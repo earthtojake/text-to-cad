@@ -652,7 +652,7 @@ def _warn_movable_links_without_inertial(
                 "missing_inertial",
                 f"{display} movable link {link_name!r} has geometry but no inertial data",
                 path=f"/robot/link[@name='{link_name}']",
-                hint="Simulation and dynamics consumers need an inertial block; see the robot-simulation skill's inertials reference (references/inertials.md).",
+                hint="Simulation and dynamics consumers need an inertial block: give the link its mass, center of mass and inertia tensor.",
             )
 
 

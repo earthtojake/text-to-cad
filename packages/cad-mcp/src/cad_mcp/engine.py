@@ -96,7 +96,7 @@ PER_PROCESS = ("DO_NOT_TRACK", "CAD_TELEMETRY")
 # the value it sets in the shells it runs: Codex's Seatbelt, in its default workspace-write mode.
 SANDBOXES: tuple[tuple[str, str], ...] = (("CODEX_SANDBOX_NETWORK_DISABLED", "1"),)
 SANDBOXED = ("no engine server is running, and this shell's sandbox cannot start one: open a CAD card "
-             "(the CAD plugin's server starts the engine) or run `cad server` outside the sandbox")
+             "(its server starts the engine) or run `cad server` outside the sandbox")
 # How long a reader waits on a port file Windows refuses while it is renamed into place: the writer's ladder.
 RETRY_DELAYS_SECONDS = (0.05, 0.1, 0.2, 0.4)
 

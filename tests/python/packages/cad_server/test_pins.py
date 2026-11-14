@@ -437,8 +437,7 @@ class Applying(unittest.TestCase):
         self.moved: list = []
         for patch in (mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state)}),
                       mock.patch.object(places, "versioned", return_value=X),
-                      mock.patch.object(versions, "move", side_effect=self.move),
-                      mock.patch.object(pins, "update_default", side_effect=self.update)):
+                      mock.patch.object(versions, "move", side_effect=self.move)):
             patch.start()
             self.addCleanup(patch.stop)
         self.answer = "moved"
@@ -446,10 +445,6 @@ class Applying(unittest.TestCase):
     def move(self, channel, version, told=None):
         self.moved.append(("move", channel, version))
         return versions.Moved(self.answer, channel, version, NEWER if self.answer == "stale" else None, error="why")
-
-    def update(self, version, told=None):
-        self.moved.append(("update", None, version))
-        return versions.Moved("moved", None, version, None)
 
     def apply(self, word: str) -> Failure | None:
         try:
@@ -497,11 +492,8 @@ class Applying(unittest.TestCase):
         self.assertIsNone(self.apply(f"+{X}@store"))  # its first use
         pointers.write("other", OLDER, self.state)
         self.assertIsNone(self.apply(f"+{X}@other"))
-        self.assertIsNone(self.apply(f"+{X}"))  # the default channel, with no install command run here
-        (self.state / pointers.RECEIPT).write_text("{}", encoding="utf-8")
-        self.assertIsNone(self.apply(f"+{X}@default"))  # where it has run: the updater
-        self.assertEqual(self.moved, [("move", "store", X), ("move", "other", X), ("move", None, X),
-                                      ("update", None, X)])
+        self.assertIsNone(self.apply(f"+{X}"))  # the default channel
+        self.assertEqual(self.moved, [("move", "store", X), ("move", "other", X), ("move", None, X)])
 
     def test_a_move_that_fails_says_why_and_runs_nothing(self) -> None:
         for answer, reason in (("cannot", "cannot_install_here"), ("failed", "failed"), ("stale", "stale_pin")):

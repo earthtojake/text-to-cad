@@ -326,80 +326,26 @@ client starts its own release's engine beside the device's, and none stops an en
 another: an engine runs on until `cad stop`, an update, or its door going.
 Each installation's bytecode is its own (`places.bytecode_tag`).
 
-An update moves the default channel to a newer release: the update button in the CAD Viewer and the CAD app (`POST
-/api/v1/local/update`, `cad_server._internal.update`), `cad update`, the install command run again, a pinned
-command newer than the default channel's version, or the default version's server itself, when automatic updates
-are on (below). Only the default channel has an updater, and only where the install command has run (its receipt).
-Every updater does one thing to the new release (the contract, `cad_server._internal.update`'s docstring): it
-installs it by its own `cad setup --add` (uvx, as the `cad` command installs a version it lacks) and runs its own
-`cad setup --engine-update`, handing it nothing else. That release's setup (`cad_server.cli.setup`) then:
-
-1. moves the default channel to itself (`cad_server._internal.versions.move`): its data imported from the version it
-   replaces at its first start, its server's start sequence proven, what the old version wrote since carried over,
-   the pointer written -- the one write that is the update --, the mirror for 0.11.10 and earlier, and every
-   version no pointer names removed where nothing is in flight on it. The old version's
-   server stops once nothing is in flight there -- a build, a draw, an export, a request that serves, an agent's
-   tool call; never an open page or an idle app --, and the new version's starts on its port with the page token
-   it imported, holding the flat door too (`Bridge`). One busy stays where it is and stops by itself once idle (its
-   version no channel's now), and the new one takes the next free port; so does one another channel is still on.
-   A server asked for `{"op": "http", "port": P}` while it serves pages on another port Q -- an updater handing the
-   pages' port on, 0.11.10's switch helper among them, to a server that started while 0.11.10 still held P -- takes
-   P too, a second listener of the same application and token, and P is its own from then on (what `status` says,
-   what its record keeps for the next start, the port a later update hands on), Q kept as well; where P cannot be
-   taken it answers with where it serves, never `failed`. Any other request naming another port (`cad viewer
-   --port`) is refused as before;
-2. writes the plugin folder from itself and brings our copies of it along (`cad_server._internal.providers`; an
-   app that reads the folder in place needs nothing); a store's copy is its store's.
-
-Every page and card keeps its link through it, and reloads once its server answers with the new release. Where the
-server a click went through stays (another channel is on its version, or work is in flight there), the update ends
-there as `moved` -- in every case but this server's own drain, which alone is `restarting` --, naming the default's
-server's address (started for it) and a link for its token: the browser
-page goes to the same document there, and a CAD card, whose launcher belongs to the version before, says the update
-is done and to start a new thread. A CAD app session a store's launcher opened (its `--channel`) shows no update
-notice, button or switch, whatever version serves it. A
-failure before the pointer is written changes nothing; after it, both versions are there and the next move or
-sweep finishes; an app that fails keeps the text before, is recorded behind in the receipt (`behind`: its release,
-why, when) and named by `cad doctor`, and is done again by `cad update`, the next update, or the default version's
-server by itself once it is idle, at most once a day (`Update.catch_up`, with the PATH of the last shell a build
-came from). A move cut short
-after its pointer is finished by the next run of the same setup (the mirror written, the sweep). An updater of
-0.11.10 or earlier runs the same setup from the flat release folder it made, which makes the release present in
-`versions/` and runs it from there; that updater then drains its own server and has its helper start the new
-release's through the mirror and the flat door, on the same port. The flat folders, and every other part of
-the layout of 0.11.10 and earlier, go once the default channel has left it and nothing runs from it
-(`cad_server._internal.legacy`).
-
-**An automatic update never interrupts.** With automatic updates on -- the person's setting, on by
-default (`cad_server.auto_updates`: the `updates` section of `settings.json`, `cad update auto`, the app
-menu's Automatic updates) -- the engine asks as it tends itself (`Daemon.tend`,
-`Update.automatic`) whether a release newer than its own is known: the feed as last read, read again
-in the background once an hour, or an agent app's newer server. **It takes a release that breaks
-nothing, as Semantic Versioning numbers it** (`auto_updates.takes`): a breaking change bumps the major
-from 1.0 and the minor below it, so the engine takes a patch or minor release from 1.0 (1.4.2 to 1.4.3
-or 1.5.0) and a patch release below it (0.11.0 to 0.11.1). Such a release carries nothing a person or
-an agent must change for, so it may land under a running agent thread unannounced; one that bumps the
-breaking part (1.9.3 to 2.0.0; 0.11.3 to 0.12.0 or 1.0.0) may rename a command or need a migration
-guide, so it waits for a click, the update button offering it as ever, and `cad status` says it is out.
-The release process holds a release to that: one the engine takes may add, and may move a library name
-whose earlier spelling stays its alias, but renames or removes nothing else, and never comes with a
-new migration guide (it may correct one already shipped). Such a release is installed at once, in the
-background -- its own `cad setup --add`, which makes it present, its kernel environment with it, and changes
-nothing else -- and its setup, which moves the default channel and gives the apps its text, waits until the default
-version's server has handled no command for an hour: nothing in flight (`Daemon.working`, asked each second) and
-none ended (`Daemon.worked`, where "the last command" is read: stamped at the end of every request through a door
-but the servers' own asks -- one marked `internal`, `working`, `pid`, `bridge`, `token`, an app's hold, an `http`
-that names a port -- and of every agent's tool call) for `auto_updates.IDLE_SECONDS`, no drain, no `cad
-setup` holding the install lock. Until then the update's state stays `idle`, so no page shows it; from then it is
-`working` and `restarting` as a click's is, and every page and card follows it to the new release as they follow a
-click. A click meanwhile makes it the click's, done at once. Nothing is ready while a person's update runs, and a
-release whose automatic attempt did not hold is not tried again by itself for a day
-(`auto_updates.RETRY_SECONDS`, the attempt kept as `update-automatic.json` in the data folder); a newer one is
-tried at the next tend. Offline, or with the setting off, nothing is read and nothing happens.
+text-to-cad has no updater: the install command updates it, and an engine only knows, from the version feed read in
+the background (`cad_server.updates`), the latest release. The updaters of 0.10.0 to 0.11.10 are frozen on computers,
+though, and update by running a newer release's `cad setup --engine-update` (`cad_server.cli.setup`) from a flat
+release folder they made: that run makes the release present in `versions/` and runs again from there, and its
+setup then hands over from their layout (`cad_server._internal.versions.move`: its data imported from the layout at
+its first start, its server's start sequence proven, the pointer and the mirror for 0.11.10 and earlier written) and
+starts the hosted install script once, detached, never waited on. That updater then drains its own server and has
+its helper start the new release's through the mirror and the flat door, on the same port; its helper's last step,
+`cad plugin --refresh`, fails (there is no such command) and is only logged. A server asked for `{"op": "http",
+"port": P}` while it serves pages on another port Q -- an updater handing the pages' port on, 0.11.10's switch helper
+among them, to a server that started while 0.11.10 still held P -- takes P too, a second listener of the same
+application and token, and P is its own from then on (what `status` says, what its record keeps for the next start,
+the port a later update hands on), Q kept as well; where P cannot be taken it answers with where it serves, never
+`failed`. Any other request naming another port (`cad viewer --port`) is refused as before. Every page keeps its link
+through it, and reloads once its server answers with another release or start (`release`, `instance`). The flat
+folders, and every other part of the layout of 0.11.10 and earlier, go once the default channel has left it and
+nothing runs from it (`cad_server._internal.legacy`).
 
 An engine asks no other process anything, another engine no more than any program: 0.8's server on
-the port is rolled from as above, or refused where the port is named, as below, and `cad setup` stops
-it with 0.8's own `cadgen stop`.
+the port is rolled from as above, or refused where the port is named, as below.
 
 A named port another process holds is refused in one line naming the holder (`daemon.PortHeld`).
 `cad server` binds at its start, so the command fails at once with that line on stderr and exits
@@ -680,23 +626,21 @@ changes what a worker and the server say to each other), the document format the
 line naming which package to update and to what release (`contract.refusal`): `cad here is 0.10.0,
 worker contract 1 (xbf/9, OCP 8.0); cad-server 0.10.2 speaks contract 2 (xbf/9, OCP 8.0): update the
 cad package in this environment to 0.10.2` -- the library's side, which names no installer -- or, for a
-library newer than the server, ``...: update cad-server to 0.10.3: run `cad update` `` -- the server's one
-way: installing cad-server into a project's environment neither registers nor moves the device's
-server. One contract of two releases builds, and the build's answer carries the server's release
+library newer than the server, `...: update cad-server to 0.10.3` -- installed on the computer as a version of its
+own: installing cad-server into a project's environment neither registers nor moves the device's server. One contract of two releases builds, and the build's answer carries the server's release
 (`release`): the script's run then says once, on stderr after its report, which package to update for
 the other's fixes (`contract.notice`, `api.say_notice`): `cad here is 0.10.0; cad-server is 0.10.2:
-update the cad package in this environment to 0.10.2 for its fixes and features`, or ``cad here is
-0.10.3; cad-server is 0.10.2: update cad-server to 0.10.3: run `cad update` ``. A script in the base names
+update the cad package in this environment to 0.10.2 for its fixes and features`, or `cad here is
+0.10.3; cad-server is 0.10.2: update cad-server to 0.10.3`. A script in the base names
 no Python and hears neither.
 
 Every other process of the engine's that loads the kernel runs the base's Python (`places.kernel`,
 which the distribution makes as `places.KERNEL`): a model's worker but one in its script's own Python,
 the documents worker, the standby, the render processes, and the meshing and reading pools, whose spawned
 processes start on the base's own import path, which the marker records (`serve._spawn_in`). **The base is
-made with its version**: whatever installs a version -- the install command, a pinned command for a version
-that is not here yet, an update a person asks for or an automatic one -- makes its base before the version is
-used (`versions.make_present`), so the first build after an install or an update waits on nothing (**An
-automatic update never interrupts**, under **Architecture**). **Where none is there it is made on first
+made with its version**: whatever installs a version -- its `cad setup` (the install command's, a skill's line,
+an updater of 0.11.x's `--engine-update`) -- makes its base before the version is used (`versions.make_present`),
+so the first build after an install waits on nothing. **Where none is there it is made on first
 need**: an environment that was not installed as a version, or a base that was removed. The engine starts and
 serves with none made -- pages, the home, documents held in the cache, `status` -- and `cad doctor` reports
 one that is missing without making it. The first thing that needs it makes it: a `cad run` of a script whose
@@ -3501,15 +3445,15 @@ for a body or query the route cannot read, 404
 for an unknown route, kind or id (a document's names its `state` where the engine says one), 405
 naming the methods the route takes (`Allow`), 413 for a body over its route's limit, 409 where
 the server's state refuses a change: a telemetry answer to a server that keeps no usage stats
-(`settings`), an update with no engine under the page (`local/update`), an export of a session
+(`settings`), an export of a session
 that restarted or of a source that changed since the page showed it, and 410 for an export's file
 already fetched or past its window. Every request that changes something (POST, PUT, PATCH, DELETE)
 carries `x-cad-viewer`, the gate a cross-site form cannot pass (403 without it). The families:
 
 | Route | What it answers |
 | --- | --- |
-| `GET /api/v1/server` | who this engine is (`app`, `release`, `identityToken`, `platform`, `user`, `home`, `start`, `pick`, `port`, `pid`), `instance` (a random token of this start of it: a page that sees another reloads), `kinds` (`reads`, and each kind's `exports`), `notice` and `update` |
-| `GET\|PUT /api/v1/settings` | `{"language": {"locale"}, "telemetry": {"share", "reason", "policy"}, "updates": {"automatic", "reason"}}` (`telemetry` null where the server keeps none, `saved` beside it after a change; `updates` whether the engine updates by itself, `cad_server.auto_updates`), the person's, one for every view; PUT takes the same shape, or a part of it (the read-only `reason` and `policy` ignored; `updates` put back as read changes nothing), and answers the whole |
+| `GET /api/v1/server` | who this engine is (`app`, `release`, `identityToken`, `platform`, `user`, `home`, `start`, `pick`, `port`, `pid`), `instance` (a random token of this start of it: a page that sees another reloads), `kinds` (`reads`, and each kind's `exports`) |
+| `GET\|PUT /api/v1/settings` | `{"language": {"locale"}, "telemetry": {"share", "reason", "policy"}, "whats_new": {"seen", "release"}}` (`telemetry` null where the server keeps none, `saved` beside it after a change; `whats_new` the releases whose What's new the person has seen), the person's, one for every view; PUT takes the same shape, or a part of it (the read-only `reason`, `policy` and `release` ignored), and answers the whole |
 | `GET /api/v1/look`, `/api/v1/look/environment` | the regular modes' look, and its Radiance image |
 | `GET /api/v1/documents`, `/api/v1/documents/<kind>` | Recents (of one kind): `{"documents": [row]}`, each row its document's `id`, `kind`, `api` and its record's kind (`record`); `?kind=`, `?q=`, `?limit=`; `?path=` one file's envelope, known by its id from then on |
 | `POST /api/v1/documents` | a file opened (`{"path"}`) or a held model served (`{"id"}`): `201 {"id", "kind", "api"}`, or `202` (and `Retry-After`) while the engine reads it |
@@ -3518,7 +3462,7 @@ carries `x-cad-viewer`, the gate a cross-site form cannot pass (403 without it).
 | `GET /api/v1/documents/<id>/version`, `.../thumbnail` | its version, waited on (**Progress**); its picture, the PNG the page kept, as it kept it (a `?v=` the page adds is ignored: it keeps an older picture out of a cache) |
 | `POST /api/v1/documents/<id>/exports` | an export of it, its job (202); `GET /api/v1/exports[/<job>[/file]]` the session's epoch, a job, its file |
 | `/api/v1/documents/<kind>/<id>/...` | a kind's reads (below); the id under another kind is a 404 naming its own |
-| `/api/v1/local/...` | a local engine's: `update` (GET, POST: the button), `folder?path=&q=`, `files?path=` (a CAD file's bytes), `prompt-files[/<name>]`, `reveal`, `clipboard`, `pick`, `activity` |
+| `/api/v1/local/...` | a local engine's: `folder?path=&q=`, `files?path=` (a CAD file's bytes), `prompt-files[/<name>]`, `reveal`, `clipboard`, `pick`, `activity` |
 | `GET /api/v1/local/link` | `{"link", "expires"}`: the link (`<expires>.<mac>`, `expires` in Unix seconds), the same text every call until the token is rotated, that the page keeps in its address, so a copied address opens it in another browser on this machine; it also answers the CAD app, through a card's tunnel, for its Copy link |
 | `GET /api/v1/local/open-in?id=<id>` | Open in: `{"targets": [{"target", "kind", "name", "present", "apps": [{"id", "name", "refuses"}], "default"}], "fileManager"}` -- a model's `source` (its script, kind `script`) then one `export:<kind>` for each kind of file its last build wrote, a file's `source` alone; each with whether it is there now and the apps found on this computer that take its kind (`_internal/apps.py`: looked for in the background, never on a request). A KiCad's `name` says its version (`KiCad 9.0.6`, `KiCad 10.99 nightly`), and `refuses: "newer"` marks one that cannot read this file's format, listed rather than hidden; `default: false` on a `.kicad_*` file, whose operating-system handler is never started; `fileManager` `finder`, `explorer` or `files`; 404 for an unknown id |
 | `POST /api/v1/local/open` | `{"id", "target", "app"}`: one of those targets in one of its apps, or `"default"` (the system's own handler), started detached and never through a shell (a KiCad by its board or schematic editor, as the file's extension says; Blender, which opens only a `.blend` from its command line, with the package's import script, `--python`, and the file as the one argument after `--`): 204; 400 for a target the document lacks, an app not found for its kind, a KiCad that `refuses` the file or `"default"` on a `.kicad_*` file, 404 for a document or a file not there. Only the server's own paths and apps are opened |

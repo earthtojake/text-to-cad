@@ -6,10 +6,10 @@ the registry (``cad.registry``), each its own module, ``cad_server.cli.<type>``
 integration's, for its tool's own files, which are no document type, which cad checks or writes and never
 shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations``: ``cad mujoco check``,
 ``cad orcaslicer presets``), only for the integrations the registry gives operations. And the commands that are no file's: the engine's process control (``serve``, ``status``, ``stop``,
-``delete``, ``server``), ``run``, and the installation's (``setup``, ``update``, ``uninstall``,
-``doctor``, ``plugin``, ``viewer``, ``telemetry``).
+``delete``, ``server``), ``run``, and the installation's (``setup``, ``uninstall``, ``doctor``, ``viewer``,
+``telemetry``).
 
-A command line may start with a pin, ``cad +<version>[@<channel>] ...``, as every command a skill runs does:
+A command line may start with a pin, ``cad +<version>[@<channel>] ...``:
 the ``cad`` command runs the version it names, and that version reads it here before anything else
 (``cad_server._internal.pins``): a pin to another version is refused (exit 5), and the pin's channel is moved to
 this version where it is behind it, or the command refused as stale where it is ahead (exit 4).
@@ -53,16 +53,10 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # The installation: the requirement a Python of a program's own installs this device's cad by.
     "requirement": ("cad_server.cli.requirement", "print the exact cad requirement for a Python of a program's own"),
     "doctor": ("cad_server.cli.doctor", "set the server up and report it (--check: report only)"),
-    # text-to-cad in every agent app here, and the cad command with it, as this release; `update`
-    # runs the newest release's. `uninstall` is setup's uninstall path, with a parser of its own.
-    "setup": ("cad_server.cli.setup", "set up text-to-cad in every agent app here, as this release"),
-    "update": ("cad_server.cli.update", "install the newest release and set it up in every agent app here"),
-    "update auto": ("cad_server.cli.update_auto", "show or change automatic updates: status, on, off"),
-    "uninstall": ("cad_server.cli.uninstall", "take text-to-cad out of every agent app here"),
-    # The folder every agent app's plugin comes from, written from the current installation.
-    "plugin": ("cad_server.cli.plugin", "write the agent apps' plugin folder and print its path"),
-    # A page session on the installation engine; the launcher exits. (CAD inside an agent host's panels is
-    # the shim's own command, ``cad-mcp``: the host starts that stdio peer per session.)
+    # This version installed on this computer, and the cad command with it; and all of it removed.
+    "setup": ("cad_server.cli.setup", "install this version of text-to-cad on this computer"),
+    "uninstall": ("cad_server.cli.uninstall", "remove text-to-cad from this computer"),
+    # A page session on the installation engine; the launcher exits.
     "viewer": ("cad_server.cli.viewer", "open a viewer page on the installation engine"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
 }
@@ -140,8 +134,6 @@ def resolve(argv: list[str]) -> tuple[str, list[str]] | None:
         if len(argv) > 1 and (argv[0], argv[1]) in INTEGRATION_OPERATIONS:
             return f"{argv[0]} {argv[1]}", argv[2:]
         return None
-    if " ".join(argv[:2]) in _COMMANDS:  # a two-word command (``update auto``) before its first word
-        return " ".join(argv[:2]), argv[2:]
     if argv[:1] and argv[0] in _COMMANDS:
         return argv[0], argv[1:]
     return None
@@ -270,8 +262,6 @@ def _main(argv: list[str]) -> int:
         return 0
 
     command, rest = argv[0], argv[1:]
-    if " ".join(argv[:2]) in _COMMANDS:  # a two-word command (``update auto``) before its first word
-        command, rest = " ".join(argv[:2]), argv[2:]
     if command in TYPE_COMMANDS:
         entry: tuple[str, str] | None = (TYPE_COMMANDS[command], "")
     elif command in INTEGRATION_COMMANDS:
@@ -315,10 +305,8 @@ def _main(argv: list[str]) -> int:
     # this release keeps of its state folder moves into its own first, before the notice below writes there.
     if command in _REGISTERS and not helping:
         _adopt()
-    # No command says a newer text-to-cad is out: it cannot tell which plugin, if any, it came
-    # with, so the CAD app and the CAD Viewer say it (`cad_server/updates.py`). What a command does say,
-    # once and before its work, is what those two send by default (`cad_server/analytics.py`) -- to a
-    # person: an answer in JSON is a program's, so the notice waits for a later run a person reads, and
+    # What a command says, once and before its work, is what CAD sends by default (`cad_server/analytics.py`)
+    # -- to a person: an answer in JSON is a program's, so the notice waits for a later run a person reads, and
     # nothing is sent by default until it is said.
     from cad_server._internal.cli_errors import wants_json
 
@@ -373,10 +361,6 @@ def _report(error: Exception) -> None:
     report(error, "command", handled=False)
 
 
-# Commands that never carry the analytics notice: the engine's server, writing nowhere; `telemetry` and
-# `setup` (`update`), which say it their own way; `uninstall`; `run`, which is only the python it runs,
-# as the `cad` command's `run` is; `plugin`, which a switch runs with no one to read it; and `requirement`,
-# whose output a program reads.
 def _maybe_a_version() -> bool:
     """Whether this process may be an installed version, told without importing the engine (a command imports no
     more than it uses): told its name (a development version, ``CAD_INSTALLATION_VERSION``), or its environment is a
@@ -392,7 +376,10 @@ def _maybe_a_version() -> bool:
 # Commands that never make the default channel's first use before they run (``pins.first_use``): setup moves it
 # itself (an updater's first run of it stops once its release is present), uninstall takes things out.
 _MOVES_ITSELF = frozenset({"setup", "uninstall"})
-_UNTOLD = frozenset({"server", "telemetry", "setup", "update", "uninstall", "run", "plugin", "requirement"})
+# Commands that never carry the analytics notice: the engine's server, writing nowhere; `telemetry`, which says it
+# its own way; `setup`, which an updater of 0.11.10 and earlier runs with no person to read it; `uninstall`; `run`,
+# which is only the python it runs, as the `cad` command's `run` is; and `requirement`, whose output a program reads.
+_UNTOLD = frozenset({"server", "telemetry", "setup", "uninstall", "run", "requirement"})
 
 
 # The told commands that register this installation (``cad_server._internal.installations.setup``).

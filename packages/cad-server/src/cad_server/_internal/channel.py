@@ -1,26 +1,23 @@
-"""Where an event comes from, and whether this process has an updater: the delivery channel and the app.
+"""Where an event comes from, and whether this process is told of a new release: the delivery channel and the app.
 
 **The channel** is a pin's (``cad +<version>@<channel> <verb>``) or a launcher's (``cad-mcp --channel NAME``):
-who delivered the copy of the plugin whose text ran the command, as that copy says it. A store's copy carries
-its channel in every pin (its builder stamps it); our own text -- the install command's plugin folder, the
-``latest`` branch, a copy installed from GitHub by hand -- carries none, and runs on the default channel. Nothing
-here keeps a list of channels or decides anything by a channel's name: a request carries its channel
+who delivered the text that ran the command, as that text says it; text that names none runs on the default
+channel. Nothing here keeps a list of channels or decides anything by a channel's name: a request carries its channel
 (``places.channel``, ``client.with_channel``), a session its launcher's (``mcp.http.Session.channel``), and
 telemetry reports it beside the app (``describe``), ``default`` for none. A server's environment says no
-channel: ``CAD_INSTALL_CHANNEL`` and ``CAD_AUTO_UPDATED``, which plugin configs of 0.11.10 and earlier set, are
-read for nothing.
+channel: ``CAD_INSTALL_CHANNEL`` and ``CAD_AUTO_UPDATED``, which releases 0.11.10 and earlier set, are read for
+nothing.
 
 **The app** an event comes from is detected, never told: the MCP handshake's client name where there is one,
-else the markers an agent app sets in the shells it runs (``engine_host.app``), else ``unknown``.
+else the markers the program that runs a shell sets in it (``engine_host.app``), else ``unknown``.
 
 **A development build** (``development``) is a version named ``<release>-dev.<time>`` (``dev_install``), or a
 source tree -- installed editable, or imported from a checkout by path -- that was not told which version it runs
 as (``places.INSTALLATION_ENV``). It hears of no release and sends no telemetry by default; what it sends with
 telemetry turned on says the channel ``dev``.
 
-**The updater** (``told``): only the default channel has one (a named channel's copy is updated by whoever
-delivers it), only where the install command has run (its receipt), and never for a development build. A
-process with no version (a person's own environment) is the default's, on a device the install command set up.
+**Told** (``told``): only the default channel's version hears of a new release (a named channel's copy is
+updated by whoever delivers it), and never a development build. A process with no version is the default's.
 """
 
 from __future__ import annotations
@@ -81,29 +78,23 @@ def development() -> bool:
 
 
 def told() -> bool:
-    """Whether this process hears of a new release, and shows an update notice, an update button and the
-    automatic-updates switch: the default channel's version alone, the one channel with an updater (a named
-    channel's copy is updated by whoever delivers it), on a device where the install command has run (its receipt:
-    where it has not, there is no install to update), and never a development build. A process with no version is
-    the default's."""
+    """Whether this process hears of a new release: the default channel's version alone (a named channel's copy is
+    updated by whoever delivers it), and never a development build. A process with no version is the default's."""
     return not development() and default_version()
 
 
 def default_version() -> bool:
     """Whether this process's version (``places.versioned``) is the default channel's as a command with no pin
-    resolves it (``pointers.default``) on a device the install command set up (its receipt); a process with no
-    version is the default's, but only on such a device too (a person's own ``pip install cad-server`` or ``uvx``
-    run on a device the install command never set up has no install to update). Never raises."""
-    from cad.engine.places import state_dir, versioned
+    resolves it (``pointers.default``); a process with no version is the default's. Never raises."""
+    from cad.engine.places import versioned
 
     name = versioned()
+    if name is None:
+        return True
     try:
         from cad_server._internal import pointers
 
-        receipt = (state_dir() / pointers.RECEIPT).is_file()
-        if name is None:
-            return receipt
-        return pointers.default().version == name and receipt
+        return pointers.default().version == name
     except Exception:  # noqa: BLE001 - a state folder it cannot read: told, as before
         return True
 
@@ -117,7 +108,7 @@ def own() -> str | None:
     """The delivery channel a version's own use counts under where nothing names one -- the browser viewer's page,
     which no pin or launcher carries (``analytics.Recorder``'s process-level counts): the one named channel that is
     on this process's version, when the default channel's pointer does not name it (a version only a store's copy is
-    on: claude.ai's directory copy, which is skills alone, has the browser as its one interface); else None, the
+    on, whose one interface is the browser); else None, the
     default. A process with no version, the default's version, a version two named channels share, or pointers that
     cannot be read: None. Read at most once every ``OWN_SECONDS``. Never raises."""
     import time
@@ -146,8 +137,8 @@ def own() -> str | None:
 def describe(channel: str | None = None, client: str | None = None, environ=None) -> dict[str, str]:
     """Where an event comes from, as telemetry says it (two fields, ``cad_server.analytics``): ``channel``, the
     delivery channel of the request or session it counts (a request's ``channel``, a launcher's ``--channel``; none
-    is ``default``; ``dev`` from a development build), and ``app``, the agent app running it -- detected, never
-    told: from the MCP handshake's client name where there is one (``client``), else from the markers an app sets
+    is ``default``; ``dev`` from a development build), and ``app``, the program running it -- detected, never
+    told: from the MCP handshake's client name where there is one (``client``), else from the markers a program sets
     in its shell (read from ``environ``: a command's own environment, or a build request's ``env``), else
     ``unknown`` (``engine_host.app``, the host adapter's)."""
     from cad.engine.places import CHANNEL, DEFAULT_CHANNEL

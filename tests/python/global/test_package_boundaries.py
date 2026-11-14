@@ -6,8 +6,7 @@ direction, and core being framework-free, are scripts/test/check-dependencies.mj
 law: each Python distribution (the library, cad; the server, cad-server; the shim,
 cad-mcp: each its own PyPI wheel) and every skill (the Skills CLI installs
 skills/<name> ALONE; plugin installers copy the published tree, which has no
-models/ and whose packages/ is never installed; the server's wheel carries skills/ whole, and
-writes it into the plugin folder the agent apps read) each work in isolation outside
+models/ and whose packages/ is never installed) each work in isolation outside
 this repo, so their markdown must not refer to anything outside the package -- a
 distribution's not even to another distribution's files, which its wheel does not carry, and
 a skill's links not out of its skill.
@@ -181,9 +180,8 @@ class DistributionLinksStayInside(unittest.TestCase):
         self.assertEqual(offenders, [], "a link out of its distribution, or to a file that is not there")
 
     def test_every_skill_link_resolves_inside_its_skill(self) -> None:
-        # The skills ship whole inside the server's wheel (cad_server/_runtime/plugin/skills, byte for byte
-        # these files: scripts/release/check-wheel-contents.sh) and each alone through the Skills CLI, so a
-        # skill's relative link names a file of its own skill, which both carry, or is a URL.
+        # A skill may be copied alone into an agent's skills folder, so a skill's relative link names a file of
+        # its own skill, which every copy carries, or is a URL.
         offenders: list[str] = []
         for skill in sorted(path.parent for path in repo_path("skills").glob("*/SKILL.md")):
             offenders += _links_outside(skill, _markdown_files(skill))

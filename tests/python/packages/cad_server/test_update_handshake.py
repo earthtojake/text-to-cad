@@ -1,21 +1,19 @@
 """The update's handshake between releases, frozen (``update_handshake.json``).
 
-Nothing on a device compares versions any more: an update is release A's code running release B's, and B's
-reading what A wrote. From the first pinned release the handshake is the contract in
-``cad_server._internal.update``'s docstring (``contract``): A installs B by B's own ``cad setup --add --quiet``
-through uvx, then runs the ``cad`` B's code marker names (``versions/<version>/code/cad-version.json``) as ``setup
---engine-update`` and reads its progress frames. An updater of 0.11.10 and earlier, frozen on devices, runs B's
-``setup --engine-update`` from the flat release folder it made and reads its frames; its helper starts B's engine
-with the Python the ``current`` mirror's record names, by the daemon module's name, asks it ``status`` and ``http``,
-stops it with ``stop`` (``drain``), and runs B's ``plugin --refresh``; B reads the ``current`` file, the installation
-records, the flat release folders and the token those releases wrote. And across the
-update, what A's pages and a host's kept card shell read of B's engine over HTTP (``http``): the
-page a tab is at (``/<id>``), the CAD app's module a kept shell imports (``/app``), and
-``GET /api/v1/server``'s ``release`` and ``instance`` (with ``notice`` and ``update``), which a page
-reloads on and a card follows its update by. So all of
-it must stay as it is across releases, and this test fails when any of it changes: a change here is
-one made on purpose, for every release still installed, never one made in passing. Change the golden
-file with it, and say in the change why releases before it still update.
+text-to-cad has no updater from 0.11.11 on, but the updaters of 0.10.0 to 0.11.10 are frozen on devices: an update
+is release A's code running release B's, and B's reading what A wrote. Such an updater runs B's ``setup
+--engine-update`` from the flat release folder it made (with ``CAD_UPDATE_PREPARE=1`` first, for an automatic
+update) and reads its exit status (progress frames on its standard output are optional: it skips any line that is
+none); its helper starts B's engine with the Python the ``current`` mirror's record names, by the daemon module's
+name, asks it ``status`` and ``http``, stops it with ``stop`` (``drain``), and runs B's ``plugin --refresh``, whose
+failure it only logs (B has no ``cad plugin``); B reads the ``current`` file, the installation records, the flat
+release folders and the token those releases wrote. And across the update, what A's pages and a host's kept card
+shell read of B's engine over HTTP (``http``): the page a tab is at (``/<id>``), the CAD app's module a kept shell
+imports (``/app``), and ``GET /api/v1/server``'s ``release`` and ``instance``, which a page reloads on (A's pages
+read its ``notice`` and ``update`` with optional chaining: B sends neither). So all of it must stay as it is across
+releases, and this test fails when any of it changes: a change here is one made on purpose, for every release still
+installed, never one made in passing. Change the golden file with it, and say in the change why releases before it
+still update.
 """
 
 from __future__ import annotations
@@ -82,11 +80,9 @@ def http_surface() -> dict:
 
 def surface() -> dict:
     """The handshake as this source tree has it."""
-    from cad_server._internal import installations, releases, update
-    from cad_server.cli import plugin as plugin_cli
+    from cad_server._internal import installations, releases
     from cad_server.cli import setup as setup_cli
-    from cad_server.cli import update as update_cli
-    from cad.engine import client, places, progress
+    from cad.engine import client, places
     from cad_server.engine import daemon, registry
     from cad_server.viewer.engine_app import EngineApp
 
@@ -122,31 +118,11 @@ def surface() -> dict:
     installations.register("9.9.9", (str(console), str(python), str(folder)))
     installations.point("9.9.9")
     record = json.loads((root / installations.FOLDER / "9.9.9.json").read_text(encoding="utf-8"))
-    frame = progress.event("update", "build123d", job="9.9.9", detail="d", done=1, total=4)
-    # What an updater of 0.11.10 runs of the release it moved to once its helper started it: `plugin --refresh`.
-    refresh = ["plugin", "--refresh"]
-    plugin_cli.build_parser().parse_args(refresh[1:])
-    # The contract from the first pinned release on: B installed by its own `cad setup --add`, then its own setup.
-    from cad_server._internal import base
-
-    with mock.patch.object(base, "find_uv", return_value="uv"), mock.patch.dict(os.environ, {"CAD_UPDATE_FIND_LINKS": ""}):
-        install = update.install_command("9.9.9")
-    with mock.patch.object(subprocess, "Popen", side_effect=Started) as popen:
-        try:
-            update.run_setup({"cad": "CAD"})
-        except Started:
-            pass
     return {
-        "setup": {"command": "setup", "engine_update_flag": "--engine-update",
+        "setup": {"command": "setup", "engine_update_flag": "--engine-update", "prepare_env": setup_cli.PREPARE_ENV,
                   "flags": _flags(setup_cli.build_parser())},
-        "update": {"command": "update", "flags": _flags(update_cli.build_parser())},
-        "plugin": {"arguments": refresh, "flags": _flags(plugin_cli.build_parser())},
-        "contract": {"install": install[install.index("--from"):], "setup": popen.call_args.args[0][1:],
-                     "marker": f"{places.VERSIONS}/<version>/{places.CODE}/{places.VERSION_MARKER}",
-                     "marker_keys": ["cad", "prefix", "python", "schema", "version"],
-                     "marker_schema": places.VERSION_SCHEMA},
-        "progress": {"line": sorted({"progress": frame}), "frame": sorted(frame), "kind": frame["kind"],
-                     "stages": list(update.STAGES)},
+        "marker": {"path": f"{places.VERSIONS}/<version>/{places.CODE}/{places.VERSION_MARKER}",
+                   "keys": ["cad", "prefix", "python", "schema", "version"], "schema": places.VERSION_SCHEMA},
         "daemon": {"arguments": started[1:], "module": client.DAEMON_MODULE},
         "http": http_surface(),
         "ops": {"status": sorted(key for key in ("ok", "pid", "prefix", "serving", "installation", "version")

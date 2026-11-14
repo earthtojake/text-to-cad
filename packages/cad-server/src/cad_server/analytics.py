@@ -255,12 +255,12 @@ def off_command() -> str:
 def _through_proxy(quote: Callable[[str], str]) -> str | None:
     """``cad``: the ``cad`` command (``cad_server._internal.installations``), where a record names this
     installation -- ``cad`` where that command is the one on the person's PATH (uvx's own
-    environment, first on PATH for the command it runs, is not theirs: ``providers.lasting``), else by its
+    environment, first on PATH for the command it runs, is not theirs: ``installations.lasting``), else by its
     path. ``None`` where no record names this installation, or the command is not there."""
     import shutil
 
     from cad_server._internal import installations
-    from cad_server._internal.providers import lasting
+    from cad_server._internal.installations import lasting
 
     record = installations.here()
     proxy = installations.proxy_path()

@@ -1,5 +1,5 @@
 """Installed versions, pointers, the first-start import and the moves between them
-(``cad_server._internal.versions``, ``pointers``, ``imports``, ``legacy``), and ``cad setup --add``.
+(``cad_server._internal.versions``, ``pointers``, ``imports``, ``legacy``).
 
 A fake device in a temporary folder (``CAD_STATE_DIR``, ``CAD_ENGINE_DIR``, ``CAD_CACHE_DIR``). uv is stood in for
 (``Uv``): each step recorded; ``venv`` makes a real virtual environment of this Python with no pip, and installing
@@ -244,19 +244,6 @@ class MakingPresent(Device):
         self.uv.fail = lambda step: (1, "error: no solution") if step[1] == "pip" else None
         failed = versions.make_present(Z, told=self.said.append)
         self.assertEqual((failed.cannot, failed.ok), (None, False), "a failure, not this shell's")
-
-        out, err = io.StringIO(), io.StringIO()
-        self.uv.fail = lambda step: (2, "error: dns error") if step[1] == "pip" else None
-        loud = io.StringIO()
-        with mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": X}):
-            code = versions.add(quiet=True, out=out, err=err)
-            self.assertEqual(versions.add(out=io.StringIO(), err=loud), 3)
-        (reason,) = err.getvalue().splitlines()  # the cad command's own run: the reason alone, said in its line
-        self.assertEqual((code, out.getvalue()), (3, ""))
-        self.assertIn("dns error", reason)
-        said = loud.getvalue().splitlines()[-1]  # a person's run: the one line, with the command to run
-        self.assertTrue(said.startswith(f"cad: text-to-cad {X} is not installed, and could not be installed from this shell ("))
-        self.assertTrue(said.endswith(versions.add_command(X)))
 
 
 class Pointers(Device):
@@ -617,42 +604,6 @@ class BeforeTwelve(Device):
         self.assertFalse(legacy.removable())
 
 
-class SetupAdd(Device):
-    def interpreter(self, folder: str) -> None:
-        home = self.root / "home"
-        home.mkdir(exist_ok=True)
-        (home / "python.exe").write_bytes(b"MZ")
-        Path(folder, "Scripts").mkdir(parents=True, exist_ok=True)
-        Path(folder, "Scripts", "python.exe").write_bytes(b"MZ")
-        Path(folder, "pyvenv.cfg").write_text(f"home = {home}\nversion_info = 3.14.0\n", encoding="utf-8")
-
-    def test_add_makes_this_version_present_and_changes_nothing_else(self) -> None:
-        from cad_server.cli import setup
-
-        dev = f"{X}-dev.20261113000000"
-        out, err = io.StringIO(), io.StringIO()
-        # On Windows the cad command's Python, as uv makes it, without uv.
-        making = mock.patch.object(installations, "_make_interpreter", side_effect=self.interpreter)
-        making.start()
-        self.addCleanup(making.stop)
-        command = Path(installations.proxy_path())
-        command.parent.mkdir()
-        if os.name != "nt":  # 0.11.10's, which knows no pin: replaced (on Windows, none: written)
-            command.write_text(f"#!/bin/sh\n# {installations.MARK}11\n", encoding="utf-8")
-        with mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": dev}), \
-                mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", err):
-            self.assertEqual(setup.main(["--add"]), 0)
-            self.assertEqual(setup.main(["--add", "--quiet"]), 0)
-        self.assertEqual(out.getvalue(), f"text-to-cad {dev} is installed now: {places.version_dir(dev)}\n")
-        self.assertIsNotNone(places.version_record(dev))
-        self.assertTrue(any("-e" in step for step in self.uv.steps), "a development version from its checkout")
-        self.assertEqual(sorted(os.listdir(self.state)), ["install.lock", "versions"],
-                         "no pointer, no mirror, no receipt, no settings, no plugin folder")
-        self.assertEqual(installations.proxy_status(), installations.OK, "and the cad command, of this revision")
-        with mock.patch.object(sys, "stderr", io.StringIO()), self.assertRaises(SystemExit):
-            setup.main(["--add", "--only", "claude-code"])
-
-
 class ServerDecisions(Device):
     """What the servers decide by, at the cheapest level: no server runs (``test_version_servers`` runs them)."""
 
@@ -729,60 +680,6 @@ class ServerDecisions(Device):
         self.assertEqual(set(plan.versions), {X, Z})
         self.assertEqual(versions.prune(plan), {X: "removed", Z: "removed"})
         self.assertEqual(versions.folders(), [Y])
-
-    def test_an_automatic_update_s_target_is_there_when_its_setup_runs_after_the_quiet_hour(self) -> None:
-        # A1: the target installed at once, its setup an hour later (the clock made short here), servers tending
-        # meanwhile -- each tend's sweep finds nothing to remove.
-        from types import SimpleNamespace
-
-        from cad_server import auto_updates
-        from cad_server._internal import update
-
-        self.data(X)
-        pointers.write(None, X, mirrored=False)
-        (self.state / "install-receipt.json").write_text('{"schema": 1}', encoding="utf-8")
-        seen: list[bool] = []
-
-        def install(version: str) -> dict:
-            self.present(version)
-            return {"cad": "the release's cad"}
-
-        def setup(record, frame=None, **_kwargs):
-            seen.append(places.version_dir(Y).is_dir() and places.version_record(Y) is not None)
-            return 0, ""
-
-        engine = SimpleNamespace(stopping=threading.Event(), draining=False, worked=0.0, working=lambda: False)
-        job = update.Update()
-        with mock.patch.object(auto_updates, "IDLE_SECONDS", 0.5), mock.patch.object(update, "IDLE_POLL_SECONDS", 0.02), \
-                mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": "", "CI": ""}), \
-                mock.patch("cad_server.updates.notice", return_value={"latest": Y, "version": X}), \
-                mock.patch("cad_server.updates.refresh", return_value=None), \
-                mock.patch.object(update, "install", side_effect=install), \
-                mock.patch.object(update, "run_setup", side_effect=setup):
-            self.assertEqual(job.automatic(engine), Y)
-            while not seen:  # the quiet hour, the servers tending all through it
-                self.assertFalse(versions.garbage(spare=X))
-                versions.sweep(spare=X)
-                job.thread.join(0.05)
-            job.thread.join(30)
-        self.assertEqual(seen, [True], "the target was there when its setup ran")
-
-    def test_an_updater_removes_its_own_earlier_target_as_it_prepares_a_newer_one(self) -> None:
-        from cad_server import auto_updates
-        from cad_server._internal import update
-
-        self.data(X)
-        pointers.write(None, X, mirrored=False)
-        self.present(Y)  # an earlier automatic attempt's target, never moved to
-        auto_updates.attempt(Y)
-        with mock.patch.object(update, "install", side_effect=lambda version: self.present(version).record):
-            update._discard(Y, Z)
-            self.assertFalse(places.version_dir(Y).exists())
-            self.present(Y)
-            pointers.write("store", Y, mirrored=False)
-            update._discard(Y, Z)
-        self.assertTrue(places.version_dir(Y).exists(), "a channel's version is never an updater's to remove")
-        self.assertEqual(versions.remove_unused(X), "named")
 
     def test_a_handover_takes_the_port_only_from_a_server_that_went(self) -> None:
         asked: list[tuple[str, dict]] = []

@@ -143,21 +143,6 @@ def _listen_also(server: Any, host: str, port: int) -> Any:
     return listen_also(server, host, port)
 
 
-def _automatic(daemon: Any) -> None:
-    """The automatic update asked for as the daemon tends itself (``cad_server._internal.engine_host.automatic``):
-    nothing but a look at the settings and the feed as last read, its work in the background."""
-    from cad_server._internal.engine_host import automatic
-
-    automatic(daemon)
-
-
-def _update() -> dict[str, Any] | None:
-    """Where the engine's update is, for ``status`` (``cad_server._internal.engine_host.update``)."""
-    from cad_server._internal.engine_host import update
-
-    return update()
-
-
 def _halt() -> None:
     """The uv commands the engine runs now stopped (``cad_server._internal.engine_host.halt``)."""
     from cad_server._internal.engine_host import halt
@@ -268,7 +253,7 @@ def _note(said: str, denied: bool = False) -> None:
 # The requests that serve (``Daemon.serve``: the HTTP server bound on the first), each counted busy
 # while it is underway (``Daemon.handle``).
 SERVING = frozenset({"serve", "viewer", "http", "read", "warm"})
-# The requests that are no command's, which the quiet hour an automatic update waits for never counts
+# The requests that are no command's, which the last command's time (``Daemon.worked``) never counts
 # (``Daemon.ended``): whether work is in flight, who answers, the flat door looked at again, a page token read
 # again, an app's hold. Besides these, any request marked ``internal`` (what one server or updater asks another,
 # ``cad_server._internal.versions.ask``) and an ``http`` that names a port (an updater handing the pages' port on,
@@ -709,8 +694,7 @@ class Daemon:
         self.busy = 0
         self.busy_lock = threading.Lock()
         # When the last command ended (monotonic): a build, draw, export or request that serves, any other request
-        # through a door but the server's own asks (``ended``), an agent's tool call (``stamp``). An automatic update
-        # switches only once nothing has run for a while (``cad_server._internal.update.Update._wait``).
+        # through a door but the server's own asks (``ended``), an agent's tool call (``stamp``).
         self.worked = self.last
         self.stopping = threading.Event()
         # The connections that hold the engine (``hold``: an agent host's MCP server, while the host
@@ -729,9 +713,6 @@ class Daemon:
         # The listeners of the HTTP application beside the server's own (``serve``): a port asked for while it served
         # on another -- the one an updater hands on, which pages were on --, and the one it served on before.
         self.listeners: list[Any] = []
-        # The PATH of the last shell a build came from (its ``env``): where the agent apps' command lines are found,
-        # which a server started from an app's window often lacks (``cad_server._internal.update.Update.catch_up``).
-        self.shell_path: str | None = None
         self.token = secrets.token_hex(16) if WINDOWS else ""
         # Per model document a build made (its ``model_id``), the worker that built it last: the one
         # that holds its provenance (``provenance``). A file the build wrote is no key: it names no model.
@@ -768,8 +749,7 @@ class Daemon:
         self.last = time.monotonic()
 
     def stamp(self) -> None:
-        """A command just ended (``worked``): the quiet hour an automatic update waits for starts again. Every
-        request through a door but the server's own asks (``ended``), and every agent's tool call (the CAD app's
+        """A command just ended (``worked``). Every request through a door but the server's own asks (``ended``), and every agent's tool call (the CAD app's
         ``mcp.http.Sessions``)."""
         with self.busy_lock:
             self.worked = time.monotonic()
@@ -1134,11 +1114,6 @@ class Daemon:
                 self.server.revive = self.models.adopt
                 self.server.leaving = self.models.leaving
                 self.server.delete = self.models.delete
-                self.server.retire = self.drain
-                # What an update a page's click starts reads of the engine it runs in (``update.Update.start``):
-                # whether it is on its way out, and the PATH of the last shell a build came from.
-                self.server.going = lambda: self.draining or self.stopping.is_set()
-                self.server.shell_path = lambda: self.shell_path
                 application = getattr(self.server.http, "app", None)
                 if application is not None:
                     application.worked = self.stamp  # an agent's tool call is a command too (``mcp.http.Sessions``)
@@ -1616,9 +1591,6 @@ class Daemon:
                 send(told["answer"])
                 self._counted(request, told, began)
                 return
-            shell = (request.get("env") or {}).get("PATH") if isinstance(request.get("env"), dict) else None
-            if isinstance(shell, str) and shell:
-                self.shell_path = shell
             with self.busy_lock:
                 self.busy += 1
             try:
@@ -1895,7 +1867,6 @@ class Daemon:
                 "identity": self.identity if self.identity and any(self.identity.values()) else None,
                 "renders": [] if self.renders is None else self.renders.status(),
                 "base": _making().status(),
-                "update": _update(),
                 "sessions": (self.server.http.app.sessions() if self.server is not None
                              and hasattr(self.server.http, "app") else [])}
 
@@ -1928,7 +1899,6 @@ class Daemon:
         self.models.prune()
         if self.versions():
             return  # stopping: its version is no channel's now
-        _automatic(self)
         _send_counts()
 
     def versions(self) -> bool:
@@ -2179,7 +2149,7 @@ def _serve(daemon: Daemon, reader: Any, writer: Any, protocol: int = DOOR_PROTOC
     except OSError as error:  # a failure: its words, and its type
         send({"failed": str(error), **failed_type(error)})
     finally:
-        daemon.ended(request)  # a command's end, for the quiet hour; the server's own asks are none
+        daemon.ended(request)  # a command's end; the server's own asks are none
         if daemon.refusal is not None:
             daemon.stopping.set()  # its answer sent: the engine whose port is another's stops
 

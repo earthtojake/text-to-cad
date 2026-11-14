@@ -92,6 +92,39 @@ def proxy_path(where: str | None = None, windows: bool = WINDOWS) -> str:
     return os.path.join(where or proxy_folder(), EXE if windows else "cad")
 
 
+# A folder uv keeps an archive in, in its cache (``archive-v0``); and the marker of a server environment text-to-cad
+# made (``releases.MARKER``).
+_UV_ARCHIVE = re.compile(r"archive-v\d+")
+_RELEASE_MARKER = "cad-release.json"
+
+
+def _within(path: str, folder: str) -> bool:
+    path, folder = os.path.normcase(path), os.path.normcase(folder.rstrip("/\\"))
+    return bool(folder) and (path == folder or path.startswith(folder + os.sep))
+
+
+def transient(path: object) -> bool:
+    """Whether ``path`` (a program, or a folder on PATH) is in an environment that comes and goes, never one
+    the person keeps: this process's own virtual environment (``sys.prefix``: uvx's, as ``uvx ... cad setup``
+    runs), one uv keeps in its cache (``archive-v<N>``), or a server environment of text-to-cad's."""
+    plain = os.path.abspath(str(path))
+    own = {sys.prefix, os.path.realpath(sys.prefix)} if sys.prefix != sys.base_prefix else set()
+    for where in {plain, os.path.realpath(plain)}:
+        if any(_within(where, prefix) for prefix in own):
+            return True
+        if any(_UV_ARCHIVE.fullmatch(part) for part in Path(where).parts):
+            return True
+        parent = os.path.dirname(where)
+        if any(os.path.isfile(os.path.join(folder, _RELEASE_MARKER)) for folder in (parent, os.path.dirname(parent))):
+            return True
+    return False
+
+
+def lasting(path: str) -> str:
+    """A PATH without its transient folders (``transient``): where the person's own commands are found."""
+    return os.pathsep.join(entry for entry in path.split(os.pathsep) if entry and not transient(entry))
+
+
 def state():
     """The user's state folder (``cad.engine.places.state_dir``), as its ``Folder``."""
     from cad_server.engine.registry import Folder
@@ -1288,25 +1321,7 @@ def setup(version: str, *, make_current: bool = False) -> tuple[tuple[str, str, 
         except (OSError, ValueError):
             where = version
         registered = (where, MISSING, f"{type(failure).__name__}: {getattr(failure, 'strerror', None) or failure}")
-    else:
-        write_plugin()
     return registered, write_proxy()
-
-
-def write_plugin() -> bool:
-    """The plugin folder written from this installation (``cad_server._internal.plugin``) when it is the
-    current one and a release's -- a development install (named, ``NAME_ENV``) or a source tree writes it
-    only when asked, by ``cad plugin``: whether it was written. Silent, and never a failure of the
-    registration it rides on: ``cad doctor`` says how the folder is."""
-    if os.environ.get(NAME_ENV) or editable() or not mine(current()):
-        return False
-    try:
-        from cad_server._internal import plugin
-
-        plugin.write()
-    except Exception:  # noqa: BLE001 - a registration never fails on the folder
-        return False
-    return True
 
 
 def startup() -> None:

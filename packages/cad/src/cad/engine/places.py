@@ -31,7 +31,7 @@ environment (a development install's checkout). A daemon with a version names it
 starts (``cad_server.engine.supervisor``), so a worker on a script's own Python is that version's too. Such
 a process reads and writes only under ``versions/<version>/`` -- its data, its data cache, its kernel and
 extras environments and bytecode in its code -- and the engine folder ``<engines>/<version>``, plus the
-device's globals (the ``cad`` command, the install lock and receipt, the plugin folder, ``installations/``),
+device's globals (the ``cad`` command, the install lock, ``installations/``),
 and the engine it starts is its own version's, never another's (``engine``).
 
 A process with NO VERSION -- a checkout or a test under ``CAD_STATE_DIR``, ``CAD_ENGINE_DIR`` and
@@ -156,8 +156,8 @@ def _appdata() -> Path:
 
 def state_dir() -> Path:
     """The device's CAD state folder (``CAD_STATE_DIR`` overrides it): ``cad`` in the platform's place for
-    state (``_local_state``). It holds the device's globals -- the install lock and receipt, the plugin folder,
-    ``installations/``, ``releases/`` -- and the versions (``versions_dir``); in 0.11.10 and earlier it was every
+    state (``_local_state``). It holds the device's globals -- the install lock, ``installations/``, ``releases/``
+    -- and the versions (``versions_dir``); in 0.11.10 and earlier it was every
     version's data too, as it still is for a process with no version (``data_dir``)."""
     override = os.environ.get("CAD_STATE_DIR")
     if override:

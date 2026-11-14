@@ -299,12 +299,11 @@ class TabServerTest(_Session):
         import cad_server
 
         offer_an_update(self)
-        for _ in range(2):  # the update button stays while this install is behind
-            read = self.http("GET", "/api/v1/server")[1]
-            self.assertEqual((read["notice"], read["release"], read["update"]["state"]),
-                             ({"latest": "99.0.0", "version": cad_server.__version__}, cad_server.__version__, "idle"))
-        # A launch carries it, as the server last read it, so the button draws with the page.
-        self.assertEqual(self.launch("cad_home")["notice"], read["notice"])
+        read = self.http("GET", "/api/v1/server")[1]
+        self.assertEqual(read["release"], cad_server.__version__)
+        self.assertFalse({"notice", "update"} & set(read), "the page is offered no update")
+        # A launch carries the notice, as the server last read it.
+        self.assertEqual(self.launch("cad_home")["notice"], {"latest": "99.0.0", "version": cad_server.__version__})
 
     def test_an_agent_names_a_model_by_its_absolute_path_and_a_tab_reopens_on_it(self) -> None:
         opened = self.launch("cad_open", {"source": self.bracket})
@@ -415,7 +414,7 @@ class TabServerTest(_Session):
                     [text] = answered["content"]
                     self.assertIn("removed in text-to-cad 0.11.10", text["text"])
                     self.assertIn(command, text["text"])
-                    self.assertIn("cad skill", text["text"])
+                    self.assertNotIn("skill", text["text"])
         # Counted as the caller's call naming no tool of cadgen's, never as the system's failure.
         self.assertEqual({call.args for call in counted.call_args_list}, {("cad_unknown", False, "bad_request")})
         with self.assertRaisesRegex(RpcError, "unknown tool 'cad_render'") as refused:
@@ -1004,7 +1003,8 @@ class ClaudeCodeSessionTest(_Session):
 
     def test_claude_code_s_session_lists_no_tool_and_says_to_use_the_skill(self) -> None:
         self.assertEqual(self.tools(), [])
-        self.assertIn("cad skill", self.initialized["instructions"])
+        self.assertIn("`cad` command", self.initialized["instructions"])
+        self.assertNotIn("skill", self.initialized["instructions"])
         self.assertIn("`cad viewer`", self.initialized["instructions"])
         # Claude gets no CAD server: nothing sends the agent to set one up.
         self.assertNotIn("cad setup", self.initialized["instructions"])
@@ -1216,8 +1216,8 @@ class TextServerTest(_Session):
     def test_a_newer_release_comes_with_the_first_cad_show_and_only_the_first(self) -> None:
         offer_an_update(self)
         first = self.call("cad_show", {"source": self.bracket})["content"]
-        self.assertRegex(first[-1]["text"], r"^text-to-cad 99\.0\.0 is out \(this is .+\); to update every agent "
-                                            r"app here, run: (curl -fsSL https://texttocad\.dev/install\.sh \| sh|"
+        self.assertRegex(first[-1]["text"], r"^A new release of text-to-cad is available: .+ -> 99\.0\.0\n"
+                                            r"To update, run: (curl -fsSL https://texttocad\.dev/install\.sh \| sh|"
                                             r"irm https://www\.texttocad\.dev/install\.ps1 \| iex)$")
         self.assertEqual(len(self.call("cad_show", {"source": self.bracket})["content"]), 1)
 

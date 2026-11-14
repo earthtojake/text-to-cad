@@ -228,7 +228,7 @@ class EngineApp:
         self._mcp = None
         self.session_factory = session_factory
         # Told as an agent's tool call ends (``mcp.http.Sessions``): the engine's daemon stamps the end of a command
-        # for the quiet hour an automatic update waits for (``daemon.Daemon.stamp``). Nothing for an app of its own.
+        # (``daemon.Daemon.stamp``). Nothing for an app of its own.
         self.worked = lambda: None
         from cad_server import __version__
         from cad_server.analytics import Recorder

@@ -213,15 +213,27 @@ VERSIONS = ("0.0.1", "0.9.9", "0.10.4", "0.10.5", "0.11.0", "0.11.12", "1.0.0", 
             "1.3.0", "1.9.3", "2.0.0", "2.1.0", "10.0.0")
 
 
-class TheGuardKeepsTheUpdatersRuleTests(unittest.TestCase):
-    """The version check's copy of the rule (release-tags.sh: the release scripts import nothing of the
-    packages, and its job installs no Python) answers as the automatic updater's
-    (cad_server.auto_updates.takes): a release refused a new migration guide is exactly one a device takes
-    by itself."""
+def _bump(have: str, want: str) -> str | None:
+    """The part of ``have`` that ``want`` moves on, or None for no later release."""
+    old, new = (tuple(int(part) for part in version.split(".")) for version in (have, want))
+    if new <= old:
+        return None
+    return "major" if new[0] != old[0] else "minor" if new[1] != old[1] else "patch"
 
-    def test_every_pair_of_releases_bumps_and_installs_itself_as_the_updater_says(self) -> None:
-        from cad_server import auto_updates
 
+def _installs_itself(have: str, want: str) -> bool:
+    """Semantic Versioning's rule as the release rules state it: a release that breaks nothing -- a patch below 1.0,
+    a patch or minor from 1.0 -- is one every device can take; one that bumps the breaking part is not."""
+    moved = _bump(have, want)
+    return moved == "patch" or (moved == "minor" and int(have.split(".")[0]) >= 1)
+
+
+class TheGuardKeepsTheReleaseRuleTests(unittest.TestCase):
+    """The version check's rule (release-tags.sh: the release scripts import nothing of the packages, and its job
+    installs no Python) answers as Semantic Versioning's rule above: a release refused a new migration guide is
+    exactly one that breaks nothing."""
+
+    def test_every_pair_of_releases_bumps_and_installs_itself_as_the_rule_says(self) -> None:
         pairs = [(have, want) for have in VERSIONS for want in VERSIONS]
         script = ('source "$1"; while read -r have want; do '
                   'bump="$(version_bump "$have" "$want")" || bump=none; '
@@ -236,7 +248,7 @@ class TheGuardKeepsTheUpdatersRuleTests(unittest.TestCase):
                     for have, want, bump, takes in (line.split() for line in result.stdout.splitlines())}
         self.assertEqual(sorted(answered), sorted(pairs))
         for have, want in pairs:
-            expected = (auto_updates.bump(have, want) or "none", "yes" if auto_updates.takes(have, want) else "no")
+            expected = (_bump(have, want) or "none", "yes" if _installs_itself(have, want) else "no")
             self.assertEqual(answered[have, want], expected, (have, want))
 
 

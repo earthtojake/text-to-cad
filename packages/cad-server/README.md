@@ -56,12 +56,8 @@ src/cad_server/
   language.py            # the language the person chose for the CAD views
   whats_new.py           # the releases whose What's new the person has seen (settings'
                          #   whats_new), and whether a device was updated or is new
-  updates.py             # the hourly version check, for a copy nothing else keeps current,
-                         #   and the release an update moves to
-  auto_updates.py        # automatic updates: the person's setting (on by default), the
-                         #   releases they take by Semantic Versioning (takes: patch below 1.0,
-                         #   patch or minor from 1.0), the hour of quiet and the retry rule the
-                         #   default version's own update keeps
+  updates.py             # the hourly version check: the latest release the feed names, and
+                         #   whether it is newer than this one
   assets.py              # where the bundled runtime is
   _internal/             # the environments models run in (base: the installation's base,
                          #   cad[build123d], made by uv on first need; extras: the one a
@@ -69,26 +65,21 @@ src/cad_server/
                          #   packages and uv's options; scan: the integrations a program's
                          #   imports use, read without running it), the launch commands (launch), the
                          #   installations' registry, which one is current, and the `cad` command
-                         #   (installations: ~/.local/bin/cad, which the skills run; written by
-                         #   `cad doctor`, `cad setup`, `cad setup --add` and a CAD app's first
-                         #   registration), a pin's reading by the version it names (pins), the
+                         #   (installations: ~/.local/bin/cad; written by `cad doctor`, `cad setup`
+                         #   and a CAD app's first registration), a pin's reading by the version it names (pins), the
                          #   module the command of 0.11.10 and earlier ran (proxy), the flat release
-                         #   folders of 0.11.10 and earlier (releases), the updater and the contract
-                         #   between releases (update), the versions installed in their own folders and the
+                         #   folders of 0.11.10 and earlier (releases), the versions installed in their own folders and the
                          #   one routine that moves a channel between them (versions), the pointer
                          #   per channel (pointers), a version's first-start import (imports), the
-                         #   layout of 0.11.10 and earlier (legacy), the plugin folder every agent app is pointed at
-                         #   (plugin), the agent apps setup reads and writes (providers),
-                         #   what earlier releases left behind (leftovers), the daemon's entry
+                         #   layout of 0.11.10 and earlier (legacy), what earlier releases left behind (leftovers), the daemon's entry
                          #   (engine_daemon) and what it is composed of (engine_host), the
                          #   server's observer of the engine and the telemetry sender, where
-                         #   an event comes from and who has an updater (channel), file locks (the data folder's one lock:
+                         #   an event comes from and who is told of a new release (channel), file locks (the data folder's one lock:
                          #   `file_lock.state`), the CLI derivation, the one parser every
                          #   command reads its options by (cli_parser) and the one failure
                          #   contract every command fails by (cli_errors)
-  _runtime/              # BUILT: the CAD Viewer client, the CAD app page and the agent-app
-                         #   plugin (its manifests and skills) -- produced when the wheel is
-                         #   packaged, never committed, never edited
+  _runtime/              # BUILT: the CAD Viewer client and the CAD app page -- produced when
+                         #   the wheel is packaged, never committed, never edited
 ```
 
 ## Commands
@@ -176,37 +167,21 @@ environment the engine makes, its own folder last on its path, and a command an 
 (`kicad-cli`) with that integration, through its `_command` module, headless; `cad requirement [INTEGRATION ...]` the
 exact requirement a Python of a program's own installs this release's cad by
 (`cad[build123d]==<release>`); `cad viewer` the engine page launcher;
-`cad setup`, which the install command `curl -fsSL https://texttocad.dev/install.sh | sh` runs, makes its
-release present in its own folder, moves the default channel to it (its data imported, the pointer, the mirror for
-0.11.10 and earlier, every version no pointer names removed, the server's port handed to its server -- a server of
-0.11.10 or earlier drained first), then sets it up in every agent app it finds, each by its own command
-(`_internal/providers.py`), and keeps its receipt, which is what gives the default channel an updater; it leaves a
-store's copy, and every named channel, alone; `cad setup --add` makes its release present and writes the `cad`
-command, and nothing else (the install command's `--add <version>`, which a skill's setup block names). Only the
-default channel has an updater (`_internal/update.py`, whose docstring is the contract between releases: an
-updater installs the new release by its own `cad setup --add` and runs its own `cad setup --engine-update`,
-nothing else), and only where the install command has run: `cad update` runs the newest release's `cad setup` that
-way, as the update button does, and on a device already on the newest release this release's setup again, which
-gives an app a run left behind its text (the receipt's `behind`, which `cad doctor` names; the default version's
-server does it by itself too, once a day at most while idle) (`--dry-run` reads the version feed, keeping nothing,
-and says the release it would install before the plan; with no receipt it says there is no install to update; with a channel's pin, that whoever
-delivers the copy updates it); a pinned command newer than the default channel's version runs the same sequence,
-whatever the switch says; and `cad update auto on|off` turns automatic updates on or off (on by default: the
-default version's server installs a newer release that breaks nothing -- a patch release below 1.0, a patch or
-minor release from 1.0 -- in the background and runs its setup once it has handled no command for an hour; one that
-may break something waits for the update button or `cad update`);
-`cad uninstall` takes out what the install command put here -- our plugin copies, the plugin folder, the default
-channel and its version's code unless a store's channel is on it (its data -- settings, Recents, documents' records,
-page token and port -- stays for a later install, which finds it), the receipt, and the `cad` command unless a store's
-copy still runs it (said, with which) --, and `--purge` everything, that data with it. The channels go before any
-server is stopped, so a thread an app still has open finds its channel gone and starts no server again; a version
-something still runs from stays, said with what runs and that deleting its folder once that has ended finishes it;
-asked first as every command that destroys is (`cad
+`cad setup` installs the version that runs it on this computer, and nothing else: its folder
+(`versions/<version>` in the state folder), its server, a check that it runs, the CAD kernel, its complete marker
+(`_internal/versions.py`'s `make_present`), and the `cad` command where it is missing or older; run again it is quick
+and changes nothing. It is run as `uvx --no-config --managed-python --python 3.14 --from cad-server==<version> cad
+setup`. It has one hidden option, `--engine-update`, which no person runs: the updaters of 0.10.0 to 0.11.10, frozen
+on computers, update by running a newer release's `cad setup --engine-update` from a flat folder they made, so it
+does the same, then the hand-over from their layout (the data imported, the records their switch reads written),
+then starts the hosted install script once, detached and never waited on (`CAD_ENGINE_UPDATE_INSTALLER` names a
+command to run instead, for a test). text-to-cad has no updater: the version check (`updates.py`) only knows the
+latest release; the install command updates. `cad uninstall` removes text-to-cad from this computer: every version,
+each one's server stopped first, the state folder and the cache folder of 0.11.10 and earlier, and the `cad`
+command; nothing is kept and nothing else is touched. It asks first, as every command that destroys does (`cad
 delete`, `cad doctor --prune`, `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`;
-`_internal/consent.py`);
-`cad plugin` writes
-the plugin folder and prints its path; and `cad telemetry` the person's answer, whose no, wherever it is said
-(`cad telemetry off`, the app menu's switch, `cad setup --no-telemetry`), is said in every version on the device
+`_internal/consent.py`); and `cad telemetry` the person's answer, whose no, wherever it is said
+(`cad telemetry off`, the app menu's switch), is said in every version on the device
 and in the state folder's settings, where 0.11.10 and earlier read it and where a version installed later takes it
 from as it first starts (`analytics.everywhere`, `inherit_no`). The mechanism is the
 engine README's **CLI** and **Document types and integrations**.
@@ -214,39 +189,18 @@ engine README's **CLI** and **Document types and integrations**.
 **Since 0.11.8** `cad <type> inspect`'s text names at most four parts on a line of materials, then the first
 three and how many more; its `--json` still names every part, so a program reads that.
 
-The plugin every agent app gets is one folder, `plugin` in the state folder, which the server writes
-from its own copy of the plugin (`_runtime/plugin`: each host's manifest, its config for the CAD app's
-server, and the skills, byte for byte as they were released) with every version this distribution's
-(`_internal/plugin.py`). It is written again in place -- each file renamed over, never a symlink --
-by `cad setup` before it points the apps at it -- every update runs the new release's setup --, and by `cad plugin
---refresh`, which the updater of 0.11.10 and earlier runs once the release it moved to serves. Each app takes it
-the way it takes a local plugin (`_internal/providers.py`): a local catalog that Claude Code reads in
-place and Codex copies, an extension Gemini CLI links, a copy in Cursor's local plugins folder, the
-skills copied by the Skills CLI for the agents without a plugin. Claude gets the skills alone: `cad setup`
-writes no CAD server into Claude Desktop's config, and takes out the one releases through 0.11.10 wrote
-there. A copy an app got from a store (claude.ai's directory, OpenAI's in Codex) is the app's to deliver and update, on
-that store's own channel -- every pin in its text carries it (`cad +<version>@claude`, `@codex`), and its CAD
-app's launcher is given it as an argument (`cad-mcp --channel codex`); a copy Cursor installed from a marketplace
-added in Cursor is the repository, our own text, as Cursor fetched it, which text-to-cad does not update, so it can
-be many releases behind, and is on the default channel. No `cad setup` touches a copy from a store, and none lets it
-stop ours: every app gets ours, beside it, and only our own older copies, known by the names and marks we wrote, are
-removed; where an app's own records or listing show a store's copy beside ours, the plan, the report and `cad doctor`
-say so in one line, with how to keep one. A skill of ours this release no longer ships is deleted from an agent the
-receipt says got it through the Skills CLI, which never removes one. An update writes the folder for the
-new release and brings our copies along, a person's or an automatic one; a store's copy, and the version its
-channel is on, are its store's to update. A model builds by running its script: `cad +<version> run model.py`, through
+A model builds by running its script: `cad +<version> run model.py`, through
 the `cad` command. The CAD app an agent
 host starts is `cad-mcp`, of the `cad-mcp` distribution, which reaches this server.
 
 **The `cad` command** (`~/.local/bin/cad`, `cad.exe` on Windows: `_internal/installations.py`) is the one file
-every version is run through, written by `cad setup`, `cad setup --add` and `cad doctor`, and never replaced by a
+every version is run through, written by `cad setup` and `cad doctor`, and never replaced by a
 release whose revision of it is older. It reads only its first argument. A pin, `cad +<version>[@<channel>]
-<verb> ...` -- every command a skill runs carries its release's, and a copy a store delivers its channel too --
+<verb> ...` --
 runs that version's own `cad` with the whole command line, and never another version: one not installed is
-installed first by its own release (`uvx ... --from cad-server==<version> cad setup --add`), unless the channel's
+installed first by its own release (`uvx ... --from cad-server==<version> cad setup`), unless the channel's
 pointer names a newer version already. That version reads the pin (`_internal/pins.py`): equal to its channel's
-version, it runs; newer, or the channel's first use, it moves the channel to itself first (the default channel,
-where the install command has run here, by the updater); older, it refuses. With no pin, the command runs the
+version, it runs; newer, or the channel's first use, it moves the channel to itself first; older, it refuses. With no pin, the command runs the
 default channel's version: its pointer; else, where the install command has run here, the installation the layout of
 0.11.10 and earlier names current; else the newest version installed that has started, else the newest
 installed, whose first command then makes the default channel's first use (its data imported, its pointer) before
@@ -259,8 +213,7 @@ run outside the sandbox (`curl -fsSL https://texttocad.dev/install.sh | sh -s --
 `& ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --add <version>`), or one whose channel it
 could not move; 4 `stale_pin`, a pin older than the version its channel is on now -- the chat's copy of the skill
 is older than the one installed: the line says to read the skill again, and, where it still names the same
-release, to bring this app's copy up (`cad update` for the default channel, the plugin's update in its app for a
-named one), then read it again or start a new chat; 5 `other_version`, a version's own
+release, to bring this app's copy up, then read it again or start a new chat; 5 `other_version`, a version's own
 `cad` given another version's pin. A `cad` command of 0.11.10 or earlier knows no pin: it says `+<version>` is an
 unknown command (exit 2).
 
@@ -271,11 +224,11 @@ port, the telemetry spool, the version feed's cache, and its caches under `data/
 its engine's door in `<version>` in the engine folder; a process with no version (a checkout or a test
 under `CAD_STATE_DIR`, `CAD_ENGINE_DIR` and `CAD_CACHE_DIR`, a release of 0.11.10 or earlier) keeps the flat
 layout below, in the state and cache folders (`cad.engine.places`). A version is made present whole --
-its server and kernel environments, then its code marker -- by `cad setup --add` (`_internal/versions.py`),
+its server and kernel environments, then its code marker -- by `cad setup` (`_internal/versions.py`),
 which writes the `cad` command where it is missing or of an older revision and changes nothing else; each delivery
 channel's pointer (`default`, `channels/<name>` in the state folder:
 `_internal/pointers.py`; a pointer that is there and cannot be read, or names no version, is never taken for none:
-a pinned command refuses, nothing is removed while one cannot be read, and only `cad setup`, the updater and `cad
+a pinned command refuses, nothing is removed while one cannot be read, and only `cad setup --engine-update` and `cad
 doctor` write one again) names its version, moved by one routine that imports the new version's settings, Recents,
 records, page token and port from the version it replaces at its first start (`_internal/imports.py`), proves the
 version's server starts (its own start sequence, up to ready to serve), carries over what the version it leaves
@@ -299,10 +252,8 @@ version's server, or its next move, removes its folder, its data carried in firs
 folder stays and `cad doctor` says why.
 `cad stop`
 and `cad status` act on one version's server: the pinned one, or the default's. Only the default channel's
-version, on a device where the install command has run (its receipt), has an updater: every other server's page
-and CAD app card show no update notice, no update button and no automatic-updates switch (the settings route
-answers its `updates` null, `_internal/channel.py`'s `told`), and neither does a CAD app card whose launcher is on a
-named channel, even where that channel shares the default's version.
+version is told of a newer release (`_internal/channel.py`'s `told`), and no CAD app card whose launcher is on a
+named channel is, even where that channel shares the default's version.
 
 Telemetry (`analytics.py`) describes each batch with two fields: `channel`, the delivery channel of the
 requests or sessions it counted (a pin's or a launcher's, `default` for none, `dev` from a development build),
@@ -318,9 +269,8 @@ place for caches; on Windows they are where Linux keeps them, `~\.local\state\ca
 `~\.cache\cad`, never in the local application data, which Windows virtualizes for every process
 an app package (the Claude desktop app) starts. Where 0.10.0 kept them there (`cad-state` and `cad`
 in `%LOCALAPPDATA%`), the same commands move the settings, the documents' records and their bytes,
-Recents, the receipt, the page token and the port the engine remembers once, `cad setup` stops 0.10.0's
-engine by its own `cad stop`, and `cad doctor --prune` removes the rest a week after its last write. On a computer an earlier release (0.8, named
-cadgen) set up, `cad setup`, `cad doctor` and a registration move what this release keeps of the
+Recents, the receipt, the page token and the port the engine remembers once, and `cad doctor --prune` removes the rest a week after its last write. On a computer an earlier release (0.8, named
+cadgen) set up, `cad doctor` and a registration move what this release keeps of the
 earlier state folder into this one, each thing once and only where this one has none of it: the
 settings, the documents' records, Recents and the setup receipt (`cad.engine.places.adopt`); the
 person's telemetry no stays in the earlier folder too, for the earlier release while it is installed.

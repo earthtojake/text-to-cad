@@ -1,1747 +1,206 @@
-"""``cad setup`` (``cad_server.cli.setup``), ``cad update`` (``cad_server.cli.update``), ``cad
-uninstall`` (``cad_server.cli.uninstall``), and the one-line installer's scripts that run them
-(``scripts/install/install.sh``, ``install.ps1``).
+"""``cad setup``, its hidden ``--engine-update``, and ``cad uninstall`` (``cad_server.cli.setup``, ``uninstall``).
 
-The verb runs against a temporary home: its state, cache and ``cad`` command folders inside it,
-fake app commands on a PATH of their own, Claude Desktop's config file named by
-``CLAUDE_DESKTOP_CONFIG``, and a plugin of the test's own that the plugin folder is written from
-(``cad_server._internal.plugin``). The engine is never asked: what serves the port, 0.8's ``cadgen stop``,
-and this release's ``cad stop`` are stood in for, as is the
-telemetry choice, so nothing here reaches the network or the developer's own engine, settings and
-apps. Every run is at a terminal that would answer no, and asks it nothing.
+``cad setup`` sets up the version that runs it -- its folder, its server, the check that it runs, its kernel, its
+marker, and the ``cad`` command -- and knows no app: a home of the test's own holds agent apps' folders and stand-ins
+of their commands on PATH, which record any call. ``--engine-update`` is what the updaters of 0.10.0 to 0.11.10 run
+of a newer release, from the flat folder they made (its prepare run first, for an automatic update): it sets the
+version up, hands over from their layout, and starts the install script once, never waiting on it (its stand-in,
+``CAD_ENGINE_UPDATE_INSTALLER``). ``cad uninstall`` removes every version (a real server running, stopped first),
+the state and cache folders and the ``cad`` command, and nothing else.
+
+The device is ``test_versions``'s (uv stood in for: each version a real virtual environment of this Python naming
+this checkout's sources); the real servers are ``test_version_servers``'s. A real 0.11.10 updating into this build
+is scripts/test/rehearse-update.py's.
 """
 
 from __future__ import annotations
 
 import contextlib
-import dataclasses
-import hashlib
 import io
-import json
 import os
-import platform
-import re
-import shutil
-import stat
 import subprocess
 import sys
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from tests.python.support.paths import REPO_ROOT, add_repo_path
-from tests.python.support.tmp_root import temporary_directory
+from tests.python.packages.cad_server.test_version_servers import Servers
+from tests.python.packages.cad_server.test_versions import OLD, Device
 
-add_repo_path("packages/cad/src")
+from cad.engine import places
+from cad_server._internal import installations, pointers, versions
+from cad_server.cli import setup, uninstall
 
-import cad_server  # noqa: E402
-from cad_server import analytics  # noqa: E402
-from cad_server import cli, updates  # noqa: E402
-from cad_server._internal import installations, plugin, providers, releases, versions  # noqa: E402
-from cad_server._internal.launch import LAUNCHER  # noqa: E402
-from cad_server.cli import setup, stop, telemetry, uninstall  # noqa: E402
-
-RELEASE = cad_server.__version__
-# ``setUp`` stands these in for most tests: the one that tells a new person takes the real ones.
-NOTIFY, DESCRIBE = analytics.notify, telemetry.describe
-PORT = 3245
-VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-INSTALL_SH = REPO_ROOT / "scripts" / "install" / "install.sh"
-INSTALL_PS1 = REPO_ROOT / "scripts" / "install" / "install.ps1"
-POSIX = unittest.skipIf(os.name == "nt", "the shell installer is for macOS and Linux")
+X, Y = "0.12.0", "0.12.1"
+DEV = f"{X}-dev.20261114000000"
+# The agents' commands a setup must never run, stood in for on PATH.
+APPS = ("claude", "codex", "cursor-agent", "gemini", "grok", "hermes", "npx", "qwen")
 
 
-def command(folder: Path, name: str, body: str) -> Path:
-    """A command ``name`` in ``folder`` that runs ``body`` (Python, with ``args``) by this interpreter
-    and logs each call to ``calls.jsonl`` beside it."""
-    program = folder / f"{name}.py"
-    program.write_text("import json, sys\nargs = sys.argv[1:]\n"
-                       f"with open({str(folder / 'calls.jsonl')!r}, 'a', encoding='utf-8') as log:\n"
-                       f"    log.write(json.dumps([{name!r}, *args]) + '\\n')\n" + body, encoding="utf-8")
-    if os.name == "nt":
-        launcher = folder / f"{name}.cmd"
-        launcher.write_text(f'@"{sys.executable}" "{program}" %*\r\n', encoding="utf-8")
-    else:
-        launcher = folder / name
-        launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{program}" "$@"\n', encoding="utf-8")
-        launcher.chmod(launcher.stat().st_mode | stat.S_IXUSR)
-    return launcher
+def snapshot(folder: Path) -> dict[str, bytes]:
+    return {path.relative_to(folder).as_posix(): path.read_bytes() for path in sorted(folder.rglob("*"))
+            if path.is_file()}
 
 
-# Claude Code with a development install of the plugin, and nothing else, for a plan to show: the record it keeps
-# (``claude_with_a_development_install``), and its listing, which a real run asks.
-CLAUDE = """
-if args == ["plugin", "list", "--json"]:
-    print(json.dumps([{"id": "text-to-cad@earthtojake-dev", "version": "0.0.1-dev.1", "scope": "user"}]))
-elif args == ["plugin", "marketplace", "list", "--json"]:
-    print("[]")
-else:
-    sys.exit(9)
-"""
+class Computer(Device):
+    """A device with a home of agent apps (their folders, and stand-ins of their commands on PATH, each writing a line
+    to ``called`` when run)."""
 
-# An app's command that writes in the home as it starts, as every one of them does: run for any reason, it shows.
-WRITES = """
-import os, pathlib
-wrote = pathlib.Path(os.environ["HOME"]) / ".written-by-a-command" / args[0]
-wrote.mkdir(parents=True, exist_ok=True)
-"""
-
-# Claude Code with nothing installed, whose every other command succeeds: the plugin folder it is
-# pointed at must be there by then, written.
-CLAUDE_EMPTY = """
-import os
-if args in (["plugin", "list", "--json"], ["plugin", "marketplace", "list", "--json"]):
-    print("[]")
-elif args[:3] == ["plugin", "marketplace", "add"]:
-    sys.exit(0 if os.path.isfile(os.path.join(args[3], ".claude-plugin", "marketplace.json")) else 7)
-"""
-
-
-def plugin_source(root: Path) -> Path:
-    """A plugin of the test's own, laid out as the server's wheel carries it: every file the folder is
-    written from, and a skill."""
-    server = {"mcpServers": {"cad": {"command": "uvx", "args": [*LAUNCHER[1:], "cad-mcp==0.0.1", "cad-mcp"]}}}
-    files = {name: b"bytes" for name in plugin.FILES}
-    files.update({name: json.dumps({"name": "text-to-cad", "version": "0.0.1"}).encode() for name in plugin.MANIFESTS})
-    files.update({name: json.dumps(server).encode() for name in ("claude.mcp.json", "codex.mcp.json", "cursor.mcp.json",
-                                                                 "mcp.json")})
-    files["gemini-extension.json"] = json.dumps({"name": "text-to-cad", "version": "0.0.1", **server}).encode()
-    files[plugin.CATALOG] = json.dumps({"name": "earthtojake", "plugins": [{"name": "text-to-cad", "source": "./"}]}).encode()
-    files["skills/cad/SKILL.md"] = b"---\nname: cad\n---\nMaintained at earthtojake/text-to-cad.\n"
-    for name, data in files.items():
-        (root / name).parent.mkdir(parents=True, exist_ok=True)
-        (root / name).write_bytes(data)
-    return root
-
-
-# The Skills CLI, for Windsurf and GitHub Copilot: `add` copies every skill into the folder it keeps for
-# each agent named, as the real one does -- Windsurf's own, and for GitHub Copilot, whose project folder is
-# `.agents/skills`, `~/.agents/skills` and never its `~/.copilot/skills` -- and prints the CLI's JSON;
-# `remove` takes the named ones out.
-NPX = f"SKILLS = {providers.SKILLS!r}\n" + """
-import os, shutil
-from pathlib import Path
-home = Path(os.environ["HOME"])
-FOLDERS = {"windsurf": home / ".codeium" / "windsurf" / "skills", "github-copilot": home / ".agents" / "skills"}
-assert args[:3] == ["--prefer-offline", "-y", "skills@latest"], args
-args = args[1:]
-agents = [args[index + 1] for index, arg in enumerate(args) if arg == "-a"]
-assert agents and set(agents) <= set(FOLDERS), agents
-if args[2] == "add":
-    assert os.path.isfile(os.path.join(args[3], "cad", "SKILL.md")), "the skills come from the plugin folder"
-    for folder in {FOLDERS[agent] for agent in agents}:
-        for name in SKILLS:
-            (folder / name).mkdir(parents=True, exist_ok=True)
-            (folder / name / "SKILL.md").write_text(f"---\\nname: {name}\\n---\\nMaintained at earthtojake/text-to-cad.\\n")
-    print(json.dumps([{"name": name, "status": "installed"} for name in SKILLS]))
-elif args[2] == "remove":
-    for folder in {FOLDERS[agent] for agent in agents}:
-        for name in args[args.index("-s") + 1:args.index("-y")]:
-            shutil.rmtree(folder / name)
-"""
-
-
-class Terminal(io.StringIO):
-    """A terminal whose every answer is no: the installer asks nothing, so it reads none of it (and an
-    uninstall told yes, ``--yes``, reads none either)."""
-
-    def isatty(self) -> bool:
-        return True
-
-
-class Fixture(unittest.TestCase):
     def setUp(self) -> None:
-        scratch = temporary_directory(prefix="install-")
-        self.addCleanup(scratch.cleanup)
-        self.root = Path(scratch.name).resolve()
+        super().setUp()
         self.home = self.root / "home"
-        self.bin = self.root / "bin"
-        for folder in (self.home, self.bin):
-            folder.mkdir()
-        self.state, self.cache = self.home / "state", self.home / "cache"
-        self.launchers = self.home / "launchers"
-        self.desktop = self.home / "Claude" / "claude_desktop_config.json"
-        self.uvx = command(self.bin, "uvx", "")
-        self.plugin_source = plugin_source(self.root / "plugin-source")
-        environ = {key: value for key, value in os.environ.items()
-                   if not key.endswith("_CLI") and key not in ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "APPDATA",
-                                                               "UV_INSTALL_DIR", "XDG_BIN_HOME", "XDG_CONFIG_HOME",
-                                                               "HERMES_HOME", "FLATPAK_XDG_CONFIG_HOME", "GEMINI_CLI_HOME")}
-        environ.update({"PATH": str(self.bin), "HOME": str(self.home), "USERPROFILE": str(self.home),
-                        "CLAUDE_DESKTOP_CONFIG": str(self.desktop)})
-        self.machine = providers.Machine(self.home, environ, bundled={})
-        # The port is the default one, never what the test runner names for its own engines.
-        port = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state), "CAD_CACHE_DIR": str(self.cache),
-                                            "CAD_LAUNCHER_DIR": str(self.launchers),
-                                            "CAD_ENGINE_DEFAULT_PORT": str(PORT)})
-        port.start()
-        self.addCleanup(port.stop)
-        os.environ.pop("CAD_ENGINE_PORT", None)
-        for patch in (mock.patch.object(providers.Machine, "here", return_value=self.machine),
-                      mock.patch.object(setup, "running_engine", side_effect=lambda: self.serving),
-                      mock.patch.object(setup, "port_held", side_effect=lambda port: self.held),
-                      mock.patch.object(setup, "stop_earlier", return_value=(True, [], "")),
-                      mock.patch.object(plugin, "source", return_value=self.plugin_source),
-                      mock.patch.object(analytics, "notify", return_value=False),
-                      mock.patch.object(telemetry, "describe", return_value="off: your choice"),
-                      mock.patch.object(stop, "main", return_value=0)):
-            self.addCleanup(patch.stop)
+        for folder, name, text in ((".claude", "settings.json", "{}"), (".codex", "config.toml", "[plugins]\n"),
+                                   (".cursor/plugins/local", "keep", "x"), (".agents/skills/cad", "SKILL.md", "ours")):
+            (self.home / folder).mkdir(parents=True)
+            (self.home / folder / name).write_text(text, encoding="utf-8")
+        tools = self.root / "tools"
+        tools.mkdir()
+        self.called = self.root / "called"
+        for app in APPS:
+            stand_in = tools / app
+            stand_in.write_text(f"#!/bin/sh\necho {app} \"$@\" >> '{self.called}'\n", encoding="utf-8")
+            stand_in.chmod(0o755)
+        self.before = snapshot(self.home)
+        environment = {"HOME": str(self.home), "USERPROFILE": str(self.home),
+                       "PATH": os.pathsep.join([str(tools), os.environ.get("PATH", "")]), setup.INSTALLER_ENV: ""}
+        for patch in (mock.patch.dict(os.environ, environment),
+                      mock.patch.object(installations, "_make_interpreter", side_effect=self.interpreter)):
             patch.start()
-        self.serving: dict | None = None
-        self.held: str | None = None
+            self.addCleanup(patch.stop)
 
-    def run_setup(self, *argv: str) -> tuple[int, str, str]:
-        return self._run(setup.main, argv)
+    def interpreter(self, folder: str) -> None:
+        """On Windows the cad command's Python, as uv makes it, without uv."""
+        home = self.root / "python-home"
+        home.mkdir(exist_ok=True)
+        (home / "python.exe").write_bytes(b"MZ")
+        Path(folder, "Scripts").mkdir(parents=True, exist_ok=True)
+        Path(folder, "Scripts", "python.exe").write_bytes(b"MZ")
+        Path(folder, "pyvenv.cfg").write_text(f"home = {home}\nversion_info = 3.14.0\n", encoding="utf-8")
 
-    def run_uninstall(self, *argv: str, yes: bool = True) -> tuple[int, str, str]:
-        """``cad uninstall``, said yes to (``--yes``) unless ``yes`` is false: it destroys, so it asks first."""
-        return self._run(uninstall.main, (*argv, "--yes") if yes else argv)
+    def no_app_touched(self) -> None:
+        self.assertFalse(self.called.exists(), "no app's command was run")
+        self.assertEqual(snapshot(self.home), self.before, "no file of the home changed")
 
-    def _run(self, main, argv: tuple[str, ...]) -> tuple[int, str, str]:
-        out, err, terminal = io.StringIO(), io.StringIO(), Terminal("n\n" * 8)
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), \
-                mock.patch.object(sys, "stdin", terminal):
+    def main(self, module, argv: list[str]) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             try:
-                code = main(list(argv))
+                code = module.main(argv)
             except SystemExit as exit_:
                 code = exit_.code
-        self.assertEqual(terminal.tell(), 0, "cad read its terminal: it asks nothing")
         return code, out.getvalue(), err.getvalue()
 
-    def snapshot(self) -> dict:
-        found = {}
-        for path in sorted(self.home.rglob("*")):
-            found[path.relative_to(self.home).as_posix()] = (
-                hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else "folder", path.stat().st_mtime_ns)
-        return found
 
-    def receipt(self) -> dict:
-        return json.loads((self.state / setup.RECEIPT).read_text(encoding="utf-8"))
-
-    def desktop_with(self, servers: dict) -> bytes:
-        self.desktop.parent.mkdir(parents=True, exist_ok=True)
-        self.desktop.write_text(json.dumps({"mcpServers": servers, "preferences": {"keep": True}}, indent=2) + "\n",
-                                encoding="utf-8")
-        return self.desktop.read_bytes()
-
-    def cursor(self) -> Path:
-        """Cursor here, with no Claude Code to feed it: the app that gets a copy of the plugin folder and runs no
-        command. Where its copy goes."""
-        (self.home / ".cursor").mkdir(exist_ok=True)
-        return providers.cursor_plugins(self.machine) / "text-to-cad"
-
-    def entry(self, release: str = RELEASE) -> dict:
-        """Claude Desktop's server as releases through 0.11.10 wrote it."""
-        return {"command": os.path.abspath(self.machine.which("uvx")),
-                "args": [*LAUNCHER[1:], f"cad-mcp=={release}", "cad-mcp"],
-                "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}}
-
-    def earlier_installation(self, version: str = "0.8.4") -> dict:
-        """A 0.8 installation, its environment and its record as 0.8 wrote it, in 0.8's own state folder: the
-        state folder this test names (``cad.engine.places.earlier_state_dir``)."""
-        scripts = self.root / f"env-{version}" / "bin"
-        scripts.mkdir(parents=True)
-        for path in (scripts / "cadgen", scripts / "python"):
-            path.write_text("", encoding="utf-8")
-        record = {"version": version, "python": str(scripts / "python"), "cadgen": str(scripts / "cadgen"),
-                  "prefix": str(scripts.parent), "registered": "2026-10-30T12:00:00+0000"}
-        (self.state / "installations").mkdir(parents=True, exist_ok=True)
-        (self.state / "installations" / f"{version}.json").write_text(json.dumps(record, indent=1), encoding="utf-8")
-        return record
-
-
-class TheCommand(Fixture):
-    def test_setup_update_and_uninstall_are_verbs_of_their_own(self) -> None:
-        self.assertEqual(cli._COMMANDS["setup"][0], "cad_server.cli.setup")
-        self.assertEqual(cli._COMMANDS["update"][0], "cad_server.cli.update")
-        self.assertEqual(cli._COMMANDS["uninstall"][0], "cad_server.cli.uninstall")
-        self.assertNotIn("install", cli._COMMANDS)
-        self.assertLessEqual({"setup", "update", "uninstall"}, cli._UNTOLD)
-        for verb in ("update", "uninstall"):
-            out = io.StringIO()
-            with self.subTest(verb=verb), contextlib.redirect_stdout(out), self.assertRaises(SystemExit) as done:
-                cli.main([verb, "--help"])
-            self.assertEqual(done.exception.code, 0)
-            self.assertIn(f"usage: cad {verb}", out.getvalue())
-
-    def test_bad_arguments_exit_2_and_change_nothing(self) -> None:
-        for run, argv in ((self.run_setup, ["--purge"]), (self.run_setup, ["--uninstall"]),
-                          (self.run_setup, ["--only", "claude,nowhere"]), (self.run_setup, ["--port", "3245"]),
-                          (self.run_setup, ["--yes"]), (self.run_uninstall, ["--no-telemetry"]),
-                          (self.run_uninstall, ["--only", "nowhere"])):
-            with self.subTest(verb=run.__name__, argv=argv):
-                code, _out, err = run(*argv)
-                self.assertEqual(code, 2)
-                self.assertIn("error:", err)
-        with mock.patch.dict(os.environ, {"CAD_ENGINE_PORT": "no-port"}):
-            code, _out, err = self.run_setup("--dry-run")
-        self.assertEqual(code, 2)
-        self.assertIn("CAD_ENGINE_PORT='no-port' is not a port", err)
-        self.assertFalse(self.state.exists())
-
-    def test_an_update_s_dry_run_says_what_it_would_install_before_the_plan(self) -> None:
-        """``cad update --dry-run`` reads the version feed -- a read, kept nowhere -- and says the release an
-        update would install, or why it would set this one up again, before this release's plan."""
-        from cad_server import updates
-        from cad_server.cli import update
-
-        def run(*argv: str, feed) -> tuple[int, str, str]:
-            with mock.patch.dict(os.environ, {"CI": "", "CAD_UPDATE_CHECK": ""}), \
-                    mock.patch.object(updates, "_get", return_value=feed), mock.patch.object(updates, "_seen", set()):
-                return self._run(update.main, argv)
-
-        # Where the install command never ran there is no install to update: said, nothing read or changed.
-        code, out, err = run("--dry-run", feed={"latest": "99.0.0"})
-        self.assertEqual((code, out), (1, ""))
-        self.assertEqual(err, "cad update: there is no install of text-to-cad here to update: the install command "
-                              f"installs one, {updates.command()}\n")
-        self.state.mkdir(parents=True, exist_ok=True)
-        (self.state / setup.RECEIPT).write_text('{"schema": 1}', encoding="utf-8")
-        # A store's copy, a named channel's command: whoever delivers it updates it.
-        from cad.engine import places
-
-        places.set_channel("claude")
-        try:
-            code, out, err = run(feed={"latest": "99.0.0"})
-        finally:
-            places.set_channel(None)
-        self.assertEqual((code, out), (1, ""))
-        self.assertEqual(err, "cad update: the claude channel's copy of text-to-cad is updated by whoever delivers it "
-                              "(its store or app), not by cad update\n")
-        code, out, _err = run("--dry-run", feed={"latest": "99.0.0"})
-        self.assertEqual(code, 0)
-        lines = out.splitlines()
-        self.assertEqual(lines[0], f"cad update: would install text-to-cad 99.0.0 (this is {RELEASE}), then run its "
-                                   "setup, which moves the default channel to it and sets it up in every agent app "
-                                   "here; this release's plan of it:")
-        self.assertTrue(lines[1].startswith(f"text-to-cad {RELEASE} for this machine"), out)
-        self.assertIn("Dry run: nothing was changed.", out)
-        code, out, _err = run("--dry-run", feed=None)
-        self.assertEqual(out.splitlines()[0], "cad update: could not reach the version feed "
-                                              f"(https://api.texttocad.dev/v1/versions): it would set up this release, "
-                                              f"{RELEASE}, again:")
-        code, out, err = run("--dry-run", "--json", feed={"latest": RELEASE})
-        self.assertEqual(json.loads(out)["update"], {"current": RELEASE, "feed": "read", "release": None})
-        self.assertIn(f"cad update: text-to-cad {RELEASE} is the newest release", err)
-        self.assertFalse((self.state / updates.FILE).exists(), "a dry run keeps nothing")
-
-    def claude_with_a_development_install(self) -> None:
-        command(self.bin, "claude", CLAUDE)
-        records = providers.claude_dir(self.machine) / "plugins" / "installed_plugins.json"
-        records.parent.mkdir(parents=True)
-        records.write_text(json.dumps({"version": 2, "plugins": {"text-to-cad@earthtojake-dev": [
-            {"version": "0.0.1-dev.1", "scope": "user"}]}}), encoding="utf-8")
-
-    def home_files(self) -> dict[str, str]:
-        """Every path under the home, with what it holds: a dry run changes none."""
-        return {str(path): path.read_text(encoding="utf-8", errors="replace") if path.is_file() else "folder"
-                for path in sorted(self.home.rglob("*"))}
-
-    def test_a_dry_run_or_a_plan_that_leaves_an_app_runs_no_app_s_command_and_writes_nothing_in_the_home(self) -> None:
-        """Checking what an app has runs no command of it: each writes its own files as it starts (``WRITES``),
-        and would create its folder in a home where there was none."""
-        for name in ("claude", "codex", "gemini", "grok", "cursor-agent", "npx"):
-            command(self.bin, name, WRITES)
-        (self.home / ".codeium" / "windsurf").mkdir(parents=True)  # for npx
-        before = self.home_files()
-        code, out, _err = self.run_setup("--dry-run")
-        self.assertEqual(code, 0, out)
-        self.assertEqual(self.home_files(), before)
-        self.assertFalse((self.bin / "calls.jsonl").exists(), "no command ran")
-        self.assertRegex(out, r"Claude Code +install")
-        self.assertRegex(out, r"Codex +install")
-        self.assertRegex(out, r"Gemini CLI +install")
-        self.assertRegex(out, r"Grok Build +leave +served by the Claude Code plugin")
-        self.assertRegex(out, r"Windsurf +install")
-        # A real run: Grok Build's "leave" runs no command of it, and Codex is asked no version it has no use for.
-        self.run_setup()
-        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertEqual({call[0] for call in calls}, {"claude", "codex", "gemini", "npx"})
-        self.assertNotIn(["codex", "--version"], calls)
-
-    def test_a_dry_run_prints_the_plan_and_writes_nothing(self) -> None:
-        self.claude_with_a_development_install()
-        self.desktop_with({"cad": self.entry("0.0.1"), "other": {"command": "node", "args": ["server.js"]}})
-        (self.home / ".cursor").mkdir()
-        earlier = self.earlier_installation()
-        before = self.snapshot()
-        code, out, _err = self.run_setup("--dry-run")
-        self.assertEqual(code, 0, out)
-        self.assertEqual(self.snapshot(), before)
-        lines = out.splitlines()
-        self.assertEqual(lines[0], f"text-to-cad {RELEASE} for this machine (engine port {PORT}):")
-        rows = [re.split(r"\s{2,}", line.strip()) for line in lines[1:] if line.startswith("  ") and not line.startswith("    ")]
-        self.assertIn(["Claude Code", "remove duplicate", "text-to-cad@earthtojake-dev (a development install)"],
-                      rows)
-        folder = providers.shown(plugin.folder(), self.machine)
-        self.assertIn(["Claude Code", "install", f"text-to-cad@text-to-cad, which reads {folder} in place"], rows)
-        where = providers.shown(self.desktop, self.machine)
-        self.assertIn(["Claude Desktop", "remove server", f"mcpServers.cad in {where} (text-to-cad 0.0.1): Claude gets "
-                                                          "text-to-cad as skills alone, through Claude Code's plugin"],
-                      rows)
-        self.assertIn(["Cursor", "leave", "served by the Claude Code plugin"], rows)
-        self.assertIn(["plugin folder", "write", f"{folder}: text-to-cad {RELEASE}, which the apps read"], rows)
-        self.assertIn(["0.8", "stop", f"cadgen 0.8.4's server, if it runs: "
-                                      f"`{providers.shown(earlier['cadgen'], self.machine)} stop`"], rows)
-        self.assertIn(["engine", "leave", f"port {PORT}: no engine running; the first CAD view or build starts one"], rows)
-        self.assertIn("$ claude plugin install text-to-cad@text-to-cad", out)
-        self.assertIn("not found here: Codex, Grok Build, Gemini CLI", out)
-        self.assertEqual(lines[-1], "Dry run: nothing was changed.")
-        self.assertFalse((self.bin / "calls.jsonl").exists(), "no app's command runs for a dry run")
-        setup.stop_earlier.assert_not_called()
-
-    def test_a_new_person_s_install_says_what_is_sent_once_and_sends_nothing_to_say_it(self) -> None:
-        """The telemetry notice on a fresh install: no choice made, nothing in the environment against it. The
-        notice is the run's report, once, kept as said; the next run says the setting instead. Under ``--json``,
-        which tells no person, it waits. The send is stubbed: nothing here reaches the receiver."""
-        quiet = {key: value for key, value in os.environ.items()
-                 if key not in ("DO_NOT_TRACK", "CAD_TELEMETRY", "CADGEN_TELEMETRY", "CI", analytics.NOTICE_ENV)}
-        with mock.patch.dict(os.environ, quiet, clear=True), mock.patch.object(analytics, "notify", NOTIFY), \
-                mock.patch.object(telemetry, "describe", DESCRIBE), mock.patch.object(analytics, "_here", return_value=True), \
-                mock.patch.object(analytics, "_post", side_effect=AssertionError("sent")) as post:
-            notice = analytics.notice_text()
-            code, out, _err = self.run_setup("--json")
-            self.assertEqual(code, 0, out)
-            self.assertRegex(json.loads(out)["verified"]["telemetry"], r"^off: not until a cad command says so")
-            self.assertNotIn(notice, out + _err)
-            settings = self.state / "settings.json"
-            self.assertNotIn("notifiedAt", json.loads(settings.read_text(encoding="utf-8")).get("telemetry", {}))
-            code, out, _err = self.run_setup()
-            self.assertEqual(code, 0, out)
-            self.assertEqual(out.count(notice), 1, out)
-            self.assertNotIn("telemetry on:", out)
-            self.assertIn("notifiedAt", json.loads(settings.read_text(encoding="utf-8"))["telemetry"])
-            code, out, _err = self.run_setup()
-            self.assertEqual(code, 0, out)
-            self.assertNotIn(notice, out)
-            self.assertRegex(out, r"telemetry on: by default, since text-to-cad said so on \d{4}-\d\d-\d\d; turn it off with "
-                                  r"`cad telemetry off`")
-        post.assert_not_called()
-
-    def test_a_dry_run_from_uvx_names_the_kernel_folder_the_real_run_uses(self) -> None:
-        """The install command runs ``cad setup`` from uvx's environment: a real run makes this release present in
-        ``versions/<release>``, its kernel environment with it in its ``code/base``, and moves there first; a dry run
-        stays, says that folder (the key is the version's own server's, not known before it is there), and plans the
-        version's install and the default channel's move."""
-        from cad.engine import places
-        from cad_server._internal import base
-
-        uvx = dataclasses.replace(base.Installation.here(), prefix=str(self.root / "uvx-env"), python="3.14.6",
-                                  kernel=False)
-        with mock.patch.object(base.Installation, "here", return_value=uvx), \
-                mock.patch.object(setup.Installer, "_home", return_value=RELEASE):
-            code, out, _err = self.run_setup("--dry-run")
-        self.assertEqual(code, 0, out)
-        folder = re.escape(providers.shown(str(places.code_dir(RELEASE) / "base"), self.machine))
-        self.assertRegex(out, rf"\n  build123d +leave +cad\[build123d\] {re.escape(RELEASE)}, made with the version "
-                              rf"in {folder}\n")
-        self.assertNotIn("made on first need", out)
-        self.assertNotIn(providers.shown(str(base.where(uvx).parent), self.machine), out,
-                         "not the folder of the environment it runs from")
-        where = re.escape(providers.shown(str(places.version_dir(RELEASE)), self.machine))
-        self.assertRegex(out, rf"\n  version +install +text-to-cad {re.escape(RELEASE)} in {where}, once\n")
-        self.assertRegex(out, rf"\n  default +move +text-to-cad {re.escape(RELEASE)}\n")
-
-    def test_a_first_install_inside_a_windows_app_package_installs_nothing_and_says_where_to_run_it(self) -> None:
-        """An MSIX app's shell (the Claude desktop app's) has what it writes under AppData -- uv's Python, on a
-        first install -- kept inside that app's package, where no terminal or other app sees it (#759). With
-        an installation current, an update runs there as anywhere."""
-        command(self.bin, "claude", CLAUDE)
-        before = self.snapshot()
-        with mock.patch.object(installations, "packaged", return_value="Claude_1.0.0.0_x64__pzs8sxrjxfjjc"):
-            code, out, _err = self.run_setup()
-            self.assertEqual(code, 1, out)
-            self.assertTrue(out.startswith("Not installed: this shell runs inside the Windows app package "
-                                           "Claude_1.0.0.0_x64__pzs8sxrjxfjjc"), out)
-            self.assertIn(f"not from an app's: {updates.command()}", out)
-            self.assertEqual(self.snapshot(), before)
-            self.assertFalse(self.state.exists())
-            code, out, _err = self.run_setup("--dry-run")
-        self.assertEqual(code, 0, out)
-        self.assertTrue(out.startswith("Not installed: "), out)
-        self.assertEqual(out.splitlines()[-1], "Dry run: nothing was changed.")
-        with mock.patch.object(installations, "packaged", return_value="Claude_1.0.0.0_x64__pzs8sxrjxfjjc"), \
-                mock.patch.object(installations, "current", return_value={"version": "0.10.0"}):
-            code, out, _err = self.run_setup("--dry-run")
-        self.assertEqual(code, 0, out)
-        self.assertNotIn("Not installed", out)
-
-    def test_on_windows_0_10_s_engine_is_stopped_by_its_own_cad_stop(self) -> None:
-        """0.10.0 kept its folders in the local application data (``installations.appdata``): its own ``cad
-        stop`` stops the engine it serves from there, as 0.8's own stop does 0.8's."""
-        scripts = self.root / "AppData" / "cad-state" / "releases" / "0.10.0" / "Scripts"
-        scripts.mkdir(parents=True)
-        for name in ("cad.exe", "python.exe"):
-            (scripts / name).write_text("", encoding="utf-8")
-        record = {"version": "0.10.0", "python": str(scripts / "python.exe"), "cad": str(scripts / "cad.exe"),
-                  "prefix": str(scripts.parent)}
-        with mock.patch.object(installations, "appdata", return_value=[record]):
-            code, out, _err = self.run_setup("--dry-run")
-            self.assertEqual(code, 0, out)
-            self.assertRegex(out, rf"\n  0\.10 +stop +cad-server 0\.10\.0's server, if it runs: "
-                                  rf"`{re.escape(providers.shown(record['cad'], self.machine))} stop`\n")
-            setup.stop_earlier.return_value = (True, ["C:/Temp/cad-engine/engine.port"], "")
-            with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
-                code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        (call,) = setup.stop_earlier.call_args_list
-        self.assertEqual(call.args[0]["cad"], record["cad"])
-        self.assertIn("0.10     stopped cad-server 0.10.0's server (its own `cad stop`)", out)
-
-    def test_claude_desktop_s_server_from_an_earlier_release_is_taken_out_and_nothing_added(self) -> None:
-        # Claude gets the skills alone: the install command and every update take out the server releases through
-        # 0.11.10 wrote, keep every other key and server and a .bak, ask no restart (the server Claude Desktop runs
-        # keeps working until it next starts), and write nothing where there was none.
-        mine = {"command": "node", "args": ["server.js"]}
-        original = self.desktop_with({"other": mine, "cad": self.entry("0.0.1")})
-        code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        where = providers.shown(self.desktop, self.machine)
-        self.assertIn(f"Claude Desktop: remove server mcpServers.cad in {where} (text-to-cad 0.0.1): Claude gets "
-                      "text-to-cad as skills alone, through Claude Code's plugin", out)
-        self.assertEqual(self.desktop.read_text(encoding="utf-8"),
-                         json.dumps({"mcpServers": {"other": mine}, "preferences": {"keep": True}}, indent=2) + "\n")
-        self.assertEqual(self.desktop.with_name(self.desktop.name + ".bak").read_bytes(), original)
-        self.assertIn("verify   Claude Desktop: no CAD server: Claude gets the skills alone, through Claude Code's plugin",
-                      out)
-        self.assertNotIn("restart to load it", out)
-        written = self.desktop.read_bytes()
-        code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        self.assertNotIn("Claude Desktop: remove", out)
-        self.assertEqual(self.desktop.read_bytes(), written)
-        # An uninstall still names it: on Windows, closing its window leaves it running in the tray.
-        self.assertIn("system tray", providers.restart("claude-desktop", providers.Machine(self.home, {}, platform="win32")))
-
-    def test_json_is_the_plan_and_what_was_done_and_progress_goes_to_stderr(self) -> None:
-        target = self.cursor()
-        code, out, err = self.run_setup("--dry-run", "--json")
-        self.assertEqual(code, 0)
-        document = json.loads(out)
-        self.assertEqual(set(document), {"schema", "plan", "actions", "stopped", "verified", "restart"})
-        self.assertEqual((document["schema"], document["actions"], document["verified"]), (1, [], None))
-        self.assertEqual([(row["app"], row["action"]) for row in document["plan"]],
-                         [("cursor", "install"), ("plugin", "write"), ("engine", "leave")])
-        self.assertEqual(document["plan"][0]["edit"], {"op": "copy", "from": str(plugin.folder()), "path": str(target)})
-        self.assertIn("Dry run", err)
-        code, out, _err = self.run_setup("--json")
-        self.assertEqual(code, 0)
-        document = json.loads(out)
-        self.assertEqual([(action["app"], action["kind"], action["ok"]) for action in document["actions"]],
-                         [("plugin", "plugin", True), ("cursor", "copy", True)])
-        self.assertEqual(document["verified"]["apps"]["cursor"], {"verdict": "ok", "release": RELEASE})
-        self.assertEqual(document["verified"]["telemetry"], "off: your choice")
-        self.assertEqual(document["restart"], [providers.restart("cursor")])
-
-
-class InstallUpdateAndUninstall(Fixture):
-    def test_an_install_stops_0_8_s_server_by_its_own_stop_registers_keeps_a_receipt_and_the_next_run_changes_nothing(self) -> None:
-        target = self.cursor()
-        earlier = self.earlier_installation()
-        self.held = "another cad-server (python3.14, pid 4242)"  # 0.8's server on the port, as the system names it
-        stopped = ["/tmp/cadgen-engine/0123456789ab.door"]
-        # Its own `cadgen stop` stops it: the port is free after.
-        setup.stop_earlier.side_effect = lambda record: (setattr(self, "held", None), (True, stopped, ""))[1]
-        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
-            code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        (call,) = setup.stop_earlier.call_args_list
-        self.assertEqual(call.args[0]["cadgen"], earlier["cadgen"], "stopped by 0.8's own cadgen stop")
-        console = re.escape(providers.shown(earlier["cadgen"], self.machine))
-        self.assertRegex(out, rf"\n  0\.8 +stop +cadgen 0\.8\.4's server, if it runs: `{console} stop`\n")
-        self.assertIn(f"port {PORT} is held by another cad-server (python3.14, pid 4242): if the stop above does "
-                      "not free it, the engine serves on the next free port, and says so", out)
-        self.assertIn("0.8      stopped cadgen 0.8.4's server (its own `cadgen stop`)", out)
-        self.assertTrue((target / ".cursor-plugin" / "plugin.json").is_file())
-        proxy = Path(installations.proxy_path())
-        self.assertEqual(installations.proxy_status(str(proxy)), installations.OK)
-        receipt = self.receipt()
-        self.assertEqual((receipt["schema"], receipt["release"]), (1, RELEASE))
-        self.assertEqual([(action["app"], action["action"], action["kind"]) for action in receipt["actions"]],
-                         [("plugin", "write", "plugin"), ("cursor", "install", "copy")])
-        self.assertEqual([(found["release"], found["servers"]) for found in receipt["stopped"]], [("0.8.4", stopped)])
-        self.assertEqual(receipt["launcher"]["path"], str(proxy))
-        self.assertIn(f"verify   Cursor: {providers.shown(str(target), self.machine)}, a copy of", out)
-        self.assertIn(f"verify   engine port {PORT}: not running; the next CAD session starts one", out)
-        self.assertIn(providers.restart("cursor"), out)
-        # Run again: nothing to do and nothing written; 0.8's own stop runs again, and stops nothing.
-        setup.stop_earlier.side_effect = None
-        before = self.snapshot()
-        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
-            code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        self.assertIn("0.8      cadgen 0.8.4's server was not running", out)
-        self.assertIn(f"text-to-cad {RELEASE} is already up to date here.", out)
-        self.assertIn(f"verify   engine port {PORT}: not running; the next CAD session starts one", out)
-        self.assertNotIn("Restart", out)
-        self.assertEqual(setup.stop_earlier.call_count, 2)
-        self.assertEqual({path: found for path, found in self.snapshot().items() if not path.endswith(setup.LOCK)},
-                         {path: found for path, found in before.items() if not path.endswith(setup.LOCK)})
-
-    def test_a_0_8_stop_that_fails_is_said_and_the_apps_are_installed(self) -> None:
-        target = self.cursor()
-        self.earlier_installation()
-        gone = self.earlier_installation("0.8.3")
-        os.remove(gone["cadgen"])  # uv's cache cleaned of it: nothing of 0.8.3 is left to run
-        setup.stop_earlier.return_value = (False, None, "Traceback (most recent call last):\nOSError: no")
-        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
-            code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        self.assertEqual([call.args[0]["version"] for call in setup.stop_earlier.call_args_list], ["0.8.4"])
-        self.assertIn("0.8      cadgen 0.8.4's `cadgen stop` failed: OSError: no; its server may still run", out)
-        self.assertNotIn("0.8.3", out)
-        self.assertTrue(target.is_dir())
-        self.assertEqual(self.receipt()["stopped"], [])
-
-    def test_another_program_on_the_port_is_said_with_what_the_engine_does(self) -> None:
-        self.held = "node (pid 77)"
-        code, out, _err = self.run_setup("--dry-run")
-        self.assertEqual(code, 0, out)
-        self.assertIn(f"port {PORT} is held by node (pid 77): the engine serves on the next free port, and says so", out)
-        with mock.patch.dict(os.environ, {"CAD_ENGINE_PORT": "3300"}):
-            code, out, _err = self.run_setup("--dry-run")
-        self.assertIn("port 3300 is held by node (pid 77): stop it, or set another CAD_ENGINE_PORT", out)
-        setup.stop_earlier.assert_not_called()
-
-    def test_the_device_s_engine_is_switched_whatever_its_release(self) -> None:
-        """Nothing compares versions: the device's engine moves to this release at the switch, a later
-        release's as an earlier one's."""
-        for version, prefix in (("99.0.0", "/newer"), ("0.0.1", str(self.root / "older"))):
-            self.serving = {"ok": True, "pid": 9, "version": version, "installation": version, "prefix": prefix,
-                            "serving": {"port": PORT}}
-            code, out, _err = self.run_setup("--dry-run")
-            self.assertEqual(code, 0, out)
-            self.assertRegex(out, rf"engine +switch +cad-server {re.escape(version)}'s engine \(pid 9\) on port {PORT}: "
-                                  rf"drains, then cad-server {re.escape(RELEASE)}'s takes its place")
-        setup.stop_earlier.assert_not_called()
-
-    def test_an_engine_a_command_started_runs_with_no_port_and_the_plan_and_the_report_say_so(self) -> None:
-        """``cad doctor`` or a build starts an engine that opens no HTTP port until a page asks for one: it runs,
-        and the plan (which switches it, as the switch does) and the report say what is true."""
-        no_port = "with no HTTP port yet (the first CAD view opens one)"
-        self.serving = {"ok": True, "pid": 9, "version": "0.0.1", "installation": "0.0.1",
-                        "prefix": str(self.root / "older"), "serving": None}
-        code, out, _err = self.run_setup("--dry-run")
-        self.assertEqual(code, 0, out)
-        self.assertRegex(out, rf"engine +switch +cad-server 0\.0\.1's engine \(pid 9\) {re.escape(no_port)}: "
-                              rf"drains, then cad-server {re.escape(RELEASE)}'s takes its place")
-        self.assertNotIn("no engine running", out)
-        self.serving = {**self.serving, "version": RELEASE, "installation": RELEASE, "prefix": sys.prefix}
-        code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        self.assertRegex(out, rf"engine +leave +cad-server {re.escape(RELEASE)}'s engine \(pid 9\) {re.escape(no_port)}: "
-                              "this installation's")
-        self.assertIn(f"verify   engine: cad-server {RELEASE} running, {no_port}\n", out)
-        self.assertNotIn("not running", out)
-        self.serving = {**self.serving, "serving": {"port": PORT}}
-        self.assertIn(f"verify   engine: cad-server {RELEASE} running, on port {PORT}\n", self.run_setup()[1])
-
-    def as_version(self, moved: "versions.Moved | None" = None):
-        """This run as a version's own process (``places.versioned``, which a version's code says by its folder), its
-        move of the default channel stood in for by ``moved`` (by default: moved from 0.0.1)."""
-        from cad.engine import places
-
-        moved = moved or versions.Moved("moved", None, RELEASE, "0.0.1")
-        stack = contextlib.ExitStack()
-        stack.enter_context(mock.patch.object(places, "versioned", return_value=RELEASE))
-        stack.enter_context(mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}))
-        stack.enter_context(mock.patch.object(versions, "move", return_value=moved))
-        return stack
-
-    def test_the_default_channel_moves_before_any_app_and_a_failed_move_changes_no_app(self) -> None:
-        self.cursor()
-        with self.as_version():
-            code, out, _err = self.run_setup()
-            versions.move.assert_called_once_with(None, RELEASE, told=mock.ANY, from_development=True, mend=True)
-        self.assertEqual(code, 0, out)
-        self.assertIn(f"default  text-to-cad {RELEASE} (was 0.0.1)\n", out)
-        self.assertLess(out.index("default  text-to-cad"), out.index("Cursor: install"),
-                        "the move, then the apps: no app's text runs a version the channel is not on")
-        self.assertTrue((self.state / setup.RECEIPT).is_file(), "the receipt: the install command ran here")
-        target = self.cursor()
-        shutil.rmtree(target)
-        failed = versions.Moved("failed", None, RELEASE, "0.0.1", "text-to-cad 9.9.9 in /x does not run: no module")
-        with self.as_version(failed):
-            code, out, _err = self.run_setup()
-        self.assertEqual(code, 1, out)
-        self.assertIn("default  the default channel stays where it was: text-to-cad 9.9.9 in /x does not run", out)
-        self.assertIn("Nothing else was changed. Once that is fixed, run the install command again", out)
-        self.assertNotIn("Cursor: install", out)
-        self.assertFalse(target.exists(), "no app was changed")
-        stale = versions.Moved("stale", None, RELEASE, "99.0.0")
-        with self.as_version(stale):
-            code, out, _err = self.run_setup()
-        self.assertEqual(code, 1, out)
-        self.assertIn("default  the default channel is on text-to-cad 99.0.0, newer than this release: nothing "
-                      "changed (going back to an older release is not supported)", out)
-        # A source tree run as no version moves nothing, and sets the apps up all the same.
-        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
-            code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        self.assertIn("default  left as it is: this cad-server is a source tree that runs as no version", out)
-        self.assertFalse((self.state / "default").exists())
-
-    def test_a_server_of_0_11_10_or_earlier_is_drained_and_this_version_takes_its_port(self) -> None:
-        """The install command or ``cad update`` run on a device whose flat door a server of 0.11.10 or earlier holds:
-        once the default channel moved, that server drains, and this version's starts, holding the flat door, on its
-        port with the token it imported; then the layout of those releases goes. An updater's run never asks it: that
-        release's own updater drains it."""
-        self.serving = {"ok": True, "pid": 9, "version": "0.11.10", "installation": "0.11.10",
-                        "prefix": str(self.state / "releases" / "0.11.10"), "serving": {"port": 4321}}
-        asked: list[tuple] = []
-
-        def ask(name, message, **_kwargs):
-            asked.append((name, message))
-            return {"ok": True, "url": "http://127.0.0.1:4321/"} if message.get("op") == "http" else {"ok": True}
-
-        from cad.engine import client
-        from cad_server._internal import pointers
-
-        default = [RELEASE]  # what the default pointer names once the old server has drained (read again: D8)
-        with self.as_version(versions.Moved("moved", None, RELEASE, "0.11.10")), \
-                mock.patch.object(pointers, "default", side_effect=lambda *_a: pointers.Default(default[0], "pointer")), \
-                mock.patch.object(versions, "ask_flat", side_effect=lambda message, **_kw: asked.append(("flat", message)) or {"ok": True}), \
-                mock.patch.object(versions, "ask", side_effect=ask), \
-                mock.patch.object(versions, "start_server", return_value=True) as started, \
-                mock.patch.object(versions, "sweep", return_value={}) as swept, \
-                mock.patch.object(client, "wait_gone", return_value=True):
-            code, out, _err = self.run_setup()
-            self.assertEqual(code, 0, out)
-            self.assertEqual(asked, [("flat", {"op": "stop", "drain": True}), (RELEASE, {"op": "bridge"}),
-                                     (RELEASE, {"op": "http", "port": 4321})])
-            started.assert_called_once_with(RELEASE)
-            swept.assert_called_once()
-            self.assertIn(f"engine   text-to-cad {RELEASE} serves pages on port 4321, as cad-server 0.11.10 did", out)
-            asked.clear()
-            code, out, _err = self.run_setup("--engine-update")
-            self.assertEqual((code, asked), (0, []), "an updater's run: the old release's updater drains it")
-            # An update moved the default channel on while the old server drained: that version's server takes its
-            # place, never this run's.
-            asked.clear()
-            started.reset_mock()
-            default[0] = "99.0.0"
-            code, out, _err = self.run_setup()
-            self.assertEqual(code, 0, out)
-            started.assert_called_once_with("99.0.0")
-            self.assertEqual(asked[1:], [("99.0.0", {"op": "bridge"}), ("99.0.0", {"op": "http", "port": 4321})])
-
-    def test_a_release_makes_itself_present_and_sets_itself_up_from_there(self) -> None:
-        """Run from uvx's environment (the install command) or a flat folder an updater of 0.11.10 made, a release
-        makes itself present in ``versions/<release>`` and runs the same command from there, with the person's
-        PATH: uvx's environment, which uvx puts first on PATH and uv's cache keeps (its uvx and its `cad`), is not
-        theirs. One that cannot be installed from this shell exits 3."""
-        record = {"cad": str(self.root / "version-bin" / "cad"), "python": sys.executable, "prefix": sys.prefix}
-        cached = self.root / "uv" / "archive-v0" / "M-XQ" / "bin"
-        with mock.patch.object(setup.Installer, "_home", return_value=RELEASE), \
-                mock.patch.dict(os.environ, {installations.NAME_ENV: "",
-                                             "PATH": os.pathsep.join((str(cached), str(self.bin)))}), \
-                mock.patch.object(versions, "make_present", return_value=versions.Present(RELEASE, record, made=True)) \
-                as made, \
-                mock.patch.object(setup.os, "execve", side_effect=SystemExit(0)) as execve, \
-                mock.patch("subprocess.call", return_value=0) as call:
-            code, out, _err = self.run_setup("--dry-run")
-            self.assertEqual(code, 0, out)
-            made.assert_not_called()
-            code, out, _err = self.run_setup("--only", "claude")
-            self.assertEqual(code, 0, out)
-            made.assert_called_once_with(RELEASE, told=mock.ANY)
-            run = [record["cad"], "setup", "--only", "claude"]
-            if os.name == "nt":
-                call.assert_called_once_with(run, env=mock.ANY)
-                environment = call.call_args.kwargs["env"]
-            else:
-                execve.assert_called_once_with(record["cad"], run, mock.ANY)
-                environment = execve.call_args.args[2]
-            self.assertEqual(environment["PATH"], str(self.bin))
-            self.assertEqual(environment["CAD_STATE_DIR"], str(self.state), "the rest of the environment goes along")
-            made.return_value = versions.Present(RELEASE, None, cannot="network", error="uv could not reach the index")
-            code, out, _err = self.run_setup()
-        self.assertEqual(code, 3, out)
-        self.assertIn("version  uv could not reach the index", out)
-
-    def test_an_updater_s_run_says_its_stages_on_stdout_and_an_app_s_failure_does_not_fail_it(self) -> None:
-        command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'link'] else 0)\n")
-        with self.as_version():
-            code, out, err = self.run_setup("--engine-update")
-        self.assertEqual(code, 0, err + out)  # the channel moved: an app's failure is said, done again next update
-        frames = [json.loads(line)["progress"] for line in out.splitlines()]
-        self.assertEqual([(frame["kind"], frame["stage"]) for frame in frames], [("update", "restart"), ("update", "apps")])
-        self.assertIn("Gemini CLI: install the text-to-cad extension", err)
-        with self.as_version(versions.Moved("failed", None, RELEASE, "0.0.1", "no")):
-            code, out, err = self.run_setup("--engine-update")
-        self.assertEqual(code, 1, "the channel did not move: the updater's server stays as it was")
-        # Its reader gone -- the move stopped the updater's server --, it writes no more frames and goes on.
-        class Gone(io.StringIO):
-            def write(self, text: str) -> int:
-                raise BrokenPipeError(32, "Broken pipe")
-
-        with self.as_version(), contextlib.redirect_stdout(Gone()), contextlib.redirect_stderr(Gone()):
-            self.assertEqual(setup.main(["--engine-update"]), 0)
-
-    def test_an_updater_of_0_11_10_s_first_run_makes_this_release_present_and_stops(self) -> None:
-        # `CAD_UPDATE_PREPARE=1` (`setup.PREPARE_ENV`), from the flat `releases/<release>` that updater made: this
-        # release made present while that release's server works; nothing of the apps, the plugin folder or the
-        # default channel changes. Its second run does the rest.
-        record = {"cad": str(self.root / "version-bin" / "cad"), "python": sys.executable, "prefix": sys.prefix}
-        command(self.bin, "gemini", "sys.exit(0)\n")
-        with mock.patch.object(setup.Installer, "_home", return_value=RELEASE), \
-                mock.patch.dict(os.environ, {installations.NAME_ENV: "", setup.PREPARE_ENV: "1"}), \
-                mock.patch.object(versions, "make_present", return_value=versions.Present(RELEASE, record)) as made, \
-                mock.patch.object(setup.os, "execve", side_effect=AssertionError("no run from there")):
-            code, out, err = self.run_setup("--engine-update")
-        self.assertEqual(code, 0, err + out)
-        made.assert_called_once()
-        self.assertEqual([json.loads(line)["progress"]["stage"] for line in out.splitlines()], ["install", "build123d"])
-        self.assertFalse((plugin.folder() / plugin.MANIFEST).exists(), "the plugin folder is the apps': the second run's")
-        self.assertFalse((self.state / "default").exists())
-
-    def test_the_cad_kernel_environment_is_said_in_the_plan_and_never_made_at_setup(self) -> None:
-        from cad_server._internal import base
-
-        core = base.Installation(**{**base.dataclasses.asdict(base.Installation.here()), "kernel": False})
-        made: dict = {}
-
-        def ensure(installation=None, *, make=True, told=None):
-            self.assertFalse(make, "setup makes no environment: it is made on first need")
-            return made.get("env")
-
-        where = providers.shown(str(base.where(core)), self.machine)
-        with mock.patch.object(base.Installation, "here", return_value=core), \
-                mock.patch.object(base, "ensure", side_effect=ensure):
-            planned = self.run_setup("--dry-run")
-            first = self.run_setup()
-            made["env"] = base.Environment("/base/bin/python", "/base", False, ("/base",))
-            again = self.run_setup()
-        self.assertEqual((planned[0], first[0], again[0]), (0, 0, 0), first[1])
-        for said in (planned[1], first[1]):
-            self.assertRegex(said, rf"\n  build123d\s+leave\s+cad\[build123d\] {re.escape(core.release)}, made on "
-                                   rf"first need in {re.escape(where)}\n")
-        self.assertRegex(again[1], rf"\n  build123d\s+leave\s+cad\[build123d\] {re.escape(core.release)} in ")
-        self.assertNotIn("making", first[1])
-
-    def test_a_failed_app_exits_1_and_the_other_apps_are_still_done(self) -> None:
-        command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'link'] else 0)\n")
-        target = self.cursor()
-        code, out, _err = self.run_setup()
-        self.assertEqual(code, 1, out)
-        self.assertIn("Gemini CLI: install the text-to-cad extension", out)
-        self.assertIn("  failed: exit status 1", out)
-        self.assertIn(f"run the install command again: {updates.command()}", out)
-        self.assertTrue(target.is_dir())
-        self.assertEqual([(action["app"], action["ok"]) for action in self.receipt()["actions"]],
-                         [("plugin", True), ("cursor", True), ("gemini", False)])
-
-    def test_an_app_left_behind_is_kept_in_the_receipt_named_by_doctor_and_given_its_text_by_cad_update(self) -> None:
-        """A run that could not give an app this release's text records it behind (its release, why, when); ``cad
-        doctor`` names it; ``cad update`` on a device already on the newest release runs this release's setup again,
-        which does the apps step again, says what it did, and takes the record out."""
-        from cad_server.cli import doctor
-        from cad_server.cli import update as update_command
-
-        command(self.bin, "gemini", "if args[:2] == ['extensions', 'link']:\n"
-                                    "    print('gemini: cannot reach its extensions folder', file=sys.stderr)\n"
-                                    "    sys.exit(1)\n")
-        code, out, _err = self.run_setup()
-        self.assertEqual(code, 1, out)
-        row = self.receipt()[setup.BEHIND]["gemini"]
-        self.assertEqual((row["release"], row["why"]), (RELEASE, "gemini: cannot reach its extensions folder"))
-        said = [line for line in doctor._apps() if ": behind " in line]
-        self.assertEqual(len(said), 1, said)
-        self.assertTrue(said[0].startswith(f"app      Gemini CLI: behind text-to-cad {RELEASE}: its setup could not give "
-                                           "it that release's text"), said[0])
-        self.assertIn("gemini: cannot reach its extensions folder; `cad update` gives it again", said[0])
-        command(self.bin, "gemini", "sys.exit(0)\n")  # found now: the agent's shell had it on its PATH
-        with mock.patch.object(updates, "newest", return_value=None):  # this is the newest release
-            code, out, _err = self._run(update_command.main, ())
-        self.assertEqual(code, 0, out)
-        self.assertIn("Gemini CLI: install the text-to-cad extension", out, "the apps step, again, said")
-        self.assertNotIn(setup.BEHIND, self.receipt())
-        self.assertEqual([line for line in doctor._apps() if ": behind " in line], [])
-
-    def test_an_app_whose_command_is_not_on_the_setup_s_path_and_holds_an_older_copy_is_recorded_behind(self) -> None:
-        """Codex's copy of an earlier release (its config and plugin cache), and no codex command on the PATH the
-        setup runs with -- an update run by a server an app started --: Codex keeps the older text, so it is behind,
-        not up to date; ``cad update`` from a shell that has the command gives it the text and takes the record out.
-        Found by the update rehearsal (``scripts/test/rehearse-update.py app-behind``)."""
-        from cad_server.cli import doctor
-        from cad_server.cli import update as update_command
-
-        codex = self.home / ".codex"
-        (codex / "plugins" / "cache" / "text-to-cad" / "text-to-cad" / "0.0.1").mkdir(parents=True)
-        (codex / "config.toml").write_text(
-            f'[marketplaces.text-to-cad]\nsource_type = "local"\nsource = {json.dumps(str(plugin.folder()))}\n'
-            '[plugins."text-to-cad@text-to-cad"]\nenabled = true\n', encoding="utf-8")
-        code, out, _err = self.run_setup("--only", "codex")
-        self.assertIn("no codex command on this PATH", out)
-        row = self.receipt()[setup.BEHIND]["codex"]
-        self.assertEqual((row["release"], row["why"]), (RELEASE, "no codex command on the PATH the setup ran with"))
-        self.assertEqual(len([line for line in doctor._apps() if line.startswith("app      Codex: behind ")]), 1)
-        command(self.bin, "codex", "sys.exit(0)\n")  # the agent's shell has it on its PATH
-        with mock.patch.object(updates, "newest", return_value=None):
-            code, out, _err = self._run(update_command.main, ())
-        self.assertEqual(code, 0, out)
-        self.assertIn(["codex", "plugin", "add", "text-to-cad@text-to-cad"],
-                      [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()])
-        self.assertNotIn(setup.BEHIND, self.receipt())
-
-    def test_an_app_with_no_copy_of_ours_and_no_command_here_is_not_behind(self) -> None:
-        (self.home / ".codex").mkdir()
-        self.run_setup("--only", "codex")
-        self.assertNotIn(setup.BEHIND, self.receipt())
-
-    def test_a_step_that_did_its_work_and_exited_non_zero_is_said_as_done_with_the_warning_quoted(self) -> None:
-        # Gemini CLI links the extension, then exits 1 when its integrity store cannot be verified.
-        command(self.bin, "gemini", """import os, pathlib
-if args[:2] == ["extensions", "link"]:
-    folder = pathlib.Path(os.environ["USERPROFILE"]) / ".gemini" / "extensions" / "text-to-cad"
-    folder.mkdir(parents=True)
-    (folder / ".gemini-extension-install.json").write_text(json.dumps({"source": args[2], "type": "link"}))
-    print('Extension "text-to-cad" linked successfully and enabled.')
-    print("Extension integrity store cannot be verified", file=sys.stderr)
-    sys.exit(1)
-sys.exit(0)
-""")
-        code, out, _err = self.run_setup("--only", "gemini")
-        self.assertEqual(code, 0, out)
-        linked = f"text-to-cad {RELEASE}, linked to {providers.shown(plugin.folder(), self.machine)}"
-        self.assertIn(f'  done all the same: {linked} (gemini exited 1, saying "Extension "text-to-cad" linked '
-                      'successfully and enabled. Extension integrity store cannot be verified")\n', out)
-        self.assertNotIn("failed", out)
-        self.assertNotIn("Some steps failed", out)
-        self.assertIn(f"verify   Gemini CLI: {linked}\n", out)
-        (action,) = [action for action in self.receipt()["actions"] if action["app"] == "gemini"]
-        self.assertEqual((action["ok"], action["code"]), (True, 1))
-        self.assertIn("Extension integrity store cannot be verified", action["warning"])
-        # A command that fails and leaves nothing behind is still a failure.
-        command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'link'] else 0)\n")
-        shutil.rmtree(self.home / ".gemini")
-        code, out, _err = self.run_setup("--only", "gemini")
-        self.assertEqual(code, 1, out)
-        self.assertIn("  failed: exit status 1", out)
-
-    def test_the_plugin_folder_is_written_before_an_app_is_pointed_at_it_and_goes_with_an_uninstall(self) -> None:
-        command(self.bin, "claude", CLAUDE_EMPTY)
-        folder = plugin.folder()
-        code, out, _err = self.run_setup("--only", "claude")
-        self.assertEqual(code, 0, out)
-        self.assertLess(out.index(f"plugin   wrote {providers.shown(folder, self.machine)}: text-to-cad {RELEASE}"),
-                        out.index("Claude Code: install"))
-        manifest = json.loads((folder / plugin.MANIFEST).read_text(encoding="utf-8"))
-        self.assertEqual(manifest["version"], RELEASE, "this release's, whatever the plugin it was written from says")
-        self.assertEqual((folder / "skills" / "cad" / "SKILL.md").read_bytes(),
-                         (self.plugin_source / "skills" / "cad" / "SKILL.md").read_bytes())
-        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertIn(["claude", "plugin", "marketplace", "add", str(folder)], calls)
-        self.assertIn(["claude", "plugin", "install", "text-to-cad@text-to-cad"], calls)
-        # Run again: the folder already this release's, nothing written.
-        before = (folder / plugin.MANIFEST).stat().st_mtime_ns
-        self.assertEqual(self.run_setup("--only", "claude")[0], 0)
-        self.assertEqual((folder / plugin.MANIFEST).stat().st_mtime_ns, before)
-        code, out, _err = self.run_uninstall()
-        self.assertEqual(code, 0, out)
-        self.assertIn(f"plugin   removed {providers.shown(folder, self.machine)}", out)
-        self.assertFalse(folder.exists())
-
-    def test_a_store_s_copy_codex_lists_gets_ours_beside_it_and_the_plan_and_the_report_say_so(self) -> None:
-        """Codex's own listing names a copy from OpenAI's directory (its cache holds Codex's mark of it): ours is
-        installed all the same, the directory's copy is never named by a command, and both the plan and the report
-        say, in one line, that Codex loads the skills of both and how to keep one."""
-        codex = self.home / ".codex"
-        cached = codex / "plugins" / "cache" / "openai-curated" / "text-to-cad"
-        (cached / "0.0.2").mkdir(parents=True)
-        (cached / providers.CODEX_REMOTE_MARK).write_text("{}", encoding="utf-8")
-        listing = {"installed": [{"name": "text-to-cad", "marketplaceName": "openai-curated", "version": "0.0.2",
-                                  "installed": True, "enabled": True}]}
-        command(self.bin, "codex", f"""
-import pathlib
-home = pathlib.Path({str(codex)!r})
-if args == ["plugin", "list", "--json"]:
-    print(json.dumps({listing!r}))
-elif args[:3] == ["plugin", "marketplace", "add"]:
-    (home / "config.toml").write_text('[marketplaces.text-to-cad]\\nsource_type = "local"\\nsource = ' + json.dumps(args[3]) + '\\n', encoding="utf-8")
-elif args[:2] == ["plugin", "add"]:
-    with open(home / "config.toml", "a", encoding="utf-8") as config:
-        config.write('[plugins."text-to-cad@text-to-cad"]\\nenabled = true\\n')
-    (home / "plugins" / "cache" / "text-to-cad" / "text-to-cad" / {RELEASE!r}).mkdir(parents=True, exist_ok=True)
-""")
-        code, out, _err = self.run_setup("--only", "codex")
-        self.assertEqual(code, 0, out)
-        line = ("text-to-cad@openai-curated 0.0.2 (its app directory's, on your OpenAI account): it stays beside ours, "
-                "and Codex loads the skills of both, so every skill shows twice; to keep one, remove the directory's copy "
-                "in Codex's plugin manager (ours is the one every update brings up to date)")
-        self.assertIn(line, out.split("verify")[0], "the plan says it")
-        self.assertIn(f"verify   Codex: {line}\n", out)
-        self.assertIn("Codex: install text-to-cad@text-to-cad", out)
-        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertFalse([call for call in calls if "text-to-cad@openai-curated" in call])
-        self.assertTrue((cached / "0.0.2").is_dir())
-
-    def test_a_store_s_copy_codex_has_switched_off_gets_no_line_in_the_plan_or_the_report(self) -> None:
-        codex = self.home / ".codex"
-        codex.mkdir()
-        (codex / "config.toml").write_text('[plugins."text-to-cad@openai-curated"]\nenabled = false\n', encoding="utf-8")
-        command(self.bin, "codex", f"""
-import pathlib
-config = pathlib.Path({str(codex / "config.toml")!r})
-if args[:3] == ["plugin", "marketplace", "add"]:
-    config.write_text(config.read_text(encoding="utf-8") + '[marketplaces.text-to-cad]\\nsource_type = "local"\\nsource = '
-                      + json.dumps(args[3]) + '\\n', encoding="utf-8")
-elif args[:2] == ["plugin", "add"]:
-    config.write_text(config.read_text(encoding="utf-8") + '[plugins."text-to-cad@text-to-cad"]\\nenabled = true\\n',
-                      encoding="utf-8")
-""")
-        code, out, _err = self.run_setup("--only", "codex")
-        self.assertEqual(code, 0, out)
-        self.assertIn("verify   Codex: text-to-cad@text-to-cad", out)
-        self.assertNotIn("openai-curated", out)
-
-    def test_a_folder_that_cannot_be_written_points_no_app_at_it(self) -> None:
-        command(self.bin, "claude", CLAUDE_EMPTY)
-        self.desktop_with({"cad": self.entry("0.0.1")})
-        with mock.patch.object(plugin, "source", side_effect=plugin.Missing("no plugin in this installation")):
-            code, out, _err = self.run_setup()
-        self.assertEqual(code, 1, out)
-        self.assertIn("could not be written: no plugin in this installation", out)
-        self.assertIn("Claude Code: install text-to-cad@text-to-cad", out)
-        self.assertIn("not done, with no plugin folder", out)
-        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertFalse([call for call in calls if call[1:3] == ["plugin", "marketplace"] and call[3] == "add"])
-        self.assertNotIn("cad", json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"],
-                         "taking Claude Desktop's server out needs no folder")
-
-    def test_uninstall_takes_back_what_the_receipt_says_and_purge_removes_the_folders(self) -> None:
-        target = self.cursor()
-        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
-            self.assertEqual(self.run_setup()[0], 0)
-        proxy = Path(installations.proxy_path())
-        self.assertTrue(proxy.is_file())
-        code, out, _err = self.run_uninstall("--dry-run")
-        self.assertEqual(code, 0)
-        self.assertRegex(out, r"Cursor +remove")
-        self.assertTrue(proxy.is_file())
-        code, out, _err = self.run_uninstall()
-        self.assertEqual(code, 0, out)
-        self.assertFalse(target.exists())
-        self.assertFalse(proxy.exists())
-        self.assertFalse((self.state / setup.RECEIPT).exists())
-        stop.main.assert_called_once_with([])
-        self.cache.mkdir(parents=True, exist_ok=True)
-        # The flat release folders of 0.11.10 and earlier go with an uninstall, with their records and the current one.
-        folder = releases.root() / RELEASE
-        (folder / "bin").mkdir(parents=True)
-        for name in ("cad", "python"):
-            (folder / "bin" / name).write_text("", encoding="utf-8")
-        installations.register(RELEASE, (str(folder / "bin" / "cad"), str(folder / "bin" / "python"), str(folder)))
-        installations.point(RELEASE)
-        code, out, _err = self.run_uninstall()
-        self.assertEqual(code, 0, out)
-        self.assertFalse(releases.root().exists())
-        self.assertIn("releases removed", out)
-        self.assertEqual((installations.records(), installations.current_version()), ([], None))
-        code, out, _err = self.run_uninstall("--purge")
-        self.assertEqual(code, 0, out)
-        self.assertFalse(self.state.exists())
-        self.assertFalse(self.cache.exists())
-
-    def test_an_uninstall_takes_the_channels_off_before_it_asks_any_server_to_stop(self) -> None:
-        # A thread's transport whose server stops starts it again unless its channel is gone (cad_mcp.engine.stale):
-        # so at the first stop the default pointer and the mirror are gone, and with --purge every channel's pointer.
-        from cad_server._internal import pointers
-
-        for purge, left in ((False, ["codex"]), (True, [])):
-            with self.subTest(purge=purge):
-                pointers.write(None, "0.12.0", mirrored=False)
-                pointers.write("codex", "0.12.1", mirrored=False)
-                installations.point("0.12.0")
-                seen: list = []
-                stopping = lambda *_args: seen.append(  # noqa: E731
-                    ([pointer.channel for pointer in pointers.listing()], installations.current_version())) or 0
-                with mock.patch.object(stop, "main", side_effect=stopping):
-                    code, out, _err = self.run_uninstall(*(["--purge"] if purge else []))
-                self.assertEqual(code, 0, out)
-                self.assertEqual(seen, [(left, None)])
-                self.assertIn("default  removed the default channel (on text-to-cad 0.12.0)\n", out)
-                self.assertEqual("channel  removed the codex channel (on text-to-cad 0.12.1)" in out, purge, out)
-
-    def test_an_uninstall_waits_for_a_stopped_server_s_processes_to_end_before_it_looks(self) -> None:
-        # A server lets its lock go, and removes it, a moment before its own process and its workers' have ended. The
-        # removal looks once, so the uninstall waits for them first (seen on Linux: it looked at once, found one still
-        # exiting and left the code), this command aside, which may run from the folder it removes.
-        from cad.engine import places
-        from cad_server._internal import pointers
-
-        name = "0.12.0"
-        code = places.code_dir(name)
-        # Its lock file gone with it (``versions.quiet``), or still there, as one a server on its way out holds until
-        # its workers are gone (``versions.gone``): either way the processes are awaited, this command aside.
-        for lock in (False, True):
-            with self.subTest(lock=lock):
-                code.mkdir(parents=True)
-                pointers.write(None, name, mirrored=False)
-                if lock:
-                    versions.endpoint(name).lock.parent.mkdir(parents=True, exist_ok=True)
-                    versions.endpoint(name).lock.write_text("", encoding="utf-8")
-                looks, spared = iter([[4242], [4242]]), []
-
-                def processes(_folder, besides=None):
-                    spared.append(besides)
-                    return next(looks, [])
-
-                with mock.patch.object(releases, "processes", side_effect=processes), \
-                        mock.patch.object(versions, "gone", wraps=versions.gone) as gone:
-                    status, out, _err = self.run_uninstall()
-                self.assertEqual(status, 0, out)
-                self.assertFalse(code.exists(), out)
-                self.assertIn(f"version  removed text-to-cad {name}'s code; its data stays for a later install\n", out)
-                self.assertGreater(len(spared), 2, "it looked again until they had ended")
-                self.assertEqual(set(spared), {os.getpid()}, "this command never counts")
-                self.assertEqual(gone.call_args_list, [mock.call(name, besides=os.getpid())] if lock else [])
-
-    def test_a_version_something_still_runs_from_is_said_with_what_runs_and_how_to_finish(self) -> None:
-        # Never "stop it, then run this again": the cad command is gone by then, and a second uninstall would not find
-        # the version (no channel is on it). What runs, that the code stays and the data is kept, and what finishes it.
-        from cad.engine import places
-        from cad_server._internal import pointers
-
-        name = "0.12.0"
-        code = places.code_dir(name)
-        code.mkdir(parents=True)
-        pointers.write(None, name, mirrored=False)
-        with mock.patch.object(releases, "processes", return_value=[4242]), \
-                mock.patch.object(versions, "QUIET_SECONDS", 0.0):  # it stays: nothing to wait for here
-            status, out, _err = self.run_uninstall()
-        self.assertEqual(status, 1, out)
-        self.assertIn(f"version  the code of text-to-cad {name} stays, in {providers.shown(code, self.machine)}: "
-                      f"process 4242 still runs from it. Its data is kept. Delete that code folder once nothing runs "
-                      f"from it to finish the uninstall; a later install of text-to-cad {name} uses it instead, and of "
-                      "a newer release removes it\n", out)
-        self.assertNotIn("run this again", out)
-        self.assertEqual(out.count(f"{name}'s code stays"), 0, "said once, by the uninstall")
-        self.assertTrue(code.is_dir())
-        self.assertTrue((places.version_dir(name) / versions.UNINSTALLED).exists(), "its data kept for a later install")
-        with mock.patch.object(releases, "processes", return_value=[]), \
-                mock.patch.object(versions, "remove_now", return_value="connected"):
-            pointers.write(None, name, mirrored=False)
-            status, out, _err = self.run_uninstall("--purge")
-        self.assertEqual(status, 1, out)
-        self.assertIn(f"version  {providers.shown(places.version_dir(name), self.machine)} stays: its server still runs. "
-                      "Delete that folder once nothing runs from it\n", out)
-
-    def test_a_refused_removal_says_its_cause_and_fails_unless_this_command_runs_from_it(self) -> None:
-        # One line, the cause as it is, never a sweep (no one may run one); exit 1, as for in use, unless the system
-        # refused it because this very command runs from it (`cad uninstall` typed on Windows): then the rest is done.
-        from cad.engine import places
-        from cad_server._internal import pointers
-
-        name = "0.12.0"
-        code = places.code_dir(name)
-        real = os.rename
-
-        def refuse(source, target):
-            if Path(source) == code:
-                raise PermissionError(13, "The process cannot access the file")
-            return real(source, target)
-
-        for here, status, cause, once in (
-                (False, 1, "the system refused to remove it (The process cannot access the file)", "once nothing runs from it"),
-                (True, 0, "the system refused to remove it (The process cannot access the file): this command runs "
-                          "from it", "once this command has ended")):
-            with self.subTest(here=here):
-                code.mkdir(parents=True, exist_ok=True)
-                pointers.write(None, name, mirrored=False)
-                with mock.patch.object(os, "rename", refuse), mock.patch.object(versions, "QUIET_SECONDS", 0.0), \
-                        mock.patch.object(versions, "runs_from", return_value=here):
-                    done, out, _err = self.run_uninstall()
-                self.assertEqual(done, status, out)
-                self.assertIn(f"version  the code of text-to-cad {name} stays, in {providers.shown(code, self.machine)}: "
-                              f"{cause}. Its data is kept. Delete that code folder {once} to finish the uninstall; a "
-                              f"later install of text-to-cad {name} uses it instead, and of a newer release removes it\n",
-                              out)
-                self.assertNotIn("sweep", out)
-                self.assertEqual(out.count("version  the code of"), 1, out)
-        with mock.patch.object(versions, "_take", side_effect=PermissionError(13, "Access is denied")):
-            pointers.write(None, name, mirrored=False)
-            done, out, _err = self.run_uninstall()
-        self.assertEqual(done, 1, out)
-        self.assertIn(": its server's lock could not be taken (Access is denied). Its data is kept.", out)
-        self.assertNotIn("this command runs from it", out)
-
-    def test_the_flat_door_s_holder_is_stopped_unless_it_is_a_version_that_stays(self) -> None:
-        # With the default channel gone first, a store channel's version takes the flat door at its next tending: the
-        # plan says that channel stays, so its server is never stopped. Another holder (a server of 0.11.10 or earlier,
-        # or of a version removed) is.
-        from cad.engine import client, places
-        from cad_server._internal import pointers
-
-        places.code_dir("0.12.1").mkdir(parents=True)
-        for holder, stopped in ((77, False), (78, True)):
-            with self.subTest(holder=holder):
-                pointers.write(None, "0.12.0", mirrored=False)
-                pointers.write("codex", "0.12.1", mirrored=False)
-                flat: list = []
-                ask = lambda name, message, **_kw: {"pid": 77} if (name, message["op"]) == ("0.12.1", "pid") else None  # noqa: E731
-                with mock.patch.object(versions, "ask_flat", side_effect=lambda message, **_kw: flat.append(
-                            message["op"]) or {"pid": holder, "ok": True}), \
-                        mock.patch.object(versions, "ask", side_effect=ask), \
-                        mock.patch.object(client, "wait_gone", return_value=True):
-                    done, out, _err = self.run_uninstall()
-                self.assertEqual(done, 0, out)
-                self.assertEqual(flat, ["pid", "stop"] if stopped else ["pid"])
-                self.assertNotIn("engine   the server at", out)
-
-    def test_purge_takes_off_a_channel_that_came_while_it_asked(self) -> None:
-        from cad_server._internal import consent, pointers
-
-        pointers.write(None, "0.12.0", mirrored=False)
-        seen: list = []
-        with mock.patch.object(consent, "confirm", side_effect=lambda *_a, **_k: pointers.write("store", "0.12.2",
-                                                                                                mirrored=False)), \
-                mock.patch.object(stop, "main", side_effect=lambda *_args: seen.append(
-                    [pointer.channel for pointer in pointers.listing()]) or 0):
-            done, out, _err = self.run_uninstall("--purge")
-        self.assertEqual((done, seen), (0, [[]]), out)
-        self.assertIn("channel  removed the store channel (on text-to-cad 0.12.2)\n", out)
-
-    def test_a_pointer_the_system_refuses_for_a_moment_is_tried_again_and_one_that_stays_is_said(self) -> None:
-        # On Windows a launcher has the pointer open to read it on each request: its unlink is refused for a moment.
-        from cad_server._internal import pointers
-
-        default = self.state / "default"
-        real, refusals = Path.unlink, []
-
-        def refuse(times: int):
-            def unlink(path, *args, **kwargs):
-                if Path(path) == default and len(refusals) < times:
-                    refusals.append(path)
-                    raise PermissionError(13, "The process cannot access the file")
-                return real(path, *args, **kwargs)
-            return unlink
-
-        pointers.write(None, "0.12.0", mirrored=False)
-        with mock.patch.object(Path, "unlink", refuse(2)):
-            done, out, _err = self.run_uninstall()
-        self.assertEqual((done, len(refusals), default.exists()), (0, 2, False), out)
-        self.assertIn("default  removed the default channel (on text-to-cad 0.12.0)\n", out)
-        refusals.clear()
-        pointers.write(None, "0.12.0", mirrored=False)
-        stop.main.reset_mock()
-        with mock.patch.object(Path, "unlink", refuse(10 ** 9)), mock.patch.object(setup, "POINTER_SECONDS", 0.0):
-            done, out, err = self.run_uninstall()
-        self.assertEqual(done, 1, out)
-        self.assertIn(f"default  {providers.shown(default, self.machine)} could not be removed: The process cannot "
-                      "access the file\n", out)
-        self.assertNotIn("Traceback", out + err)
-        stop.main.assert_called_once_with([])  # the run went on: the stops and removals say what they find
-
-    def test_an_uninstall_with_no_record_of_a_setup_says_so_and_takes_out_what_it_finds(self) -> None:
-        self.desktop_with({"cad": self.entry()})
-        code, out, _err = self.run_uninstall("--dry-run")
-        self.assertEqual(code, 0, out)
-        self.assertEqual(out.splitlines()[0], "text-to-cad: cad uninstall finds no record of an earlier run, so it takes "
-                                              "out every copy of text-to-cad here:")
-        self.assertIn("Claude Desktop", out)
-
-    def test_an_uninstall_asks_first_and_without_a_yes_changes_nothing(self) -> None:
-        """``cad uninstall`` destroys, so it says its plan and asks: where no one can be asked (no terminal,
-        ``--json``) it changes nothing without ``--yes``, naming the command with it; at a terminal, anything
-        but y or yes changes nothing either."""
-        from cad_server._internal import consent
-
-        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
-            self.assertEqual(self.run_setup()[0], 0)
-        proxy = Path(installations.proxy_path())
-        before = (self.snapshot(), sorted(path.name for path in self.state.iterdir()))
-        code, out, err = self.run_uninstall("--purge", yes=False)
+class Setup(Computer):
+    def test_six_steps_for_this_version_and_no_app(self) -> None:
+        command = Path(installations.proxy_path())
+        command.parent.mkdir()
+        if os.name != "nt":  # an older release's command: replaced
+            command.write_text(f"#!/bin/sh\n# {installations.MARK}11\n", encoding="utf-8")
+        with mock.patch.dict(os.environ, {places.INSTALLATION_ENV: DEV}):
+            code, out, err = self.main(setup, [])
+            self.assertEqual(code, 0, out + err)
+            self.assertEqual(out, f"text-to-cad {DEV} is installed now: {places.version_dir(DEV)}\n")
+            record = places.version_record(DEV)
+            self.assertIsNotNone(record, "the version's complete marker")
+            self.assertTrue(any("-e" in step for step in self.uv.steps), "a development version from its checkout")
+            self.assertEqual(sorted(os.listdir(self.state)), ["install.lock", "versions"],
+                             "nothing but the version's folder: no pointer, no record, no setting")
+            self.assertEqual(installations.proxy_status(), installations.OK, "the cad command, of this revision")
+            steps = len(self.uv.steps)
+            code, out, err = self.main(setup, [])
+            self.assertEqual((code, len(self.uv.steps)), (0, steps), "again: quick, and nothing made twice")
+            self.assertEqual(out, f"text-to-cad {DEV} is installed: {places.version_dir(DEV)}\n")
+        self.no_app_touched()
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            setup.main(["--only", "claude"])
+        self.assertNotIn("--engine-update", setup.build_parser().format_help(), "hidden")
+
+
+@unittest.skipIf(os.name == "nt", "the install script's stand-in is a POSIX script")
+class EngineUpdate(Computer):
+    """What an updater of 0.11.10 runs of a newer release Y, and what its switch then needs."""
+
+    def test_prepare_then_the_whole_run_hands_over_and_starts_the_installer_once_without_waiting(self) -> None:
+        self.legacy()  # 0.11.10 installed: its data, its flat release, its records
+        released, ran = self.root / "released", self.root / "ran"
+        installer = self.root / "installer.py"
+        installer.write_text("import sys, time, pathlib\n"
+                             "released, ran = map(pathlib.Path, sys.argv[1:])\n"
+                             "while not released.exists():\n    time.sleep(0.02)\n"
+                             "with ran.open('a') as out:\n    out.write('ran\\n')\n", encoding="utf-8")
+        hook = f"{sys.executable} {installer} {released} {ran}"
+        again: list[str] = []
+        with mock.patch.object(setup, "_name", return_value=Y), \
+                mock.patch.object(setup, "_again", side_effect=lambda cad: again.append(cad) or 0), \
+                mock.patch.dict(os.environ, {setup.INSTALLER_ENV: hook}):
+            # The first run, from the flat folder (CAD_UPDATE_PREPARE=1): Y present, and nothing else.
+            with mock.patch.dict(os.environ, {setup.PREPARE_ENV: "1"}):
+                code, out, err = self.main(setup, ["--engine-update"])
+            self.assertEqual(code, 0, out + err)
+            self.assertIsNotNone(places.version_record(Y))
+            self.assertEqual((again, pointers.read(None), installations.current_version()), ([], None, OLD),
+                             "the first run changes nothing but Y's own folder")
+            # The second, from the flat folder: Y's own cad runs it again.
+            code, out, err = self.main(setup, ["--engine-update"])
+            self.assertEqual((code, again), (0, [places.version_record(Y)["cad"]]), out + err)
+            self.assertFalse(ran.exists(), "nothing started by a run that hands on")
+            # Y's own run: set up, handed over, the installer started and not waited for.
+            began = time.monotonic()
+            with mock.patch.object(places, "versioned", return_value=Y):
+                code, out, err = self.main(setup, ["--engine-update"])
+            self.assertEqual(code, 0, out + err)
+            self.assertFalse(ran.exists(), "it returned while the installer still waits")
+        # What the updater's switch then reads: the records of its layout naming Y's server environment.
+        record = installations.current()
+        self.assertEqual((record["version"], record["prefix"]), (Y, str(places.code_dir(Y) / "server")))
+        self.assertEqual(installations.proxy_status(), installations.OK)
+        released.write_text("", encoding="utf-8")
+        deadline = began + 60
+        while not ran.exists():
+            self.assertLess(time.monotonic(), deadline, "the installer ran")
+            time.sleep(0.02)
+        self.assertEqual(ran.read_text(encoding="utf-8"), "ran\n", "started once")
+        self.no_app_touched()
+
+    def test_an_empty_installer_starts_nothing(self) -> None:
+        with mock.patch.object(subprocess, "Popen") as started:
+            self.assertIsNone(setup.start_installer())
+        started.assert_not_called()
+        with mock.patch.dict(os.environ, {setup.INSTALLER_ENV: "printf ok"}), \
+                mock.patch.object(subprocess, "Popen") as started:
+            setup.start_installer()
+        self.assertEqual(started.call_args.args[0], ["printf", "ok"])
+        self.assertIs(started.call_args.kwargs["stdout"], subprocess.DEVNULL, "its output read by no one")
+        os.environ.pop(setup.INSTALLER_ENV)
+        self.assertEqual(setup.installer(), ["sh", "-c", "curl -fsSL https://texttocad.dev/install.sh | sh"])
+
+
+class Uninstall(Servers, Computer):
+    def test_everything_of_cad_goes_its_server_stopped_first_and_nothing_else(self) -> None:
+        self.legacy()  # what 0.11.10 left: its records, its flat release, its cache
+        self.version(X)
+        self.start(X)
+        self.assertIn(installations.write_proxy()[1], (installations.MISSING, installations.STALE))
+        beside = self.state.parent / "kept.txt"
+        beside.write_text("not cad's", encoding="utf-8")
+        code, out, err = self.main(uninstall, ["--yes"])
+        self.assertEqual(code, 0, out + err)
+        self.assertIsNone(versions.ask(X, {"op": "pid"}, seconds=2.0), "its server stopped")
+        for gone in (self.state, self.cache, Path(installations.proxy_path())):
+            self.assertFalse(gone.exists(), gone)
+        self.assertTrue(beside.exists())
+        self.no_app_touched()
+        code, out, _err = self.main(uninstall, ["--yes"])
+        self.assertEqual((code, out), (0, "text-to-cad is not installed on this computer: nothing to remove.\n"))
+
+    def test_nobody_to_ask_and_no_yes_changes_nothing(self) -> None:
+        self.version(X)
+        with mock.patch.object(sys, "stdin", io.StringIO()):
+            code, _out, err = self.main(uninstall, [])
         self.assertEqual(code, 2, err)
-        self.assertIn("text-to-cad: cad uninstall takes back what earlier runs did", out, "the plan, said first")
-        self.assertIn("cad uninstall: taking text-to-cad out of this computer and removing its state and cache folders "
-                      "needs a yes, and no one can be asked here (no terminal, or --json): nothing was changed; "
-                      "`cad uninstall --purge --yes` says yes\n", err)
-        code, out, err = self.run_uninstall("--json", yes=False)
-        self.assertEqual((code, json.loads(out)), (2, {
-            "ok": False, "reason": "confirmation_required", "userActionRequired": True,
-            "next": ["cad uninstall --json --yes"],
-            "error": "taking text-to-cad out of this computer needs a yes, and no one can be asked here (no terminal, "
-                     "or --json): nothing was changed; `cad uninstall --json --yes` says yes"}))
-        # At a terminal, a no -- or anything but y or yes -- is a no.
-        for answer in ("n\n", "\n", "sure\n", ""):
-            with self.subTest(answer=answer):
-                out, err, terminal = io.StringIO(), io.StringIO(), Terminal(answer)
-                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), \
-                        mock.patch.object(sys, "stdin", terminal), mock.patch.object(consent, "interactive",
-                                                                                      return_value=True):
-                    code = uninstall.main(["--purge"])
-                self.assertEqual(code, 1)
-                self.assertTrue(err.getvalue().endswith("This cannot be undone: --purge removes every installed version "
-                                                        "of text-to-cad, a store's among them, and its state folder "
-                                                        "(your settings, the documents' records, Recents) and its "
-                                                        "cache folder.\nTake text-to-cad out as planned? (y/N) "
-                                                        "cad uninstall: nothing was changed\n"), err.getvalue())
-        self.assertEqual((self.snapshot(), sorted(path.name for path in self.state.iterdir())), before)
-        self.assertTrue(proxy.is_file())
-        # A yes, typed: it goes on.
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), \
-                mock.patch.object(sys, "stdin", Terminal("y\n")), mock.patch.object(consent, "interactive",
-                                                                                   return_value=True):
-            code = uninstall.main([])
-        self.assertEqual(code, 0, out.getvalue() + err.getvalue())
-        self.assertFalse(proxy.exists())
-
-    def test_purge_leaves_a_folder_of_the_same_name_that_another_program_keeps(self) -> None:
-        for folder in (self.state, self.cache):
-            folder.mkdir(parents=True, exist_ok=True)
-            (folder / "theirs.db").write_text("theirs", encoding="utf-8")
-        code, out, _err = self.run_uninstall("--purge")
-        self.assertEqual(code, 0, out)
-        for folder in (self.state, self.cache):
-            self.assertEqual([entry.name for entry in folder.iterdir()], ["theirs.db"], folder)
-        self.assertEqual(out.count("it holds nothing text-to-cad made"), 2, out)
-
-    def test_an_agent_without_a_plugin_gets_the_skills_once_per_release_and_uninstall_takes_them_back(self) -> None:
-        command(self.bin, "npx", NPX)
-        folder = self.home / ".codeium" / "windsurf" / "skills"
-        folder.parent.mkdir(parents=True)
-        code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        self.assertEqual(providers.ours_in(folder), [folder / name for name in providers.SKILLS])
-        got = self.receipt()["skills"]["windsurf"]
-        self.assertEqual((got["release"], got["skills"]), (RELEASE, list(providers.SKILLS)))
-        self.assertIn("Windsurf: start a new session for the skills", out)
-        where = providers.shown(folder, self.machine)
-        self.assertRegex(out, rf"verify   Windsurf: the skills of text-to-cad {re.escape(RELEASE)}, copied into "
-                              rf"{re.escape(where)} by the Skills CLI \(\d{{4}}-")
-        document = json.loads(self.run_setup("--json", "--only", "windsurf")[1])
-        self.assertEqual(document["verified"]["apps"], {"windsurf": {"verdict": "ok", "release": RELEASE}})
-        # The report reads the folder again: a skill gone since, which nothing here can add back (no Node), fails
-        # the run, said as a failure, never a footnote to a line that reads as done.
-        shutil.rmtree(folder / providers.SKILLS[0])
-        (self.bin / ("npx.cmd" if os.name == "nt" else "npx")).unlink()
-        code, out, _err = self.run_setup()
-        self.assertEqual(code, 1, out)
-        self.assertIn(f"verify   Windsurf: failed: {providers.SKILLS[0]} not in {where}, where the Skills CLI was to "
-                      f"copy the skills of text-to-cad {RELEASE}\n", out)
-        self.assertIn("Some steps failed (said above)", out)
-        self.assertNotIn("is already up to date here", out)
-        code, printed, _err = self.run_setup("--json", "--only", "windsurf")
-        self.assertEqual(code, 1, printed)
-        self.assertEqual(json.loads(printed)["verified"]["apps"],
-                         {"windsurf": {"verdict": "missing", "release": RELEASE, "missing": [providers.SKILLS[0]]}})
-        command(self.bin, "npx", NPX)
-        code, out, _err = self.run_setup()
-        self.assertIn(f": {providers.SKILLS[0]} missing", out)
-        # The receipt's release is this one and every skill is there: nothing to do.
-        calls = (self.bin / "calls.jsonl").read_text(encoding="utf-8")
-        code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        self.assertIn(f"from text-to-cad {RELEASE}: up to date", out)
-        self.assertIn(f"text-to-cad {RELEASE} is already up to date here.", out)
-        self.assertEqual((self.bin / "calls.jsonl").read_text(encoding="utf-8"), calls)
-        code, out, _err = self.run_uninstall()
-        self.assertEqual(code, 0, out)
-        last = json.loads((self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()[-1])
-        self.assertEqual(last, ["npx", "--prefer-offline", "-y", "skills@latest", "remove", "-g", "-a", "windsurf", "-s",
-                                *sorted(providers.SKILLS), "-y"])
-        self.assertEqual(providers.ours_in(folder), [])
-        self.assertIn("Next, restart to unload it:\n  Windsurf: start a new session for the skills\n", out)
-        self.assertNotIn("restart to load it", out)
-
-    def test_a_dropped_skill_the_receipt_names_is_removed_with_no_node_and_never_counted_missing(self) -> None:
-        """No Node here: a skill the receipt says Windsurf got, which this release no longer ships, is deleted all the
-        same, the receipt's record drops it, and neither the report nor ``cad doctor`` calls it missing."""
-        from cad_server.cli import doctor
-
-        folder = self.home / ".codeium" / "windsurf" / "skills"
-        for name in (*providers.SKILLS, "old-name"):
-            (folder / name).mkdir(parents=True)
-            (folder / name / "SKILL.md").write_text(f"---\nname: {name}\n---\nMaintained at earthtojake/text-to-cad.\n",
-                                                    encoding="utf-8")
-        self.state.mkdir(parents=True, exist_ok=True)
-        (self.state / setup.RECEIPT).write_text(json.dumps({"schema": 1, "actions": [], "skills": {"windsurf": {
-            "release": RELEASE, "folder": str(folder), "skills": [*providers.SKILLS, "old-name"]}}}), encoding="utf-8")
-        got = self.receipt()["skills"]["windsurf"]
-        self.assertEqual(providers.skills_lost("windsurf", {**got, "skills": ["old-name"]}, self.machine), [])
-        code, out, _err = self.run_setup("--only", "windsurf")
-        self.assertEqual(code, 0, out)
-        self.assertIn("Windsurf: remove retired old-name in", out)
-        self.assertFalse((folder / "old-name").exists())
-        self.assertEqual(self.receipt()["skills"]["windsurf"]["skills"], list(providers.SKILLS))
-        self.assertNotIn("failed", out)
-        self.assertEqual([line for line in doctor._apps() if "not there now" in line], [])
-
-    def test_an_agent_whose_skills_the_cli_keeps_in_the_shared_folder_is_read_there(self) -> None:
-        """GitHub Copilot's project folder is `.agents/skills`, so `npx skills add -g` copies its skills into
-        `~/.agents/skills`, never its `~/.copilot/skills` (which Copilot reads beside it): the plan, the receipt
-        and the report name that folder, and find the skills in it. Read in `~/.copilot/skills`, as 0.11.1 did,
-        they were missing after every run."""
-        command(self.bin, "npx", NPX)
-        own = self.home / ".copilot" / "skills"
-        (own / "theirs").mkdir(parents=True)
-        shared = providers.shared_skills(self.machine)
-        where = providers.shown(shared, self.machine)
-        code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        self.assertIn(f"GitHub Copilot  install  the skills, copied into {where} by the Skills CLI", out)
-        self.assertEqual(providers.ours_in(shared), [shared / name for name in providers.SKILLS])
-        self.assertEqual([path.name for path in own.iterdir()], ["theirs"])
-        self.assertEqual(self.receipt()["skills"]["github-copilot"]["folder"], str(shared))
-        self.assertRegex(out, rf"verify   GitHub Copilot: the skills of text-to-cad {re.escape(RELEASE)}, copied into "
-                              rf"{re.escape(where)} by the Skills CLI \(\d{{4}}-")
-        code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        self.assertIn(f"the skills in {where}, from text-to-cad {RELEASE}: up to date", out)
-
-    def test_only_takes_a_skills_cli_agent(self) -> None:
-        command(self.bin, "npx", NPX)
-        for mark in (".codeium/windsurf", ".config/goose"):
-            (self.home / mark).mkdir(parents=True)
-        self.cursor()
-        code, out, _err = self.run_setup("--dry-run", "--only", "windsurf")
-        self.assertEqual(code, 0, out)
-        rows = [line.split()[0] for line in out.splitlines() if line.startswith("  ") and not line.startswith("    ")]
-        self.assertEqual(rows, ["Windsurf", "plugin", "engine"])
-        star = "*" if os.name == "nt" else "'*'"  # command_text spells it for cmd, else for the shell
-        self.assertIn(f"-a windsurf -s {star} -y --copy --json", out)
-
-    def test_no_telemetry_turns_it_off_as_cad_telemetry_off_does(self) -> None:
-        with mock.patch.object(analytics, "choose", return_value={"saved": True, "sharing": False}) as chosen:
-            code, out, _err = self.run_setup("--no-telemetry")
-        self.assertEqual(code, 0, out)
-        chosen.assert_called_once_with(False, by="cli", forget=analytics.request_deletion)
-        self.assertIn("telemetry off: your choice", out)
-
-
-class ThePluginCommand(Fixture):
-    """``cad plugin``: the folder written from the current installation, its path printed; ``--refresh``,
-    which a switch runs, brings the apps' copies of it along when that changed it."""
-
-    def test_it_writes_the_folder_from_the_current_installation_and_prints_its_path(self) -> None:
-        from cad_server.cli import plugin as plugin_cli
-
-        folder = plugin.folder()
-        code, out, err = self._run(plugin_cli.main, ())  # no installation current: this one writes it
-        self.assertEqual((code, out), (0, f"{folder}\n"), err)
-        self.assertEqual(json.loads((folder / plugin.MANIFEST).read_text(encoding="utf-8"))["version"], RELEASE)
-        with mock.patch.object(installations, "current", return_value={"version": "9.9.9", "prefix": "/elsewhere"}), \
-                mock.patch.object(installations, "mine", return_value=False), mock.patch.object(plugin, "write") as write:
-            code, out, err = self._run(plugin_cli.main, ())
-        self.assertEqual((code, out), (0, f"{folder}\n"))
-        write.assert_not_called()
-        self.assertIn("text-to-cad 9.9.9 is the current installation: its `cad plugin` writes the folder", err)
-
-    def test_refresh_adds_codex_s_copy_again_only_when_the_folder_changed(self) -> None:
-        from cad_server.cli import plugin as plugin_cli
-
-        folder = plugin.folder()
-        command(self.bin, "codex", "print('codex-cli 0.153.4') if args == ['--version'] else None\n")
-        codex = self.home / ".codex"
-        (codex / "plugins" / "cache" / "text-to-cad" / "text-to-cad" / "0.0.1").mkdir(parents=True)
-        (codex / "config.toml").write_text(f'[marketplaces.text-to-cad]\nsource_type = "local"\nsource = {json.dumps(str(folder))}\n'
-                                           '[plugins."text-to-cad@text-to-cad"]\nenabled = true\n', encoding="utf-8")
-        code, out, err = self._run(plugin_cli.main, ("--refresh",))
-        self.assertEqual(code, 0, err)
-        self.assertIn("Codex: update text-to-cad@text-to-cad 0.0.1 -> " + RELEASE, err)
-        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertIn(["codex", "plugin", "add", "text-to-cad@text-to-cad"], calls)
-        self.assertEqual([action["app"] for action in self.receipt()["actions"]], ["codex"])
-        count = len(calls)
-        code, out, err = self._run(plugin_cli.main, ("--refresh", "--json"))
-        self.assertEqual(code, 0, err)
-        self.assertEqual(json.loads(out)["refreshed"], None, "the folder did not change: nothing to bring along")
-        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertEqual([call for call in calls[count:] if call != ["codex", "--version"]], [])
-
-
-class ZeroEightsOwnStop(unittest.TestCase):
-    def test_it_runs_0_8_s_cadgen_stop_in_0_8_s_own_environment_with_telemetry_off(self) -> None:
-        record = {"version": "0.8.4", "cadgen": "/env/bin/cadgen", "python": "/env/bin/python", "prefix": "/env"}
-        answer = json.dumps({"ok": True, "stopped": ["/t/cadgen-engine/0123456789ab.door"]}, indent=2) + "\n"
-        with mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0, answer, "")) as ran, \
-                mock.patch.dict(os.environ, {"PYTHONPATH": "/a/checkout/src", "CADGEN_TELEMETRY": "1"}):
-            self.assertEqual(setup.stop_earlier(record), (True, ["/t/cadgen-engine/0123456789ab.door"], answer.strip()))
-        (call,) = ran.call_args_list
-        self.assertEqual(call.args[0], ["/env/bin/cadgen", "stop", "--json"])
-        # It runs on the person's behalf, its words read by no one: it counts, sends and tells nothing, so it
-        # never takes a notice nobody read for a yes; and it imports its own release, never this one.
-        self.assertEqual(call.kwargs["env"]["CADGEN_TELEMETRY"], "0")
-        self.assertNotIn("PYTHONPATH", call.kwargs["env"])
-        for done, expected in ((subprocess.CompletedProcess([], 0, '{"ok": true, "stopped": []}\n', ""), (True, [])),
-                               (subprocess.CompletedProcess([], 0, "no engine server is running\n", ""), (True, None)),
-                               (subprocess.CompletedProcess([], 1, "", "boom\n"), (False, None))):
-            with mock.patch.object(subprocess, "run", return_value=done):
-                self.assertEqual(setup.stop_earlier(record)[:2], expected, done)
-        with mock.patch.object(subprocess, "run", side_effect=FileNotFoundError(2, "No such file or directory")):
-            self.assertEqual(setup.stop_earlier(record)[:2], (False, None))
-        # 0.10.0's on Windows: its console script is its record's `cad`, and its telemetry switch CAD_TELEMETRY.
-        ten = {"version": "0.10.0", "cad": "C:/s/cad.exe", "python": "C:/s/python.exe", "prefix": "C:/s"}
-        with mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0, answer, "")) as ran:
-            setup.stop_earlier(ten)
-        self.assertEqual(ran.call_args.args[0], ["C:/s/cad.exe", "stop", "--json"])
-        self.assertEqual(ran.call_args.kwargs["env"]["CAD_TELEMETRY"], "0")
-
-
-class TheOneLineInstaller(unittest.TestCase):
-    """The scripts texttocad.dev serves, read as text, and the shell one run with fake uvx and curl."""
-
-    def test_install_sh_runs_nothing_before_its_last_line_and_runs_this_release_s_cad_setup(self) -> None:
-        text = INSTALL_SH.read_text(encoding="utf-8").replace("\r\n", "\n")  # as a Windows checkout may hold it
-        self.assertTrue(text.isascii())
-        # The command each script says it is run by is the one the server tells people to run.
-        self.assertIn(updates.INSTALL, text)
-        self.assertIn(updates.INSTALL_WINDOWS, text)
-        lines = text.splitlines()
-        self.assertEqual(lines[-1], 'main "$@"')
-        self.assertIn("set -eu", lines[:lines.index("main() {")])
-        self.assertEqual(re.findall(r'^CAD_VERSION="([^"]*)"$', text, re.M), [VERSION])
-        # Outside a function, only comments, settings and definitions: a download cut short runs nothing.
-        heredoc, depth = None, 0
-        for line in lines[:-1]:
-            if heredoc:
-                heredoc = None if line == heredoc else heredoc
-                continue
-            if depth == 0:
-                self.assertRegex(line, r'^(#.*|set -eu|[A-Z_]+="[^"$`]*"|[a-z_]+\(\) \{|)$')
-            depth += line.endswith("{") - (line.strip() == "}")
-            opened = re.search(r"<<'?(\w+)'?$", line)
-            heredoc = opened.group(1) if opened else None
-        self.assertEqual(depth, 0)
-        launch = " ".join(LAUNCHER[1:-1])
-        self.assertIn(f'exec "$uvx" {launch} $refresh --from "$requirement" cad "$verb" "$@"\n', text)
-        self.assertIn('requirement="cad-server==$version"', text)
-        self.assertIn('refresh="--refresh-package cad-server --refresh-package cad"', text)
-        # One way in, the same at a terminal or not: cad asks nothing here, so it reads none -- an uninstall,
-        # the person's own --uninstall, told yes by the release that would ask.
-        self.assertEqual(text.count('cad "$verb" "$@"'), 1)
-        self.assertNotIn("cad install", text)
-        self.assertNotIn("/dev/tty", text)
-        self.assertEqual([line.strip() for line in text.splitlines() if "--yes" in line and not line.strip().startswith("#")],
-                         ["set -- \"$@\" --yes"])
-        sh = shutil.which("sh")
-        if sh and os.name != "nt":
-            self.assertEqual(subprocess.run([sh, "-n", str(INSTALL_SH)], capture_output=True).returncode, 0)
-
-    def test_install_ps1_runs_nothing_but_its_function_and_runs_this_release_s_cad_setup(self) -> None:
-        text = INSTALL_PS1.read_text(encoding="utf-8").replace("\r\n", "\n")
-        self.assertTrue(text.isascii())
-        self.assertIn(updates.INSTALL_WINDOWS, text)
-        self.assertIn(updates.INSTALL, text)
-        lines = text.splitlines()
-        self.assertEqual(lines[-1], "Install-TextToCad @args")
-        body = lines[lines.index("function Install-TextToCad {"):lines.index("Install-TextToCad @args")]
-        self.assertEqual(body[-2], "}")
-        self.assertTrue(all(line.startswith("#") or not line for line in lines[:lines.index("function Install-TextToCad {")]))
-        self.assertEqual(re.findall(r'^\s*\$CadVersion = "([^"]*)"$', text, re.M), [VERSION])
-        words = ", ".join(f"'{word}'" for word in LAUNCHER[1:-1])
-        self.assertIn(f"@({words}) + $refresh + @('--from', $requirement, 'cad', $verb) + $rest", text)
-        self.assertIn('$requirement = "cad-server==$version"', text)
-        self.assertIn("$verb = 'setup'", text)
-        self.assertIn("if ($argument -eq '--uninstall') { $verb = 'uninstall'; continue }", text)
-        self.assertNotIn("cad install", text)
-        self.assertIn("$refresh = @('--refresh-package', 'cad-server', '--refresh-package', 'cad')", text)
-        # Asking nothing: setup asks nothing, and an uninstall -- the person's own --uninstall -- is told yes,
-        # by a release that asks (from $ConsentSince on) and takes it.
-        self.assertEqual([line.strip() for line in text.splitlines() if "--yes" in line and not line.strip().startswith("#")],
-                         ["if ($verb -eq 'uninstall' -and ($from -or -not (Test-Older $version $ConsentSince))) "
-                          "{ $rest += '--yes' }"])
-        self.assertEqual(re.findall(r"^\s*\$ConsentSince = '([^']*)'$", text, re.M), ["0.11.0"])
-        pwsh = shutil.which("pwsh")
-        if pwsh:
-            # Parsed, never run: the path is inside the command (after -Command, an argument is more command).
-            path = str(INSTALL_PS1).replace("'", "''")
-            parse = (f"$errors = $null; [System.Management.Automation.Language.Parser]::ParseFile('{path}', [ref]$null, "
-                     "[ref]$errors) | Out-Null; if ($errors) { $errors | ForEach-Object { $_.Message }; exit 1 }")
-            done = subprocess.run([pwsh, "-NoProfile", "-NonInteractive", "-Command", parse],
-                                  capture_output=True, text=True, timeout=120)
-            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-
-    @POSIX
-    def test_install_sh_picks_the_release_and_hands_every_other_argument_to_cad_setup_or_uninstall(self) -> None:
-        with temporary_directory(prefix="install-sh-") as scratch:
-            root = Path(scratch)
-            fakes = root / "bin"
-            fakes.mkdir()
-            (fakes / "uvx").write_text('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$FAKE_ARGS"\n', encoding="utf-8")
-            (fakes / "curl").write_text('#!/bin/sh\n[ -n "$FEED" ] || exit 7\nprintf \'%s\' "$FEED"\n', encoding="utf-8")
-            for fake in fakes.iterdir():
-                fake.chmod(0o755)
-            arguments = root / "arguments"
-
-            def run(*argv: str, feed: str = '{"latest":"9.9.9"}', **extra: str) -> tuple[subprocess.CompletedProcess, list[str]]:
-                arguments.unlink(missing_ok=True)
-                environment = {"PATH": f"{fakes}:/usr/bin:/bin", "HOME": str(root), "FAKE_ARGS": str(arguments),
-                               "FEED": feed, **extra}
-                done = subprocess.run(["/bin/sh", str(INSTALL_SH), *argv], env=environment, capture_output=True,
-                                      text=True, stdin=subprocess.DEVNULL)
-                given = arguments.read_text(encoding="utf-8").splitlines() if arguments.exists() else []
-                return done, given
-
-            head = [*LAUNCHER[1:-1], "--refresh-package", "cad-server", "--refresh-package", "cad", "--from"]
-            done, given = run("--dry-run", "--only", "claude,codex")
-            self.assertEqual(done.returncode, 0, done.stderr)
-            self.assertEqual(given, [*head, "cad-server==9.9.9", "cad", "setup", "--dry-run", "--only", "claude,codex"])
-            self.assertIn("cad setup --dry-run --only claude,codex\n", done.stderr)  # the Running: line
-            # A release asked for by name is the one installed; the device runs its newest release.
-            done, given = run("--version", "1.2.3")
-            self.assertEqual(given, [*head, "cad-server==1.2.3", "cad", "setup"])
-            done, given = run("--version", "0.0.1")  # older than the script's own, taken as asked
-            self.assertEqual(given, [*head, "cad-server==0.0.1", "cad", "setup"])
-            # ... but never below the first pinned release on a device whose default channel has a pointer.
-            state = root / "state"
-            state.mkdir()
-            (state / "default").write_text("0.11.12\n", encoding="utf-8")
-            for asked in ("0.11.10", "0.10.4"):
-                done, given = run("--version", asked, CAD_STATE_DIR=str(state))
-                self.assertEqual((done.returncode, given), (1, []), done.stderr)
-                self.assertIn(f"going back to {asked}, a release before 0.11.11, is not supported", done.stderr)
-            done, given = run("--version", "0.11.11", CAD_STATE_DIR=str(state))
-            self.assertEqual(given, [*head, "cad-server==0.11.11", "cad", "setup"])
-            done, given = run("--uninstall", "--version", "0.10.4", CAD_STATE_DIR=str(root / "elsewhere"))
-            self.assertEqual(given, [*head, "cad-server==0.10.4", "cad", "uninstall"], "no versions here: as asked")
-            # --uninstall picks the verb, wherever it is given; the rest goes to `cad uninstall`, told yes: the
-            # person asked for it, and the installer asks nothing. A release from before uninstall asked takes no
-            # --yes; a build named outright is taken as this one.
-            done, given = run("--purge", "--uninstall", "--dry-run")
-            self.assertEqual(given, [*head, "cad-server==9.9.9", "cad", "uninstall", "--purge", "--dry-run", "--yes"])
-            self.assertIn("cad uninstall --purge --dry-run --yes\n", done.stderr)
-            done, given = run("--uninstall", "--version", "0.10.4")
-            self.assertEqual(given, [*head, "cad-server==0.10.4", "cad", "uninstall"])
-            done, given = run("--uninstall", "--from", "/builds/cad_server-0.1.0-py3-none-any.whl")
-            self.assertEqual(given[-3:], ["cad", "uninstall", "--yes"])
-            done, given = run("--version=1.2.4")
-            self.assertEqual(given[len(head)], "cad-server==1.2.4")
-            done, given = run(feed="")  # the version feed cannot be read: the release the script was published with
-            self.assertEqual(given[len(head)], f"cad-server=={VERSION}")
-            self.assertIn("the version feed could not be read", done.stderr)
-            # The feed lags a release for up to an hour: never a release older than this script's own,
-            # which has no `cad setup`; a newer one, and this very release, are taken as the feed says.
-            done, given = run(feed='{"latest":"0.8.0"}')
-            self.assertEqual(given[len(head)], f"cad-server=={VERSION}")
-            self.assertIn("the version feed still names 0.8.0", done.stderr)
-            done, given = run(feed=f'{{"latest":"{VERSION}"}}')
-            self.assertEqual(given[len(head)], f"cad-server=={VERSION}")
-            self.assertIn("the newest release", done.stderr)
-            # A build named outright, for testing before its release: taken as it is, nothing refreshed.
-            plain = [*LAUNCHER[1:-1], "--from"]
-            done, given = run("--from", "/builds/cad_server-9.9.9-py3-none-any.whl", "--dry-run")
-            self.assertEqual(given, [*plain, "/builds/cad_server-9.9.9-py3-none-any.whl", "cad", "setup", "--dry-run"])
-            self.assertIn("as --from asked", done.stderr)
-            done, given = run("--dry-run", CAD_INSTALL_FROM="/builds/cad-server")
-            self.assertEqual(given[:len(plain) + 1], [*plain, "/builds/cad-server"])
-            done, given = run("--from")
-            self.assertEqual((done.returncode, given), (1, []))
-            for argv in (("--version", "1.2.3;true"), ("--version",)):
-                done, given = run(*argv)
-                self.assertEqual((done.returncode, given), (1, []), argv)
-            done, given = run("--help")
-            self.assertEqual((done.returncode, given), (0, []))
-            self.assertIn(f"releases/download/v{VERSION}/install.sh", done.stdout)
-
-
-    @POSIX
-    def test_install_sh_add_installs_exactly_that_release_alone_and_reads_no_feed(self) -> None:
-        """``--add X`` -- the skills' setup block's ``curl ... | sh -s -- --add X`` -- runs ``cad setup --add`` of
-        exactly X: no version feed read, never widened to the newest, and any other option refused."""
-        with temporary_directory(prefix="install-add-") as scratch:
-            root = Path(scratch)
-            fakes = root / "bin"
-            fakes.mkdir()
-            (fakes / "uvx").write_text('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$FAKE_ARGS"\n', encoding="utf-8")
-            (fakes / "curl").write_text('#!/bin/sh\ntouch "$FEED_READ"\nprintf \'{"latest":"9.9.9"}\'\n', encoding="utf-8")
-            for fake in fakes.iterdir():
-                fake.chmod(0o755)
-            arguments, read = root / "arguments", root / "feed-read"
-            environment = {"PATH": f"{fakes}:/usr/bin:/bin", "HOME": str(root), "FAKE_ARGS": str(arguments),
-                           "FEED_READ": str(read)}
-
-            def run(*argv: str, piped: bool = False, **extra: str) -> tuple[subprocess.CompletedProcess, list[str]]:
-                arguments.unlink(missing_ok=True)
-                command = ["/bin/sh", "-s", "--", *argv] if piped else ["/bin/sh", str(INSTALL_SH), *argv]
-                done = subprocess.run(command, env={**environment, **extra}, capture_output=True, text=True,
-                                      input=INSTALL_SH.read_text(encoding="utf-8") if piped else None,
-                                      stdin=None if piped else subprocess.DEVNULL)
-                return done, arguments.read_text(encoding="utf-8").splitlines() if arguments.exists() else []
-
-            head = [*LAUNCHER[1:-1], "--refresh-package", "cad-server", "--refresh-package", "cad", "--from"]
-            for argv, piped in ((("--add", "0.11.11"), True), (("--add=0.12.3",), False)):
-                done, given = run(*argv, piped=piped)
-                self.assertEqual(done.returncode, 0, done.stderr)
-                release = argv[-1].removeprefix("--add=")
-                self.assertEqual(given, [*head, f"cad-server=={release}", "cad", "setup", "--add"])
-                self.assertIn(f"text-to-cad: {release} (as --add asked)", done.stderr)
-            self.assertFalse(read.exists(), "no version feed read for --add")
-            # A wheel named outright, for testing a build: that release's, or refused.
-            done, given = run("--add", "9.9.9", "--from", "/builds/cad_server-9.9.9-py3-none-any.whl")
-            self.assertEqual(given, [*LAUNCHER[1:-1], "--from", "/builds/cad_server-9.9.9-py3-none-any.whl", "cad",
-                                     "setup", "--add"])
-            for argv, words in ((("--add",), "--add needs a release"), (("--add", ""), "--add needs a release"),
-                                (("--add", "9.9.9", "--dry-run"), "--add takes no other option: --dry-run"),
-                                (("--add", "9.9.9", "--only", "claude"), "--add takes no other option"),
-                                (("--uninstall", "--add", "9.9.9"), "it does not go with --uninstall"),
-                                (("--add", "9.9.9", "--version", "9.9.8"), "it does not go with --version"),
-                                (("--add", "9.9.9;true"), "not a release"),
-                                (("--add", "0.11.11-dev.20261113000000"), "is a development version"),
-                                (("--add", "0.11.10"), "installs no release alone (the first that does is 0.11.11)"),
-                                (("--add", "9.9.9", "--from", "/b/cad_server-9.9.8-py3-none-any.whl"),
-                                 "is not text-to-cad 9.9.9")):
-                with self.subTest(argv=argv):
-                    done, given = run(*argv)
-                    self.assertEqual((done.returncode, given), (1, []), done.stderr)
-                    self.assertIn(words, done.stderr)
-            self.assertFalse(read.exists())
-
-    def test_install_ps1_add_installs_exactly_that_release_alone(self) -> None:
-        """The same for Windows' installer, as the skills' setup block runs it: ``& ([scriptblock]::Create((irm
-        .../install.ps1))) --add X``, the script's ``$args`` handed to its function. Its words are held here; where
-        PowerShell is installed (Windows, and the Linux runners), the script block is run with a fake uvx."""
-        text = INSTALL_PS1.read_text(encoding="utf-8").replace("\r\n", "\n")
-        self.assertEqual(re.findall(r"^\s*\$AddSince = '([^']*)'$", text, re.M), ["0.11.11"])
-        self.assertIn("if ($argument -eq '--add') {", text)
-        self.assertIn("(Test-Older $version $AddSince) -and", text, "going back below the first pinned release refused")
-        self.assertIn("$rest = @('--add')", text)
-        sh_text = INSTALL_SH.read_text(encoding="utf-8")
-        self.assertEqual(re.findall(r'^ADD_SINCE="([^"]*)"$', sh_text, re.M), ["0.11.11"], "the two scripts agree")
-        pwsh = shutil.which("pwsh")
-        if not pwsh:
-            return
-        with temporary_directory(prefix="install-ps1-") as scratch:
-            root = Path(scratch)
-            fakes = root / "bin"
-            fakes.mkdir()
-            arguments = root / "arguments"
-            logger = fakes / "uvx.py"
-            logger.write_text("import sys\nopen(sys.argv[1], 'w').write('\\n'.join(sys.argv[2:]) + '\\n')\n",
-                              encoding="utf-8")
-            if os.name == "nt":
-                (fakes / "uvx.cmd").write_text(f'@"{sys.executable}" "{logger}" "{arguments}" %*\r\n', encoding="utf-8")
-            else:
-                uvx = fakes / "uvx"
-                uvx.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{logger}" "{arguments}" "$@"\n', encoding="utf-8")
-                uvx.chmod(0o755)
-            path = str(INSTALL_PS1).replace("'", "''")
-
-            def run(*argv: str) -> tuple[subprocess.CompletedProcess, list[str]]:
-                arguments.unlink(missing_ok=True)
-                # As the setup block types them: bare words (a word that starts with -- is the script's to read).
-                words = " ".join(argv)
-                script = f"& ([scriptblock]::Create((Get-Content -Raw '{path}'))) {words}"
-                done = subprocess.run([pwsh, "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True,
-                                      text=True, timeout=120, env={**os.environ, "PATH": os.pathsep.join(
-                                          (str(fakes), os.environ.get("PATH", ""))), "CAD_INSTALL_FROM": ""})
-                return done, arguments.read_text(encoding="utf-8").splitlines() if arguments.exists() else []
-
-            done, given = run("--add", "0.11.11")
-            self.assertEqual(given, [*LAUNCHER[1:-1], "--refresh-package", "cad-server", "--refresh-package", "cad",
-                                     "--from", "cad-server==0.11.11", "cad", "setup", "--add"], done.stdout + done.stderr)
-            self.assertIn("text-to-cad: 0.11.11 (as --add asked)", done.stdout)
-            for argv, words in ((("--add",), "--add needs a release"),
-                                (("--add", "0.11.11", "--dry-run"), "--add takes no other option: --dry-run"),
-                                (("--uninstall", "--add", "0.11.11"), "it does not go with --uninstall"),
-                                (("--add", "0.11.11-dev.1"), "is a development version"),
-                                (("--add", "0.11.10"), "installs no release alone")):
-                with self.subTest(argv=argv):
-                    done, given = run(*argv)
-                    self.assertEqual(given, [], done.stdout + done.stderr)
-                    self.assertIn(words, done.stdout + done.stderr)
+        self.assertTrue(places.version_dir(X).is_dir())
 
 
 if __name__ == "__main__":

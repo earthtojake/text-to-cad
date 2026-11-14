@@ -40,8 +40,7 @@ default channel, and the pages' port goes to the new version's server where the 
 before the pointer is written changes no pointer and no other version. A pointer that is there and cannot be read
 now fails the move (``pointers.Unreadable``); one a crash emptied is written again. The default channel's first
 move on a device with the layout of 0.11.10 and earlier imports from that layout, and the sweep removes the layout's
-code, records and caches as soon as that is safe (``cad_server._internal.legacy``). Whether the automatic updates
-are on plays no part: a newer version asked for is moved to.
+code, records and caches as soon as that is safe (``cad_server._internal.legacy``).
 
 **Servers** (``endpoint``, ``ask``). Each version's server is reached through its own door alone,
 ``<engines>/<version>``: asked whether work is in flight (``connected``), asked to stop (``stop_server``), started
@@ -110,7 +109,7 @@ from typing import Any
 from cad.engine import places
 from cad_server._internal import base
 
-__all__ = ["CANNOT", "LOCK", "NAMED", "SUCCESSOR", "UNINSTALLED", "Moved", "Present", "Refusal", "add", "add_command",
+__all__ = ["CANNOT", "LOCK", "NAMED", "SUCCESSOR", "UNINSTALLED", "Moved", "Present", "Refusal", "add_command",
            "answered_port", "ask", "ask_flat", "connected", "development", "endpoint", "fate", "first_start", "flat",
            "flat_endpoint", "folders", "garbage", "hand_port", "handover", "install_lock", "make_present", "mend",
            "move", "older", "order", "present", "proof", "prune", "prune_plan", "remove", "remove_code", "remove_now",
@@ -763,7 +762,7 @@ def ask_flat(message: dict[str, Any], *, seconds: float = ASK_SECONDS) -> dict[s
 
 def _ask_at(door: Path, message: dict[str, Any], seconds: float) -> dict[str, Any] | None:
     """``message`` asked at ``door``, marked ``internal``: what one server, updater or command asks another of the
-    device's servers is no command of the person's, which the quiet hour an automatic update waits for counts
+    device's servers is no command of the person's, which the last command's time never counts
     (``daemon.Daemon.ended``); a server of 0.11.10 or earlier reads past the mark."""
     from cad.engine import client
 
@@ -1650,7 +1649,7 @@ def _names(folder: Path) -> list[str]:
         return []
 
 
-# --- cad setup --add ------------------------------------------------------------------------------------
+# --- the command that installs a version ------------------------------------------------------------------
 
 
 def add_command(version: str, system: str | None = None) -> str:
@@ -1661,43 +1660,3 @@ def add_command(version: str, system: str | None = None) -> str:
     if (system or os.name) == "nt":
         return f"& ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --add {version}"
     return f"{INSTALL} -s -- --add {version}"
-
-
-def add(*, quiet: bool = False, out: Any = None, err: Any = None) -> int:
-    """``cad setup --add [--quiet]``: this process's own version made present (``make_present``), and the ``cad``
-    command written where it is missing or of an older revision (``installations.write_proxy``: a later one, or a
-    file of that name not text-to-cad's, is left alone), and nothing else -- no pointer, no app, no setting, no
-    receipt --, said in one or two lines on ``out`` (each line of the making on ``err`` unless ``quiet``). A
-    failure is one line on ``err``: with ``quiet`` (the ``cad`` command's own run of it) its reason alone, which
-    that command says in its own line. Exit 0 present; ``cli_errors.REASONS['cannot_install_here']`` when it
-    cannot be installed from this shell; 1 when it failed, or the ``cad`` command could not be written."""
-    import cad_server
-    from cad_server._internal import installations
-    from cad_server._internal.cli_errors import FAILED, REASONS
-
-    out, err = out or sys.stdout, err or sys.stderr
-    name = os.environ.get(places.INSTALLATION_ENV) or cad_server.__version__
-    if not os.environ.get(places.INSTALLATION_ENV) and installations.editable():
-        err.write(f"cad setup --add: this cad-server is a source tree, added only as a version it is named "
-                  f"({places.INSTALLATION_ENV})\n")
-        return FAILED
-    found = make_present(name, told=(lambda _line: None) if quiet else (lambda line: err.write(f"cad: {line}\n")))
-    if not found.ok:
-        if quiet:
-            err.write(f"{found.error}\n")
-        elif found.cannot is not None:
-            from cad_server._internal import pins
-
-            err.write(f"cad: {pins.not_installed(name, found.error or found.cannot)}\n")
-        else:
-            err.write(f"text-to-cad {name} could not be installed: {found.error}\n")
-        return REASONS["cannot_install_here"] if found.cannot is not None else FAILED
-    path, status, error = installations.write_proxy()
-    if error is not None or status == installations.FOREIGN:
-        why = error or "a file of that name there is not text-to-cad's, and is left alone"
-        err.write(f"text-to-cad {name} is installed, but the cad command could not be written at {path}: {why}\n")
-        return FAILED
-    if not quiet:
-        out.write(f"text-to-cad {name} is {'installed now' if found.made else 'installed'}: "
-                  f"{places.version_dir(name)}\n")
-    return 0

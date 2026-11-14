@@ -78,8 +78,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from tests.python.packages.cad_server import test_update_end_to_end as published  # noqa: E402
-from tests.python.packages.cad_server.test_update_end_to_end import Feed, forget, free_port, release  # noqa: E402
+from tests.python.support import machine as published  # noqa: E402
+from tests.python.support.machine import Feed, forget, free_port, release  # noqa: E402
 
 from cad_server._internal import base  # noqa: E402
 from cad_server._internal.launch import LAUNCHER  # noqa: E402

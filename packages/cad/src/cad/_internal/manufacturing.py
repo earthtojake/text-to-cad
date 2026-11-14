@@ -441,7 +441,7 @@ def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str
             f"the verdicts are {rule_set.title} (version {rule_set.version}): general practice drawn from "
             f"published design guides, and text-to-cad's own floors where no guide states a limit (each "
             f"labelled by its source), no shop's limits", "rules",
-            "for a named shop, compare the measurements with its own published limits, or use its skill"))
+            "for a named shop, compare the measurements with its own published limits"))
     try:
         # allow_nan=False: a NaN is not JSON, and a report a parser rejects is worse than one that says it failed.
         json.dumps(report, allow_nan=False)

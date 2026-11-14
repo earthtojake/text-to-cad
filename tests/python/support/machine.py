@@ -1,18 +1,14 @@
-"""The update end to end, as a person's machine runs it (``cad_server._internal.update``, ``versions``,
-``cad_server.cli.setup``): release A set up by its own ``cad setup`` in a home of this test's own -- present in
-``versions/A``, the default channel on it --, its server started as any client starts it; release B published --
-its wheel in a folder uv reads beside the index (``CAD_UPDATE_FIND_LINKS``), and named by a version feed served here
-(``CAD_API_URL``); then the button's request (``POST /api/v1/local/update``, ``cad_server.viewer.http_app``): B
-installed by its own ``cad setup --add`` and its own ``cad setup --engine-update`` run, which moves the default
-channel to B and hands B's server A's port; the server back on the same port, with the same token, running B -- the
-answer a page reloads on --, and A's folder removed, which nothing names now. A real 0.11.10 updating into this
-build is scripts/test/rehearse-update.py's.
+"""A machine of a test's own, and releases of this source tree published to it.
 
-Each release is this source tree's library and server as wheels, the library's ``build123d`` extra naming
-nothing: the update's path is what is tested, and the kernel's install is uv's (the base's own tests
-make it). uv takes their dependencies from its cache where it holds them, as an update does on a
-person's machine; the wheels it keeps there, under versions of this run's own, are taken out again
-(``forget``)."""
+``Machine``: its home, state, cache, engine and command folders (``CAD_STATE_DIR``, ``CAD_CACHE_DIR``,
+``CAD_ENGINE_DIR``, ``CAD_LAUNCHER_DIR``), a version feed served here (``Feed``, ``CAD_API_URL``) and a folder of
+wheels uv reads beside the index (``CAD_UPDATE_FIND_LINKS``); every server of it stopped, and every process from its
+folder ended, as the test ends. ``release``: this source tree's library and server as wheels of a release of this run
+(the library's ``build123d`` extra naming nothing: the kernel's install is uv's, which the base's own tests make).
+uv takes their dependencies from its cache where it holds them; the wheels it keeps there, under versions of this
+run's own, are taken out again (``forget``). Used by ``test_uninstall_end_to_end`` and
+``scripts/test/rehearse-update.py``.
+"""
 
 from __future__ import annotations
 
@@ -39,7 +35,7 @@ from tests.python.support.paths import LIBRARY, SERVER, add_sources
 
 add_sources()
 
-from cad_server._internal import base, plugin, providers  # noqa: E402
+from cad_server._internal import base  # noqa: E402
 
 # Each release's wheels, by distribution: its project, its packages, and what its wheel carries at its root.
 DISTRIBUTIONS = {"cad": (LIBRARY, ("cad", "cadgen"), ("cad-lazy-kernel.pth",)),
@@ -53,32 +49,15 @@ TAKEN = range(3245, 3251)
 WINDOWS = os.name == "nt"
 
 
-def plugin_files() -> dict[str, bytes]:
-    """A plugin of the test's own where the server's wheel carries its plugin (``_runtime/plugin``): every
-    file the plugin folder is written from, and a skill."""
-    server = {"mcpServers": {"cad": {"command": "uvx", "args": ["--from", "cad-mcp==0.0.0", "cad-mcp"]}}}
-    files = {name: b"bytes" for name in plugin.FILES}
-    files.update({name: json.dumps({"name": "text-to-cad", "version": "0.0.0"}).encode() for name in plugin.MANIFESTS})
-    files.update({name: json.dumps(server).encode() for name in ("claude.mcp.json", "codex.mcp.json", "cursor.mcp.json",
-                                                                 "mcp.json")})
-    files["gemini-extension.json"] = json.dumps({"name": "text-to-cad", "version": "0.0.0", **server}).encode()
-    files[plugin.CATALOG] = json.dumps({"name": "x", "plugins": [{"name": "text-to-cad", "source": "./"}]}).encode()
-    files["skills/cad/SKILL.md"] = b"---\nname: cad\n---\n"
-    return {f"cad_server/_runtime/plugin/{name}": data for name, data in files.items()}
-
-
 def wheel(distribution: str, version: str, folder: Path) -> Path:
     """This source tree's ``distribution`` as a wheel of release ``version``: its packages and package data
-    but the built runtime (``_runtime``: nothing here serves a page; the plugin is the test's own,
-    ``plugin_files``), what it carries at its root, its dependencies -- the library pinned at ``version``
+    but the built runtime (``_runtime``: nothing here serves a page), what it carries at its root, its dependencies -- the library pinned at ``version``
     -- and command as ``pyproject.toml`` declares them, and a ``build123d`` extra that names nothing."""
     source, packages, roots = DISTRIBUTIONS[distribution]
     project = tomllib.loads((source / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     stem = distribution.replace("-", "_")
     info = f"{stem}-{version}.dist-info"
     files: dict[str, bytes] = {name: (source / name).read_bytes() for name in roots}
-    if distribution == "cad-server":
-        files.update(plugin_files())
     for top in packages:
         package = source / "src" / top
         for path in sorted(package.rglob("*")):
@@ -201,8 +180,7 @@ class Machine(unittest.TestCase):
         self.wheels = self.work / "wheels"
         self.wheels.mkdir()
         home = self.work / "home"
-        # uv and uvx where uv's installer puts them, as the install command leaves them: Claude Desktop's
-        # entry runs CAD's server with that uvx.
+        # uv and uvx where uv's installer puts them, as the install command leaves them.
         tools = home / ".local" / "bin"
         tools.mkdir(parents=True)
         uv = Path(base.find_uv())
@@ -220,13 +198,12 @@ class Machine(unittest.TestCase):
         self.addCleanup(self.stop)
 
     def environment(self, home: Path) -> dict[str, str]:
-        """A machine of this test's own: its home, state, cache, engine and command folders; no agent app's
-        command on PATH, nor the Codex app's; the feed and the folder of wheels; the port; no telemetry."""
+        """A machine of this test's own: its home, state, cache, engine and command folders; a PATH of the system's
+        alone; the feed and the folder of wheels; the port; no telemetry."""
         uv_cache = os.environ.get("UV_CACHE_DIR") or subprocess.run(
             [base.find_uv(), "cache", "dir"], capture_output=True, text=True, check=True).stdout.strip()
         self.addCleanup(forget, Path(uv_cache), (A, B))
-        dropped = ("PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "VIRTUAL_ENV", "CONDA_PREFIX", "CI", "CODEX_HOME",
-                   "CLAUDE_CONFIG_DIR", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
+        dropped = ("PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "VIRTUAL_ENV", "CONDA_PREFIX", "CI", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
                    "XDG_BIN_HOME", "UV_INSTALL_DIR")
         env = {key: value for key, value in os.environ.items() if not key.startswith("CAD_") and key not in dropped}
         system = os.environ.get("SystemRoot", r"C:\Windows")
@@ -234,7 +211,7 @@ class Machine(unittest.TestCase):
         env.update({
             "HOME": str(home), "PATH": os.pathsep.join([rf"{system}\System32", system] if WINDOWS else ["/usr/bin", "/bin"]),
             "UV_CACHE_DIR": uv_cache, "NO_PROXY": bypass, "no_proxy": bypass, "DO_NOT_TRACK": "1",
-            "BROWSER": "true", "CODEX_CLI": str(self.work / "no-codex"),
+            "BROWSER": "true",
             "CAD_STATE_DIR": str(self.work / "state"), "CAD_CACHE_DIR": str(self.work / "cache"),
             "CAD_ENGINE_DIR": str(self.work / "engine"), "CAD_LAUNCHER_DIR": str(self.work / "bin"),
             "CAD_ENGINE_PORT": str(self.port), "CAD_API_URL": f"http://127.0.0.1:{self.feed.server_port}/v1",
@@ -288,7 +265,7 @@ class Machine(unittest.TestCase):
         return response.status, (json.loads(body) if response.status == 200 else {"body": body.decode("utf-8", "replace")})
 
     def said(self) -> str:
-        """Where the update got to, as the state folder says it: the pointer, the mirror, the versions present."""
+        """What the state folder holds: the pointer, the mirror, the versions present."""
         state = self.work / "state"
         read = lambda path: path.read_text(encoding="utf-8").strip() if path.exists() else "(none)"  # noqa: E731
         versions = sorted(os.listdir(state / "versions")) if (state / "versions").is_dir() else []
@@ -296,8 +273,7 @@ class Machine(unittest.TestCase):
                 f"versions {versions}")
 
     def running(self) -> str:
-        """Every process still running from this test's folder, its pid and command line: on a stalled update,
-        whether the engine before is still there, and whether the switch helper the update log names is."""
+        """Every process still running from this test's folder, its pid and command line."""
         if WINDOWS:
             listing = ["powershell", "-NoProfile", "-Command",
                        "Get-CimInstance Win32_Process | ForEach-Object { \"$($_.ProcessId) $($_.CommandLine)\" }"]
@@ -323,103 +299,3 @@ class Machine(unittest.TestCase):
             made = self.run_here(install)
         self.assertEqual(made.returncode, 0, made.stderr)
         return boot
-
-
-class UpdateEndToEndTest(Machine):
-
-    def test_the_button_installs_the_next_release_and_its_engine_takes_the_port_and_token(self) -> None:
-        # Release A, as the install command sets it up: uvx's environment, whose `cad setup` makes A's
-        # release folder and sets it up from there. Cursor's folder is there: it gets a copy of the plugin folder,
-        # A's, which the update copies again for B (an app updated with no app's command, no network).
-        release(A, self.wheels)
-        machine = providers.Machine(Path(self.env["HOME"]), self.env, platform=sys.platform, bundled={})
-        (machine.home / ".cursor").mkdir(parents=True)
-        cursor = providers.cursor_plugins(machine) / "text-to-cad" / ".cursor-plugin" / "plugin.json"
-        boot = self.installer(A)
-        set_up = self.run_here([command(boot), "setup"], timeout=600)
-        self.assertEqual(set_up.returncode, 0, set_up.stdout + set_up.stderr)
-        self.assertEqual((self.work / "state" / "default").read_text(encoding="utf-8").strip(), A)
-        self.assertEqual((self.work / "state" / "installations" / "current").read_text(encoding="utf-8"), A)
-        self.assertTrue(cursor.is_file(), set_up.stdout + set_up.stderr)
-        self.assertEqual(json.loads(cursor.read_text(encoding="utf-8"))["version"], A)
-        # The plugin folder every app is pointed at, A's.
-        folder = self.work / "state" / plugin.FOLDER
-        self.assertEqual(json.loads((folder / plugin.MANIFEST).read_text(encoding="utf-8"))["version"], A)
-
-        # A's engine, started as any client starts it, serving on the port.
-        started = self.run_here([base.interpreter(self.release(A)), "-c",
-                                 "import json, sys\nfrom cad.engine import client\n"
-                                 "print(json.dumps(client.request({'op': 'http', 'port': int(sys.argv[1])})))",
-                                 str(self.port)], timeout=120)
-        self.assertEqual(started.returncode, 0, started.stderr)
-        token = json.loads(started.stdout.strip().splitlines()[-1])["token"]
-        status, answer = self.version(token)
-        self.assertEqual((status, answer.get("release"), answer.get("notice")), (200, A, None), answer)
-        instance = answer["instance"]
-
-        # B is published: its wheels where uv reads, the feed naming it.
-        release(B, self.wheels)
-        self.feed.latest = B
-
-        # The click.
-        clicked = time.monotonic()
-        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
-        connection.request("POST", "/api/v1/local/update", body=b"{}", headers={
-            "Authorization": f"Bearer {token}", "x-cad-viewer": "1", "Content-Type": "application/json"})
-        response = connection.getresponse()
-        answer = json.loads(response.read())
-        connection.close()
-        self.assertEqual((response.status, answer["update"]["state"], answer["update"]["target"]),
-                         (202, "working", B), answer)
-
-        # What the page sees: the update's stages, the engine gone, then B's on the same port, admitting the
-        # same token -- its release changed, which a page reloads on.
-        stages: list[str] = []
-        gone = back = None
-        status, answer = None, {}
-        deadline = clicked + 300
-        while back is None:
-            # Where it stopped, when it does: the stages the page saw, and the engine's last answer.
-            if time.monotonic() >= deadline:  # the message made once, on failure: it lists the processes
-                self.fail(f"no engine of {B} answered; stages {stages}, last answer {status} "
-                          f"{json.dumps(answer)[:600]}\n{self.said()}\n{self.running()}")
-            status, answer = self.version(token)
-            if status is None:
-                gone = gone or time.monotonic()
-            elif status != 200:
-                self.fail(f"the engine answered {status}: {answer}\n{self.said()}")
-            elif answer["release"] == B:
-                back = time.monotonic()
-                # Another start of the engine: a page reloads on it as on the release.
-                self.assertNotEqual(answer["instance"], instance)
-                break
-            else:
-                update = answer["update"]
-                self.assertNotEqual(update["state"], "failed", f"{update.get('error')}\n{self.said()}")
-                stage = (update.get("progress") or {}).get("stage")
-                if stage and stage not in stages:
-                    stages.append(stage)
-            time.sleep(0.05)
-        order = ("install", "build123d", "restart", "apps")  # cad_server._internal.update.STAGES: as the page saw them
-        self.assertTrue(set(stages) <= {"install", "build123d", "restart"}, stages)
-        self.assertEqual(stages, sorted(stages, key=order.index))
-        self.assertEqual((self.work / "state" / "default").read_text(encoding="utf-8").strip(), B)
-        self.assertEqual((self.work / "state" / "installations" / "current").read_text(encoding="utf-8"), B)
-        self.assertTrue((self.release(B).parent / "cad-version.json").is_file())
-        # A, which nothing names now and whose server stopped for the handover, is removed with it.
-        while (self.work / "state" / "versions" / A).exists():
-            self.assertLess(time.monotonic(), deadline, f"{A}'s folder stayed\n{self.said()}\n{self.running()}")
-            time.sleep(0.05)
-        # The apps step, B's setup's last: Cursor's copy and the plugin folder are B's.
-        while json.loads(cursor.read_text(encoding="utf-8"))["version"] != B:
-            self.assertLess(time.monotonic(), deadline, f"Cursor's copy stayed {A}'s\n{self.said()}")
-            time.sleep(0.05)
-        self.assertEqual(json.loads((folder / plugin.MANIFEST).read_text(encoding="utf-8"))["version"], B)
-        proxy = self.work / "bin" / ("cad.exe" if WINDOWS else "cad")  # the cad command runs the default channel's
-        self.assertEqual(self.run_here([proxy, "--version"]).stdout.strip(), f"cad {B}")
-        print(f"\nupdate {A} -> {B}: {back - clicked:.1f} s from the click to {B}'s server answering; "
-              f"{round((back - (gone or back)) * 1000)} ms without a server as the page saw it", file=sys.stderr)
-
-
-if __name__ == "__main__":
-    unittest.main()

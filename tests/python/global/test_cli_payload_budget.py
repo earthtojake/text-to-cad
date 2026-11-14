@@ -19,10 +19,6 @@ class CompactStdoutTests(unittest.TestCase):
     # Every source that writes JSON to stdout. `cad artifact` and `dxf artifact` were
     # missed by the first pass of this test and were still pretty-printing.
     STDOUT_JSON_SOURCES = (
-        # The installer's --json: its plan and what it did.
-        "packages/cad-server/src/cad_server/cli/setup.py",
-        # `cad plugin --json`: the plugin folder written, and the apps' copies brought along.
-        "packages/cad-server/src/cad_server/cli/plugin.py",
         # `cad requirement --json`: the requirement, its indexes and find-links.
         "packages/cad-server/src/cad_server/cli/requirement.py",
         # `cad doctor --json`: each check of the report, and what --prune removed.

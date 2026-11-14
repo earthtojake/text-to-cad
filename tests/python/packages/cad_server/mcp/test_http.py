@@ -255,38 +255,6 @@ class HttpSessionsTest(unittest.TestCase):
         self.assertEqual(client.call('DELETE', '/mcp', headers=headers)[0], 200)
         self.assertEqual(post({'jsonrpc': '2.0', 'id': 2, 'method': 'ping'}, **headers)[0], 404)
 
-    def test_the_release_an_app_s_server_runs_shows_the_update_button_when_newer_with_no_network(self):
-        # Each stdio transport says its release as its session opens (``cad_mcp.shim``'s transport meta): one
-        # newer than the engine's proves a release is out, and the button shows it, with no feed read.
-        import cad_mcp
-        import cad_server
-        from cad.engine.api import stop
-
-        # An engine that is told of releases: one a release runs as (named to it alone, as in ``setUpClass``), started
-        # afresh -- a test before this one may have started another with no version named, a checkout's.
-        stop()
-        with patch.dict(os.environ, {'CAD_INSTALLATION_VERSION': cad_server.__version__}):
-            EngineClient().connect()
-        client = EngineClient()
-
-        def version():
-            status, _, body = client.call('GET', '/api/v1/server')
-            self.assertEqual(status, 200, body)
-            return json.loads(body)
-
-        release = cad_server.__version__
-        # The install command ran here (its receipt): the engine, a process with no version, is the default's.
-        receipt = self.root / 'state' / 'install-receipt.json'
-        receipt.write_text('{}', encoding='utf-8')
-        self.addCleanup(receipt.unlink, missing_ok=True)
-        self.assertEqual(version()['release'], release)
-        with patch.object(cad_mcp, '_version', return_value='0.0.1'):
-            self.proxy()  # an older release's server: no release is out
-        self.assertIsNone(version()['notice'])
-        with patch.object(cad_mcp, '_version', return_value='999.0.0'):
-            self.proxy()
-        self.assertEqual(version()['notice'], {'latest': '999.0.0', 'version': release})
-
     def test_shim_opens_a_new_session_when_the_engine_session_ends(self):
         # A host initializes once: an expired session or a restarted engine must not leave the
         # server answering every later call with an error until the host reconnects it.

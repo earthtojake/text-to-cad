@@ -203,8 +203,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    environments and bytecode in `code/` (the base and each run's under `code/base/`, bytecode under
    `code/pycache/`), and its door in `<version>` in the engine folder; the state folder itself holds only
    the device's globals (each delivery channel's pointer, `default` and `channels/<name>`; the installations'
-   records and the mirror clients of 0.11.10 and earlier read; the install receipt and lock; the plugin folder;
-   and the settings file of 0.11.10 and earlier, which also keeps a telemetry no for every version).
+   records and the mirror clients of 0.11.10 and earlier read; the install lock; and the settings file of 0.11.10 and earlier, which also keeps a telemetry no for every version).
    Which a process is, and so every path, is `cad.engine.places`' one rule (`versioned`). The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
@@ -337,8 +336,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     gets. An alias is kept out of every `__all__` and every document but the migration guide; a test pins the
     table of them (`cad._internal.aliases`). An agent migrates a project on first touch.
 
-    **Tier 3: a person's data** -- documents, the state folder and its records, Recents, settings,
-    receipts, the plugin folder. A release reads what the previous shipped release wrote, writes the
+    **Tier 3: a person's data** -- documents, the state folder and its records, Recents, settings. A release reads what the previous shipped release wrote, writes the
     current form, and migrates on first touch, once: never the old form written, never a downgrade.
     Opening, viewing, importing and exporting a saved document never requires its source or a rebuild
     because text-to-cad was upgraded: the engine reads `xbf/8` and `xbf/9` and converts `xbf/8` in
@@ -357,16 +355,16 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     Whether the newer side keeps answering the previous number is decided case by case, by what a
     mismatch would strand and whether the stranded side can say what to do. Where it does not, the
     side that meets a number it does not speak says so in one line and names which package to update,
-    and to what release, never how to install it: the person or the agent has their own way -- but
-    for the server, whose one way the line names (`cad update`): installing `cad-server` into a
-    project's environment neither registers nor moves the device's server. The analytics receiver
+    and to what release, never how to install it: the person or the agent has their own way; for the
+    server, installing `cad-server` into a project's environment neither registers nor moves the device's
+    server. The analytics receiver
     keeps every schema a released client sends. The worker contract (`cad.engine.contract`: the worker
     protocol's number, the document format, the kernel), by which a script run with a Python of its
     own and the server meet, is decided so: a contract the server does not speak is refused before any
     worker starts, in that one line, with no window; one contract of two releases builds, and the
     script says once which package to update. 0.8's door had no number, and 0.10
-    meets 0.8 by stopping it, never by answering it: 0.8's engines keep their own folder, no process
-    of 0.10's speaks to one of 0.8's, and `cad setup` stops 0.8's server with 0.8's own `cadgen stop`.
+    meets 0.8 by never answering it: 0.8's engines keep their own folder, and no process of 0.10's speaks
+    to one of 0.8's.
 
     **The earlier name.** `cadgen` is the library's deprecated alias, still published at every
     release for backwards compatibility. The `cadgen` distribution installs `cad` at the same
@@ -388,18 +386,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     answer in JSON, which no person reads --, and never
     after the person's no) and the hourly version check (the server's `updates.py`). Both run in the
     background and fail silently: no start, command, build, request or tool call waits on them.
-    An update waits on the network because a person asked for it -- the update button, `cad
-    update`, the install command run again --: it reads the feed then, and uv installs the release
-    from its cache and the network for what that lacks; one that cannot reach it says so in a line
-    and leaves everything as it was. `cad update --dry-run`, asked what an update would do, reads the
-    feed the same bounded way and keeps nothing of it, saying so in a line when it cannot reach it. An automatic update (on by default, `cad update auto off` to
-    leave every update to the person) waits on nothing: the server installs the release in the
-    background and runs its setup only once the default channel's version has had no command for an hour. Only
-    the default channel's version, on a device where the install command has run, has an updater: a store's copy
-    is updated by the store. It takes a release that breaks
-    nothing, as Semantic Versioning numbers it -- a patch release below 1.0, a patch or minor release
-    from 1.0 --; one that may (a minor or major release below 1.0, a major one from 1.0) waits for the
-    person's click.
+    text-to-cad updates nothing by itself: the install command, run by a person or an agent, installs the
+    latest release, and waits on the network because it was asked to.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
     `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
     it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot

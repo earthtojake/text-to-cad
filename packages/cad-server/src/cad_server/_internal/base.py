@@ -29,11 +29,10 @@ exists (``Making.made``), never before.
 - **The network** waits on nothing it need not: uv is asked ``--offline`` first, from its cache, and
   online only for what the cache does not hold, said in a line before it starts.
 - **Made on first need** for a process with no version, never ahead of it: nothing makes it at the
-  engine's start. Two exceptions: a version of the per-version layout has its base made as it is installed
+  engine's start. The exception: a version of the per-version layout has its base made as it is installed
   (``cad_server._internal.versions.make_present``), so a version that is present has nothing left to make --
-  a sandboxed command of it cannot write its code folder --; and an automatic update's first half (``cli.setup``'s ``PREPARE_ENV``): the
-  release the engine will switch to by itself makes its base before the switch, so that the person's first
-  build after it, which they never asked to wait for an update, waits on nothing. The first ``cad run`` that needs it, or the first of the engine's kernel processes -- a build's
+  a sandboxed command of it cannot write its code folder --; and so does a version an updater of 0.11.x installs
+  (``cad setup --engine-update``), the same way. The first ``cad run`` that needs it, or the first of the engine's kernel processes -- a build's
   worker, a view or an operation that reads a STEP or an xbf or meshes one -- makes it (``kernel``,
   ``Making``), and what needs it waits on its making. An engine a host's CAD app starts runs outside any
   sandbox, so an agent's sandboxed ``cad run``, which cannot write the cache folder, asks it over its door

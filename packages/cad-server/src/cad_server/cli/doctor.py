@@ -1,11 +1,10 @@
 """``cad doctor`` — set the server up and report it: register the installation, write the ``cad``
 command, start the engine, and say what this device runs.
 
-The skills' one-time step (``uvx ... --from cad-server==<version> cad doctor``), and the repair
-command. On a device where no installation is current it registers this one
+The repair command. On a device where no installation is current it registers this one
 (``<state>/installations/<version>.json``) and makes it current (``cad_server._internal.installations``);
 on one where an installation is, it registers nothing. It writes the proxy, ``~/.local/bin/cad``
-(on Windows ``cad.exe``, with the Python it runs by), through which the skills run the server, and says what it found: each written, already right, or a
+(on Windows ``cad.exe``, with the Python it runs by), through which the server is run, and says what it found: each written, already right, or a
 folder it cannot write (a sandbox's), the records of installations whose interpreter is gone, a file in
 the proxy's place that is not text-to-cad's, another command shadowing it on PATH, and what earlier
 releases left behind that none running now needs (``cad_server._internal.leftovers``: engine records of an older
@@ -35,12 +34,7 @@ newest version that has started, so it can.
 Everything else it does acts on the one version it runs as (the pinned one, or the default with no pin).
 
 It says what the device runs, comparing nothing: the current installation, the flat release folders of
-0.11.10 and earlier on disk (``cad_server._internal.releases``), the engine running and its release,
-the plugin folder every app's plugin comes from (``cad_server._internal.plugin``) and each agent app's
-copy of the plugin: the release it pins and where it comes from -- the folder read in place, linked, or
-copied, and when (``cad_server._internal.providers``) --, and the agents the Skills CLI copied the
-skills for. Registering the current installation writes the plugin folder again, so it repairs one
-that is gone.
+0.11.10 and earlier on disk (``cad_server._internal.releases``), and the engine running and its release.
 
 It says whether the CAD kernel environment, the base the engine's own kernel processes start from
 (``cad_server._internal.base``: ``cad[build123d]`` at this release), is made -- it never makes it: a version
@@ -85,7 +79,7 @@ from pathlib import Path
 OK, INFO, WARNING, FAILED = "ok", "info", "warning", "failed"
 
 
-def _server(start: bool = True, answered: list | None = None) -> tuple[str, str]:
+def _server(start: bool = True) -> tuple[str, str]:
     """The device's engine server (``cad_server.engine.daemon``): where its door is, and whether one is
     running, from which installation -- started when none is and ``start``, through the client's own
     start (the current installation's), which in a sandbox that cannot start one says so. ``(status,
@@ -107,8 +101,6 @@ def _server(start: bool = True, answered: list | None = None) -> tuple[str, str]
         return WARNING, f"unknown ({type(error).__name__}: {error})"
     if not isinstance(answer, dict):
         return INFO, f"not running ({where}); a build starts it outside a sandbox; inside one, run `cad server` outside first"
-    if answered is not None:
-        answered.append(answer)  # what the engine said, for the lines after this one (``_automatic``)
     from cad_server.engine.cli import workers_text
 
     # The version the engine runs as, and its environment; the workers as `cad status` counts them:
@@ -261,88 +253,14 @@ def _fate_words(name: str, kept: set[str]) -> list[str]:
     return words
 
 
-def _plugin() -> list[str]:
-    """The plugin folder every app's plugin comes from (``cad_server._internal.plugin``): its release and
-    when it was written, or that there is none."""
-    try:
-        from cad_server._internal import plugin
-
-        where = plugin.folder()
-        found = plugin.written(where)
-    except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
-        return [f"plugin   unknown ({type(error).__name__}: {error})"]
-    if found is None:
-        return [f"plugin   {_home(str(where))}: not written; `cad setup` writes it, and points the apps at it"]
-    return [f"plugin   {_home(str(where))}: text-to-cad {found['version'] or '?'}, written {found['at']}"]
-
-
-def _apps() -> list[str]:
-    """Each agent app's copy of the plugin, the release it pins and where it comes from -- the plugin folder
-    read in place, linked or copied, and when -- as the app says it (``cad_server._internal.providers``),
-    comparing nothing; a store's copy the app's own files show, which stays, and beside ours how to keep one
-    (``providers.store_line``); Claude Desktop's server an earlier release wrote, which the next ``cad setup``
-    takes out; and, as the receipt says, the store's copies an earlier release's ``cad setup`` replaced with ours
-    and the agents the Skills CLI copied the skills for."""
-    try:
-        import json
-
-        from cad_server._internal import plugin, providers
-        from cad.engine.places import state_dir
-
-        machine = providers.Machine.here()
-        found = providers.detect(machine, folder=plugin.folder())
-    except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
-        return [f"apps     unknown ({type(error).__name__}: {error})"]
-    lines = []
-    for name, app in found.items():
-        if not app.present:
-            continue
-        ours, stores = app.ours(), app.stores()
-        if ours is not None and name == "claude-desktop":
-            lines.append(f"app      {app.label}: CAD's server text-to-cad {ours.version or '?'}, which an earlier "
-                         "release wrote; the next `cad setup` takes it out (Claude gets the skills alone)")
-            continue
-        if ours is not None:
-            origin = ours.origin(machine)
-            lines.append(f"app      {app.label}: {ours.words(machine)}" + (f", {origin}" if origin else ""))
-        lines += [f"app      {app.label}: {line}" for line in providers.beside(app, machine)]
-    try:
-        receipt = json.loads((Path(state_dir()) / "install-receipt.json").read_text(encoding="utf-8"))
-        skills = receipt.get("skills") if isinstance(receipt, dict) else None
-    except (OSError, ValueError):
-        receipt, skills = None, None
-    for gone in providers.replaced(receipt if isinstance(receipt, dict) else None, found):
-        lines.append(f"app      {providers.label(gone['app'])}: {gone['store']}: the directory's copy, replaced by "
-                     "an earlier release's cad setup"
-                     + (f" ({str(gone['at']).replace('T', ' ').rstrip('Z')[:16]})" if gone.get("at") else ""))
-    for agent, got in (skills or {}).items() if isinstance(skills, dict) else ():
-        if agent in providers.SKILLS_AGENTS and isinstance(got, dict):
-            lost = providers.skills_lost(agent, got, machine)
-            lines.append(f"app      {providers.label(agent)}: {providers.skills_words(agent, got, machine)}"
-                         + (f"; {', '.join(lost)} not there now: run the install command again" if lost else ""))
-    behind = receipt.get("behind") if isinstance(receipt, dict) else None
-    for app, row in behind.items() if isinstance(behind, dict) else ():
-        if isinstance(row, dict):
-            when = str(row.get("at") or "").replace("T", " ").rstrip("Z")[:16]
-            lines.append(f"app      {providers.label(app)}: {BEHIND} text-to-cad {row.get('release') or '?'}: its setup "
-                         f"could not give it that release's text" + (f" ({when})" if when else "")
-                         + f": {row.get('why') or 'it failed'}; `cad update` gives it again (the default version's "
-                           "server tries again by itself once a day while idle)")
-    return lines
-
-
-# How a line of ``_apps`` says an app is behind (the receipt's ``behind``): a warning in the report.
-BEHIND = "behind"
-
-
 def _command_path_hint(path: str) -> str:
     """How to reach the proxy when PATH does not resolve ``cad`` to it. The person's PATH is the one
-    looked in (``providers.lasting``): ``uvx`` puts its ephemeral environment's ``bin`` first on PATH
-    for the command it runs, so inside ``uvx ... cad doctor`` -- and the install command's ``cad
-    setup`` -- that environment's own ``cad`` script would otherwise read as shadowing the proxy."""
+    looked in (``installations.lasting``): ``uvx`` puts its ephemeral environment's ``bin`` first on PATH
+    for the command it runs, so inside ``uvx ... cad doctor`` that environment's own ``cad`` script would
+    otherwise read as shadowing the proxy."""
     from shutil import which
 
-    from cad_server._internal.providers import lasting
+    from cad_server._internal.installations import lasting
 
     found = which("cad", path=lasting(os.environ.get("PATH", "")))
     if found is not None:
@@ -372,19 +290,6 @@ def _sharing(check: bool = False) -> str | None:
 
             return describe(status(probe=False, keep=False))
         return describe()
-    except Exception:  # noqa: BLE001 - a report line, never a reason for the report to fail
-        return None
-
-
-def _automatic(status: dict | None = None) -> str | None:
-    """Automatic updates, on or off and why, the feed's last read and next, and what the engine running
-    is getting ready (its ``status``, as the server line asked it: ``cad_server.auto_updates.describe``), or
-    ``None`` if it cannot tell."""
-    try:
-        from cad_server import auto_updates
-
-        engine = status.get("update") if isinstance(status, dict) else None
-        return auto_updates.describe(engine if isinstance(engine, dict) else None)
     except Exception:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return None
 
@@ -705,7 +610,7 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
         description="Set the server up -- register this installation where none is current, write the cad command, "
                     "start the engine -- and report what this device runs: the current installation, the releases "
                     "on disk, the CAD kernel environment (made on first need, never here) and the integrations', "
-                    "the engine and each agent app's plugin. --check reports alone, changing nothing: what a bug "
+                    "and the engine. --check reports alone, changing nothing: what a bug "
                     "report wants. Exit 1 when the CAD kernel is installed and does not load.",
     )
     parser.add_argument(
@@ -860,21 +765,20 @@ def _check(name: str, status: str, detail: str, more: list[str] | None = None) -
 
 
 def _line(line: str, status: str | None = None) -> dict:
-    """A report line a helper said whole (``registry ...``, ``app      Claude Code: ...``) as a check: its first
-    word its name; its status ``status``, else said by its words -- one the helper could not read ``unknown``,
-    a switch that failed a warning, the rest as they are."""
+    """A report line a helper said whole (``registry ...``, ``version  ...``) as a check: its first word its name;
+    its status ``status``, else said by its words -- one the helper could not read ``unknown``, the rest as they
+    are."""
     name, _, detail = line.partition(" ")
     detail = detail.lstrip()
     if status is None:
-        status = WARNING if detail.startswith("unknown (") or (name == "update" and " failed: " in detail) else INFO
+        status = WARNING if detail.startswith("unknown (") else INFO
     return _check(name, status, detail)
 
 
 def _report(*, check: bool, start: bool) -> tuple[str, list[dict]]:
     """``cad doctor``'s report: the version this installation runs as, and each check in order -- what it
     set up (nothing with ``check``), what the device runs, the cache and the leftovers, the kernel, the
-    integrations' environments, the engine (started when ``start``), updates and sharing, the plugin and
-    each app's copy of it."""
+    integrations' environments, the engine (started when ``start``) and sharing."""
     import cad_server
     from cad_server._internal import installations
     from cad_server._internal.installations import own_version
@@ -883,7 +787,7 @@ def _report(*, check: bool, start: bool) -> tuple[str, list[dict]]:
     location = Path(cad_server.__file__).resolve().parent
     checks = [_check("python", INFO, f"{sys.version.split()[0]} ({sys.executable})"),
               _check("install", INFO, str(location))]
-    # Its record and the command the skills run it by (`cad_server._internal.installations`).
+    # Its record and the command it is run by (`cad_server._internal.installations`).
     checks += [_line(line, status) for status, line in _setup(check)]
     # What the device runs: the current installation, and the flat release folders of 0.11.10 and earlier.
     checks += [_line(line) for line in _current()]
@@ -902,19 +806,11 @@ def _report(*, check: bool, start: bool) -> tuple[str, list[dict]]:
     # The integrations whose operations run in an environment of their own: never made here.
     checks += [_line(line, status) for status, line in _integrations()]
     # One per installation: the same door means the same warm daemon. Started here when none runs.
-    answered: list = []
-    checks.append(_check("server", *_server(start=start, answered=answered)))
-    automatic = _automatic(answered[0] if answered else None)
-    if automatic:
-        # Whether the engine updates by itself, as `cad update auto` says it.
-        checks.append(_check("updates", INFO, f"automatic {automatic}"))
+    checks.append(_check("server", *_server(start=start)))
     sharing = _sharing(check)
     if sharing:
         # Whether CAD's apps send usage stats, as `cad telemetry` says it.
         checks.append(_check("sharing", INFO, sharing))
-    # The plugin folder, and each agent app's copy of the plugin: the release it pins and where it comes from.
-    checks += [_line(line, OK if line.startswith("plugin") and ", written " in line else None) for line in _plugin()]
-    checks += [_line(line, WARNING if line.partition(": ")[2].startswith(BEHIND + " ") else None) for line in _apps()]
     # The version this installation runs as: a development install's own name, else its release.
     return own_version() or installed, checks
 

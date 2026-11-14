@@ -26,8 +26,8 @@ each version's server is reached by its own version's processes alone, and by th
 of the default channel's version, which never takes another version's data for a release number. Equal contracts of different releases build, and the
 script then says once which package to update for the other's fixes (``notice``). The library's side is
 the cad package in the caller's environment, and no installer is named: the person or the agent has
-their own way. The server's side is ``cad-server`` and its one way, ``cad update``: installing it into a
-project's environment neither registers nor moves the device's server.
+their own way. The server's side is ``cad-server``, installed on the computer as a version of its own:
+installing it into a project's environment neither registers nor moves the device's server.
 """
 
 from __future__ import annotations
@@ -103,8 +103,8 @@ def refusal(named: Any, *, ours: dict[str, Any] | None = None, server: str | Non
     (``interpreter``'s) is not the server's own (``ours``, by default this library's, of the release
     ``server``): which package to update, and to what release -- the cad package in the caller's
     environment to the server's release, never naming an installer; or ``cad-server`` to the caller's,
-    by the server's one way, ``cad update`` (installing it in a project's environment neither registers
-    nor moves the device's server). None when they speak one contract, whatever their releases."""
+    installed as a version of its own (installing it in a project's environment neither registers nor moves the
+    device's server); no installer named. None when they speak one contract, whatever their releases."""
     ours = CONTRACT if ours is None else ours
     server = release() if server is None else server
     named = named if isinstance(named, dict) else {}
@@ -143,16 +143,15 @@ def notice(server: Any, here: str | None = None) -> str | None:
 
 def _library_to(release: str) -> str:
     """The library's side updated: the cad package, said so, so no one reads it as the server's
-    ``cad update``, which moves the server and leaves the library behind; no installer named."""
+    ``cad setup``, which installs the server and leaves the library behind; no installer named."""
     return f"update the cad package in this environment to {release}"
 
 
 def _server_to(release: str) -> str:
-    """The server's side updated, by its one way: installing ``cad-server`` into a project's environment
-    neither registers nor moves the device's server. ``cad update`` reaches a final release alone: a
-    pre-release or a development build is named, with no way that cannot reach it."""
-    said = f"update {SERVER} to {release}"
-    return said if _preview(release) else f"{said}: run `{COMMAND} update`"
+    """The server's side updated: ``cad-server`` at ``release``, installed on the computer as a version of its own
+    (installing it into a project's environment neither registers nor moves the device's server); no installer
+    named."""
+    return f"update {SERVER} to {release}"
 
 
 # A release as PEP 440 spells one (its normal forms and their spellings): an epoch, the release, a
@@ -196,7 +195,8 @@ def _order(release: Any) -> tuple[Any, ...] | None:
 
 
 def _preview(release: Any) -> bool:
-    """Whether ``release`` is a pre-release or a development build, which ``cad update`` does not reach."""
+    """Whether ``release`` is a pre-release or a development build: the caller's own release is run exactly
+    (``cad +<release> run``) only for a release."""
     found = _parsed(release)
     return found is not None and (found["pre"] is not None or found["dev"] is not None)
 

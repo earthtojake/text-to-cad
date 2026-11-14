@@ -16,10 +16,8 @@ runs another version for it. So the version that reads a pin is the one it names
    (``places.versioned``; a process with no version -- a checkout, a test's device, an installation of the layout
    of 0.11.10 and earlier -- moves nothing). The channel's pointer (``pointers``) read, no lock taken: equal, the command
    runs; older than the pin's version, the pin is stale (``stale_pin``, exit 4: the chat's copy of the skill is
-   older than the one installed); newer, or the channel's first use, the channel moved (``versions.move``) -- the
-   default channel, where the install command has run here (its receipt), by the updater's own sequence
-   (``update_default``: the move and the apps step), so the install command's other copies get the matching text,
-   whatever the automatic-update switch says -- and then the command runs. A move this shell
+   older than the one installed); newer, or the channel's first use, the channel moved (``versions.move``), and then
+   the command runs. A move this shell
    cannot make (a sandbox that will not let it write the state folder) is ``cannot_install_here`` (exit 3).
 
 A command with no pin run by a version that has never started, where the default channel has no pointer, makes the
@@ -34,7 +32,7 @@ word that is no pin; a pointer there that cannot be read), held equal by a test.
 
 A pointer that is there and cannot be read, or names no version, is never "no pointer": a pinned command refuses
 (``unreadable_pointer``, exit 1), and so does a command with no pin that would make the default channel's first use
-(``first_use``). Only ``cad setup``, the updater and ``cad doctor`` write one again.
+(``first_use``). Only ``cad setup --engine-update`` and ``cad doctor`` write one again.
 """
 
 from __future__ import annotations
@@ -46,8 +44,7 @@ from dataclasses import dataclass
 from cad.engine import places
 
 __all__ = ["PIN", "Pin", "apply", "bad_channel", "bad_pin", "cannot_move", "channel_now", "check", "development", "first_use",
-           "not_installed", "other_version", "own", "parse", "released", "stale", "stale_head", "take", "unreadable_pointer",
-           "update_default"]
+           "not_installed", "other_version", "own", "parse", "released", "stale", "stale_head", "take", "unreadable_pointer"]
 
 # The characters of a release's name, as the ``cad`` command tells one (``released``).
 RELEASED = re.compile(r"[0-9.abcoprst]+")
@@ -228,10 +225,7 @@ def apply(pin: Pin, *, told: Callable[[str], None] | None = None) -> None:
     if now is not None and versions.older(pin.version, now):
         raise _failure(stale(pin.version, pin.channel, now), "stale_pin")
     try:
-        if pin.channel is None and (places.state_dir() / pointers.RECEIPT).is_file():
-            moved = update_default(pin.version, told=told)
-        else:
-            moved = versions.move(pin.channel, pin.version, told=told)
+        moved = versions.move(pin.channel, pin.version, told=told)
     except OSError as error:  # the install lock, in a state folder this shell may not write
         raise _failure(cannot_move(pin, f"{error.strerror or error}"), "cannot_install_here") from None
     if moved.kind in ("same", "moved"):
@@ -260,8 +254,8 @@ def _used(pin: Pin) -> None:
 def first_use(*, told: Callable[[str], None] | None = None) -> None:
     """A command with no pin, run by an installed version that has never started (no data marker) on a device whose
     default channel has no pointer -- the newest version present, which the ``cad`` command runs where none has
-    started --: the default channel's first use made first (``apply``: its data imported, then its pointer, or the
-    updater's own sequence where the install command has run here), so the version writes nothing before its first
+    started --: the default channel's first use made first (``apply``: its data imported, then its pointer), so the
+    version writes nothing before its first
     start is marked. Nothing otherwise. A default pointer there that cannot be read is the failure it is
     (``unreadable_pointer``): the command runs nothing, and writes nothing, on a guess of which version it names. The
     failure ``apply`` raises."""
@@ -276,43 +270,6 @@ def first_use(*, told: Callable[[str], None] | None = None) -> None:
     except pointers.Unreadable as unreadable:
         raise _unreadable(unreadable) from None
     apply(Pin(name, None, f"+{name}"), told=told)
-
-
-def update_default(version: str, *, told: Callable[[str], None] | None = None):
-    """The default channel updated to ``version`` now, by the updater's own sequence (``cad_server._internal.update``):
-    a pin newer than the default channel's version on a device where the install command has run (its receipt),
-    whatever the automatic-update switch says -- a pin is an explicit request for its version, and the switch
-    governs background updates alone. Run by ``version`` itself (the pinned command's own process, present
-    already): the ``cad`` command, the move (``versions.move``), and the apps step, so the install command's other
-    copies of the plugin get the matching text too; a store's copy is left alone. Each line is said to ``told``
-    (else on stderr); an app that fails is said and fails nothing. What the move did (``versions.Moved``)."""
-    import argparse
-    import sys
-
-    from cad_server._internal import versions
-    from cad_server.cli import setup
-
-    if own() != version or not released(version):
-        # Only a version runs its own setup, and a development version's apps step is its checkout's to run
-        # (scripts/install/dev_install.py): the channel moved alone.
-        return versions.move(None, version, told=told)
-
-    class Said:
-        def write(self, text: str) -> None:
-            for line in text.splitlines():
-                if line.strip():
-                    (told or (lambda words: print(f"cad: {words}", file=sys.stderr, flush=True)))(line.rstrip())
-
-        def flush(self) -> None:
-            pass
-
-    args = argparse.Namespace(dry_run=False, json=False, only=None, no_telemetry=False, engine_update=False)
-    installer = setup.Installer(args, [], 0, "default", [], "cad")
-    installer.out = Said()
-    moved = installer.update_own()
-    if moved is None:  # a source tree that is no version: the move alone
-        return versions.move(None, version, told=told)
-    return moved
 
 
 def released(version: str) -> bool:
