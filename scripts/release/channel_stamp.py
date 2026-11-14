@@ -1,21 +1,24 @@
-"""A store's delivery channel, stamped into every pin of its copy of the plugin.
+"""A store's copy of the plugin: its store's name stamped into every pin, and no update paragraph.
 
 Every command a skill runs pins the skill's release, `cad +<VERSION> <verb>` (the release stamps the version:
-sync-version.mjs), and the skills' prose names the pin as `+<VERSION>`. A copy a store delivers runs that
-release on the store's own channel, `cad +<VERSION>@<channel> <verb>`, so the device keeps a pointer for that
-store's copies apart from the default channel's (the server's `pointers`): a store's update moves its own
-channel, and the install command's update moves only the default. Our own text, the server's plugin folder
-and the `latest` branch, carries no channel: the default.
+sync-version.mjs), and the skills' prose names the pin as `+<VERSION>`. A copy a store delivers names that
+store in every pin, `cad +<VERSION>@<store> <verb>`: the label says the store updates this copy, so `cad`
+prints no update notice for its commands. Our own text, `main` and the `latest` branch, names no store.
 
-Two builders stamp: plugin_branch.py, the `claude-plugin` branch claude.ai's directory reads (`@claude`), and
-plugin_zip.py, the ZIP OpenAI's Codex directory takes (`@codex`). One routine, strict: a pin left unstamped,
-a pin of another version, or a file of the copy that is neither an image nor UTF-8 text fails the build.
-The channel's name is checked by the library's own rule (`cad.engine.places.CHANNEL`), read from this
-checkout's source, which needs nothing of the library's installed.
+Our own text tells the agent to keep the install up to date, in one paragraph of each skill's setup block
+between two HTML comments, `UPDATE_START` and `UPDATE_END` (a reader of the rendered skill sees neither). A
+store updates its own copy, so a store's copy leaves that paragraph out, comments and all.
 
-What `--add X` names in the skills' setup block (`install.sh ... --add X`) is a version, not a pin: it
-installs version X alone and moves no channel, and the first pinned command afterwards moves the store's
-channel to it. It is left as it is.
+Three builders make a store's copy, each through `stamp`: plugin_branch.py, the `claude-plugin` branch
+claude.ai's directory reads (`@claude`), and plugin_zip.py, the ZIP OpenAI's Codex directory takes and the
+`codex-plugin` branch that holds the same files (`@codex`). One routine, strict: a pin left unstamped, a pin
+of another version, an update paragraph not marked exactly once in a skill's setup block, a marker left over,
+or a file of the copy that is neither an image nor UTF-8 text fails the build. The store's name is checked by
+the library's own rule (`cad.engine.places.CHANNEL`), read from this checkout's source, which needs nothing of
+the library's installed.
+
+The install line in the setup block names the version as a requirement (`--from cad-server==X`), not a pin,
+and is left as it is.
 """
 
 from __future__ import annotations
@@ -30,6 +33,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PLACES = REPO_ROOT / "packages/cad/src/cad/engine/places.py"
 # Files a copy carries that are not text, and hold no pin: images (each checked as one by its builder).
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico")
+# The update paragraph of our own text, between these two lines; a store's copy has neither.
+UPDATE_START = "<!-- manual-copy-update: start -->"
+UPDATE_END = "<!-- manual-copy-update: end -->"
+_UPDATE = re.compile(re.escape(UPDATE_START) + r"\n.*?^" + re.escape(UPDATE_END) + r"\n\n?", re.S | re.M)
+# A skill's setup block opens with this sentence: each such SKILL.md carries the update paragraph once.
+SETUP_OPENS = "Every command in this skill starts `cad +"
+_SKILL_DOC = re.compile(r"skills/[^/]+/SKILL\.md")
 # A command that runs `cad` with a pin: `cad +<word>`, the Windows `cad.exe` too; or written as a list, a
 # `+<digit>` word beside `cad` (`["cad", "+0.11.9", ...]`).
 _COMMAND_PIN = re.compile(r"(?<![\w.$/+-])cad(?:\.exe)?(?: \+|[\"']?[ \t]*,[ \t]*[\"']\+(?=[0-9]))"
@@ -74,10 +84,23 @@ def unstamped(text: str, version: str, channel: str) -> list[str]:
     return found
 
 
+def without_update(path: str, text: str) -> tuple[str, list[str]]:
+    """`text` without its update paragraph, and what fails the build: a skill's setup block whose paragraph is not
+    marked exactly once, or a marker left without its pair."""
+    out, found = _UPDATE.subn("", text)
+    errors = []
+    if _SKILL_DOC.fullmatch(path) and SETUP_OPENS in text and found != 1:
+        errors.append(f"{path}: its setup block's update paragraph is marked {found} times, not once")
+    if UPDATE_START in out or UPDATE_END in out:
+        errors.append(f"{path}: an update paragraph marker without its pair ({UPDATE_START} ... {UPDATE_END})")
+    return out, errors
+
+
 def stamp(files: dict[str, bytes], version: str, channel: str) -> tuple[dict[str, bytes], list[str]]:
-    """Every file of a copy (path -> bytes) with its pins stamped `@channel`, and what fails the build: a
-    channel the library would not take, a file that is neither an image nor UTF-8 text, a pin left without the
-    channel or naming another version. Images pass as they are."""
+    """Every file of a store's copy (path -> bytes) without the update paragraph and with its pins stamped
+    `@channel`, and what fails the build: a channel the library would not take, a file that is neither an image
+    nor UTF-8 text, an update paragraph that cannot be taken out (`without_update`), a pin left without the channel
+    or naming another version. Images pass as they are."""
     if not channel_rule().fullmatch(channel):
         return files, [f"{channel!r} is not a channel's name (cad.engine.places.CHANNEL)"]
     errors: list[str] = []
@@ -92,6 +115,8 @@ def stamp(files: dict[str, bytes], version: str, channel: str) -> tuple[dict[str
             errors.append(f"{path}: not UTF-8 text, so its pins cannot be stamped @{channel}")
             out[path] = data
             continue
+        text, stripping = without_update(path, text)
+        errors += stripping
         stamped = stamp_text(text, version, channel)
         errors += [f"{path}: {pin} is not stamped @{channel} for {version}" for pin in unstamped(stamped, version, channel)]
         out[path] = stamped.encode("utf-8")

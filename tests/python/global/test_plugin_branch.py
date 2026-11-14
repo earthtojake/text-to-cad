@@ -1,6 +1,6 @@
 """The plugin the install branches carry: scripts/release/plugin_branch.py.
 
-Publish Release commits these trees onto `latest` and `claude-plugin`, so a
+Publish Release commits these trees onto `latest`, `claude-plugin` and `codex-plugin`, so a
 tree claude.ai's directory would hold or refuse has to fail here, on the pull request that
 causes it, rather than at release time.
 """
@@ -13,6 +13,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+import zipfile
 
 from tests.python.support.paths import REPO_ROOT
 
@@ -33,18 +34,18 @@ class PluginTreeTests(unittest.TestCase):
         on_main = branch.tracked(REPO_ROOT)
         skills = {path for path in on_main if path.startswith("skills/")}
         blobs = branch.read_blobs(REPO_ROOT, sorted({blob for _mode, blob in on_main.values()}))
-        # latest: every host's manifest and config, the marketplace catalog, Codex's, Grok Build's and the Agent
-        # Plugins standard's, and every skill; each file main's but the README: our own text, the default channel.
+        # latest: every app's manifest and config, the marketplace catalogs, Codex's, Grok Build's, the other apps'
+        # and the Agent Plugins standard's, and every skill; each file main's but the README: our own text.
         install, errors, _manifest = branch.build(REPO_ROOT, "latest")
         self.assertEqual(errors, [])
         self.assertEqual(set(install), {*branch.FILES, *branch.MARKETPLACE_FILES, *branch.STANDARD_FILES,
-                                        *branch.GROK_FILES, "README.md", *skills})
+                                        *branch.GROK_FILES, *branch.OTHER_APP_FILES, "README.md", *skills})
         self.assertEqual([path for path, (_mode, data) in sorted(install.items()) if data != blobs[on_main[path][1]]],
                          ["README.md"])
         # Claude Code gets the skills alone from latest; Grok Build reads its own manifest first, naming the server.
         self.assertEqual({path: json.loads(install[path][1]).get("mcpServers")
                           for path in (".claude-plugin/plugin.json", ".grok-plugin/plugin.json")},
-                         {".claude-plugin/plugin.json": None, ".grok-plugin/plugin.json": "./claude.mcp.json"})
+                         {".claude-plugin/plugin.json": None, ".grok-plugin/plugin.json": "./grok.mcp.json"})
         # claude.ai's directory: Claude's manifest (main's, naming no server) and icon, LICENSE, the README and
         # every skill, no other host's manifest or config, and every file a type the directory accepts from an
         # organization it has not verified.
@@ -65,26 +66,30 @@ class PluginTreeTests(unittest.TestCase):
                           if any(f'"{key}":' in line for key in branch.UNLISTED)])
         self.assertEqual(len(branch.UNLISTED), 4)
         self.assertNotIn("mcpServers", json.loads(copied))
-        # Main's but for the channel and the install block: every pin of the release stamped `@claude`, the channel
-        # claude.ai's directory delivers (`channel_stamp.py`), and in each setup block the uvx command in place of the
-        # install script's line, the Windows sentence gone; nothing else changed.
+        # Main's but for the store: every pin of the release stamped `@claude` (`channel_stamp.py`), and each setup
+        # block's update paragraph left out with its two markers, since the directory updates its copy; nothing else
+        # changed. The install line is main's: the skills install by uvx everywhere.
         version = _manifest["version"]
         command = branch.UVX_INSTALL.format(version=version)
-        line, windows = branch.SETUP_LINE.format(version=version), branch.SETUP_WINDOWS.format(version=version)
+        start, end = branch.channel_stamp.UPDATE_START, branch.channel_stamp.UPDATE_END
         pinned, blocks = 0, 0
         for path in sorted(skills):
             main, copy = blobs[on_main[path][1]].decode("utf-8"), directory[path][1].decode("utf-8")
-            blocks += line in main
-            self.assertEqual(copy.replace(f"+{version}@claude", f"+{version}"),
-                             main.replace(line, command + "\n").replace(windows, ""), path)
+            blocks += start in main
+            stripped, errors = branch.channel_stamp.without_update(path, main)
+            self.assertEqual(errors, [], path)
+            self.assertEqual(copy.replace(f"+{version}@claude", f"+{version}"), stripped, path)
             self.assertEqual(branch.channel_stamp.unstamped(copy, version, "claude"), [], path)
+            self.assertNotIn(start, copy, path)
+            self.assertNotIn(end, copy, path)
+            self.assertNotIn("nothing updates it but you", copy, path)
             pinned += copy.count(f"+{version}@claude")
         self.assertGreater(pinned, 100, "the skills' pins were found")
         self.assertEqual(blocks, len({path for path in skills if path.endswith("/SKILL.md")}),
-                         "every skill's setup block was replaced")
+                         "every skill's setup block carries the update paragraph on main")
         cad = directory["skills/cad/SKILL.md"][1].decode("utf-8")
-        self.assertIn(f"```bash\n{command}\n```\n\nIt installs {version} and the `cad` command and changes nothing else.",
-                      cad)
+        self.assertIn(f"```bash\n{command}\n```\n\nIt installs text-to-cad {version} and the `cad` command and changes "
+                      "nothing else. If `uvx` is missing,\ninstall uv first.\n\nA project written for an earlier", cad)
         # The README: latest's (its links pointed at the release commit) but for its install section, the uvx command
         # and one paragraph in place of the two one-liners and the paragraph after them.
         readme, ours = directory["README.md"][1].decode("utf-8"), install["README.md"][1].decode("utf-8")
@@ -96,23 +101,40 @@ class PluginTreeTests(unittest.TestCase):
         for key in branch.UNLISTED:
             self.assertNotIn(f'"{key}"'.encode(), directory[".claude-plugin/plugin.json"][1])
             self.assertIn(f"]({json.loads(manifest_text)[key]})", readme, key)
-        # Every other copy keeps the install script: latest's skills are main's, its README the one-liners.
-        self.assertIn(line, install["skills/cad/SKILL.md"][1].decode("utf-8"))
-        self.assertIn(windows, install["skills/cad/SKILL.md"][1].decode("utf-8"))
+        # latest is our own text: its skills keep the update paragraph (the update command for each system), its
+        # README the one-liners.
+        self.assertIn(start, install["skills/cad/SKILL.md"][1].decode("utf-8"))
+        self.assertIn(f"{branch.INSTALL_SCRIPT}\n", install["skills/cad/SKILL.md"][1].decode("utf-8"))
         self.assertEqual(len(branch.pipes_to_shell(install)), 2 * blocks + 2)
+        # Codex's directory: exactly the files of the ZIP plugin_zip.py writes, from the one build, stamped `@codex`
+        # and without the update paragraph, each with its ZIP entry's mode.
+        codex, errors, _codex_manifest = branch.build(REPO_ROOT, "codex")
+        self.assertEqual(errors, [])
+        with tempfile.TemporaryDirectory() as scratch:
+            out = Path(scratch) / "plugin.zip"
+            self.assertEqual(branch.plugin_zip.build(REPO_ROOT, out).errors, [])
+            with zipfile.ZipFile(out) as archive:
+                zipped = {info.filename: (archive.read(info), info.external_attr >> 16 & 0o111 != 0)
+                          for info in archive.infolist() if not info.is_dir()}
+        self.assertEqual(zipped, {path: (data, mode == "100755") for path, (mode, data) in codex.items()})
+        for path in sorted(path for path in codex if path.endswith("/SKILL.md")):
+            text = codex[path][1].decode("utf-8")
+            self.assertEqual(branch.channel_stamp.unstamped(text, version, "codex"), [], path)
+            self.assertNotIn(start, text, path)
+            self.assertNotIn("nothing updates it but you", text, path)
 
-    def test_the_uvx_command_and_the_install_script_are_the_server_s(self) -> None:
-        # The copy installs by the server's own line for a version (`cad setup --add`, what the `cad` command runs
-        # for a version it lacks), and replaces the install script as the server and main's skills name it.
+    def test_the_uvx_command_is_the_server_s_and_the_skills(self) -> None:
+        # The directory's README installs by the server's own line for a version running `cad setup`, the line every
+        # skill's setup block gives.
         from tests.python.support.paths import add_sources
 
         add_sources()
         from cad_server._internal import launch
-        from cad_server.updates import INSTALL, INSTALL_WINDOWS
 
-        self.assertEqual(branch.UVX_INSTALL.format(version="1.2.3"), launch.launch_command("cad", "1.2.3") + " setup --add")
-        self.assertEqual(branch.INSTALL_SCRIPT, INSTALL)
-        self.assertEqual(f"irm {branch.INSTALL_SCRIPT_WINDOWS} | iex", INSTALL_WINDOWS)
+        self.assertEqual(branch.UVX_INSTALL.format(version="1.2.3"), launch.launch_command("cad", "1.2.3") + " setup")
+        version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        for skill in sorted((REPO_ROOT / "skills").glob("*/SKILL.md")):
+            self.assertIn(f"```bash\n{branch.UVX_INSTALL.format(version=version)}\n```", skill.read_text(encoding="utf-8"))
 
     def test_a_pin_left_unstamped_or_of_another_version_is_found_however_the_command_is_written(self) -> None:
         unstamped = branch.channel_stamp.unstamped
@@ -129,7 +151,7 @@ class PluginTreeTests(unittest.TestCase):
                  "bash <(curl -s https://x.dev/i.sh)", "irm https://x.dev/i.ps1 | iex",
                  "& ([scriptblock]::Create((irm https://x.dev/i.ps1))) --add 1.0.0",
                  "Invoke-WebRequest https://x.dev/i.ps1 | Invoke-Expression"]
-        left = ["curl -o file https://x.dev/a.zip", "`curls`, `holes`", "uvx --from cad-server==1.0.0 cad setup --add",
+        left = ["curl -o file https://x.dev/a.zip", "`curls`, `holes`", "uvx --from cad-server==1.0.0 cad setup",
                 "confirm | iex", "run `sh build.sh`"]
         for text in found:
             self.assertTrue(branch.PIPE_TO_SHELL.search(text), text)
@@ -168,8 +190,9 @@ class PluginTreeTests(unittest.TestCase):
                 self.assertEqual(missing, [])
 
     def test_no_config_names_a_channel_or_who_updates_the_copy(self) -> None:
-        # A channel is a pin's (`cad +<VERSION>@<channel>`) or a store's launcher's argument (`cad-mcp --channel`),
-        # never a server's environment: no copy's config sets the variables 0.11.10 and earlier read.
+        # A store is named by a pin (`cad +<VERSION>@<store>`) or by its launcher's argument (`cad-mcp --channel`),
+        # never in a server's environment: no copy's config sets the variables 0.11.10 and earlier read. Only the
+        # Codex directory's copy, the ZIP's files, gives its launcher an argument.
         for copy in branch.COPIES:
             tree, errors, _manifest = branch.build(REPO_ROOT, copy)
             self.assertEqual(errors, [], copy)
@@ -178,8 +201,12 @@ class PluginTreeTests(unittest.TestCase):
                     with self.subTest(copy=copy, path=path):
                         self.assertNotIn(b"CAD_INSTALL_CHANNEL", data)
                         self.assertNotIn(b"CAD_AUTO_UPDATED", data)
-                        self.assertNotIn(b"--channel", data)
-                        self.assertNotIn(b"--startup-timeout", data)  # the Codex directory's ZIP's alone
+                        if copy != "codex":
+                            self.assertNotIn(b"--channel", data)
+                            self.assertNotIn(b"--startup-timeout", data)
+        codex = branch.build(REPO_ROOT, "codex")[0]
+        args = json.loads(codex[".mcp.json"][1])["mcpServers"]["cad"]["args"]
+        self.assertEqual(args[args.index("--channel") + 1], "codex")
 
     def test_readme_links_outside_the_tree_point_at_the_commit(self) -> None:
         text = ('[cad](skills/cad/SKILL.md) [dir](skills/cad/) [license](LICENSE) [web](https://x.dev) [top](#install)\n'
@@ -232,7 +259,7 @@ class PluginTreeTests(unittest.TestCase):
                       "It installs it,\nall of it.\n\nThen ask.\n\n[s](skills/s/SKILL.md) [c](CONTRIBUTING.md)\n")
             files = {".claude-plugin/plugin.json": json.dumps(manifest, indent=2) + "\n", ".claude-plugin/icon.png": PNG,
                      ".claude-plugin/marketplace.json": "{}", ".cursor-plugin/plugin.json": "{}",
-                     "gemini-extension.json": "{}", "claude.mcp.json": SERVERS, "cursor.mcp.json": SERVERS, "LICENSE": "MIT\n",
+                     "gemini-extension.json": "{}", "grok.mcp.json": SERVERS, "cursor.mcp.json": SERVERS, "LICENSE": "MIT\n",
                      "skills/s/SKILL.md": "one\n", "skills/p/SKILL.md": "prints\n", "README.md": readme,
                      "CONTRIBUTING.md": "x\n", "apps/web.js": "x\n"}
             for path, content in files.items():
@@ -267,17 +294,17 @@ class PluginTreeTests(unittest.TestCase):
             self.assertEqual(git(root, "rev-parse", f"{second}^"), first)
             self.assertEqual(git(root, "show", f"{second}:skills/s/SKILL.md"), "two")
 
-            # The copy's pins carry its channel: a pin of the release is stamped, the line installing it is not, and
+            # The copy's pins carry its store: a pin of the release is stamped, the line installing it is not, and
             # a pin of any other version left in the text fails the build.
-            (root / "skills/s/SKILL.md").write_text("Run `cad +1.0.0 model x` (`+1.0.0`); `--add 1.0.0`.\n",
+            (root / "skills/s/SKILL.md").write_text("Run `cad +1.0.0 model x` (`+1.0.0`); `cad-server==1.0.0`.\n",
                                                    encoding="utf-8")
             git(root, "commit", "-q", "-am", "pinned")
             tree, errors, _manifest = branch.build(root, "directory")
             self.assertEqual(errors, [])
             self.assertEqual(tree["skills/s/SKILL.md"][1],
-                             b"Run `cad +1.0.0@claude model x` (`+1.0.0@claude`); `--add 1.0.0`.\n")
+                             b"Run `cad +1.0.0@claude model x` (`+1.0.0@claude`); `cad-server==1.0.0`.\n")
             self.assertEqual(branch.build(root, "latest")[0]["skills/s/SKILL.md"][1],
-                             b"Run `cad +1.0.0 model x` (`+1.0.0`); `--add 1.0.0`.\n")
+                             b"Run `cad +1.0.0 model x` (`+1.0.0`); `cad-server==1.0.0`.\n")
             (root / "skills/s/SKILL.md").write_text("Run `cad +0.9.0 model x`.\n", encoding="utf-8")
             git(root, "commit", "-q", "-am", "another version")
             self.assertEqual(branch.build(root, "directory")[1],
@@ -285,20 +312,27 @@ class PluginTreeTests(unittest.TestCase):
             (root / "skills/s/SKILL.md").write_text("two\n", encoding="utf-8")
             git(root, "commit", "-q", "-am", "unpinned")
 
-            # The setup block installs by the uvx command; what it replaces must be there once each, the README's
-            # install section once, each listing link once, and no download run by a shell is left anywhere.
-            block = ("Install:\n\n```bash\n" + branch.SETUP_LINE.format(version="1.0.0") + "```\n\n"
-                     + branch.SETUP_WINDOWS.format(version="1.0.0") + "It installs 1.0.0.\n")
+            # A setup block's update paragraph, between its two markers, is our own text's: the store's copy leaves it
+            # out, markers and all, and latest keeps it. It must be marked once in a setup block, a marker never left
+            # without its pair, the README's install section there once, each listing link once, and no download run
+            # by a shell is left anywhere.
+            start, end = branch.channel_stamp.UPDATE_START, branch.channel_stamp.UPDATE_END
+            block = ("Every command in this skill starts `cad +1.0.0`. Install:\n\n```bash\n"
+                     + branch.UVX_INSTALL.format(version="1.0.0") + "\n```\n\nIf `uvx` is missing, install uv first.\n\n"
+                     + start + "\nKeep it up to date:\n\n```bash\n" + branch.INSTALL_SCRIPT + "\n```\n" + end + "\n\n"
+                     + "Migrations.\n")
             (root / "skills/s/SKILL.md").write_text(block, encoding="utf-8")
             git(root, "commit", "-q", "-am", "a setup block")
             tree, errors = branch.build(root, "directory")[:2]
             self.assertEqual(errors, [])
             self.assertEqual(tree["skills/s/SKILL.md"][1].decode("utf-8"),
-                             "Install:\n\n```bash\nuvx --no-config --managed-python --python 3.14 "
-                             "--from cad-server==1.0.0 cad setup --add\n```\n\nIt installs 1.0.0.\n")
+                             "Every command in this skill starts `cad +1.0.0@claude`. Install:\n\n```bash\n"
+                             "uvx --no-config --managed-python --python 3.14 --from cad-server==1.0.0 cad setup\n```\n\n"
+                             "If `uvx` is missing, install uv first.\n\nMigrations.\n")
             self.assertEqual(branch.build(root, "latest")[0]["skills/s/SKILL.md"][1].decode("utf-8"), block)
             broken = {
-                "skills/s/SKILL.md": block.replace(branch.SETUP_WINDOWS.format(version="1.0.0"), ""),
+                "skills/s/SKILL.md": block.replace(end + "\n", ""),
+                "skills/p/SKILL.md": block.replace(start + "\n", "").replace(end + "\n", ""),
                 "README.md": readme.replace("Windows, in PowerShell:", "On Windows:"),
                 ".claude-plugin/plugin.json": json.dumps({**manifest, "supportUrl": None}, indent=2) + "\n",
                 "skills/p/notes.md": "Or: wget -qO- https://x.dev/i.sh | bash\n",
@@ -334,7 +368,7 @@ class PluginTreeTests(unittest.TestCase):
             git(root, "commit", "-q", "-m", "no script")
 
             # A server or hooks in Claude's manifest fails the directory's copy, which carries the skills alone.
-            (root / ".claude-plugin/plugin.json").write_text(json.dumps({**manifest, "mcpServers": "./claude.mcp.json"}),
+            (root / ".claude-plugin/plugin.json").write_text(json.dumps({**manifest, "mcpServers": "./grok.mcp.json"}),
                                                                 encoding="utf-8")
             git(root, "commit", "-q", "-am", "three")
             self.assertIn(".claude-plugin/plugin.json names `mcpServers`; this copy carries the skills alone",

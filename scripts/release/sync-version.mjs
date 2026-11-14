@@ -17,8 +17,13 @@ export const jsonTargets = [
   { path: ".cursor-plugin/plugin.json", fields: [["version"]] },
   { path: ".grok-plugin/plugin.json", fields: [["version"]] },
   { path: "gemini-extension.json", fields: [["version"]] },
+  { path: ".antigravity-plugin/plugin.json", fields: [["version"]] },
+  { path: ".kimi-plugin/plugin.json", fields: [["version"]] },
+  { path: ".devin-plugin/plugin.json", fields: [["version"]] },
+  { path: ".muse-plugin/plugin.json", fields: [["version"]] },
   { path: "plugin.json", fields: [["version"]] },
   { path: ".claude-plugin/marketplace.json", fields: [["version"]], pluginEntries: ["text-to-cad"] },
+  { path: ".muse-plugin/marketplace.json", fields: [], pluginEntries: ["text-to-cad"] },
 ];
 
 // The four distributions released together: the library, the server, the shim and the alias.
@@ -45,44 +50,41 @@ export const pinTargets = [
   "packages/cad-server/pyproject.toml",
   "packages/aliases/cadgen/pyproject.toml",
   "codex.mcp.json",
-  "claude.mcp.json",
+  "grok.mcp.json",
   "cursor.mcp.json",
   "mcp.json",
   "gemini-extension.json",
+  ".kimi-plugin/plugin.json",
+  ".devin-plugin/plugin.json",
   "docs/install.md",
   // The README, the docs site's homepage and its policy pages pin nothing (the privacy policy's
   // telemetry commands run `cad`, the installed command): a target without a pin is refused.
 ];
 
-// The one-line installer's scripts carry the release they were published with, which each installs
-// when the version feed cannot be read. Neither is a pin target: each runs `cad-server==$version`,
-// a variable a pin's stamp would overwrite.
+// The one-line installer (install.sh and install.ps1 run install.py) carries the release it was
+// published with, which it installs when the version feed cannot be read. It is no pin target: it runs
+// `cad-server==<the release it found>`, which a pin's stamp would overwrite.
 export const bootstrapTargets = [
-  { path: "scripts/install/install.sh", pattern: /^(CAD_VERSION=")([^"\n]*)(")$/m },
-  { path: "scripts/install/install.ps1", pattern: /^([ \t]*\$CadVersion = ")([^"\n]*)(")$/m },
+  { path: "scripts/install/install.py", pattern: /^(FALLBACK = ")([^"\n]*)(")$/m },
 ];
 
 // Every command a skill runs names its release: `cad +<VERSION> <verb> ...`, the pin the first
 // argument, so the skill text of a release runs that release's software. Every Markdown file under
-// `skills/` is stamped, in place, by three patterns:
+// `skills/` is stamped, in place, by two patterns:
 // - the pin, `cad +X.Y.Z` (a suffix allowed, ending in a letter or digit) followed by a space, a
 //   backtick, a quote or the line's end. `cad` stands alone (not `scad +1.2.3`, not `my-cad`), and
 //   the version is three dotted numbers, so arithmetic such as `cad +0.5 ` is never touched;
-// - the setup block's install argument, `--add X.Y.Z`;
-// - the setup block itself, from "Every command in this skill starts `cad +" to "step it prints.",
-//   where the release is named in prose too ("runs text-to-cad X.Y.Z"): every X.Y.Z in it.
-// - a SKILL.md's header, `metadata.version` (quoted: the Agent Skills format's `metadata` values are
-//   strings), in the front matter alone; every SKILL.md must carry it.
+// - the setup block, from "Every command in this skill starts `cad +" to "install uv first.", where
+//   the release is named in prose ("runs text-to-cad X.Y.Z") and in its install line
+//   (`--from cad-server==X.Y.Z`): every X.Y.Z in it.
+// A SKILL.md's header names no version: the commands carry it.
 // Every skill that runs `cad` carries that block (tests/python/global/test_skill_requirements.py), and
 // no command goes unpinned (test_skill_commands_pin_their_release.py).
 export const skillsDir = "skills";
 const releaseName = String.raw`\d+\.\d+\.\d+(?:[0-9A-Za-z.+_-]*[0-9A-Za-z])?`;
 export const skillPinPatterns = {
   pin: new RegExp(String.raw`(?<![\w.-])(cad \+)(${releaseName})(?=[\s\x60'"]|$)`, "gm"),
-  add: new RegExp(String.raw`(?<![\w-])(--add )(${releaseName})`, "g"),
-  setupBlock: /Every command in this skill starts `cad \+[\s\S]*?step it prints\./g,
-  frontMatter: /^---\n[\s\S]*?\n---\n/,
-  metadataVersion: /^(metadata:\n(?:  .*\n)*?  version: ")([^"\n]*)(")$/m,
+  setupBlock: /Every command in this skill starts `cad \+[\s\S]*?install uv first\./g,
 };
 
 function skillDocuments(dir = skillsDir) {
@@ -106,15 +108,12 @@ function skillDocuments(dir = skillsDir) {
     });
 }
 
-/** The skill text with every pin, install argument and the setup block's release set to `version`. */
+/** The skill text with every pin and the setup block's release set to `version`. */
 export function stampSkillText(text, version) {
-  const { pin, add, setupBlock } = skillPinPatterns;
-  const { frontMatter, metadataVersion } = skillPinPatterns;
+  const { pin, setupBlock } = skillPinPatterns;
   return text
-    .replace(frontMatter, (header) => header.replace(metadataVersion, (_, before, _stale, after) => `${before}${version}${after}`))
     .replace(new RegExp(setupBlock.source, "g"), (block) => block.replace(/\b\d+\.\d+\.\d+\b/g, version))
-    .replace(new RegExp(pin.source, "gm"), (_, prefix) => `${prefix}${version}`)
-    .replace(new RegExp(add.source, "g"), (_, prefix) => `${prefix}${version}`);
+    .replace(new RegExp(pin.source, "gm"), (_, prefix) => `${prefix}${version}`);
 }
 
 function syncSkillTargets(version) {
@@ -124,12 +123,6 @@ function syncSkillTargets(version) {
   for (const relativePath of documents) {
     const text = readRequiredText(relativePath);
     pinned += [...text.matchAll(new RegExp(skillPinPatterns.pin.source, "gm"))].length;
-    if (relativePath.endsWith("/SKILL.md")) {
-      const header = text.match(skillPinPatterns.frontMatter);
-      if (!header || !skillPinPatterns.metadataVersion.test(header[0])) {
-        throw new Error(`${relativePath} must carry metadata.version: "<version>" in its header`);
-      }
-    }
     const stamped = stampSkillText(text, version);
     if (stamped !== text) {
       changes.push({ path: relativePath, labels: ["skill command pins"], text: stamped });

@@ -118,15 +118,17 @@ class VersionSyncMirrorTests(unittest.TestCase):
                 if repo_path(relative).is_file():
                     (root / relative).parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(repo_path(relative), root / relative)
-            # A skill pins its release in every command, and the setup block names it in prose and in the
-            # install argument; nothing else in a skill is a pin: not arithmetic, not another word's `cad`,
-            # not a version outside the setup block.
+            # A skill pins its release in every command, and the setup block names it in prose and in its
+            # install line; nothing else in a skill is a pin: not arithmetic, not another word's `cad`, not a
+            # version outside the setup block, not the header (which names no version).
             skill = root / "skills/fixture/SKILL.md"
             skill.parent.mkdir(parents=True)
-            unstamped = ("---\nname: fixture\nmetadata:\n  repository: o/r\n  version: \"1.0.0\"\n---\n"
-                         "Every command in this skill starts `cad +1.0.0`: it runs text-to-cad 1.0.0, the release.\n"
-                         "```bash\ncurl -fsSL https://texttocad.dev/install.sh | sh -s -- --add 1.0.0\n```\n"
-                         "`cad +1.0.0 doctor --check`. Tell the person any next\nstep it prints.\n\n"
+            unstamped = ("---\nname: fixture\nmetadata:\n  repository: o/r\n---\n"
+                         "Every command in this skill starts `cad +1.0.0`: it runs text-to-cad 1.0.0, the version.\n"
+                         "If `cad` says 1.0.0 is not installed:\n"
+                         "```bash\nuvx --no-config --managed-python --python 3.14 --from cad-server==1.0.0 cad setup\n```\n"
+                         "It installs text-to-cad 1.0.0. If `uvx` is missing,\ninstall uv first.\n\n"
+                         "At the start of a session, run `cad +1.0.0 --version`.\n\n"
                          "Run `cad +1.0.0 run model.py`, then\n```bash\ncad +0.11.10-dev.1 model export \"$ID\" a.step\n```\n"
                          "Not pins: `x = cad +0.5 * y`, `scad +1.2.3 run`, bpy 5.2.3, cadgen==0.1.0.\n")
             stamped = unstamped.replace("1.0.0", "9.9.9").replace("0.11.10-dev.1", "9.9.9")
@@ -145,13 +147,8 @@ class VersionSyncMirrorTests(unittest.TestCase):
                 if project not in ("cad", "cad-mcp"):
                     self.assertIn('"cad==9.9.9"', text, project)
                     self.assertNotRegex(text, r"cad==(?!9\.9\.9)", project)
-            # The one-line installer falls back to the release it ships with, and pins nothing else:
-            # its `cad-server==$version` is the release it found.
-            installer = (root / "scripts/install/install.sh").read_text(encoding="utf-8")
-            self.assertIn('\nCAD_VERSION="9.9.9"\n', installer)
-            self.assertIn('--from "$requirement" cad "$verb"', installer)
-            self.assertIn('requirement="cad-server==$version"', installer)
-            self.assertIn('\n    $CadVersion = "9.9.9"\n', (root / "scripts/install/install.ps1").read_text(encoding="utf-8"))
+            # The one-line installer falls back to the release it ships with.
+            self.assertIn('\nFALLBACK = "9.9.9"\n', (root / "scripts/install/install.py").read_text(encoding="utf-8"))
             self.assertEqual(skill.read_text(encoding="utf-8"), stamped)
             # Stamped once, it is stamped: a second run changes nothing.
             again = subprocess.run(["node", str(root / "scripts/release/sync-version.mjs")],
@@ -177,9 +174,14 @@ class VersionSyncMirrorTests(unittest.TestCase):
                                     % json.dumps(SYNC_SCRIPT.as_uri())))
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch).resolve()
+            # And the plugin's manifests and server configs, which name the release.
+            manifests = json.loads(_node("const { jsonTargets, pinTargets } = await import(%s);\n"
+                                         "console.log(JSON.stringify([...jsonTargets.map((t) => t.path), ...pinTargets]));"
+                                         % json.dumps(SYNC_SCRIPT.as_uri())))
+            manifests = [path for path in manifests if path.endswith(".json") and "package" not in path]
             for relative in ("scripts/release/check-version.sh", "scripts/release/release-tags.sh",
-                             "scripts/release/unavailable-versions.txt", "scripts/install/install.sh", "scripts/install/install.ps1",
-                             *projects):
+                             "scripts/release/unavailable-versions.txt", "scripts/install/install.py",
+                             *projects, *manifests):
                 (root / relative).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(repo_path(relative), root / relative)
             shutil.copy2(repo_path("VERSION"), root / "VERSION")
@@ -192,11 +194,12 @@ class VersionSyncMirrorTests(unittest.TestCase):
             stale = subprocess.run(check, capture_output=True, text=True, timeout=60)
             self.assertEqual(1, stale.returncode, stale.stdout + stale.stderr)
             released = repo_path("VERSION").read_text(encoding="utf-8").strip()
-            for script in ("install.sh", "install.ps1"):
-                self.assertIn(f"scripts/install/{script} falls back to {released}; expected 9.9.9", stale.stderr)
+            self.assertIn(f"scripts/install/install.py falls back to {released}; expected 9.9.9", stale.stderr)
             self.assertIn(f"skills/ pins cad +{released}; expected 9.9.9", stale.stderr)
-            self.assertIn(f"skills/ pins --add {released}; expected 9.9.9", stale.stderr)
-            self.assertIn(f"skills/cad/SKILL.md's header says metadata.version {released}; expected 9.9.9", stale.stderr)
+            self.assertIn(f"skills/ pins cad-server=={released}; expected 9.9.9", stale.stderr)
+            for manifest in (".claude-plugin/plugin.json", ".muse-plugin/marketplace.json", ".kimi-plugin/plugin.json"):
+                self.assertIn(f"{manifest} names version {released}; expected 9.9.9", stale.stderr)
+            self.assertIn(f"grok.mcp.json pins cad-mcp=={released}; expected cad-mcp==9.9.9", stale.stderr)
 
     def test_derived_metadata_is_synced_at_the_current_version(self) -> None:
         """The gate the release workflows run, at the version in VERSION."""

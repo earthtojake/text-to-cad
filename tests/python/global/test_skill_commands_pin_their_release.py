@@ -32,6 +32,9 @@ ALLOWED = {
     r"\b(?:from|import)[ \t]+cad\b": "the Python library, not the command",
     # render's scene script: a Python comment saying where text-to-cad's model put each part.
     r"where cad placed it": "prose in a code comment about the model, not a command",
+    # The setup block's install line: uvx runs that release's own `cad setup` (`--from cad-server==<VERSION>`),
+    # pinned by its requirement, before the `cad` command exists.
+    r"--from cad-server==\S+ cad setup\b": "the release's install line, pinned by its requirement",
 }
 
 

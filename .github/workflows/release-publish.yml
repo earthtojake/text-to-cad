@@ -15,7 +15,7 @@ name: Publish Release
 # names: one project at a time, the library first, each listed by PyPI's index before the next goes
 # (the server and the alias pin the library at their own release). Only then does anything that
 # installers follow name it: the
-# `latest` branch and claude.ai's `claude-plugin` get the plugin alone
+# `latest` branch, claude.ai's `claude-plugin` and Codex's `codex-plugin` get the plugin alone
 # (scripts/release/plugin_branch.py); after them, the docs deploy moves the site's header
 # version, and the tag and the GitHub Release go out. The version feed the install command and
 # the server's update notice read (apps/api) asks PyPI itself -- `cadgen`'s index, which the release
@@ -139,7 +139,7 @@ jobs:
           INSTALL_BRANCHES_KEY: ${{ secrets.INSTALL_BRANCHES_KEY }}
         run: |
           if [ -z "$INSTALL_BRANCHES_KEY" ]; then
-            echo "::error::INSTALL_BRANCHES_KEY is not set, so the release could not push latest and claude-plugin."
+            echo "::error::INSTALL_BRANCHES_KEY is not set, so the release could not push latest, claude-plugin and codex-plugin."
             exit 1
           fi
 
@@ -226,9 +226,9 @@ jobs:
           path: ${{ runner.temp }}/plugin/
           if-no-files-found: error
 
-      # The plugin alone, as `latest` and claude.ai's directory take it, checked
-      # against the directory's file rules ahead of every irreversible step; on main, the
-      # branches job below commits these same trees.
+      # The plugin alone, as `latest`, claude.ai's directory and Codex's take it, checked
+      # (the directory's file rules, the Codex ZIP's) ahead of every irreversible step; on main,
+      # the branches job below commits these same trees.
       - name: Check the plugin trees
         run: python3 scripts/release/plugin_branch.py --check
 
@@ -334,9 +334,7 @@ jobs:
             cad_server/_runtime/viewer/THIRD_PARTY_LICENSES.txt \
             cad_server/_runtime/mcp/shell.html \
             cad_server/_runtime/mcp/app.js \
-            cad_server/_runtime/mcp/THIRD_PARTY_LICENSES.txt \
-            cad_server/_runtime/plugin/.claude-plugin/marketplace.json \
-            cad_server/_runtime/plugin/skills/cad/SKILL.md; do
+            cad_server/_runtime/mcp/THIRD_PARTY_LICENSES.txt; do
             if ! printf '%s\n' "$listing" | grep -qF " $required"; then
               echo "$(basename "$wheel") does not contain $required" >&2
               echo "scripts/bundle/bundle.sh produces it; [tool.setuptools.package-data] ships it." >&2
@@ -376,14 +374,14 @@ jobs:
           echo "Would have uploaded, one project at a time: $(ls dist)"
           echo "Would have uploaded these pages' source maps to PostHog: $(ls "$RUNNER_TEMP/sourcemaps/files")"
           echo "Would have deployed the docs site from ${{ needs.gate.outputs.release_sha }}."
-          echo "Would have committed the plugin to latest and claude-plugin."
+          echo "Would have committed the plugin to latest, claude-plugin and codex-plugin."
           echo "Would have purged the version feed's CDN cache (api.texttocad.dev) after them."
           # --dry-run computes the tag and the release it would create without
           # pushing anything; the version check inside it runs for real.
           args=(--target HEAD --dry-run --publish)
           mkdir -p "$RUNNER_TEMP/installer"
-          cp scripts/install/install.sh scripts/install/install.ps1 "$RUNNER_TEMP/installer/"
-          (cd "$RUNNER_TEMP/installer" && sha256sum install.sh install.ps1 > SHA256SUMS)
+          cp scripts/install/install.sh scripts/install/install.ps1 scripts/install/install.py "$RUNNER_TEMP/installer/"
+          (cd "$RUNNER_TEMP/installer" && sha256sum install.sh install.ps1 install.py > SHA256SUMS)
           for file in dist/* "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/installer/*; do args+=(--asset "$file"); done
           scripts/release/publish-github-release.sh "${args[@]}"
 
@@ -513,9 +511,10 @@ jobs:
           if-no-files-found: error
 
   # The plugin alone, one commit per release, onto the branches installers follow
-  # (scripts/release/plugin_branch.py): `latest`, which every install command names, and
+  # (scripts/release/plugin_branch.py): `latest`, which every install command names;
   # `claude-plugin`, which claude.ai's directory follows: the skills alone, in the file types it
-  # accepts. Publish Release is these branches' only writer.
+  # accepts; and `codex-plugin`, what the Codex directory's ZIP holds, from the same build.
+  # Publish Release is these branches' only writer.
   #
   # TODO: the directory's listing stays on `claude-plugin` while a reviewer has the plugin.
   branches:
@@ -536,7 +535,7 @@ jobs:
           ref: ${{ needs.gate.outputs.release_sha }}
           persist-credentials: false
 
-      - name: Commit the plugin onto latest and claude-plugin and push them
+      - name: Commit the plugin onto latest, claude-plugin and codex-plugin and push them
         env:
           # Only a deploy key may update the install branches (CONTRIBUTING.md, "Repository settings"),
           # so the release pushes them with its own, which the gate found.
@@ -561,11 +560,14 @@ jobs:
           }
           latest_parent="$(tip latest || true)"
           directory_parent="$(tip claude-plugin || true)"
+          codex_parent="$(tip codex-plugin || true)"
           latest="$(python3 scripts/release/plugin_branch.py --commit --copy latest --parent "$latest_parent")"
           directory="$(python3 scripts/release/plugin_branch.py --commit --copy directory --parent "$directory_parent")"
-          # Both branches move, or neither does (--atomic). A push that changes nothing is a no-op, so
-          # an unchanged plugin leaves both where they are.
-          git push --atomic "$remote" "$latest:refs/heads/latest" "$directory:refs/heads/claude-plugin"
+          codex="$(python3 scripts/release/plugin_branch.py --commit --copy codex --parent "$codex_parent")"
+          # All three branches move, or none does (--atomic). A push that changes nothing is a no-op, so
+          # an unchanged plugin leaves each where it is.
+          git push --atomic "$remote" "$latest:refs/heads/latest" "$directory:refs/heads/claude-plugin" \
+            "$codex:refs/heads/codex-plugin"
 
   # The version feed (api.texttocad.dev/v1/versions, apps/api) names the newest release PyPI lists, and
   # the install command and every copy's hourly update check read it; but Vercel's edge keeps each answer
@@ -692,14 +694,14 @@ jobs:
           name: sourcemaps-${{ needs.gate.outputs.version }}
           path: ${{ runner.temp }}/sourcemaps
 
-      # The one-line installer as this release publishes it, and the SHA-256 of each script:
-      # releases/download/v<VERSION>/install.sh is the copy pinned to this release (texttocad.dev
-      # serves the newest), and SHA256SUMS is what a person checks a downloaded copy against.
+      # The one-line installer as this release publishes it (install.sh, install.ps1 and install.py, the
+      # program both run), and the SHA-256 of each: releases/download/v<VERSION>/ holds the copies of this
+      # release (texttocad.dev serves the newest), and SHA256SUMS is what a person checks a download against.
       - name: Gather the installer scripts and their checksums
         run: |
           mkdir -p "$RUNNER_TEMP/installer"
-          cp scripts/install/install.sh scripts/install/install.ps1 "$RUNNER_TEMP/installer/"
-          (cd "$RUNNER_TEMP/installer" && sha256sum install.sh install.ps1 > SHA256SUMS && cat SHA256SUMS)
+          cp scripts/install/install.sh scripts/install/install.ps1 scripts/install/install.py "$RUNNER_TEMP/installer/"
+          (cd "$RUNNER_TEMP/installer" && sha256sum install.sh install.ps1 install.py > SHA256SUMS && cat SHA256SUMS)
 
       # A push-triggered run has no `publish` input: it publishes. Only a manual
       # dispatch can ask for a draft. The wheel, sdist, plugin ZIP, source maps and the installer's
@@ -716,7 +718,8 @@ jobs:
           fi
           ls -l "$RUNNER_TEMP/dist" "$RUNNER_TEMP/plugin" "$RUNNER_TEMP/sourcemaps" "$RUNNER_TEMP/installer"
           for file in "$RUNNER_TEMP"/dist/*.whl "$RUNNER_TEMP"/dist/*.tar.gz "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/sourcemaps/*.zip \
-              "$RUNNER_TEMP"/installer/install.sh "$RUNNER_TEMP"/installer/install.ps1 "$RUNNER_TEMP"/installer/SHA256SUMS; do
+              "$RUNNER_TEMP"/installer/install.sh "$RUNNER_TEMP"/installer/install.ps1 "$RUNNER_TEMP"/installer/install.py \
+              "$RUNNER_TEMP"/installer/SHA256SUMS; do
             [ -f "$file" ] && args+=(--asset "$file")
           done
           scripts/release/publish-github-release.sh "${args[@]}"

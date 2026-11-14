@@ -4,7 +4,9 @@
 The portal (https://platform.openai.com/plugins) is a web page with no API, so a
 release cannot submit the plugin itself. It can hand the person who does a file
 that uploads cleanly. Publish Release builds that file from the release commit,
-before any irreversible step, and attaches it to the GitHub Release.
+before any irreversible step, and attaches it to the GitHub Release; the same files,
+from the same `build`, are committed to the `codex-plugin` branch (plugin_branch.py's
+`codex` copy), one commit per release.
 
 The plugin is at the archive's root, where the portal looks for it: the Codex
 manifest and the rest of `.codex-plugin/`, `skills/`, `LICENSE`, and every file
@@ -15,11 +17,11 @@ that `mcpServers` "must resolve to the root `.mcp.json`". A server config kept
 under another name (a root `.mcp.json` is one Claude Code would load too) goes
 into the archive as `.mcp.json`, and the archived manifest points there.
 
-The package is the copy OpenAI's directory delivers, on its own channel, `codex`: every pin in it is stamped
-`@codex` (`cad +<VERSION>@codex <verb>`, `channel_stamp.py`, the routine the directory branch of claude.ai
-uses too), and its launcher is told the channel as an argument in its server config (`cad-mcp --channel
-codex`), so the device keeps that copy's version apart from the default channel's and the install
-command's updates never move it. It is told Codex's startup timeout too, the config's own `startup_timeout_sec`
+The package is the copy OpenAI's directory delivers, so it names that store, `codex`: every pin in it is
+stamped `@codex` (`cad +<VERSION>@codex <verb>`) and each skill's update paragraph is left out, since the
+store updates the copy (`channel_stamp.py`, the routine the directory branch of claude.ai uses too), and its
+launcher is told the store as an argument in its server config (`cad-mcp --channel codex`). It is told
+Codex's startup timeout too, the config's own `startup_timeout_sec`
 (`--startup-timeout 300`): a first start installs its version, and the launcher holds Codex's `initialize` for most
 of that time rather than answer early, since Codex acts on no `tools/list_changed` within a turn.
 

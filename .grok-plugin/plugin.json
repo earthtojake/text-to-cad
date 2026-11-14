@@ -20,5 +20,5 @@
     "gcode"
   ],
   "skills": "./skills/",
-  "mcpServers": "./claude.mcp.json"
+  "mcpServers": "./grok.mcp.json"
 }

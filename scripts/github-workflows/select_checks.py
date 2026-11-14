@@ -204,9 +204,10 @@ RULES: tuple[Rule, ...] = (
          select(flags=["installer"])),
     # The update rehearsal (test.yml's update-rehearsal): a real 0.11.10 updating into this tree's build.
     Rule(("scripts/test/rehearse-update.py",), select(flags=["installer"]), final=True),
-    # The one-line installers: the docs site serves copies of them, and the setup suite reads both.
-    Rule(("scripts/install/install.sh", "scripts/install/install.ps1"),
-         select(flags=["docs"], packages=[f"{PACKAGES_SUITE}/cad_server/test_setup.py"])),
+    # The one-line installer: the docs site serves copies of install.sh, install.ps1 and install.py. Its own
+    # tests (tests/python/global/test_install_script.py) are a light contract: static runs them on every change.
+    Rule(("scripts/install/install.sh", "scripts/install/install.ps1", "scripts/install/install.py"),
+         select(flags=["docs"])),
 
     # A fixture one language writes and another asserts is current: the robot renderer's browser
     # fixtures are the payloads the server resolves, the board renderer's the test board's plot.
@@ -254,7 +255,8 @@ RULES: tuple[Rule, ...] = (
         ".github/workflows/deploy-docs.yml", ".github/workflows/deploy-api.yml",
         ".github/dependabot.yml", ".github/release.yml", ".github/FUNDING.yml", ".githooks/**",
         ".claude-plugin/**", ".codex-plugin/**", ".cursor-plugin/**", ".grok-plugin/**", "gemini-extension.json",
-        "*.mcp.json", "plugin.json", "mcp.json", "skills.sh.json",
+        ".antigravity-plugin/**", ".kimi-plugin/**", ".devin-plugin/**", ".muse-plugin/**",
+        "*.mcp.json", "plugin.json", "mcp.json",
         "README.md", "AGENTS.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE", "docs/**",
         ".gitignore",
         "models/**",

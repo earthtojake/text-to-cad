@@ -36,18 +36,12 @@ class SkillFrontMatterTest(unittest.TestCase):
                     self.assertNotIn(": ", value, "quote it or write it as a `>-` block")
                     self.assertNotIn(" #", value, "quote it or write it as a `>-` block")
 
-    def test_every_skill_says_its_release_in_metadata_version(self) -> None:
-        # The standard place a skill carries its version: `metadata.version`, quoted (the Agent Skills format's
-        # `metadata` values are strings), the release its `cad +<VERSION>` commands pin. The release stamps it
-        # (scripts/release/sync-version.mjs); check-version.sh asserts it too.
-        version = (REPO / "VERSION").read_text(encoding="utf-8").strip()
+    def test_no_skill_header_names_a_version(self) -> None:
+        # A skill's release is in its commands (`cad +<VERSION>`), which the release stamps; a version in the header
+        # would be a second copy of it that nothing reads.
         for path in sorted((REPO / "skills").glob("*/SKILL.md")):
-            header = front_matter(path)
             with self.subTest(skill=path.parent.name):
-                self.assertIn("metadata:", header)
-                metadata = header[header.index("metadata:") + 1:]
-                metadata = metadata[:next((i for i, line in enumerate(metadata) if not line.startswith("  ")), len(metadata))]
-                self.assertIn(f'  version: "{version}"', metadata)
+                self.assertEqual([line for line in front_matter(path) if line.strip().startswith("version:")], [])
 
 
 if __name__ == "__main__":

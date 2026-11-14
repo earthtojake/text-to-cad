@@ -852,112 +852,86 @@ directory would hold its workflows, lockfile and binaries for a reviewer. `main`
 also has a release's pins from the merge on, before PyPI has the wheel. So
 installers follow branches only `Publish Release` writes, once the release is on
 PyPI: one commit per release whose tree is only the plugin
-(`scripts/release/plugin_branch.py`): the manifests and icon, the MCP configs
-the manifests name, `skills/`, `LICENSE` and `README.md`, with each README link
-to a file outside that tree pointed at the release commit on GitHub. A release
-whose plugin did not change adds no commit. There are two copies:
+(`scripts/release/plugin_branch.py`). A release whose plugin did not change adds
+no commit. There are three copies:
 
-- `latest`, the newest release, which every install command names: every host's
+- `latest`, the newest release, which every install command names: every app's
   manifest and MCP config (`.claude-plugin/plugin.json` and `icon.png`,
-  `.cursor-plugin/plugin.json`, `gemini-extension.json`, `claude.mcp.json`,
-  `cursor.mcp.json`), the marketplace catalog, listing the plugin at the
-  branch's root, Codex's manifest and config, Grok Build's manifest, and the
-  Agent Plugins standard's `plugin.json` and `mcp.json`, with every skill.
-- `claude-plugin`, which claude.ai's directory listing tracks: every skill and
-  nothing else, every pin in it stamped with the directory's channel (`cad +<VERSION>@claude`).
-  `.claude-plugin/plugin.json` (main's less four listing links, naming no MCP server and no
-  hooks) and `icon.png`, `skills/`, `LICENSE` and `README.md`, and nothing another
-  host reads. The directory flags a download piped to a shell (`curl ... | sh`) as an
-  install-time risk, so this copy installs by the `uvx` command the server runs for a
-  version it lacks (`uvx --no-config --managed-python --python 3.14 --from
-  cad-server==<VERSION> cad setup --add`), the same on every system, and holds no
-  pipe-to-shell download anywhere (the table below says what differs). The directory refuses an MCP server that runs on the user's computer,
-  and every file type but Markdown, text, JSON, YAML and PNG, JPEG, GIF, WebP or
-  ICO images, from an organization it has not verified, so the builder checks
-  each file of this copy against that rule and fails `--check`, and with it the
-  release's "Check the plugin trees" step, on any other: a program or anything
-  starting with `#!`, text that is not UTF-8 or holds a NUL byte, a `hooks.json`,
-  `.mcp.json`, `.lsp.json` or `monitors.json`, a package manager's
-  configuration, or anything in `.claude-plugin/` but `plugin.json` and images.
-  A `LICENSE` with no extension counts as text. No skill is left out to pass:
-  a refused file anywhere in `skills/` fails the build, so a skill ships no
-  script, and what one would script is a `cad` command (print3d's complete
-  OrcaSlicer presets are `cad orcaslicer`, the library's `orcaslicer`
-  integration).
+  `.cursor-plugin/plugin.json` and `cursor.mcp.json`, `.grok-plugin/plugin.json`
+  and `grok.mcp.json`, `gemini-extension.json`, `.codex-plugin/` and
+  `codex.mcp.json`, `.antigravity-plugin/`, `.kimi-plugin/`, `.devin-plugin/`,
+  `.muse-plugin/`), the marketplace catalogs (Claude's, which Codex reads too,
+  and Muse's), each listing the plugin at the branch's root, the Agent Plugins
+  standard's `plugin.json` and `mcp.json` (what Hermes reads), `skills/`,
+  `LICENSE` and `README.md`, each README link to a file outside the tree pointed
+  at the release commit on GitHub. It is our own text, as `main` has it.
+- `claude-plugin`, which claude.ai's directory listing tracks: the skills alone.
+  `.claude-plugin/plugin.json` (main's less four listing links, naming no MCP
+  server and no hooks) and `icon.png`, `skills/`, `LICENSE` and `README.md`, and
+  nothing another app reads. The directory flags a download piped to a shell
+  (`curl ... | sh`) as an install-time risk, so this copy's README installs by
+  the skills' own `uvx` line in place of the Quickstart's one-liners, and the
+  copy holds no pipe-to-shell download anywhere. The directory refuses an MCP
+  server that runs on the user's computer, and every file type but Markdown,
+  text, JSON, YAML and PNG, JPEG, GIF, WebP or ICO images, from an organization
+  it has not verified, so the builder checks each file of this copy against
+  that rule and fails `--check`, and with it the release's "Check the plugin
+  trees" step, on any other: a program or anything starting with `#!`, text
+  that is not UTF-8 or holds a NUL byte, a `hooks.json`, `.mcp.json`,
+  `.lsp.json` or `monitors.json`, a package manager's configuration, or
+  anything in `.claude-plugin/` but `plugin.json` and images. A `LICENSE` with
+  no extension counts as text. No skill is left out to pass: a refused file
+  anywhere in `skills/` fails the build, so a skill ships no script, and what
+  one would script is a `cad` command (print3d's complete OrcaSlicer presets
+  are `cad orcaslicer`, the library's `orcaslicer` integration).
+- `codex-plugin`, for Codex's plugin directory: exactly the files of the ZIP a
+  person uploads to OpenAI's portal (below), from the one function that builds
+  that ZIP (`plugin_zip.build`), so the branch and the ZIP cannot differ.
+
+A store's copy (`claude-plugin`, `codex-plugin` and the ZIP) names its store in
+every pin (`cad +<VERSION>@claude`, `@codex`), so `cad` prints no update notice
+for its commands, and leaves out each skill's update paragraph, the lines
+between `<!-- manual-copy-update: start -->` and `<!-- manual-copy-update: end
+-->` in the setup block: the store updates its copy, the person updates ours
+(`scripts/release/channel_stamp.py`, used by both builders; a setup block whose
+paragraph is not marked exactly once, or a marker left over, fails the build).
+`main` and `latest` name no store and keep the paragraph. Every copy installs
+`cad` by the skills' one line,
+`uvx --no-config --managed-python --python 3.14 --from cad-server==<VERSION> cad setup`.
 
 **Installs always work from `main`; `latest` is the preferred install.** A
 command that names no branch installs `main` as it is, so `main` keeps every
-manifest, MCP config and the marketplace catalog at its root, its catalog lists
+manifest, MCP config and the marketplace catalogs at its root, its catalogs list
 the plugin at `./`, and nothing on `main` points an installer at another branch.
 Development installs (`scripts/install/dev_install.py`) rely on that too. The
-documented commands name `latest` because it is the plugin alone and never ahead
-of PyPI. Branch names are channels: a slower `stable`, moved to a `latest` commit
-that has proven itself, can join `latest` later without renaming anything.
-`test_plugin_manifests.py` holds both halves of the rule. Both trees are checked against claude.ai's file rules
-(<https://claude.com/docs/plugins/pre-submission-checklist>) by
-`tests/python/global/test_plugin_branch.py` on every pull request and again
-before each release.
-
-What each store and installer reads:
-
-| Where | Reads |
-| ----- | ----- |
-| Claude Code | `latest` (`earthtojake/text-to-cad#latest`; the marketplace keeps the ref, so its updates follow the branch); `main` without it |
-| Codex | `latest` (`earthtojake/text-to-cad --ref latest`), as the install command and `docs/install.md` add it; `main` without it. Its plugin directory listing, the plugin ZIP a person uploads to OpenAI's portal (below), trails the releases, so nothing suggests it for now. Codex clones the whole repository with its history, about 300 MB, whichever branch it installs |
-| Grok Build | `latest` (`earthtojake/text-to-cad@latest`; its registry keeps the ref); `main` without it |
-| Gemini CLI | `latest` (`--ref latest`, kept for its updates). Without the ref, the latest GitHub Release: with no Gemini archive among its assets, it takes the release's source tarball, the whole repository. A release with a single asset would be taken as the extension, so keep shipping the wheel and sdist beside the ZIP |
-| Skills CLI and skills.sh | `latest` (`earthtojake/text-to-cad#latest`; the lock file keeps the ref for updates); `main` without it |
-| Cursor, by hand | `latest` (`git clone --branch latest`) |
-| The install command (`cad setup`), in every app | no branch: the plugin folder the server writes from its wheel's copy of the plugin (`<state>/plugin`, `cad_server/_internal/plugin.py`), the same files as `latest`'s at the release, its catalog a local one (`text-to-cad`) |
-| claude.ai's directory | `claude-plugin` |
-| Cursor, from a marketplace added in Cursor (a team marketplace that imports the repository, or the repository a person added as one; text-to-cad is not listed on Cursor's public Marketplace) | the repository's default branch, `main`, as it was when Cursor fetched it, kept in Cursor's own app data (`~/.cursor/plugins/cache/<marketplace>/text-to-cad/<commit>`): such a marketplace takes a repository, not a branch. Nothing here updates that copy or knows when Cursor will fetch the repository again, so a person's copy can be many releases behind (one fetched on October 6 was still 0.7.12, whose skills run `cadgen` commands, five weeks later). `main`'s text names no channel, so a copy recent enough to pin its commands is on the default channel |
-| OpenAI's plugin portal | the plugin ZIP a person uploads from the GitHub Release, its pins stamped `@codex` |
-
-Who delivers a copy is its channel, and the copy's own text says so: every command its
-skills run names the channel in its pin (`cad +<VERSION>@<channel>`), and its MCP config
-starts the launcher with it (`cad-mcp --channel <channel>`). Our own text names none, so it
-is on the default channel. The software holds no list of channels and decides nothing by a
-channel's name: a new store is one more stamp in the builder that makes its copy. Only the
-default channel has an updater, and only on a device where the install command ran (its
-receipt, `cad_server/_internal/update.py`); a store's channel moves when the store delivers a
-newer copy, by that copy's first command or launcher (`cad_server/_internal/pins.py`). Telemetry
-reports the channel, and the agent app it detects, as two fields (`apps/api/README.md`).
-The channel is a flag, not a variable: a config runs the launcher of its own release
-(`cad-mcp==<VERSION>`), so no launcher meets a flag it does not know.
-`test_plugin_manifests.py`, `test_plugin_branch.py`, `test_plugin_zip.py` and
-`test_plugin_folder.py` hold each copy:
-
-| Copy | Channel | Updated by | Stamped by |
-| ---- | ------- | ---------- | ---------- |
-| `main` and `latest`, every manifest and config; the plugin folder the install command points every app at; a copy a person installs by hand | default | the install command's updater, where it ran here; else the person, in the app | nothing: the text names no channel |
-| one Cursor installed from a marketplace added in Cursor: `main` as Cursor last fetched it | default | Cursor alone, when it fetches the repository again: the install command never reads or changes it, gives Cursor ours all the same, and an update of text-to-cad leaves it at its own release | nothing |
-| `claude-plugin`, which claude.ai's directory follows | `claude` | the directory | `plugin_branch.py` |
-| the OpenAI ZIP | `codex` | the directory | `plugin_zip.py` |
-| a development install | default (its telemetry says `dev`) | `dev_install.py`, run again | `dev_install.py` pins its own version name |
+documented commands name `latest` where the app can name a branch, because it is
+the plugin alone and never ahead of PyPI; Devin, Antigravity and Hermes find no
+branch syntax and install `main`. `test_plugin_manifests.py` holds both halves
+of the rule. Every copy is built and checked by
+`tests/python/global/test_plugin_branch.py` and `test_plugin_zip.py` on every
+pull request and again before each release (`plugin_branch.py --check`), the
+directory's against claude.ai's file rules
+(<https://claude.com/docs/plugins/pre-submission-checklist>).
 
 What each built copy changes from `main`'s text, each change a strict substitution that fails
 the build when what it replaces is not there exactly once:
 
-| | `latest` and the plugin folder | the OpenAI ZIP | `claude-plugin` |
+| | `latest` | `codex-plugin` and the OpenAI ZIP | `claude-plugin` |
 | --- | --- | --- | --- |
 | Pins | as `main` | `@codex` | `@claude` |
+| Setup block's update paragraph | as `main` | left out | left out |
 | Launcher | as `main` | `cad-mcp --channel codex --startup-timeout 300` in `.mcp.json` (the number its `startup_timeout_sec`) | none: no MCP config |
-| Setup block's install line | the install script, `curl ... \| sh -s -- --add <VERSION>`, and the Windows sentence | as `main` | `uvx ... --from cad-server==<VERSION> cad setup --add`; no Windows sentence |
-| README's install section | `latest`'s: the two one-liners and what they do (the plugin folder has no README) | no README | the `uvx` command and one paragraph |
+| README's install section | the two one-liners and what they do | no README | the `uvx` command and one paragraph |
 | `.claude-plugin/plugin.json` | as `main` | not shipped | without `documentationUrl`, `privacyPolicyUrl`, `supportUrl` and `termsOfServiceUrl`, which the directory's validation does not know; the README links the same pages |
 
 `CAD_INSTALL_CHANNEL` and `CAD_AUTO_UPDATED`, which the configs of 0.11.10 and earlier set, are
 no longer written and are ignored where an older copy still sets them.
 
-A skill's own `cad` command never says a release is out: the same skill files
-ship in every plugin, so it cannot tell which one it came with. The CAD app and
-the Viewer say it.
-
 **Dev note — `plugin` and `claude-plugin`.** `plugin`, which Cursor installs
 cloned before `latest` existed, is no longer written; it stays at 0.7.14 until it
 is deleted. claude.ai's listing stays on `claude-plugin` while a reviewer has the
 plugin, since the portal refuses a tracked-branch change then. Moving it to
-`latest` would hand the directory every other host's manifest and MCP config,
+`latest` would hand the directory every other app's manifest and MCP config,
 which it refuses from an organization it has not verified.
 
 ### Submitting the plugin to OpenAI

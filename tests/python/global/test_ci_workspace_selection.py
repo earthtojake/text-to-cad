@@ -527,7 +527,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "apps/docs/package.json": jobs_on("docs", "core_js"),
             "tests/browser/viewer-e2e.mjs": jobs_on("web_viewer"),
             # The installer rehearsals: the installers, their folder and the workflows; a release.
-            "scripts/install/install.sh": jobs_on("installer", "docs", "packages"),
+            "scripts/install/install.sh": jobs_on("installer", "docs"),
+            "scripts/install/install.py": jobs_on("installer", "docs"),
             ".github/workflows/install-windows.yml": jobs_on("installer"),
             # A runner runs what it feeds.
             "scripts/test/test-js.sh": jobs_on("core_js", "web_ui", "web_client", "mcp"),

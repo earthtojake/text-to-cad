@@ -35,15 +35,18 @@ class PluginZipTests(unittest.TestCase):
             with zipfile.ZipFile(out) as archive:
                 members = archive.namelist()
                 manifest = json.loads(archive.read(".codex-plugin/plugin.json"))
-                # The skills the checkout's but for the channel: every pin of the release stamped `@codex`, the
-                # channel OpenAI's directory delivers (`channel_stamp.py`), nothing else changed.
+                # The skills the checkout's but for the store: every pin of the release stamped `@codex`, and each
+                # setup block's update paragraph left out, since OpenAI's directory updates the copy
+                # (`channel_stamp.py`); nothing else changed.
                 version = manifest["version"]
                 skills = {name: archive.read(name).decode("utf-8") for name in members
                           if name.startswith("skills/") and not name.endswith("/")}
+                stamp = plugin_zip.channel_stamp
                 changed = [name for name, text in skills.items()
                            if text.replace(f"+{version}@codex", f"+{version}")
-                           != (REPO_ROOT / name).read_text(encoding="utf-8")
-                           or plugin_zip.channel_stamp.unstamped(text, version, "codex")]
+                           != stamp.without_update(name, (REPO_ROOT / name).read_text(encoding="utf-8"))[0]
+                           or stamp.unstamped(text, version, "codex")
+                           or stamp.UPDATE_START in text or stamp.UPDATE_END in text]
                 pinned = sum(text.count(f"+{version}@codex") for text in skills.values())
                 server = json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"]
         # The launcher on its channel, told Codex's startup timeout from the same config: its first start, which
@@ -58,8 +61,9 @@ class PluginZipTests(unittest.TestCase):
         self.assertIn(".codex-plugin/", members)
         self.assertEqual(changed, [])
         self.assertGreater(pinned, 100, "the skills' pins were found")
-        # Only claude.ai's directory's copy installs by uvx (plugin_branch.py): this one keeps the install script.
-        self.assertIn(f"curl -fsSL https://texttocad.dev/install.sh | sh -s -- --add {version}\n", skills["skills/cad/SKILL.md"])
+        # Every copy installs by the skills' uvx line, and a store's copy names no update command.
+        self.assertIn(f"--from cad-server=={version} cad setup\n", skills["skills/cad/SKILL.md"])
+        self.assertNotIn("install.sh", skills["skills/cad/SKILL.md"])
         # Everything tracked under the plugin's roots ships, `.codex-plugin/` icons included,
         # plus exactly the files the archived manifest points at; nothing else from the repo.
         roots = set(git(REPO_ROOT, "ls-files", "--", *plugin_zip.ROOTS).split())

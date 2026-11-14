@@ -27,7 +27,7 @@ MARKETPLACE_NAME = "earthtojake"
 
 CLAUDE_PLUGIN_PATH = REPO_ROOT / ".claude-plugin" / "plugin.json"
 CODEX_MCP_PATH = REPO_ROOT / "codex.mcp.json"
-CLAUDE_MCP_PATH = REPO_ROOT / "claude.mcp.json"
+GROK_MCP_PATH = REPO_ROOT / "grok.mcp.json"
 CURSOR_MCP_PATH = REPO_ROOT / "cursor.mcp.json"
 MCP_PATH = REPO_ROOT / "mcp.json"
 CODEX_PLUGIN_PATH = REPO_ROOT / ".codex-plugin" / "plugin.json"
@@ -35,6 +35,14 @@ CURSOR_PLUGIN_PATH = REPO_ROOT / ".cursor-plugin" / "plugin.json"
 GROK_PLUGIN_PATH = REPO_ROOT / ".grok-plugin" / "plugin.json"
 PLUGIN_PATH = REPO_ROOT / "plugin.json"
 GEMINI_EXTENSION_PATH = REPO_ROOT / "gemini-extension.json"
+ANTIGRAVITY_PLUGIN_PATH = REPO_ROOT / ".antigravity-plugin" / "plugin.json"
+KIMI_PLUGIN_PATH = REPO_ROOT / ".kimi-plugin" / "plugin.json"
+DEVIN_PLUGIN_PATH = REPO_ROOT / ".devin-plugin" / "plugin.json"
+MUSE_PLUGIN_PATH = REPO_ROOT / ".muse-plugin" / "plugin.json"
+MUSE_MARKETPLACE_PATH = REPO_ROOT / ".muse-plugin" / "marketplace.json"
+# Every app's manifest named `text-to-cad`.
+MANIFESTS = (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH, GROK_PLUGIN_PATH, PLUGIN_PATH,
+             ANTIGRAVITY_PLUGIN_PATH, KIMI_PLUGIN_PATH, DEVIN_PLUGIN_PATH, MUSE_PLUGIN_PATH)
 MARKETPLACE_PATH = REPO_ROOT / ".claude-plugin" / "marketplace.json"
 SKILLS_ROOT = REPO_ROOT / "skills"
 
@@ -53,14 +61,14 @@ def load_json(path: Path) -> dict:
 
 class PluginManifestPolicyTest(unittest.TestCase):
     def test_every_provider_plugin_manifest_exists_at_the_repo_root(self) -> None:
-        for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH, GROK_PLUGIN_PATH, PLUGIN_PATH):
+        for path in MANIFESTS:
             self.assertTrue(
                 path.is_file(),
                 f"missing plugin manifest: {path.relative_to(REPO_ROOT)}",
             )
 
     def test_plugin_manifests_name_the_plugin_consistently(self) -> None:
-        for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH, GROK_PLUGIN_PATH, PLUGIN_PATH):
+        for path in MANIFESTS:
             manifest = load_json(path)
             self.assertEqual(
                 manifest.get("name"),
@@ -82,6 +90,13 @@ class PluginManifestPolicyTest(unittest.TestCase):
             "agent plugins": load_json(PLUGIN_PATH).get("description"),
             "gemini": load_json(GEMINI_EXTENSION_PATH).get("description"),
             "marketplace": next(e for e in marketplace["plugins"] if e.get("name") == PLUGIN_NAME).get("description"),
+            "antigravity": load_json(ANTIGRAVITY_PLUGIN_PATH).get("description"),
+            "kimi": load_json(KIMI_PLUGIN_PATH).get("description"),
+            "kimi interface": load_json(KIMI_PLUGIN_PATH)["interface"].get("longDescription"),
+            "devin": load_json(DEVIN_PLUGIN_PATH).get("description"),
+            "muse": load_json(MUSE_PLUGIN_PATH).get("description"),
+            "muse marketplace": next(e for e in load_json(MUSE_MARKETPLACE_PATH)["plugins"]
+                                     if e.get("name") == PLUGIN_NAME).get("description"),
         }
         page = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
         descriptions["docs copy"] = re.search(r'const pluginDescription =\s*"([^"]+)"', page).group(1)
@@ -145,6 +160,8 @@ class PluginManifestPolicyTest(unittest.TestCase):
             "codex": load_json(CODEX_PLUGIN_PATH)["interface"].get("shortDescription"),
             "marketplace": marketplace.get("description"),
             "marketplace metadata": marketplace.get("metadata", {}).get("description"),
+            "kimi": load_json(KIMI_PLUGIN_PATH)["interface"].get("shortDescription"),
+            "muse marketplace": load_json(MUSE_MARKETPLACE_PATH).get("description"),
         }
         self.assertEqual(set(shorts.values()), {"Design 3D models"}, shorts)
 
@@ -181,6 +198,10 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertLess(len(data), 2 * 1024 * 1024, "the Claude icon is 2 MB or more")
 
     def test_marketplace_lists_the_plugin_at_the_repository_root(self) -> None:
+        # Muse's catalog is Claude's in its own folder: the same names, the plugin at the root.
+        muse = load_json(MUSE_MARKETPLACE_PATH)
+        self.assertEqual(muse.get("name"), MARKETPLACE_NAME)
+        self.assertEqual([(entry["name"], entry["source"]) for entry in muse["plugins"]], [(PLUGIN_NAME, "./")])
         marketplace = load_json(MARKETPLACE_PATH)
         self.assertEqual(marketplace.get("name"), MARKETPLACE_NAME)
 
@@ -215,11 +236,11 @@ class PluginManifestPolicyTest(unittest.TestCase):
                 for item in value:
                     yield from keys(item)
 
-        for path in (MARKETPLACE_PATH, CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH, GROK_PLUGIN_PATH,
-                     GEMINI_EXTENSION_PATH, PLUGIN_PATH, CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH):
+        for path in (MARKETPLACE_PATH, MUSE_MARKETPLACE_PATH, *MANIFESTS, GEMINI_EXTENSION_PATH, GROK_MCP_PATH,
+                     CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH):
             with self.subTest(path=path.name):
                 self.assertFalse({"ref", "sha"} & set(keys(load_json(path))), f"{path.name} names a git ref")
-        for entry in load_json(MARKETPLACE_PATH)["plugins"]:
+        for entry in load_json(MARKETPLACE_PATH)["plugins"] + load_json(MUSE_MARKETPLACE_PATH)["plugins"]:
             self.assertIn(entry.get("source"), VALID_ROOT_SOURCES)
 
     def test_the_documented_commands_install_latest(self) -> None:
@@ -231,7 +252,6 @@ class PluginManifestPolicyTest(unittest.TestCase):
             "git clone --depth 1 --branch latest https://github.com/earthtojake/text-to-cad",
             "grok plugin install earthtojake/text-to-cad@latest",
             "gemini extensions install https://github.com/earthtojake/text-to-cad --ref latest",
-            "npx skills add earthtojake/text-to-cad#latest",
         )
         page = (REPO_ROOT / "docs" / "install.md").read_text(encoding="utf-8")
         for command in commands:
@@ -258,18 +278,17 @@ class PluginManifestPolicyTest(unittest.TestCase):
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         self.assertEqual(args[args.index("--from") + 1], f"cad-mcp=={version}")
 
-    def test_claude_code_gets_the_skills_alone_and_grok_build_keeps_claude_mcp_json(self) -> None:
-        # Every plugin ships the skills with CAD's server but Claude Code's: Claude gets no CAD server on any
-        # route (a server Claude Code starts gets no card it can use: its terminal draws none, the desktop app's
-        # Code tab refuses their calls), so its manifest on main, and on latest, names none. claude.mcp.json
-        # stays: Grok Build's manifest names it (claude.ai's directory's copy carries neither,
-        # scripts/release/plugin_branch.py). It is Codex's command without its startup
-        # timeout, which Claude's config has no field for. Never a root .mcp.json, which Claude Code would read,
-        # and would offer to anyone who opens this repository as a project.
+    def test_claude_code_gets_the_skills_alone_and_grok_build_names_its_own_config(self) -> None:
+        # Claude gets no CAD server on any route (a server Claude Code starts gets no card it can use: its terminal
+        # draws none, the desktop app's Code tab refuses their calls), so its manifest on main, and on latest, names
+        # none. Grok Build's manifest names grok.mcp.json: Codex's command without its startup timeout. Never a
+        # root .mcp.json, which Claude Code would read, and would offer to anyone who opens this repository as a
+        # project.
         self.assertNotIn("mcpServers", load_json(CLAUDE_PLUGIN_PATH))
-        self.assertEqual(load_json(GROK_PLUGIN_PATH).get("mcpServers"), "./claude.mcp.json")
+        self.assertEqual(load_json(GROK_PLUGIN_PATH).get("mcpServers"), "./grok.mcp.json")
+        self.assertFalse((REPO_ROOT / "claude.mcp.json").exists())
         self.assertFalse((REPO_ROOT / ".mcp.json").exists())
-        servers = load_json(CLAUDE_MCP_PATH)["mcpServers"]
+        servers = load_json(GROK_MCP_PATH)["mcpServers"]
         self.assertEqual(list(servers), ["cad"])
         self.assertEqual(servers["cad"]["command"], "uvx")
         args = servers["cad"]["args"]
@@ -292,7 +311,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
         # resolves it to that commit's raw file.
         manifest = load_json(CURSOR_PLUGIN_PATH)
         self.assertEqual(manifest.get("mcpServers"), "./cursor.mcp.json")
-        cursor, claude = load_json(CURSOR_MCP_PATH)["mcpServers"]["cad"], load_json(CLAUDE_MCP_PATH)["mcpServers"]["cad"]
+        cursor, claude = load_json(CURSOR_MCP_PATH)["mcpServers"]["cad"], load_json(GROK_MCP_PATH)["mcpServers"]["cad"]
         self.assertEqual({**cursor, "env": None}, {**claude, "env": None})
         logo = manifest.get("logo", "")
         self.assertFalse(logo.startswith(("/", "..")) or "://" in logo, logo)
@@ -314,7 +333,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertEqual(config, {"$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
                                   "mcpServers": config["mcpServers"]})
         self.assertEqual(list(config["mcpServers"]), list(load_json(CURSOR_MCP_PATH)["mcpServers"]))
-        server, claude = config["mcpServers"]["cad"], load_json(CLAUDE_MCP_PATH)["mcpServers"]["cad"]
+        server, claude = config["mcpServers"]["cad"], load_json(GROK_MCP_PATH)["mcpServers"]["cad"]
         self.assertEqual({**server, "env": None}, {**claude, "type": "stdio", "env": None})
         self.assertEqual(load_json(CURSOR_PLUGIN_PATH).get("mcpServers"), "./cursor.mcp.json")
 
@@ -324,7 +343,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
         # naming its own channel.
         manifest = load_json(GEMINI_EXTENSION_PATH)
         self.assertEqual(manifest.get("name"), PLUGIN_NAME)
-        gemini, claude = manifest["mcpServers"]["cad"], load_json(CLAUDE_MCP_PATH)["mcpServers"]["cad"]
+        gemini, claude = manifest["mcpServers"]["cad"], load_json(GROK_MCP_PATH)["mcpServers"]["cad"]
         self.assertEqual(list(manifest["mcpServers"]), ["cad"])
         self.assertEqual({**gemini, "env": None}, {**claude, "env": None})
         # Gemini loads the extension's GEMINI.md (or contextFileName) as the user's context; the
@@ -345,8 +364,9 @@ class PluginManifestPolicyTest(unittest.TestCase):
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         expected = mcp_command(version)[1:]
         self.assertEqual(expected, [*LAUNCHER[1:], f"cad-mcp=={version}", "cad-mcp"])
-        for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH):
-            with self.subTest(path=path.name):
+        for path in (GROK_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH, KIMI_PLUGIN_PATH,
+                     DEVIN_PLUGIN_PATH):
+            with self.subTest(path=str(path.relative_to(REPO_ROOT))):
                 server = load_json(path)["mcpServers"]["cad"]
                 self.assertEqual((server["command"], server["args"]), (LAUNCHER[0], expected))
 
@@ -356,8 +376,9 @@ class PluginManifestPolicyTest(unittest.TestCase):
         # and no launcher is given `--channel`. A store's copy is told its channel by the builder that makes it
         # (scripts/release/plugin_branch.py, plugin_zip.py). A marketplace added in Cursor takes main as it is
         # when Cursor fetches the repository, so the copies Cursor installs from one are on the default channel too.
-        for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH):
-            with self.subTest(path=path.name):
+        for path in (GROK_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH, KIMI_PLUGIN_PATH,
+                     DEVIN_PLUGIN_PATH):
+            with self.subTest(path=str(path.relative_to(REPO_ROOT))):
                 server = load_json(path)["mcpServers"]["cad"]
                 self.assertNotIn("env", server)
                 self.assertNotIn("--channel", server["args"])
@@ -384,14 +405,41 @@ class PluginManifestPolicyTest(unittest.TestCase):
                 f"missing skill manifest: skills/{path.name}/SKILL.md",
             )
 
-    def test_skills_sh_groups_every_skill_once(self) -> None:
-        # skills.sh lists skills it has seen installed, removed ones included, and puts any
-        # skill no group names under "Other skills" with them. A new skill left out of
-        # skills.sh.json would land beside the removed ones.
-        groups = load_json(REPO_ROOT / "skills.sh.json")["groupings"]
-        listed = [skill for group in groups for skill in group["skills"]]
+    def test_the_other_apps_manifests(self) -> None:
+        # Each app's own manifest, in its own documented fields; the server only where the format has a field for
+        # it and the app's docs say it starts a local command from a plugin (Kimi Code, Devin), in the app's own
+        # shape: an inline map. Antigravity's manifest has no server field (its config file is another name) and
+        # Muse's format is not documented, so both carry the skills alone. Hermes and Pi read the Agent Plugins
+        # standard's manifest and the skills/ folder: no file of their own.
+        claude = load_json(CLAUDE_PLUGIN_PATH)
+        antigravity = load_json(ANTIGRAVITY_PLUGIN_PATH)
+        # Antigravity's schema is closed (additionalProperties: false): only its documented fields.
+        self.assertLessEqual(set(antigravity), {"$schema", "name", "displayName", "description", "version", "logo",
+                                                "author", "suggestedPrompts", "skills", "disabled", "homepage",
+                                                "repository", "license", "keywords", "extensions"})
+        self.assertRegex(antigravity["name"], r"^[a-z0-9]+(-[a-z0-9]+)*$")
+        self.assertEqual(antigravity["suggestedPrompts"], load_json(CODEX_PLUGIN_PATH)["interface"]["defaultPrompt"])
+        for manifest in (antigravity, load_json(DEVIN_PLUGIN_PATH)):
+            self.assertEqual(manifest["logo"], ".claude-plugin/icon.png")
+            self.assertNotIn("skills", manifest)  # skills/ is each one's default
+        kimi = load_json(KIMI_PLUGIN_PATH)
+        self.assertEqual(kimi["skills"], "./skills/")  # without it Kimi takes a root SKILL.md as the one skill
+        self.assertEqual(list(kimi["mcpServers"]), ["cad"])
+        self.assertEqual(list(load_json(DEVIN_PLUGIN_PATH)["mcpServers"]), ["cad"])
+        for path in (ANTIGRAVITY_PLUGIN_PATH, MUSE_PLUGIN_PATH):
+            self.assertFalse(load_json(path).get("mcpServers"), path)
+        for path in (ANTIGRAVITY_PLUGIN_PATH, KIMI_PLUGIN_PATH, DEVIN_PLUGIN_PATH):
+            with self.subTest(path=str(path.relative_to(REPO_ROOT))):
+                manifest = load_json(path)
+                for key in ("homepage", "license", "keywords"):
+                    self.assertEqual(manifest[key], claude[key], key)
+        # Muse lists each skill by id and path.
+        muse = load_json(MUSE_PLUGIN_PATH)
         shipped = sorted(path.parent.name for path in SKILLS_ROOT.glob("*/SKILL.md"))
-        self.assertEqual(sorted(listed), shipped)
+        self.assertEqual(muse["capabilities"]["skills"],
+                         [{"id": name, "path": f"skills/{name}/SKILL.md"} for name in shipped])
+        self.assertEqual(muse["compat"], {"source": "native", "manifestDir": ".muse-plugin"})
+        self.assertFalse((REPO_ROOT / "skills.sh.json").exists())
 
     def test_the_features_link_every_skill_and_only_pages_that_exist(self) -> None:
         # The site's Features are their own copy, not read from skills/, and its build does not check
