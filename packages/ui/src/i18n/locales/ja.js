@@ -312,6 +312,19 @@ export default {
   "home.ageHours": "{n} 時間前",
   "home.ageDays": "{n} 日前",
 
+  // The update nudge (`@cad/ui/update`).
+  "update.aria": "アップデートがあります: v{version}",
+  "update.available": "アップデートがあります",
+  "update.versions": "v{version} → v{latest}",
+  "update.close": "閉じる",
+  "update.description": "text-to-cad プラグインの新しいバージョンがあります。エージェントにメッセージを送り、アップデートを依頼してください:",
+  "update.copy": "コピー",
+  "update.copied": "コピーしました",
+  "update.copyPrompt": "プロンプトをコピー",
+  "update.sendToAgent": "エージェントに送信",
+  "update.sendFailed": "チャットに送信できませんでした。代わりにプロンプトをコピーしてください。",
+  "update.copiedHint": "コピーしました。エージェントのチャットに貼り付けてください。",
+  "update.copyFailed": "コピーできませんでした。上のプロンプトを選択してコピーしてください。",
   // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
   "whatsNew.gotIt": "OK",
   "whatsNew.title": "新機能（v{version}）",

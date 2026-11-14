@@ -28,6 +28,12 @@ export interface Launch {
   /** Whether this computer has a file chooser for the home's Open. */
   pick?: boolean;
   /**
+   * A newer release than the server's, as its version check last saw it (`cad_server/updates.py`): the update
+   * nudge draws with the page. Absent where none is known, the check is off, or a store's launcher opened the
+   * session (the store updates that copy).
+   */
+  notice?: { version: string; latest: string };
+  /**
    * The ways to the engine that need no call, where it gives a page (`cad_server/mcp/server.py`'s
    * `_reach`): `browser`, the CAD Viewer's page of what the launch shows, with its link
    * (`?token=`), and `engine`, that page's origin. A card whose host carries no `tools/call` links

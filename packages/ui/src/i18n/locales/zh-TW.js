@@ -313,6 +313,19 @@ export default {
   "home.ageHours": "{n} 小時前",
   "home.ageDays": "{n} 天前",
 
+  // The update nudge (`@cad/ui/update`).
+  "update.aria": "有可用的更新：v{version}",
+  "update.available": "有可用的更新",
+  "update.versions": "v{version} → v{latest}",
+  "update.close": "關閉",
+  "update.description": "text-to-cad 外掛程式有新版本了。傳訊息給你的 AI 代理，請它更新：",
+  "update.copy": "複製",
+  "update.copied": "已複製",
+  "update.copyPrompt": "複製提示詞",
+  "update.sendToAgent": "傳送給 AI 代理",
+  "update.sendFailed": "無法傳送到對話。請改為複製提示詞。",
+  "update.copiedHint": "已複製。請貼到你的 AI 代理對話中。",
+  "update.copyFailed": "無法複製。請選取上方的提示詞後自行複製。",
   // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
   "whatsNew.gotIt": "知道了",
   "whatsNew.title": "新功能（v{version}）",

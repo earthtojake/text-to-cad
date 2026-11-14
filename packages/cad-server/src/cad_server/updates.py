@@ -176,6 +176,15 @@ def notice(*, path: Path | None = None) -> dict[str, str] | None:
         return None
 
 
+def offered(*, path: Path | None = None) -> dict[str, str] | None:
+    """The notice a page is handed for its update nudge (``GET /api/v1/server``'s and a CAD app launch's ``notice``):
+    ``notice`` where the check is not turned off (``CAD_UPDATE_CHECK=0``), the same decision a command's line makes
+    (``cad_server.cli._notice``). Never read from the network here, never waited on."""
+    if str(os.environ.get("CAD_UPDATE_CHECK") or "").strip().lower() in _OFF:
+        return None
+    return notice(path=path)
+
+
 def latest(*, path: Path | None = None) -> str | None:
     """The latest release the last check saw (the feed as last read, never read here), or None: none read yet, the
     check turned off, or a feed that named none."""

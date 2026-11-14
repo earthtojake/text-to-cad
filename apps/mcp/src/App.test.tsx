@@ -18,7 +18,7 @@ vi.mock('@cad/ui/cad-viewer', async original => {
   return {
     ...await original<object>(),
     // What the host hands the navbar, and its notice (the file handler's corner), drawn as the real viewer would.
-    CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return <>{props.fullSize ?? null}{props.notice ?? null}</>; },
+    CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return <>{props.fullSize ?? null}{props.update ?? null}{props.notice ?? null}</>; },
   };
 });
 
@@ -278,6 +278,40 @@ it('the file handler\'s corner is the viewport\'s top-right, the host\'s notice:
     launch={{ protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'file' }} />);
   expect(viewer.props!.chrome).toBe('bare');
   expect(container.querySelector('[data-card-corner] [aria-label="Full size"]')).not.toBeNull();
+});
+
+it('the update nudge is a launch\'s notice: last in the navbar, the file handler\'s corner under Full size; Send to agent posts exactly the prompt where the host takes messages, else Copy prompt copies it; a launch with none (a store\'s session) shows nothing', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  const prompt = 'A new version of the text-to-cad plugin is available (v0.11.12). Update it from https://github.com/earthtojake/text-to-cad';
+  const notice = { version: '0.11.11', latest: '0.11.12' };
+  const card: Launch = { protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'inline', view: 'cad-1-c', order: { createdAt: 1, seq: 1 }, notice };
+  // A host that takes messages: Send to agent, which posts the prompt as the person's message, and closes.
+  let { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] }, { message: { text: {} } });
+  render(<App bridge={bridge as any} server={server as any} presentation="inline" launch={card} />);
+  await act(async () => { screen.getByRole('button', { name: 'Update available: v0.11.12' }).click(); });
+  expect(screen.getByRole('dialog').querySelector('[data-update-prompt]')?.textContent).toBe(prompt);
+  await act(async () => { screen.getByRole('button', { name: 'Send to agent' }).click(); });
+  expect(bridge.request).toHaveBeenCalledWith('ui/message', { role: 'user', content: [{ type: 'text', text: prompt }] }, { timeoutMs: 30_000 });
+  expect(screen.queryByRole('dialog')).toBeNull();
+  cleanup();
+  // A host that takes none: Copy prompt, through the frame's clipboard; the file handler has it in its corner.
+  ({ bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] }));
+  const copied = vi.spyOn(frameClipboard, 'writeText').mockResolvedValue();
+  const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline" launch={{ ...card, surface: 'file' }} />);
+  expect([...container.querySelectorAll('[data-card-corner] button')].map(button => button.getAttribute('aria-label')))
+    .toEqual(['Full size', 'Update available: v0.11.12']);
+  await act(async () => { screen.getByRole('button', { name: 'Update available: v0.11.12' }).click(); });
+  expect(screen.queryByRole('button', { name: 'Send to agent' })).toBeNull();
+  await act(async () => { screen.getByRole('button', { name: 'Copy prompt' }).click(); });
+  expect(copied).toHaveBeenCalledWith(prompt);
+  expect(bridge.request).not.toHaveBeenCalledWith('ui/message', expect.anything(), expect.anything());
+  copied.mockRestore();
+  cleanup();
+  // A launch with no notice -- none known, the check off, or a store's launcher's session, which the server
+  // never tells -- has no nudge at all.
+  ({ bridge, server } = host({ displayMode: 'inline' }, { message: { text: {} } }));
+  render(<App bridge={bridge as any} server={server as any} presentation="inline" launch={{ ...card, notice: undefined }} />);
+  expect([viewer.props!.update, screen.queryByRole('button', { name: /Update available/ })]).toEqual([null, null]);
 });
 
 it("Open in › Browser is the file menu's where a launch carried the page: the server opens it from this computer, and only where it cannot is the launch's page opened through the host", async () => {

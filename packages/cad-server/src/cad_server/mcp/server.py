@@ -224,15 +224,21 @@ _APP_TOKEN_SCHEMA = {"type": "string", "description": "The view's capability, fr
 _BROWSER_OPEN_ROUTE = "/api/v1/local/browser/open"
 
 
-def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
+def _stamped(launch: dict[str, Any], told: bool = True) -> dict[str, Any]:
     """A launch with what the page needs to start on it alone: this server's version and platform,
-    and whether this computer has a file chooser for the home's Open."""
-    from cad_server import __version__
+    whether this computer has a file chooser for the home's Open, and, where a newer release is known
+    (``updates.offered``: the version check as last read, never waited on) and the session is ``told``, ``notice``
+    (``{version, latest}``), which the page's update nudge shows: none for a session a store's launcher opened
+    (``Server.store``), whose copy the store updates."""
+    from cad_server import __version__, updates
     from cad_server._internal.picker import available
 
     launch["version"] = __version__
     launch["platform"] = sys.platform if sys.platform in ("darwin", "win32") else "linux"
     launch["pick"] = available()
+    found = updates.offered() if told else None
+    if found is not None:
+        launch["notice"] = found
     return launch
 
 
@@ -359,6 +365,9 @@ class Server:
         # clock is this session's too: when a model was shown, and whether a later moment is past the grace.
         self._outcomes = outcomes or Outcomes()
         self._app: str | None = None  # the connecting app, by the name its MCP client gives
+        # Whether a store's launcher opened this session (its ``--channel``, the transport's ``pin``): its launches
+        # carry no update notice (``_stamped``), since the store updates that copy.
+        self.store = False
         self._shown_at: float | None = None  # when this session first showed a model no view has called back for
         self._judged = False  # whether this session's miss is counted (once a session)
         # The engine's own origin (``http://127.0.0.1:<port>``), which an inline host is asked to let
@@ -528,6 +537,8 @@ class Server:
         elif presentation != "text" and self._outcomes.failing(self._app):
             presentation, self.renders, why = "text", False, "its views never called back (tried again after a while)"
         self._peer_browser = transport.get("browser") if isinstance(transport.get("browser"), dict) else None
+        pin = transport.get("pin") if isinstance(transport.get("pin"), dict) else {}
+        self.store = isinstance(pin.get("channel"), str) and bool(pin["channel"])
         self._declared = why.startswith("declared")
         self.tabs, self.text = presentation == "tabs", presentation == "text"
         if presentation == "inline":
@@ -777,7 +788,7 @@ class Server:
         self._model = model
         if _reads_with_kernel(model):
             self.warm()  # the view's first document meshes on a pool already starting
-        return _stamped(launch)
+        return _stamped(launch, not self.store)
 
     def _home(self, *, surface: str | None = None) -> dict[str, Any]:
         """The launch that shows the home: the models opened before, which come with it so its cards
@@ -791,7 +802,7 @@ class Server:
         launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "home", "model": None, "recents": recents}
         if surface:
             launch["surface"] = surface
-        return _stamped(launch)
+        return _stamped(launch, not self.store)
 
     def _mounted(self, launch: dict[str, Any]) -> dict[str, Any]:
         """Stamp a launch that mounts a new inline view: its token, and its place among the views."""

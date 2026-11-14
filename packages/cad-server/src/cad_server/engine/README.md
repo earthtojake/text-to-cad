@@ -3446,7 +3446,7 @@ carries `x-cad-viewer`, the gate a cross-site form cannot pass (403 without it).
 
 | Route | What it answers |
 | --- | --- |
-| `GET /api/v1/server` | who this engine is (`app`, `release`, `identityToken`, `platform`, `user`, `home`, `start`, `pick`, `port`, `pid`), `instance` (a random token of this start of it: a page that sees another reloads), `kinds` (`reads`, and each kind's `exports`) |
+| `GET /api/v1/server` | who this engine is (`app`, `release`, `identityToken`, `platform`, `user`, `home`, `start`, `pick`, `port`, `pid`), `instance` (a random token of this start of it: a page that sees another reloads), `kinds` (`reads`, and each kind's `exports`), and `notice` (`{version, latest}`) only where the version check as last read knows a newer release (`updates.offered`): the page's update nudge |
 | `GET\|PUT /api/v1/settings` | `{"language": {"locale"}, "telemetry": {"share", "reason", "policy"}, "whats_new": {"seen", "release"}}` (`telemetry` null where the server keeps none, `saved` beside it after a change; `whats_new` the releases whose What's new the person has seen), the person's, one for every view; PUT takes the same shape, or a part of it (the read-only `reason`, `policy` and `release` ignored), and answers the whole |
 | `GET /api/v1/look`, `/api/v1/look/environment` | the regular modes' look, and its Radiance image |
 | `GET /api/v1/documents`, `/api/v1/documents/<kind>` | Recents (of one kind): `{"documents": [row]}`, each row its document's `id`, `kind`, `api` and its record's kind (`record`); `?kind=`, `?q=`, `?limit=`; `?path=` one file's envelope, known by its id from then on |

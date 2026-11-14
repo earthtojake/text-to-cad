@@ -111,6 +111,7 @@ class Sessions:
         analytics = self.engine.analytics.of(channel, client.get('name'))
         app.analytics = analytics
         app.consent_by = "app"
+        app.channel = channel  # a store's session: its ``/api/v1/server`` carries no update notice
         # The link to the engine's own page (``GET /api/v1/local/link``), for a card's Copy link:
         # the card's capability already reaches everything a link does.
         app.issue_link = self.engine.fresh_link

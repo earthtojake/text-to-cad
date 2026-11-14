@@ -283,13 +283,33 @@ class TabServerTest(_Session):
         read = self.server.handle("resources/read", {"uri": uri}, None)["contents"][0]
         self.assertEqual((read["mimeType"], read["text"]), ("text/html;profile=mcp-app", "<!doctype html><title>CAD</title>"))
 
-    def test_the_page_is_offered_no_update(self) -> None:
+    def test_a_newer_release_is_the_page_s_notice_while_the_check_is_on_and_never_a_store_session_s(self) -> None:
+        """The update nudge's data: ``/api/v1/server`` and each launch carry ``notice`` where the version check knows a
+        newer release and is not turned off; a session a store's launcher opened (``--channel``) is told none."""
         import cad_server
+        from cad_server import updates
 
-        read = self.http("GET", "/api/v1/server")[1]
-        self.assertEqual(read["release"], cad_server.__version__)
-        self.assertFalse({"notice", "update"} & set(read), "the page is offered no update")
-        self.assertNotIn("notice", self.launch("cad_home"))
+        newer = {"latest": "99.0.0", "version": cad_server.__version__}
+        with mock.patch.object(updates, "notice", return_value=None):
+            read = self.http("GET", "/api/v1/server")[1]
+            self.assertEqual(read["release"], cad_server.__version__)
+            self.assertFalse({"notice", "update"} & set(read), "none known: no notice, and never an update")
+            self.assertNotIn("notice", self.launch("cad_home"))
+        with mock.patch.object(updates, "notice", return_value=newer):
+            with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": ""}):
+                self.assertEqual(self.http("GET", "/api/v1/server")[1]["notice"], newer)
+                self.assertEqual(self.launch("cad_home")["notice"], newer)
+                self.assertEqual(self.launch("cad_open", {"source": self.bracket})["notice"], newer)
+                # A store's launcher's session: its launches say nothing of releases.
+                store = Server(page=self.server.page, recents=self.server.recents)
+                params = initialize_params({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": CODEX})
+                params["_meta"]["dev.texttocad/transport"]["pin"]["channel"] = "codex"
+                store.handle("initialize", params, None)
+                launch = store.handle("tools/call", {"name": "cad_home", "arguments": {}}, RequestContext(1, {"threadId": "s"}))
+                self.assertNotIn("notice", launch["structuredContent"]["launch"])
+            with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": "0"}):
+                self.assertNotIn("notice", self.http("GET", "/api/v1/server")[1])
+                self.assertNotIn("notice", self.launch("cad_home"))
 
     def test_an_agent_names_a_model_by_its_absolute_path_and_a_tab_reopens_on_it(self) -> None:
         opened = self.launch("cad_open", {"source": self.bracket})

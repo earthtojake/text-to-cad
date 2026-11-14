@@ -57,8 +57,33 @@ quoting the command, so no copy of the plugin carries a download piped to a shel
 and Hermes Agent's install scans flag.
 
 **What it costs.** A computer whose agent never acts on the notice stays on its release, and a person
-who uses cad alone learns that a version exists but not how to install it from cad. The notice is
-the only nudge.
+who uses cad alone learns that a version exists but not how to install it from cad. Besides the
+notice, the only nudge is the viewer's (below).
+
+## The viewer's update nudge
+
+**Decision.** The web viewer and the CAD app show a small blue button, last in the navbar, only
+while the server's version check knows a newer release. Pressed, it opens a popover saying a new
+version of the text-to-cad plugin is available, with a ready prompt for the person's agent: `A new
+version of the text-to-cad plugin is available (vY). Update it from
+https://github.com/earthtojake/text-to-cad`. The CAD app sends it to the chat where the host takes
+messages; otherwise, and in the web viewer, the person copies it. The nudge is the one place the
+software tells a person, rather than an agent, that a new version exists, and all it does is hand
+them that prompt: nothing in the page or the server installs, downloads or restarts anything. A CAD
+app session a store's launcher opened is never shown it.
+
+**Why.** A skill cannot make an agent install without the person's say-so: in blind tests, agents
+told to install "without asking" refused. The person has to agree, and the viewer is where they
+are looking and can opt in by pressing, so they are given an easy way to say it. This is a
+deliberate, small exception to "a viewer knows nothing about versions", and the one piece of the
+cad packages' text that names the text-to-cad plugin, because the plugin and cad are updated
+together.
+
+**What it costs.** The page reads one more field from its server and carries one more control and
+popover, in five languages. The web viewer cannot tell a store's copy of the plugin from ours (a
+store's `cad viewer` opens the same page), so a person on a store's copy is shown the nudge too,
+and an agent that follows it installs ours beside the store's. The prompt names the repository's
+address, which can never change.
 
 ## The install script is the one place that knows every app
 

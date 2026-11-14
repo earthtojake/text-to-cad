@@ -618,8 +618,15 @@ class CadApp:
     def api_server(self) -> dict:
         """``GET /api/v1/server``: who this engine is (``server_info``), the token of this start of it
         (``instance``: a page that sees another one reloads), the kinds of documents it reads and
-        what each exports, and the release this server runs (``release``)."""
-        return {**self.server_info(), **self._version(),
+        what each exports, the release this server runs (``release``), and, where a newer release is known
+        (``updates.offered``: the version check as last read, never waited on; none with ``CAD_UPDATE_CHECK=0`` or
+        for a development build), ``notice`` (``{version, latest}``): the page's update nudge, which hands the
+        person a prompt for their agent. A page cannot tell a store's copy from ours (a store's ``cad viewer``
+        opens the same page), so only a CAD app session a store's launcher opened (``channel``) is told none."""
+        from cad_server import updates
+
+        found = updates.offered() if self.channel is None else None
+        return {**self.server_info(), **self._version(), **({"notice": found} if found is not None else {}),
                 "kinds": {"reads": list(KINDS), "exports": {kind: list(formats) for kind, formats in EXPORTS.items()}}}
 
     def settings(self, share=None) -> dict:
