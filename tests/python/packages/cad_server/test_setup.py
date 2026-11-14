@@ -1010,6 +1010,31 @@ sys.exit(0)
                 self.assertIn("default  removed the default channel (on text-to-cad 0.12.0)\n", out)
                 self.assertEqual("channel  removed the codex channel (on text-to-cad 0.12.1)" in out, purge, out)
 
+    def test_an_uninstall_waits_for_a_stopped_server_s_processes_to_end_before_it_looks(self) -> None:
+        # A server lets its lock go, and removes it, a moment before its own process and its workers' have ended. The
+        # removal looks once, so the uninstall waits for them first (seen on Linux: it looked at once, found one still
+        # exiting and left the code), this command aside, which may run from the folder it removes.
+        from cad.engine import places
+        from cad_server._internal import pointers
+
+        name = "0.12.0"
+        code = places.code_dir(name)
+        code.mkdir(parents=True)
+        pointers.write(None, name, mirrored=False)
+        looks, spared = iter([[4242], [4242]]), []
+
+        def processes(_folder, besides=None):
+            spared.append(besides)
+            return next(looks, [])
+
+        with mock.patch.object(releases, "processes", side_effect=processes):
+            status, out, _err = self.run_uninstall()
+        self.assertEqual(status, 0, out)
+        self.assertFalse(code.exists(), out)
+        self.assertIn(f"version  removed text-to-cad {name}'s code; its data stays for a later install\n", out)
+        self.assertGreater(len(spared), 2, "it looked again until they had ended")
+        self.assertEqual(set(spared), {os.getpid()}, "this command never counts")
+
     def test_a_version_something_still_runs_from_is_said_with_what_runs_and_how_to_finish(self) -> None:
         # Never "stop it, then run this again": the cad command is gone by then, and a second uninstall would not find
         # the version (no channel is on it). What runs, that the code stays and the data is kept, and what finishes it.
@@ -1020,7 +1045,8 @@ sys.exit(0)
         code = places.code_dir(name)
         code.mkdir(parents=True)
         pointers.write(None, name, mirrored=False)
-        with mock.patch.object(releases, "processes", return_value=[4242]):
+        with mock.patch.object(releases, "processes", return_value=[4242]), \
+                mock.patch.object(versions, "QUIET_SECONDS", 0.0):  # it stays: nothing to wait for here
             status, out, _err = self.run_uninstall()
         self.assertEqual(status, 1, out)
         self.assertIn(f"version  the code of text-to-cad {name} stays, in {providers.shown(code, self.machine)}: "

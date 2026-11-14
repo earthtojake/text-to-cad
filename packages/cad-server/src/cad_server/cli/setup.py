@@ -1429,10 +1429,15 @@ class Installer:
         failed = False
         for name in names:
             # Its lock is awaited whether or not the stop is answered: a server this command already asked to stop
-            # (``_stop``) answers nothing more on its way out, and holds its lock until its workers are gone.
+            # (``_stop``) answers nothing more on its way out, and holds its lock until its workers are gone. Then the
+            # end of its processes: a server lets its lock go, and removes it, a moment before its own process and its
+            # workers' have ended, and the removal below looks once (seen on Linux: the look came first, and the code
+            # was left). This command does not count: typed in a terminal, it runs from the folder it removes.
             if versions.endpoint(name).lock.exists():  # a server there, or on its way out
                 versions.ask(name, {"op": "stop"})
-                versions.gone(name)
+                versions.gone(name, besides=os.getpid())
+            else:
+                versions.quiet(places.version_dir(name), besides=os.getpid())
             said: list[str] = []
             # Without --purge the version's data stays for a later install (``versions.remove_code``).
             done = (versions.remove_now if purge else versions.remove_code)(name, told=said.append)
