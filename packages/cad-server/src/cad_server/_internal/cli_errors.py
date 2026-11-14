@@ -51,7 +51,7 @@ REASONS: dict[str, int] = {
     "declined": 1,               # the person answered no to a destructive command's question: nothing was changed
     "engine_unavailable": 1,     # the engine server could not be reached or started
     "failed": 1,                 # the work failed: a build, a render, an export, a tool it ran
-    "internal_error": 1,         # a mistake in text-to-cad's own code
+    "internal_error": 1,         # a mistake in cad's own code
     # A version this shell cannot install (``cad setup``): no uv, no network for what uv's cache lacks, or a folder
     # the system (an agent's sandbox) will not let it write. The one line says to run it outside the sandbox.
     "cannot_install_here": 3,

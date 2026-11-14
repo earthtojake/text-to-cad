@@ -40,15 +40,25 @@ version do not reach another.
 ## Who updates what
 
 **Decision.** A plugin store (Codex's directory, claude.ai's) updates the copy it installed. The
-agent updates a manual install: the skills tell it to run the install command when `cad` says a
-newer release is out. cad only says that a release is available. Nothing installs itself.
+agent updates a manual install. cad says only that a version exists, in one line after a command's
+output: `A new version of cad is available: X -> Y`, with no command and no link. The skill holds
+the rest: at a session's start it checks `cad +X --version`, and when `cad` reports a new version
+it tells the agent to "install the new version of the plugin from
+https://github.com/earthtojake/text-to-cad", and then to tell the person. The agent installs it; a
+cautious agent asks the person first. Nothing installs itself.
 
 **Why.** cad cannot update a plugin without knowing the apps, which the first decision rules out.
 The store already updates its copy, and the agent is already running commands for the person, with
-the person watching.
+the person watching. cad prints no command because the only command that updates a manual install,
+the install script, installs the plugin into every agent app too: printing it would steer a person
+who uses cad alone into the plugin. What installs a newer version is for whatever installed this one
+to say, and for a manual install that is the skill. The skill links the repository rather than
+quoting the command, so no copy of the plugin carries a download piped to a shell, which stores'
+and Hermes Agent's install scans flag.
 
-**What it costs.** A computer whose agent never acts on the notice stays on its release. The
-notice is the only nudge.
+**What it costs.** A computer whose agent never acts on the notice stays on its release, and a person
+who uses cad alone learns that a version exists but not how to install it from cad. The notice is
+the only nudge.
 
 ## The install script is the one place that knows every app
 

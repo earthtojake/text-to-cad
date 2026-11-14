@@ -1,4 +1,4 @@
-"""Whether a newer text-to-cad is out: the version check.
+"""Whether a newer cad is out: the version check.
 
 At most once an hour, a server reads the version feed (``GET /v1/versions``, ``cad_server/_internal/api.py``)::
 
@@ -8,8 +8,9 @@ in the background (``refresh``), never waited on. It is one anonymous request: n
 person or their machine beyond what any web request carries. ``CAD_UPDATE_CHECK=0`` turns it off, and it never runs
 in CI (``CI`` set) or for a copy that is not told (``cad_server/_internal/channel.py``). The feed as last read is
 kept in the data folder (``versions.json``), where every process of the person's reads it: ``latest`` says the
-newest release the last check saw, and ``notice`` whether it is newer than this one. Nothing here updates anything:
-text-to-cad is updated by its install command (``INSTALL``, ``INSTALL_WINDOWS``; ``command`` picks this computer's).
+newest release the last check saw, and ``notice`` whether it is newer than this one. Nothing here updates anything,
+and the notice (``line``) names no command: it says only that a newer version exists. What installs it is for
+whoever installed this one to say.
 
 A release is also known with no network at all: an MCP client running a newer release's server says its release as
 it connects (``see``), and that proves the release exists.
@@ -35,8 +36,6 @@ from cad_server._internal.channel import told
 
 LOG = logging.getLogger("cad_server.updates")
 
-INSTALL = "curl -fsSL https://texttocad.dev/install.sh | sh"  # installs or updates text-to-cad: macOS and Linux
-INSTALL_WINDOWS = "irm https://www.texttocad.dev/install.ps1 | iex"  # the same, in Windows PowerShell
 FILE = "versions.json"  # the feed as last read, in the data folder
 CHECK_SECONDS = 60 * 60  # how old the feed may get before it is read again
 TIMEOUT_SECONDS = 5
@@ -57,7 +56,7 @@ def parse_release(value: Any) -> tuple[int, int, int] | None:
 
 def parse_feed(data: Any) -> dict[str, Any] | None:
     """The feed as the server reads it: a release as ``latest`` (``None`` when there is none). Anything
-    else in it is left out, so the feed can grow without a release of text-to-cad."""
+    else in it is left out, so the feed can grow without a release of cad."""
     if not isinstance(data, dict) or parse_release(data.get("latest")) is None:
         return None
     return {"latest": data["latest"]}
@@ -153,12 +152,6 @@ def _newest(candidates: list[Any], version: str) -> str | None:
     return max(newer)[1] if newer else None
 
 
-def command(system: str | None = None) -> str:
-    """The install command for this computer (or for ``system``, an ``os.name``), which installs or updates
-    text-to-cad."""
-    return INSTALL_WINDOWS if (system or os.name) == "nt" else INSTALL
-
-
 def notice(*, path: Path | None = None) -> dict[str, str] | None:
     """``{latest, version}``: a release newer than this one, from the feed as last read (never read here:
     ``refresh``) and the releases connecting servers run (``see``), where this process is told (``told``); or
@@ -196,11 +189,9 @@ def latest(*, path: Path | None = None) -> str | None:
         return None
 
 
-def line(found: dict[str, str], system: str | None = None) -> str:
-    """The notice as text: the two lines a newer release is said in, with the install command that updates to
-    it."""
-    return (f"A new release of text-to-cad is available: {found['version']} -> {found['latest']}\n"
-            f"To update, run: {command(system)}")
+def line(found: dict[str, str]) -> str:
+    """The notice as text: one line, that a newer version is out. It names no command."""
+    return f"A new version of cad is available: {found['version']} -> {found['latest']}"
 
 
 def _quietly() -> None:

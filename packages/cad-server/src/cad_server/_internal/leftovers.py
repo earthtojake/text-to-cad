@@ -1,4 +1,4 @@
-"""What earlier releases of text-to-cad left behind that nothing of this one uses, which ``cad doctor`` reports.
+"""What earlier releases of cad left behind that nothing of this one uses, which ``cad doctor`` reports.
 Nothing here removes anything: the layout of 0.11.10 and earlier goes by itself once it is safe
 (``cad_server._internal.legacy``), and the rest is the person's to delete.
 

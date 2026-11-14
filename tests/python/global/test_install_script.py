@@ -25,11 +25,13 @@ install = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = install
 spec.loader.exec_module(install)
 
+LATEST = "a" * 40  # the commit of `latest`, as the stand-in git names it
 OURS = "---\nname: {name}\ndescription: x\nmetadata:\n  repository: earthtojake/text-to-cad\n---\n"
 THEIRS = "---\nname: {name}\ndescription: someone else's\n---\n"
 
 # A stand-in: records {name, argv} as a JSON line, fails where FAKE_FAIL names it (`name`, or `name:word` for a call
-# whose arguments hold that word), and for `git clone` writes a small plugin folder with our skills.
+# whose arguments hold that word), for `git clone` writes a small plugin folder with our skills, and for
+# `git ls-remote` names the commit LATEST.
 STAND_IN = textwrap.dedent('''\
     #!{python}
     import json, os, sys
@@ -41,6 +43,8 @@ STAND_IN = textwrap.dedent('''\
            for fail in os.environ.get("FAKE_FAIL", "").split(",")):
         print(f"{{name}}: something went wrong")
         sys.exit(3)
+    if name == "git" and "ls-remote" in sys.argv:
+        print("{latest}\trefs/heads/latest")
     if name == "git" and "clone" in sys.argv:
         target = Path(sys.argv[-1])
         (target / ".git").mkdir(parents=True)
@@ -69,7 +73,7 @@ class InstallScriptTests(unittest.TestCase):
     def programs(self, *names: str) -> None:
         for name in names:
             path = self.bin / name
-            path.write_text(STAND_IN.format(python=sys.executable), encoding="utf-8")
+            path.write_text(STAND_IN.format(python=sys.executable, latest=LATEST), encoding="utf-8")
             path.chmod(0o755)
 
     def write(self, relative: str, value) -> Path:
@@ -157,6 +161,32 @@ class InstallScriptTests(unittest.TestCase):
         self.assertEqual(self.calls("gemini"), [["extensions", "update", "text-to-cad"]])
         for name in ("Claude Code", "Codex", "Gemini CLI"):
             self.assertIn(f"{name}: updated\n", done.stdout)
+
+    def test_hermes_installs_latest_by_its_commit_with_no_override_and_moves_it_only_when_it_changed(self) -> None:
+        # Hermes's --ref takes a commit alone, and its default branch is main: the commit of `latest`, no --force.
+        self.programs("hermes")
+        install_it = [["plugins", "install", "earthtojake/text-to-cad", "--no-enable", "--ref", LATEST],
+                      ["plugins", "enable", "text-to-cad", "--no-allow-tool-override"]]
+        done = self.run_install()
+        self.assertEqual(0, done.returncode, done.stderr)
+        self.assertIn(["ls-remote", install.URL, "refs/heads/latest"], self.calls("git"))
+        self.assertEqual(self.calls("hermes"), install_it)
+        self.assertIn("Hermes Agent: installed", done.stdout)
+        # Installed at that commit (Hermes's record): nothing to do. At another: removed, then that commit installed.
+        self.write(".hermes/plugins/text-to-cad/plugin.json", {"name": "text-to-cad"})
+        self.write(".hermes/plugins/.install-metadata.json", {"text-to-cad": {"revision": LATEST, "pinned": True}})
+        self.log.unlink()
+        self.assertIn("Hermes Agent: updated: already the latest release", self.run_install().stdout)
+        self.assertEqual(self.calls("hermes"), [])
+        self.write(".hermes/plugins/.install-metadata.json", {"text-to-cad": {"revision": "b" * 40, "pinned": True}})
+        self.log.unlink()
+        self.assertIn("Hermes Agent: updated\n", self.run_install().stdout)
+        self.assertEqual(self.calls("hermes"), [["plugins", "remove", "text-to-cad"], *install_it])
+        # No git, no commit: said, and nothing run.
+        (self.bin / "git").unlink()
+        self.log.unlink()
+        self.assertIn("Hermes Agent: skipped: needs git", self.run_install().stdout)
+        self.assertEqual(self.calls("hermes"), [])
 
     def test_without_claude_code_cursor_s_clone_and_grok_s_plugin_are_updated(self) -> None:
         self.programs("grok")

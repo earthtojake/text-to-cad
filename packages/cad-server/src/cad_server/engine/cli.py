@@ -561,7 +561,7 @@ def _inspect(args: argparse.Namespace, prog: str) -> int:
             print("closure     none: a STEP file carries none, only an .xbf does (a model's document, inspected by its "
                   "id, has one)")
         elif found["closure"] is None:
-            print("closure     none: no build of text-to-cad's wrote this document")
+            print("closure     none: no build of cad's wrote this document")
         else:
             print("closure")
             print(json.dumps(found["closure"], indent=2))
@@ -747,7 +747,7 @@ def _consent_to_rotate(args: argparse.Namespace, prog: str) -> None:
     command = retry(prog, ["--rotate-token", *(["--port", str(args.port)] if args.port is not None else [])])
     confirm("replacing the page token", "Replace the page token?", yes=bool(args.yes), as_json=False,
             command=command,
-            preview=[f"{prog} --rotate-token replaces the page token of every text-to-cad version on this device: every "
+            preview=[f"{prog} --rotate-token replaces the page token of every cad version on this device: every "
                      "CAD Viewer link and browser session made with the one it has now stops working at once, in every "
                      "server running, and each page needs a new link (cad viewer prints one). This cannot be undone."])
 

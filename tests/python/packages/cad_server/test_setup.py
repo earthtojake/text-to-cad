@@ -101,7 +101,7 @@ class Setup(Computer):
         with mock.patch.dict(os.environ, {places.INSTALLATION_ENV: DEV}):
             code, out, err = self.main(setup, [])
             self.assertEqual(code, 0, out + err)
-            self.assertEqual(out, f"text-to-cad {DEV} is installed now: {places.version_dir(DEV)}\n")
+            self.assertEqual(out, f"cad {DEV} is installed now: {places.version_dir(DEV)}\n")
             record = places.version_record(DEV)
             self.assertIsNotNone(record, "the version's complete marker")
             self.assertTrue(any("-e" in step for step in self.uv.steps), "a development version from its checkout")
@@ -111,7 +111,7 @@ class Setup(Computer):
             steps = len(self.uv.steps)
             code, out, err = self.main(setup, [])
             self.assertEqual((code, len(self.uv.steps)), (0, steps), "again: quick, and nothing made twice")
-            self.assertEqual(out, f"text-to-cad {DEV} is installed: {places.version_dir(DEV)}\n")
+            self.assertEqual(out, f"cad {DEV} is installed: {places.version_dir(DEV)}\n")
         self.no_app_touched()
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             setup.main(["--only", "claude"])
@@ -124,7 +124,7 @@ class Setup(Computer):
         with mock.patch.dict(os.environ, {places.INSTALLATION_ENV: DEV}):
             code, out, err = self.main(setup, [])
             self.assertEqual(code, 0, out + err)
-            self.assertIn(f"took its settings and store from text-to-cad {X}'s data", err)
+            self.assertIn(f"took its settings and store from cad {X}'s data", err)
             settings = places.data_dir(DEV) / "settings.json"
             self.assertEqual(json.loads(settings.read_text(encoding="utf-8")), {"language": {"locale": "fr"}})
             (places.data_dir(X) / "settings.json").write_text('{"language": {"locale": "de"}}', encoding="utf-8")
@@ -260,7 +260,7 @@ class Uninstall(Servers, Computer):
         self.assertTrue(beside.exists())
         self.no_app_touched()
         code, out, _err = self.main(uninstall, ["--yes"])
-        self.assertEqual((code, out), (0, "text-to-cad is not installed on this computer: nothing to remove.\n"))
+        self.assertEqual((code, out), (0, "cad is not installed on this computer: nothing to remove.\n"))
 
     def test_nobody_to_ask_and_no_yes_changes_nothing(self) -> None:
         self.version(X)

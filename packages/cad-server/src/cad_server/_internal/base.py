@@ -545,11 +545,10 @@ def find_uv() -> str:
         return find_uv_bin()
     except (ImportError, FileNotFoundError):
         pass
-    from cad_server._internal.launch import SERVER
-    from cad_server.updates import command
+    from cad_server._internal.launch import SERVER, launch_command
 
     raise Refused("the server makes its CAD kernel environment with uv, and finds none: it depends on the uv "
-                  f"package, which carries it; install {SERVER} again: run `{command()}`", "uv")
+                  f"package, which carries it; install {SERVER} again: run `{launch_command('cad setup')}`", "uv")
 
 
 @dataclass(frozen=True)
@@ -559,7 +558,7 @@ class Recipe:
     an installation names them (``Installation``): a release on the index (``source`` None) is asked for
     again with its index page fetched anew when uv's cached page predates it."""
 
-    what: str  # the environment, in words: "the CAD kernel environment", "text-to-cad 0.9.1"
+    what: str  # the environment, in words: "the CAD kernel environment", "cad 0.9.1"
     python: str  # the interpreter its virtual environment is made of
     requirement: tuple[str, ...]  # what ``uv pip install`` installs
     release: str
@@ -919,10 +918,9 @@ def _failure(step: list[str], said: str, recipe: Recipe, code: int | None = None
     if step[1] == "venv":
         again = ""
         if what == WHAT:  # the installation's own Python: a release installed again brings it back
-            from cad_server._internal.launch import SERVER as server
-            from cad_server.updates import command
+            from cad_server._internal.launch import SERVER as server, launch_command
 
-            again = f"; that Python must run here: install {server} again: run `{command()}`"
+            again = f"; that Python must run here: install {server} again: run `{launch_command('cad setup')}`"
         return f"uv cannot make {what} on {recipe.python}: {words}{again}", "python"
     release = recipe.release
     if recipe.source is None and any(f"no version of {name}=={release}" in explained

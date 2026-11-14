@@ -341,7 +341,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     **Tier 3: a person's data** -- documents, the state folder and its records, Recents, settings. A release reads what the previous shipped release wrote, writes the
     current form, and migrates on first touch, once: never the old form written, never a downgrade.
     Opening, viewing, importing and exporting a saved document never requires its source or a rebuild
-    because text-to-cad was upgraded: the engine reads `xbf/8` and `xbf/9` and converts `xbf/8` in
+    because cad was upgraded: the engine reads `xbf/8` and `xbf/9` and converts `xbf/8` in
     memory, without executing model code or changing source or cache bytes, under a migration record
     that leaves the original build closure and toolchain provenance unchanged; an explicit export to
     another XBF path saves the upgraded document atomically, and opening one does not rewrite it;
@@ -382,14 +382,14 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 17. **Loud failure or correct output, nothing between.** *The package.* The cardinal sin is plausible-wrong
     output at exit 0. No silent fallbacks, no globs, no guessing; a failed write or render leaves
     no file this run wrote; an earlier file stays byte for byte.
-18. **Nothing waits on the network.** *The package.* Once installed, text-to-cad works offline: every command,
+18. **Nothing waits on the network.** *The package.* Once installed, cad works offline: every command,
     build, snapshot, server and page. Its own requests are two: telemetry (the server's `analytics.py`, usage
     counts under a random id, sent by default once a `cad` command has said so -- never its help, nor an
     answer in JSON, which no person reads --, and never
     after the person's no) and the hourly version check (the server's `updates.py`). Both run in the
     background and fail silently: no start, command, build, request or tool call waits on them.
-    text-to-cad updates nothing by itself: the install command, run by a person or an agent, installs the
-    latest release, and waits on the network because it was asked to.
+    cad updates nothing by itself: a newer release is installed when a person or an agent asks for it,
+    and that install waits on the network because it was asked to.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
     `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
     it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot
@@ -911,13 +911,13 @@ holds of it, the same check of an unchanged document answered from the result th
 millimetres.
 The measurements are facts and always reported (`measurements`). The verdicts are general: each process has
 one table of rules: general practice from published design guides, each rule citing its guide as the
-evidence, and text-to-cad's own floors where no guide states a limit, each labelled as its own -- no rule
+evidence, and cad's own floors where no guide states a limit, each labelled as its own -- no rule
 is a shop's limit, and every result says so (`rules_general`). A shop's own limits are
 compared with the measurements; what a person knows of their own shop is a plain option (`--tools`,
 `--bend-radius`, `--k-factor`, `--sheet-size`, `--build-volume`, ...). A failing rule is one finding for
 each feature that fails it, coded by its id, at the feature's most specific ref (a corner's edge, not one of
 its two faces), with the verdict as data -- `rule`, `value`, `limit`, `unit`, `op` (`min` or `max`),
-`source` (the guide's publisher and title, or `text-to-cad` for a floor of its own) and `refs` (every ref the feature names, `location` first) --
+`source` (the guide's publisher and title, or `cad` for a floor of its own) and `refs` (every ref the feature names, `location` first) --
 and a hint saying what to change; an error is a limit the part breaks, a warning a recommendation. The
 command says a rule once -- its hint, its source and how many places -- then a short line a place, and its
 last line leads with the state and the counts, which are the findings': `FAILED part.step: 4 error(s), 2

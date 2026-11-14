@@ -39,10 +39,12 @@ class MissingRuntimeNamesTheBundler(unittest.TestCase):
         with mock.patch.object(assets, "_in_source_checkout", return_value=False):
             hint = assets.runtime_build_hint(Path("_runtime") / "mcp" / "index.html")
         self.assertNotIn(BUNDLER, hint)
-        from cad_server.updates import command
+        from cad_server._internal.launch import launch_command
 
+        # This version's own line, which installs cad alone, never the install script.
         self.assertIn("This installation of cad-server is incomplete: ", hint)
-        self.assertIn(f"Install cad-server again: run `{command()}`, or point the matching CAD_*_DIR", hint)
+        self.assertIn(f"Install cad-server again: run `{launch_command('cad setup')}`, or point the matching CAD_*_DIR",
+                      hint)
 
 
 class ExplicitRuntimeAssets(unittest.TestCase):

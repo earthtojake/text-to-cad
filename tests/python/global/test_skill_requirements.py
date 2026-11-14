@@ -28,9 +28,9 @@ SKILLS = sorted(p for p in (REPO_ROOT / "skills").iterdir() if p.is_dir())
 VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 # The owner's text, word for word (X is the release, stamped).
-SETUP = """Every command in this skill starts `cad +{X}`: it runs text-to-cad {X}, the version this skill was
-written for, and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your
-PATH; `cad.exe` on Windows).
+SETUP = """Every command in this skill starts `cad +{X}`: it runs cad {X}, the version this skill was written for,
+and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your PATH; `cad.exe`
+on Windows).
 
 If `cad` is missing, or says {X} is not installed, install it, outside the sandbox, then run the
 command again:
@@ -39,21 +39,18 @@ command again:
 uvx --no-config --managed-python --python 3.14 --from cad-server=={X} cad setup
 ```
 
-It installs text-to-cad {X} and the `cad` command and changes nothing else. If `uvx` is missing,
-install uv first.
+It installs cad {X} and the `cad` command and changes nothing else. If `uvx` is missing, install uv
+first.
 
 <!-- manual-copy-update: start -->
-Keep this install up to date: nothing updates it but you. At the start of a session, run
-`cad +{X} --version`. If it, or any `cad` command, says a new release of text-to-cad is available,
-run the update command it gives, outside the sandbox:
+Keep this install up to date: nothing updates it but you.
 
-```bash
-curl -fsSL https://texttocad.dev/install.sh | sh
-```
+1. At the start of a session, run `cad +{X} --version`.
+2. If it, or any `cad` command later, says a new version of cad is available, install the new version of
+   the plugin from https://github.com/earthtojake/text-to-cad.
 
-On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. This is the update
-command, not the `uvx` line above. Then tell the person text-to-cad was updated and that a new chat
-will use the new version, and carry on with this chat: its commands keep working.
+Then tell the person it was updated and that a new chat will use the new version, and carry on with
+this chat: its commands keep working.
 <!-- manual-copy-update: end -->
 
 A project written for an earlier text-to-cad may need changes. The migration guides say what, one per

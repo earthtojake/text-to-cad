@@ -210,13 +210,13 @@ def version_record(version: str) -> dict[str, Any] | None:
 
 
 def setup_command(version: str) -> list[str]:
-    """The line that installs ``version`` of text-to-cad: that release's own ``cad setup``, through uvx."""
+    """The line that installs ``version`` of cad: that release's own ``cad setup``, through uvx."""
     return [*LAUNCHER, f"{SERVER}=={version}", "cad", "setup"]
 
 
 def installing_line(version: str) -> str:
     """What a transport answers while its version is being installed (``prepare``)."""
-    return f"text-to-cad {version} is being installed on this computer: try again shortly"
+    return f"cad {version} is being installed on this computer: try again shortly"
 
 
 def unavailable(wait: float = 0.0) -> tuple[str, str] | None:
@@ -238,13 +238,13 @@ def prepare(pin: Pin | None = None) -> Pin:
         if pin.version is None or version_record(pin.version) is not None:
             return pin
         if not re.fullmatch(RELEASED, pin.version):
-            pin.failed = (f"text-to-cad {pin.version} is not installed, and it is no release: a development "
+            pin.failed = (f"cad {pin.version} is not installed, and it is no release: a development "
                           "version is installed from its own checkout alone")
             return pin
         command = setup_command(pin.version)
         said = _run(command, os.environ.copy())
         if version_record(pin.version) is None:
-            pin.failed = (f"text-to-cad {pin.version} is not installed, and it could not be installed here "
+            pin.failed = (f"cad {pin.version} is not installed, and it could not be installed here "
                           f"({said or 'uvx failed'}): run {' '.join(command)} outside any sandbox")
         return pin
     finally:
@@ -611,7 +611,7 @@ def _start() -> subprocess.Popen:
     if PIN.version is not None:
         record = version_record(PIN.version)
         if record is None:
-            raise ConnectionError(PIN.failed or f"text-to-cad {PIN.version} is not installed on this computer: run "
+            raise ConnectionError(PIN.failed or f"cad {PIN.version} is not installed on this computer: run "
                                                  f"{' '.join(setup_command(PIN.version))}")
         env = {name: value for name, value in os.environ.items() if name not in ("PYTHONPATH", "PYTHONHOME")}
         env[INSTALLATION_ENV] = PIN.version

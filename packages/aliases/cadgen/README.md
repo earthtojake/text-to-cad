@@ -1,6 +1,6 @@
 # cadgen
 
-**Deprecated: install and import `cad`.** `cadgen` is the deprecated alias of the text-to-cad
+**Deprecated: install and import `cad`.** `cadgen` is the deprecated alias of the `cad`
 library, still published at every release for backwards compatibility. This distribution holds
 nothing of its own: it installs `cad`, the library, at the same release. A model that imports
 `cadgen` still runs (`from cadgen import model` is `from cad import model`), and says so once per

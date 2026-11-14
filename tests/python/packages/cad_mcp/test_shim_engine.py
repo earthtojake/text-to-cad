@@ -350,7 +350,7 @@ class PinTest(unittest.TestCase):
         pin = self.pinned()
         engine.prepare(pin)
         line = pin.failed
-        self.assertEqual(line, f"text-to-cad {self.X} is not installed, and it could not be installed here (error: "
+        self.assertEqual(line, f"cad {self.X} is not installed, and it could not be installed here (error: "
                                f"Failed to fetch: dns error): run uvx --no-config --managed-python --python 3.14 --from "
                                f"cad-server=={self.X} cad setup outside any sandbox")
         with mock.patch.object(engine, "_connect", side_effect=AssertionError("never connects")), \
@@ -380,7 +380,7 @@ class PinTest(unittest.TestCase):
         proxy = self.proxy()
         proxy.tell = lambda method, params: (told.append(method), len(told) == 2 and announced.set())
         line = engine.installing_line(self.X)
-        self.assertEqual(line, f"text-to-cad {self.X} is being installed on this computer: try again shortly")
+        self.assertEqual(line, f"cad {self.X} is being installed on this computer: try again shortly")
         with mock.patch.object(shim, "INITIALIZE_SECONDS", 0.01), mock.patch.object(engine, "READY_SECONDS", 0.01):
             greeting = proxy.handle("initialize", {"protocolVersion": "2025-06-18"}, RequestContext(0, {}))
             self.assertEqual(greeting["capabilities"], {"tools": {"listChanged": True}, "resources": {"listChanged": True}})

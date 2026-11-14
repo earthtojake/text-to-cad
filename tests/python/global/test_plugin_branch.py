@@ -88,24 +88,24 @@ class PluginTreeTests(unittest.TestCase):
         self.assertEqual(blocks, len({path for path in skills if path.endswith("/SKILL.md")}),
                          "every skill's setup block carries the update paragraph on main")
         cad = directory["skills/cad/SKILL.md"][1].decode("utf-8")
-        self.assertIn(f"```bash\n{command}\n```\n\nIt installs text-to-cad {version} and the `cad` command and changes "
-                      "nothing else. If `uvx` is missing,\ninstall uv first.\n\nA project written for an earlier", cad)
-        # The README: latest's (its links pointed at the release commit) but for its install section, the uvx command
-        # and one paragraph in place of the two one-liners and the paragraph after them.
+        self.assertIn(f"```bash\n{command}\n```\n\nIt installs cad {version} and the `cad` command and changes "
+                      "nothing else. If `uvx` is missing, install uv\nfirst.\n\nA project written for an earlier", cad)
+        # The README, in both copies: main's (its links pointed at the release commit) but for its install section, the
+        # uvx command and one paragraph in place of the two one-liners and the paragraph after them, which main keeps.
         readme, ours = directory["README.md"][1].decode("utf-8"), install["README.md"][1].decode("utf-8")
-        section = branch.README_INSTALL.search(ours)[0]
-        self.assertEqual(readme, ours.replace(section, branch.README_UVX.format(command=command, version=version)))
-        self.assertIn(f"```bash\n{command}\n```", readme)
-        # Nothing in the copy downloads a script and runs it, and the README links what the manifest left out.
+        main_readme = blobs[on_main["README.md"][1]].decode("utf-8")
+        self.assertEqual(len(branch.README_INSTALL.findall(main_readme)), 1)
+        for text in (readme, ours):
+            self.assertIsNone(branch.README_INSTALL.search(text))
+            self.assertIn(branch.README_UVX.format(command=command, version=version), text)
+        # Nothing in either copy downloads a script and runs it, and the README links what the manifest left out.
         self.assertEqual(branch.pipes_to_shell(directory), [])
+        self.assertEqual(branch.pipes_to_shell(install), [])
         for key in branch.UNLISTED:
             self.assertNotIn(f'"{key}"'.encode(), directory[".claude-plugin/plugin.json"][1])
             self.assertIn(f"]({json.loads(manifest_text)[key]})", readme, key)
-        # latest is our own text: its skills keep the update paragraph (the update command for each system), its
-        # README the one-liners.
+        # latest is our own text: its skills keep the update paragraph, which links the repository and runs nothing.
         self.assertIn(start, install["skills/cad/SKILL.md"][1].decode("utf-8"))
-        self.assertIn(f"{branch.INSTALL_SCRIPT}\n", install["skills/cad/SKILL.md"][1].decode("utf-8"))
-        self.assertEqual(len(branch.pipes_to_shell(install)), 2 * blocks + 2)
         # Codex's directory: exactly the files of the ZIP plugin_zip.py writes, from the one build, stamped `@codex`
         # and without the update paragraph, each with its ZIP entry's mode.
         codex, errors, _codex_manifest = branch.build(REPO_ROOT, "codex")
@@ -283,9 +283,10 @@ class PluginTreeTests(unittest.TestCase):
             self.assertEqual(json.loads(git(root, "show", f"{first}:.claude-plugin/plugin.json")),
                              {"name": "demo", "version": "1.0.0", "repository": "https://github.com/o/demo"})
             self.assertEqual(branch.commit(root, tree, first, "demo 1.0.0"), first)
-            # latest keeps the install script and the listing links.
+            # latest installs by the uvx command too (no download piped to a shell in any copy), and keeps the listing
+            # links.
             self.assertEqual(branch.build(root, "latest")[0]["README.md"][1].decode("utf-8").split("\n\n[s]")[0],
-                             readme.split("\n\n[s]")[0])
+                             git(root, "show", f"{first}:README.md").split("\n\n[s]")[0])
             self.assertEqual(json.loads(branch.build(root, "latest")[0][".claude-plugin/plugin.json"][1]), manifest)
 
             (root / "skills/s/SKILL.md").write_text("two\n", encoding="utf-8")
@@ -319,7 +320,8 @@ class PluginTreeTests(unittest.TestCase):
             start, end = branch.channel_stamp.UPDATE_START, branch.channel_stamp.UPDATE_END
             block = ("Every command in this skill starts `cad +1.0.0`. Install:\n\n```bash\n"
                      + branch.UVX_INSTALL.format(version="1.0.0") + "\n```\n\nIf `uvx` is missing, install uv first.\n\n"
-                     + start + "\nKeep it up to date:\n\n```bash\n" + branch.INSTALL_SCRIPT + "\n```\n" + end + "\n\n"
+                     + start + "\nKeep it up to date: install the new version with the install command at\n"
+                     "https://github.com/o/demo.\n" + end + "\n\n"
                      + "Migrations.\n")
             (root / "skills/s/SKILL.md").write_text(block, encoding="utf-8")
             git(root, "commit", "-q", "-am", "a setup block")
@@ -345,8 +347,11 @@ class PluginTreeTests(unittest.TestCase):
                     git(root, "commit", "-q", "-m", f"break {path}")
                     errors = branch.build(root, "directory")[1]
                     self.assertEqual({error.split(":")[0] for error in errors}, {path}, errors)
-                    # latest is built as ever (this repository lacks the other hosts' files, which it says).
-                    self.assertEqual([error for error in branch.build(root, "latest")[1] if "is not tracked" not in error], [])
+                    # latest is built as ever (this repository lacks the other hosts' files, which it says), but for
+                    # what it shares with the directory's copy: the README's install section and no piped download.
+                    shared = {"README.md", "skills/p/notes.md"} & {path}
+                    self.assertEqual({error.split(":")[0] for error in branch.build(root, "latest")[1]
+                                      if "is not tracked" not in error}, shared)
                     if before is None:
                         git(root, "rm", "-q", path)
                     else:

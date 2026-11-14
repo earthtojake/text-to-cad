@@ -278,7 +278,7 @@ class Proxy:
             if why is not None:
                 # Its version is still being installed: the host is greeted here, inside its start window, and the
                 # server's session opened at its first request once the version is ready (``_post``).
-                LOG.info("text-to-cad %s is being installed: the engine session opens once it is ready",
+                LOG.info("cad %s is being installed: the engine session opens once it is ready",
                          engine.PIN.version)
                 with self.lock:
                     self.initialize = params
@@ -438,7 +438,7 @@ def serve(argv=None, channel=None, startup=None):
 
 
 USAGE = ("usage: cad-mcp [--channel NAME] [--startup-timeout SECONDS]\n\nServe CAD over MCP on standard input and "
-         "output, as this package's version of text-to-cad: installed first where it is missing, then its server started "
+         "output, as this package's version of cad: installed first where it is missing, then its server started "
          "and every request passed on to it. --channel NAME labels where this copy came from, for the server's usage "
          "counts alone. --startup-timeout is how long the app that starts this process waits for it to start, in "
          "seconds, a day at most: the app's first request waits up to 80% of it (never less than 20 seconds; 20 "

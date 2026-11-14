@@ -1,4 +1,4 @@
-"""``cad telemetry`` -- show or change the usage stats and crash reports text-to-cad sends: from CAD's apps
+"""``cad telemetry`` -- show or change the usage stats and crash reports cad sends: from CAD's apps
 (``cad-mcp`` and ``cad viewer``) and its build daemon.
 
 They are sent by default once a ``cad`` command has said so (``cad_server/analytics.py``). ``status`` (the
@@ -22,7 +22,7 @@ DEFAULT_PROG = "cad telemetry"
 _REASONS = {
     "environment": "set by DO_NOT_TRACK or CAD_TELEMETRY in this environment",
     "choice": "your choice",
-    "default": "by default, since text-to-cad said so{when}",
+    "default": "by default, since cad said so{when}",
     "untold": "not until a cad command says so, which none does in CI or from a development install",
     "unavailable": "the telemetry setting could not be read",
 }
@@ -44,11 +44,11 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     parser = command_parser(
         prog=prog,
         description=(
-            "Show or change the usage stats and crash reports text-to-cad sends from CAD's apps (the CAD app in an agent "
+            "Show or change the usage stats and crash reports cad sends from CAD's apps (the CAD app in an agent "
             "app, and the CAD Viewer) and its build daemon. By default, once a cad command has said so: a random "
             "install id, versions, the OS and agent app, counts of CAD tool calls, view activity, which of the "
             "viewer's tools and settings are used (never a value or a name), files shown by format, builds and "
-            "snapshots, how they ended and how long they took, and where text-to-cad's own code failed (never a "
+            "snapshots, how they ended and how long they took, and where cad's own code failed (never a "
             "message). `off` sends nothing. Never file names, paths, contents or prompts."
         ),
     )
@@ -74,14 +74,14 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
         if args.action == "off":
             print("Telemetry is off; the install id was deleted"
                   + (" and the data sent under it was deleted." if chosen.get("forgotten")
-                     else ". The data sent under it will be deleted the next time text-to-cad can reach its server."))
+                     else ". The data sent under it will be deleted the next time cad can reach its server."))
     else:
         notify()  # where a person looks for it: said here when no command has said it yet
     found = status()
     if args.action != "off":
         print(f"Telemetry is {describe(found)}.")
         if found["reason"] == "default":
-            print("It counts CAD's tool calls, views, files shown, builds and snapshots, and reports where text-to-cad's "
+            print("It counts CAD's tool calls, views, files shown, builds and snapshots, and reports where cad's "
                   f"own code failed -- never what they hold: `{off_command()}` turns it off.")
         if found["id"]:
             print(f"Install id: {found['id']}")

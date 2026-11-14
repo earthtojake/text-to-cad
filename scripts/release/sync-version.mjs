@@ -74,8 +74,9 @@ export const bootstrapTargets = [
 // - the pin, `cad +X.Y.Z` (a suffix allowed, ending in a letter or digit) followed by a space, a
 //   backtick, a quote or the line's end. `cad` stands alone (not `scad +1.2.3`, not `my-cad`), and
 //   the version is three dotted numbers, so arithmetic such as `cad +0.5 ` is never touched;
-// - the setup block, from "Every command in this skill starts `cad +" to "install uv first.", where
-//   the release is named in prose ("runs text-to-cad X.Y.Z") and in its install line
+// - the setup block, from "Every command in this skill starts `cad +" to "install uv first." (a line
+//   break may fall between "uv" and "first"), where the release is named in prose ("runs cad X.Y.Z",
+//   "says X.Y.Z is not installed", "installs cad X.Y.Z") and in its install line
 //   (`--from cad-server==X.Y.Z`): every X.Y.Z in it.
 // A SKILL.md's header names no version: the commands carry it.
 // Every skill that runs `cad` carries that block (tests/python/global/test_skill_requirements.py), and
@@ -84,7 +85,7 @@ export const skillsDir = "skills";
 const releaseName = String.raw`\d+\.\d+\.\d+(?:[0-9A-Za-z.+_-]*[0-9A-Za-z])?`;
 export const skillPinPatterns = {
   pin: new RegExp(String.raw`(?<![\w.-])(cad \+)(${releaseName})(?=[\s\x60'"]|$)`, "gm"),
-  setupBlock: /Every command in this skill starts `cad \+[\s\S]*?install uv first\./g,
+  setupBlock: /Every command in this skill starts `cad \+[\s\S]*?install uv\s+first\./g,
 };
 
 function skillDocuments(dir = skillsDir) {

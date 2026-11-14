@@ -1,4 +1,4 @@
-"""text-to-cad's telemetry, CAD's usage stats: who decides whether they are sent -- by default once a ``cad`` command has
+"""cad's telemetry, CAD's usage stats: who decides whether they are sent -- by default once a ``cad`` command has
 said so, never after a no -- and that they carry counts, times and metadata -- how many people, how often,
 on how many files -- and nothing else. The build daemon's counts are ``test_daemon_telemetry.py``'s."""
 
@@ -1139,7 +1139,7 @@ class NoticeTest(_Tmp):
                 mock.patch("sys.stdout", out), mock.patch("sys.stderr", err):
             self.assertEqual(telemetry_cli.main([]), 0)
         self.assertEqual(err.getvalue(), notice_text() + "\n")
-        self.assertRegex(out.getvalue(), r"^Telemetry is on: by default, since text-to-cad said so on \d{4}-\d{2}-\d{2}\.\n")
+        self.assertRegex(out.getvalue(), r"^Telemetry is on: by default, since cad said so on \d{4}-\d{2}-\d{2}\.\n")
 
 
 class NeverInTheWayTest(_Tmp):

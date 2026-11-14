@@ -108,15 +108,15 @@ To update: `grok plugin update text-to-cad`.
 ### Hermes Agent
 
 ```bash
-hermes plugins install earthtojake/text-to-cad --no-enable --force \
+hermes plugins install earthtojake/text-to-cad --no-enable \
   --ref "$(git ls-remote https://github.com/earthtojake/text-to-cad latest | cut -f1)"
 hermes plugins enable text-to-cad --no-allow-tool-override
 ```
 
-Hermes takes a branch only as its commit, which `git ls-remote` looks up. Its install scan stops at
-the `curl ... | sh` line in the plugin's text (the install command) until `--force` is given.
+Hermes takes a branch only as its commit, which `git ls-remote` looks up.
 
-To update, run the same commands again.
+To update, remove it (`hermes plugins remove text-to-cad`) and run the same commands again:
+`hermes plugins update` follows the repository's default branch.
 
 ### Antigravity
 
@@ -230,8 +230,10 @@ it finds. To update one app, run the update command under its name. A copy from 
 is updated by that directory.
 
 text-to-cad does not update itself. When a newer release is out, `cad` says so after a command's
-output, with the command to run. A chat that is already open keeps its release; a new chat uses the
-new one.
+output, in one line: `A new version of cad is available: X -> Y`. It names no command; the plugin's
+skills tell your agent to install the new version of the plugin from this repository, with the
+install command above. A chat that is
+already open keeps its release; a new chat uses the new one.
 
 ## Removing
 

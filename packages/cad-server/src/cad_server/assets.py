@@ -55,12 +55,11 @@ def runtime_build_hint(path: Path | str, *, overridable: bool = True) -> str:
             "and never committed: run scripts/bundle/bundle.sh to produce it. "
             f"Expected it at {path}."
         )
-    from cad_server._internal.launch import SERVER
-    from cad_server.updates import command
+    from cad_server._internal.launch import SERVER, launch_command
 
     return (
         f"This installation of {SERVER} is incomplete: {path} should ship inside the "
-        f"distribution. Install {SERVER} again: run `{command()}`"
+        f"distribution. Install {SERVER} again: run `{launch_command('cad setup')}`"
         + (", or point the matching CAD_*_DIR environment variable at a directory "
            "that holds it." if overridable else ".")
     )

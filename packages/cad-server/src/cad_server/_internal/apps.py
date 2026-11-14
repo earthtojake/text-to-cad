@@ -71,7 +71,7 @@ APPS = {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed", "pycha
 # The apps that take each kind of file, in the menu's order. A kind not here takes none: the file
 # manager and the default app alone.
 # SolidWorks takes a STEP, which it imports as a part or an assembly a person saves as its own (FeatureWorks
-# recovers the features): text-to-cad writes no SLDPRT, a closed format.
+# recovers the features): cad writes no SLDPRT, a closed format.
 # Blender takes what its import script does (``BLENDER_SCRIPT``): a GLB and an STL, never a 3MF, which no
 # Blender reads without an add-on.
 _MESHES = ("bambu", "orca", "prusa", "freecad")

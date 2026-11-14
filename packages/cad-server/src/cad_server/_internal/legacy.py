@@ -111,12 +111,12 @@ def unsafe(version: str, *, read_only: bool = False) -> str | None:
     from cad_server._internal import imports, releases, versions
 
     if not imports.imported(version):
-        return f"text-to-cad {version}'s data is not imported yet"
+        return f"cad {version}'s data is not imported yet"
     if not versions.serves(version):
-        return f"text-to-cad {version} has not started yet"
+        return f"cad {version} has not started yet"
     flat = flat_server(take=not read_only)
     if flat is not None and not _within(flat, places.code_dir(version)):
-        return f"a server other than text-to-cad {version}'s holds the flat engine folder {places.engines_dir()}"
+        return f"a server other than cad {version}'s holds the flat engine folder {places.engines_dir()}"
     for folder in (*(root() / RELEASES / name for name in _releases()), cache_root() / "base"):
         if folder.exists() and releases.running(folder):
             return f"a process of 0.11.10 or earlier still runs from {folder}"
@@ -189,7 +189,7 @@ def remove(version: str, told: Callable[[str], None] | None = None) -> bool:
     carried = imports.carry(imports.of_legacy(), version, told=say)
     if not carried.complete:
         say("the code and caches of 0.11.10 and earlier stay for now: what they hold could not all be carried into "
-            f"text-to-cad {version}")
+            f"cad {version}")
         return False
     from cad_server import analytics
     from cad_server.settings import FILE
@@ -330,7 +330,7 @@ def hand_over(version: str, told: Callable[[str], None] | None = None) -> None:
             say(f"the records clients of 0.11.10 and earlier read could not be written: {error}")
     if serving and versions.ask_flat({"op": "stop", "drain": True}, seconds=ASK_SECONDS) is not None:
         old = (status or {}).get("installation") or (status or {}).get("version") or "0.11.10 or earlier"
-        say(f"cad-server {old}'s server stops once nothing is in flight there; text-to-cad {version}'s takes its "
+        say(f"cad-server {old}'s server stops once nothing is in flight there; cad {version}'s takes its "
             "place at the next command")
 
 

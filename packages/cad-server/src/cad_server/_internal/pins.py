@@ -1,7 +1,7 @@
 """A pinned command, ``cad +<version>[@<name>] <verb> ...``: read by the version it names.
 
 A command can name the version it is for (``cad +X``), and the copy of the text that ran it can name where that
-copy came from too (``cad +X@codex``). The ``cad`` command (``~/.local/bin/cad``, written by
+copy came from too (``cad +X@<name>``). The ``cad`` command (``~/.local/bin/cad``, written by
 ``cad_server._internal.installations``) reads only that first word: where version X is installed it runs X's own
 ``cad`` with the whole command line; where it is not, it says so (``not_installed``, exit 3) and does nothing else --
 it installs nothing, names no install command and uses no network. It never runs another version for a pin. With no
@@ -63,21 +63,21 @@ def bad_channel(word: str) -> str:
 
 def not_installed(version: str) -> str:
     """A pinned version that is not installed on this computer: said by the ``cad`` command, exit 3."""
-    return f"text-to-cad {version} is not installed on this computer."
+    return f"cad {version} is not installed on this computer."
 
 
 def none_installed() -> str:
     """A command with no pin where no version is installed: said by the ``cad`` command, exit 3."""
-    return "text-to-cad is not installed on this computer."
+    return "cad is not installed on this computer."
 
 
 def other_version(mine: str | None, version: str) -> str:
     """A pin read by another version than the one it names (``other_version``)."""
     if mine is None:
-        return (f"this cad-server is a source tree that runs as no version, and the command is pinned to text-to-cad "
+        return (f"this cad-server is a source tree that runs as no version, and the command is pinned to cad "
                 f"{version}: run it through the cad command, or name this tree's version in "
                 f"{places.INSTALLATION_ENV}")
-    return (f"this is text-to-cad {mine}, and the command is pinned to text-to-cad {version}: run it through the "
+    return (f"this is cad {mine}, and the command is pinned to cad {version}: run it through the "
             f"cad command, which runs {version}")
 
 

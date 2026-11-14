@@ -81,7 +81,7 @@ def proxy_path(where: str | None = None, windows: bool = WINDOWS) -> str:
     return os.path.join(where or proxy_folder(), EXE if windows else "cad")
 
 
-# A folder uv keeps an archive in, in its cache (``archive-v0``); and the marker of a server environment text-to-cad
+# A folder uv keeps an archive in, in its cache (``archive-v0``); and the marker of a server environment cad
 # made (``releases.MARKER``).
 _UV_ARCHIVE = re.compile(r"archive-v\d+")
 _RELEASE_MARKER = "cad-release.json"
@@ -95,7 +95,7 @@ def _within(path: str, folder: str) -> bool:
 def transient(path: object) -> bool:
     """Whether ``path`` (a program, or a folder on PATH) is in an environment that comes and goes, never one
     the person keeps: this process's own virtual environment (``sys.prefix``: uvx's, as ``uvx ... cad setup``
-    runs), one uv keeps in its cache (``archive-v<N>``), or a server environment of text-to-cad's."""
+    runs), one uv keeps in its cache (``archive-v<N>``), or a server environment of cad's."""
     plain = os.path.abspath(str(path))
     own = {sys.prefix, os.path.realpath(sys.prefix)} if sys.prefix != sys.base_prefix else set()
     for where in {plain, os.path.realpath(plain)}:
@@ -171,7 +171,7 @@ def targets() -> tuple[str, str, str] | None:
 
 
 def editable() -> bool:
-    """Whether this text-to-cad is imported from outside its environment: a checkout's source tree
+    """Whether this cad is imported from outside its environment: a checkout's source tree
     (an editable install, or a path on ``PYTHONPATH``). A string compare, no metadata read."""
     import cad_server
 
@@ -515,7 +515,7 @@ def mirror(version: str, folder=None) -> bool:
 
 _SH = """#!/bin/sh
 # {mark}{revision}
-# The cad command. `cad +<version>[@<name>] ...` runs that version of text-to-cad and no other: its own cad, which
+# The cad command. `cad +<version>[@<name>] ...` runs that version of cad and no other: its own cad, which
 # reads the pin. A version not installed is said to be so: nothing is installed. With no pin: the newest version
 # installed. Every release writes this same file (cad setup); a release whose revision is older never replaces it.
 if [ -n "$CAD_STATE_DIR" ]; then state=$CAD_STATE_DIR
@@ -612,7 +612,7 @@ ASIDE = ".old"
 
 _MAIN = '''# {mark}{revision}
 # The cad command on Windows (cad.exe), as the sh is elsewhere: `cad +<version>[@<name>] ...` runs that version of
-# text-to-cad and no other, its own cad, which reads the pin; a version not installed is said to be so, and nothing is
+# cad and no other, its own cad, which reads the pin; a version not installed is said to be so, and nothing is
 # installed. With no pin: the newest version installed. Every release writes this same file; a release whose revision
 # is older never replaces it. The standard library alone: its Python has nothing else.
 import json
@@ -910,7 +910,7 @@ def _write_windows(where: str, path: str) -> None:
 
 
 def earlier_command(where: str | None = None) -> str | None:
-    """The Windows cad command of a revision before (``cad.cmd``, a batch file) where it is text-to-cad's."""
+    """The Windows cad command of a revision before (``cad.cmd``, a batch file) where it is cad's."""
     path = os.path.join(where or proxy_folder(), EARLIER_CMD)
     return path if os.path.isfile(path) and _revision(path) is not None else None
 

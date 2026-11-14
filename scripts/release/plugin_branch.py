@@ -29,14 +29,15 @@ leaves the update paragraph out, since the store updates it (`channel_stamp.stam
 main or `latest` names a store: Codex's launcher is told its store as an argument by `plugin_zip.py`
 (`cad-mcp --channel codex`), and the directory's copy carries no server at all.
 
-The directory's copy differs from main's text in two more places, each a strict substitution that fails
-the build when what it replaces is not there exactly once (`by_uvx`, `unlisted`). claude.ai's directory
-flags a download piped to a shell (`curl ... | sh`) as an install-time risk, so the copy's README installs
-by the skills' own `uvx` line (`UVX_INSTALL`) in place of the Quickstart's two one-liners and the paragraph
-after them. Its manifest leaves out the listing links the directory's validation does not know
-(`UNLISTED`); the README, which the directory shows as the listing's description, links the same pages. No
-pipe-to-shell download is left anywhere in the copy (`PIPE_TO_SHELL`): the skills' only one is the update
-paragraph, which a store's copy leaves out.
+No copy holds a download piped to a shell (`PIPE_TO_SHELL`, checked in every copy): claude.ai's directory
+flags one as an install-time risk, and Hermes Agent's install scan rates one high and refuses a scripted
+install for it. The skills carry none (their update paragraph links the repository), so the one on main is
+the README's Quickstart: in `latest` and the directory's copy the README installs by the skills' own `uvx`
+line (`UVX_INSTALL`) in place of the Quickstart's two one-liners and the paragraph after them (`by_uvx`, a
+strict substitution that fails the build when what it replaces is not there exactly once). main's README
+keeps its Quickstart. The directory's copy differs once more: its manifest leaves out the listing links
+the directory's validation does not know (`UNLISTED`, also strict); the README, which the directory shows
+as the listing's description, links the same pages.
 
 The checks are claude.ai's file rules, the strictest of the directories
 (https://claude.com/docs/plugins/pre-submission-checklist.md): a tree that breaks
@@ -91,7 +92,7 @@ class Copy(NamedTuple):
     # Whether the copy holds only what claude.ai's directory accepts from an organization it has not
     # verified: the skills alone, in the file types `type_errors` allows.
     skills_only: bool = False
-    # Whether the copy installs by `UVX_INSTALL` in place of the install script (`by_uvx`).
+    # Whether the copy's README installs by `UVX_INSTALL` in place of the install script (`by_uvx`).
     uvx: bool = False
     # Keys of Claude's manifest the copy leaves out (`unlisted`).
     unlisted: tuple[str, ...] = ()
@@ -103,7 +104,7 @@ class Copy(NamedTuple):
 # manifests keep them.
 UNLISTED = ("documentationUrl", "privacyPolicyUrl", "supportUrl", "termsOfServiceUrl")
 COPIES = {
-    "latest": Copy(FILES + MARKETPLACE_FILES + STANDARD_FILES + GROK_FILES + OTHER_APP_FILES, None),
+    "latest": Copy(FILES + MARKETPLACE_FILES + STANDARD_FILES + GROK_FILES + OTHER_APP_FILES, None, uvx=True),
     "directory": Copy(DIRECTORY_FILES, "claude", skills_only=True, uvx=True, unlisted=UNLISTED),
     "codex": Copy((), plugin_zip.CHANNEL, codex_zip=True),
 }
@@ -135,7 +136,7 @@ PACKAGE_CONFIGS = {"package.json", "package-lock.json", "npm-shrinkwrap.json", "
                    "requirements.txt", "constraints.txt", "uv.lock", "pyproject.toml", "Pipfile"}
 # What the directory's copy of Claude's manifest must not name: it carries the skills alone.
 NOT_SKILLS = ("mcpServers", "hooks", "lspServers")
-# The install script, as main's README runs it, and the `uvx` command the directory's README installs by in
+# The install script, as main's README runs it, and the `uvx` command the copies' READMEs install by in
 # its place: the skills' own install line (each setup block's), the server's line for a version
 # (`cad_server._internal.launch.launch_command`) running `cad setup`. test_plugin_branch.py holds it to both.
 INSTALL_SCRIPT = "curl -fsSL https://texttocad.dev/install.sh | sh"
@@ -150,9 +151,9 @@ README_UVX = """```bash
 {command}
 ```
 
-The skills run text-to-cad's `cad` command. The first time, your agent installs it with
+The skills run the `cad` command. The first time, your agent installs it with
 [uv](https://docs.astral.sh/uv/), with your permission, or you run the command above yourself. It installs
-text-to-cad {version} and the `cad` command and changes nothing else.
+cad {version} and the `cad` command and changes nothing else.
 """
 # A download piped to a shell or run as a script block: what claude.ai's directory flags (`RUNTIME_FETCH_EXEC`).
 _FETCH = r"(?:irm|iwr|invoke-restmethod|invoke-webrequest)"
@@ -360,11 +361,11 @@ def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str
     if uvx:
         if isinstance(version, str) and version:
             tree, substituting = by_uvx(tree, version)
-            errors += substituting + pipes_to_shell(tree)
+            errors += substituting
         else:
             errors.append(f"{MANIFEST}: no `version`, so the uvx command cannot name the release")
     tree, leaving = unlisted(tree, leaves_out)
-    errors += leaving
+    errors += leaving + pipes_to_shell(tree)
     return tree, errors + rule_errors(tree) + (type_errors(tree) if skills_only else []), manifest
 
 
@@ -373,7 +374,7 @@ def codex(root: Path) -> tuple[dict[str, tuple[str, bytes]], list[str], dict]:
     the `codex-plugin` branch cannot differ), each with its ZIP entry's mode."""
     package = plugin_zip.build(root)
     tree = {path: ("100755" if executable else "100644", data) for path, (data, executable) in package.files.items()}
-    return tree, list(package.errors), package.manifest
+    return tree, list(package.errors) + pipes_to_shell(tree), package.manifest
 
 
 def commit(root: Path, tree: dict[str, tuple[str, bytes]], parent: str | None, message: str) -> str:

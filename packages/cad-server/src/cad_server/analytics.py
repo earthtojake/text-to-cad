@@ -169,7 +169,7 @@ from cad_server._internal.file_lock import state
 from cad_server.settings import read_section, settings_path, update_section
 
 LOG = logging.getLogger("cad_server.analytics")
-# The import names of the code that is text-to-cad's own: the library (and ``cadgen``, its earlier name, an alias
+# The import names of the code that is cad's own: the library (and ``cadgen``, its earlier name, an alias
 # of it) and the server.
 OWN = frozenset({"cad", "cadgen", "cad_server"})
 
@@ -215,7 +215,7 @@ NOTICE = 1
 def notice_text() -> str:
     """The notice (``notify``), its command to turn telemetry off the one that runs this installation
     (``off_command``)."""
-    return ("text-to-cad now sends usage stats and crash reports, tagged with a random ID — never your files, paths or "
+    return ("cad now sends usage stats and crash reports, tagged with a random ID — never your files, paths or "
             f"prompts. Turn off: {off_command()} · {PRIVACY_URL}")
 
 

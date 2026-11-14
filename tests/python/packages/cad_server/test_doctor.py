@@ -251,7 +251,7 @@ class DoctorTests(unittest.TestCase):
         (self.state / "settings.json").write_text('{"telemetry": {"notifiedAt": 1790000000, "notice": 1}}', encoding="utf-8")
         with TemporaryDirectory() as tmp:
             _, out, _ = _run([])
-        self.assertRegex(out, r"sharing  on: by default, since text-to-cad said so on \d{4}-\d{2}-\d{2}\n")
+        self.assertRegex(out, r"sharing  on: by default, since cad said so on \d{4}-\d{2}-\d{2}\n")
 
     def test_the_report_starts_the_engine_when_none_runs(self) -> None:
         # In a sandbox that cannot start one, the client's own line, and nothing started.

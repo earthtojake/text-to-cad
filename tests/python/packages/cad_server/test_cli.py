@@ -133,7 +133,7 @@ class Dispatch(unittest.TestCase):
                     self.assertFalse(os.path.exists(state), os.listdir(state) if os.path.exists(state) else None)
             done = run("status")
             self.assertEqual(done.returncode, 0, done.stderr)
-            self.assertIn("text-to-cad now sends usage stats", done.stderr)
+            self.assertIn("cad now sends usage stats", done.stderr)
             self.assertTrue(os.path.isfile(os.path.join(state, "settings.json")))
 
     def test_status_names_the_engine_s_installation(self):

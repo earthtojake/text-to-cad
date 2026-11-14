@@ -222,7 +222,7 @@ class ProxyFileTests(Fixture):
             return subprocess.run([proxy_file, *args], capture_output=True, text=True, env=environment, cwd=self.root)
 
         none = run("status")
-        self.assertEqual((none.returncode, none.stderr), (3, "cad: text-to-cad is not installed on this computer.\n"))
+        self.assertEqual((none.returncode, none.stderr), (3, "cad: cad is not installed on this computer.\n"))
         with self.assertRaises(proxy.Refused) as refused:
             proxy.choose(None, [])
         self.assertEqual(str(refused.exception), none.stderr.strip(), "the command of 0.11.10's layout says the same")
@@ -405,7 +405,7 @@ class WindowsCommandTests(Fixture):
                                   env=environment, cwd=self.root)
 
         none = run("status")
-        self.assertEqual((none.returncode, none.stderr), (3, "cad: text-to-cad is not installed on this computer.\n"))
+        self.assertEqual((none.returncode, none.stderr), (3, "cad: cad is not installed on this computer.\n"))
         for version in ("1.0.0", "2.0.0"):
             code = state / "versions" / version / "code"
             code.mkdir(parents=True)

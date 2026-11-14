@@ -58,8 +58,8 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "requirement": ("cad_server.cli.requirement", "print the exact cad requirement for a Python of a program's own"),
     "doctor": ("cad_server.cli.doctor", "set the server up and report it (--check: report only)"),
     # This version installed on this computer, and the cad command with it; and all of it removed.
-    "setup": ("cad_server.cli.setup", "install this version of text-to-cad on this computer"),
-    "uninstall": ("cad_server.cli.uninstall", "remove text-to-cad from this computer"),
+    "setup": ("cad_server.cli.setup", "install this version of cad on this computer"),
+    "uninstall": ("cad_server.cli.uninstall", "remove cad from this computer"),
     # A page session on the installation engine; the launcher exits.
     "viewer": ("cad_server.cli.viewer", "open a viewer page on the installation engine"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
@@ -384,8 +384,8 @@ def _first_run() -> None:
 
 
 def _notice(*, daily: bool) -> None:
-    """On stderr, after a command's own output: the two lines of a newer release the last version check saw
-    (``updates.line``), where one is known and the check is not turned off (``updates.notice``); ``daily``: at most
+    """On stderr, after a command's own output: the one line of a newer release the last version check saw
+    (``updates.line``, which names no command), where one is known and the check is not turned off (``updates.notice``); ``daily``: at most
     once every ``NOTICE_SECONDS`` on this computer (a stamp in the state folder, ``NOTICE``). Never a failure, never on
     stdout, never a wait: the feed is read by the server, in the background. Only an installed version's command says
     it (``_maybe_a_version``), and with the check turned off nothing is even imported for it: a command imports no

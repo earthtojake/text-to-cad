@@ -120,7 +120,7 @@ class Source:
     def words(self) -> str:
         if self.kind == "legacy":
             return "the settings of 0.11.10 and earlier" if self.settings_only else "the data of 0.11.10 and earlier"
-        return f"text-to-cad {self.version}'s data"
+        return f"cad {self.version}'s data"
 
     @property
     def key(self) -> str:
@@ -479,10 +479,10 @@ def carry(found: Source, name: str, *, told: Callable[[str], None] | None = None
         say(line)
 
     if not imported(name):
-        failed(f"text-to-cad {name} has no data yet: nothing of {found.words()} was carried over")
+        failed(f"cad {name} has no data yet: nothing of {found.words()} was carried over")
         return done
     if found.kind == "version" and found.version is not None and versions.older(name, found.version):
-        failed(f"text-to-cad {found.version} is newer than {name}: its data is never carried into an older version")
+        failed(f"cad {found.version} is newer than {name}: its data is never carried into an older version")
         return done
     data, cache = _data(name), places.cache_dir(name)
     root = found.root
@@ -555,7 +555,7 @@ def carry(found: Source, name: str, *, told: Callable[[str], None] | None = None
     except OSError as error:
         failed(f"{data / LEDGER} could not be written: {error.strerror or error}")
     if done.added:
-        say(f"carried over into text-to-cad {name} from {found.words()}: {', '.join(done.added)}")
+        say(f"carried over into cad {name} from {found.words()}: {', '.join(done.added)}")
     return done
 
 

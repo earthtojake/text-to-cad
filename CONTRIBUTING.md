@@ -625,8 +625,11 @@ computer in one of two ways:
 - **A plugin store** (Codex's directory, claude.ai's) updates the copy it installed. Its skills name
   the release, and install it the first time they run.
 - **An agent or a person runs the install command.** When a newer release is out, `cad` says so after
-  a command's output, with the install command; the skills of a manual install ask the agent to run it
-  and tell the person. A new chat then uses the new release; a chat already open keeps its own.
+  a command's output, in one line that names no command (`A new version of cad is available: X -> Y`):
+  cad knows nothing of the plugin, and the install command installs the plugin too. The skills of a
+  manual install tell the agent to install the new version of the plugin from the repository, whose
+  README gives the install command, and to tell the person. A new chat then uses the new release; a chat already open keeps
+  its own.
 
 Releases 0.10.0 to 0.11.10 are the exception: they shipped an updater of their own, which still installs
 newer releases ([No version left behind](#no-version-left-behind)). The reasons are in
@@ -856,7 +859,11 @@ no commit. There are three copies:
   and Muse's), each listing the plugin at the branch's root, the Agent Plugins
   standard's `plugin.json` and `mcp.json` (what Hermes reads), `skills/`,
   `LICENSE` and `README.md`, each README link to a file outside the tree pointed
-  at the release commit on GitHub. It is our own text, as `main` has it.
+  at the release commit on GitHub. It is our own text, as `main` has it, but for
+  the README's install section, which installs by the skills' own `uvx` line in
+  place of the Quickstart's one-liners, as `claude-plugin`'s does: Hermes Agent's
+  install scan rates a download piped to a shell high and refuses a scripted
+  install for it, so no copy holds one (`plugin_branch.py` checks every copy).
 - `claude-plugin`, which claude.ai's directory listing tracks: the skills alone.
   `.claude-plugin/plugin.json` (main's less four listing links, naming no MCP
   server and no hooks) and `icon.png`, `skills/`, `LICENSE` and `README.md`, and
@@ -897,7 +904,8 @@ manifest, MCP config and the marketplace catalogs at its root, its catalogs list
 the plugin at `./`, and nothing on `main` points an installer at another branch.
 Development installs (`scripts/install/dev_install.py`) rely on that too. The
 documented commands name `latest` where the app can name a branch, because it is
-the plugin alone and never ahead of PyPI; Devin, Antigravity and Hermes find no
+the plugin alone and never ahead of PyPI; Hermes takes a branch only as its
+commit, so its command names the commit of `latest`; Devin and Antigravity find no
 branch syntax and install `main`. `test_plugin_manifests.py` holds both halves
 of the rule. Every copy is built and checked by
 `tests/python/global/test_plugin_branch.py` and `test_plugin_zip.py` on every

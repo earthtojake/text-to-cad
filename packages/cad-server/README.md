@@ -1,6 +1,6 @@
 # cad-server
 
-The CAD server for text-to-cad, imported as `cad_server`: the daemon that builds, keeps and serves CAD
+The CAD server, imported as `cad_server`: the daemon that builds, keeps and serves CAD
 documents, one per installed version in use (each reached through its own door; the one `installations/current`
 names also answers clients of 0.11.10 and earlier); the CAD Viewer and the CAD app's MCP endpoint on its listener; the
 environment the CAD kernel runs in; the versions installed side by side; and the command that runs them all.
@@ -171,8 +171,8 @@ on computers, update by running a newer release's `cad setup --engine-update` fr
 does the same, then the hand-over from their layout (the records their switch reads written: `installations/current`
 and the installation record naming the version's server),
 then starts the hosted install script once, detached and never waited on (`CAD_ENGINE_UPDATE_INSTALLER` names a
-command to run instead, for a test). text-to-cad has no updater: the version check (`updates.py`) only knows the
-latest release; the install command updates. `cad uninstall` removes text-to-cad from this computer: every version,
+command to run instead, for a test). cad has no updater: the version check (`updates.py`) only knows the
+latest release, and says so (**The update notice**). `cad uninstall` removes cad from this computer: every version,
 each one's server stopped first, the state folder and the cache folder of 0.11.10 and earlier, and the `cad`
 command; nothing is kept and nothing else is touched. It asks first, as every command that destroys does (`cad
 delete`, `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`;
@@ -194,11 +194,11 @@ every version is run through, written by `cad setup` and `cad doctor` where it i
 and never replaced by a release whose revision of it is older. It reads only its first argument and what every
 version keeps where every version keeps it, so a command written by one release runs every later one by the same
 rules. A pin, `cad +<version>[@<name>] <verb> ...`, runs exactly that version's own `cad` with the whole command line,
-and never another version. A version that is not installed is said to be so, `cad: text-to-cad <version> is not
+and never another version. A version that is not installed is said to be so, `cad: cad <version> is not
 installed on this computer.`, exit 3: nothing is installed, no install command is named and no network is used (the
 line that installs a version is that version's own, `uvx ... --from cad-server==<version> cad setup`). With no pin,
 the command runs the newest version installed (the highest version number); with none installed it says `cad:
-text-to-cad is not installed on this computer.`, exit 3. The version reads the pin (`_internal/pins.py`): its
+cad is not installed on this computer.`, exit 3. The version reads the pin (`_internal/pins.py`): its
 `@name` is a label alone -- the channel its requests to the server name (`cad.engine.places.channel()`, `default`
 for none) and `cad run` hands its program, which telemetry reports, and which turns the update notice off. Each
 refusal is one line on stderr (from the version, one JSON document on stdout under `--json`), with its exit status:
@@ -206,18 +206,18 @@ refusal is one line on stderr (from the version, one JSON document on stdout und
 own); 5 `other_version`, a version's own `cad` given another version's pin. A `cad` command of 0.11.10 or earlier
 knows no pin: it says `+<version>` is an unknown command (exit 2).
 
-**The update notice.** text-to-cad updates nothing by itself. Each version's server reads the version feed in the
+**The update notice.** cad updates nothing by itself. Each version's server reads the version feed in the
 background at most once an hour (`updates.py`; never waited on; `CAD_UPDATE_CHECK=0` turns it off), and where the
 last read names a newer release, a command says so on stderr after its own output, at most once every 24 hours on
 the computer (a stamp in the state folder, `update-notice`), and never for a command that names a channel:
 
 ```
-A new release of text-to-cad is available: X -> Y
-To update, run: curl -fsSL https://texttocad.dev/install.sh | sh
+A new version of cad is available: X -> Y
 ```
 
-(on Windows the second line names `irm https://www.texttocad.dev/install.ps1 | iex`). `cad --version` prints `cad X`,
-and then the same two lines on stderr whenever a newer release is known. Nothing on stdout changes.
+One line, naming no command and no link: cad says only that a version exists. How to install it is for whatever
+installed this one to say, and cad cannot know what that was. `cad --version` prints `cad X`, and then the same line
+on stderr whenever a newer release is known. Nothing on stdout changes.
 
 **Versions side by side.** An installed version keeps everything it reads and writes in its own folder,
 `versions/<version>` in the state folder: its data (`data/`: settings, Recents, the documents' records, the page

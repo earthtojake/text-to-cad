@@ -976,8 +976,46 @@ def remove_loose_skills(here: Here) -> Outcome:
     return Outcome("removed", f"{len(ours)} old copies of our skills, in {', '.join(places)}")
 
 
+def _hermes_plugins(here: Here) -> Path:
+    return Path(here.environ.get("HERMES_HOME") or here.home / ".hermes") / "plugins"
+
+
 def _hermes_plugin(here: Here) -> bool:
-    return (Path(here.environ.get("HERMES_HOME") or here.home / ".hermes") / "plugins" / PLUGIN).is_dir()
+    return (_hermes_plugins(here) / PLUGIN).is_dir()
+
+
+def hermes(app: App, here: Here, context: Context) -> Outcome:
+    """Hermes Agent: ``hermes plugins install earthtojake/text-to-cad --no-enable --ref <commit of latest>``, then
+    ``hermes plugins enable text-to-cad --no-allow-tool-override``. Hermes's ``--ref`` takes a 40-character commit
+    alone, and its default branch is main, which its install scan refuses, so the commit of ``latest`` is looked up
+    (``git ls-remote``). No ``--force``: ``latest`` holds no download piped to a shell, and Hermes's scan passes it.
+    Updated by removing the copy and installing the new commit where the installed one (Hermes's record,
+    ``plugins/.install-metadata.json``) is another: ``hermes plugins update`` follows the default branch. Verified:
+    ``hermes plugins install --help`` and its source (``hermes_cli/plugins_cmd.py``); the install, enable and
+    ``plugins doctor`` run from a local copy of ``latest`` with HERMES_HOME in a scratch folder."""
+    cli = here.which("hermes")
+    if not cli:
+        return NOT_FOUND
+    if context.source.local:
+        return plugin_command(app, here, context)
+    git = here.which("git")
+    if not git:
+        return Outcome("skipped", "needs git, to find the commit of the latest release")
+    listed = here.run([git, "ls-remote", URL, f"refs/heads/{BRANCH}"])
+    commit = listed.out.split()[0] if listed.ok and listed.out.split() else ""
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise Failed(f"could not find the commit of {BRANCH}: {listed.last()}")
+    record = read_json(_hermes_plugins(here) / ".install-metadata.json")
+    entry = record.get(PLUGIN) if isinstance(record, dict) else None
+    installed = (entry or {}).get("revision") if isinstance(entry, dict) else None
+    present = _hermes_plugin(here)
+    if present and installed == commit:
+        return Outcome("updated", "already the latest release")
+    if present:
+        here.must([cli, "plugins", "remove", PLUGIN])
+    here.must([cli, "plugins", "install", REPOSITORY, "--no-enable", "--ref", commit])
+    here.must([cli, "plugins", "enable", PLUGIN, "--no-allow-tool-override"])
+    return Outcome("updated" if present else "installed")
 
 
 def _pi_installed(here: Here) -> bool:
@@ -1010,14 +1048,10 @@ APPS: Tuple[App, ...] = (
         install=[["extensions", "install", "{url}", "--ref", "{branch}", "--consent"]],
         update=[["extensions", "update", "{plugin}"]],
         local=[["extensions", "install", "{folder}", "--consent"]], installed=_qwen_installed),
-    # Hermes Agent. Help: `hermes plugins install --help` (owner/repo, --no-enable; --ref takes a commit SHA alone, so
-    # this installs the default branch, main), `enable --no-allow-tool-override`, `update <name>`; docs
+    # Hermes Agent (``hermes``, above): `latest` by its commit. Docs
     # https://hermes-agent.nousresearch.com/docs/developer-guide/plugins. It takes the root plugin.json, skills/ and
-    # mcp.json. Lane C ran install, enable and `plugins doctor` from a local copy; its install-time scan refused our
-    # README while that named AGENTS.md (a failure this reports as Hermes's line).
-    App("hermes", "Hermes Agent", command="hermes",
-        install=[["plugins", "install", "{repo}", "--no-enable"], ["plugins", "enable", "{plugin}", "--no-allow-tool-override"]],
-        update=[["plugins", "update", "{plugin}"]], installed=_hermes_plugin),
+    # mcp.json.
+    App("hermes", "Hermes Agent", command="hermes", handler=hermes, installed=_hermes_plugin),
     # Factory Droid. Docs https://docs.factory.com/cli/configuration/plugins: it reads .claude-plugin/marketplace.json;
     # the catalog's name comes from the source (`owner/repo` -> the repo's name; a `#ref` is appended to it), so this
     # adds no ref (main) to keep the name text-to-cad, as superpowers does. Not run.

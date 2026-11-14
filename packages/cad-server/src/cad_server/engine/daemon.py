@@ -611,7 +611,7 @@ def _token_homes(own: Any) -> list[tuple[str, Any]]:
 
         for name in versions.folders():
             if imports.imported(name):
-                add(_places.data_dir(name), f"text-to-cad {name}'s data")
+                add(_places.data_dir(name), f"cad {name}'s data")
     except Exception:  # noqa: BLE001 - a device whose versions cannot be listed: the rest is still done
         pass
     add(_places.state_dir(), "the state folder", kept_only=True)
@@ -633,7 +633,7 @@ def _tell_servers(told: Callable[[str], None]) -> None:
             continue
         answer = versions.ask(name, {"op": "token"})
         if not (isinstance(answer, dict) and answer.get("ok")):
-            told(f"text-to-cad {name}'s server could not take the new token "
+            told(f"cad {name}'s server could not take the new token "
                  f"({(answer or {}).get('failed') or 'it did not answer'}): it admits the one before until it stops "
                  f"(`cad +{name} stop`)")
     answer = versions.ask_flat({"op": "token"})
@@ -2497,11 +2497,11 @@ def _first_start() -> None:
 
         found = imports.ensure(name, told=lambda line: print(f"cad: {line}", file=sys.stderr, flush=True))
     except Exception as error:  # noqa: BLE001 - said, and the engine starts on what data there is
-        print(f"cad: the data of text-to-cad {name} could not be imported: {type(error).__name__}: {error}",
+        print(f"cad: the data of cad {name} could not be imported: {type(error).__name__}: {error}",
               file=sys.stderr, flush=True)
         return
     if found.done and found.source is not None:
-        print(f"cad: imported {found.source.words()} into text-to-cad {name}", file=sys.stderr, flush=True)
+        print(f"cad: imported {found.source.words()} into cad {name}", file=sys.stderr, flush=True)
 
 
 def main(argv: list[str] | None = None, *, port: int | None = None, foreground: bool = False,

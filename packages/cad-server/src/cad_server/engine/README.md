@@ -312,8 +312,9 @@ client starts its own release's engine beside the device's, and none stops an en
 another: an engine runs on until `cad stop`, an update, or its door going.
 Each installation's bytecode is its own (`places.bytecode_tag`).
 
-text-to-cad has no updater: the install command updates it, and an engine only knows, from the version feed read in
-the background (`cad_server.updates`), the latest release. The updaters of 0.10.0 to 0.11.10 are frozen on computers,
+cad has no updater: an engine only knows, from the version feed read in the background (`cad_server.updates`), the
+latest release, and a command says so in one line that names no command (the package's README, **The update
+notice**). The updaters of 0.10.0 to 0.11.10 are frozen on computers,
 though, and update by running a newer release's `cad setup --engine-update` (`cad_server.cli.setup`) from a flat
 release folder they made: that run makes the release present in `versions/` (its data imported from their layout)
 and runs again from there, and its setup then hands over from their layout (`installations.mirror`: the installation
@@ -857,8 +858,7 @@ says it alone), and then asks: at a terminal, `... (y/N)` on stderr, anything bu
 nothing (`declined`, exit 1); where no one can be asked (no terminal, `--json`, CI), it changes nothing
 without `-y`/`--yes`, failing `confirmation_required` (exit 2) with the exact command with `--yes`
 (`cad_server._internal.consent`). `--yes` answers that question and no other. `cad setup` asks nothing:
-installing is what was asked, and the install command passes `--yes` to an uninstall, which a person asked
-for by `--uninstall`.
+installing is what was asked.
 
 **The failure contract**, every command's alike (`cad_server._internal.cli_errors`). A failure's class
 sets the exit status, the same with `--json` and without: 2 for the command line and its input -- a
@@ -976,10 +976,10 @@ place), so two cold builds of the same code are the same bytes on any day.
 If a body raises, the error is reported with the model's frames and the
 previous files stay. The report also keeps the error's whole traceback as facts (`raised`,
 `build._raised`: its type and every frame, the library's included), and the daemon decides
-from them whether the failure is a mistake in text-to-cad's own code (`reportable`,
+from them whether the failure is a mistake in cad's own code (`reportable`,
 `daemon._reportable`) by the rule telemetry counts a build's crash by
 (`analytics.told_signature`), so the tracker hears of what telemetry would: an error Python
-raised in text-to-cad's code at a line that is no `raise`, past the memo's and the history's wrappers
+raised in cad's code at a line that is no `raise`, past the memo's and the history's wrappers
 of build123d's calls. The model's own code, a library it called, the kernel refusing a call and
 the library refusing what it was given are the model's to correct. The page's record of the failed
 build carries `reportable`, and the card offers Report Issue only where it is not `false`; a

@@ -1,13 +1,13 @@
-"""``cad uninstall``: text-to-cad removed from this computer, and nothing else.
+"""``cad uninstall``: cad removed from this computer, and nothing else.
 
 What it removes: every installed version (``versions/<version>`` in the state folder), each version's server
-stopped first, and the server of the layout of 0.11.10 and earlier where one still runs; text-to-cad's state folder
+stopped first, and the server of the layout of 0.11.10 and earlier where one still runs; cad's state folder
 (``cad.engine.places.state_dir``: every version, its settings, Recents and documents' records, and what earlier
 releases kept there) and the cache folder of 0.11.10 and earlier (``places.legacy_cache_dir``); and the ``cad``
-command (``~/.local/bin/cad``, on Windows ``cad.exe`` and its Python) where it is text-to-cad's. Nothing is kept. A
-folder of that name that holds nothing text-to-cad made is another program's, and is left alone.
+command (``~/.local/bin/cad``, on Windows ``cad.exe`` and its Python) where it is cad's. Nothing is kept. A
+folder of that name that holds nothing cad made is another program's, and is left alone.
 
-It asks first: at a terminal ``Remove text-to-cad from this computer? (y/N)``; where no one can be asked, nothing
+It asks first: at a terminal ``Remove cad from this computer? (y/N)``; where no one can be asked, nothing
 is changed without ``--yes`` (``cad_server._internal.consent``).
 
 Exit status: 0 removed; 1 something stays (a server that would not stop, a folder something still runs from: said,
@@ -24,7 +24,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 DEFAULT_PROG = "cad uninstall"
-# What text-to-cad keeps in the two folders it removes, in every layout so far. A folder of that name that holds
+# What cad keeps in the two folders it removes, in every layout so far. A folder of that name that holds
 # other things and none of these is another program's that shares the name, and is left alone.
 STATE_OURS = frozenset({"versions", "installations", "engines", "documents", "recents", "releases", "plugin",
                         "settings.json", "settings.lock", "plugin.lock", "versions.json", "install-channels.json",
@@ -40,8 +40,8 @@ def build_parser(prog: str = DEFAULT_PROG):
     parser = command_parser(
         prog=prog,
         allow_abbrev=False,
-        description="Remove text-to-cad from this computer: every installed version, their servers stopped first, "
-                    "text-to-cad's state and cache folders (settings, Recents and documents' records among them), "
+        description="Remove cad from this computer: every installed version, their servers stopped first, "
+                    "cad's state and cache folders (settings, Recents and documents' records among them), "
                     "and the cad command. Nothing is kept, and nothing else is changed.",
     )
     add_yes(parser, "remove it")
@@ -57,7 +57,7 @@ def _say(line: str) -> None:
 
 
 def _ours(folder: Path, names: frozenset[str]) -> bool:
-    """Whether ``folder`` is text-to-cad's to remove: there, and empty or holding something text-to-cad made."""
+    """Whether ``folder`` is cad's to remove: there, and empty or holding something cad made."""
     try:
         held = {entry.name for entry in folder.iterdir()}
     except OSError:
@@ -80,26 +80,26 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG) -> int:
     folders = [(folder, ours) for folder, ours in ((state, STATE_OURS), (cache, CACHE_OURS))
                if folder.is_dir() and _ours(folder, ours)]
     names = versions.folders()
-    plan = [f"  text-to-cad {name}, its server stopped first" for name in names]
+    plan = [f"  cad {name}, its server stopped first" for name in names]
     plan += [f"  {folder}" for folder, _ours_ in folders]
     plan += [f"  {proxy}"] if command else []
     if not plan:
-        _say("text-to-cad is not installed on this computer: nothing to remove.")
+        _say("cad is not installed on this computer: nothing to remove.")
         return 0
     try:
-        confirm("removing text-to-cad from this computer", "Remove text-to-cad from this computer?",
+        confirm("removing cad from this computer", "Remove cad from this computer?",
                 yes=bool(args.yes), as_json=False, command=retry(prog, list(argv or [])),
                 preview=["cad uninstall removes, and this cannot be undone:", *plan])
     except Failure as failure:
         return write(failure, prog=prog, as_json=False)
 
     failed = False
-    with versions.install_lock(waiting=lambda: _say("waiting for another install of text-to-cad to finish")):
+    with versions.install_lock(waiting=lambda: _say("waiting for another install of cad to finish")):
         names = versions.folders()  # again under the lock: one installed while the question waited among them
         for name in names:
             if versions.ask(name, {"op": "stop"}) is not None or versions.endpoint(name).lock.exists():
                 if not versions.gone(name, besides=os.getpid()):
-                    _say(f"text-to-cad {name}'s server did not stop")
+                    _say(f"cad {name}'s server did not stop")
                     failed = True
         failed = _stop_flat() or failed
     if command:
@@ -108,7 +108,7 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG) -> int:
     if failed or running:
         for folder in running:
             _say(f"a process still runs from {folder}")
-        _say("text-to-cad's folders stay: " + ", ".join(str(folder) for folder, _ours_ in folders)
+        _say("cad's folders stay: " + ", ".join(str(folder) for folder, _ours_ in folders)
              + ". Delete them once nothing runs from them.")
         return 1
     for folder, _ours_ in folders:
@@ -120,7 +120,7 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG) -> int:
         else:
             _say(f"removed {folder}")
     if not failed:
-        _say("text-to-cad is removed from this computer.")
+        _say("cad is removed from this computer.")
     return 1 if failed else 0
 
 

@@ -58,8 +58,12 @@ skills/<name>/
   every such skill carries, word for word (`tests/python/global/test_skill_requirements.py`): the `uvx`
   line that installs `cad` at the skill's release and, in the manual copy only, the paragraph between
   `<!-- manual-copy-update: start -->` and `<!-- manual-copy-update: end -->` that tells the agent to keep
-  the install up to date. The store builders give each pin the store's name and leave that paragraph
-  out, and a marker the builder does not find exactly once fails the release
+  the install up to date: check `cad +<VERSION> --version` at a session's start and, when `cad` says a
+  new version of cad is available, install the new version of the plugin from the repository.
+  `cad` names no command, and the skill quotes none: it links the repository, so the skill carries no
+  download piped to a shell (a store's and Hermes Agent's install scans flag one). The store builders
+  give each pin the store's name and leave that paragraph out, and a marker the builder does not find
+  exactly once fails the release
   ([The install branches](../../CONTRIBUTING.md#the-install-branches)).
 - **Independent of other skills.** A skill never imports another, and never puts `skills/` or the
   repository root on a lookup path. The install script copies each alone into an agent's skills folder.

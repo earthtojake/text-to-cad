@@ -440,7 +440,7 @@ class Cleanup(Device):
         self.assertFalse(places.engine_dir(stale).exists())
         self.assertFalse(any(record["version"] == stale for record in installations.records()), "its record forgotten")
         self.assertFalse(any(entry.startswith(".trash-") for entry in os.listdir(places.versions_dir())))
-        self.assertIn(f"removed text-to-cad {stale}, which no agent has used for 2 days", self.said)
+        self.assertIn(f"removed cad {stale}, which no agent has used for 2 days", self.said)
 
     def test_going_back_from_a_development_install_removes_its_versions_used_or_not(self) -> None:
         # A development version sorts after its release: `dev_install.py --release` removes it (its REMOVE, run by the
@@ -460,7 +460,7 @@ class Cleanup(Device):
         with mock.patch("builtins.print", side_effect=lambda *words, **_: printed.append(" ".join(map(str, words)))):
             exec(dev_install.REMOVE, {})  # noqa: S102 - the snippet the script runs, run here on this device
         self.assertEqual((versions.present(), versions.newest()), ([X], X))
-        self.assertEqual(printed, [f"removed text-to-cad {development}"])
+        self.assertEqual(printed, [f"removed cad {development}"])
 
     def test_a_version_that_is_not_the_newest_cleans_nothing(self) -> None:
         now = time.time()
@@ -917,7 +917,7 @@ class TokenRotatedEverywhere(Device):
             self.assertEqual(registry.Registry(root).token(), token, root)
         self.assertFalse((places.data_dir(Z) / registry.TOKEN).exists(), "a version not started writes nothing")
         self.assertEqual(asked, [(X, {"op": "token"}), (Y, {"op": "token"})], "each running server told")
-        self.assertTrue(any(line.startswith(f"text-to-cad {Y}'s server could not take the new token") for line in said), said)
+        self.assertTrue(any(line.startswith(f"cad {Y}'s server could not take the new token") for line in said), said)
         self.assertTrue(any("0.11.10 or earlier" in line for line in said), said)
 
 
@@ -942,13 +942,13 @@ class DoctorReadsEveryVersion(Device):
             self.assertEqual(len(found), 1, said)
             return found[0]
 
-        self.assertIn("not completely installed", line("version  text-to-cad 0.11.99 "))
-        self.assertIn("its server is not running; last used ", line(f"version  text-to-cad {X} "))
-        self.assertIn("(at its next cleanup)", line(f"version  text-to-cad {X} "))
-        self.assertIn(f"text-to-cad {Z}'s server removes it once it has gone unused for 2 days (in ",
-                      line(f"version  text-to-cad {Y} "))
-        self.assertIn("its server runs, pages on port 4000", line(f"version  text-to-cad {Z} "))
-        self.assertIn("the newest: a command with no pin runs it", line(f"version  text-to-cad {Z} "))
+        self.assertIn("not completely installed", line("version  cad 0.11.99 "))
+        self.assertIn("its server is not running; last used ", line(f"version  cad {X} "))
+        self.assertIn("(at its next cleanup)", line(f"version  cad {X} "))
+        self.assertIn(f"cad {Z}'s server removes it once it has gone unused for 2 days (in ",
+                      line(f"version  cad {Y} "))
+        self.assertIn("its server runs, pages on port 4000", line(f"version  cad {Z} "))
+        self.assertIn("the newest: a command with no pin runs it", line(f"version  cad {Z} "))
 
 
 if __name__ == "__main__":

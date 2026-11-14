@@ -1,4 +1,4 @@
-"""``cad setup``: this version of text-to-cad installed on this computer, and nothing else.
+"""``cad setup``: this version of cad installed on this computer, and nothing else.
 
 It is run as ``uvx --no-config --managed-python --python 3.14 --from cad-server==<version> cad setup`` (or by the
 version's own ``cad``), and sets up the version that runs it, in six steps, each skipped where it is done already,
@@ -64,7 +64,7 @@ def build_parser(prog: str = DEFAULT_PROG):
     parser = command_parser(
         prog=prog,
         allow_abbrev=False,
-        description="Install this version of text-to-cad on this computer: its own folder, its server and the CAD "
+        description="Install this version of cad on this computer: its own folder, its server and the CAD "
                     "kernel, and the cad command (~/.local/bin/cad) where it is missing or older. Nothing else is "
                     "changed. Running it again is quick and harmless.",
     )
@@ -112,18 +112,18 @@ def _present(name: str) -> int | None:
     found = versions.make_present(name, told=_say)
     if not found.ok:
         if found.cannot is not None:
-            _say(f"text-to-cad {name} could not be installed from this shell: {found.error}. Run this command again "
+            _say(f"cad {name} could not be installed from this shell: {found.error}. Run this command again "
                  "outside the sandbox.")
             return REASONS["cannot_install_here"]
-        _say(f"text-to-cad {name} could not be installed: {found.error}")
+        _say(f"cad {name} could not be installed: {found.error}")
         return FAILED
     try:
         copied = imports.ensure(name, told=_say)
     except OSError as error:  # never a failed setup: the version's server imports at its first start
-        _say(f"text-to-cad {name}'s settings and store were not copied in yet: {error.strerror or error}")
+        _say(f"cad {name}'s settings and store were not copied in yet: {error.strerror or error}")
         return None
     if copied.done and copied.source is not None:
-        _say(f"text-to-cad {name} took its settings and store from {copied.source.words()}")
+        _say(f"cad {name} took its settings and store from {copied.source.words()}")
     return None
 
 
@@ -134,8 +134,8 @@ def _command(name: str) -> int | None:
 
     path, status, error = installations.write_proxy()
     if error is not None or status == installations.FOREIGN:
-        why = error or "a file of that name there is not text-to-cad's, and is left alone"
-        _say(f"text-to-cad {name} is installed, but the cad command could not be written at {path}: {why}")
+        why = error or "a file of that name there is not cad's, and is left alone"
+        _say(f"cad {name} is installed, but the cad command could not be written at {path}: {why}")
         return FAILED
     return None
 
@@ -158,7 +158,7 @@ def setup() -> int:
     if failed is not None:
         return failed
     _arrive(name, engine_update=False)
-    sys.stdout.write(f"text-to-cad {name} is {'installed' if was else 'installed now'}: {places.version_dir(name)}\n")
+    sys.stdout.write(f"cad {name} is {'installed' if was else 'installed now'}: {places.version_dir(name)}\n")
     return 0
 
 
@@ -257,7 +257,7 @@ def _hand_over(name: str) -> int | None:
         why = "it is not installed"
     except (OSError, ValueError) as error:
         why = str(error)
-    _say(f"text-to-cad {name} could not take over: {why}")
+    _say(f"cad {name} could not take over: {why}")
     return FAILED
 
 

@@ -322,7 +322,7 @@ class EnginePortTest(unittest.TestCase):
 
     def test_another_engine_on_the_default_port_is_asked_nothing_and_rolled_from(self) -> None:
         """An engine of another engine folder on the device's port -- as 0.8's server is to 0.10's -- is
-        rolled from as any program is, said as a text-to-cad's, never asked to stop: it runs on."""
+        rolled from as any program is, said as a cad's, never asked to stop: it runs on."""
         default = free_port()
         other = {"CAD_ENGINE_DIR": str(self.root / "other-engine"), "CAD_STATE_DIR": str(self.root / "other-state"),
                  "CAD_ENGINE_STANDBY": "0"}

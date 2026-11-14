@@ -17,7 +17,7 @@ length is given the same three ways from the bend, the least along the bend (``l
 length at least half of the bend reaches (``length_*_half_mm``).
 
 **The rules** (``RULES``) are general practice, each from a published sheet metal design guide (cited as the
-evidence, not as a shop's limit) but the few that are text-to-cad's own (``rules.OWN``: said as its own in
+evidence, not as a shop's limit) but the few that are cad's own (``rules.OWN``: said as its own in
 every verdict). A rule that scales with the thickness scales by each item's own part's (``_scales``): a document's
 parts are each judged by their own. A shop's own figures -- its gauges, its tooled radius per gauge, its die
 widths, its brake's angles and lengths, its smallest and largest parts -- are no rule here: give the ones it
@@ -55,7 +55,7 @@ PROTOLABS = Source("protolabs-sheet", "Protolabs", "Sheet metal fabrication desi
 XOMETRY = Source("xometry-sheet", "Xometry", "Sheet metal fabrication service (design guidelines)",
                  "https://www.xometry.com/capabilities/sheet-metal-fabrication/", ACCESSED)
 
-#: Past this a part is plate, no sheet shop's work (mm): text-to-cad's own floor, an inch -- sheet lasers and
+#: Past this a part is plate, no sheet shop's work (mm): cad's own floor, an inch -- sheet lasers and
 #: press brakes in general service stop near an inch of steel (a 1 in plate is the last they take), and thicker
 #: plate is flame-, plasma- or waterjet-cut and machined. Hubs recommends 10 mm at most for laser cutting and 6
 #: for bending (``thickness_max``, warnings).
@@ -63,11 +63,11 @@ PLATE_MM = 25.4
 
 #: A fold of 175 degrees or more is a hem where its inside diameter is at most this many thicknesses (the return
 #: lies on the panel, or a few thicknesses off it: a closed, an open or a teardrop hem); wider, it is a U-bend
-#: formed round a radius tool -- a strap, a saddle clamp -- and no hem's rule is its. text-to-cad's own line: the
+#: formed round a radius tool -- a strap, a saddle clamp -- and no hem's rule is its. cad's own line: the
 #: guides give a hem's least diameter (Protolabs: the thickness), not where a hem stops being one.
 HEM_DIAMETER_T = 4.0
 
-#: An inside radius past this many thicknesses is no one hit of a brake's punch: text-to-cad's own line (air
+#: An inside radius past this many thicknesses is no one hit of a brake's punch: cad's own line (air
 #: bending forms a radius of a fraction of the die's opening, a few thicknesses; a larger one is bump-formed in
 #: steps or rolled). No fetched guide states one.
 BRAKE_RADIUS_T = 10.0
@@ -85,7 +85,7 @@ DEFAULT_SHEET = (3048.0, 1524.0)
 
 
 #: The largest plate a flat pattern can be cut from where no --sheet-size names the shop's (long x short, mm):
-#: text-to-cad's own floor -- a 10 x 40 ft plate, the largest steel mills and service centres stock (120 x 480
+#: cad's own floor -- a 10 x 40 ft plate, the largest steel mills and service centres stock (120 x 480
 #: in), which the longest laser and plasma beds in general service take. A flat longer or wider is cut from no
 #: one plate: it is split and welded, or it is a mistake of units.
 LARGEST_PLATE = (12192.0, 3048.0)
@@ -207,14 +207,14 @@ def _hems(source: Source) -> tuple[Rule, ...]:
 
 def _flat_size(source: Source, note: str) -> tuple[Rule, ...]:
     """The flat pattern on the standard sheet assumed (``DEFAULT_SHEET``), a warning: no shop's limit; and on
-    the largest plate there is (``LARGEST_PLATE``, text-to-cad's own floor), an error: no shop cuts it in one
+    the largest plate there is (``LARGEST_PLATE``, cad's own floor), an error: no shop cuts it in one
     piece. Against the sheet given (``--sheet-size``, the shop's) it is a finding of fact (``_on_sheet``), which
     cites no guide."""
     # a part that is not sheet has no flat pattern (``sheet.not_sheet`` says so): the rule is a sheet part's
     more = {"severity": "warning", "note": note, "when": {"sheet_given": False},
             "item_when": {"is_sheet": True}}
     plate = {"item_when": {"is_sheet": True}, "when": {"sheet_given": False},
-             "note": "text-to-cad's own floor: a 10 x 40 ft plate (3048 x 12192 mm) is the largest plate stocked "
+             "note": "cad's own floor: a 10 x 40 ft plate (3048 x 12192 mm) is the largest plate stocked "
                      "and the longest bed in general service; --sheet-size names a shop's own"}
     return (
         _r("flat_length_limit", "parts", "flat_length_mm", "max", LARGEST_PLATE[0], "mm", "flat pattern's long side",
@@ -246,7 +246,7 @@ def _hubs_rules(source: Source) -> tuple[Rule, ...]:
            item_when={"is_sheet": True},
            fix="plate over {limit:g} mm is not cut on a sheet laser or bent on a press brake: check it as a "
                "machined part (--process cnc), or make it of thinner sheet",
-           note="text-to-cad's own floor: sheet lasers and press brakes in general service stop near an inch "
+           note="cad's own floor: sheet lasers and press brakes in general service stop near an inch "
                 "(25.4 mm) of steel; thicker plate is flame-, plasma- or waterjet-cut and machined"),
         _r("thickness_min", "parts", "thickness_mm", "min", 0.5, "mm", "sheet thickness", source,
            item_when={"is_sheet": True}, severity="warning", fix="use sheet at least {limit:g} mm thick",
@@ -258,7 +258,7 @@ def _hubs_rules(source: Source) -> tuple[Rule, ...]:
            "inside bend radius over the thickness", OWN, severity="warning", item_when={"kind": "bend"},
            fix="a radius this large is bump-formed in steps or rolled, not bent in one hit: confirm it with the "
                "shop, or bend it at a few thicknesses",
-           note="text-to-cad's own line: air bending forms a radius of a few thicknesses in one hit; a larger "
+           note="cad's own line: air bending forms a radius of a few thicknesses in one hit; a larger "
                 "one is bump-formed or rolled, at more cost"),
         _r("flange_length", "flanges", "length_outside_minus_radius_mm", "min", 2.0, "mm",
            "flange height less the inside radius (from the outside of the bend)", source, scale_by="rule_thickness_mm",
@@ -311,7 +311,7 @@ _RULES = (*_uniform(PROTOLABS, "material thickness uniform throughout"), *_hubs_
 
 
 RULES = RuleSet(
-    "sheet", "text-to-cad general rules", "2026-11-10", _RULES, (HUBS, PROTOLABS, XOMETRY, OWN),
+    "sheet", "cad general rules", "2026-11-10", _RULES, (HUBS, PROTOLABS, XOMETRY, OWN),
     note="general practice from published sheet metal design guides, no shop's limits: Hubs's bending and laser "
          "rules, the uniform-thickness, notch, tab and hem rules of Protolabs' guide, a standard 5 x 10 ft sheet "
          "unless --sheet-size names the shop's; a shop's gauges, tooled radii, dies and part sizes are compared "

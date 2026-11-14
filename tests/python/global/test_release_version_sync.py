@@ -124,10 +124,10 @@ class VersionSyncMirrorTests(unittest.TestCase):
             skill = root / "skills/fixture/SKILL.md"
             skill.parent.mkdir(parents=True)
             unstamped = ("---\nname: fixture\nmetadata:\n  repository: o/r\n---\n"
-                         "Every command in this skill starts `cad +1.0.0`: it runs text-to-cad 1.0.0, the version.\n"
+                         "Every command in this skill starts `cad +1.0.0`: it runs cad 1.0.0, the version.\n"
                          "If `cad` says 1.0.0 is not installed:\n"
                          "```bash\nuvx --no-config --managed-python --python 3.14 --from cad-server==1.0.0 cad setup\n```\n"
-                         "It installs text-to-cad 1.0.0. If `uvx` is missing,\ninstall uv first.\n\n"
+                         "It installs cad 1.0.0. If `uvx` is missing, install uv\nfirst.\n\n"
                          "At the start of a session, run `cad +1.0.0 --version`.\n\n"
                          "Run `cad +1.0.0 run model.py`, then\n```bash\ncad +0.11.10-dev.1 model export \"$ID\" a.step\n```\n"
                          "Not pins: `x = cad +0.5 * y`, `scad +1.2.3 run`, bpy 5.2.3, cadgen==0.1.0.\n")

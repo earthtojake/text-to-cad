@@ -1,4 +1,4 @@
-"""The versions of text-to-cad installed on this computer: making one present, the use each one records, and the
+"""The versions of cad installed on this computer: making one present, the use each one records, and the
 cleanup that removes the old ones.
 
 Each version lives in ``versions/<version>`` in the state folder (``cad.engine.places``): its ``code/``, its
@@ -91,7 +91,7 @@ USE_SECONDS = 60.0 * 60
 CLEAN_SECONDS = 24 * 60 * 60.0
 UNUSED_SECONDS = 2 * 24 * 60 * 60.0
 CACHEDIR_TAG = ("Signature: 8a477f597d28d172789f06886806bc55\n"
-                "# This file is a cache directory tag created by text-to-cad: a version's code, made again whole\n"
+                "# This file is a cache directory tag created by cad: a version's code, made again whole\n"
                 "# by its install.\n")
 # The causes (``base.Refused.cause``) that mean making a version cannot run from this shell, not that it failed.
 CANNOT = frozenset({"uv", "network", "denied"})
@@ -234,7 +234,7 @@ def make_present(name: str, *, told: Callable[[str], None] | None = None) -> Pre
     if found is not None:
         return Present(name, found)
     try:
-        with install_lock(waiting=lambda: say("waiting for another install of text-to-cad to finish")):
+        with install_lock(waiting=lambda: say("waiting for another install of cad to finish")):
             found = _alive(name)
             if found is not None:
                 return Present(name, found)  # made meanwhile, by the process this one waited for
@@ -242,10 +242,10 @@ def make_present(name: str, *, told: Callable[[str], None] | None = None) -> Pre
     except base.Refused as refused:
         return Present(name, None, cannot=refused.cause if refused.cause in CANNOT else None, error=str(refused))
     except PermissionError as error:
-        return Present(name, None, cannot="denied", error=base._cannot(f"text-to-cad {name}'s folder", error,
-                                                                       f"text-to-cad {name}"))
+        return Present(name, None, cannot="denied", error=base._cannot(f"cad {name}'s folder", error,
+                                                                       f"cad {name}"))
     except OSError as error:
-        return Present(name, None, error=f"text-to-cad {name} could not be installed: {error.strerror or error}")
+        return Present(name, None, error=f"cad {name} could not be installed: {error.strerror or error}")
     return Present(name, record, made=True)
 
 
@@ -305,7 +305,7 @@ def _source(name: str) -> str | None:
         return base.server_source()
     if installations.RELEASE.fullmatch(name):
         return None
-    raise base.Refused(f"text-to-cad {name} is a development version: only its own checkout installs it")
+    raise base.Refused(f"cad {name} is a development version: only its own checkout installs it")
 
 
 def _server(env: Path, name: str) -> dict[str, Any] | None:
@@ -340,7 +340,7 @@ def _probe(name: str, python: str | None = None) -> dict[str, Any]:
         found, said = None, str(error)
     if not isinstance(found, dict) or found.get("version") != name or not isinstance(found.get("installation"), dict):
         last = said.splitlines()[-1] if said else "it said nothing"
-        raise base.Refused(f"text-to-cad {name} in {server} does not run: {last}", "probe")
+        raise base.Refused(f"cad {name} in {server} does not run: {last}", "probe")
     return found
 
 
@@ -381,7 +381,7 @@ def _kernel(name: str, probe: dict[str, Any], say: Callable[[str], None]) -> str
     env = Path(probe["base"])
     inside = os.path.normcase(os.path.realpath(places.code_dir(name))).rstrip(os.sep) + os.sep
     if not os.path.normcase(os.path.realpath(env)).startswith(inside):
-        raise base.Refused(f"text-to-cad {name}'s kernel environment would be made outside its code: {env}", "probe")
+        raise base.Refused(f"cad {name}'s kernel environment would be made outside its code: {env}", "probe")
     base._make(env, installation, say, inputs=probe.get("inputs"))
     return str(env)
 
@@ -686,7 +686,7 @@ def _stopped(name: str, folder: Path, engine: Path, say: Callable[[str], None]) 
             if not connected(name) and stop_server(name):
                 held = _take(engine)
     except OSError as error:
-        say(f"text-to-cad {name} is kept: its server's lock cannot be taken ({error.strerror or error})")
+        say(f"cad {name} is kept: its server's lock cannot be taken ({error.strerror or error})")
         return None, "refused"
     if held is None:
         return None, "connected"
@@ -724,14 +724,14 @@ def _remove(name: str, say: Callable[[str], None], *,
         try:
             os.rename(folder, aside)
         except OSError as error:
-            say(f"text-to-cad {name} is kept for now: {error.strerror or error}")
+            say(f"cad {name} is kept for now: {error.strerror or error}")
             return "refused"
     finally:
         _drop(held, engine)
     shutil.rmtree(engine, ignore_errors=True)
     shutil.rmtree(aside, ignore_errors=True)
     _forget_records(folder)
-    say(f"removed text-to-cad {name}{because}")
+    say(f"removed cad {name}{because}")
     return "removed"
 
 

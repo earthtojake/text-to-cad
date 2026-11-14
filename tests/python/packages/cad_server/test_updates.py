@@ -1,4 +1,4 @@
-"""The version check (`cad_server/updates.py`): what each install is told about a newer text-to-cad, from a feed
+"""The version check (`cad_server/updates.py`): what each install is told about a newer cad, from a feed
 read at most once an hour or a connecting client's newer server, said the same way wherever it shows. No test
 reaches the real feed: each one is handed in, or kept as just read."""
 
@@ -62,15 +62,13 @@ class UpdatesTest(unittest.TestCase):
                     mock.patch("cad_server._internal.channel._source_tree", return_value=source_tree):
                 self.assertEqual(channel.told(), expected)
 
-    def test_the_notice_is_the_release_and_its_lines_name_the_install_command(self) -> None:
+    def test_the_notice_is_one_line_that_names_the_release_and_no_command(self) -> None:
         self.assertIsNone(updates.latest())
         self.just_read(FEED)
         self.assertEqual(updates.latest(), "0.9.0")
         found = updates.notice()
         self.assertEqual(found, {"latest": "0.9.0", "version": "0.8.1"})
-        self.assertEqual(updates.line(found, "posix"), "A new release of text-to-cad is available: 0.8.1 -> 0.9.0\n"
-                                                       "To update, run: curl -fsSL https://texttocad.dev/install.sh | sh")
-        self.assertTrue(updates.line(found, "nt").endswith("run: irm https://www.texttocad.dev/install.ps1 | iex"))
+        self.assertEqual(updates.line(found), "A new version of cad is available: 0.8.1 -> 0.9.0")
         with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": "0"}):
             self.assertIsNone(updates.latest())
         # Never from a process that is not told: a development build.

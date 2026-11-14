@@ -137,7 +137,7 @@ class TheCommand(Device):
             for word in (f"+{X}", f"+{X}@store", f"+{DEV}"):
                 done = self.cad(how, word, "status")
                 self.refused(done, 3, pins.not_installed(word[1:].split("@")[0]))
-                self.assertEqual(done.stderr, f"cad: text-to-cad {word[1:].split('@')[0]} is not installed on this "
+                self.assertEqual(done.stderr, f"cad: cad {word[1:].split('@')[0]} is not installed on this "
                                               "computer.\n")
             self.assertEqual(self.uv_runs(), [], "nothing installed")
             self.assertFalse((self.state / "versions" / X).exists())
@@ -166,7 +166,7 @@ class TheCommand(Device):
         def check(how: str) -> None:
             done = self.cad(how, "status")
             self.refused(done, 3, pins.none_installed())
-            self.assertEqual(done.stderr, "cad: text-to-cad is not installed on this computer.\n")
+            self.assertEqual(done.stderr, "cad: cad is not installed on this computer.\n")
             self.version("0.9.0")
             self.version(X)
             self.ran(self.cad(how, "status"), f"{X} unset status")  # the newest installed, by its numbers
@@ -352,22 +352,19 @@ class ACommandOfAVersion(unittest.TestCase):
     def test_the_notice_follows_the_output_on_stderr_once_a_day_and_never_with_a_name(self) -> None:
         self.notice()
         mine = cad_server.__version__
-        lines = (f"A new release of text-to-cad is available: {mine} -> 99.0.0\n"
-                 "To update, run: curl -fsSL https://texttocad.dev/install.sh | sh\n")
+        lines = f"A new version of cad is available: {mine} -> 99.0.0\n"
         with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": "0"}):
             quiet = self.main("requirement")
         self.assertEqual(quiet[2], "", "the check turned off: nothing")
-        with mock.patch.object(os, "name", "posix"):
-            code, out, err = self.main("requirement")
+        code, out, err = self.main("requirement")
         self.assertEqual((code, out), quiet[:2], "stdout as it was")
         self.assertTrue(err.endswith(lines), err)
-        self.assertNotIn("new release", self.main("requirement")[2], "once a day per computer")
+        self.assertNotIn("new version", self.main("requirement")[2], "once a day per computer")
         stamp = self.state / cli.NOTICE
         os.utime(stamp, (time.time() - cli.NOTICE_SECONDS, time.time() - cli.NOTICE_SECONDS))
         code, out, err = self.main(f"+{mine}@claude", "requirement")
         self.assertEqual((code, out, err), (*quiet[:2], ""), "a name: whoever delivered that copy updates it")
-        self.assertIn("new release", self.main("requirement")[2], "a day later")
-        self.assertIn("irm https://www.texttocad.dev/install.ps1 | iex", updates.line({"version": "1", "latest": "2"}, "nt"))
+        self.assertIn("new version", self.main("requirement")[2], "a day later")
 
     def test_version_says_it_every_time_and_nothing_when_the_check_is_off_or_none_is_newer(self) -> None:
         self.notice()

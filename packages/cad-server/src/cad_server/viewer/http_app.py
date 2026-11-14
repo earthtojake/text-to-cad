@@ -568,10 +568,10 @@ class CadApp:
 
             code = cad_app_code()
             if code is None:
-                from cad_server.updates import command
+                from cad_server._internal.launch import launch_command
 
                 send_json(response, 404, {"error": "this install has no CAD app build",
-                                          "hint": f"run the install command again: `{command()}`"})
+                                          "hint": f"install this version again: `{launch_command('cad setup')}`"})
             else:
                 response.send_bytes(200, code, "text/javascript; charset=utf-8")
             return

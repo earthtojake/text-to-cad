@@ -1,4 +1,4 @@
-"""``cad doctor`` -- the health of this version of text-to-cad, and its repair: the ``cad`` command written, the
+"""``cad doctor`` -- the health of this version of cad, and its repair: the ``cad`` command written, the
 installation registered where none is, the engine started, and what this computer runs said.
 
 It writes the proxy, ``~/.local/bin/cad`` (on Windows ``cad.exe``, with the Python it runs by), where it is missing
@@ -6,14 +6,14 @@ or of an older revision, and, on a computer where no installation is current, re
 (``<state>/installations/<version>.json``) and makes it current (``cad_server._internal.installations``: the records
 clients of 0.11.10 and earlier, and processes with no version, read); on one where an installation is, it registers
 nothing. It says what it found: each written, already right, or a folder it cannot write (a sandbox's), the records
-of installations whose interpreter is gone, a file in the proxy's place that is not text-to-cad's, another command
+of installations whose interpreter is gone, a file in the proxy's place that is not cad's, another command
 shadowing it on PATH.
 
 It reads every version installed (``_versions``): where each is, whether it is completely installed, whether its
 server runs and on which port, when an agent last used it (``versions.last_used``), which is the newest, and when the
 newest one's server removes an older one (``versions.clean``: unused for 2 days); and what is left of the layout of
 0.11.10 and earlier and whether it can go yet (``legacy.unsafe``). And it says what earlier releases left behind that
-nothing of text-to-cad uses (``cad_server._internal.leftovers``: engine records of an older format, the bytecode of
+nothing of cad uses (``cad_server._internal.leftovers``: engine records of an older format, the bytecode of
 installations no longer registered, cache folders no record names, environments of models' packages unused for a
 week, the launchers 0.8 published beside the ``cad`` command, cadgen 0.7's store and state files, 0.10.0's folders
 on Windows), with their size and when they were last written: nothing removes them but the person. Everything else
@@ -59,7 +59,7 @@ import sys
 from pathlib import Path
 
 # Each check's status, as the report's lines and its JSON say them: right, said for what it is, worth a
-# look (a write a sandbox refused, a command that is not text-to-cad's), and failed (the exit status 1).
+# look (a write a sandbox refused, a command that is not cad's), and failed (the exit status 1).
 OK, INFO, WARNING, FAILED = "ok", "info", "warning", "failed"
 
 
@@ -150,7 +150,7 @@ def _versions() -> list[str]:
         now = time.time()
         for name in versions.folders():
             present = places.version_record(name) is not None
-            words = [f"text-to-cad {name} at {_home(str(places.version_dir(name)))}"
+            words = [f"cad {name} at {_home(str(places.version_dir(name)))}"
                      + ("" if present else ", not completely installed")]
             if versions.serves(name):
                 port = versions.serving(name)
@@ -165,7 +165,7 @@ def _versions() -> list[str]:
                                  f"unused for {round(versions.UNUSED_SECONDS / 86400)} days")
                 elif newest is not None and versions.older(name, newest):
                     left = last + versions.UNUSED_SECONDS - now
-                    words.append(f"text-to-cad {newest}'s server removes it once it has gone unused for "
+                    words.append(f"cad {newest}'s server removes it once it has gone unused for "
                                  f"{round(versions.UNUSED_SECONDS / 86400)} days"
                                  + (f" (in {max(1, round(left / 3600))} hours or more)" if left > 0
                                     else " (at its next cleanup)"))
@@ -324,7 +324,7 @@ def _setup(check: bool = False) -> list[tuple[str, str]]:
                 lines.append((OK, f"registry {path} " + ("registered" if status == setup.REGISTERED else "OK")))
         path, status, error = proxy
         said = {setup.OK: "OK", setup.NEWER: "OK (a later release's)",
-                setup.FOREIGN: "is not text-to-cad's (left alone): remove it to run cad by it",
+                setup.FOREIGN: "is not cad's (left alone): remove it to run cad by it",
                 setup.MISSING: "missing", setup.STALE: "stale"}[status]
 
         path_hint = _command_path_hint(path)
@@ -379,7 +379,7 @@ def _cache() -> str:
 
 
 def _leftovers():
-    """What earlier releases left behind that nothing of text-to-cad uses (``cad_server._internal.leftovers``): in the
+    """What earlier releases left behind that nothing of cad uses (``cad_server._internal.leftovers``): in the
     state and cache folders of the layout of 0.11.10 and earlier (``places``: a version's own go with it), and what 0.8
     and 0.7 kept outside what 0.10 moved into its own state folder (``cad.engine.places.adopt``), in theirs, named for
     cadgen (``earlier_state_dir``, ``earlier_cache_dir``: the folders named, where ``CAD_STATE_DIR`` and
@@ -426,7 +426,7 @@ def _leftover_words(records, bytecode, cached, earlier, packages) -> list[str]:
 
 def _report_leftovers() -> list[str]:
     """The report's lines of what earlier releases left behind, where there is any: what each is, its size and when it
-    was last written. Nothing of text-to-cad uses or removes them."""
+    was last written. Nothing of cad uses or removes them."""
     from cad_server._internal import installations, leftovers
 
     try:
@@ -451,7 +451,7 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
 
     parser = command_parser(
         prog=prog,
-        description="Check this version of text-to-cad and repair it -- write the cad command where it is missing "
+        description="Check this version of cad and repair it -- write the cad command where it is missing "
                     "or older, register this installation where none is, start its server -- and report what this "
                     "computer runs: the versions installed and when each was last used, the CAD kernel environment "
                     "(made on first need, never here) and the integrations', and the server. --check reports alone, "

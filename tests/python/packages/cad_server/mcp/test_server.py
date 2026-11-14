@@ -398,7 +398,7 @@ class TabServerTest(_Session):
                     answered = self.server.handle("tools/call", {"name": name, "arguments": {"source": "x"}}, context)
                     self.assertTrue(answered["isError"])
                     [text] = answered["content"]
-                    self.assertIn("removed in text-to-cad 0.11.10", text["text"])
+                    self.assertIn("removed in cad 0.11.10", text["text"])
                     self.assertIn(command, text["text"])
                     self.assertNotIn("skill", text["text"])
         # Counted as the caller's call naming no tool of cadgen's, never as the system's failure.

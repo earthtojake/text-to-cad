@@ -1,6 +1,6 @@
 # cad-mcp
 
-The stdio transport an agent app starts for text-to-cad's CAD app (`cad-mcp`): it carries the app's MCP
+The stdio transport an agent app starts for cad's CAD app (`cad-mcp`): it carries the app's MCP
 requests to the CAD server on this computer, over HTTP, and the server's answers back. The standard
 library alone, imported as `cad_mcp`.
 
@@ -21,7 +21,7 @@ It holds no tool, view or document: the server does. What it does on its own, in
   the server's session opened once the version is ready. Holding it matters: an app that does not act on
   `tools/list_changed` within a turn (Codex) keeps the empty list an early answer gave for the rest of that turn.
 - **Never leaves a request waiting**: every wait is bounded. While its version is being installed (minutes, on a
-  slow network), a request is answered here within seconds: a tool call with a result saying text-to-cad
+  slow network), a request is answered here within seconds: a tool call with a result saying cad
   `<version>` is being installed and to try again shortly; a tool or resource list empty, and a list-changed
   notification once the version is ready, so the app asks again; anything else an error saying the same. The
   module documentation of `cad_mcp.shim` lists the answer for each method.
