@@ -8,7 +8,7 @@ must change for, so it can land under a running agent thread unannounced. One th
 part may (a command renamed, a migration guide) -- a major release from 1.0 (1.9.3 to 2.0.0), a minor or
 major one below it (0.11.3 to 0.12.0 or 1.0.0) -- so it waits for the person's click: the update button,
 ``cad update``, the install command. The release process holds a release to that (the release check
-refuses a migration guide in a release this takes).
+refuses a new migration guide in a release this takes).
 
 With automatic updates on -- the default (``DEFAULT``) -- the default channel's version's server, on a device
 where the install command has run, reads the version feed once an hour (``cad_server/updates.py``) and, when it

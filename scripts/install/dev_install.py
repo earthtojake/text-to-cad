@@ -9,7 +9,7 @@ channel is moved to it (`versions.move`: its data imported from the version it r
 pointer, the mirror for 0.11.10 and earlier), and the `cad` command is written (~/.local/bin/cad).
 Every command in the copied skills pins that name (`cad +<name>`), so the skills, the server and
 the agent's scripts run this checkout's version and share its warm server. Name every host you
-test in one run (`dev_install.py claude codex cursor`): each run is a new version, and moving the
+test in one run (`dev_install.py claude codex`): each run is a new version, and moving the
 default channel to it leaves the skills of a host installed by an earlier run pinned to a version
 the channel has left (they say so; install that host again). With --wheel, the checkout's wheels
 are built as the release builds them, the server runs them through uvx and that installation is
@@ -22,9 +22,10 @@ Going back to the published release is the install command (`curl -fsSL
 https://texttocad.dev/install.sh | sh`): it installs the release, moves the default channel to it
 from the development version (a person's install goes back from a development version, which no
 pinned command does), gives every app its plugin and takes the development plugin out of each as a
-second copy; the development version goes with that move. What was recorded while the checkout ran
-(Recents, settings) stays with it: a release never imports from a newer version. --uninstall takes
-a host's install out alone. For an agent without plugins, install the skills alone from the
+second copy. The development version's folder stays, with its data: a release never imports from a
+newer version, and the move to the development version carried the device's Recents and settings
+into it, so the release shows none of them until the next development install carries them on.
+--uninstall takes a host's install out alone. For an agent without plugins, install the skills alone from the
 checkout with the Skills CLI: `npx skills add . -g -a <agent>`.
 
 One copy per app: a host that already loads another copy (the published plugin, this one through
@@ -46,8 +47,8 @@ setup` reads the apps with too.
 
 The page is a copy taken at install, as an installed wheel serves its own: a page that changed
 under a running app would change its URI, and hosts drop the frames already showing it. So
-install again to see a page edit, and restart the app after a Python change -- a running server
-keeps the code it started with.
+install again to see a page edit, and run `cad stop` after a Python change -- a running server
+keeps the code it started with, and outlives the app.
 
 Environment:
     CAD_PYTHON           the interpreter that runs the server (default: the checkout's .venv)

@@ -382,7 +382,7 @@ breaking part (1.9.3 to 2.0.0; 0.11.3 to 0.12.0 or 1.0.0) may rename a command o
 guide, so it waits for a click, the update button offering it as ever, and `cad status` says it is out.
 The release process holds a release to that: one the engine takes may add, and may move a library name
 whose earlier spelling stays its alias, but renames or removes nothing else, and never comes with a
-migration guide. Such a release is installed at once, in the
+new migration guide (it may correct one already shipped). Such a release is installed at once, in the
 background -- its own `cad setup --add`, which makes it present, its kernel environment with it, and changes
 nothing else -- and its setup, which moves the default channel and gives the apps its text, waits until the default
 version's server has handled no command for an hour: nothing in flight (`Daemon.working`, asked each second) and

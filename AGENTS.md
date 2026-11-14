@@ -39,8 +39,8 @@ exact version, ask which one. A release pull request comes one of two ways:
 
 Releases follow Semantic Versioning: a breaking change, which always comes with a migration guide,
 bumps the minor below 1.0 and the major from 1.0, and a release that breaks nothing installs itself on
-every device (a patch below 1.0, a patch or minor from 1.0), so `Test`'s version check refuses a migration guide
-in one. What breaks is law 15's four tiers ([CONTRIBUTING.md, "Which number a release
+every device (a patch below 1.0, a patch or minor from 1.0), so `Test`'s version check refuses a new migration
+guide in one (an existing guide may be corrected in any release). What breaks is law 15's four tiers ([CONTRIBUTING.md, "Which number a release
 bumps"](CONTRIBUTING.md#which-number-a-release-bumps)).
 
 Merge a release pull request only on the user's explicit word, once its checks

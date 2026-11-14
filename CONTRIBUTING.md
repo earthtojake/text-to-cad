@@ -234,11 +234,19 @@ Test the skills the way users get them: as the plugin, with CAD's server. One
 script installs this checkout into the agent apps you name, and running it again replaces
 that install with the current checkout. Name every app you will test in one run: each run is
 a version of its own, and moving the device to it leaves an app installed by an earlier run
-with skills pinned to a version the device has left (they say so: install that app again).
+with skills pinned to a version the device has left. Such an app says its commands are for that
+run and names `cad update`: on a development install that is not the way, since `cad update`
+gives every app the release's plugin back; run this script for that app again. Run `npm ci` and
+`scripts/bundle/bundle.sh` once first: the script builds the CAD app's page, and the viewer's
+page comes from the bundle (without it a model's link answers 404).
 
 ```bash
-scripts/install/dev_install.py claude codex cursor
+scripts/install/dev_install.py claude codex
 ```
+
+`claude` covers Cursor and Grok Build, which load Claude Code's plugin: name `cursor` or `grok`
+only on a computer without Claude Code (beside `claude` in one run, each is refused as a second
+copy and the run exits 1).
 
 | Host | What it installs |
 | ---- | ---------------- |
@@ -271,13 +279,19 @@ installation is the version: exactly what users get, each build its own. To go b
 published release, run the install command (`curl -fsSL https://texttocad.dev/install.sh | sh`;
 on Windows `irm https://www.texttocad.dev/install.ps1 | iex`): it installs the release, moves the
 default channel to it from the development version (a person's install goes back from one; no
-pinned command does), gives every app its plugin, takes the development plugin out of each as a
-second copy, and removes the development version. What the checkout recorded (Recents,
-settings) stays behind with it: a release never imports from a newer version. `--uninstall` takes
+pinned command does), gives every app its plugin, and takes the development plugin out of each as a
+second copy. The development version's folder stays, with its data: a release never imports from a
+newer version, and the move to the development version carried the device's Recents and settings
+into it, so the release you go back to shows none of them (they are in that folder, which
+`cad doctor` lists, and the next development install carries them on). The `earthtojake-dev`
+catalog stays in Claude Code and Codex too, pointing into this checkout's `tmp/`: remove it
+(`claude plugin marketplace remove earthtojake-dev`, `codex plugin marketplace remove
+earthtojake-dev`) before deleting the checkout, or Codex fails to list its plugins. `--uninstall` takes
 the named apps' installs out alone. Install again to see a skill or page edit. A page that changed under a
 running app would change its URI, and hosts drop the frames already showing it,
 which is why each install serves its own copy. A running server keeps the
-Python it started with, so restart the app after a Python-only change. The
+Python it started with and outlives the app: after a Python-only change run `cad stop`, and the
+next command starts it with the new code. The
 app menu of every view says which build it shows: any build but the release's
 own reads `v<VERSION>-dev.<commit>` (`-dirty` when the checkout had uncommitted
 changes), the commit of the checkout the Viewer or the CAD app was built from.
@@ -296,7 +310,9 @@ Keep one copy of the plugin per app. The script refuses to install where another
 copy would load beside it: the published plugin, this one installed through
 another host, or this repository's skills installed loose where the app reads
 skills. Two copies means every skill twice. Uninstall the published plugin
-before testing, and reinstall it afterwards.
+before testing (`claude plugin uninstall text-to-cad@text-to-cad`, `codex plugin remove
+text-to-cad@text-to-cad`, `gemini extensions uninstall text-to-cad`); the install command puts it
+back afterwards.
 
 Where the server's output goes:
 
@@ -632,8 +648,10 @@ setting that comes to mean something else, anything a skill or a person's script
 edited for. A breaking change always comes with a migration guide under `docs/migrations/`, which says
 what to change. An addition that renames nothing (a new command, a new document type, a new option)
 breaks nothing, and neither does a Python name renamed with its earlier spelling kept as its alias
-(tier 2, below). The version check refuses a release that installs itself and adds or changes a migration
-guide; the rest is the release's author's to judge, and when in doubt it is the breaking slot.
+(tier 2, below). The version check refuses a release that installs itself and adds a migration guide: a
+new guide is a new migration, which waits for the person's click. An existing guide may be corrected or
+extended in any release. The rest is the release's author's to judge, and when in doubt it is the
+breaking slot.
 
 **What breaks, by tier.** [Law 15](packages/cad/README.md#the-design-laws) ("Compatibility, by who
 pays for a break") sorts what a release can change into four tiers and says what compatibility each
@@ -725,7 +743,8 @@ The pull request's version check (`static`) says what merging it releases, and r
 - a version that is not past the target branch's and the latest release tag's, or that is on
   the list of [versions a release cannot take](#versions-a-release-cannot-take);
 - a release that installs itself -- below 1.0 a patch, the target's `X.Y`; from 1.0 a patch or
-  minor, the target's `X` -- that adds or changes a migration guide under `docs/migrations/`: see
+  minor, the target's `X` -- that adds a migration guide under `docs/migrations/` (a change to one
+  already there passes): see
   [Which number a release bumps](#which-number-a-release-bumps);
 - a release that changes more than 300 files: GitHub matches a push's paths
   against its first 300 changed files only, so `Publish Release` might never

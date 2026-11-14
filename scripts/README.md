@@ -157,8 +157,8 @@ where those files ship, so these scripts are what produces them.
   merging it releases: nothing when `VERSION` is unchanged against the target
   branch; otherwise the bump must come from a branch of this repository (never a
   fork) and pass both the target's version and the latest tag, and a release that
-  installs itself (a patch below 1.0, a patch or minor from 1.0) may not add or change
-  a migration guide. Called by `test.yml` (`static`); see `CONTRIBUTING.md`,
+  installs itself (a patch below 1.0, a patch or minor from 1.0) may not add a
+  migration guide, though it may correct one already there. Called by `test.yml` (`static`); see `CONTRIBUTING.md`,
   "Which number a release bumps".
 - `pypi_release.py --project NAME --version X.Y.Z --built DIR --upload DIR --released DIR`
   (or `--wait`) — what a release uploads to PyPI of one of its four projects

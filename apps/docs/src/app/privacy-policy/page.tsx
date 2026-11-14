@@ -207,8 +207,8 @@ export default function PrivacyPolicyPage() {
             from a development install. Your choice is kept on your computer, as the{" "}
             <code>telemetry</code> setting in text-to-cad’s settings file, through restarts and updates, and
             one choice counts for every part of text-to-cad; a no stays a no. Turning telemetry off turns it
-            off in every version of text-to-cad on your computer, older ones included, and deletes what was
-            sent. Nothing waits to
+            off in every version of text-to-cad on your computer, and asks our server to delete everything
+            stored under their install IDs. Nothing waits to
             send: what a command or a model script counts, and what any part of text-to-cad counted since its
             last send when it exits, wait in small files beside that setting until the next part of text-to-cad
             sends them, or a sender the next command starts once they have waited five minutes; turning
