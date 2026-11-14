@@ -251,6 +251,9 @@ export const ALL_VIEW_FEATURES = Object.freeze({ modes: VIEW_MODE_VALUES, settin
 /** @type {ViewFeatures} */
 export const EDGELESS_VIEW_FEATURES = Object.freeze({ modes: Object.freeze(["solid"]), settings: Object.freeze([]) });
 
+/** A field, an implicit model the page marches: drawn one way, with nothing a mesh's settings act on. @type {ViewFeatures} */
+export const FIELD_VIEW_FEATURES = EDGELESS_VIEW_FEATURES;
+
 /** A STEP part file: one part, so no Parts and no Explode. @type {ViewFeatures} */
 export const STEP_PART_VIEW_FEATURES = Object.freeze({
   modes: Object.freeze(VIEW_MODE_VALUES.filter(mode => mode !== "parts")),
@@ -276,6 +279,8 @@ export const XBF_PART_VIEW_FEATURES = STEP_PART_VIEW_FEATURES;
 export function viewFeaturesForKind(kind, { parts = 0, explodeParts = 0 } = {}) {
   const normalized = String(kind || "").trim().toLowerCase();
   if (normalized === "dxf") return EDGELESS_VIEW_FEATURES;
+  // A field is drawn by marching it: one look, and no clip plane a mesh's cap could close.
+  if (normalized === "gsl") return FIELD_VIEW_FEATURES;
   // A cadgen engine document: an assembly everything, a part no Parts or Explode.
   if (normalized === "xbf") return parts > 1 ? XBF_VIEW_FEATURES : XBF_PART_VIEW_FEATURES;
   return {

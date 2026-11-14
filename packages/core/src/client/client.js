@@ -450,6 +450,28 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         if (disposed) throw abortError();
       }
     },
+    async fieldPayload(file, { signal } = {}) {
+      // A `.gsl` drawn as its field: what the page marches it with (`GET <document>/field`), a shader
+      // library omega's gsl writes of the model on the SERVER, kept there by the model's bytes. Bytes it
+      // has not compiled yet it compiles off the request, answering 202 { state: 'compiling', retryMs }
+      // until it has, and the client asks again after `retryMs`, as a board's plot does.
+      if (!file) throw new Error('Missing file');
+      const api = await documentApi(file, { signal, operation: 'compiling' });
+      for (;;) {
+        const reply = await request(`${api}/field`, { signal, timeoutMs: 10_000, operation: 'compiling' });
+        if (reply?.state !== 'compiling') return reply;
+        await pause(Math.min(Math.max(Number(reply.retryMs) || 0, 0), DRAWING_RETRY_MAX_MS), signal);
+        if (disposed) throw abortError();
+      }
+    },
+    async fieldTexture(file, name, { signal } = {}) {
+      // One texture a field reads (`GET <document>/field/textures/<name>`), as its raw texels.
+      if (!file) throw new Error('Missing file');
+      const api = await documentApi(file, { signal, operation: 'compiling' });
+      const response = await fetchImpl(cadApiUrl(`${api}/field/textures/${encodeURIComponent(name)}`, { origin }), { signal, cache: 'no-store' });
+      if (!response.ok) throw new Error(`The field's texture ${name} could not be read (${response.status}).`);
+      return response.arrayBuffer();
+    },
     async boardModels(file, { signal } = {}) {
       // A `.kicad_pcb`'s 3D models table (`GET <board>/models`): each model its footprints name, answered by the
       // SERVER as this computer has it now -- `{ file, document, api, stamp }`, a STEP the engine serves by that

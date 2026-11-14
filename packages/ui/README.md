@@ -95,6 +95,7 @@ src/
     xbf/            an engine document (.xbf) and a STEP: model tree, Position
     robot/          URDF, SRDF and SDF: Position and Links
     glb/, mesh/     GLB, and STL/3MF triangle meshes
+    field/          a GSL model, drawn as its field: marched in the view, with no mesh of it
     dxf/            2D drawings
     workspace/      a viewer file's catalog entry and document load
     harness/, shell-harness/  surfaces the browser suites drive
@@ -144,7 +145,7 @@ const renderers = [createDxfRenderer({ client, preferences }), createGlbRenderer
 ```
 
 Public entry points include `/host`, `/file-viewer`, `/tab-store`, `/navigation`,
-`/renderers/dxf`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/xbf`, `/renderers/workspace`, `/file-viewer/presentation`,
+`/renderers/dxf`, `/renderers/field`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/xbf`, `/renderers/workspace`, `/file-viewer/presentation`,
 `/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the app menu's Telemetry row and its state), `/update` (the update button), `/whats-new` (the What's new dialog, its notes and when it shows), `/i18n` (the locales and the translation hook), `/i18n/locale` (which locale a person reads in, with no dictionary: for a page that says a few words before anything else loads), `/build-id` (what a Vite config names the build with), `/loading-icon`, `/utils`, `/primitives/*`,
 `/tokens.css`, and `/styles.css`. `/catalog` (a CAD client as a `FileSource`, the file menu's
 Copy path and Reveal, and the one spelling of an absolute path: `normalizePath`, `baseName`,
