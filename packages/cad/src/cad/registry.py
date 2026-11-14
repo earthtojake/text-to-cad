@@ -46,7 +46,9 @@ __all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "INTEGRATION_OPERATIONS", "OPERATIO
 OPERATIONS = ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges", "drc", "erc", "validate")
 #: What an integration does to a file of its tool's own that is no document type (a file we check and never
 #: show): a closed set too. ``check`` answers findings, as a type's check does (``cad.results.CheckResult``).
-INTEGRATION_OPERATIONS = ("check",)
+#: ``mesh`` writes a file of a type we do show from one we do not (a GLB of a GSL model), and answers as a check
+#: does: the file is written only where its findings do not block.
+INTEGRATION_OPERATIONS = ("check", "mesh")
 #: How a type is viewed: an engine document (a B-rep scene the engine serves), a triangle mesh, a 2D
 #: drawing, a robot description, a plot.
 VIEWS = ("document", "mesh", "drawing", "robot", "plot")
@@ -446,8 +448,9 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
     "omega": Integration(
         "omega", "omega-core's gsl, the compiler and mesher of GSL, Gradient Control Laboratories' language for implicit "
                  "(signed-distance) models, and its client for the field's queries: `cad run gsl compile -t stl "
-                 "part.gsl` meshes a model as gsl does, and `cad omega check part.gsl` judges the mesh against the "
-                 "field, since gsl exits 0 on one it got wrong",
+                 "part.gsl` meshes a model as gsl does, `cad omega check part.gsl` judges the mesh against the "
+                 "field, since gsl exits 0 on one it got wrong, and `cad omega mesh part.gsl part.glb` writes the "
+                 "mesh once it passes",
         extra="omega", process="separate",
         # gsl is the omega-core wheel's (the extra's), or the one CAD_GSL names; one on PATH is never run.
         probe=Probe("gsl", "0.1.1", "gsl comes with cad's omega integration, cad[omega] (the omega-core wheel, macOS "
@@ -456,7 +459,10 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                                     "or newer", "CAD_GSL"),
         operations=(Operation("check", "mesh a GSL model with gsl and check the mesh against the field: it compiles, "
                                        "it is closed and manifold, it points outward, it stops short of the @scene "
-                                       "box, and its volume is the field's", "omega"),),
+                                       "box, and its volume is the field's", "omega"),
+                    Operation("mesh", "mesh a GSL model into a GLB, with values for its names, once it is wanted: the "
+                                      "mesh is checked against the field as check does before it is written, and "
+                                      "kept, so the same model and values are meshed once", "omega")),
         files=(".gsl",),
         modules=("omega_core",), distributions=("omega-core",), identity=("omega-core",), commands=("gsl",),
         # omega-core publishes wheels for macOS (arm64, x86-64) and Linux with glibc (x86-64, arm64) alone.

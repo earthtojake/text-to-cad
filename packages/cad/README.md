@@ -92,7 +92,8 @@ launcher for the engine’s one page, every document at `/<id>`, every file read
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a MuJoCo model's
 check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); a GSL
 model's mesh checked against its field (`cad.omega.check`: omega's `gsl` meshes it, and the mesh is held closed,
-manifold, outward, inside its `@scene` box and to the volume omega's evaluator proves); a 3D
+manifold, outward, inside its `@scene` box and to the volume omega's evaluator proves), and written as a GLB once
+it passes (`cad.omega.mesh`: with values for the model's names, kept by what made it); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
 exact geometry measured by the build123d integration, a mesh by trimesh, judged against general, cited rules); a
 B-rep document's interference check (`cad.<type>.interference(source, poses=..., fits=...)`: every

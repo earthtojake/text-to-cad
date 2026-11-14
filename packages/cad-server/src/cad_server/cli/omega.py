@@ -1,4 +1,4 @@
-"""``cad omega <operation>``: the omega integration's commands on a GSL model (check).
+"""``cad omega <operation>``: the omega integration's commands on a GSL model (check, mesh).
 
 The operations and their options are ``cad_server.cli.integrations``', from the registry
 (``cad.registry``); ``python -m cad_server.cli.omega <operation> ...`` runs what the ``cad`` command does.
