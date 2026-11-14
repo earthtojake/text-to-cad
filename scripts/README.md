@@ -114,16 +114,18 @@ where those files ship, so these scripts are what produces them.
   packaged CAD app over stdio and a manufacturing check of a built part for each process
   (the checks' measuring modules, loaded from the wheel). Called by `test.yml` and
   `release-publish.yml`.
-- `rehearse-update.py [SCENARIO ...] [--old RELEASE]` — rehearses, on private devices (each its own home,
-  state, engine, cache and `cad` command folders), every update a device makes into this build and out of
-  it: 0.11.10's automatic update, update button, `cad update` and the install command run again, each
-  followed by a second update; updates killed at each point of the move; this build updating itself by
-  its own automatic path; work in flight during an update; this build's server running before 0.11.10
-  switches; an app an update could not reach; and 0.10.4. It installs the real releases from PyPI,
-  builds this tree as later releases with a 40-second quiet period, and never names a port: servers take
-  3245 where it is free, else a port of the device's own as their default. It checks the pointer, the
-  mirror, the port and page token, Recents, the old layout's removal and the flat door. Needs uv and the
-  network. Called by `test.yml`'s `update-rehearsal` job on Linux, macOS and Windows.
+- `rehearse-update.py [ROUTE ...] [--old RELEASE]` — rehearses, on private computers (each its own home,
+  state, engine, cache and `cad` command folders), a computer on a shipped release arriving at this build by
+  each route: `updater`, 0.11.10's (or `--old`'s) own update button running this build's hidden
+  `cad setup --engine-update` (the install script it starts is a stand-in that notes it ran);
+  `install-script`, `scripts/install/install.py` on a computer of 0.11.10 whose server serves pages; and
+  `from-0.8`, 0.8.4 installed by its own `cadgen setup` with telemetry off, then `install.py`. It installs the
+  real releases from PyPI, publishes this tree as one later release, and never names a port: servers take
+  3245 where it is free, else a port of the computer's own as their default. It checks this build's server
+  on the pages' port with their token, Recents and a document opening, the telemetry answer and What's new,
+  the `cad` command with and without a pin, the install script started once, and one server: the old
+  release's stopped and its layout removed by this build's cleanup. Needs uv and the network. Called by
+  `test.yml`'s `update-rehearsal` job on Linux, macOS and Windows.
 - `test-viewer-launch.sh` — launches `cad viewer` against the built client and
   verifies reuse, the engine serving a tiny test-owned STEP and the bundled client
   drawing it. Called by `test.yml`'s `viewer-e2e` job.

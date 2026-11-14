@@ -51,7 +51,8 @@ a request its server takes from a command, an MCP tool call other than the page'
 nothing is in flight there, then its folder renamed aside and removed. One with work in flight, a process running
 from its folder, or a folder the system refuses to move (Windows: a file in use) stays for the next pass. A version
 that is not the newest cleans nothing. The same pass removes what the layout of 0.11.10 and earlier left, once that
-is safe (``cad_server._internal.legacy``).
+is safe (``cad_server._internal.legacy``); while that layout is there, the server tries that part again every minute
+between passes (``clean_legacy``).
 """
 
 from __future__ import annotations
@@ -73,10 +74,10 @@ from typing import Any
 from cad.engine import places
 from cad_server._internal import base
 
-__all__ = ["CANNOT", "CLEAN_SECONDS", "LOCK", "UNUSED_SECONDS", "USED", "Present", "ask", "ask_flat", "clean",
-           "connected", "development", "due", "endpoint", "flat", "flat_endpoint", "folders", "gone",
-           "install_lock", "last_used", "make_present", "newest", "older", "order", "present", "quiet", "serves",
-           "serving", "stop_server", "used"]
+__all__ = ["CANNOT", "CLEAN_SECONDS", "LEGACY_SECONDS", "LOCK", "UNUSED_SECONDS", "USED", "Present", "ask",
+           "ask_flat", "clean", "clean_legacy", "connected", "development", "due", "endpoint", "flat",
+           "flat_endpoint", "folders", "gone", "install_lock", "last_used", "make_present", "newest", "older",
+           "order", "present", "quiet", "remove", "serves", "serving", "stop_server", "used"]
 
 # The computer's install lock, in the state folder: every install and every cleanup holds it (``cad setup``'s too).
 LOCK = "install.lock"
@@ -622,6 +623,30 @@ def clean(*, now: float | None = None, told: Callable[[str], None] | None = None
     return done
 
 
+# How often the newest version's server tries again to remove the layout of 0.11.10 and earlier between its cleanups,
+# while that layout is there and was not safe to remove (``clean_legacy``).
+LEGACY_SECONDS = 60.0
+
+
+def clean_legacy(*, told: Callable[[str], None] | None = None) -> bool:
+    """The layout of 0.11.10 and earlier removed (``legacy.remove``) by a process of the newest installed version once
+    that is safe, between its cleanups (``clean``): its server tries every ``LEGACY_SECONDS`` while the layout is
+    there. The cleanup as the server starts often finds it unsafe -- the shipped updater's helper that started this
+    server still runs from that layout --, and a day is long to keep a kernel's worth of folders. Quiet while it is not
+    safe (``legacy.unsafe``). Whether nothing of the layout is left."""
+    from cad_server._internal import legacy
+
+    own = places.versioned()
+    if not legacy.removable():
+        return True
+    if own is None or newest() != own or legacy.unsafe(own) is not None:
+        return False
+    with install_lock():
+        if newest() != own:
+            return False
+        return legacy.remove(own, told)
+
+
 def _take(folder: Path) -> Any:
     """The engine lock in ``folder`` (``places.lock``): held, or None while a server holds it. ``OSError`` when
     the folder cannot hold it."""
@@ -671,7 +696,18 @@ def _stopped(name: str, folder: Path, engine: Path, say: Callable[[str], None]) 
     return held, None
 
 
-def _remove(name: str, say: Callable[[str], None]) -> str:
+def remove(name: str, *, told: Callable[[str], None] | None = None) -> str:
+    """Version ``name`` removed now, whenever it was last used: its server stopped where nothing is in flight there,
+    its folder removed, as the cleanup removes one (``_remove``), under the install lock. What a development install
+    going back to the release does with its development versions (``scripts/install/dev_install.py --release``), which
+    sort after their release and would otherwise stay the newest installed. ``removed``, ``absent``, or why it stays
+    (``connected``, ``in use``, ``refused``)."""
+    with install_lock():
+        return _remove(name, told or (lambda _line: None), because="")
+
+
+def _remove(name: str, say: Callable[[str], None], *,
+            because: str = f", which no agent has used for {round(UNUSED_SECONDS / 86400)} days") -> str:
     """Version ``name``'s folder removed, its data with it: its server stopped where nothing is in flight
     (``_stopped``), the folder renamed aside (``versions/.trash-*``), which a refusal (Windows: a file in use) turns
     into a skip, then removed, and the records naming it forgotten. ``removed``, ``absent``, or why it stays
@@ -695,7 +731,7 @@ def _remove(name: str, say: Callable[[str], None]) -> str:
     shutil.rmtree(engine, ignore_errors=True)
     shutil.rmtree(aside, ignore_errors=True)
     _forget_records(folder)
-    say(f"removed text-to-cad {name}, which no agent has used for {round(UNUSED_SECONDS / 86400)} days")
+    say(f"removed text-to-cad {name}{because}")
     return "removed"
 
 

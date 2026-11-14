@@ -442,6 +442,26 @@ class Cleanup(Device):
         self.assertFalse(any(entry.startswith(".trash-") for entry in os.listdir(places.versions_dir())))
         self.assertIn(f"removed text-to-cad {stale}, which no agent has used for 2 days", self.said)
 
+    def test_going_back_from_a_development_install_removes_its_versions_used_or_not(self) -> None:
+        # A development version sorts after its release: `dev_install.py --release` removes it (its REMOVE, run by the
+        # checkout's Python), so the release is the newest installed again.
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("dev_install_under_test",
+                                                      repo_path("scripts/install/dev_install.py"))
+        dev_install = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(dev_install)
+        self.data(X)
+        development = f"{X}-dev.20261114000000"
+        versions.development(development, sys.executable, sys.executable, sys.prefix)
+        versions.used(development)
+        self.assertEqual(versions.newest(), development)
+        printed: list[str] = []
+        with mock.patch("builtins.print", side_effect=lambda *words, **_: printed.append(" ".join(map(str, words)))):
+            exec(dev_install.REMOVE, {})  # noqa: S102 - the snippet the script runs, run here on this device
+        self.assertEqual((versions.present(), versions.newest()), ([X], X))
+        self.assertEqual(printed, [f"removed text-to-cad {development}"])
+
     def test_a_version_that_is_not_the_newest_cleans_nothing(self) -> None:
         now = time.time()
         for name in (X, Y, Z):
@@ -512,13 +532,34 @@ class Cleanup(Device):
         self.assertTrue(versions.due(5.0, 5.0 + versions.CLEAN_SECONDS))
         cleaned: list[float] = []
         engine = SimpleNamespace(draining=False, stopping=threading.Event(), cleaning=None, cleaned=None,
-                                 bridge=SimpleNamespace(reconcile=lambda: False))
+                                 legacy_tried=None, bridge=SimpleNamespace(reconcile=lambda: False))
         with mock.patch.object(daemon, "versioned", return_value=Y), mock.patch.object(updates, "refresh"), \
+                mock.patch.object(legacy, "removable", return_value=False), \
                 mock.patch.object(versions, "clean", side_effect=lambda **_kwargs: cleaned.append(engine.cleaned)):
             for now in (100.0, 200.0, 100.0 + versions.CLEAN_SECONDS - 1, 100.0 + versions.CLEAN_SECONDS):
                 daemon.Daemon.versions(engine, now=now)
                 engine.cleaning.join(10)
         self.assertEqual(cleaned, [100.0, 100.0 + versions.CLEAN_SECONDS], "as it starts, then a day later")
+
+    def test_the_layout_before_is_tried_again_every_minute_between_cleanups(self) -> None:
+        # The cleanup as the server starts finds the layout of 0.11.10 and earlier unsafe while the shipped updater's
+        # helper that started the server still runs from it: its removal is tried again a minute later, not a day.
+        from cad_server import updates
+        from cad_server.engine import daemon
+
+        cleaned, tried = [], []
+        engine = SimpleNamespace(draining=False, stopping=threading.Event(), cleaning=None, cleaned=None,
+                                 legacy_tried=None, bridge=SimpleNamespace(reconcile=lambda: False))
+        with mock.patch.object(daemon, "versioned", return_value=Y), mock.patch.object(updates, "refresh"), \
+                mock.patch.object(legacy, "removable", return_value=True), \
+                mock.patch.object(versions, "clean", side_effect=lambda **_kwargs: cleaned.append(True)), \
+                mock.patch.object(versions, "clean_legacy", side_effect=lambda **_kwargs: tried.append(True)):
+            for now in (100.0, 100.0 + versions.LEGACY_SECONDS - 1, 100.0 + versions.LEGACY_SECONDS,
+                        100.0 + versions.LEGACY_SECONDS + 1, 100.0 + 2 * versions.LEGACY_SECONDS):
+                daemon.Daemon.versions(engine, now=now)
+                if engine.cleaning is not None:
+                    engine.cleaning.join(10)
+        self.assertEqual((len(cleaned), len(tried)), (1, 2), "the cleanup as it starts, then the layout each minute")
 
 
 class TheLayoutBefore(Device):
@@ -601,6 +642,38 @@ class TheLayoutBefore(Device):
         imports.ensure(Y)  # Y copies X, which no longer has it
         imports.carry(imports.of_legacy(), Y)  # the layout, which still has it, carried into Y
         self.assertFalse((places.data_dir(Y) / "documents" / IDENT).exists(), "deleted before: it stays deleted")
+
+
+class FromEight(Device):
+    """A computer that comes from 0.7 or 0.8 straight to this release: what those kept in their own state folder
+    (``cadgen``) is taken in by the first version's import, through the layout of 0.11.10 and earlier, as every release
+    since 0.10 did as it set itself up (``places.adopt_earlier``)."""
+
+    def test_its_settings_records_and_telemetry_no_are_taken_in_and_whats_new_is_shown(self) -> None:
+        environment = {key: value for key, value in os.environ.items() if key not in ("CAD_STATE_DIR", "XDG_STATE_HOME")}
+        environment.update({"HOME": str(self.root / "home"), "USERPROFILE": str(self.root / "home")})
+        patch = mock.patch.dict(os.environ, environment, clear=True)  # the platform's folders, in a home of its own
+        patch.start()
+        self.addCleanup(patch.stop)
+        eight = places._platform_state(places.EARLIER_STATE)
+        (eight / "documents" / IDENT).mkdir(parents=True)
+        (eight / "documents" / IDENT / "document.json").write_text('{"id": "eight"}', encoding="utf-8")
+        (eight / "settings.json").write_text(json.dumps({"telemetry": {"choice": "off", "decidedAt": 1.0},
+                                                         "language": {"locale": "de"}}), encoding="utf-8")
+        (eight / "installations").mkdir()
+        (eight / "installations" / "0.8.4.json").write_text(json.dumps(
+            {"version": "0.8.4", "python": "/gone/python", "cadgen": "/gone/cadgen", "prefix": "/gone"}),
+            encoding="utf-8")
+        self.present(X)
+        done = imports.ensure(X)
+        self.assertEqual(done.source.kind, "legacy")
+        data = places.data_dir(X)
+        settings = json.loads((data / "settings.json").read_text(encoding="utf-8"))
+        self.assertEqual((settings["telemetry"]["choice"], settings["language"]), ("off", {"locale": "de"}))
+        self.assertEqual(settings["whats_new"], {"seen": []}, "0.8 on record: shown what this release brought")
+        self.assertTrue((data / "documents" / IDENT / "document.json").is_file(), "Recents' record")
+        said_no = json.loads((eight / "settings.json").read_text(encoding="utf-8"))["telemetry"]["choice"]
+        self.assertEqual(said_no, "off", "0.8's folder keeps the no, for a 0.8 still installed")
 
 
 class ReadOnly(Device):

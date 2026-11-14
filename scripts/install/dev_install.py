@@ -16,8 +16,10 @@ checkout as the source instead of GitHub:
 3. removes the published copy of ours from each app and installs that folder instead, with the app's own command
    (install.py's ``local`` commands; an app that cannot install from a folder is skipped and says so).
 
-``--release`` runs install.py as it is: the newest release, every app moved back to the GitHub copy (the
-development copies, ``text-to-cad@earthtojake-dev`` and the rest, are among the old copies it removes). Run it
+``--release`` first removes every development version (its server stopped where nothing is in flight there): one
+sorts after its release, so left installed it would stay the newest, the one a ``cad`` command with no pin runs and
+whose server cleans. Then it runs install.py as it is: the newest release, every app moved back to the GitHub copy
+(the development copies, ``text-to-cad@earthtojake-dev`` and the rest, are among the old copies it removes). Run it
 again after a change; restart an app's session to load it.
 
 Environment: ``CAD_PYTHON``, the interpreter that runs the server (default: the checkout's .venv).
@@ -59,6 +61,13 @@ REGISTER = ("import sys\n"
             "versions.development(sys.argv[1], sys.executable, str(releases.console(Path(sys.prefix))), sys.prefix)\n"
             "_path, _status, unwritten = installations.write_proxy()\n"
             "sys.exit(unwritten or 0)\n")
+# Removes every development version installed (``versions.remove``: its server stopped first), each said.
+REMOVE = ("from cad_server._internal import versions\n"
+          "for name in versions.present():\n"
+          "    if versions.DEVELOPMENT.fullmatch(name):\n"
+          "        done = versions.remove(name, told=print)\n"
+          "        if done not in ('removed', 'absent'):\n"
+          "            print(f'text-to-cad {name} stays for now ({done}): run this again once nothing runs from it')\n")
 # The variable naming the version the server registers as when an app starts it (cad_server's installations).
 VERSION_ENV = "CAD_INSTALLATION_VERSION"
 
@@ -78,6 +87,17 @@ def interpreter() -> str:
         raise Refused(f"{python} cannot run this checkout's server: install requirements-dev.txt into .venv, "
                       "or set CAD_PYTHON")
     return python
+
+
+def remove_development() -> None:
+    """Every development version removed, by this checkout's own server code (``REMOVE``); where the checkout cannot
+    run it, said, and nothing removed."""
+    try:
+        python = interpreter()
+    except Refused as refusal:
+        print(f"The development versions stay ({refusal}).", file=sys.stderr)
+        return
+    subprocess.run([python, "-c", REMOVE])
 
 
 def plugin_files(root: Path = REPO_ROOT) -> list:
@@ -146,6 +166,7 @@ def main(argv=None) -> int:
     if args.release:
         if args.apps:
             parser.error("--release takes no apps: it puts the published release into every app")
+        remove_development()
         return install.main([])
     version = f"{(REPO_ROOT / 'VERSION').read_text(encoding='utf-8').strip()}-dev.{time.strftime('%Y%m%d%H%M%S')}"
     try:

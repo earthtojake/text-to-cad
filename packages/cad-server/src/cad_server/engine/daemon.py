@@ -723,6 +723,7 @@ class Daemon:
         self.bridge = Bridge(self)
         self.cleaning: threading.Thread | None = None
         self.cleaned: float | None = None
+        self.legacy_tried: float | None = None
         from cad_server.engine.models import Models
 
         self.models = Models(self)
@@ -1903,7 +1904,9 @@ class Daemon:
         and earlier held while ``installations/current`` names its version and let go once it does not
         (``Bridge``); the version check's feed read in the background where it is due (``updates.refresh``); and,
         as it starts and then every ``versions.CLEAN_SECONDS`` (``versions.due``, at ``now``, monotonic), the
-        cleanup in the background (``versions.clean``: nothing unless its version is the newest installed)."""
+        cleanup in the background (``versions.clean``: nothing unless its version is the newest installed); between
+        those, while the layout of 0.11.10 and earlier is there, its removal tried again every
+        ``versions.LEGACY_SECONDS`` (``versions.clean_legacy``)."""
         name = versioned()
         if name is None or self.draining or self.stopping.is_set():
             return
@@ -1914,12 +1917,21 @@ class Daemon:
             self.bridge.reconcile()
             updates.refresh()
             now = time.monotonic() if now is None else now
-            if versions.due(self.cleaned, now) and (self.cleaning is None or not self.cleaning.is_alive()):
-                self.cleaned = now
-                self.cleaning = threading.Thread(
-                    target=versions.clean, name="cad-clean", daemon=True,
-                    kwargs={"told": lambda line: print(f"cad: {line}", file=sys.stderr, flush=True)})
+            idle = self.cleaning is None or not self.cleaning.is_alive()
+            told = {"told": lambda line: print(f"cad: {line}", file=sys.stderr, flush=True)}
+            if versions.due(self.cleaned, now) and idle:
+                self.cleaned = self.legacy_tried = now
+                self.cleaning = threading.Thread(target=versions.clean, name="cad-clean", daemon=True, kwargs=told)
                 self.cleaning.start()
+            elif idle and now - (self.legacy_tried or now) >= versions.LEGACY_SECONDS:
+                # The layout of 0.11.10 and earlier, which the cleanup found unsafe to remove: tried again.
+                from cad_server._internal import legacy
+
+                self.legacy_tried = now
+                if legacy.removable():
+                    self.cleaning = threading.Thread(target=versions.clean_legacy, name="cad-clean-legacy",
+                                                     daemon=True, kwargs=told)
+                    self.cleaning.start()
         except Exception as error:  # noqa: BLE001 - the engine's tending never fails for a folder
             print(f"cad: the versions could not be looked after: {type(error).__name__}: {error}", file=sys.stderr,
                   flush=True)

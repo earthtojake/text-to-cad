@@ -202,8 +202,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    Recents, the registry, the page token and port, and the caches above under `data/cache/`), its
    environments and bytecode in `code/` (the base and each run's under `code/base/`, bytecode under
    `code/pycache/`), and its door in `<version>` in the engine folder; the state folder itself holds only
-   the device's globals (each delivery channel's pointer, `default` and `channels/<name>`; the installations'
-   records and the mirror clients of 0.11.10 and earlier read; the install lock; and the settings file of 0.11.10 and earlier, which also keeps a telemetry no for every version).
+   the device's globals (the installations' records and the mirror clients of 0.11.10 and earlier read; the install
+   lock; and the settings file of 0.11.10 and earlier, which also keeps a telemetry no for every version).
    Which a process is, and so every path, is `cad.engine.places`' one rule (`versioned`). The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
@@ -315,7 +315,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     they can. Four tiers:
 
     **Tier 1: what an agent reads each session** -- the skills, the `cad` command's verbs and flags,
-    the CAD tools' arguments, the wording of docs. Hard cutovers only, release over release. A retired
+    the CAD tools' arguments, the wording of docs. Hard cutovers only, in any release: every command a skill runs
+    names its release (`cad +X`), so a skill only ever meets its own release's surface, and removing or renaming one
+    is not a breaking change and needs no migration guide. A retired
     surface does not exist: no alias, no shim, and no error that recognizes its old spelling to
     explain what replaced it. A removed command, flag, argument, key, module or name gets what the
     current contract's ordinary validation says -- an unknown command, an unrecognized argument, an
@@ -348,7 +350,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     retains no retired authoring API. The engine's README's **Build closure** describes the conversion.
 
     **Tier 4: protocols where two releases meet while both run** -- the door, the CAD app's server and
-    its page, the update handshake, the HTTP API (`/api/v1`), a page's reload probe, the version feed,
+    its page, the hidden `cad setup --engine-update` that the updaters of 0.10.0 to 0.11.10 call, the HTTP API (`/api/v1`), a page's reload probe, the version feed,
     the installation and release records, the analytics schemas, and the PyPI names old pins resolve
     through. Each is numbered or frozen in a golden, so a break is never silent: a change within a
     number is additive, and unknown keys and ops are ignored; a breaking change bumps the number.
@@ -424,14 +426,13 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 20. **One engine per installed version in use; tabs select documents at `/<uuid>`.** *Every document.* A
     process of a version reaches that version's engine alone, through its own door, and starts that one
     where none answers; a process with no version (a person's own environment, a release of 0.11.10 or
-    earlier) reaches the default channel's version's engine, which alone holds the flat door those find --
-    a client with no installation registered starts none: the library never starts a server of its own
-    environment. Two channels on one version share its engine. An update of a channel replaces its old
-    version's engine with the new one's -- one the person asks for, or an automatic patch update once the
-    engine is idle (law 18) -- on the same port with the same token when nothing is in flight on the old
-    one and no other channel is on it; else the old one runs on as it is and the new one takes the next
-    free port. An engine no channel is on stops once nothing is in flight (the engine's **Starting and
-    updating**). A tab names a model's id, or a file's id after a launcher
+    earlier) reaches the engine of the version the installation records of that layout name, which alone holds
+    the flat door those find -- a client with no installation registered starts none: the library never starts a
+    server of its own environment. Versions sit side by side, each its own engine on its own port; nothing moves an
+    engine from one version to another. The newest installed version's engine stops an older version's, once
+    nothing is in flight there, as it removes that version no agent has used for two days; an earlier release's
+    engine is stopped by the setup that brings the computer to this one, once it is idle (the engine's
+    **Starting and updating**). A tab names a model's id, or a file's id after a launcher
     registers it; Python scripts are never documents. A page never replaces or re-executes the engine. Its one page and document reads
     share its authenticated HTTP listener. `serve` and `viewer` always start or reuse it, with no
     standalone serving mode, and no Python function starts, stops or serves it (law 21). Launchers

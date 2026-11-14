@@ -15,8 +15,11 @@ so running it again is quick and changes nothing:
 
 Steps 1 to 5 are ``versions.make_present``. The first setup of a version also gives it its own settings and store,
 copied ONCE from the newest older installed version, or, on a computer coming from 0.11.10 and earlier, from that
-layout (``cad_server._internal.imports.ensure``; nothing once they are there). Nothing else on the computer is
-changed.
+layout, what 0.7 and 0.8 kept in their own folder taken into it first (``cad_server._internal.imports.ensure``;
+nothing once they are there). On a computer an earlier release ran on, what it left running is handed over
+(``cad_server._internal.legacy``: ``stop_earlier``, ``hand_over``): 0.8's server stopped by its own stop command,
+and a server of 0.11.10 or earlier asked to stop once idle, with the records its clients start a server by naming
+this version. Nothing else on the computer is changed.
 
 ``--engine-update`` (hidden, absent from the help) is how releases 0.10.0 to 0.11.10 update themselves: their
 updater makes a flat folder of the newer release and runs its ``cad setup --engine-update``, reading its exit status
@@ -154,6 +157,7 @@ def setup() -> int:
     failed = _command(name)
     if failed is not None:
         return failed
+    _arrive(name, engine_update=False)
     sys.stdout.write(f"text-to-cad {name} is {'installed' if was else 'installed now'}: {places.version_dir(name)}\n")
     return 0
 
@@ -193,8 +197,24 @@ def engine_update() -> int:
     failed = _hand_over(name)
     if failed is not None:
         return failed
+    _arrive(name, engine_update=True)
     start_installer()
     return 0
+
+
+def _arrive(name: str, *, engine_update: bool) -> None:
+    """What earlier releases left running, handed over to version ``name`` (``cad_server._internal.legacy``): the
+    servers of 0.8 (and of 0.10.0 on Windows) stopped by their own stop command; and, by the install command's route
+    (not an updater's, whose own switch stops its server), the mirror written and a server of 0.11.10 or earlier at
+    the flat door asked to stop once idle. Never a failed setup."""
+    from cad_server._internal import legacy
+
+    try:
+        legacy.stop_earlier(_say)
+        if not engine_update:
+            legacy.hand_over(name, _say)
+    except Exception as error:  # noqa: BLE001 - what an earlier release left never fails this version's setup
+        _say(f"what an earlier release left running was not handed over: {type(error).__name__}: {error}")
 
 
 def _environment() -> dict[str, str]:

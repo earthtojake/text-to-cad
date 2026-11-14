@@ -32,7 +32,11 @@ else the layout of 0.11.10 and earlier while it still has what it imports (``leg
 Recents, release folders) -- a computer coming from it --; else, once that layout's bulk is removed, the settings it
 keeps (``legacy.SETTINGS``: a client of 0.11.10 or earlier reads them, and they carry the computer's telemetry no)
 and nothing else; else nothing, and the data starts empty. Once imported, nothing is copied between versions again:
-each version's settings and store are its own.
+each version's settings and store are its own. Before the source is chosen, what 0.7 and 0.8 kept in their own state
+folder (and 0.10.0 on Windows in the local application data) is moved into the layout of 0.11.10 and earlier, as
+every release since 0.10 did as it set itself up (``places.adopt_earlier``), so a computer coming straight from those
+releases imports its settings, records and Recents from there. An import from that layout also decides What's new
+once (``cad_server.whats_new.settle``), while the layout's records of its releases are still on the computer.
 
 **How**, under the version's import lock (``versions/<version>/import.lock``): any ``data.importing-*`` a crash
 left removed; the items copied into a new ``data.importing-*`` beside ``data``; that folder renamed to
@@ -198,8 +202,9 @@ def ensure(name: str, *, told: Callable[[str], None] | None = None) -> Imported:
         for stale in _names(folder):
             if stale.startswith(STAGING):
                 shutil.rmtree(folder / stale, ignore_errors=True)
-        found = source(name)
         said: list[str] = []
+        _adopt_earlier(said)
+        found = source(name)
         staging = folder / f"{STAGING}{os.getpid()}-{os.urandom(4).hex()}"
         staging.mkdir()
         if found is not None:
@@ -215,6 +220,14 @@ def ensure(name: str, *, told: Callable[[str], None] | None = None) -> Imported:
         from cad_server import analytics
 
         analytics.inherit_no(data / SETTINGS)
+        # What's new decided once, for data taken from the layout of 0.11.10 and earlier, while that layout's records
+        # of its releases are still on the computer (the cleanup removes them with it once the version's server runs):
+        # an updated computer is shown what this release brought, not taken for a new person's. Settings that carry
+        # the decision keep it; any other data is decided by the first view that reads it, from the same records.
+        if found is not None and found.kind == "legacy" and not found.settings_only:
+            from cad_server import whats_new
+
+            whats_new.settle(path=data / SETTINGS, release=whats_new.minor(name))
         record = {"schema": SCHEMA, "version": name, "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "skipped": said,
                   "imported": None if found is None else {"kind": found.kind, "version": found.version}}
         from cad._internal.atomic_replace import write_bytes_atomic
@@ -230,6 +243,18 @@ def _names(folder: Path) -> list[str]:
         return sorted(os.listdir(folder))
     except OSError:
         return []
+
+
+def _adopt_earlier(said: list[str]) -> None:
+    """What 0.7 and 0.8 kept in their own state folder (``cadgen``), and 0.10.0 on Windows in the local application
+    data, moved into the layout of 0.11.10 and earlier first (``places.adopt_earlier``: settings, records, Recents;
+    each only where that layout has none), so an import from that layout carries them (``source``): a computer that
+    comes from 0.7 or 0.8 straight to this release keeps its settings, its telemetry answer among them, and Recents.
+    Nothing where a state folder is named (``CAD_STATE_DIR``). Never stops an import: what cannot be moved is said."""
+    try:
+        places.adopt_earlier()
+    except OSError as error:
+        said.append(f"the state folder of 0.8 and earlier was not taken in: {error.strerror or error}")
 
 
 def _copy(found: Source, staging: Path, said: list[str]) -> None:

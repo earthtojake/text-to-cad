@@ -13,8 +13,9 @@ is, and keeps the answer: a device with an installation of an earlier release on
 (``installations/<version>.json``, 0.10.0's on Windows in the local application data, 0.8's where it left
 them), a record naming a release or a development build of one, was updated, ``{"seen": []}``; any other
 is a new person's, who has seen everything up to this
-release, ``{"seen": ["<this release>"]}``. ``cad setup`` decides it as it sets a release up, before the
-update collects the records of the releases before; a view's read decides it where setup never ran.
+release, ``{"seen": ["<this release>"]}``. A version's import from the layout of 0.11.10 and earlier decides it
+(``cad_server._internal.imports``), before the cleanup removes that layout's records of its releases; a view's
+read decides it otherwise.
 Settings that cannot be read or written show nothing: a dismissal that could not be kept would ask again
 at every view.
 """
@@ -124,8 +125,8 @@ def change(choice: Any, *, path: Path | None = None, release: str | None = None)
 
 
 def settle(*, path: Path | None = None, release: str | None = None) -> None:
-    """Decide, once, whether this device was updated or is a new person's (``cad setup``, as it sets a
-    release up): never fails what it rides on."""
+    """Decide, once, whether this device was updated or is a new person's (a version's import from the
+    layout of 0.11.10 and earlier, ``cad_server._internal.imports``): never fails what it rides on."""
     try:
         read(path=path, release=release)
     except Exception:  # noqa: BLE001 - what's new never fails the setup it rides on

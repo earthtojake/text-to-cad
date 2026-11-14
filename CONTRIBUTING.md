@@ -244,9 +244,11 @@ first: the viewer's page and the CAD app's page come from the bundle (without it
 answers 404). An app that cannot install from a folder is skipped and says so; Claude Code's copy
 also serves Cursor and Grok Build, which load Claude Code's plugins.
 
-`--release` runs the install script as it is: the newest release, every app moved back to the
-GitHub copy, the development copies among the old ones it removes. The development version's
-folder stays until cleanup removes it.
+`--release` first removes every development version, its server stopped where nothing is in
+flight there: a development version sorts after its release, so left installed it would stay the
+newest, the one a `cad` command with no pin runs. Then it runs the install script as it is: the
+newest release, every app moved back to the GitHub copy, the development copies among the old ones
+it removes.
 
 A running server keeps the Python it started with and outlives the app: after a Python-only change
 run `cad stop`, and the next command starts it with the new code. The app menu of every view says

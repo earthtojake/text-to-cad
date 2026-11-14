@@ -265,7 +265,9 @@ server, each on its own port (the second rolls from the first's, below); nothing
   -- on Windows the flat port file, naming its own port and token, and 0.10.0's (`daemon._mirror`) --, which every
   client of 0.11.10 and earlier finds (their launchers, their updater, their library) and every process with no
   version (a person's own environment running `python model.py`); `installations/current` and its record name
-  that version's server environment (`installations.mirror`, written by `cad setup --engine-update`), so such a
+  that version's server environment (`installations.mirror`, written by `cad setup --engine-update`, and by a plain
+  `cad setup` where `current` names a release of that layout, a version no longer installed or an older one:
+  `legacy.hand_over`), so such a
   client that finds no server starts that version's, which takes the flat door as it starts (a second start of a
   version whose server runs asks that server to, `daemon._front`). It is let go as soon as `current` names another,
   and taken by that one's server at its next tending (`{"op": "bridge"}` asks at once). Such a client's builds are
@@ -283,7 +285,9 @@ server, each on its own port (the second rolls from the first's, below); nothing
   server's own processes aside), or a folder the system will not move (Windows: a file in use), it stays for the next
   cleanup, which looks once and never waits. A version that is not the newest cleans nothing. The same cleanup
   removes the layout of 0.11.10 and earlier once it is safe (`legacy.remove`), what that layout wrote after the
-  version imported it carried in first (`imports.carry`).
+  version imported it carried in first (`imports.carry`); while that layout is there, the server tries its removal
+  again every minute between cleanups (`versions.clean_legacy`), since the one as it starts often finds the shipped
+  updater's helper that started it still running from that layout.
 - **The version check** (`cad_server.updates`): each version's server reads the version feed in the background at
   most once an hour as it tends itself (`updates.refresh`), never waited on; a `cad` command says a newer release
   after its own output (`cad_server.cli`).
@@ -325,6 +329,14 @@ the port a later update hands on), Q kept as well; where P cannot be taken it an
 through it, and reloads once its server answers with another release or start (`release`, `instance`). The flat
 folders, and every other part of the layout of 0.11.10 and earlier, go once nothing runs from them, by the newest
 version's cleanup (`cad_server._internal.legacy`).
+
+A computer reaches this release by the install command instead (0.7 and 0.8, which have no updater, and any release
+whose person runs it): its plain `cad setup` hands over what the earlier release left running (`legacy.stop_earlier`,
+`legacy.hand_over`). A server of 0.11.10 or earlier at the flat door is asked to stop once nothing is in flight there
+(the drain), never waited for, and the mirror names this version, so the next client -- this release's or an old
+one's -- starts this version's server, which takes the page token and port it imported. A 0.8 server is stopped by
+0.8's own `cadgen stop`, run from the installation record 0.8 keeps, with its telemetry off: 0.8 has no updater, and
+its server stops on no timer.
 
 An engine asks no other process anything, another engine no more than any program: 0.8's server on
 the port is rolled from as above, or refused where the port is named, as below.

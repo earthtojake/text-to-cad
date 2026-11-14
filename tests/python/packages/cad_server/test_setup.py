@@ -29,7 +29,7 @@ from tests.python.packages.cad_server.test_version_servers import Servers
 from tests.python.packages.cad_server.test_versions import OLD, Device
 
 from cad.engine import places
-from cad_server._internal import imports, installations, versions
+from cad_server._internal import imports, installations, legacy, versions
 from cad_server.cli import setup, uninstall
 
 X, Y = "0.12.0", "0.12.1"
@@ -134,6 +134,54 @@ class Setup(Computer):
         self.no_app_touched()
 
 
+@unittest.skipIf(os.name == "nt", "0.8's stand-in stop is a POSIX script")
+class Arriving(Computer):
+    """The install command's ``cad setup`` on a computer an earlier release ran on: what it left running handed over
+    (``legacy.stop_earlier``, ``legacy.hand_over``), cad's own processes and records alone."""
+
+    def test_from_0_11_10_and_0_8_their_servers_stop_and_their_clients_find_this_version(self) -> None:
+        import json
+
+        self.legacy()  # 0.11.10 installed by the install command: its data, its flat release, its records
+        # 0.8 installed beside it: its installation record, its own `cadgen stop` a stand-in that says what it did.
+        stopped = self.root / "cadgen-stopped"
+        cadgen = self.root / "cadgen"
+        cadgen.write_text(f"#!/bin/sh\necho \"$* telemetry=$CADGEN_TELEMETRY\" >> '{stopped}'\n"
+                          "echo '{\"stopped\": [\"0.8.4\"]}'\n", encoding="utf-8")
+        cadgen.chmod(0o755)
+        (self.state / "installations" / "0.8.4.json").write_text(json.dumps(
+            {"version": "0.8.4", "python": sys.executable, "cadgen": str(cadgen), "prefix": str(self.root)}),
+            encoding="utf-8")
+        flat = str(self.state / "releases" / OLD)
+        asked: list[dict] = []
+
+        def ask_flat(message, *, seconds=10.0):  # 0.11.10's server, holding the flat door
+            asked.append({key: value for key, value in message.items() if key != "internal"})
+            return {"ok": True, "prefix": flat, "installation": OLD} if message["op"] == "status" else {"ok": True}
+
+        with mock.patch.object(setup, "_name", return_value=Y), mock.patch.object(versions, "ask_flat", ask_flat):
+            code, out, err = self.main(setup, [])
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(stopped.read_text(encoding="utf-8"), "stop --json telemetry=0\n", "0.8's own stop, quiet")
+        self.assertIn("stopped cadgen 0.8.4's server", err)
+        self.assertEqual(asked, [{"op": "status"}, {"op": "stop", "drain": True}], "asked to stop once idle")
+        record = installations.current()
+        self.assertEqual((record["version"], record["prefix"]), (Y, str(places.code_dir(Y) / "server")),
+                         "its clients start or find this version's server")
+        settings = json.loads((places.data_dir(Y) / "settings.json").read_text(encoding="utf-8"))
+        self.assertEqual((settings["telemetry"]["choice"], settings["whats_new"]), ("off", {"seen": []}),
+                         "the no kept; What's new decided while 0.11.10's records were there: an updated computer")
+        self.no_app_touched()
+
+        # Again, with this version's own server at the flat door: nothing asked to stop, nothing written.
+        asked.clear()
+        with mock.patch.object(setup, "_name", return_value=Y), \
+                mock.patch.object(versions, "ask_flat", side_effect=lambda message, **_: asked.append(message) or {
+                    "ok": True, "prefix": str(places.code_dir(Y) / "server")}):
+            self.assertEqual(self.main(setup, [])[0], 0)
+        self.assertEqual([message["op"] for message in asked], ["status"])
+
+
 @unittest.skipIf(os.name == "nt", "the install script's stand-in is a POSIX script")
 class EngineUpdate(Computer):
     """What an updater of 0.11.10 runs of a newer release Y, and what its switch then needs."""
@@ -165,9 +213,11 @@ class EngineUpdate(Computer):
             self.assertFalse(ran.exists(), "nothing started by a run that hands on")
             # Y's own run: set up, handed over, the installer started and not waited for.
             began = time.monotonic()
-            with mock.patch.object(places, "versioned", return_value=Y):
+            with mock.patch.object(places, "versioned", return_value=Y), \
+                    mock.patch.object(legacy, "hand_over") as hand_over:
                 code, out, err = self.main(setup, ["--engine-update"])
             self.assertEqual(code, 0, out + err)
+            hand_over.assert_not_called()  # the updater's own switch stops its server: never asked here
             self.assertFalse(ran.exists(), "it returned while the installer still waits")
         # What the updater's switch then reads: the records of its layout naming Y's server environment.
         record = installations.current()

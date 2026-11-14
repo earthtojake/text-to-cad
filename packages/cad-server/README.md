@@ -160,8 +160,12 @@ exact requirement a Python of a program's own installs this release's cad by
 `cad setup` installs the version that runs it on this computer, and nothing else: its folder
 (`versions/<version>` in the state folder), its server, a check that it runs, the CAD kernel, its complete marker
 (`_internal/versions.py`'s `make_present`), and the `cad` command where it is missing or older; its first setup copies
-its settings and store in once, from the newest older version installed, or from the layout of 0.11.10 and earlier
-(`_internal/imports.py`); run again it is quick and changes nothing. It is run as `uvx --no-config --managed-python --python 3.14 --from cad-server==<version> cad
+its settings and store in once, from the newest older version installed, or from the layout of 0.11.10 and earlier,
+what 0.7 and 0.8 kept in their own state folder taken into it first (`_internal/imports.py`); and on a computer an
+earlier release ran on it hands over what that release left running, its own processes and records alone
+(`_internal/legacy.py`): 0.8's server stopped by 0.8's own `cadgen stop`, and a server of 0.11.10 or earlier asked to
+stop once idle, with the records its clients start a server by naming this version. Run again it is quick and changes
+nothing. It is run as `uvx --no-config --managed-python --python 3.14 --from cad-server==<version> cad
 setup`. It has one hidden option, `--engine-update`, which no person runs: the updaters of 0.10.0 to 0.11.10, frozen
 on computers, update by running a newer release's `cad setup --engine-update` from a flat folder they made, so it
 does the same, then the hand-over from their layout (the records their switch reads written: `installations/current`
@@ -255,8 +259,8 @@ an app package (the Claude desktop app) starts. Where 0.10.0 kept them there (`c
 in `%LOCALAPPDATA%`), the same commands move the settings, the documents' records and their bytes,
 Recents, the receipt, the page token and the port the engine remembers once; `cad doctor` reports the rest, which
 nothing removes but the person. On a computer an earlier release (0.8, named
-cadgen) set up, `cad doctor` and a registration move what this release keeps of the
-earlier state folder into this one, each thing once and only where this one has none of it: the
+cadgen) set up, a version's first setup (its import), `cad doctor` and a registration move what this release keeps of
+the earlier state folder into the layout of 0.11.10 and earlier, which the version imports, each thing once and only where this one has none of it: the
 settings, the documents' records, Recents and the setup receipt (`cad.engine.places.adopt`); the
 person's telemetry no stays in the earlier folder too, for the earlier release while it is installed.
 0.8's installations' records, engine records and page token stay where 0.8 keeps them: no 0.10 engine
