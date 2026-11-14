@@ -20,11 +20,12 @@ it('the prompt is one English text, and a notice is read only in its shape', () 
     .toEqual([NOTICE, null, null, null]);
 });
 
-it('opens the popover from its button: the versions, the line, the prompt; Copy prompt where nothing sends, copying exactly the prompt', async () => {
+it('opens the popover from its button: the title, the line, the prompt; Copy prompt where nothing sends, copying exactly the prompt', async () => {
   const copy = vi.fn(async () => {});
   render(<UpdateButton notice={NOTICE} copy={copy} />);
   const card = await open();
-  expect(card.querySelector('[data-update-versions]')?.textContent).toBe('v0.11.11 → v0.11.12');
+  // The header is the title alone: the version is the prompt's.
+  expect(card.querySelector('h2')?.textContent).toBe('Update available');
   expect(card.textContent).toContain('A new version of the text-to-cad plugin is available. Send a message to your agent asking it to update:');
   expect(card.querySelector('[data-update-prompt]')?.textContent).toBe(PROMPT);
   expect(screen.queryByRole('button', { name: 'Send to agent' })).toBeNull();

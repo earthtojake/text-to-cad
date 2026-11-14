@@ -75,12 +75,7 @@ function UpdateCard({ id, notice, send, copy, onClose }: {
   };
   return <div className="flex flex-col gap-2" data-update-card="">
     <div className="flex items-center justify-between gap-2">
-      <h2 id={`${id}-title`} className="flex items-baseline gap-2 font-medium">
-        {t("update.available")}
-        <span className="text-xs font-normal tabular-nums text-muted-foreground" data-update-versions="">
-          {t("update.versions", { version: notice.version, latest: notice.latest })}
-        </span>
-      </h2>
+      <h2 id={`${id}-title`} className="font-medium">{t("update.available")}</h2>
       <Button variant="ghost" size="icon-xs" className="-mr-1" aria-label={t("update.close")} onClick={onClose}><X aria-hidden="true" /></Button>
     </div>
     <p id={`${id}-text`} className="text-xs text-muted-foreground">{t("update.description")}</p>

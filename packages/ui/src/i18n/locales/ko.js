@@ -315,7 +315,6 @@ export default {
   // The update nudge (`@cad/ui/update`).
   "update.aria": "업데이트 가능: v{version}",
   "update.available": "업데이트 가능",
-  "update.versions": "v{version} → v{latest}",
   "update.close": "닫기",
   "update.description": "text-to-cad 플러그인의 새 버전이 나왔습니다. 에이전트에게 업데이트해 달라는 메시지를 보내세요:",
   "update.copy": "복사",

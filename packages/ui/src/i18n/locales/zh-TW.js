@@ -316,7 +316,6 @@ export default {
   // The update nudge (`@cad/ui/update`).
   "update.aria": "有可用的更新：v{version}",
   "update.available": "有可用的更新",
-  "update.versions": "v{version} → v{latest}",
   "update.close": "關閉",
   "update.description": "text-to-cad 外掛程式有新版本了。傳訊息給你的 AI 代理，請它更新：",
   "update.copy": "複製",

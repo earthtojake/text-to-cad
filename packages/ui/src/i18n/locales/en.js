@@ -329,7 +329,6 @@ export default {
   // The update nudge: a newer version is known; its popover hands the person a prompt for their agent (`@cad/ui/update`).
   "update.aria": "Update available: v{version}",
   "update.available": "Update available",
-  "update.versions": "v{version} → v{latest}",
   "update.close": "Close",
   "update.description": "A new version of the text-to-cad plugin is available. Send a message to your agent asking it to update:",
   "update.copy": "Copy",

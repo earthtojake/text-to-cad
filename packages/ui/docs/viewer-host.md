@@ -596,7 +596,7 @@ is the blue icon button a host hands the viewer as its `update` (`CadViewerProps
 the navbar's right-hand controls, over every file and over the home; a host with no navbar puts it in its
 corner, as the CAD app's file handler does), only while the host knows a `notice` (`{ version, latest }`, the
 server's version check as last read: `/api/v1/server`'s, a CAD app launch's). A press opens a stock Popover
-saying an update is available (`v<version> → v<latest>`), that a new version of the text-to-cad plugin is
+saying an update is available (the title alone: the version is the prompt's), that a new version of the text-to-cad plugin is
 available and to send the agent a message, and the prompt (`updatePrompt(notice)`, one English text in every
 locale: `A new version of the text-to-cad plugin is available (v<latest>). Update it from <repository>`), with a
 copy icon on it and one button: **Send to agent** where the host can post a message to the agent's chat (`send`),

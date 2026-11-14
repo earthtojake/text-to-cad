@@ -107,8 +107,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   only control. Last and outermost, only while the host knows a newer version (`update`), the
   **update nudge** (`@cad/ui/update`'s `UpdateButton`): a 24px blue icon button (a download arrow,
   hinted "Update available", named "Update available: v<latest>") whose stock Popover, aligned to
-  its right edge and 20rem wide, says **Update available** with `v<version> → v<latest>` muted beside
-  it, the line that a new version of the text-to-cad plugin is available and to send the agent a
+  its right edge and 20rem wide, says **Update available** (the title alone, with its X; the version
+  is the prompt's), the line that a new version of the text-to-cad plugin is available and to send the agent a
   message, the prompt (`text-xs` monospace on the `muted` fill, selectable, a copy icon at its
   top-right) and one `xs` primary button, **Send to agent** where the host can post to the chat,
   else **Copy prompt**. It closes as every popover does, with its X, and after a send. With no

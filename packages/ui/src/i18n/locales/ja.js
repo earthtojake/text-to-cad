@@ -315,7 +315,6 @@ export default {
   // The update nudge (`@cad/ui/update`).
   "update.aria": "アップデートがあります: v{version}",
   "update.available": "アップデートがあります",
-  "update.versions": "v{version} → v{latest}",
   "update.close": "閉じる",
   "update.description": "text-to-cad プラグインの新しいバージョンがあります。エージェントにメッセージを送り、アップデートを依頼してください:",
   "update.copy": "コピー",
