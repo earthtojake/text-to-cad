@@ -434,7 +434,7 @@ class DoctorTests(unittest.TestCase):
             "codex": App("Codex", providers.Copy("codex", "plugin", providers.PLUGIN_ID, version="1.2.0", ours=True,
                                                  source=folder, via="copied", when="2026-10-31 02:41")),
             "cursor": App("Cursor", None, [providers.Copy("cursor", "store", "/c/text-to-cad", store=True,
-                                                          detail="the Cursor Marketplace's", version="0.7.12")]),
+                                                          detail=providers.CURSOR_STORE, version="0.7.12")]),
             "gemini": App("Gemini CLI", providers.Copy("gemini", "extension", "text-to-cad", version="1.1.0", ours=True,
                                                        source=folder, via="linked")),
             "grok": App("Grok Build", None, present=False)}
@@ -457,7 +457,8 @@ class DoctorTests(unittest.TestCase):
             "app      Claude Desktop: CAD's server text-to-cad 1.1.0, which an earlier release wrote; the next "
             "`cad setup` takes it out (Claude gets the skills alone)",
             f"app      Codex: text-to-cad@text-to-cad 1.2.0, a copy of {folder}, made 2026-10-31 02:41",
-            "app      Cursor: /c/text-to-cad (the Cursor Marketplace's, text-to-cad 0.7.12), which its store updates",
+            "app      Cursor: /c/text-to-cad (installed from a marketplace in Cursor, text-to-cad 0.7.12), which "
+            "text-to-cad does not update",
             f"app      Gemini CLI: text-to-cad 1.1.0, linked to {folder}",
             "app      Codex: text-to-cad@openai-curated (its app directory's): the directory's copy, replaced by an "
             "earlier release's cad setup (2026-10-31 02:39)",

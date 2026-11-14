@@ -255,8 +255,9 @@ the launch's `_meta` first (`host/capability.ts`).
   and no automatic-updates switch (its settings answer `updates` null), and neither does a card whose launcher was
   started with `--channel`, whatever version serves it (the session's channel, `ViewerApp._updater`). A store's copy is on the store's
   own channel -- its launcher is started with `--channel NAME` and every pin in its skills carries the
-  name -- and is updated by the store alone; the Cursor Marketplace reads the repository as it is, our
-  own text, so its copy is on the default channel, and the Marketplace, not the install command, updates it. The telemetry: the server
+  name -- and is updated by the store alone; a copy Cursor installed from a marketplace added in Cursor is the
+  repository as Cursor fetched it, our own text, so it is on the default channel, and only Cursor fetching the
+  repository again changes it, never the install command. The telemetry: the server
   counts its use -- tool calls (not the page's plumbing), view activity from each
   view's sync (`focused`), and the files views show (counted by format, once a day,
   as a view adds one to the library) --

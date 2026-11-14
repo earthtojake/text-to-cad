@@ -509,11 +509,12 @@ class DetectionAndPlan(Fixture):
                       "updates, so it stays, and ours is not added beside it", by_app["codex"][0][1])
         self.assertIn("remove it in Codex's own plugin manager and run the install command again", by_app["codex"][0][1])
         self.assertNotIn(["plugin", "remove", "text-to-cad@openai-curated"], commands(steps)["codex"])
-        # Cursor and Grok Build are served by Claude Code's plugin: their own copies go; the Cursor
-        # Marketplace's, which no command uninstalls, is left for the person to uninstall in Cursor.
+        # Cursor and Grok Build are served by Claude Code's plugin: their own copies go; the one Cursor installed
+        # from a marketplace added in Cursor, which no command uninstalls, is left for the person to uninstall there.
         self.assertEqual([action for action, _subject in by_app["cursor"]],
                          ["leave", "leave", "remove duplicate"])
-        self.assertIn("the Marketplace's copy, which the Marketplace updates", by_app["cursor"][1][1])
+        self.assertIn("(installed from a marketplace in Cursor), which text-to-cad does not update: Cursor has no "
+                      "command to uninstall it, so it stays", by_app["cursor"][1][1])
         self.assertIn("uninstall this one in Cursor", by_app["cursor"][1][1])
         self.assertEqual(by_app["grok"], [("leave", "served by the Claude Code plugin"),
                                           ("remove duplicate", "text-to-cad 1.2.3 (from /checkout)")])
@@ -707,18 +708,18 @@ class DetectionAndPlan(Fixture):
         self.assertEqual(actions(undo), [("claude", "leave")])
         self.assertIn("is not put back; install it from claude.ai's plugin directory again", undo[0].subject)
 
-    def test_without_claude_code_the_cursor_marketplace_s_copy_keeps_ours_out(self) -> None:
-        # Cursor keeps a Marketplace install in its own app data and has no command to uninstall it.
-        # The Marketplace keeps the repository it took in a folder per commit, whose VERSION says which release it
-        # is: said, since the Marketplace's copy can be far behind.
+    def test_without_claude_code_a_copy_from_a_marketplace_in_cursor_keeps_ours_out(self) -> None:
+        # Cursor keeps what it installed from a marketplace added in Cursor in its own app data and has no command
+        # to uninstall it. It keeps the repository it fetched in a folder per commit, whose VERSION says which
+        # release it is: said, since text-to-cad never updates that copy and it can be far behind.
         home = self.make()
         taken = home.home / ".cursor" / "plugins" / "cache" / "earthtojake" / "text-to-cad" / "0123abc"
         taken.mkdir(parents=True)
         (taken / "VERSION").write_text("0.7.12\n", encoding="utf-8")
         (step,) = home.plan()
         self.assertEqual((step.app, step.action), ("cursor", "leave"))
-        self.assertIn("(the Cursor Marketplace's, text-to-cad 0.7.12): the Marketplace's copy, which the Marketplace "
-                      "updates, so it stays, "
+        self.assertIn("(installed from a marketplace in Cursor, text-to-cad 0.7.12), which text-to-cad does not "
+                      "update: Cursor has no command to uninstall it, so it stays, "
                       "and ours is not added beside it; for ours, uninstall it in Cursor, then run the install command "
                       "again", step.subject)
 

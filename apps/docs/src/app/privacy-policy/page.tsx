@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="November 13, 2026">
+    <LegalPage title="Privacy Policy" updated="November 14, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -43,11 +43,9 @@ export default function PrivacyPolicyPage() {
                 clock, so that a batch sent again after a failed send is counted once;
               </li>
               <li>
-                which of them sent it, the text-to-cad version, the channel that delivered your copy (the
-                name its commands carry, such as a plugin directory’s, or “default” for our install command)
-                and the agent app that ran it, as text-to-cad detects it, your operating
-                system and processor type, and the name and version of your agent app and how it shows
-                CAD (or that it is the browser viewer);
+                which of them sent it, the text-to-cad version, which plugin directory your copy came from,
+                if any, your operating system and processor type, and which agent app ran it: its name and
+                version, and how it shows CAD (or that it is the browser viewer);
               </li>
               <li>
                 counts, added up over those five minutes: how many times each CAD tool was called and
@@ -208,9 +206,9 @@ export default function PrivacyPolicyPage() {
             policy describes, text-to-cad says so again before it does. Nothing is sent by default in CI or
             from a development install. Your choice is kept on your computer, as the{" "}
             <code>telemetry</code> setting in text-to-cad’s settings file, through restarts and updates, and
-            one choice counts for every part of text-to-cad; a no stays a no. Turning telemetry off, in any
-            version, turns it off in every version on your computer, and analytics in an earlier one still
-            installed, and deletes what it sent. Nothing waits to
+            one choice counts for every part of text-to-cad; a no stays a no. Turning telemetry off turns it
+            off in every version of text-to-cad on your computer, older ones included, and deletes what was
+            sent. Nothing waits to
             send: what a command or a model script counts, and what any part of text-to-cad counted since its
             last send when it exits, wait in small files beside that setting until the next part of text-to-cad
             sends them, or a sender the next command starts once they have waited five minutes; turning

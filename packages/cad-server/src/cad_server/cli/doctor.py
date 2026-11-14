@@ -304,7 +304,7 @@ def _apps() -> list[str]:
             origin = ours.origin(machine)
             lines.append(f"app      {app.label}: {ours.words(machine)}" + (f", {origin}" if origin else ""))
         elif stores:
-            lines.append(f"app      {app.label}: {stores[0].words(machine)}, which its store updates")
+            lines.append(f"app      {app.label}: {stores[0].words(machine)}, {stores[0].updater()}")
     try:
         receipt = json.loads((Path(state_dir()) / "install-receipt.json").read_text(encoding="utf-8"))
         skills = receipt.get("skills") if isinstance(receipt, dict) else None

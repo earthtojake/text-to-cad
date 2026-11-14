@@ -66,21 +66,23 @@ Amp, Antigravity, Cline, Droid, Kilo Code, OpenCode and Zed there), is the Skill
 that uses it is here: Codex and Gemini CLI then list those skills beside their plugin's, which the plan
 says.
 
-A store's copy (claude.ai's directory, OpenAI's plugin directory in Codex, the Cursor Marketplace) is
-delivered and updated by the app it came through, and no run of ``cad setup`` -- the install command, an
-update, the update button, an automatic one -- removes it: it is reported, kept, and keeps ours out, since
-the app would load both and every skill twice (``App.held``, ``_held``); ours, where the app has it too,
+A store's copy (claude.ai's directory, OpenAI's plugin directory in Codex, a marketplace added in Cursor) is
+delivered by the app it came through, and updated by it but for Cursor's, and no run of ``cad setup`` -- the
+install command, an update, the update button, an automatic one -- removes it: it is reported, kept, and keeps
+ours out, since the app would load both and every skill twice (``App.held``, ``_held``); ours, where the app has it too,
 goes (``_against_stores``). Its line says that removing it in the app's own plugin manager and running the
 install command again installs ours. Who else holds one (``held_by``): Claude Code's in the ``managed``
 scope, which an administrator manages; the copies claude.ai syncs from a person's account, which Claude Code
 records nowhere but in their own manifests (``plugins/synced/<bucket>/manifest.json``, ``_synced``: not a
-scope); and the Cursor Marketplace's, which Cursor has no command to uninstall and keeps in its own app data
-by the Marketplace's id. A copy claude.ai syncs feeds neither Cursor nor Grok Build, which read only what
-``installed_plugins.json`` records (``feeds``). Codex records no plugin installed from OpenAI's directory on the
-person's account in its config, and loads one only while signed in, the server listing it: its own listing
-(``codex plugin list --json``) naming it installed and enabled from such a catalog is the evidence that it has
-one (``_codex_listed``), as a config entry is for a copy from a Git catalog; ``openai-bundled`` and
-``openai-primary-runtime`` are no such catalog (``CODEX_NOT_STORES``). Its plugin cache's folder with Codex's
+scope); and a copy Cursor installed from a marketplace added in Cursor (a team marketplace that imports a
+repository, or a repository a person added as one), which Cursor has no command to uninstall and keeps in its
+own app data, by that marketplace's id, at the commit it fetched: text-to-cad never updates it and cannot tell
+when Cursor fetches the repository again, so it can be many releases behind. A copy claude.ai syncs feeds
+neither Cursor nor Grok Build, which read only what ``installed_plugins.json`` records (``feeds``). Codex
+records no plugin installed from OpenAI's directory on the person's account in its config, and loads one only
+while signed in, the server listing it: its own listing (``codex plugin list --json``) naming it installed and
+enabled from such a catalog is the evidence that it has one (``_codex_listed``), as a config entry is for a
+copy from a Git catalog; ``openai-bundled`` and ``openai-primary-runtime`` are no such catalog (``CODEX_NOT_STORES``). Its plugin cache's folder with Codex's
 mark of a remote install (``CODEX_REMOTE_MARK``) is weak evidence, since it outlives a sign-out
 (``_codex_cached``): ours is installed and kept all the same, and a line says how to keep one copy. Releases through 0.11.10 removed a directory's copy at the install command; the receipts
 they wrote still say so (``store``), and ``cad uninstall`` and ``cad doctor`` read them (``replaced``).
@@ -149,8 +151,8 @@ DEV_MARKETPLACE = "earthtojake-dev"
 DEV_MARK = ".text-to-cad-dev"
 # Stores: Claude Code's official catalog, which claude.ai's directory installs from, and the scope an
 # administrator manages (who holds it: no command of the person's removes it); who holds a copy claude.ai
-# syncs from a person's account, which is no scope (``_synced``); Codex's maker's directory catalogs; the
-# Cursor Marketplace's cache.
+# syncs from a person's account, which is no scope (``_synced``); Codex's maker's directory catalogs; Cursor's
+# cache of what it installed from a marketplace added in Cursor.
 CLAUDE_STORES = frozenset({"claude-plugins-official"})
 CLAUDE_STORE_SCOPES = {"managed": "an administrator manages it"}
 CLAUDE_SYNCED = "claude.ai syncs it from your account"
@@ -163,7 +165,7 @@ CODEX_REMOTE_MARK = ".codex-remote-plugin-install.json"
 # How long Codex's own listing (``codex plugin list --json``, which asks its maker's server) may take: past it,
 # what it would have said is unknown, never a failure.
 CODEX_LIST_SECONDS = 15
-CURSOR_STORE = "the Cursor Marketplace"
+CURSOR_STORE = "installed from a marketplace in Cursor"
 
 APPS = ("claude", "claude-desktop", "codex", "cursor", "grok", "gemini")
 # The apps pointed at the plugin folder (each reads it in place, links it or keeps a copy of it).
@@ -835,6 +837,11 @@ class Copy:
                                              if self.kind == "store" and self.version else "") if word)
         return f"{what}{version}" + (f" ({detail})" if detail else "")
 
+    def updater(self) -> str:
+        """Who updates a store's copy, as a report's line ends: its store, but for the copy Cursor installed
+        from a marketplace added in Cursor, which nothing updates but Cursor fetching the repository again."""
+        return "which text-to-cad does not update" if self.app == "cursor" else "which its store updates"
+
     def origin(self, machine: Optional[Machine] = None) -> str:
         """Where an app's copy of ours comes from, as a person reads it: ``reads ~/x/plugin in place``,
         ``linked to ~/x/plugin``, ``a copy of ~/x/plugin, made 2026-10-31 02:41``."""
@@ -1212,9 +1219,9 @@ def _detect_cursor(machine: Machine, folder: Optional[Path] = None) -> App:
                                when=mark.get("copied") if ours else None))
     cache = home / "plugins" / "cache"
     for path in sorted(cache.glob(f"*/{PLUGIN}")) if cache.is_dir() else []:
-        # Cursor keeps the install in its own app data, by the Marketplace's id, and has no command to
-        # uninstall it: a folder removed here would come back.
-        app.copies.append(Copy("cursor", "store", str(path), path=str(path), store=True, detail=CURSOR_STORE + "'s",
+        # Cursor keeps what it installed from a marketplace added in Cursor in its own app data, by that
+        # marketplace's id, and has no command to uninstall it: a folder removed here would come back.
+        app.copies.append(Copy("cursor", "store", str(path), path=str(path), store=True, detail=CURSOR_STORE,
                                held_by="Cursor has no command to uninstall it", version=_cursor_store_version(path)))
     servers, problem = _json(home / "mcp.json")
     if problem:
@@ -1226,10 +1233,10 @@ def _detect_cursor(machine: Machine, folder: Optional[Path] = None) -> App:
 
 
 def _cursor_store_version(path: Path) -> Optional[str]:
-    """The release of the Cursor Marketplace's copy at ``path``: the Marketplace keeps the repository it took in a
-    folder per commit under it (the newest is the one Cursor loads), whose manifest or ``VERSION`` file names it;
-    None where none says, or where the folder cannot be read (one removed between two looks among them): it never fails
-    detection."""
+    """The release of the copy Cursor installed from a marketplace at ``path``: Cursor keeps the repository it
+    fetched in a folder per commit under it (the newest is the one Cursor loads), whose manifest or ``VERSION``
+    file names it; None where none says, or where the folder cannot be read (one removed between two looks among
+    them): it never fails detection."""
     try:
         folders = [found for found in path.iterdir() if found.is_dir()] if path.is_dir() else []
         newest = sorted(folders, key=lambda found: found.stat().st_mtime, reverse=True)
@@ -1534,7 +1541,7 @@ def _held(app: App, machine: Machine, *, served: bool = False) -> List[Step]:
             said = (f"{words}: {copy.held_by}, so it stays, and ours is not added beside it "
                     f"({app.label} would load both)")
         elif app.id == "cursor":
-            said = f"{words}: the Marketplace's copy, which the Marketplace updates, so it stays"
+            said = f"{words}, which text-to-cad does not update: {copy.held_by}, so it stays"
             said += (f"; {app.label} loads the {LABELS['claude']} plugin too, so uninstall this one in {app.label}"
                      if served else f", and ours is not added beside it; for ours, uninstall it in {app.label}, then "
                                     "run the install command again")

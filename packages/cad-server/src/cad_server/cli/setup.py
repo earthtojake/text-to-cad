@@ -40,7 +40,7 @@ whose docstring is the contract between releases). In order, each step said as i
    gets it again for this release. Claude gets no CAD server: the one releases through 0.11.10 wrote into Claude
    Desktop's config is taken out, written atomically with a ``.bak`` beside it. Every second copy goes, an earlier
    release's from the repository on GitHub among them; a plugin directory's copy (a store's: claude.ai's
-   directory, the Cursor Marketplace, a store in another app) is the app's to deliver and update, and stays,
+   directory, a store in another app, or a marketplace added in Cursor) is the app's to deliver, and stays,
    with nothing of ours beside it, as do the named channels' pointers and versions. The agents with no plugin that
    the Skills CLI knows get the skills, copied from the folder by one ``npx skills add`` (Node needed). A command
    that fails is said with its output, and the other apps go on; the exit status is then 1. A folder that cannot be
@@ -90,7 +90,7 @@ one can be asked it changes nothing without ``--yes`` (``confirmation_required``
 
 Never done here: restarting an app, anything that needs sudo or a password, removing a ``cad`` command that is not
 text-to-cad's, editing a config that is not plain JSON, removing a store's copy (a plugin directory's, an
-administrator's or claude.ai's in Claude Code, the Cursor Marketplace's).
+administrator's or claude.ai's in Claude Code, one Cursor installed from a marketplace added in Cursor).
 
 The first install never runs inside a Windows app package (an MSIX app's shell, the Claude desktop app's among
 them): it installs nothing and says so (``installations.packaged``). ``--dry-run`` says it before the plan.
@@ -851,7 +851,7 @@ class Installer:
                 said += f", {origin}" if origin else ""
             elif stores:
                 found = {"verdict": "store"}
-                said = f"{stores[0].words(self.machine)}, which its store updates"
+                said = f"{stores[0].words(self.machine)}, {stores[0].updater()}"
             elif name in providers.FED_BY and self.fed:
                 found = {"verdict": "served"}
                 said = f"served by the {providers.LABELS['claude']} plugin"

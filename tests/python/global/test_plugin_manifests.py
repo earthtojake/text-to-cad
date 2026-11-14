@@ -287,9 +287,9 @@ class PluginManifestPolicyTest(unittest.TestCase):
 
     def test_cursor_starts_claudes_server_and_shows_its_icon(self) -> None:
         # Cursor reads only .cursor-plugin/plugin.json. Its MCP config format is Claude's, and it starts
-        # the same pinned server from a config of its own, which names the Cursor Marketplace as its
-        # channel: the marketplace reads main. Its logo must be a relative path inside the plugin
-        # tree: Cursor resolves it to that commit's raw file.
+        # the same pinned server from a config of its own, which names no channel: a marketplace added in
+        # Cursor reads main as it is. Its logo must be a relative path inside the plugin tree: Cursor
+        # resolves it to that commit's raw file.
         manifest = load_json(CURSOR_PLUGIN_PATH)
         self.assertEqual(manifest.get("mcpServers"), "./cursor.mcp.json")
         cursor, claude = load_json(CURSOR_MCP_PATH)["mcpServers"]["cad"], load_json(CLAUDE_MCP_PATH)["mcpServers"]["cad"]
@@ -354,8 +354,8 @@ class PluginManifestPolicyTest(unittest.TestCase):
         # Main's text is our own, the default channel: no config names a channel or says who updates the copy
         # (the variables 0.11.10 and earlier read, which a copy of those releases still sets, are ignored now),
         # and no launcher is given `--channel`. A store's copy is told its channel by the builder that makes it
-        # (scripts/release/plugin_branch.py, plugin_zip.py). The Cursor Marketplace takes main as it is when it
-        # updates its listing, so its copies are on the default channel too.
+        # (scripts/release/plugin_branch.py, plugin_zip.py). A marketplace added in Cursor takes main as it is
+        # when Cursor fetches the repository, so the copies Cursor installs from one are on the default channel too.
         for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH):
             with self.subTest(path=path.name):
                 server = load_json(path)["mcpServers"]["cad"]

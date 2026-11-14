@@ -71,11 +71,12 @@ checksum. It:
    (`plugin`), and points each app at that folder with the app's own commands
    ([What each app gets](#what-each-app-gets)), removing duplicate copies, among them
    one an earlier release installed from GitHub. A copy from a plugin directory
-   (claude.ai's, Codex's, the Cursor Marketplace) is that app's to deliver and update:
+   (claude.ai's, Codex's) is that app's to deliver and update:
    it is kept, and that app gets nothing beside it; its line says how to switch to
    this release's (remove it in the app's own plugin manager, then run the install
    command again). So is one an administrator manages or claude.ai syncs in Claude
-   Code. The agents without a plugin get the skills alone, copied from the folder
+   Code, and one Cursor installed from a marketplace added in Cursor, which
+   text-to-cad does not update ([Cursor](#cursor)). The agents without a plugin get the skills alone, copied from the folder
    through the Skills CLI ([Other Agents](#other-agents)). Claude gets the skills
    alone, no CAD server: the one releases through 0.11.10 wrote into Claude Desktop's
    config is taken out, the rest of the file kept and a `.bak` of it beside it, and so
@@ -170,7 +171,7 @@ another release. Each app takes it the way it takes a local plugin:
 | Claude Code | the skills: the folder added as a local catalog, `text-to-cad`, and its plugin installed, `text-to-cad@text-to-cad`; Claude Code reads the folder in place. The plugin starts no server for Claude Code, and a CAD server added with `claude mcp add` is removed. A copy from claude.ai's directory, or one an administrator manages or claude.ai syncs, is kept, and nothing is added beside it | its next session reads the new release; the update also refreshes the copy Claude Code keeps in its cache (`claude plugin update`), which Cursor and Grok Build may read |
 | Codex | the same catalog and plugin; Codex copies the plugin when it is added. On a Mac, ChatGPT.app bundles Codex's command (`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`), so with that app installed Codex counts as present even with no `codex` command; with a `codex` command too (npm's, say), the install command uses the newer of the two. A copy from Codex's plugin directory, as Codex's own listing names it, is kept, and nothing is added beside it; one only Codex's plugin cache holds (Codex loads it only while you are signed in) gets this release's beside it, and a line says to remove one copy if the skills show twice | the update adds it again; a running Codex session keeps the copy it started with until you restart it |
 | Gemini CLI | the folder linked as its extension (`gemini extensions link`) | nothing to do: it reads the folder in place |
-| Cursor | the plugin loaded with Claude Code's, CAD's server included (Cursor reads its own manifest first); without Claude Code, a copy of the folder in its local plugins folder, `~/.cursor/plugins/local/text-to-cad`. A copy from the Cursor Marketplace is kept, since Cursor has no command to uninstall it, and without Claude Code nothing is added beside it: uninstall it in Cursor, then run the install command again | the update copies the folder again |
+| Cursor | the plugin loaded with Claude Code's, CAD's server included (Cursor reads its own manifest first); without Claude Code, a copy of the folder in its local plugins folder, `~/.cursor/plugins/local/text-to-cad`. A copy Cursor installed from a marketplace added in Cursor is kept, since Cursor has no command to uninstall it, and without Claude Code nothing is added beside it: uninstall it in Cursor, then run the install command again | the update copies the folder again |
 | Grok Build | the plugin loaded with Claude Code's, CAD's server included (Grok reads its own manifest first); without Claude Code, the plugin from the `latest` branch | `grok plugin update text-to-cad`, without Claude Code |
 | Claude Desktop | nothing: its Code tab runs Claude Code, which loads the plugin's skills. The CAD server releases through 0.11.10 wrote into its config is taken out | nothing to do |
 | Other agents | the skills alone, copied from the folder by the Skills CLI | the update copies them again |
@@ -188,11 +189,14 @@ folder too.
    [uv's installer](https://docs.astral.sh/uv/getting-started/installation/).
 2. Run the commands under your agent app's heading below, or under
    [Other Agents](#other-agents) if it has none.
-3. Restart the app. Its first start downloads CAD's runtime and makes the environment
-   models run in ([What a model runs in](#what-a-model-runs-in)), so it needs a network
-   connection, and it may outlast the app's server start timeout (Claude Code: 30 s by
-   default, raised by setting `MCP_TIMEOUT` in milliseconds; Codex: the plugin asks for
-   300 s); a restart resumes the download.
+3. Restart the app. The first time it starts CAD's server, text-to-cad installs its
+   release (Claude starts none: there the first skill command does): a download, then the
+   environment models run in ([What a model runs in](#what-a-model-runs-in)). That needs a
+   network connection and takes from half a minute to a few minutes, which can be longer
+   than the app waits for the server (Codex: 30 seconds). CAD's server then answers that it
+   is still installing, and the chat that started it may have no CAD tools: start a new
+   chat, or restart the app, once it has finished. An install that was interrupted resumes
+   at the next start.
 
 The plugin for your agent app brings the skills and CAD's viewer, a local server
 (`cad-mcp`); Claude's brings the skills alone, and shows models in your browser. For an agent without a plugin, install the skills alone. Install
@@ -315,13 +319,15 @@ Cursor reads `.cursor-plugin/plugin.json`: restart Cursor after cloning. Teams
 can import the repository instead, under **Dashboard → Plugins & MCPs → Team
 Marketplaces**.
 
-The Cursor Marketplace lists text-to-cad too. The Marketplace takes the plugin from
-this repository's default branch when it updates its listing. text-to-cad does not
-update that copy and does not know when the Marketplace will, so it can be many
-releases behind. A copy that old runs its own release's commands (before 0.8 they were
-`cadgen` commands), and updating text-to-cad on the same computer does not change it.
-To get the current release in Cursor, uninstall the Marketplace's copy in Cursor, then
-run the install command.
+Cursor can also install text-to-cad from a marketplace added in Cursor: a team
+marketplace that imports this repository, or the repository added as one. Cursor keeps
+that copy in its own app data, at the commit it fetched from the repository's default
+branch. text-to-cad does not update that copy and does not know when Cursor will fetch
+the repository again, so it can be many releases behind. A copy that old runs its own
+release's commands (before 0.8 they were `cadgen` commands), and updating text-to-cad on
+the same computer does not change it. Cursor has no command to uninstall it, so the
+install command keeps it and adds nothing beside it. To get the current release in
+Cursor, uninstall that copy in Cursor's plugin manager, then run the install command.
 
 To update, pull the latest release, then restart Cursor:
 
@@ -493,8 +499,8 @@ terminal where the app's command is found, gives it the text now.
 Only what the install command set up updates itself; the receipt it writes is what says
 so. A copy from a plugin directory (claude.ai's, Codex's) is updated by its store: CAD
 shows no update button or automatic-updates switch in its chats, and `cad update` there
-says its store updates it. The Cursor Marketplace's copy changes only when the
-Marketplace takes the repository again, which text-to-cad does not control
+says its store updates it. A copy Cursor installed from a marketplace added in Cursor
+changes only when Cursor fetches the repository again, which text-to-cad does not control
 ([Cursor](#cursor)). On a computer where the install command never ran, `cad update` says there is
 nothing to update and names the install command.
 
@@ -522,8 +528,8 @@ nothing to update and names the install command.
 - A copy of the plugin you installed yourself, with an app's own plugin commands rather
   than the install command, says the same until you update it in that app
   ([App by app](#app-by-app)), or until `cad update` replaces it with the install
-  command's. `cad update` never changes the Cursor Marketplace's copy: it stays at the
-  release the Marketplace last took.
+  command's. `cad update` never changes a copy Cursor installed from a marketplace
+  added in Cursor: it stays at the release Cursor last fetched.
 
 ### Releases side by side
 

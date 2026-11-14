@@ -226,9 +226,9 @@ skills copied by the Skills CLI for the agents without a plugin. Claude gets the
 writes no CAD server into Claude Desktop's config, and takes out the one releases through 0.11.10 wrote
 there. A copy an app got from a store (claude.ai's directory, OpenAI's in Codex) is the app's to deliver and update, on
 that store's own channel -- every pin in its text carries it (`cad +<version>@claude`, `@codex`), and its CAD
-app's launcher is given it as an argument (`cad-mcp --channel codex`); the Cursor Marketplace takes the
-repository, our own text, when it updates its listing, on its own schedule, so its copy can be many releases behind, and is
-on the default channel: every `cad setup` keeps it, adds nothing of ours beside it, and says
+app's launcher is given it as an argument (`cad-mcp --channel codex`); a copy Cursor installed from a marketplace
+added in Cursor is the repository, our own text, as Cursor fetched it, which text-to-cad does not update, so it can
+be many releases behind, and is on the default channel: every `cad setup` keeps it, adds nothing of ours beside it, and says
 how to switch (remove it in the app's own plugin manager, then run the install command again). An update writes the folder for the
 new release and brings our copies along, a person's or an automatic one; a store's copy, and the version its
 channel is on, are its store's to update. A model builds by running its script: `cad +<version> run model.py`, through
