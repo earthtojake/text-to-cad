@@ -279,8 +279,9 @@ def _plugin() -> list[str]:
 def _apps() -> list[str]:
     """Each agent app's copy of the plugin, the release it pins and where it comes from -- the plugin folder
     read in place, linked or copied, and when -- as the app says it (``cad_server._internal.providers``),
-    comparing nothing; Claude Desktop's server an earlier release wrote, which the next ``cad setup`` takes
-    out; and, as the receipt says, the store's copies an earlier release's ``cad setup`` replaced with ours
+    comparing nothing; a store's copy the app's own files show, which stays, and beside ours how to keep one
+    (``providers.store_line``); Claude Desktop's server an earlier release wrote, which the next ``cad setup``
+    takes out; and, as the receipt says, the store's copies an earlier release's ``cad setup`` replaced with ours
     and the agents the Skills CLI copied the skills for."""
     try:
         import json
@@ -300,17 +301,17 @@ def _apps() -> list[str]:
         if ours is not None and name == "claude-desktop":
             lines.append(f"app      {app.label}: CAD's server text-to-cad {ours.version or '?'}, which an earlier "
                          "release wrote; the next `cad setup` takes it out (Claude gets the skills alone)")
-        elif ours is not None:
+            continue
+        if ours is not None:
             origin = ours.origin(machine)
             lines.append(f"app      {app.label}: {ours.words(machine)}" + (f", {origin}" if origin else ""))
-        elif stores:
-            lines.append(f"app      {app.label}: {stores[0].words(machine)}, {stores[0].updater()}")
+        lines += [f"app      {app.label}: {line}" for line in providers.beside(app, machine)]
     try:
         receipt = json.loads((Path(state_dir()) / "install-receipt.json").read_text(encoding="utf-8"))
         skills = receipt.get("skills") if isinstance(receipt, dict) else None
     except (OSError, ValueError):
         receipt, skills = None, None
-    for gone in providers.replaced(receipt if isinstance(receipt, dict) else None):
+    for gone in providers.replaced(receipt if isinstance(receipt, dict) else None, found):
         lines.append(f"app      {providers.label(gone['app'])}: {gone['store']}: the directory's copy, replaced by "
                      "an earlier release's cad setup"
                      + (f" ({str(gone['at']).replace('T', ' ').rstrip('Z')[:16]})" if gone.get("at") else ""))

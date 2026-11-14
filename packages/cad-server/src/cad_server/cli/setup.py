@@ -38,11 +38,13 @@ whose docstring is the contract between releases). In order, each step said as i
    and each app is pointed at it by its own command, the way it keeps a local plugin
    (``cad_server._internal.providers``): one reads the folder in place, one links it, one keeps a copy of it, which
    gets it again for this release. Claude gets no CAD server: the one releases through 0.11.10 wrote into Claude
-   Desktop's config is taken out, written atomically with a ``.bak`` beside it. Every second copy goes, an earlier
-   release's from the repository on GitHub among them; a plugin directory's copy (a store's: claude.ai's
-   directory, a store in another app, or a marketplace added in Cursor) is the app's to deliver, and stays,
-   with nothing of ours beside it, as do the named channels' pointers and versions. The agents with no plugin that
-   the Skills CLI knows get the skills, copied from the folder by one ``npx skills add`` (Node needed). A command
+   Desktop's config is taken out, written atomically with a ``.bak`` beside it. Every second copy of ours goes, an
+   earlier release's from the repository on GitHub among them. Every app gets ours whatever other copy it has: a
+   plugin directory's copy (a store's: claude.ai's directory's, or another app maker's) is the app's to deliver, and
+   stays, ours beside it; where the app's records or listing show one, the plan and the report say so, with how
+   to keep one copy. The named channels' pointers and versions stay too. The agents with no plugin that the Skills CLI
+   knows get the skills, copied from the folder by one ``npx skills add`` (Node needed), a skill of ours this release
+   no longer ships deleted from them first. A command
    that fails is said with its output, and the other apps go on; the exit status is then 1. A folder that cannot be
    written changes no app that would point at it.
 7. **Receipt.** What was done, in ``<state>/install-receipt.json``, for ``cad uninstall`` to take back; its
@@ -89,8 +91,8 @@ one can be asked it changes nothing without ``--yes`` (``confirmation_required``
 ``--uninstall`` passes ``--yes``, the person's own word. ``--dry-run`` prints either plan alone.
 
 Never done here: restarting an app, anything that needs sudo or a password, removing a ``cad`` command that is not
-text-to-cad's, editing a config that is not plain JSON, removing a store's copy (a plugin directory's, an
-administrator's or claude.ai's in Claude Code, one Cursor installed from a marketplace added in Cursor).
+text-to-cad's, editing a config that is not plain JSON, removing or changing a store's copy (a plugin directory's,
+an administrator's or claude.ai's in Claude Code, another app maker's directory's, anything an app installed itself).
 
 The first install never runs inside a Windows app package (an MSIX app's shell, the Claude desktop app's among
 them): it installs nothing and says so (``installations.packaged``). ``--dry-run`` says it before the plan.
@@ -384,6 +386,8 @@ class Installer:
         self.fed = False
         # Whether this run asked Claude Code's listing (``providers.read_for``), so reads it again the same way.
         self.listed = False
+        # The store's copies each app had as this run read it (``providers.read_for``), for the report.
+        self.stores: dict[str, list[Any]] = {}
         # Whether the progress frames' reader has gone (``stage``).
         self.unread = False
         # Whether this run moved the default channel (``_move``).
@@ -837,7 +841,9 @@ class Installer:
         for name, app in apps.items():
             if not app.present or (self.only and name not in self.only):
                 continue
-            ours, stores = app.ours(), app.stores()
+            # A store's copy only an app's own listing shows (``providers.read_for``) is as the plan read it: no run
+            # touches it.
+            ours, stores = app.ours(), app.stores() or self.stores.get(name, [])
             if name == "claude-desktop":
                 # Claude gets no CAD server: an earlier release's entry still there is said, never a failure.
                 found = {"verdict": "server", "release": ours.version} if ours is not None else {"verdict": "none"}
@@ -851,7 +857,7 @@ class Installer:
                 said += f", {origin}" if origin else ""
             elif stores:
                 found = {"verdict": "store"}
-                said = f"{stores[0].words(self.machine)}, {stores[0].updater()}"
+                said = providers.store_line(app, stores[0], self.machine, beside=False)
             elif name in providers.FED_BY and self.fed:
                 found = {"verdict": "served"}
                 said = f"served by the {providers.LABELS['claude']} plugin"
@@ -860,6 +866,10 @@ class Installer:
                 said = "no copy of text-to-cad"
             verdicts[name] = found
             self.say(f"verify   {app.label}: {said}")
+            if ours is not None and name != "claude-desktop":
+                for copy in stores:
+                    if copy.enabled is not False:  # one the app has switched off loads nothing: no line
+                        self.say(f"verify   {app.label}: {providers.store_line(app, copy, self.machine)}")
         verdicts.update(self._verify_skills())
         engine: dict[str, Any] | None = None
         if self.port:
@@ -995,6 +1005,17 @@ class Installer:
             got[agent] = {"release": self.release, "folder": str(folder), "skills": names, "at": providers.stamp()}
         receipt["skills"] = got
 
+    def _forget_skill(self, receipt: dict[str, Any], step: Any) -> None:
+        """A skill of ours deleted from a Skills CLI agent (``remove retired``) out of the receipt's record of what that
+        agent got, whether or not the skills are added again after: a name the record keeps would be one the
+        report looks for."""
+        if step.app not in self.providers.SKILLS_AGENTS or step.action != "remove retired" or not step.edit:
+            return
+        name = Path(step.edit["path"]).name
+        got = (receipt.get("skills") or {}).get(step.app)
+        if isinstance(got, dict) and isinstance(got.get("skills"), list) and name in got["skills"]:
+            got["skills"] = [other for other in got["skills"] if other != name]
+
     def refresh(self, told: Any) -> tuple[bool, list[dict[str, Any]]]:
         """After the plugin folder was written again (``cad plugin --refresh``, which the updater of 0.11.10 and
         earlier runs once its helper has started this release's server): the
@@ -1018,6 +1039,8 @@ class Installer:
                 failed = failed or not ok
                 if ok and step.agents:
                     self._record_skills(receipt, step, steps, records, changed)
+                if ok:
+                    self._forget_skill(receipt, step)
             if self.actions:
                 receipt.update({"release": self.release, "updated": providers.stamp()})
                 receipt["actions"] = list(receipt.get("actions") or []) + self.actions
@@ -1065,8 +1088,9 @@ class Installer:
                 lambda apps: providers.plan(apps, release=self.release, folder=self.folder,
                                             only=self.only, machine=self.machine,
                                             skills=receipt.get("skills")),
-                self.machine, folder=self.folder)
+                self.machine, folder=self.folder, only=self.only)
             self.fed = providers.feeds(apps, self.only or providers.APPS)
+            self.stores = {name: app.stores() for name, app in apps.items()}
             earlier = self._earlier() if not self.engine_update else []
             before = running_engine() if not self.engine_update else None
             engine = self._engine(earlier) if not self.engine_update else {
@@ -1128,7 +1152,7 @@ class Installer:
             _apps, steps, self.listed = providers.read_for(
                 lambda apps: providers.plan(apps, release=self.release, folder=self.folder, only=self.only,
                                             machine=self.machine, skills=receipt.get("skills")),
-                self.machine, folder=self.folder)
+                self.machine, folder=self.folder, only=self.only)
             self.fed = providers.feeds(_apps, providers.APPS)
             registered = self._register()
             failed, moved = self._move(None)
@@ -1196,6 +1220,8 @@ class Installer:
                 changed.add(step.app)
             if ok and step.agents:  # the Skills CLI keeps no versions: the receipt says which release
                 self._record_skills(receipt, step, steps, records, changed)
+            if ok:
+                self._forget_skill(receipt, step)
             if step.action in GIVES:
                 why = None if ok else _why(records)
                 for app in step.agents or [step.app]:  # one Skills CLI command gives every agent its skills

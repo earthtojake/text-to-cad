@@ -371,7 +371,7 @@ class TheCommand(Fixture):
         lines = out.splitlines()
         self.assertEqual(lines[0], f"text-to-cad {RELEASE} for this machine (engine port {PORT}):")
         rows = [re.split(r"\s{2,}", line.strip()) for line in lines[1:] if line.startswith("  ") and not line.startswith("    ")]
-        self.assertIn(["Claude Code", "remove duplicate", "text-to-cad@earthtojake-dev 0.0.1-dev.1 (a development install)"],
+        self.assertIn(["Claude Code", "remove duplicate", "text-to-cad@earthtojake-dev (a development install)"],
                       rows)
         folder = providers.shown(plugin.folder(), self.machine)
         self.assertIn(["Claude Code", "install", f"text-to-cad@text-to-cad, which reads {folder} in place"], rows)
@@ -942,6 +942,59 @@ sys.exit(0)
         self.assertIn(f"plugin   removed {providers.shown(folder, self.machine)}", out)
         self.assertFalse(folder.exists())
 
+    def test_a_store_s_copy_codex_lists_gets_ours_beside_it_and_the_plan_and_the_report_say_so(self) -> None:
+        """Codex's own listing names a copy from OpenAI's directory (its cache holds Codex's mark of it): ours is
+        installed all the same, the directory's copy is never named by a command, and both the plan and the report
+        say, in one line, that Codex loads the skills of both and how to keep one."""
+        codex = self.home / ".codex"
+        cached = codex / "plugins" / "cache" / "openai-curated" / "text-to-cad"
+        (cached / "0.0.2").mkdir(parents=True)
+        (cached / providers.CODEX_REMOTE_MARK).write_text("{}", encoding="utf-8")
+        listing = {"installed": [{"name": "text-to-cad", "marketplaceName": "openai-curated", "version": "0.0.2",
+                                  "installed": True, "enabled": True}]}
+        command(self.bin, "codex", f"""
+import pathlib
+home = pathlib.Path({str(codex)!r})
+if args == ["plugin", "list", "--json"]:
+    print(json.dumps({listing!r}))
+elif args[:3] == ["plugin", "marketplace", "add"]:
+    (home / "config.toml").write_text('[marketplaces.text-to-cad]\\nsource_type = "local"\\nsource = ' + json.dumps(args[3]) + '\\n', encoding="utf-8")
+elif args[:2] == ["plugin", "add"]:
+    with open(home / "config.toml", "a", encoding="utf-8") as config:
+        config.write('[plugins."text-to-cad@text-to-cad"]\\nenabled = true\\n')
+    (home / "plugins" / "cache" / "text-to-cad" / "text-to-cad" / {RELEASE!r}).mkdir(parents=True, exist_ok=True)
+""")
+        code, out, _err = self.run_setup("--only", "codex")
+        self.assertEqual(code, 0, out)
+        line = ("text-to-cad@openai-curated 0.0.2 (its app directory's, on your OpenAI account): it stays beside ours, "
+                "and Codex loads the skills of both, so every skill shows twice; to keep one, remove the directory's copy "
+                "in Codex's plugin manager (ours is the one every update brings up to date)")
+        self.assertIn(line, out.split("verify")[0], "the plan says it")
+        self.assertIn(f"verify   Codex: {line}\n", out)
+        self.assertIn("Codex: install text-to-cad@text-to-cad", out)
+        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertFalse([call for call in calls if "text-to-cad@openai-curated" in call])
+        self.assertTrue((cached / "0.0.2").is_dir())
+
+    def test_a_store_s_copy_codex_has_switched_off_gets_no_line_in_the_plan_or_the_report(self) -> None:
+        codex = self.home / ".codex"
+        codex.mkdir()
+        (codex / "config.toml").write_text('[plugins."text-to-cad@openai-curated"]\nenabled = false\n', encoding="utf-8")
+        command(self.bin, "codex", f"""
+import pathlib
+config = pathlib.Path({str(codex / "config.toml")!r})
+if args[:3] == ["plugin", "marketplace", "add"]:
+    config.write_text(config.read_text(encoding="utf-8") + '[marketplaces.text-to-cad]\\nsource_type = "local"\\nsource = '
+                      + json.dumps(args[3]) + '\\n', encoding="utf-8")
+elif args[:2] == ["plugin", "add"]:
+    config.write_text(config.read_text(encoding="utf-8") + '[plugins."text-to-cad@text-to-cad"]\\nenabled = true\\n',
+                      encoding="utf-8")
+""")
+        code, out, _err = self.run_setup("--only", "codex")
+        self.assertEqual(code, 0, out)
+        self.assertIn("verify   Codex: text-to-cad@text-to-cad", out)
+        self.assertNotIn("openai-curated", out)
+
     def test_a_folder_that_cannot_be_written_points_no_app_at_it(self) -> None:
         command(self.bin, "claude", CLAUDE_EMPTY)
         self.desktop_with({"cad": self.entry("0.0.1")})
@@ -1292,6 +1345,29 @@ sys.exit(0)
         self.assertEqual(providers.ours_in(folder), [])
         self.assertIn("Next, restart to unload it:\n  Windsurf: start a new session for the skills\n", out)
         self.assertNotIn("restart to load it", out)
+
+    def test_a_dropped_skill_the_receipt_names_is_removed_with_no_node_and_never_counted_missing(self) -> None:
+        """No Node here: a skill the receipt says Windsurf got, which this release no longer ships, is deleted all the
+        same, the receipt's record drops it, and neither the report nor ``cad doctor`` calls it missing."""
+        from cad_server.cli import doctor
+
+        folder = self.home / ".codeium" / "windsurf" / "skills"
+        for name in (*providers.SKILLS, "old-name"):
+            (folder / name).mkdir(parents=True)
+            (folder / name / "SKILL.md").write_text(f"---\nname: {name}\n---\nMaintained at earthtojake/text-to-cad.\n",
+                                                    encoding="utf-8")
+        self.state.mkdir(parents=True, exist_ok=True)
+        (self.state / setup.RECEIPT).write_text(json.dumps({"schema": 1, "actions": [], "skills": {"windsurf": {
+            "release": RELEASE, "folder": str(folder), "skills": [*providers.SKILLS, "old-name"]}}}), encoding="utf-8")
+        got = self.receipt()["skills"]["windsurf"]
+        self.assertEqual(providers.skills_lost("windsurf", {**got, "skills": ["old-name"]}, self.machine), [])
+        code, out, _err = self.run_setup("--only", "windsurf")
+        self.assertEqual(code, 0, out)
+        self.assertIn("Windsurf: remove retired old-name in", out)
+        self.assertFalse((folder / "old-name").exists())
+        self.assertEqual(self.receipt()["skills"]["windsurf"]["skills"], list(providers.SKILLS))
+        self.assertNotIn("failed", out)
+        self.assertEqual([line for line in doctor._apps() if "not there now" in line], [])
 
     def test_an_agent_whose_skills_the_cli_keeps_in_the_shared_folder_is_read_there(self) -> None:
         """GitHub Copilot's project folder is `.agents/skills`, so `npx skills add -g` copies its skills into

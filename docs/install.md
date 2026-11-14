@@ -69,14 +69,17 @@ checksum. It:
    over. Should this step fail, nothing has changed, and no app is touched.
 8. Writes the plugin, this release's, into a folder of text-to-cad's state folder
    (`plugin`), and points each app at that folder with the app's own commands
-   ([What each app gets](#what-each-app-gets)), removing duplicate copies, among them
-   one an earlier release installed from GitHub. A copy from a plugin directory
-   (claude.ai's, Codex's) is that app's to deliver and update:
-   it is kept, and that app gets nothing beside it; its line says how to switch to
-   this release's (remove it in the app's own plugin manager, then run the install
-   command again). So is one an administrator manages or claude.ai syncs in Claude
-   Code, and one Cursor installed from a marketplace added in Cursor, which
-   text-to-cad does not update ([Cursor](#cursor)). The agents without a plugin get the skills alone, copied from the folder
+   ([What each app gets](#what-each-app-gets)), removing our own older copies by their
+   names, with each app's own uninstall command: the plugin earlier releases installed
+   from GitHub (`text-to-cad@earthtojake`, and the first releases' `cad@earthtojake`)
+   and a development install (`text-to-cad@earthtojake-dev`), then their catalogs. Every
+   app gets this release's copy, whatever other copy of text-to-cad it has. A copy from
+   a plugin directory (claude.ai's, Codex's), one an administrator manages or one
+   claude.ai syncs in Claude Code, and one from any other catalog (your organisation's,
+   say) is someone else's to deliver and update, and is never changed or removed: it
+   stays beside ours. Where the app has it switched on, it loads the skills of both, so
+   every skill shows twice; a line says so, and that to keep one you remove the other
+   copy in the app's plugin manager (ours is the one each update brings up to date). The agents without a plugin get the skills alone, copied from the folder
    through the Skills CLI ([Other Agents](#other-agents)). Claude gets the skills
    alone, no CAD server: the one releases through 0.11.10 wrote into Claude Desktop's
    config is taken out, the rest of the file kept and a `.bak` of it beside it, and so
@@ -168,10 +171,10 @@ another release. Each app takes it the way it takes a local plugin:
 
 | App | What it gets | After an update |
 | --- | --- | --- |
-| Claude Code | the skills: the folder added as a local catalog, `text-to-cad`, and its plugin installed, `text-to-cad@text-to-cad`; Claude Code reads the folder in place. The plugin starts no server for Claude Code, and a CAD server added with `claude mcp add` is removed. A copy from claude.ai's directory, or one an administrator manages or claude.ai syncs, is kept, and nothing is added beside it | its next session reads the new release; the update also refreshes the copy Claude Code keeps in its cache (`claude plugin update`), which Cursor and Grok Build may read |
-| Codex | the same catalog and plugin; Codex copies the plugin when it is added. On a Mac, ChatGPT.app bundles Codex's command (`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`), so with that app installed Codex counts as present even with no `codex` command; with a `codex` command too (npm's, say), the install command uses the newer of the two. A copy from Codex's plugin directory, as Codex's own listing names it, is kept, and nothing is added beside it; one only Codex's plugin cache holds (Codex loads it only while you are signed in) gets this release's beside it, and a line says to remove one copy if the skills show twice | the update adds it again; a running Codex session keeps the copy it started with until you restart it |
+| Claude Code | the skills: the folder added as a local catalog, `text-to-cad`, and its plugin installed, `text-to-cad@text-to-cad`; Claude Code reads the folder in place. The plugin starts no server for Claude Code, and a CAD server added with `claude mcp add` is removed. A copy from claude.ai's directory, one an administrator manages or claude.ai syncs, or one from any other catalog, is never changed, and ours is installed beside it: Claude Code loads the skills of both, and the install command says so | its next session reads the new release; the update also refreshes the copy Claude Code keeps in its cache (`claude plugin update`), which Cursor and Grok Build may read |
+| Codex | the same catalog and plugin; Codex copies the plugin when it is added. On a Mac, ChatGPT.app bundles Codex's command (`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`), so with that app installed Codex counts as present even with no `codex` command; with a `codex` command too (npm's, say), the install command uses the newer of the two. A copy from Codex's plugin directory, or from any other catalog, is never changed, and ours is installed beside it: Codex loads the skills of both, and where Codex's config or its own listing names that copy the install command says so | the update adds it again; a running Codex session keeps the copy it started with until you restart it |
 | Gemini CLI | the folder linked as its extension (`gemini extensions link`) | nothing to do: it reads the folder in place |
-| Cursor | the plugin loaded with Claude Code's, CAD's server included (Cursor reads its own manifest first); without Claude Code, a copy of the folder in its local plugins folder, `~/.cursor/plugins/local/text-to-cad`. A copy Cursor installed from a marketplace added in Cursor is kept, since Cursor has no command to uninstall it, and without Claude Code nothing is added beside it: uninstall it in Cursor, then run the install command again | the update copies the folder again |
+| Cursor | the plugin loaded with Claude Code's, CAD's server included (Cursor reads its own manifest first); without Claude Code, a copy of the folder in its local plugins folder, `~/.cursor/plugins/local/text-to-cad`. A copy Cursor installed itself, from a marketplace added in Cursor, is never changed, and Cursor gets ours all the same | the update copies the folder again |
 | Grok Build | the plugin loaded with Claude Code's, CAD's server included (Grok reads its own manifest first); without Claude Code, the plugin from the `latest` branch | `grok plugin update text-to-cad`, without Claude Code |
 | Claude Desktop | nothing: its Code tab runs Claude Code, which loads the plugin's skills. The CAD server releases through 0.11.10 wrote into its config is taken out | nothing to do |
 | Other agents | the skills alone, copied from the folder by the Skills CLI | the update copies them again |
@@ -280,14 +283,14 @@ In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar
 drives, and *Open with CAD* for model files.
 
 Codex's plugin directory lists text-to-cad too, but for now its listing trails
-the releases, so install it from the marketplace. The install command keeps a copy
-from the directory, which the directory updates, and adds nothing beside it: to get
-the release's instead, remove it in Codex's plugin manager, then run the install
-command again. Installing from the directory alone also works, since the plugin's
-server sets everything up on its first start. A copy from the directory runs the
-release the directory last delivered, beside the install command's
-([Releases side by side](#releases-side-by-side)). A copy from the directory and one from
-the marketplace would load side by side: keep one.
+the releases, so install it from the marketplace. The install command never changes
+a copy from the directory, which the directory updates, and installs the release's
+beside it: Codex then loads the skills of both, so every skill shows twice, and the install command
+says so. To keep one, remove the directory's copy in Codex's plugin manager; the
+install command's is the one each update brings up to date. Installing from the
+directory alone also works, since the plugin's server sets everything up on its first
+start. A copy from the directory runs the release the directory last delivered, beside
+the install command's ([Releases side by side](#releases-side-by-side)).
 
 To update, upgrade the `earthtojake` marketplace (or use Plugins › Manage ›
 Marketplace), then restart Codex:
@@ -325,9 +328,9 @@ that copy in its own app data, at the commit it fetched from the repository's de
 branch. text-to-cad does not update that copy and does not know when Cursor will fetch
 the repository again, so it can be many releases behind. A copy that old runs its own
 release's commands (before 0.8 they were `cadgen` commands), and updating text-to-cad on
-the same computer does not change it. Cursor has no command to uninstall it, so the
-install command keeps it and adds nothing beside it. To get the current release in
-Cursor, uninstall that copy in Cursor's plugin manager, then run the install command.
+the same computer does not change it. The install command never touches that copy and
+gives Cursor the current release all the same, so Cursor may load both and show every
+skill twice: to keep one, uninstall the marketplace's copy in Cursor's plugin manager.
 
 To update, pull the latest release, then restart Cursor:
 
@@ -409,7 +412,11 @@ into `~/.agents/skills`, never the agent's own folder (`~/.copilot/skills`,
 names only its own folders, read it there, and so do Codex and Gemini CLI, which
 list the skills beside their plugin's. Its receipt records which skills each agent got, from which
 release; running it again, or an update, adds them again after a new release or when
-one of them is gone, and `--uninstall` removes them.
+one of them is gone, and `--uninstall` removes them. The Skills CLI never removes a skill
+on its own, so a skill the receipt says an agent got and the new release no longer ships
+(one renamed or dropped) is deleted from that agent's folder, and from the Skills CLI's
+record of it, before the new skills are added; so is a skill of an earlier release's you
+installed yourself from GitHub. A skill of that name that is not text-to-cad's stays.
 
 For any other agent, install them with the Skills CLI yourself:
 

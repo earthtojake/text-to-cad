@@ -228,8 +228,11 @@ there. A copy an app got from a store (claude.ai's directory, OpenAI's in Codex)
 that store's own channel -- every pin in its text carries it (`cad +<version>@claude`, `@codex`), and its CAD
 app's launcher is given it as an argument (`cad-mcp --channel codex`); a copy Cursor installed from a marketplace
 added in Cursor is the repository, our own text, as Cursor fetched it, which text-to-cad does not update, so it can
-be many releases behind, and is on the default channel: every `cad setup` keeps it, adds nothing of ours beside it, and says
-how to switch (remove it in the app's own plugin manager, then run the install command again). An update writes the folder for the
+be many releases behind, and is on the default channel. No `cad setup` touches a copy from a store, and none lets it
+stop ours: every app gets ours, beside it, and only our own older copies, known by the names and marks we wrote, are
+removed; where an app's own records or listing show a store's copy beside ours, the plan, the report and `cad doctor`
+say so in one line, with how to keep one. A skill of ours this release no longer ships is deleted from an agent the
+receipt says got it through the Skills CLI, which never removes one. An update writes the folder for the
 new release and brings our copies along, a person's or an automatic one; a store's copy, and the version its
 channel is on, are its store's to update. A model builds by running its script: `cad +<version> run model.py`, through
 the `cad` command. The CAD app an agent

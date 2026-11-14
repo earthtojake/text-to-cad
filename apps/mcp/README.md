@@ -32,7 +32,7 @@ terminal UI show none and are served as text clients.
   the whole viewer at card size, as a tab is: its navbar (`chrome: "page"`: the logo, which
   opens the app menu, first; Back and Forward; the file name that opens the name menu; the ⋯,
   the file menu: Copy path, Copy link (the engine's own page of the document,
-  `<engine origin>/<id>?token=<fresh link>`, the origin from the launch and the link asked through the
+  `<engine origin>/<id>?token=<link>`, the origin from the launch and the link asked through the
   tunnel; never the tunnel's address), then Open in › Browser and Finder (File Explorer, File manager), a
   model's Copy path and Finder acting on its script (Finder disabled, with its reason, where the
   script was moved or deleted; Browser needs none), then the apps the server finds on this computer
@@ -257,7 +257,11 @@ the launch's `_meta` first (`host/capability.ts`).
   own channel -- its launcher is started with `--channel NAME` and every pin in its skills carries the
   name -- and is updated by the store alone; a copy Cursor installed from a marketplace added in Cursor is the
   repository as Cursor fetched it, our own text, so it is on the default channel, and only Cursor fetching the
-  repository again changes it, never the install command. The telemetry: the server
+  repository again changes it, never the install command. `cad setup` installs ours beside a store's copy
+  all the same: the app loads the skills of both. Codex, given two plugins that each name a server `cad`, lists one, the
+  one of the plugin whose id sorts first (`text-to-cad@openai-curated` before `text-to-cad@text-to-cad`;
+  `codex mcp list`, codex-cli 0.153.4 and 0.169.0-alpha.11.1, measured 2026-11-14, no agent turn), so the CAD
+  tab is likely the store's channel's then. The telemetry: the server
   counts its use -- tool calls (not the page's plumbing), view activity from each
   view's sync (`focused`), and the files views show (counted by format, once a day,
   as a view adds one to the library) --

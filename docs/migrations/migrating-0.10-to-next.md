@@ -294,8 +294,10 @@ release, and what it runs a program in follows the program:
   `cad doctor` lists every installed release and channel
   ([Checking what your computer runs](../install.md#checking-what-your-computer-runs)).
 - **What the install command gives, it takes back** (tier 1). It no longer replaces a copy from a
-  plugin directory (claude.ai's, Codex's): it keeps it and adds nothing beside it in that app, and the
-  directory updates it, on a release of its own. `cad uninstall` removes what the install command put on
+  plugin directory (claude.ai's, Codex's), and never changes or removes it: the directory updates it, on a
+  release of its own. Every app still gets the install command's copy beside it, so the app loads the skills of both and
+  every skill shows twice; the install command and `cad doctor` say so, and to keep one you remove the
+  directory's copy in the app's plugin manager. `cad uninstall` removes what the install command put on
   the computer and keeps your settings, Recents and documents' records; a plugin directory's copy stays,
   with its release and the `cad` command. `--purge` removes everything
   ([What the install command does](../install.md#what-the-install-command-does)).

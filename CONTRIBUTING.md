@@ -930,7 +930,7 @@ The channel is a flag, not a variable: a config runs the launcher of its own rel
 | Copy | Channel | Updated by | Stamped by |
 | ---- | ------- | ---------- | ---------- |
 | `main` and `latest`, every manifest and config; the plugin folder the install command points every app at; a copy a person installs by hand | default | the install command's updater, where it ran here; else the person, in the app | nothing: the text names no channel |
-| one Cursor installed from a marketplace added in Cursor: `main` as Cursor last fetched it | default | Cursor alone, when it fetches the repository again: the install command keeps it (Cursor has no command to uninstall it) and never changes it, and an update of text-to-cad leaves it at its own release | nothing |
+| one Cursor installed from a marketplace added in Cursor: `main` as Cursor last fetched it | default | Cursor alone, when it fetches the repository again: the install command never reads or changes it, gives Cursor ours all the same, and an update of text-to-cad leaves it at its own release | nothing |
 | `claude-plugin`, which claude.ai's directory follows | `claude` | the directory | `plugin_branch.py` |
 | the OpenAI ZIP | `codex` | the directory | `plugin_zip.py` |
 | a development install | default (its telemetry says `dev`) | `dev_install.py`, run again | `dev_install.py` pins its own version name |

@@ -418,6 +418,7 @@ class DoctorTests(unittest.TestCase):
         class App:
             def __init__(self, label: str, ours, stores=(), present: bool = True) -> None:
                 self.label, self._ours, self._stores, self.present = label, ours, list(stores), present
+                self.id = {value: key for key, value in providers.LABELS.items()}[label]
 
             def ours(self):
                 return self._ours
@@ -427,14 +428,16 @@ class DoctorTests(unittest.TestCase):
 
         folder = str(plugin.folder())
         found = {
+            # A store's copy beside ours: it stays, and the line says how to keep one.
             "claude": App("Claude Code", providers.Copy("claude", "plugin", providers.PLUGIN_ID, version="1.1.0", ours=True,
-                                                        source=folder, via="in place")),
+                                                        source=folder, via="in place"),
+                          [providers.Copy("claude", "plugin", "text-to-cad@claude-plugins-official", version="1.0.0",
+                                          detail="claude.ai's directory's", store=True, enabled=True)]),
             "claude-desktop": App("Claude Desktop", providers.Copy("claude-desktop", "server", "cad", version="1.1.0",
                                                                    ours=True)),
             "codex": App("Codex", providers.Copy("codex", "plugin", providers.PLUGIN_ID, version="1.2.0", ours=True,
                                                  source=folder, via="copied", when="2026-10-31 02:41")),
-            "cursor": App("Cursor", None, [providers.Copy("cursor", "store", "/c/text-to-cad", store=True,
-                                                          detail=providers.CURSOR_STORE, version="0.7.12")]),
+            "cursor": App("Cursor", None),  # nothing of text-to-cad's: no line
             "gemini": App("Gemini CLI", providers.Copy("gemini", "extension", "text-to-cad", version="1.1.0", ours=True,
                                                        source=folder, via="linked")),
             "grok": App("Grok Build", None, present=False)}
@@ -453,18 +456,29 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(detect.call_args.kwargs["folder"], plugin.folder())
         self.assertEqual(lines, [
             f"app      Claude Code: text-to-cad@text-to-cad 1.1.0, reads {folder} in place",
+            "app      Claude Code: text-to-cad@claude-plugins-official 1.0.0 (claude.ai's directory's): it stays beside "
+            "ours, and Claude Code loads the skills of both, so every skill shows twice; to keep one, remove the "
+            "directory's copy in Claude Code's plugin manager (ours is the one every update brings up to date)",
             # Claude gets the skills alone: the server an earlier release wrote is said, and that setup takes it out.
             "app      Claude Desktop: CAD's server text-to-cad 1.1.0, which an earlier release wrote; the next "
             "`cad setup` takes it out (Claude gets the skills alone)",
             f"app      Codex: text-to-cad@text-to-cad 1.2.0, a copy of {folder}, made 2026-10-31 02:41",
-            "app      Cursor: /c/text-to-cad (installed from a marketplace in Cursor, text-to-cad 0.7.12), which "
-            "text-to-cad does not update",
             f"app      Gemini CLI: text-to-cad 1.1.0, linked to {folder}",
             "app      Codex: text-to-cad@openai-curated (its app directory's): the directory's copy, replaced by an "
             "earlier release's cad setup (2026-10-31 02:39)",
             # The folder the Skills CLI keeps for it, read again: the skill gone since is said.
             f"app      Windsurf: the skills of text-to-cad 1.1.0, copied into {windsurf} by the Skills CLI "
             "(2026-10-31 02:40); cad not there now: run the install command again"])
+        # Codex's plugin cache alone holds a copy from OpenAI's directory: the doctor, which runs no app, names it.
+        cached = machine.home / ".codex" / "plugins" / "cache" / "openai-curated" / "text-to-cad"
+        (cached / "1.0.0").mkdir(parents=True)
+        (cached / providers.CODEX_REMOTE_MARK).write_text("{}", encoding="utf-8")
+        with mock.patch.object(providers.Machine, "here", return_value=machine), \
+                mock.patch.object(providers, "detect", return_value=found):
+            lines = self.apps()
+        self.assertIn("app      Codex: its plugin cache also holds text-to-cad@openai-curated 1.0.0 (from OpenAI's plugin "
+                      "directory), which Codex loads while you are signed in to your OpenAI account; if every skill shows "
+                      "twice, remove that copy in Codex's plugin manager", lines)
         with mock.patch.object(providers.Machine, "here", side_effect=OSError("no home")):
             self.assertEqual(self.apps(), ["apps     unknown (OSError: no home)"])
 
