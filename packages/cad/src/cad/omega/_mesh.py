@@ -147,6 +147,7 @@ def mesh(path: Path, out: Path | None = None, *, define: tuple[str, ...] = (), d
     import importlib.util
     import shutil
 
+    from cad._internal.atomic_replace import replace_atomic
     from cad._internal.findings import FindingsReport
     from cad._internal.validation_door import blocks, display_path, failed, resolved_target, result_from_findings
     from cad.engine.places import cache_dir
@@ -254,7 +255,7 @@ def mesh(path: Path, out: Path | None = None, *, define: tuple[str, ...] = (), d
             if blocks(findings, strict=strict):
                 return refused(measurements)
             # Kept only once it has passed, the mesh before its record: a record names a mesh that is there.
-            os.replace(making, glb)
+            replace_atomic(making, glb)
             record.write_text(json.dumps(measurements), encoding="utf-8")
         finally:
             making.unlink(missing_ok=True)
