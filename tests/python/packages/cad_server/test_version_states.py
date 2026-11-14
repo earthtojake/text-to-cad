@@ -123,6 +123,65 @@ class Uninstall(Device):
         self.assertTrue(places.data_dir(X).is_dir(), "its data kept")
 
 
+    def test_an_uninstall_tries_a_refused_rename_again_for_a_while_and_says_why_a_sweep_tries_once(self) -> None:
+        # On Windows a stopped server's process keeps its files a moment after it lets its lock go: the uninstall (a
+        # person waiting) tries the rename again, bounded; a sweep tries once and says the next sweep.
+        real, refusals = os.rename, []
+
+        def refuse(times: int):
+            def rename(source, target):
+                if Path(source) in (places.code_dir(X), places.version_dir(X)) and len(refusals) < times:
+                    refusals.append(source)
+                    raise PermissionError(13, "The process cannot access the file")
+                return real(source, target)
+            return rename
+
+        for remove in (versions.remove_code, versions.remove_now):
+            with self.subTest(remove=remove.__name__):
+                self.moved(None, X)
+                self.leave()
+                refusals.clear()
+                why: list = []
+                with mock.patch.object(os, "rename", refuse(2)):
+                    self.assertEqual(remove(X, wait=30.0, why=why), "removed")
+                self.assertEqual((len(refusals), why), (2, []))
+        self.moved(None, X)
+        self.leave()
+        refusals.clear()
+        said: list[str] = []
+        with mock.patch.object(os, "rename", refuse(2)):
+            self.assertEqual(versions.remove_code(X, told=said.append), "refused", "a sweep's: once")
+        self.assertEqual(len(refusals), 1)
+        self.assertIn(f"text-to-cad {X}'s code stays until the next sweep: The process cannot access the file", said)
+
+    def test_a_refusal_says_its_cause_and_this_command_running_from_it_needs_no_wait(self) -> None:
+        self.moved(None, X)
+        self.leave()
+        real, tries = os.rename, []
+
+        def refuse(source, target):
+            if Path(source) == places.code_dir(X):
+                tries.append(source)
+                raise PermissionError(13, "The process cannot access the file")
+            return real(source, target)
+
+        why: list = []
+        with mock.patch.object(os, "rename", refuse), mock.patch.object(versions, "runs_from", return_value=True):
+            self.assertEqual(versions.remove_code(X, wait=30.0, why=why), "refused")
+        self.assertEqual(len(tries), 1, "no wait changes it: this command runs from it")
+        self.assertEqual(why, [versions.Refusal("the system refused to remove it (The process cannot access the file): "
+                                                "this command runs from it", True)])
+        why.clear()
+        with mock.patch.object(versions, "_take", side_effect=PermissionError(13, "Access is denied")):
+            self.assertEqual(versions.remove_code(X, wait=30.0, why=why), "refused")
+        self.assertEqual(why, [versions.Refusal("its server's lock could not be taken (Access is denied)")])
+        # Where this process runs from, by its own interpreter and environment, resolved.
+        import sys
+
+        self.assertTrue(versions.runs_from(Path(sys.prefix)))
+        self.assertFalse(versions.runs_from(places.version_dir(X)))
+
+
 class PointersThatCannotBeRead(Device):
     """D2, D3, D9, D11: anything there that cannot be read or understood is never read as nothing."""
 

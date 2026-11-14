@@ -17,7 +17,8 @@ by ``cad uninstall``, ``--purge`` or ``cad doctor --prune``: the stale kind too,
 that stops under the thread is never started again; until an install writes the channel's pointer again, when this
 process serves again); or its version could not be made ready (failed). Each request waits for the version
 ``engine.READY_SECONDS`` at most (``ping`` not at all; ``initialize`` ``initialize_seconds``: 80% of the app's own
-startup timeout where its server config gives it, ``--startup-timeout``, never less than ``INITIALIZE_SECONDS``, so
+startup timeout where its server config gives it, ``--startup-timeout``, the rest left to uvx starting this process
+before the initialize arrives and to the server's start and its answer after, never less than ``INITIALIZE_SECONDS``, so
 a first start that installs the version is answered by the server's own session wherever the app waits for it: Codex
 adds a late start's tools to the running turn, but acts on no ``list_changed`` within a turn), then:
 
@@ -60,9 +61,13 @@ LOG = logging.getLogger("cad_mcp")
 # Past it -- a version being installed for the first time -- the initialize is answered here, and the server's session
 # opened at the host's next request.
 INITIALIZE_SECONDS = 20.0
-# The share of the app's startup timeout (``--startup-timeout``) the initialize waits: the rest is uvx fetching this
-# transport and the handshake.
+# The share of the app's startup timeout (``--startup-timeout``) the initialize waits for this transport's version. The
+# rest is for what the app's timeout counts besides: before the initialize arrives, uvx fetching and starting this
+# transport; after the version is ready, its server's start and that server's own answer to the initialize.
 STARTUP_SHARE = 0.8
+# The longest startup timeout taken, in seconds: a day. Far past any app's, and inside what a wait can be told
+# (``threading.Event.wait`` overflows near 4.29e6 seconds on Windows).
+STARTUP_MOST = 86400.0
 
 
 def initialize_seconds(startup=None):
@@ -436,9 +441,10 @@ USAGE = ("usage: cad-mcp [--channel NAME] [--startup-timeout SECONDS]\n\nServe C
          "The app starts one process per thread, from its plugin's startup config. --channel names the delivery "
          "channel of the plugin copy that config belongs to (a store's), none for the default channel; it is the "
          "config's to say. --startup-timeout is how long that app waits for this process to start, as the same config "
-         "says it: the app's first request waits up to 80% of it (never less than 20 seconds; 20 without it) for this "
-         "version to be installed and its server ready, so an app that never asks for its tools again in a turn gets "
-         "them in the one that started it.\n")
+         "says it, in seconds, a day at most: the app's first request waits up to 80% of it (never less than 20 "
+         "seconds; 20 without it) for this version to be installed, the rest left to uvx starting this process before "
+         "and to the server's start and answer after, so an app that never asks for its tools again in a turn gets them "
+         "in the one that started it.\n")
 
 
 def _seconds(text):
@@ -447,8 +453,9 @@ def _seconds(text):
         seconds = float(text)
     except ValueError:
         seconds = float("nan")
-    if not (0 < seconds < float("inf")):
-        raise ValueError(f"not a startup timeout: {text!r} (a startup timeout is a positive number of seconds)")
+    if not 0 < seconds <= STARTUP_MOST:
+        raise ValueError(f"not a startup timeout: {text!r} (a startup timeout is a positive number of seconds, a day "
+                         "at most)")
     return seconds
 
 

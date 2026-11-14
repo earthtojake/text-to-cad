@@ -110,12 +110,12 @@ from typing import Any
 from cad.engine import places
 from cad_server._internal import base
 
-__all__ = ["CANNOT", "LOCK", "NAMED", "SUCCESSOR", "UNINSTALLED", "Moved", "Present", "add", "add_command",
+__all__ = ["CANNOT", "LOCK", "NAMED", "SUCCESSOR", "UNINSTALLED", "Moved", "Present", "Refusal", "add", "add_command",
            "answered_port", "ask", "ask_flat", "connected", "development", "endpoint", "fate", "first_start", "flat",
            "flat_endpoint", "folders", "garbage", "hand_port", "handover", "install_lock", "make_present", "mend",
            "move", "older", "order", "present", "proof", "prune", "prune_plan", "remove", "remove_code", "remove_now",
-           "remove_unused", "retiring", "serves", "serving", "start_server", "stop_server", "successor", "sweep",
-           "used"]
+           "remove_unused", "retiring", "runs_from", "serves", "serving", "start_server", "stop_server", "successor",
+           "sweep", "used"]
 
 # The device's install lock, in the state folder: every install, move and removal holds it (``cad setup``'s too).
 LOCK = "install.lock"
@@ -1233,13 +1233,57 @@ def _remove(name: str, say: Callable[[str], None], *, whole: bool = False, actin
     return "removed"
 
 
-def _strip(name: str, say: Callable[[str], None]) -> str:
+def runs_from(folder: Path) -> bool:
+    """Whether this process runs from ``folder``: its interpreter or its environment (``sys.prefix``) inside it, each
+    resolved. Where this process is, never what the system lists: ``cad uninstall`` typed in a terminal runs from the
+    version it removes, which Windows will not let it remove while it runs, however long it waits."""
+    inside = os.path.normcase(os.path.realpath(folder)).rstrip(os.sep) + os.sep
+    return any((os.path.normcase(os.path.realpath(path)).rstrip(os.sep) + os.sep).startswith(inside)
+               for path in (sys.executable, sys.prefix) if path)
+
+
+@dataclass(frozen=True)
+class Refusal:
+    """Why a removal was refused (``refused``), in a person's words, the system's own among them; ``here``: the
+    system refused it because this process runs from the folder (``runs_from``), which no wait changes."""
+
+    words: str
+    here: bool = False
+
+
+def _aside(source: Path, aside: Path, folder: Path, wait: float | None) -> OSError | None:
+    """``source`` renamed to ``aside``: None, or the system's refusal. With ``wait`` (seconds: an uninstall's, a person
+    waiting on it), a refusal is tried again until that long has passed -- on Windows a stopped server's process keeps
+    its files for a moment after it has let its lock go -- unless this process runs from ``folder`` (``runs_from``),
+    which no wait changes. Without one, once: a sweep tries again at its next pass."""
+    deadline = time.monotonic() + (wait or 0.0)
+    while True:
+        try:
+            os.rename(source, aside)
+            return None
+        except OSError as error:
+            if wait is None or time.monotonic() >= deadline or runs_from(folder):
+                return error
+        time.sleep(0.05)
+
+
+def _refused(error: OSError, folder: Path) -> Refusal:
+    """The system's refusal of a removal, said as it is: its words, and that this process runs from ``folder`` where it
+    does."""
+    here = runs_from(folder)
+    return Refusal(f"the system refused to remove it ({error.strerror or error})"
+                   + (": this command runs from it" if here else ""), here)
+
+
+def _strip(name: str, say: Callable[[str], None], *, wait: float | None = None,
+           why: list[Refusal] | None = None) -> str:
     """The code of version ``name`` removed, its data kept: what ``cad uninstall`` does to the default channel's
     version (``remove_code``), and what a sweep finishes where the system refused it then (``_code_left``). Its server's
     lock taken first (its server stopped by the caller; one that still runs keeps it), no other process running from
     it but this one (``cad uninstall`` typed in a terminal runs from the version it uninstalls), ``code/`` renamed
-    aside and removed. ``removed``, ``absent``, ``connected``, ``in use`` or ``refused`` (on Windows, a file in use:
-    the next sweep removes it)."""
+    aside (``_aside``: ``wait``, an uninstall's) and removed. ``removed``, ``absent``, ``connected``, ``in use`` or
+    ``refused``: why, a ``Refusal`` appended to ``why`` where it is given (an uninstall says it in its own line), else
+    said, as a sweep's (on Windows, a file in use: the next sweep removes it)."""
     from cad_server._internal import releases
 
     folder = places.version_dir(name)
@@ -1250,7 +1294,11 @@ def _strip(name: str, say: Callable[[str], None]) -> str:
     try:
         held = _take(engine)
     except OSError as error:
-        say(f"text-to-cad {name}'s server's lock cannot be taken ({error.strerror or error})")
+        refusal = Refusal(f"its server's lock could not be taken ({error.strerror or error})")
+        if why is not None:
+            why.append(refusal)
+        else:
+            say(f"text-to-cad {name}'s code stays: {refusal.words}")
         return "refused"
     if held is None:
         return "connected"
@@ -1259,10 +1307,12 @@ def _strip(name: str, say: Callable[[str], None]) -> str:
             say(f"text-to-cad {name}'s code stays for now: a process still runs from {folder}")
             return "in use"
         aside = places.versions_dir() / f"{TRASH}{name}-code-{os.getpid()}-{os.urandom(4).hex()}"
-        try:
-            os.rename(code, aside)
-        except OSError as error:
-            say(f"text-to-cad {name}'s code stays until the next sweep: {error.strerror or error}")
+        error = _aside(code, aside, folder, wait)
+        if error is not None:
+            if why is not None:
+                why.append(_refused(error, folder))
+            else:
+                say(f"text-to-cad {name}'s code stays until the next sweep: {error.strerror or error}")
             return "refused"
     finally:
         _drop(held, engine)
@@ -1273,12 +1323,14 @@ def _strip(name: str, say: Callable[[str], None]) -> str:
     return "removed"
 
 
-def remove_code(name: str, *, told: Callable[[str], None] | None = None) -> str:
+def remove_code(name: str, *, told: Callable[[str], None] | None = None, wait: float | None = None,
+                why: list[Refusal] | None = None) -> str:
     """``cad uninstall`` without ``--purge``: version ``name``, the default channel's, taken out but its data -- its
     settings, Recents, documents' records, page token and port -- kept for a later install (``UNINSTALLED``, written
     first: the default channel's next first use leaves it, ``move``), under the install lock: its code removed
-    (``_strip``). ``removed``, ``absent``, ``connected``, ``in use`` or ``refused`` (on Windows the uninstall runs from
-    it: its code goes at the next sweep, a later install's, or when the person deletes it)."""
+    (``_strip``; ``wait`` and ``why`` as there). ``removed``, ``absent``, ``connected``, ``in use`` or ``refused`` (on
+    Windows the uninstall may run from it: its code goes at the next sweep, a later install's, or when the person
+    deletes it)."""
     from cad_server._internal.pointers import _land
 
     say = told or (lambda _line: None)
@@ -1287,19 +1339,21 @@ def remove_code(name: str, *, told: Callable[[str], None] | None = None) -> str:
         if not os.path.lexists(folder):
             return "absent"
         _land(folder / UNINSTALLED, b"")
-        done = _strip(name, say)
+        done = _strip(name, say, wait=wait, why=why)
         if done == "removed":
             say(f"removed text-to-cad {name}'s code; its data stays for a later install")
         return done
 
 
-def remove_now(name: str, *, told: Callable[[str], None] | None = None) -> str:
+def remove_now(name: str, *, told: Callable[[str], None] | None = None, wait: float | None = None,
+               why: list[Refusal] | None = None) -> str:
     """Version ``name``'s folder removed whole, its data with it, at a person's word (``cad uninstall --purge``),
     whatever names it: under the install lock, its server's lock taken (its server stopped by the caller first; one
     that still runs keeps it: ``connected``), no other process running from it (``in use``; this process may: ``cad
     uninstall`` typed in a terminal runs from the version it removes, and nothing is imported from it after), the
-    folder renamed aside and removed, and the records naming it forgotten. ``removed``, ``absent``, ``connected``, ``in
-    use`` or ``refused`` (the system refused the rename: on Windows, a file in use)."""
+    folder renamed aside (``_aside``: ``wait`` as there) and removed, and the records naming it forgotten. ``removed``,
+    ``absent``, ``connected``, ``in use`` or ``refused`` (the lock could not be taken, or the system refused the rename:
+    on Windows, a file in use; a ``Refusal`` appended to ``why`` where it is given, else said)."""
     from cad_server._internal import releases
 
     say = told or (lambda _line: None)
@@ -1311,7 +1365,11 @@ def remove_now(name: str, *, told: Callable[[str], None] | None = None) -> str:
         try:
             held = _take(engine)
         except OSError as error:
-            say(f"text-to-cad {name}'s server's lock cannot be taken ({error.strerror or error})")
+            refusal = Refusal(f"its server's lock could not be taken ({error.strerror or error})")
+            if why is not None:
+                why.append(refusal)
+            else:
+                say(f"text-to-cad {name} is kept: {refusal.words}")
             return "refused"
         if held is None:
             return "connected"
@@ -1320,10 +1378,12 @@ def remove_now(name: str, *, told: Callable[[str], None] | None = None) -> str:
                 say(f"text-to-cad {name} is kept: a process still runs from {folder}")
                 return "in use"
             aside = places.versions_dir() / f"{TRASH}{name}-{os.getpid()}-{os.urandom(4).hex()}"
-            try:
-                os.rename(folder, aside)
-            except OSError as error:
-                say(f"text-to-cad {name} could not be removed: {error.strerror or error}")
+            error = _aside(folder, aside, folder, wait)
+            if error is not None:
+                if why is not None:
+                    why.append(_refused(error, folder))
+                else:
+                    say(f"text-to-cad {name} could not be removed: {error.strerror or error}")
                 return "refused"
         finally:
             _drop(held, engine)

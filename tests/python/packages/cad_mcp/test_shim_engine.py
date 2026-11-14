@@ -301,12 +301,14 @@ class PinTest(unittest.TestCase):
         for args, expected in (([], (None, None)), (["--channel", "codex"], ("codex", None)),
                                (["--channel=codex"], ("codex", None)), (["--channel", "default"], (None, None)),
                                (["--channel", "codex", "--startup-timeout", "300"], ("codex", 300.0)),
-                               (["--startup-timeout=12.5"], (None, 12.5))):
+                               (["--startup-timeout=12.5"], (None, 12.5)), (["--startup-timeout", "86400"], (None, 86400.0))):
             with self.subTest(args=args):
                 self.assertEqual(shim.arguments(args), expected)
         for args in (["--channel", "Not a channel"], ["--channel"], ["--other"], ["--channel=@"], ["--startup-timeout"],
                      ["--startup-timeout", "0"], ["--startup-timeout=-5"], ["--startup-timeout", "soon"],
-                     ["--startup-timeout=nan"], ["--startup-timeout", "inf"]):
+                     ["--startup-timeout=nan"], ["--startup-timeout", "inf"],
+                     # Past a day: a wait that long overflows `threading.Event.wait` on Windows (near 4.29e6 s).
+                     ["--startup-timeout", "86401"], ["--startup-timeout", "1e400"], ["--startup-timeout", "5e6"]):
             with self.subTest(args=args), self.assertRaises(ValueError):
                 shim.arguments(args)
         for args, said in ((["--channel", "Bad"], "not a channel"), (["--startup-timeout", "0"], "not a startup timeout")):

@@ -19,7 +19,9 @@ It holds no tool, view or document: the server does. What it does on its own:
   own `cad` run pinned to it (`cad +<version>[@<channel>] setup --add --quiet`), which moves the channel to it,
   or finds the channel past it. The app's `initialize` waits for this at most 20 seconds, inside Codex's
   default 30-second start window, or 80% of the app's startup timeout where its server config gives it as
-  `--startup-timeout SECONDS` (a store's copy whose config sets the app's timeout says the same number): past
+  `--startup-timeout SECONDS`, a day at most (a store's copy whose config sets the app's timeout says the same
+  number; the rest of it is left to uvx starting this transport before the `initialize` arrives, and to the
+  server's start and its own answer after the version is ready): past
   that it is answered here and the server's session opened once the version is ready. Holding it matters: an
   app that does not act on `tools/list_changed` within a turn (Codex) keeps the empty list an early answer
   gave for the rest of that turn.

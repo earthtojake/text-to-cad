@@ -1282,5 +1282,25 @@ class TheCopy(unittest.TestCase):
             self.assertEqual(providers.copy_mark(target)["from"], str(source))
 
 
+class CursorStoreVersion(unittest.TestCase):
+    def test_a_folder_that_cannot_be_listed_or_read_names_no_version_and_never_fails_detection(self) -> None:
+        with temporary_directory(prefix="providers-cursor-") as scratch:
+            store = Path(scratch) / "store"
+            (store / "abc123" / ".cursor-plugin").mkdir(parents=True)
+            (store / "abc123" / ".cursor-plugin" / "plugin.json").write_text('{"version": "0.11.11"}', encoding="utf-8")
+            self.assertEqual(providers._cursor_store_version(store), "0.11.11")
+            real = Path.stat
+
+            def removed(path, *args, **kwargs):  # the commit's folder removed between its listing and its look
+                if path.name == "abc123":
+                    raise FileNotFoundError(2, "No such file or directory")
+                return real(path, *args, **kwargs)
+
+            for patched, replacement in (("iterdir", mock.Mock(side_effect=PermissionError(13, "Permission denied"))),
+                                         ("stat", removed)):
+                with self.subTest(patched=patched), mock.patch.object(Path, patched, replacement):
+                    self.assertIsNone(providers._cursor_store_version(store))
+
+
 if __name__ == "__main__":
     unittest.main()

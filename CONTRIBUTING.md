@@ -956,8 +956,8 @@ holding no plugin.) The portal requires `mcpServers` to resolve to a root
 archived as `.mcp.json`, and the archived manifest points there. That config
 starts the launcher with its channel as an argument, `cad-mcp --channel codex`, and
 Codex's startup timeout, the config's own `startup_timeout_sec`, as `--startup-timeout 300` (the
-launcher holds a first start's `initialize` for 80% of it: Codex acts on no `tools/list_changed`
-within a turn, `apps/mcp/README.md`), and sets no environment.
+launcher holds a first start's `initialize` for 80% of it, the rest of it left to uvx starting the launcher before the `initialize` arrives and to the server's start and its own answer after the version is ready: Codex acts on no
+`tools/list_changed` within a turn, `apps/mcp/README.md`), and sets no environment.
 
 For each release, a person with the access below:
 

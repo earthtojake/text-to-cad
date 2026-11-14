@@ -1228,9 +1228,14 @@ def _detect_cursor(machine: Machine, folder: Optional[Path] = None) -> App:
 def _cursor_store_version(path: Path) -> Optional[str]:
     """The release of the Cursor Marketplace's copy at ``path``: the Marketplace keeps the repository it took in a
     folder per commit under it (the newest is the one Cursor loads), whose manifest or ``VERSION`` file names it;
-    None where none says."""
-    folders = [found for found in path.iterdir() if found.is_dir()] if path.is_dir() else []
-    for folder in sorted(folders, key=lambda found: found.stat().st_mtime, reverse=True) + [path]:
+    None where none says, or where the folder cannot be read (one removed between two looks among them): it never fails
+    detection."""
+    try:
+        folders = [found for found in path.iterdir() if found.is_dir()] if path.is_dir() else []
+        newest = sorted(folders, key=lambda found: found.stat().st_mtime, reverse=True)
+    except OSError:
+        return None
+    for folder in newest + [path]:
         version = _manifest_version(folder, ".cursor-plugin/plugin.json", "plugin.json")
         if version is None:
             try:

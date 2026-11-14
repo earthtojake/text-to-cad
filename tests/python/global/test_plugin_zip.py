@@ -71,6 +71,14 @@ class PluginZipTests(unittest.TestCase):
             pointed_at.add("./.mcp.json")
         self.assertEqual(names, roots | {path[2:] for path in pointed_at})
 
+    def test_the_startup_timeout_s_bound_is_the_launcher_s(self):
+        from tests.python.support.paths import add_sources
+
+        add_sources()
+        from cad_mcp import shim
+
+        self.assertEqual(plugin_zip.STARTUP_MOST, shim.STARTUP_MOST)
+
     def test_every_skill_description_fits_the_hosts_limit(self):
         # Hosts refuse a skill whose description is over 1024 characters; fea's is a short router.
         checked = {}
@@ -120,10 +128,17 @@ class PluginZipTests(unittest.TestCase):
             # positive number of seconds fails the package.
             for timeout, args, errors in ((300.0, ["--startup-timeout", "300"], []), (45.5, ["--startup-timeout", "45.5"], []),
                                           ("300", None, [".mcp.json's startup_timeout_sec"]),
-                                          (0, None, [".mcp.json's startup_timeout_sec"])):
-                with self.subTest(timeout=timeout):
+                                          (0, None, [".mcp.json's startup_timeout_sec"]),
+                                          # The launcher's own rule, a day at most: never a line it refuses, and no
+                                          # number too large to write crashes the builder.
+                                          (86400, ["--startup-timeout", "86400"], []),
+                                          (86401, None, [".mcp.json's startup_timeout_sec"]),
+                                          (10 ** 400, None, [".mcp.json's startup_timeout_sec"])):
+                with self.subTest(timeout=str(timeout)[:12]):
                     (root / "codex.mcp.json").write_text(json.dumps(
                         {"mcpServers": {"cad": {**server, "startup_timeout_sec": timeout}}}), encoding="utf-8")
+                    if timeout == 10 ** 400:
+                        self.assertIn("a day at most", "\n".join(build(manifest)))
                     found = build(manifest, root / "out.zip")
                     self.assertEqual([error.split(" is not")[0] for error in found], errors)
                     if args is not None:

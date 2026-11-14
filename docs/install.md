@@ -115,10 +115,15 @@ release finds them, or a newer release takes them over. A copy from a plugin dir
 Recents: its store delivered it. While one does, so does the `cad` command it runs,
 and a line says which channel is still installed, on which release: its store's plugin
 uses the command, and `cad uninstall --purge` removes it too. A chat an app still has
-open with text-to-cad stops using it and says text-to-cad was uninstalled. Nothing is
-removed from under a program still running from it: the line says which program, the
-release's folder stays with your data kept, and the uninstall fails. Delete the folder
-the line names once that program has ended, or install again, which uses it or removes it.
+open with text-to-cad stops using it and says text-to-cad was uninstalled. Then restart
+the apps the uninstall lists: a chat started in an app that still holds the plugin can
+install text-to-cad again. Nothing is removed from under a program still running from
+it: the release's folder stays with your data kept, the line says why (naming the
+program where your system can tell), and the uninstall fails. On Windows, a `cad
+uninstall` typed in a terminal runs from the release it removes, which Windows will not
+delete while it runs: the line says so, and the rest is done. Delete the folder the line
+names once that program, or that command, has ended, or install again, which uses it or
+removes it.
 A plugin directory's copy that the install command of a release through 0.11.10
 replaced is not put back: install it from the directory again to get it back.
 `--purge` with it removes everything: every release, a store's among them, and

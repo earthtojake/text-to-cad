@@ -1019,21 +1019,30 @@ sys.exit(0)
 
         name = "0.12.0"
         code = places.code_dir(name)
-        code.mkdir(parents=True)
-        pointers.write(None, name, mirrored=False)
-        looks, spared = iter([[4242], [4242]]), []
+        # Its lock file gone with it (``versions.quiet``), or still there, as one a server on its way out holds until
+        # its workers are gone (``versions.gone``): either way the processes are awaited, this command aside.
+        for lock in (False, True):
+            with self.subTest(lock=lock):
+                code.mkdir(parents=True)
+                pointers.write(None, name, mirrored=False)
+                if lock:
+                    versions.endpoint(name).lock.parent.mkdir(parents=True, exist_ok=True)
+                    versions.endpoint(name).lock.write_text("", encoding="utf-8")
+                looks, spared = iter([[4242], [4242]]), []
 
-        def processes(_folder, besides=None):
-            spared.append(besides)
-            return next(looks, [])
+                def processes(_folder, besides=None):
+                    spared.append(besides)
+                    return next(looks, [])
 
-        with mock.patch.object(releases, "processes", side_effect=processes):
-            status, out, _err = self.run_uninstall()
-        self.assertEqual(status, 0, out)
-        self.assertFalse(code.exists(), out)
-        self.assertIn(f"version  removed text-to-cad {name}'s code; its data stays for a later install\n", out)
-        self.assertGreater(len(spared), 2, "it looked again until they had ended")
-        self.assertEqual(set(spared), {os.getpid()}, "this command never counts")
+                with mock.patch.object(releases, "processes", side_effect=processes), \
+                        mock.patch.object(versions, "gone", wraps=versions.gone) as gone:
+                    status, out, _err = self.run_uninstall()
+                self.assertEqual(status, 0, out)
+                self.assertFalse(code.exists(), out)
+                self.assertIn(f"version  removed text-to-cad {name}'s code; its data stays for a later install\n", out)
+                self.assertGreater(len(spared), 2, "it looked again until they had ended")
+                self.assertEqual(set(spared), {os.getpid()}, "this command never counts")
+                self.assertEqual(gone.call_args_list, [mock.call(name, besides=os.getpid())] if lock else [])
 
     def test_a_version_something_still_runs_from_is_said_with_what_runs_and_how_to_finish(self) -> None:
         # Never "stop it, then run this again": the cad command is gone by then, and a second uninstall would not find
@@ -1064,6 +1073,112 @@ sys.exit(0)
         self.assertEqual(status, 1, out)
         self.assertIn(f"version  {providers.shown(places.version_dir(name), self.machine)} stays: its server still runs. "
                       "Delete that folder once nothing runs from it\n", out)
+
+    def test_a_refused_removal_says_its_cause_and_fails_unless_this_command_runs_from_it(self) -> None:
+        # One line, the cause as it is, never a sweep (no one may run one); exit 1, as for in use, unless the system
+        # refused it because this very command runs from it (`cad uninstall` typed on Windows): then the rest is done.
+        from cad.engine import places
+        from cad_server._internal import pointers
+
+        name = "0.12.0"
+        code = places.code_dir(name)
+        real = os.rename
+
+        def refuse(source, target):
+            if Path(source) == code:
+                raise PermissionError(13, "The process cannot access the file")
+            return real(source, target)
+
+        for here, status, cause, once in (
+                (False, 1, "the system refused to remove it (The process cannot access the file)", "once nothing runs from it"),
+                (True, 0, "the system refused to remove it (The process cannot access the file): this command runs "
+                          "from it", "once this command has ended")):
+            with self.subTest(here=here):
+                code.mkdir(parents=True, exist_ok=True)
+                pointers.write(None, name, mirrored=False)
+                with mock.patch.object(os, "rename", refuse), mock.patch.object(versions, "QUIET_SECONDS", 0.0), \
+                        mock.patch.object(versions, "runs_from", return_value=here):
+                    done, out, _err = self.run_uninstall()
+                self.assertEqual(done, status, out)
+                self.assertIn(f"version  the code of text-to-cad {name} stays, in {providers.shown(code, self.machine)}: "
+                              f"{cause}. Its data is kept. Delete that code folder {once} to finish the uninstall; a "
+                              f"later install of text-to-cad {name} uses it instead, and of a newer release removes it\n",
+                              out)
+                self.assertNotIn("sweep", out)
+                self.assertEqual(out.count("version  the code of"), 1, out)
+        with mock.patch.object(versions, "_take", side_effect=PermissionError(13, "Access is denied")):
+            pointers.write(None, name, mirrored=False)
+            done, out, _err = self.run_uninstall()
+        self.assertEqual(done, 1, out)
+        self.assertIn(": its server's lock could not be taken (Access is denied). Its data is kept.", out)
+        self.assertNotIn("this command runs from it", out)
+
+    def test_the_flat_door_s_holder_is_stopped_unless_it_is_a_version_that_stays(self) -> None:
+        # With the default channel gone first, a store channel's version takes the flat door at its next tending: the
+        # plan says that channel stays, so its server is never stopped. Another holder (a server of 0.11.10 or earlier,
+        # or of a version removed) is.
+        from cad.engine import client, places
+        from cad_server._internal import pointers
+
+        places.code_dir("0.12.1").mkdir(parents=True)
+        for holder, stopped in ((77, False), (78, True)):
+            with self.subTest(holder=holder):
+                pointers.write(None, "0.12.0", mirrored=False)
+                pointers.write("codex", "0.12.1", mirrored=False)
+                flat: list = []
+                ask = lambda name, message, **_kw: {"pid": 77} if (name, message["op"]) == ("0.12.1", "pid") else None  # noqa: E731
+                with mock.patch.object(versions, "ask_flat", side_effect=lambda message, **_kw: flat.append(
+                            message["op"]) or {"pid": holder, "ok": True}), \
+                        mock.patch.object(versions, "ask", side_effect=ask), \
+                        mock.patch.object(client, "wait_gone", return_value=True):
+                    done, out, _err = self.run_uninstall()
+                self.assertEqual(done, 0, out)
+                self.assertEqual(flat, ["pid", "stop"] if stopped else ["pid"])
+                self.assertNotIn("engine   the server at", out)
+
+    def test_purge_takes_off_a_channel_that_came_while_it_asked(self) -> None:
+        from cad_server._internal import consent, pointers
+
+        pointers.write(None, "0.12.0", mirrored=False)
+        seen: list = []
+        with mock.patch.object(consent, "confirm", side_effect=lambda *_a, **_k: pointers.write("store", "0.12.2",
+                                                                                                mirrored=False)), \
+                mock.patch.object(stop, "main", side_effect=lambda *_args: seen.append(
+                    [pointer.channel for pointer in pointers.listing()]) or 0):
+            done, out, _err = self.run_uninstall("--purge")
+        self.assertEqual((done, seen), (0, [[]]), out)
+        self.assertIn("channel  removed the store channel (on text-to-cad 0.12.2)\n", out)
+
+    def test_a_pointer_the_system_refuses_for_a_moment_is_tried_again_and_one_that_stays_is_said(self) -> None:
+        # On Windows a launcher has the pointer open to read it on each request: its unlink is refused for a moment.
+        from cad_server._internal import pointers
+
+        default = self.state / "default"
+        real, refusals = Path.unlink, []
+
+        def refuse(times: int):
+            def unlink(path, *args, **kwargs):
+                if Path(path) == default and len(refusals) < times:
+                    refusals.append(path)
+                    raise PermissionError(13, "The process cannot access the file")
+                return real(path, *args, **kwargs)
+            return unlink
+
+        pointers.write(None, "0.12.0", mirrored=False)
+        with mock.patch.object(Path, "unlink", refuse(2)):
+            done, out, _err = self.run_uninstall()
+        self.assertEqual((done, len(refusals), default.exists()), (0, 2, False), out)
+        self.assertIn("default  removed the default channel (on text-to-cad 0.12.0)\n", out)
+        refusals.clear()
+        pointers.write(None, "0.12.0", mirrored=False)
+        stop.main.reset_mock()
+        with mock.patch.object(Path, "unlink", refuse(10 ** 9)), mock.patch.object(setup, "POINTER_SECONDS", 0.0):
+            done, out, err = self.run_uninstall()
+        self.assertEqual(done, 1, out)
+        self.assertIn(f"default  {providers.shown(default, self.machine)} could not be removed: The process cannot "
+                      "access the file\n", out)
+        self.assertNotIn("Traceback", out + err)
+        stop.main.assert_called_once_with([])  # the run went on: the stops and removals say what they find
 
     def test_an_uninstall_with_no_record_of_a_setup_says_so_and_takes_out_what_it_finds(self) -> None:
         self.desktop_with({"cad": self.entry()})

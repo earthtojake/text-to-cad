@@ -98,7 +98,9 @@ that thread gets CAD's tools.
 
 So `cad-mcp` holds `initialize` for its version as long as the host waits: 20 seconds by default
 (inside Codex's 30), and 80% of the startup timeout where the server config says it as
-`cad-mcp --startup-timeout N`. Only the OpenAI ZIP says it (`scripts/release/plugin_zip.py`, N
+`cad-mcp --startup-timeout N` (a day at most). The other 20% is what the host's timeout counts
+besides: uvx fetching and starting `cad-mcp` before the `initialize` arrives, and the server's
+start and its own answer to the `initialize` after the version is ready. Only the OpenAI ZIP says it (`scripts/release/plugin_zip.py`, N
 read from that config's own `startup_timeout_sec`: `--channel codex --startup-timeout 300`). For
 the plugin folder and `main`, Codex reads the Agent Plugins standard's root `mcp.json` rather than
 `codex.mcp.json`, and any Codex-only key there makes the server vanish with no error: nothing

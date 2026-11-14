@@ -54,6 +54,8 @@ ROOTS = (".codex-plugin", "skills", "LICENSE")
 MCP_CONFIG = ".mcp.json"
 # The delivery channel of the copy this package is: OpenAI's directory's.
 CHANNEL = "codex"
+# The longest startup timeout the launcher takes (`cad_mcp.shim.STARTUP_MOST`, held equal by a test): a day.
+STARTUP_MOST = 86400
 ICONS = ("logo", "logoDark", "composerIcon", "composerIconDark")
 SEMVER = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?")
 # A clone without git-lfs (CI's included) checks LFS-tracked files out as pointers.
@@ -196,8 +198,10 @@ def with_channel(package: Package, data: bytes) -> bytes:
     args = [*servers[0]["args"], "--channel", CHANNEL]
     timeout = servers[0].get("startup_timeout_sec")
     if timeout is not None:
-        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 0 < timeout < float("inf"):
-            package.errors.append(f"{MCP_CONFIG}'s startup_timeout_sec is not a positive number of seconds: {timeout!r}")
+        # The launcher's own rule (`cad_mcp.shim`'s `--startup-timeout`): never a line it would refuse.
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 0 < timeout <= STARTUP_MOST:
+            package.errors.append(f"{MCP_CONFIG}'s startup_timeout_sec is not a positive number of seconds, a day at "
+                                  f"most: {timeout!r}")
             return data
         args += ["--startup-timeout", f"{timeout:g}"]
     servers[0]["args"] = args

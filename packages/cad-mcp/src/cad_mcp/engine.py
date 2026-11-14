@@ -46,7 +46,8 @@ reads it the same way:
   same process serves again.
 - **Every wait bounded**: a request waits for the version a few seconds at most (``unavailable``), the app's
   ``initialize`` 20 seconds, or 80% of the app's own startup timeout where its server config gives it
-  (``--startup-timeout``, ``shim.initialize_seconds``), a server's
+  (``--startup-timeout``, ``shim.initialize_seconds``: the rest is uvx starting this transport before, and the
+  server's start and its own answer after), a server's
   answer through the door ``DOOR_SECONDS`` a line (``_line``), its start 60 seconds, its HTTP answer 10 minutes;
   ``prepare``'s runs are bounded by ``PREPARE_SECONDS`` each, which bounds every wait for it (``READY_LIMIT``).
 - **The hold** (``hold``): a connection the server keeps while it is open, under a name the transport's

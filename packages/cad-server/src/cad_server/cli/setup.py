@@ -143,6 +143,9 @@ PREPARE_ENV = "CAD_UPDATE_PREPARE"
 # How long this run waits for a server of 0.11.10 or earlier to drain, its work in flight running to its end, before
 # this release's server takes its port: as long as that release's own switch waited.
 DRAIN_SECONDS = 3600.0
+# How long an uninstall tries again to remove a channel's pointer the system refuses for a moment (``_unlink``): on
+# Windows, while a launcher has the file open to read it, as every one does on each request.
+POINTER_SECONDS = 2.0
 
 
 def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: bool = False) -> argparse.ArgumentParser:
@@ -1357,12 +1360,15 @@ class Installer:
                 self.say(f"command  {providers.shown(proxy, self.machine)} stays: {self._still_used(channels)}")
             if whole:
                 if purge:
-                    names = versions.folders()  # read again under the lock: the folders there now
+                    # Read again under the lock: the folders and the channels there now, one that came while the
+                    # question waited among them.
+                    names = versions.folders()
+                    channels = [pointer for pointer in pointers.listing() if pointer.channel is not None]
                 # The channels first, then the servers: a thread's transport whose server stops finds its channel gone
                 # and starts nothing again (``cad_mcp.engine.stale``).
-                self._take_channels_off(default, names, channels, purge)
+                failed = self._take_channels_off(default, names, channels, purge) or failed
                 failed = self._stop() or failed
-                failed = self._stop_flat() or failed
+                failed = self._stop_flat(names) or failed
                 failed = self._remove_versions(names, purge) or failed
                 failed = self._remove_releases() or failed
                 failed = self._remove_plugin() or failed
@@ -1392,17 +1398,23 @@ class Installer:
                 "store's copy of the plugin runs this command; `cad uninstall --purge` removes "
                 f"{'them' if many else 'it'} too")
 
-    def _take_channels_off(self, default: str | None, names: list[str], channels: list[Any], purge: bool) -> None:
+    def _take_channels_off(self, default: str | None, names: list[str], channels: list[Any], purge: bool) -> bool:
         """The channels a whole uninstall takes off this computer, before any server is asked to stop: the default
         channel's pointer and the mirror 0.11.10 and earlier read (``installations/current`` and the records naming a
         version, or the default's), and with ``purge`` every named channel's pointer (``channels``) too. A thread's
         transport that notices its server stopping then finds its channel gone and starts nothing again
         (``cad_mcp.engine.stale``); else it would start the server again at once, from the code being removed. Run under
-        the install lock, so no server's tending decides on the pointers meanwhile (``versions.retiring``)."""
+        the install lock, so no server's tending decides on the pointers meanwhile (``versions.retiring``). True when a
+        pointer could not be removed (``_unlink``: said, and the run goes on)."""
         from cad.engine import places
         from cad_server._internal import installations, pointers
 
-        self._folder().remove(pointers.DEFAULT)
+        failed = False
+        if self._unlink(self._folder().path(pointers.DEFAULT), "default "):
+            if default is not None:
+                self.say(f"default  removed the default channel (on text-to-cad {default})")
+        else:
+            failed = True
         inside = os.path.normcase(os.path.realpath(places.versions_dir())).rstrip(os.sep) + os.sep
         for record in installations.records():
             if os.path.normcase(os.path.realpath(record["prefix"])).startswith(inside) \
@@ -1410,19 +1422,41 @@ class Installer:
                 installations.forget(record["version"])
         if installations.current_version() in (*names, default):
             installations.state().remove(installations.CURRENT)
-        if default is not None:
-            self.say(f"default  removed the default channel (on text-to-cad {default})")
         for pointer in channels if purge else ():
-            pointers.forget(pointer.channel)
+            if not self._unlink(pointer.path, "channel "):
+                failed = True
+                continue
+            pointers.forget(pointer.channel)  # its last-use stamp with it
             self.say(f"channel  removed the {pointer.channel} channel (on text-to-cad {pointer.version})")
+        return failed
+
+    def _unlink(self, path: Path, label: str) -> bool:
+        """The pointer file ``path`` removed, tried again for ``POINTER_SECONDS`` while the system refuses it (on Windows,
+        while a launcher has it open to read): whether it is gone. One that stays is said, with the system's words, under
+        ``label``; never a traceback that ends the run."""
+        import time
+
+        deadline = time.monotonic() + POINTER_SECONDS
+        while True:
+            try:
+                path.unlink()
+                return True
+            except FileNotFoundError:
+                return True
+            except OSError as error:
+                if not isinstance(error, PermissionError) or time.monotonic() >= deadline:
+                    self.say(f"{label} {self.providers.shown(str(path), self.machine)} could not be removed: "
+                             f"{error.strerror or error}")
+                    return False
+            time.sleep(0.05)
 
     def _remove_versions(self, names: list[str], purge: bool) -> bool:
         """The versions ``names`` taken out, their channels taken off already (``_take_channels_off``), each one's
         server stopped first: the default channel's version's code, its data kept for a later install
         (``versions.remove_code``); with ``purge``, every version whole. Run under the install lock. True when a
-        version could not be removed (something still runs from it: said, with what the person can do,
-        ``_left``); on Windows the code this command runs from stays until it is deleted or a later install's sweep
-        takes it, said."""
+        version could not be removed (something still runs from it, or the system refused it: said, with what the
+        person can do, ``_left``); the code this command itself runs from, which Windows refuses to remove while it
+        runs, is said the same way and is no failure."""
         from cad.engine import places
         from cad_server._internal import versions
 
@@ -1439,54 +1473,56 @@ class Installer:
             else:
                 versions.quiet(places.version_dir(name), besides=os.getpid())
             said: list[str] = []
-            # Without --purge the version's data stays for a later install (``versions.remove_code``).
-            done = (versions.remove_now if purge else versions.remove_code)(name, told=said.append)
-            if done not in ("in use", "connected"):  # else ``_left`` says it, with what runs
+            why: list[versions.Refusal] = []
+            # Without --purge the version's data stays for a later install (``versions.remove_code``). A person waits on
+            # this run: a rename the system refuses is tried again for a while (on Windows, a stopped server's process
+            # keeps its files a moment), unless this command runs from the folder (``versions.runs_from``).
+            done = (versions.remove_now if purge else versions.remove_code)(
+                name, told=said.append, wait=versions.QUIET_SECONDS, why=why)
+            if done in ("removed", "absent"):
                 for line in said:
                     self.say(f"version  {line}")
-            if done == "refused" and not purge:
-                # No sweep follows on a device with nothing left installed: said as what it is, with what finishes it.
-                self.say(f"version  the code of text-to-cad {name} stays for now, in "
-                         f"{self.providers.shown(str(places.code_dir(name)), self.machine)}: the system refused to "
-                         "remove it (on Windows, this command runs from it). Its data is kept. Delete that code folder "
-                         f"once this command has ended; a later install of text-to-cad {name} uses it instead, and of "
-                         "a newer release removes it")
-            elif done not in ("removed", "absent"):
-                failed = True
-                self.say(f"version  {self._left(name, done, purge)}")
-            else:
                 self.actions.append({"app": "version", "action": "remove", "kind": "remove",
                                      "path": str(places.version_dir(name) if purge else places.code_dir(name)),
                                      "ok": True, "at": self.providers.stamp()})
+                continue
+            refusal = why[0] if why else None
+            # Refused because this command runs from it (``cad uninstall`` typed on Windows): all else is done, and
+            # deleting the folder once it has ended finishes it. Anything else that stays is a failure.
+            failed = failed or not (refusal is not None and refusal.here)
+            self.say(f"version  {self._left(name, done, purge, refusal)}")
         return failed
 
-    def _left(self, name: str, done: str, purge: bool) -> str:
-        """What a version this uninstall could not remove (``done``: ``in use``, ``connected``, ``refused``...) leaves,
-        and what the person can do, in one line. Without ``purge`` its code stays in its folder and its data is kept:
+    def _left(self, name: str, done: str, purge: bool, refusal: Any = None) -> str:
+        """What a version this uninstall could not remove (``done``: ``in use``, ``connected``, ``refused``) leaves, and
+        what the person can do, in one line. Without ``purge`` its code stays in its folder and its data is kept:
         deleting that code folder once nothing runs from it finishes the uninstall, as a later install would (the same
         release takes the code it finds, a newer one carries the data in and removes the folder: ``versions.fate``).
-        With ``purge``, the version's folder. What still runs is named where ``ps`` says it (``releases.processes``);
-        a server holding its lock (``connected``) is its server. Never "run this again": the ``cad`` command may be gone
-        by now, and a second uninstall would find no channel on this version."""
+        With ``purge``, the version's folder. Why, as it is: a refusal's own words (``versions.Refusal``: the lock, or
+        the system's refusal of the rename, and that this command runs from it where it does); else what still runs,
+        named where the system lists it (``releases.processes``), or its server, where its lock is held
+        (``connected``). Never "run this again": the ``cad`` command may be gone by now, and a second uninstall would
+        find no channel on this version; nor a sweep, which no one may run."""
         from cad.engine import places
         from cad_server._internal import releases
 
         shown = lambda path: self.providers.shown(str(path), self.machine)  # noqa: E731
-        found = releases.processes(places.version_dir(name), besides=os.getpid()) if done != "refused" else []
-        if found:
+        found = releases.processes(places.version_dir(name), besides=os.getpid()) if refusal is None else []
+        if refusal is not None:
+            what = refusal.words
+        elif found:
             ids = ", ".join(str(pid) for pid in found[:-1]) + (" and " if len(found) > 1 else "") + str(found[-1])
             what = f"process{'es' if len(found) > 1 else ''} {ids} still run{'' if len(found) > 1 else 's'} from it"
         elif done == "connected":
             what = "its server still runs"
-        elif done == "refused":
-            what = "the system refused to remove it (a file in it is in use)"
         else:
             what = "a process still runs from it"
+        once = "once this command has ended" if refusal is not None and refusal.here else "once nothing runs from it"
         if purge:
-            return f"{shown(places.version_dir(name))} stays: {what}. Delete that folder once nothing runs from it"
+            return f"{shown(places.version_dir(name))} stays: {what}. Delete that folder {once}"
         return (f"the code of text-to-cad {name} stays, in {shown(places.code_dir(name))}: {what}. Its data is kept. "
-                f"Delete that code folder once nothing runs from it to finish the uninstall; a later install of "
-                f"text-to-cad {name} uses it instead, and of a newer release removes it")
+                f"Delete that code folder {once} to finish the uninstall; a later install of text-to-cad {name} uses it "
+                "instead, and of a newer release removes it")
 
     def _remove_command(self, proxy: str) -> bool:
         """The cad command removed, with its Python on Windows (``installations.remove_proxy``): True when it
@@ -1575,15 +1611,23 @@ class Installer:
                              "code": code, "ok": code == 0, "at": self.providers.stamp()})
         return code != 0
 
-    def _stop_flat(self) -> bool:
+    def _stop_flat(self, names: list[str]) -> bool:
         """Whoever holds the flat door of 0.11.10 and earlier -- a server of those releases still running, as while
-        it drains after an update -- asked to stop, and its lock awaited (``versions.STOP_SECONDS``): nothing it runs
-        from is removed under it. True when one still runs."""
+        it drains after an update, or the server of a version this uninstall removes (``names``) -- asked to stop, and
+        its lock awaited (``versions.STOP_SECONDS``): nothing it runs from is removed under it. A version that stays (a
+        store's channel is on it) is left alone, unsaid: with the default channel gone, its server takes the flat door
+        at its next tending (``versions.flat``), and the plan says it stays. True when one still runs."""
         from cad.engine import client
         from cad_server._internal import versions
 
-        if versions.ask_flat({"op": "pid"}, seconds=versions.SERVES_SECONDS) is None:
+        holder = versions.ask_flat({"op": "pid"}, seconds=versions.SERVES_SECONDS)
+        if holder is None:
             return False
+        pid = holder.get("pid")
+        for kept in (name for name in versions.folders() if name not in names):
+            if type(pid) is int and (versions.ask(kept, {"op": "pid"}, seconds=versions.SERVES_SECONDS)
+                                     or {}).get("pid") == pid:
+                return False
         versions.ask_flat({"op": "stop"})
         try:
             gone = client.wait_gone(timeout=versions.STOP_SECONDS, endpoint=versions.flat_endpoint())
