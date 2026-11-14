@@ -919,6 +919,86 @@ class WhereFromTest(_Tmp):
                          ["feature", "tool"])
 
 
+class EveryVersionOwesTest(_Tmp):
+    """A no deletes what was sent under every install id the device's versions hold: asked for by the version that
+    takes it (``everywhere``), by whichever version sends next (``_forget_owed``), and handed on by one that leaves
+    (``hand_on``). This process's own settings are ``self.path``; two other versions' and the state folder's beside
+    them (``_settings_everywhere``)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.device, self.other, self.third = (self.tmp / name / "settings.json" for name in ("device", "other", "third"))
+        for path in (self.device, self.other, self.third):
+            path.parent.mkdir()
+        for patch in (mock.patch("cad_server.analytics.settings_path", return_value=self.path),
+                      mock.patch("cad_server.analytics._settings_everywhere",
+                                 return_value=[self.device, self.other, self.third, self.path])):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def section(self, path: Path) -> dict:
+        return json.loads(path.read_text(encoding="utf-8"))["telemetry"]
+
+    def on(self, path: Path) -> str:
+        """A version sharing under an install id of its own (one turned on again there, or one with nothing to import)."""
+        choose(True, by="cli", path=path)
+        return self.section(path)["id"]
+
+    def test_a_no_at_a_terminal_asks_for_every_version_s_id_at_once(self) -> None:
+        mine, theirs, third = self.on(self.path), self.on(self.other), self.on(self.third)
+        asked: list[str] = []
+        chosen = choose(False, by="cli", forget=lambda install_id: asked.append(install_id) or True)
+        self.assertTrue(chosen["forgotten"])
+        self.assertEqual(asked, [mine, theirs, third])
+        for path in (self.path, self.device, self.other, self.third):
+            with self.subTest(path=path.parent.name):
+                self.assertEqual((self.section(path)["choice"], "id" in self.section(path),
+                                  "forget" in self.section(path)), ("off", False, False))
+
+    def test_unreached_the_receiver_costs_one_wait_and_the_rest_stay_owed(self) -> None:
+        mine, theirs, third = self.on(self.path), self.on(self.other), self.on(self.third)
+        asked: list[str] = []
+        choose(False, by="cli", forget=lambda install_id: asked.append(install_id) or install_id == mine)
+        self.assertEqual(asked, [mine, theirs], "nothing asked after the first not heard")
+        self.assertNotIn("forget", self.section(self.path))
+        self.assertEqual((self.section(self.other)["forget"], self.section(self.third)["forget"]), ([theirs], [third]))
+        self.assertEqual(self.section(self.third)["choice"], "off", "the no kept everywhere all the same")
+        # Offline from the first request: this version's own is the one asked, and every other stays owed.
+        again = self.on(self.path)
+        asked.clear()
+        self.assertFalse(choose(False, by="cli", forget=lambda install_id: asked.append(install_id) or False)["forgotten"])
+        self.assertEqual(asked, [again])
+        self.assertEqual((self.section(self.other)["forget"], self.section(self.third)["forget"]), ([theirs], [third]))
+
+    def test_the_next_send_asks_for_what_any_version_owes(self) -> None:
+        sender = Recorder(process="cli", path=self.path, send=lambda payload: True)
+        sender.flush()
+        self.assertEqual(self.deleted, [], "nothing owed anywhere: nothing asked")
+        theirs, third = self.on(self.other), self.on(self.third)
+        for path in (self.other, self.third):  # said in that version alone: owed there, and nowhere else
+            choose(False, by="cli", path=path)
+        asked: list[str] = []
+        with mock.patch("cad_server.analytics.request_deletion", side_effect=lambda install_id: asked.append(install_id) or False):
+            sender.flush()
+        self.assertEqual(asked, [theirs], "offline: one request, and the rest left for a later send")
+        self.assertEqual((self.section(self.other)["forget"], self.section(self.third)["forget"]), ([theirs], [third]))
+        sender.flush()
+        self.assertEqual(self.deleted, [theirs, third])
+        self.assertNotIn("forget", self.section(self.other))
+        self.assertNotIn("forget", self.section(self.third))
+
+    def test_a_version_that_leaves_hands_on_what_it_owes(self) -> None:
+        self.other.write_text(json.dumps({"telemetry": {"choice": "off", "forget": ["a", "b", "a"]}}), encoding="utf-8")
+        self.path.write_text(json.dumps({"telemetry": {"choice": "on", "disclosure": 1, "id": "c", "forget": ["b"]}}),
+                             encoding="utf-8")
+        self.assertEqual(analytics.hand_on(self.other, self.path), 0, "the count is of rows kept for sending")
+        self.assertEqual((self.section(self.path)["forget"], self.section(self.path)["id"]), (["b", "a"], "c"),
+                         "added once each, whatever the answer there")
+        self.assertNotIn("forget", self.section(self.other))
+        analytics.hand_on(self.other, self.path)
+        self.assertEqual(self.section(self.path)["forget"], ["b", "a"], "nothing moved twice")
+
+
 class BeforeTelemetryTest(_Tmp):
     """cadgen 0.7.7 to 0.7.15 kept the answer as `analytics`, for a few days: none of it carries over."""
 

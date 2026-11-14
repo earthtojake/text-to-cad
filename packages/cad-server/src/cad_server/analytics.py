@@ -116,7 +116,9 @@ sends nothing by default (``_here``).
 
 The install id exists only while sharing is on: turning it off deletes it here and asks the
 receiver to delete what it holds under it -- again and again until it hears back -- and turning it
-on again starts a new install, so nothing links the two.
+on again starts a new install, so nothing links the two. A no is said in every version on the device, each
+of whose ids is owed a deletion too (``everywhere``): whichever version sends next asks for what any of them
+owes (``_forget_owed``), and a version that leaves hands what it owes to the one that sends next (``hand_on``).
 
 Telemetry never gets in the way of CAD:
 
@@ -863,11 +865,27 @@ def choose(share: bool, *, by: str, path: Path | None = None,
            forget: Callable[[str], bool] | None = None) -> dict[str, Any]:
     """Keep the person's choice (``_choose``); a no in this process's own settings -- the app menu's switch, ``cad
     telemetry off``, ``cad setup --no-telemetry`` -- said in every other version on the device too (``everywhere``),
-    so a no is a no whichever version runs next."""
+    so a no is a no whichever version runs next. Given ``forget`` (a person at a terminal waits for it), the
+    deletions every other version owes are asked for too, each install id once -- but only once this process's own
+    were heard: unreached, the receiver costs that person one wait, never one for each version."""
+    forget = _once(forget) if forget is not None else None
     chosen = _choose(share, by=by, path=path, forget=forget)
     if not share and chosen.get("saved") and _own(path):
-        everywhere(by)
+        everywhere(by, forget=forget if chosen.get("forgotten") else None)
     return chosen
+
+
+def _once(forget: Callable[[str], bool]) -> Callable[[str], bool]:
+    """``forget`` asking the receiver about each install id once: versions that imported one another's settings
+    hold the same id, and the answer for one file is the answer for all."""
+    heard: dict[str, bool] = {}
+
+    def ask(install_id: str) -> bool:
+        if install_id not in heard:
+            heard[install_id] = bool(forget(install_id))
+        return heard[install_id]
+
+    return ask
 
 
 def _own(path: Path | None) -> bool:
@@ -897,12 +915,15 @@ def _settings_everywhere() -> list[Path]:
     return found
 
 
-def everywhere(by: str) -> list[Path]:
+def everywhere(by: str, *, forget: Callable[[str], bool] | None = None) -> list[Path]:
     """A no said in every settings file of the device but this process's own (``_settings_everywhere``), as ``cad
     telemetry off`` would say it there (``_choose``): its install id deleted and owed a deletion there, what it kept
     for sending deleted. The state folder's file is made where it is missing, in the form every release reads (the
     ``telemetry`` section's ``choice``), so 0.11.10 and earlier, and a version installed later with nothing to import
-    from, start with it (``inherit_no``). What was written. Never raises: a file that cannot be written is skipped."""
+    from, start with it (``inherit_no``). Given ``forget``, what each file owes is asked for there and then
+    (``forget_pending``) -- a version removed before it runs again would take it away unasked -- until the first
+    request not heard: the no is still kept in every file after it, and what is not asked stays owed for the next
+    sender (``Recorder.flush``). What was written. Never raises: a file that cannot be written is skipped."""
     done = []
     mine = os.path.normcase(os.path.realpath(settings_path()))
     try:
@@ -914,11 +935,57 @@ def everywhere(by: str) -> list[Path]:
         if os.path.normcase(os.path.realpath(target)) == mine:
             continue
         try:
-            if _choose(False, by=by, path=target)["saved"]:
-                done.append(target)
+            if not _choose(False, by=by, path=target)["saved"]:
+                continue
+            done.append(target)
         except Exception:  # noqa: BLE001 - as above
             LOG.debug("could not keep the no in %s", target, exc_info=True)
+            continue
+        if forget is not None:
+            try:
+                heard = forget_pending(path=target, forget=forget, stop=True)
+            except Exception:  # noqa: BLE001 - as above: what is not asked stays owed
+                LOG.debug("could not ask for what %s owes", target, exc_info=True)
+                heard = False
+            forget = forget if heard else None
     return done
+
+
+def _forget_elsewhere(forget: Callable[[str], bool]) -> bool:
+    """The deletions owed in the device's other settings files (``_settings_everywhere``) asked for by this process's
+    sender, each heard taken off the list that held it: a version removed before it runs again (an update that
+    replaces it, ``cad doctor --prune``) would otherwise take what it owes away unasked. Each file read first, a
+    local read, so nothing is asked where nothing is owed; after the first request not heard nothing more is asked,
+    and the rest stay owed. It waits on the network where something is owed: only the sender calls it
+    (``_forget_owed``). Whether every one asked was heard. Never raises."""
+    try:
+        mine = os.path.normcase(os.path.realpath(settings_path()))
+        targets = _settings_everywhere()
+    except Exception:  # noqa: BLE001 - owed still, for a later send
+        LOG.debug("could not list the device's versions", exc_info=True)
+        return False
+    for target in targets:
+        try:
+            if os.path.normcase(os.path.realpath(target)) == mine:
+                continue
+            if not forget_pending(path=target, forget=forget, stop=True):
+                return False
+        except Exception:  # noqa: BLE001 - as above
+            LOG.debug("could not ask for what %s owes", target, exc_info=True)
+            return False
+    return True
+
+
+def _forget_owed(path: Path | None = None) -> None:
+    """The deletions a sender asks for (``Recorder.flush``, and an opt-out's in the background): those its own
+    settings at ``path`` owe (``forget_pending``), then, where those are this process's own settings and every one
+    of theirs was heard, those any other version on the device owes (``_forget_elsewhere``) -- so whichever version
+    sends next asks for what every version owes, each install id once. It waits on the network: only the
+    background sender calls it."""
+    path = path or settings_path()
+    ask = _once(request_deletion)
+    if forget_pending(path=path, forget=ask) and _own(path):
+        _forget_elsewhere(ask)
 
 
 def _device_no(path: Path) -> bool:
@@ -1006,8 +1073,11 @@ def hand_on(source: Path, target: Path) -> int:
     ``spool``'s ``source``) and the whole batches its processes kept as they exited (``KEPT``) -- moved to another
     version's settings folder, ``target`` (both settings paths), for that version's sender: taken whole from
     ``source`` under its lock, so no row is moved twice, then appended under ``target``'s. A row is sent only under
-    the answer it was kept under (``_drain``, ``send_kept``), and a batch's id makes a second copy the first. A
-    local move, never the network; nothing waits on a send. How many rows were moved. Never raises."""
+    the answer it was kept under (``_drain``, ``send_kept``), and a batch's id makes a second copy the first. The
+    deletions it still owed (``forget``) go to ``target``'s list too, whatever ``target``'s own answer: a deletion
+    owed is owed, and that version's sender asks for it (``forget_pending``) -- kept there first, then taken off
+    ``source``'s, so one is asked for twice rather than never. A local move, never the network; nothing waits on a
+    send. How many rows were moved. Never raises."""
     moved = 0
     try:
         for name, key in ((SPOOL, "counts"), (KEPT, "batch")):
@@ -1016,6 +1086,17 @@ def hand_on(source: Path, target: Path) -> int:
                     moved += 1
     except Exception:  # noqa: BLE001 - counts not moved are lost with the folder, never a failed removal
         LOG.debug("could not hand on what %s kept for sending", source, exc_info=True)
+    try:
+        owed = list(dict.fromkeys(_pending(_read(source) or {})))
+        if owed:
+            def owe(section: dict[str, Any]) -> dict[str, Any]:
+                pending = _pending(section)
+                return {**section, "forget": [*pending, *(value for value in owed if value not in pending)]}
+
+            if _update(target, owe) is not None:
+                _update(source, lambda section: _without(section, owed))
+    except Exception:  # noqa: BLE001 - as above: lost with the folder, never a failed removal
+        LOG.debug("could not hand on the deletions %s owed", source, exc_info=True)
     return moved
 
 
@@ -1055,15 +1136,26 @@ def _choose(share: bool, *, by: str, path: Path | None = None,
     return {"saved": True, "sharing": False, "forgotten": not _pending(_read(path) or {})}
 
 
-def forget_pending(*, path: Path | None = None, forget: Callable[[str], bool] | None = None) -> None:
-    """Ask the receiver again to delete what it holds under ids turned off while it was not asked or not reached."""
+def forget_pending(*, path: Path | None = None, forget: Callable[[str], bool] | None = None,
+                   stop: bool = False) -> bool:
+    """Ask the receiver again to delete what it holds under ids turned off while it was not asked or not reached,
+    each one heard taken off the list. With ``stop``, nothing more is asked after the first one not heard: the rest
+    stay owed. Whether every one asked was heard (nothing owed: ``True``, and nothing asked)."""
     path = path or settings_path()
     pending = _pending(_read(path) or {})
     if not pending:
-        return
-    done = [value for value in pending if (forget or request_deletion)(value)]
+        return True
+    done, heard = [], True
+    for value in pending:
+        if (forget or request_deletion)(value):
+            done.append(value)
+            continue
+        heard = False
+        if stop:
+            break
     if done:  # only the list changes, under the lock: an answer given meanwhile stays as given
         _update(path, lambda section: _without(section, done))
+    return heard
 
 
 def notify(stream: Any = None, *, path: Path | None = None) -> bool:
@@ -1878,7 +1970,7 @@ class Recorder:
             if recorder is not None:
                 recorder._chose(decision, share, chosen["saved"])
         if not share:
-            self._background(lambda: forget_pending(path=self.path))
+            self._background(lambda: _forget_owed(self.path))
         return chosen
 
     def _chose(self, decision: Any, share: bool, saved: bool) -> None:
@@ -2069,8 +2161,9 @@ class Recorder:
 
     @_guarded(lambda: False)
     def flush(self) -> bool:
-        """Send what was used since the last batch, if sharing is on; drop it if not. A deletion still owed
-        is asked for first, then the batches exiting processes kept (``send_kept``), then what commands and
+        """Send what was used since the last batch, if sharing is on; drop it if not. A deletion still owed --
+        here, or, from this process's own settings, by any version on the device (``_forget_owed``) -- is asked for
+        first, then the batches exiting processes kept (``send_kept``), then what commands and
         scripts kept, as a ``cli`` batch of its own (``_spooled``), then the batch this one could not send
         (``_resend``): while that is still owed, what came since waits for a later batch. A batch with no use in
         it is not sent. It waits on the network: only the background sender calls it. Whether this process's own
@@ -2078,7 +2171,7 @@ class Recorder:
         if self._collect is not None:
             self._collect(self)
         settings = self.path or settings_path()
-        forget_pending(path=settings)
+        _forget_owed(settings)
         self.send_kept()
         if self._spooled is not None:
             self._spooled._send_own(settings)

@@ -918,7 +918,8 @@ class TelemetryAcrossVersions(Device):
         device = json.loads((self.state / "settings.json").read_text(encoding="utf-8"))["telemetry"]
         self.assertEqual(device["choice"], "off", "and at the old place, made, in the form every release reads")
         x = json.loads((places.data_dir(X) / "settings.json").read_text(encoding="utf-8"))["telemetry"]
-        self.assertEqual((x["choice"], "id" in x, x["forget"]), ("off", False, ["an-id"]), "its id owed a deletion")
+        self.assertEqual((x["choice"], "id" in x, "forget" in x), ("off", False, False),
+                         "its id deleted there, and its deletion asked for at once (``everywhere``'s ``forget``)")
         # A version made present afterwards: a newer one importing from Y, and an older one with nothing older to
         # import from -- both start with the off.
         for name in (Z, "0.11.99"):

@@ -306,7 +306,9 @@ requests or sessions it counted (a pin's or a launcher's, `default` for none, `d
 and `app`, the agent app that ran them, detected (the MCP handshake's client name, else the markers an app sets in
 its shell, else `unknown`) -- one batch for each version, channel and app a window counted. A row a command or a
 build keeps for sending says the three itself, so what a version had not sent when its folder goes is moved, as
-it goes, to the version that sends next (`analytics.hand_on`).
+it goes, to the version that sends next (`analytics.hand_on`), with the deletions it still owed. A no is said in
+every version's settings, and the deletion it asks for is asked under every install id they hold: at once by
+`cad telemetry off`, up to the first request the receiver does not answer, and by whichever version sends next.
 
 The state folder is `cad` in the platform's place for state, the cache folder `cad` in its
 place for caches; on Windows they are where Linux keeps them, `~\.local\state\cad` and
