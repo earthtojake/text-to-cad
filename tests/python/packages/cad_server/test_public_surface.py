@@ -42,6 +42,10 @@ MIRRORS: dict[str, tuple[str, str]] = {
     # The mujoco integration's check of a MuJoCo model's file, which is no document type: run here, or where
     # mujoco is not installed, in cad[mujoco]'s environment (``cad_server.cli.integrations``).
     "mujoco check": ("cad.mujoco", "check"),
+    # The orcaslicer integration's presets, found by name in OrcaSlicer's own folders, listed and written complete:
+    # standard library alone, so always run here.
+    "orcaslicer presets": ("cad.orcaslicer", "presets"),
+    "orcaslicer complete": ("cad.orcaslicer", "complete"),
     "srdf validate": ("cad.srdf", "validate"),
     # KiCad's design rule check of a saved board: the document type's, run by the kicad integration's kicad-cli.
     "kicad_pcb drc": ("cad.kicad_pcb", "drc"),
@@ -102,9 +106,9 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "server": frozenset({"port", "rotate_token", "yes"}),
     # text-to-cad set up in the agent apps, and `update`, the same command: its plan, what it may do,
     # for which apps; and `uninstall`, which takes it out again.
-    "setup": frozenset({"dry_run", "only", "no_telemetry", "json", "engine_update"}),
+    "setup": frozenset({"dry_run", "only", "no_telemetry", "json", "engine_update", "add", "quiet"}),
     # `update` runs the newest release's `setup` with its options; the switch's helper is its own.
-    "update": frozenset({"dry_run", "only", "no_telemetry", "json", "switch", "port", "previous"}),
+    "update": frozenset({"dry_run", "only", "no_telemetry", "json"}),
     # Automatic updates, the person's setting: status, on or off (a verb of its own, as `update`'s options
     # are what every release hands its newer one).
     "update auto": frozenset({"action"}),

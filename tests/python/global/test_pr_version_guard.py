@@ -152,6 +152,7 @@ class PrVersionGuardTests(unittest.TestCase):
         result = self.check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("VERSION 0.10.5 is a patch release, which installs itself on every device", result.stderr)
+        self.assertIn("pull request adds a migration guide", result.stderr)
         self.assertIn("docs/migrations/migrating-0.5-to-0.6.md", result.stderr)
         self.assertIn("a minor release below 1.0: scripts/release/bump-version.sh minor", result.stderr)
         for version in ("0.11.0", "1.1.0"):
@@ -159,6 +160,28 @@ class PrVersionGuardTests(unittest.TestCase):
             result = self.check()
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(f"releases {version}", result.stdout)
+
+    def test_a_release_that_installs_itself_may_correct_an_existing_guide(self) -> None:
+        # A new guide is a new migration; one already shipped may be corrected, extended or renamed in any release.
+        self.migration_guide()
+        guide = self.root / "docs" / "migrations" / "migrating-0.5-to-0.6.md"
+        guide.write_text("Renamed.\n" + "".join(f"Step {step}: as it was.\n" for step in range(20)), encoding="utf-8")
+        self.commit("The guide as it shipped")
+        self.git("switch", "main")
+        self.git("merge", "--no-edit", "feature")
+        self.released("0.10.4")
+        guide.write_text(guide.read_text(encoding="utf-8") + "The preset script is a command now.\n", encoding="utf-8")
+        self.commit("The guide corrected")
+        self.bump_feature("0.10.5")
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("releases 0.10.5", result.stdout)
+        self.git("switch", "feature")
+        self.git("mv", "docs/migrations/migrating-0.5-to-0.6.md", "docs/migrations/migrating-0.5-to-0.10.md")
+        self.commit("The guide renamed for its release")
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("releases 0.10.5", result.stdout)
 
     def test_from_1_0_a_migration_guide_takes_a_major_release(self) -> None:
         # From 1.0 a patch or minor release installs itself on every device; a major one waits.
@@ -193,7 +216,7 @@ VERSIONS = ("0.0.1", "0.9.9", "0.10.4", "0.10.5", "0.11.0", "0.11.12", "1.0.0", 
 class TheGuardKeepsTheUpdatersRuleTests(unittest.TestCase):
     """The version check's copy of the rule (release-tags.sh: the release scripts import nothing of the
     packages, and its job installs no Python) answers as the automatic updater's
-    (cad_server.auto_updates.takes): a release refused a migration guide is exactly one a device takes
+    (cad_server.auto_updates.takes): a release refused a new migration guide is exactly one a device takes
     by itself."""
 
     def test_every_pair_of_releases_bumps_and_installs_itself_as_the_updater_says(self) -> None:

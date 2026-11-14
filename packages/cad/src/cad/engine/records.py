@@ -1,7 +1,7 @@
 """The documents' records, read: what a model's run asks of the engine's registry in its own process.
 
-Each document the engine knows has one record, ``<state>/documents/<id>/document.json`` in the user's state
-folder (``places.state_dir``), which the engine's registry writes (``cad_server.engine.registry``, the server's).
+Each document the engine knows has one record, ``<data>/documents/<id>/document.json`` in the data folder of
+the version this process belongs to (``places.data_dir``), which the engine's registry writes (``cad_server.engine.registry``, the server's).
 A model's script and its worker read a record of it now and then -- the file that claims an explicit name
 (``identity.claimed``), where a moved script's document was built (``build._relocation``) -- and write none:
 so the library reads them here, by the registry's one shape (``parse``), and the words the engine says of a
@@ -69,10 +69,11 @@ class Records:
 
 
 def current() -> Records:
-    """The records of the user's state folder, where it is now (``CAD_STATE_DIR`` is read each time)."""
-    from cad.engine.places import state_dir
+    """The records of this process's data folder (``places.data_dir``), where it is now (``CAD_STATE_DIR`` is
+    read each time)."""
+    from cad.engine.places import data_dir
 
-    return Records(state_dir())
+    return Records(data_dir())
 
 
 def relative(path: Path | str, root: Path | str) -> str:

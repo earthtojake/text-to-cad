@@ -8,13 +8,9 @@
         "--python",
         "3.14",
         "--from",
-        "cad-mcp==0.11.10",
+        "cad-mcp==0.11.11",
         "cad-mcp"
-      ],
-      "env": {
-        "CAD_INSTALL_CHANNEL": "cursor-marketplace",
-        "CAD_AUTO_UPDATED": "1"
-      }
+      ]
     }
   }
 }

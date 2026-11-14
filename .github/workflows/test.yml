@@ -414,6 +414,77 @@ jobs:
     with:
       ref: ${{ inputs.ref }}
 
+  # The updates every device makes into this build and out of it, rehearsed with the real releases from PyPI, each on a
+  # device of its own (scripts/test/rehearse-update.py): this tree published as three later releases (wheels uv reads
+  # beside the index, a local version feed; built from a copy of the tree whose automatic-update quiet period is 40
+  # seconds, not an hour), and no port named for any process: the servers take the true default port, 3245 (free on a
+  # runner), and roll from it. Two legs a system, run side by side:
+  # - `into`: 0.11.10's automatic update, its update button, its `cad update` and the install command run again, each
+  #   with a second update on top by the new server's own button; this build's setup killed before the import is
+  #   marked, before the pointer is written, after it, and during the removal of the version left; then 0.11.0, the
+  #   oldest release that updates itself, by its button and by itself. About 11 minutes of rehearsal (measured on
+  #   macOS), plus the job's setup.
+  # - `around`: this build updating itself by its own automatic path (installed at once, a person's commands putting it
+  #   off, the server tending and sweeping through the quiet period, then its setup); a build and a Recents entry in
+  #   flight while 0.11.10 and then this build are updated; this build's server already running on the next port
+  #   before 0.11.10 switches (new skill text before the software: never stopped, its build finished, the pages' port
+  #   taken too); an app an update could not reach (a stand-in Codex command missing from the server's PATH: recorded
+  #   in the receipt, named by `cad doctor`, repaired by `cad update`); and 0.10.4, the newest 0.10 release, by its
+  #   button, its `cad update` and the install command. About 9 minutes of rehearsal (measured on macOS), plus the
+  #   job's setup.
+  # Each checks the default pointer, the mirror, the pages' port and token, Recents and a document opening, the old
+  # layout removed and the files its clients read kept, the flat door answering an old client, and the `cad` command
+  # with no pin. Windows runs both legs as well; it is slower (uv copies, no Unix doors), so its timeouts are the
+  # job's. Before a release ships (a full run), nightly, and on a change to the installers or the rehearsal: the cost
+  # of the one migration every device makes unattended.
+  update-rehearsal:
+    name: update rehearsal (${{ matrix.os }}, ${{ matrix.leg }})
+    needs: changes
+    if: needs.changes.outputs.installer == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        leg: [into, around]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 50
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Python
+        timeout-minutes: 5
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        timeout-minutes: 5
+        uses: astral-sh/setup-uv@v10.3.3
+
+      # The rehearsal builds this tree's wheels and reads its own helpers: the library and the server. The builds it
+      # holds open while an update runs are made in this Python, so the library comes with its kernel (`build123d`).
+      - name: Install the library with its kernel, and the server
+        timeout-minutes: 10
+        run: python -m pip install --editable "./packages/cad[build123d]" --editable ./packages/cad-server
+
+      - name: From 0.11.10, every path and every interruption
+        if: matrix.leg == 'into'
+        timeout-minutes: 30
+        run: python scripts/test/rehearse-update.py automatic button command reinstall interrupted
+
+      - name: From 0.11.0, the oldest release that updates itself
+        if: matrix.leg == 'into'
+        timeout-minutes: 15
+        run: python scripts/test/rehearse-update.py button automatic --old 0.11.0
+
+      - name: This build's own update, work in flight, a server before the switch, an app behind, and 0.10
+        if: matrix.leg == 'around'
+        timeout-minutes: 40
+        run: python scripts/test/rehearse-update.py own-automatic in-flight early-server app-behind from-0.10
+
   # ---- integration: each with what it drives installed -------------------------------------------
 
   # The stress study (cad <type> solve) and its result (cad fea) with their integrations installed as on a
@@ -824,6 +895,7 @@ jobs:
       - packages-floor
       - install-linux
       - install-windows
+      - update-rehearsal
       - fea
       - blender
       - kicad

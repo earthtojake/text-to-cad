@@ -15,9 +15,11 @@ export interface AutomaticUpdates {
  * (another view or `cad update auto` may have changed it meanwhile), and changed by a click. The
  * same setting in every CAD app. Only the latest read or answer's reply is kept, so a read sent just
  * before a click can never undo it, and an answer that did not arrive is read back. One the
- * environment decided shows as fixed. Its label is in `locale`, as the host hands it.
+ * environment decided shows as fixed. A server with no updater answers null (only the default channel's
+ * version on a device the install command set up updates itself): then there is no switch at all. Its label
+ * is in `locale`, as the host hands it.
  */
-export function useAutomaticUpdates(automaticUpdates: (automatic?: boolean) => Promise<AutomaticUpdates>, locale?: string) {
+export function useAutomaticUpdates(automaticUpdates: (automatic?: boolean) => Promise<AutomaticUpdates | null>, locale?: string) {
   const t = translator(locale);
   const [state, setState] = useState<AutomaticUpdates | null>(null);
   const turn = useRef(0);

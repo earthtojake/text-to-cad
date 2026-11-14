@@ -131,8 +131,8 @@ def _server_arguments(server: argparse.ArgumentParser) -> None:
                              "CAD_ENGINE_PORT, else 3245 or the port this installation rolled to); 0 takes "
                              "any free port")
     server.add_argument("--rotate-token", action="store_true",
-                        help="replace this installation's page token first: every link shared before stops working; "
-                             "asked first")
+                        help="replace the page token of every version on this device first: every link and browser "
+                             "session made before stops working, in every server running at once; asked first")
     add_yes(server, "with --rotate-token, replace the token")
 
 
@@ -726,27 +726,30 @@ def _server(args: argparse.Namespace, prog: str) -> int:
         raise Failed("--port must be between 0 and 65535", 2)
     if args.rotate_token:
         _consent_to_rotate(args, prog)
-    return daemon([], port=args.port, rotate=args.rotate_token, foreground=True)
+        from cad_server.engine.daemon import rotate_token
+
+        try:
+            rotated = rotate_token(told=lambda line: print(f"cad: {line}", file=sys.stderr, flush=True))
+        except (OSError, ValueError) as error:
+            raise Failed(f"cannot replace the page token: {getattr(error, 'strerror', None) or error}") from None
+        if rotated is None:
+            raise Failed("cannot replace the page token: there is no state folder to keep it in")
+        print("cad: a new page token: every link and browser session made before no longer works, in every version's "
+              "server at once", file=sys.stderr, flush=True)
+    return daemon([], port=args.port, foreground=True, rotated=bool(args.rotate_token))
 
 
 def _consent_to_rotate(args: argparse.Namespace, prog: str) -> None:
-    """``--rotate-token`` retires every link and session made before, for good: refused first while an engine
-    runs (the daemon refuses it then too), then asked (``cad_server._internal.consent``)."""
-    from cad.engine.client import request
+    """``--rotate-token`` retires every link and session made before, for good, in every version's server on the
+    device at once (``daemon.rotate_token``): asked first (``cad_server._internal.consent``)."""
     from cad_server._internal.consent import confirm, retry
 
-    try:
-        running = request({"op": "status"}, start=False) is not None
-    except (OSError, ValueError):
-        running = False
-    if running:
-        raise Failed("an engine server is running; run cad stop first, then cad server --rotate-token")
     command = retry(prog, ["--rotate-token", *(["--port", str(args.port)] if args.port is not None else [])])
-    confirm("replacing this installation's page token", "Replace the page token?", yes=bool(args.yes), as_json=False,
+    confirm("replacing the page token", "Replace the page token?", yes=bool(args.yes), as_json=False,
             command=command,
-            preview=[f"{prog} --rotate-token replaces this installation's page token: every CAD Viewer link and browser "
-                     "session made with the one it has now stops working, and each page needs a new link "
-                     "(cad viewer prints one). This cannot be undone."])
+            preview=[f"{prog} --rotate-token replaces the page token of every text-to-cad version on this device: every "
+                     "CAD Viewer link and browser session made with the one it has now stops working at once, in every "
+                     "server running, and each page needs a new link (cad viewer prints one). This cannot be undone."])
 
 
 def _status(args: argparse.Namespace, _prog: str) -> int:
@@ -931,8 +934,8 @@ def _port(serving: dict[str, Any]) -> str:
     source = serving.get("portSource") or ""
     if source == "rolled":
         return f" (rolled from {default} because {serving.get('portBecause') or 'another process'} holds it)"
-    return " (" + {"--port": "the port --port named", "CAD_ENGINE_PORT": "the port CAD_ENGINE_PORT names"
-                   }.get(source, f"not the default {default}") + ")"
+    return " (" + {"--port": "the port --port named", "CAD_ENGINE_PORT": "the port CAD_ENGINE_PORT names",
+                   "handed": "the port pages were on before the update"}.get(source, f"not the default {default}") + ")"
 
 
 def cache_text(root: Any, documents: Any, size: Any) -> str:
@@ -974,6 +977,8 @@ def status_text(answer: dict[str, Any]) -> str:
                          + f", up {_span(answer.get('up'))}", workers_text(answer),
                          *([f"held by {answer['holders']} app server{'' if answer['holders'] == 1 else 's'}"]
                            if answer.get("holders") else []),
+                         # The default channel's version's server answers clients of 0.11.10 and earlier too.
+                         *(["also answers clients of 0.11.10 and earlier"] if answer.get("bridge") else []),
                          memory])]
     names = [Path(str(worker["script"])).name for worker in workers]
     width = max((len(name) for name in names), default=0)
@@ -1033,7 +1038,10 @@ def status_text(answer: dict[str, Any]) -> str:
         renders = len(answer.get("renders") or [])
         memory = serving.get("memory") or {}
         held = (memory.get("documents") or 0) + (memory.get("meshes") or 0) + (memory.get("facts") or 0)
-        lines.append(f"serving {serving['url']}{_port(serving)}: {opened} document{'' if opened == 1 else 's'} opened by a page or a command"
+        also = [port for port in serving.get("also") or [] if isinstance(port, int)]
+        lines.append(f"serving {serving['url']}{_port(serving)}"
+                     + (f", and on port{'s' if len(also) > 1 else ''} {', '.join(map(str, also))} too" if also else "")
+                     + f": {opened} document{'' if opened == 1 else 's'} opened by a page or a command"
                      + (f" · {renders} render process{'' if renders == 1 else 'es'}" if renders else "")
                      + (f" · {_gb(held / 2**20)} of {_gb(memory['budget'] / 2**20)} held" if memory.get("budget") else ""))
         # What this engine's start said: a move of its port.

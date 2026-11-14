@@ -35,7 +35,7 @@ irm https://www.texttocad.dev/install.ps1 | iex
 It installs uv if it is missing, then sets up text-to-cad in every agent app on
 your computer with each app's own commands (the plugin, which brings the skills
 and CAD's MCP server, or for an agent without a plugin the skills alone; Claude
-Code gets the skills, and Claude Desktop the server, for its Chat and Code tabs),
+gets the skills alone and shows models in your browser),
 registers the `cad` command, and moves CAD's server to the new release. Run
 it again to update everything, or click CAD's update button when it shows one; it
 lists the apps to restart.
@@ -77,7 +77,8 @@ text-to-cad is MIT-licensed and built in the open.
 By default, text-to-cad sends usage stats and crash reports, tagged with a random
 ID and never including your files, paths or prompts. The
 [privacy policy](https://www.texttocad.dev/privacy-policy) says what is sent and
-how to turn it off.
+how to turn it off, and the [terms of service](https://www.texttocad.dev/terms-of-service)
+govern using text-to-cad.
 
 
 <a href="https://trendshift.io/repositories/26559"><img src="https://trendshift.io/api/badge/repositories/26559" alt="earthtojake/text-to-cad | Trendshift" width="250" height="55"></a>

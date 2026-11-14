@@ -1,5 +1,6 @@
 """An exclusive lock between processes, held on a file of its own beside what it guards, and the
-state folder's one lock (``state``), which every change of a small file there holds."""
+data folder's one lock (``state``: a version's data folder, ``places.data_dir``, the state folder for a process with no
+version, as in 0.11.10 and earlier), which every change of a small file there holds."""
 
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
-# The state folder's one lock: every read-change-write of a small file there -- the settings, the
+# The data folder's one lock: every read-change-write of a small file there -- the settings, the
 # install channels, the telemetry spool and the batches kept, the start of a telemetry sender --
 # holds it (``state``), so none needs a lock file of its own. Named as cadgen 0.7 names the
 # settings' lock, so a 0.7 still installed and this cadgen changing the settings exclude each other.
@@ -65,6 +66,39 @@ def exclusive(lock_path: Path, *, waiting: Callable[[], None] | None = None) -> 
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
+@contextlib.contextmanager
+def attempt(lock_path: Path) -> Iterator[bool]:
+    """``lock_path`` held exclusively if no one else holds it now, never waited for: yields whether it is held
+    (``exclusive``'s lock, on the same file)."""
+    with open(lock_path, "a+b") as handle:
+        if sys.platform == "win32":
+            import msvcrt
+
+            handle.seek(0)
+            try:
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            except OSError:
+                yield False
+                return
+            try:
+                yield True
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                yield False
+                return
+            try:
+                yield True
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def state(folder: Path, *, waiting: Callable[[], None] | None = None) -> contextlib.AbstractContextManager[None]:
-    """Hold the state folder's one lock (``STATE_LOCK`` in ``folder``), waiting for any other holder."""
+    """Hold the data folder's one lock (``STATE_LOCK`` in ``folder``), waiting for any other holder."""
     return exclusive(folder / STATE_LOCK, waiting=waiting)

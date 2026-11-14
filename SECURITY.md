@@ -7,11 +7,13 @@ text-to-cad is a local development tool: agent skills and the text-to-cad server
 transport, `cad-mcp`), which builds, views and exports CAD models on your own machine.
 Everything below runs as you, with your files.
 
-**The server.** One warm server daemon on your computer does the building,
-viewing and exporting. Its clients reach it through its door, a named pipe
-with a pair of pipes per connection, that only you can open (on Windows, a
-loopback port and a token in a file only you can read). The door lives in the
-server's folder (`CAD_ENGINE_DIR`, by default
+**The server.** A warm server daemon on your computer does the building,
+viewing and exporting: one for each installed version of text-to-cad (usually
+one; two when a plugin directory's copy runs another release beside yours). Its
+clients reach it through its door, a named pipe with a pair of pipes per
+connection, that only you can open (on Windows, a loopback port and a token in a
+file only you can read). Each version's door lives in its own folder inside the
+servers' folder (`CAD_ENGINE_DIR`, by default
 `cad-engine` in `$XDG_RUNTIME_DIR`, else in a temporary folder that is yours alone (on macOS
 the system's per-user one, else `$TMPDIR`),
 else `/tmp/cad-<uid>`). The client and the daemon refuse a folder that
@@ -30,8 +32,9 @@ installation keeps and names in `cad status`). Every route needs one of three
 credentials, all made from one token:
 
 - **The token** is yours, not one server's: made once, kept in a file only you
-  can read in your state folder (`engines/token`), and served by every
-  installation's server at every start until you rotate it. No URL carries it,
+  can read in your state folder (`engines/token` in each version's data folder,
+  copied to the next version when you update), and served by every version's
+  server at every start until you rotate it. No URL carries it,
   and only `cad viewer --api-only --json` prints it, for the development
   client's proxy. Your own clients read it through the server's door and send
   it as a Bearer header.
@@ -41,26 +44,28 @@ credentials, all made from one token:
   until you rotate the token (`cad server --rotate-token`, which ends every link
   and every session at once), as a Jupyter server's URL token does; the token is
   kept in your state folder and survives restarts, reboots and updates, and so do
-  links. It stays in the page's address (a page opened without one is given
+  links. Every link of one token is the same text, whenever it is printed (its
+  expiry is one fixed date, the start of the year 3000), until the token is rotated. It stays in the page's address (a page opened without one is given
   one), so the address copied into another browser on this machine opens the
   same page. A link works only from this machine: the server listens on
   loopback (unless you bind another `--host`, below) and refuses any other Host. It never leaves in a Referer
   (every page is sent `Referrer-Policy: no-referrer`). A page's
-  and a CAD app card's **Copy link** copy a fresh one; the card asks for it
+  and a CAD app card's **Copy link** copy that link; the card asks for it
   through its tunnel, with a capability that already reaches everything a link
   does, so this widens nothing.
 - **The session cookie** is what a browser is given for a link it opens:
   HttpOnly, SameSite=Strict, one name for every port of this host, holding the
   token's signature of its own expiry, never the token. It lasts 30 days from
   its last use: every page load renews it, and so does any request once it is a
-  day old. It is what lets a reloaded page get a fresh link for its address.
+  day old. It is what lets a reloaded page get the link for its address.
 
 A server checks a link or a cookie by signing it again, so it keeps no
 sessions: links and cookies outlive a restart, a reboot, a port that moved and
-an upgrade. `cad server --rotate-token`, with every server stopped
-(`cad stop`), replaces the token once you say yes (it asks; `--yes` where it
-cannot), and with it every link and every session made before. Behind the
-credentials:
+an upgrade. `cad server --rotate-token` replaces the token once you say yes (it
+asks; `--yes` where it cannot), and with it every link and every session made
+before: it writes the new token into every installed version, and every running
+server takes it at once. A server of 0.11.10 or earlier reads its token only as it
+starts, so it takes the new one when it restarts. Behind the credentials:
 
 - A Host check refuses DNS rebinding.
 - A request the cookie alone admits must come from the server's own pages or
@@ -77,8 +82,7 @@ credentials:
   so the session cookie never rides a cross-origin read. A link in a URL, the
   cookie, your own token and `/mcp` get no CORS headers.
 
-**The credentials are the boundary.** Whoever holds the token, a link within its
-day, or a session cookie can read any CAD file on your machine by its path, list
+**The credentials are the boundary.** Whoever holds the token, a link, or a session cookie can read any CAD file on your machine by its path, list
 folders, export, and use every Viewer action. So keep links private: treat a
 link, and the address of an open CAD page, as you would a password for your
 files on this computer. Do not bind
@@ -114,9 +118,12 @@ Windows `irm https://www.texttocad.dev/install.ps1 | iex`) runs the script the d
 site serves over HTTPS, as you, with no sudo and nothing asked: it installs uv with
 uv's own installer when uv is missing, and runs the newest release of the server, `cad-server`, from PyPI
 through uvx, which installs the plugin in each agent app with that app's own
-command and edits Claude Desktop's config (keeping a `.bak`). To read the script
+command, and takes out of Claude Desktop's config the CAD server earlier releases wrote there
+(keeping a `.bak`). To read the script
 first, or to keep to one release, take the copy attached to that release on GitHub
-and check it against the release's `SHA256SUMS`.
+and check it against the release's `SHA256SUMS`. The skills of claude.ai's directory
+copy install with no script: `uvx --from cad-server==<release> cad setup --add`
+installs that release from PyPI and writes the `cad` command, and changes nothing else.
 
 ### What we treat as a vulnerability
 

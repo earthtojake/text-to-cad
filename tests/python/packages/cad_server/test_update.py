@@ -1,11 +1,12 @@
-"""The update path's parts, with the engine and uv stood in for: the switch (``cad_server._internal.switch``)
--- its flip of ``current`` and its way back --, the update a click starts (``cad_server._internal.update``),
-and the release folders kept and removed (``cad_server._internal.releases``). The whole path with the real
-uv, a local feed and a local index is test_update_end_to_end.py's."""
+"""The updater's parts (``cad_server._internal.update``), with uv and the new release's setup stood in for: the
+contract -- install the release by its own ``cad setup --add``, then run its own ``cad setup --engine-update`` and
+nothing else --, the update a click starts and the automatic one's waiting, and the drain a server's retirement
+uses. The whole sequence on a device of versions is test_update_sequence.py's; the update with the real uv, a local
+feed and a local index is test_update_end_to_end.py's; a real 0.11.10 updating into this build is
+scripts/test/rehearse-update.py's."""
 
 from __future__ import annotations
 
-import io
 import json
 import os
 import shutil
@@ -24,8 +25,7 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cad/src")
 
-from cad_server._internal import installations, releases, switch, update  # noqa: E402
-from cad.engine import client  # noqa: E402
+from cad_server._internal import installations, releases, update  # noqa: E402
 
 
 class Fixture(unittest.TestCase):
@@ -34,16 +34,17 @@ class Fixture(unittest.TestCase):
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name).resolve()
         engine = tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)
-        self.addCleanup(lambda: __import__("shutil").rmtree(engine, True))
+        self.addCleanup(lambda: shutil.rmtree(engine, True))
         patched = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.root / "state"),
                                                "CAD_CACHE_DIR": str(self.root / "cache"),
                                                "CAD_ENGINE_DIR": engine})
         patched.start()
         self.addCleanup(patched.stop)
+        (self.root / "state").mkdir()
 
     def release(self, version: str) -> dict:
-        """A release's folder, made as ``releases.make`` makes one, and registered."""
-        folder = releases.where(version)
+        """A flat release folder of 0.11.10 or earlier, as its updater made one, and registered."""
+        folder = releases.root() / version
         scripts = folder / ("Scripts" if os.name == "nt" else "bin")
         scripts.mkdir(parents=True)
         python, console = releases.base.interpreter(folder), releases.console(folder)
@@ -53,201 +54,95 @@ class Fixture(unittest.TestCase):
         installations.register(version, (str(console), str(python), str(folder)))
         return {"python": str(python), "cad": str(console), "prefix": str(folder)}
 
+    def installed(self) -> None:
+        """The install command ran here: its receipt."""
+        (self.root / "state" / "install-receipt.json").write_text('{"schema": 1}', encoding="utf-8")
 
-class SwitchTest(Fixture):
-    def started(self, works: set[str]):
-        """``switch._started`` stood in for: the engine of each release in ``works`` answers."""
-        tried: list[str] = []
-
-        def started(version: str, port, told) -> tuple[bool, str]:
-            tried.append(version)
-            return (True, "") if version in works else (False, f"cad-server {version}'s engine did not start")
-
-        return tried, mock.patch.object(switch, "_started", side_effect=started)
-
-    def test_the_switch_flips_current_and_keeps_the_release_before(self) -> None:
-        for version in ("1.0.0", "1.1.0", "1.2.0"):
-            self.release(version)
-        installations.point("1.1.0")
-        tried, started = self.started({"1.2.0"})
-        with started, mock.patch.object(client, "wait_gone", return_value=True), \
-                mock.patch.object(releases, "running", return_value=False):
-            done = switch.switch("1.2.0", port=4321, previous="1.1.0", told=lambda _line: None)
-        self.assertTrue(done["ok"], done)
-        self.assertEqual((tried, installations.current_version()), (["1.2.0"], "1.2.0"))
-        self.assertIsInstance(done["gapMs"], int)
-        self.assertEqual(sorted(release["version"] for release in releases.listing()), ["1.1.0", "1.2.0"],
-                         "the release before stays; one older goes")
-        self.assertEqual(sorted(record["version"] for record in installations.records()), ["1.1.0", "1.2.0"])
-        self.assertEqual(switch.last()["to"], "1.2.0")
-
-    def test_a_release_whose_engine_does_not_answer_is_switched_back_and_its_folder_goes(self) -> None:
-        from cad_server import auto_updates
-
-        for version in ("1.0.0", "1.1.0", "1.2.0"):
-            self.release(version)
-        installations.point("1.1.0")
-        auto_updates.attempt("1.2.0", now=1000.0)  # an automatic update's, which the failure is kept on
-        tried, started = self.started({"1.1.0"})
-        kept: list = []  # update.json as each release's engine is started: the one before reads the failure
-        with started as stood_in, mock.patch.object(client, "wait_gone", return_value=True), \
-                mock.patch.object(client, "request", return_value=None) as asked:
-            then = stood_in.side_effect
-
-            def start(version, port, told):
-                kept.append(switch.last())
-                return then(version, port, told)
-
-            stood_in.side_effect = start
-            done = switch.switch("1.2.0", port=4321, previous="1.1.0", told=lambda _line: None)
-        self.assertFalse(done["ok"])
-        self.assertTrue(done["restored"])
-        self.assertEqual(done["error"], "cad-server 1.2.0's engine did not start")
-        self.assertEqual((tried, installations.current_version()), (["1.2.0", "1.1.0"], "1.1.0"))
-        self.assertEqual((kept[1]["ok"], kept[1]["to"], kept[1]["error"]), (False, "1.2.0", done["error"]),
-                         "the failure is kept before the release before's engine starts again")
-        asked.assert_any_call({"op": "stop"}, start=False)  # whatever of the new release answered, stopped first
-        self.assertEqual(sorted(release["version"] for release in releases.listing()), ["1.0.0", "1.1.0"],
-                         "the release it failed to move to goes; the current one and the one before stay")
-        self.assertEqual(sorted(record["version"] for record in installations.records()), ["1.0.0", "1.1.0"])
-        self.assertEqual((switch.last()["ok"], switch.last()["to"]), (False, "1.2.0"), "the failure stays recorded")
-        self.assertEqual(auto_updates.attempted()["release"], "1.2.0")
-        self.assertFalse(auto_updates.due("1.2.0", auto_updates.attempted(), 1000.0 + 60),
-                         "an automatic update does not try it again by itself any sooner")
-
-    def test_a_failed_release_a_process_runs_from_goes_as_the_engine_tends_itself(self) -> None:
-        # A `cad update` runs the switch from the release it moves to: that folder stays until it has ended,
-        # then the restored engine, tending itself, removes it.
-        from cad_server._internal import engine_host
-
-        for version in ("1.0.0", "1.1.0", "1.2.0"):
-            self.release(version)
-        installations.point("1.1.0")
-        tried, started = self.started({"1.1.0"})
-        live = {"1.2.0"}
-        with started, mock.patch.object(client, "wait_gone", return_value=True), \
-                mock.patch.object(client, "request", return_value=None), \
-                mock.patch.object(releases, "running", side_effect=lambda folder: Path(folder).name in live):
-            done = switch.switch("1.2.0", port=4321, previous="1.1.0", told=lambda _line: None)
-            self.assertTrue(done["restored"])
-            self.assertEqual(releases.failed(), "1.2.0", "kept while the process that ran the switch runs")
-            with mock.patch.object(update.UPDATE, "automatic") as automatic:
-                engine_host.automatic(None)
-            automatic.assert_called_once()
-            self.assertTrue(releases.where("1.2.0").is_dir())
-            live.clear()
-            with mock.patch.object(update.UPDATE, "automatic"):
-                engine_host.automatic(None)
-        self.assertEqual(sorted(release["version"] for release in releases.listing()), ["1.0.0", "1.1.0"])
-        self.assertIsNone(releases.failed())
-        self.assertFalse(switch.last()["ok"], "the failure stays recorded")
-
-    def test_with_no_engine_running_the_next_client_starts_the_release(self) -> None:
-        self.release("1.1.0")
-        self.release("1.2.0")
-        installations.point("1.1.0")
-        with mock.patch.object(client, "request", return_value=None):
-            done = switch.handover("1.2.0", told=lambda _line: None)
-        self.assertEqual((done["ok"], done["gapMs"], installations.current_version()), (True, None, "1.2.0"))
-        with mock.patch.object(client, "request", return_value=None):
-            self.assertIsNone(switch.handover("1.2.0", told=lambda _line: None), "nothing to do the second time")
-
-    def test_a_running_engine_drains_and_this_process_switches_it(self) -> None:
-        self.release("1.1.0")
-        later = self.release("1.2.0")
-        installations.point("1.1.0")
-        status = {"ok": True, "pid": 7, "prefix": str(releases.where("1.1.0")), "serving": {"port": 4567}}
-        with mock.patch.object(client, "request", side_effect=[status, {"ok": True, "draining": True}]) as asked, \
-                mock.patch.object(switch, "switch", return_value={"ok": True}) as switched:
-            switch.handover("1.2.0", told=lambda _line: None)
-        self.assertEqual(asked.call_args_list[1].args[0], {"op": "stop", "drain": True})
-        switched.assert_called_once_with("1.2.0", port=4567, previous="1.1.0", told=mock.ANY)
-        # The engine already that release's: nothing to switch.
-        with mock.patch.object(client, "request", return_value={**status, "prefix": later["prefix"]}), \
-                mock.patch.object(switch, "switch") as switched:
-            self.assertIsNone(switch.handover("1.2.0", told=lambda _line: None))
-        switched.assert_not_called()
-        self.assertEqual(installations.current_version(), "1.2.0")
-
-    def test_the_helper_has_the_release_it_leaves_current_write_its_plugin_folder(self) -> None:
-        # Held or gone back, the release then current runs its own `cad plugin --refresh`: the folder
-        # follows it, and so do the apps' copies when that changed it.
-        for version in ("1.1.0", "1.2.0"):
-            self.release(version)
-        installations.point("1.1.0")
-        ran = subprocess.CompletedProcess([], 0, "", "Codex: update text-to-cad@text-to-cad\n")
-        for held, current in ((True, "1.2.0"), (False, "1.1.0")):
-            with self.subTest(held=held), \
-                    mock.patch.object(switch, "switch", side_effect=lambda *a, **k: (installations.point(current),
-                                                                                     {"ok": held, "from": "1.1.0",
-                                                                                      "to": "1.2.0", "gapMs": 640})[1]), \
-                    mock.patch.object(subprocess, "run", return_value=ran) as run, \
-                    mock.patch.object(sys, "stderr", io.StringIO()) as log, \
-                    mock.patch.dict(os.environ, {"PYTHONPATH": "/checkout/src"}):
-                self.assertEqual(switch.helper("1.2.0", port=4567, previous="1.1.0"), 0 if held else 1)
-            self.assertIn("cad update: Codex: update text-to-cad@text-to-cad", log.getvalue(), "its lines go to the log")
-            said = "cad-server 1.1.0 -> 1.2.0 is the current installation (640 ms without an engine)"
-            self.assertEqual(said in log.getvalue(), held, "a switch that held says so, in setup's one line")
-            (call,) = run.call_args_list
-            self.assertEqual(call.args[0], [installations.current()["cad"], "plugin", "--refresh"])
-            self.assertNotIn("PYTHONPATH", call.kwargs["env"], "the release runs its own code")
-        # With no installation current there is nothing to write it from.
-        installations.state().remove(installations.CURRENT)
-        with mock.patch.object(subprocess, "run") as run:
-            self.assertFalse(switch.follow(told=lambda _line: None))
-        run.assert_not_called()
-
-    def test_the_helper_starts_detached_from_the_engine_it_replaces(self) -> None:
-        with mock.patch.object(subprocess, "Popen") as popen:
-            switch.spawn("1.2.0", port=4567, previous="1.1.0")
-        argv = popen.call_args.args[0]
-        self.assertEqual(argv[:4], [sys.executable, "-P", "-m", "cad_server.cli"])
-        self.assertEqual(argv[4:], ["update", "--switch", "1.2.0", "--port", "4567", "--previous", "1.1.0"])
-        options = popen.call_args.kwargs
+    def setup_script(self, *lines: str, code: int = 0, said: str = "", log: Path | None = None) -> str:
+        """A release's ``cad setup``: its arguments, its standard input and its environment kept in ``log``,
+        ``lines`` on stdout, ``said`` on stderr, ``code``."""
+        script = self.root / f"setup-{code}.py"
+        log = log or self.root / "setup.log"
+        script.write_text(
+            "import json, os, sys\n"
+            f"open({str(log)!r}, 'a', encoding='utf-8').write(json.dumps({{'argv': sys.argv[1:], "
+            "'stdin': sys.stdin.read(), 'env': {key: os.environ.get(key) for key in ('PYTHONPATH', "
+            "'CAD_INSTALLATION_VERSION', 'CAD_UPDATE_PREPARE', 'CAD_STATE_DIR')}}) + '\\n')\n"
+            + "".join(f"print({line!r}, flush=True)\n" for line in lines)
+            + (f"print({said!r}, file=sys.stderr)\n" if said else "") + f"sys.exit({code})\n", encoding="utf-8")
         if os.name == "nt":
-            self.assertEqual(options["creationflags"], switch.DETACHED_PROCESS | switch.CREATE_NEW_PROCESS_GROUP)
+            command = self.root / f"cad-{code}.cmd"
+            command.write_text(f'@"{sys.executable}" "{script}" %*\r\n', encoding="utf-8")
         else:
-            self.assertTrue(options["start_new_session"])
-        self.assertEqual(options["stdin"], subprocess.DEVNULL)
+            command = self.root / f"cad-{code}"
+            command.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n', encoding="utf-8")
+            command.chmod(0o755)
+        return str(command)
+
+    def runs(self) -> list[dict]:
+        log = self.root / "setup.log"
+        return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()] if log.exists() else []
+
+
+class ContractTest(Fixture):
+    """What an updater hands a newer release, from this release on: its own install, then its own setup, with one
+    argument and nothing else (the module's contract)."""
+
+    def test_install_is_the_release_s_own_add_through_uvx(self) -> None:
+        from cad_server._internal import base
+        from cad_server._internal.launch import LAUNCHER
+
+        with mock.patch.object(base, "find_uv", return_value="uv"), mock.patch.dict(os.environ, {base.FIND_LINKS_ENV: ""}):
+            self.assertEqual(update.install_command("0.11.12"),
+                             ["uv", "tool", "run", *LAUNCHER[1:-1], "--from", "cad-server==0.11.12", "cad", "setup",
+                              "--add", "--quiet"])
+        with mock.patch.object(base, "find_uv", return_value="uv"), mock.patch.dict(os.environ, {base.FIND_LINKS_ENV: "/w"}):
+            self.assertIn("--find-links", update.install_command("0.11.12"), "a test's folder of wheels, read beside the index")
+        # Present already: nothing run. Its install exits non-zero, or leaves it absent: its last line, refused.
+        record = {"python": sys.executable, "cad": sys.executable, "prefix": sys.prefix}
+        with mock.patch("cad.engine.places.version_record", return_value=record), \
+                mock.patch.object(subprocess, "run", side_effect=AssertionError("present: nothing to install")):
+            self.assertEqual(update.install("0.11.12"), record)
+        done = subprocess.CompletedProcess([], 1, "", "a line before\nerror: no solution for cad-server==0.11.12\n")
+        with mock.patch("cad.engine.places.version_record", return_value=None), \
+                mock.patch.object(subprocess, "run", return_value=done), self.assertRaises(base.Refused) as refused:
+            update.install("0.11.12")
+        self.assertEqual(str(refused.exception), "error: no solution for cad-server==0.11.12")
+
+    def test_its_setup_is_handed_one_argument_and_its_frames_are_read(self) -> None:
+        frame = {"progress": {"kind": "update", "stage": "restart", "job": "1.2.0", "outputs": [], "detail": "d",
+                              "done": 3, "total": 4, "elapsedMs": 0}}
+        command = self.setup_script("not json", json.dumps({"progress": {"kind": "other"}}), json.dumps(frame),
+                                    code=1, said="the move failed: no network")
+        frames: list[tuple[str, str]] = []
+        with mock.patch.dict(os.environ, {"PYTHONPATH": "/somewhere", "CAD_INSTALLATION_VERSION": "1.1.0",
+                                          "CAD_UPDATE_PREPARE": "1"}):
+            code, said = update.run_setup({"cad": command}, frame=lambda *found: frames.append(found))
+        self.assertEqual((code, said, frames), (1, "the move failed: no network", [("restart", "d")]))
+        (run,) = self.runs()
+        self.assertEqual(run["argv"], ["setup", "--engine-update"])
+        self.assertEqual(run["stdin"], "", "standard input closed")
+        self.assertEqual(run["env"], {"PYTHONPATH": None, "CAD_INSTALLATION_VERSION": None, "CAD_UPDATE_PREPARE": None,
+                                      "CAD_STATE_DIR": os.environ["CAD_STATE_DIR"]},
+                         "nothing of this process's import path, version or the legacy caller's prepare step")
 
 
 class ReleaseFoldersTest(Fixture):
-    def test_the_release_before_is_the_last_switch_s_else_the_newest_older_one(self) -> None:
-        for version in ("0.9.0", "1.0.0", "1.1.0", "1.2.0"):
-            self.release(version)
-        installations.point("1.1.0")
-        self.assertEqual(releases.kept(), {"1.1.0", "1.0.0"}, "the newest older one")
-        switch._record({"from": "0.9.0", "to": "1.1.0", "ok": True})
-        self.assertEqual(releases.kept(), {"1.1.0", "0.9.0"}, "the one the last switch to it came from")
-        switch._record({"from": "1.1.0", "to": "1.2.0", "ok": False, "error": "it exited 3"})
-        self.assertEqual(releases.kept(), {"1.1.0", "1.0.0"})
-        self.assertEqual(releases.discard("1.1.0"), [], "never the current release")
-        self.assertEqual(releases.discard("1.0.0"), [], "never the one before")
-        lock = releases.where("1.2.0").with_name("1.2.0.lock")
-        lock.write_text("", encoding="utf-8")
-        with mock.patch.object(releases, "running", return_value=False):
-            self.assertEqual(releases.discard("1.2.0"), [str(releases.where("1.2.0"))])
-        self.assertFalse(lock.exists(), "its making's lock goes with it")
-        # An incomplete folder is no way back: the one before is the newest complete older one.
-        incomplete = releases.where("1.0.5")
-        incomplete.mkdir(parents=True)
-        self.assertEqual(releases.kept(), {"1.1.0", "1.0.0"})
-
     def test_a_folder_a_process_runs_from_is_kept(self) -> None:
+        # The flat folders of 0.11.10 and earlier, and a version's: one a process runs from stays (``legacy.remove``,
+        # ``versions.remove``).
         for version in ("1.0.0", "1.1.0"):
             self.release(version)
-        with mock.patch.object(releases, "running", side_effect=lambda folder: str(folder).endswith("1.0.0")):
-            self.assertEqual(releases.collect({"1.1.0"}), [])
         self.assertEqual(len(releases.listing()), 2)
         if os.name != "nt":  # a folder named on a process's command line is one that process runs from
-            folder = releases.where("1.0.0")
+            folder = releases.root() / "1.0.0"
             self.assertFalse(releases.running(folder))
             process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", str(releases.console(folder))])
             self.addCleanup(process.wait)
             self.addCleanup(process.kill)
             self.assertTrue(releases.running(folder))
             # Named by a link to it -- a worker started by an alias of an environment's Python -- it is the same.
-            other = releases.where("1.1.0")
+            other = releases.root() / "1.1.0"
             alias = Path(tempfile.mkdtemp(prefix="alias-")) / "release"
             self.addCleanup(shutil.rmtree, alias.parent, True)
             alias.symlink_to(other, target_is_directory=True)
@@ -344,31 +239,14 @@ class DrainTest(unittest.TestCase):
         self.assertEqual(PAGE_TOOLS, {"cad_http", "cad_sync", "cad_capture_reply"}, "a page's own calls are never counted")
 
 
-class Server:
-    """The engine's HTTP server as the update sees it: its port, and its drain."""
-
-    def __init__(self) -> None:
-        self.port = 4567
-        self.retired: list = []
-
-    def retire(self, then=None) -> None:
-        self.retired.append(then)
-
-
 class UpdateJobTest(Fixture):
-    def setup_script(self, *lines: str, code: int = 0, said: str = "") -> str:
-        """A release's ``cad setup --engine-update``: ``lines`` on stdout, ``said`` on stderr, ``code``."""
-        script = self.root / ("setup.py")
-        script.write_text("import sys\n" + "".join(f"print({line!r}, flush=True)\n" for line in lines)
-                          + (f"print({said!r}, file=sys.stderr)\n" if said else "") + f"sys.exit({code})\n", encoding="utf-8")
-        if os.name == "nt":
-            command = self.root / "cad.cmd"
-            command.write_text(f'@"{sys.executable}" "{script}" %*\r\n', encoding="utf-8")
-        else:
-            command = self.root / "cad"
-            command.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n', encoding="utf-8")
-            command.chmod(0o755)
-        return str(command)
+    def setUp(self) -> None:
+        super().setUp()
+        # This process has an updater (``channel.told``): the default channel's version, with the install command's
+        # receipt; a test's checkout would otherwise be a development build, which has none.
+        told = mock.patch("cad_server._internal.channel.told", return_value=True)
+        told.start()
+        self.addCleanup(told.stop)
 
     def wait(self, job: update.Update, *states: str) -> dict:
         deadline = time.monotonic() + 30
@@ -377,67 +255,219 @@ class UpdateJobTest(Fixture):
             time.sleep(0.01)
         return state
 
-    def test_a_click_installs_the_release_sets_it_up_and_hands_the_engine_to_the_helper(self) -> None:
-        self.release("1.1.0")
-        installations.point("1.1.0")
-        frame = {"progress": {"kind": "update", "stage": "apps", "job": "1.2.0", "outputs": [], "detail": "",
-                              "done": 2, "total": 4, "elapsedMs": 0}}
+    def test_a_click_installs_the_release_and_runs_its_setup(self) -> None:
+        self.installed()
+        frame = {"progress": {"kind": "update", "stage": "restart", "job": "1.2.0", "outputs": [], "detail": "",
+                              "done": 3, "total": 4, "elapsedMs": 0}}
         command = self.setup_script(json.dumps(frame))
-        job, server = update.Update(), Server()
-        with mock.patch("cad_server.updates.newest", return_value="1.2.0"), \
-                mock.patch.object(releases, "make", return_value={"cad": command}) as made, \
-                mock.patch.object(switch, "spawn") as spawned:
-            started = job.start(server)
+        job = update.Update()
+        # Its setup a stand-in that moves nothing: this server goes, as a move's drain makes it (``_moved``).
+        with mock.patch("cad_server.updates.newest", return_value="1.2.0"), mock.patch.object(update, "_moved"), \
+                mock.patch.object(update, "install", return_value={"cad": command}) as installed:
+            update._moved.return_value = None
+            started = job.start(SimpleNamespace(port=4567))
             self.assertEqual((started["state"], started["target"]), ("working", "1.2.0"))
-            again = job.start(server)  # a second click joins the update running
+            again = job.start()  # a second click joins the update running
             self.assertEqual((again["state"] in ("working", "restarting"), again["target"]), (True, "1.2.0"))
-            state = self.wait(job, "restarting", "failed")
-            self.assertEqual(state["state"], "restarting", state)
-            self.assertEqual((state["progress"]["kind"], state["progress"]["stage"]), ("update", "restart"))
             assert job.thread is not None
-            job.thread.join(10)
-            made.assert_called_once_with("1.2.0", told=mock.ANY)
-            (then,) = server.retired
-            then()  # the engine drained: its helper starts
-        spawned.assert_called_once_with("1.2.0", port=4567, previous="1.1.0")
+            job.thread.join(30)
+        state = job.snapshot()
+        self.assertEqual(state["state"], "restarting", state)
+        self.assertEqual((state["progress"]["kind"], state["progress"]["stage"]), ("update", "restart"))
+        installed.assert_called_once_with("1.2.0")
+        self.assertEqual([run["argv"] for run in self.runs()], [["setup", "--engine-update"]])
 
-    def test_nothing_newer_starts_nothing_and_a_failed_setup_says_its_line_and_keeps_the_engine(self) -> None:
-        job, server = update.Update(), Server()
-        with mock.patch("cad_server.updates.newest", return_value=None), mock.patch.object(releases, "make") as made:
-            self.assertEqual(job.start(server)["state"], "idle")
+    def test_nothing_newer_no_install_here_and_a_failure_each_leave_the_server_as_it_was(self) -> None:
+        job = update.Update()
+        with mock.patch("cad_server.updates.newest", side_effect=AssertionError("no install: no feed read")):
+            state = job.start()
+        self.assertEqual(state["state"], "failed")
+        self.assertIn("there is no install of text-to-cad here to update: the install command installs one", state["error"])
+        self.installed()
+        job = update.Update()
+        with mock.patch("cad_server.updates.newest", return_value=None), mock.patch.object(update, "install") as made:
+            self.assertEqual(job.start()["state"], "idle")
         made.assert_not_called()
-        command = self.setup_script(code=1, said="the CAD kernel environment needs the network once: dns error")
+        command = self.setup_script(code=1, said="text-to-cad 1.2.0 could not be installed: dns error")
         with mock.patch("cad_server.updates.newest", return_value="1.2.0"), \
-                mock.patch.object(releases, "make", return_value={"cad": command}):
-            job.start(server)
+                mock.patch.object(update, "install", return_value={"cad": command}):
+            job.start()
             state = self.wait(job, "failed", "restarting")
-        self.assertEqual((state["state"], state["error"]),
-                         ("failed", "the CAD kernel environment needs the network once: dns error"))
-        self.assertEqual(server.retired, [], "the engine stays as it was")
+        self.assertEqual((state["state"], state["error"]), ("failed", "text-to-cad 1.2.0 could not be installed: dns error"))
         refused = releases.base.Refused("cad-server 1.2.0 needs the network once: dns error")
-        with mock.patch("cad_server.updates.newest", return_value="1.2.0"), mock.patch.object(releases, "make", side_effect=refused):
-            job.start(server)
+        with mock.patch("cad_server.updates.newest", return_value="1.2.0"), \
+                mock.patch.object(update, "install", side_effect=refused):
+            job.start()
             self.assertEqual(self.wait(job, "failed", "restarting")["error"], str(refused))
+        self.assertEqual(len(self.runs()), 1, "a release that could not be installed runs no setup")
 
-    def test_the_engine_a_failed_switch_starts_again_says_the_update_failed(self) -> None:
-        # The release before's engine, started again by the switch that failed, reads that failure as it
-        # starts serving: the page that followed the update through the restart reads it failed, and why.
-        error = "cad-server 1.2.0's engine did not start: it exited with code 3"
-        switch._record({"from": "1.1.0", "to": "1.2.0", "port": 4567, "ok": False, "error": error})
+    def test_an_update_after_which_this_server_stays_ends_moved_with_the_new_default_s_address(self) -> None:
+        """A store's channel is still on this server's version (or work is in flight here): the setup moves the default
+        channel and this server stays. The update ends -- no spinner waits on a server that does not go -- saying
+        where the new default's server serves (started for it), with a link for its token; one whose server goes (its
+        door closed by the move) restarts, as before, the new server taking its port."""
+        import secrets
+
+        from cad.engine import places
+        from cad_server._internal import pointers, versions
+        from cad_server.viewer.engine_app import standing
+
+        self.installed()
+        command = self.setup_script()
+        token = secrets.token_urlsafe(32)
+        answered = {"ok": True, "url": "http://127.0.0.1:3246", "port": 3246, "token": token}
+        for stays, expected in ((True, "moved"), (False, "restarting")):
+            job = update.Update()
+            with self.subTest(stays=stays), mock.patch("cad_server.updates.newest", return_value="1.2.0"), \
+                    mock.patch.object(update, "install", return_value={"cad": command}), \
+                    mock.patch.object(places, "versioned", return_value="1.1.0"), \
+                    mock.patch.object(pointers, "read", return_value="1.2.0"), \
+                    mock.patch.object(versions, "serves", return_value=stays), \
+                    mock.patch.object(versions, "start_server", return_value=True) as started, \
+                    mock.patch.object(versions, "ask", return_value=answered):
+                job.start()
+                state = self.wait(job, "moved", "restarting", "failed")
+                self.assertEqual(state["state"], expected, state)
+                if stays:
+                    self.assertEqual((state["target"], state["address"], state["progress"]), ("1.2.0", answered["url"], None))
+                    self.assertNotIn("token", state, "the token never leaves the server in the update's state")
+                    self.assertEqual(job.moved_token(), token, "a link for it signed by the page's application")
+                    from cad_server.viewer.http_app import create_cad_app
+
+                    (self.root / "index.html").write_text("<!doctype html>", encoding="utf-8")
+                    page = create_cad_app(host="127.0.0.1", port=0, dist_dir=str(self.root))
+                    with mock.patch.object(update, "UPDATE", job), mock.patch("cad_server.updates.refresh"):
+                        read = page._version()["update"]
+                    self.assertEqual((read["state"], read["address"]), ("moved", answered["url"]))
+                    self.assertEqual(standing(token, "link", read["link"]), "ok", "a link the new server admits")
+                    started.assert_called_once_with("1.2.0")
+                else:
+                    self.assertIsNone(job.moved_token())
+                    started.assert_not_called()
+
+
+    def test_its_setup_runs_with_the_path_of_the_last_shell_a_build_came_from(self) -> None:
+        # E1: the apps' command lines are on the agent's shell's PATH, which a server a GUI app started lacks.
+        from cad_server._internal.providers import lasting
+
+        self.installed()
+        ran: list = []
+        engine = SimpleNamespace(going=lambda: False, shell_path=lambda: "/opt/apps/bin:/usr/bin")
         job = update.Update()
-        job.recall()
-        self.assertEqual(job.snapshot(), {"state": "failed", "target": "1.2.0", "progress": None, "error": error})
-        # One that failed long before, or a switch that held, is no news to an engine started later.
-        result = Path(os.environ["CAD_STATE_DIR"]) / switch.RESULT
-        before = time.time() - update.RECALL_SECONDS - 60
-        os.utime(result, (before, before))
+        with mock.patch("cad_server.updates.newest", return_value="1.2.0"), \
+                mock.patch.object(update, "install", return_value={"cad": "cad"}), \
+                mock.patch.object(update, "_moved", return_value=None), \
+                mock.patch.object(update, "run_setup", side_effect=lambda record, **kw: ran.append(kw) or (0, "")):
+            job.start(engine)
+            self.wait(job, "restarting", "failed")
+        self.assertEqual(ran[0]["environ"], {"PATH": lasting("/opt/apps/bin:/usr/bin")})
+
+    def test_a_server_with_no_updater_refuses_the_click(self) -> None:
+        # E2: a page on a server that is not the default channel's version (one only a store's channel is on, the
+        # server an update left) never starts an update of the default channel.
+        from cad_server.viewer.http_app import create_cad_app
+
+        self.installed()
         job = update.Update()
-        job.recall()
-        self.assertEqual(job.snapshot()["state"], "idle")
-        switch._record({"from": "1.1.0", "to": "1.2.0", "port": 4567, "ok": True, "error": None})
-        job = update.Update()
-        job.recall()
-        self.assertEqual(job.snapshot()["state"], "idle")
+        with mock.patch("cad_server._internal.channel.told", return_value=False), \
+                mock.patch("cad_server.updates.newest", side_effect=AssertionError("no feed read")):
+            state = job.start()
+            self.assertEqual(state["state"], "failed")
+            self.assertIn("has no updater", state["error"])
+            (self.root / "index.html").write_text("<!doctype html>", encoding="utf-8")
+            app = create_cad_app(host="127.0.0.1", port=0, dist_dir=str(self.root))
+            app.server = SimpleNamespace(retire=lambda then=None: None)
+            with mock.patch.object(update, "UPDATE", job), mock.patch.object(job, "start") as started:
+                status, said = app._update()
+            self.assertEqual((status, said["error"]), (409, "this text-to-cad has no updater"))
+            started.assert_not_called()
+
+    def test_restarting_only_while_this_server_goes_and_moved_with_the_default_s_address_otherwise(self) -> None:
+        # E3: a page never spins on a restart that does not come.
+        from cad.engine import places
+        from cad_server._internal import pointers, versions
+
+        self.installed()
+        command = self.setup_script()
+        answered = {"ok": True, "url": "http://127.0.0.1:3247", "port": 3247, "token": "t"}
+        for going, versioned, default, expected in ((True, "1.1.0", "1.2.0", "restarting"),
+                                                    (False, "1.1.0", "1.3.0", "moved"),  # the pointer moved further
+                                                    (False, None, "1.2.0", "moved")):  # a server of no version
+            job = update.Update()
+            with self.subTest(going=going, versioned=versioned, default=default), \
+                    mock.patch("cad_server.updates.newest", return_value="1.2.0"), \
+                    mock.patch.object(update, "install", return_value={"cad": command}), \
+                    mock.patch.object(places, "versioned", return_value=versioned), \
+                    mock.patch.object(pointers, "read", return_value=default), \
+                    mock.patch.object(versions, "serves", return_value=True), \
+                    mock.patch.object(versions, "start_server", return_value=True) as started, \
+                    mock.patch.object(versions, "ask", return_value=answered):
+                job.start(SimpleNamespace(going=lambda: going, shell_path=lambda: None))
+                state = self.wait(job, "moved", "restarting", "failed")
+                self.assertEqual(state["state"], expected, state)
+                if expected == "moved":
+                    self.assertEqual(state["address"], answered["url"])
+                    started.assert_called_once_with(default)
+
+    @unittest.skipIf(os.name == "nt", "the process group's stop on Windows is taskkill's (unverified here)")
+    def test_a_setup_past_its_bound_is_stopped_with_every_process_it_started(self) -> None:
+        # E12: the bound stops the whole process group, an app's command the setup started among it.
+        child = self.root / "child.pid"
+        script = self.root / "slow.sh"
+        script.write_text(f'#!/bin/sh\nsleep 300 &\necho $! > "{child}.part" && mv "{child}.part" "{child}"\nwait\n',
+                          encoding="utf-8")
+        script.chmod(0o755)
+        thread = threading.Thread(target=update.run_setup, args=({"cad": str(script)},), kwargs={"seconds": 5.0})
+        thread.start()
+        thread.join(60)
+        self.assertFalse(thread.is_alive())
+        pid = int(child.read_text(encoding="utf-8"))
+        deadline = time.monotonic() + 10
+        while _alive(pid):
+            self.assertLess(time.monotonic(), deadline, "its child outlived the bound")
+            time.sleep(0.05)
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    try:  # a child reaped by no one is a zombie: gone all the same
+        state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+    except OSError:
+        return True
+    return bool(state) and not state.startswith("Z")
+
+
+class StoreSessionTest(Fixture):
+    def test_a_session_a_store_s_launcher_opened_has_no_update_notice_button_or_switch_whatever_serves_it(self) -> None:
+        """A CAD app session on a named channel (its launcher's ``--channel``) shows no update: its copy is updated by
+        whoever delivers it, even where the default channel shares the server's version."""
+        from cad_server.mcp import server as mcp_server
+        from cad_server.viewer.http_app import create_cad_app
+
+        self.installed()
+        (self.root / "index.html").write_text("<!doctype html>", encoding="utf-8")
+        app = create_cad_app(host="127.0.0.1", port=0, dist_dir=str(self.root))
+        notice = {"latest": "1.2.0", "version": "1.1.0"}
+        with mock.patch("cad_server.updates.notice", return_value=notice), \
+                mock.patch("cad_server.updates.refresh", return_value=None), \
+                mock.patch("cad_server._internal.channel.told", return_value=True):
+            self.assertEqual(app._version()["notice"], notice, "the default's session, and the browser page")
+            self.assertIsNotNone(app.settings()["updates"])
+            app.channel = "codex"
+            self.assertEqual((app._version()["notice"], app._version()["update"]), (None, None))
+            self.assertIsNone(app.settings()["updates"], "no switch")
+            app.server = SimpleNamespace(retire=lambda then=None: None)
+            status, said = app._update()
+            self.assertEqual((status, said["error"]), (409, "this text-to-cad has no updater"))
+            self.assertIsNone(mcp_server._stamped({}, updater=False)["notice"], "no notice in its launches")
+            self.assertEqual(mcp_server._stamped({})["notice"], notice)
+            session = mcp_server.Server(updater=False)
+            self.assertEqual(session._told({"content": []}), {"content": []}, "no line for a text app")
 
 
 if __name__ == "__main__":

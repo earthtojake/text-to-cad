@@ -288,7 +288,7 @@ class WindowsTokenFirstTest(unittest.TestCase):
         from cad_server.engine import daemon
 
         handled = []
-        engine = types.SimpleNamespace(token="ab" * 16, refusal=None, unsaid="",
+        engine = types.SimpleNamespace(token="ab" * 16, refusal=None, unsaid="", ended=lambda request: None,
                                        handle=lambda request, send: handled.append(request) or send({"ok": True}))
         server_side, client_side = socket.socketpair()
         self.addCleanup(client_side.close)
@@ -410,7 +410,7 @@ class WindowsTokenFirstTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, folder, True)
         listener = socket.create_server(("127.0.0.1", 0))  # any free port, never the engine's
         self.addCleanup(listener.close)
-        engine = types.SimpleNamespace(token=token, refusal=None, unsaid="",
+        engine = types.SimpleNamespace(token=token, refusal=None, unsaid="", ended=lambda request: None,
                                        handle=lambda request, send: send({"ok": True}))
         spoken: list[int] = []
         serving = daemon._serve

@@ -3,13 +3,30 @@
 
 Each host gets the development plugin, text-to-cad@earthtojake-dev: this checkout's skills, and
 CAD's server run by this checkout's .venv (`cad-mcp`), serving a copy of this checkout's
-apps/mcp build. That .venv is registered as this install's version (<version>-dev.<time>) and
-made the current installation, and the `cad` command is written (~/.local/bin/cad), which the
-skills run, so the server and the agent's scripts share this checkout's installation and warm
-daemon -- and every worktree has its own. With --wheel, the checkout's wheels are built as the release builds them, the
-server runs them through uvx and that installation is the one registered: the shape users get. Claude Desktop's chat takes servers, not plugins, so it
-gets that server alone. Run it again after a change; --uninstall takes the install out. For an agent without plugins,
-install the skills alone from the checkout with the Skills CLI: `npx skills add . -g -a <agent>`.
+apps/mcp build. That .venv is installed as a version of its own, named <VERSION>-dev.<time>
+(versions/<name>, whose code marker names the .venv: nothing is copied), the device's default
+channel is moved to it (`versions.move`: its data imported from the version it replaces, the
+pointer, the mirror for 0.11.10 and earlier), and the `cad` command is written (~/.local/bin/cad).
+Every command in the copied skills pins that name (`cad +<name>`), so the skills, the server and
+the agent's scripts run this checkout's version and share its warm server. Name every host you
+test in one run (`dev_install.py claude codex`): each run is a new version, and moving the
+default channel to it leaves the skills of a host installed by an earlier run pinned to a version
+the channel has left (they say so; install that host again). With --wheel, the checkout's wheels
+are built as the release builds them, the server runs them through uvx and that installation is
+the version: the shape users get. Claude gets no CAD server, as from the release: Claude Code's
+plugin is the skills alone (Cursor and Grok Build, which load it, read their own manifests, which
+name the server), and `claude-desktop` only takes out the server an earlier development install
+wrote into Claude Desktop's config. Run it again after a change.
+
+Going back to the published release is the install command (`curl -fsSL
+https://texttocad.dev/install.sh | sh`): it installs the release, moves the default channel to it
+from the development version (a person's install goes back from a development version, which no
+pinned command does), gives every app its plugin and takes the development plugin out of each as a
+second copy. The development version's folder stays, with its data: a release never imports from a
+newer version, and the move to the development version carried the device's Recents and settings
+into it, so the release shows none of them until the next development install carries them on.
+--uninstall takes a host's install out alone. For an agent without plugins, install the skills alone from the
+checkout with the Skills CLI: `npx skills add . -g -a <agent>`.
 
 One copy per app: a host that already loads another copy (the published plugin, this one through
 another host, or this repository's skills installed loose) is refused, because two copies means
@@ -19,18 +36,19 @@ it loads -- is the server's own (cad_server/_internal/providers.py, loaded by it
 setup` reads the apps with too.
 
     scripts/install/dev_install.py claude              # Claude Code (and so Cursor and Grok Build)
+    scripts/install/dev_install.py claude codex        # several hosts, one version
     scripts/install/dev_install.py codex [--restart]   # the Codex app, CLI and IDE extension
     scripts/install/dev_install.py cursor              # Cursor, without Claude Code
     scripts/install/dev_install.py grok                # Grok Build, without Claude Code
     scripts/install/dev_install.py gemini              # Gemini CLI
-    scripts/install/dev_install.py claude-desktop      # Claude Desktop's chat: the server alone
+    scripts/install/dev_install.py claude-desktop      # Claude Desktop: an earlier install's server taken out
     scripts/install/dev_install.py <host> --wheel        # this checkout's wheels, run through uvx
     scripts/install/dev_install.py <host> --uninstall
 
 The page is a copy taken at install, as an installed wheel serves its own: a page that changed
 under a running app would change its URI, and hosts drop the frames already showing it. So
-install again to see a page edit, and restart the app after a Python change -- a running server
-keeps the code it started with.
+install again to see a page edit, and run `cad stop` after a Python change -- a running server
+keeps the code it started with, and outlives the app.
 
 Environment:
     CAD_PYTHON           the interpreter that runs the server (default: the checkout's .venv)
@@ -102,16 +120,13 @@ def dev_root(host: str, root: Path = REPO_ROOT) -> Path:
     return root / "tmp" / f"{host}-dev"
 
 
-# A development install's channel, in its server's environment (cadgen's _internal/channel.py): its
-# analytics are told apart, and it is never offered an update.
-CHANNEL = {"CAD_INSTALL_CHANNEL": "dev"}
-
-
 def server_entry(host: str, python: str, page_dir: Path, version: str | None = None) -> dict:
     """CAD's server for a development install: this checkout's interpreter, this install's page, and
     the version it registers as at each start, `version` (cadgen's _internal/installations.py; a
-    source tree registers none unless named)."""
-    entry = {"command": python, "args": ["-m", "cad_mcp"], "env": {**CHANNEL, "CAD_MCP_APP_DIR": str(page_dir)}}
+    source tree registers none unless named). Its name, `<VERSION>-dev.<time>`, is what makes it a development
+    build to the server (the server's _internal/channel.py): it sends no telemetry by default and hears of no
+    release. Nothing names a channel: the default channel is moved to it."""
+    entry = {"command": python, "args": ["-m", "cad_mcp"], "env": {"CAD_MCP_APP_DIR": str(page_dir)}}
     if version:
         entry["env"][VERSION_ENV] = version
     if host == "codex":
@@ -129,60 +144,56 @@ def launcher_dir() -> str:
     return os.environ.get("CAD_LAUNCHER_DIR") or "~/.local/bin"
 
 
-# Registers this install, makes it the device's current installation -- the one whose engine every
-# client starts, so the apps run this checkout -- and writes the `cad` command, through its own
-# cadgen (this script cannot import it), printing the record's file.
-REGISTER = ("import sys\n"
-            "from cad_server._internal import installations\n"
-            "(record, _, failed), (_, _, unwritten) = installations.setup(sys.argv[1], make_current=True)\n"
-            "print(record)\n"
-            "sys.exit('; '.join(error for error in (failed, unwritten) if error) or 0)\n")
+# Installs this install as a version of its own, named by the first argument, and moves the device's default
+# channel to it -- the version every client and the `cad` command run with no pin, so the apps run this checkout --,
+# and writes the `cad` command, through its own cadgen (this script cannot import it), printing what it did as JSON:
+# the version and the one the default channel was on before. The code marker names the environment that runs this
+# (the .venv, or the wheel's uvx environment): nothing is copied. A checkout older than the release the default
+# channel is on moves it all the same: a development install goes over it.
+INSTALL_VERSION = ("import json, sys\n"
+                   "from pathlib import Path\n"
+                   "from cad_server._internal import installations, pointers, releases, versions\n"
+                   "name = sys.argv[1]\n"
+                   "before = pointers.read(None)\n"
+                   "said = lambda line: print(line, file=sys.stderr)\n"
+                   "versions.development(name, sys.executable, str(releases.console(Path(sys.prefix))), sys.prefix)\n"
+                   "moved = versions.move(None, name, told=said)\n"
+                   "if moved.kind == 'stale':\n"
+                   "    versions.first_start(name, told=said)\n"
+                   "    pointers.write(None, name)\n"
+                   "    versions.sweep(told=said)\n"
+                   "elif not moved.ok:\n"
+                   "    sys.exit(moved.error)\n"
+                   "_path, _status, unwritten = installations.write_proxy()\n"
+                   "print(json.dumps({'version': name, 'before': before}))\n"
+                   "sys.exit(unwritten or 0)\n")
+
+def register(python: list[str], version: str) -> dict:
+    """Install this install as `version` by `python` (its interpreter, or the uvx command that runs the wheel's)
+    and move the default channel to it (``INSTALL_VERSION``), writing the `cad` command: what it said, the version
+    and the one the default channel was on before."""
+    return json.loads(run(*python, "-c", INSTALL_VERSION, version, capture=True).strip().splitlines()[-1])
 
 
-def register(host: str, python: list[str], version: str) -> None:
-    """Register this install as `version` by `python` (its interpreter, or the uvx command that runs
-    the wheel's), write the `cad` command, and take out the records of this host's installs
-    before it that are over a day old: a Codex thread started earlier may still run its own."""
-    record = dev_root(host) / "installations.json"
-    try:
-        earlier = json.loads(record.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        earlier = {}
-    stale = time.time() - PAGE_COPY_DAYS * 86400
-    for old_version, path in list(earlier.items()):
-        if old_version != version and _older(path, stale):
-            Path(path).unlink(missing_ok=True)
-            del earlier[old_version]
-    written = run(*python, "-c", REGISTER, version, capture=True).strip().splitlines()[-1]
-    write_json(record, {**earlier, version: written})
-
-
-def _older(path: str, than: float) -> bool:
-    try:
-        return os.lstat(path).st_mtime < than
-    except OSError:
-        return True
-
-
-def unregister(host: str) -> None:
-    """Take out the record of every install of this host's (the `cad` command stays: it is every
-    installation's)."""
-    try:
-        recorded = json.loads((dev_root(host) / "installations.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return
-    for path in recorded.values():
-        Path(path).unlink(missing_ok=True)
-
-
-def skill_rewrites() -> dict:
-    """What a development install changes in its skills' text, ``{release's: this install's}``: the
-    `cad` command's folder is CAD_LAUNCHER_DIR's, and the one-line installer (``INSTALL_COMMANDS``)
-    becomes a note that this is a development install. The skills name no version: the `cad` command
-    runs the current installation, which this install is made."""
+def skill_rewrites(version: str) -> dict:
+    """What a development install changes in its skills' text, ``{release's: this install's}``: every
+    command's pin, ``cad +<VERSION>``, names this install's `version` (the name it registers as), so
+    the skills run this checkout, and each SKILL.md header's `metadata.version` names it too; the setup
+    block's install commands, which would install the release (``--add <VERSION>``), become a note
+    that this is a development install; and the `cad` command's folder is CAD_LAUNCHER_DIR's."""
+    release = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
     note = f"This is a development install of {REPO_ROOT}; do not run the install command here"
-    # The macOS and Linux command stands alone in a shell block: there the note is a comment.
-    rewrites = {INSTALL_COMMANDS[0]: f"# {note}", INSTALL_COMMANDS[1]: note}
+    install, install_windows = INSTALL_COMMANDS
+    windows_script = install_windows.removeprefix("irm ").removesuffix(" | iex")
+    rewrites = {
+        # The macOS and Linux command stands alone in a shell block: there the note is a comment.
+        f"{install} -s -- --add {release}": f"# {note}",
+        f"& ([scriptblock]::Create((irm {windows_script}))) --add {release}": note,
+        f"cad +{release}": f"cad +{version}",
+        # The header's `metadata.version` names the build the copy is, as the pins do.
+        f'\nmetadata:\n  repository: earthtojake/text-to-cad\n  version: "{release}"\n':
+            f'\nmetadata:\n  repository: earthtojake/text-to-cad\n  version: "{version}"\n',
+    }
     if launcher_dir() != "~/.local/bin":
         rewrites["~/.local/bin"] = launcher_dir()
     return rewrites
@@ -192,15 +203,16 @@ def assemble(host: str, plugin_dir: Path, version: str, server: dict, root: Path
              rewrites: dict | None = None) -> dict:
     """Write the plugin `host` loads into `plugin_dir` and return its manifest.
 
-    The skills are copied with ``rewrites`` applied to each SKILL.md (:func:`skill_rewrites`), the
+    The skills are copied with ``rewrites`` applied to each Markdown file (:func:`skill_rewrites`), the
     host's manifest takes `version` (each install its own, so a host that caches by
     version takes this build) and names `server` alone: in a server config beside it, or, for
-    Gemini, which keeps servers in the manifest itself, inline.
+    Gemini, which keeps servers in the manifest itself, inline. Claude Code's names none, as the
+    release's: Cursor's and Grok Build's manifests beside it name the server for the apps that load it.
     """
     if plugin_dir.exists():
         shutil.rmtree(plugin_dir)
     shutil.copytree(root / "skills", plugin_dir / "skills", ignore=IGNORED)
-    for skill in plugin_dir.glob("skills/*/SKILL.md"):
+    for skill in plugin_dir.glob("skills/**/*.md"):
         text = skill.read_text(encoding="utf-8")
         for released, ours in (rewrites or {}).items():
             text = text.replace(released, ours)
@@ -211,23 +223,38 @@ def assemble(host: str, plugin_dir: Path, version: str, server: dict, root: Path
         manifest["mcpServers"] = {"cad": server}
         write_json(plugin_dir / "gemini-extension.json", manifest)
         return manifest
+    if host == "claude":
+        # Claude Code gets the skills alone; Cursor and Grok Build load its plugins and read their own
+        # manifests first, which keep the server.
+        for fed, servers_file in ((".cursor-plugin", "cursor.mcp.json"), (".grok-plugin", "claude.mcp.json")):
+            _manifest(root, plugin_dir, fed, version, servers_file)
+            write_json(plugin_dir / servers_file, {"mcpServers": {"cad": server}})
+        return _manifest(root, plugin_dir, ".claude-plugin", version)
     manifest_dir = {"codex": ".codex-plugin", "cursor": ".cursor-plugin"}.get(host, ".claude-plugin")
     servers_file = "codex.mcp.json" if host == "codex" else "claude.mcp.json"
+    write_json(plugin_dir / servers_file, {"mcpServers": {"cad": server}})
+    return _manifest(root, plugin_dir, manifest_dir, version, servers_file)
+
+
+def _manifest(root: Path, plugin_dir: Path, manifest_dir: str, version: str, servers_file: str | None = None) -> dict:
+    """One host's manifest written into `plugin_dir` with `version`, naming `servers_file` (none: no server),
+    with its own files beside it."""
     manifest = json.loads((root / manifest_dir / "plugin.json").read_text(encoding="utf-8"))
     manifest["version"] = version
-    manifest["mcpServers"] = f"./{servers_file}"
-    (plugin_dir / manifest_dir).mkdir(parents=True)
+    manifest.pop("mcpServers", None)
+    if servers_file:
+        manifest["mcpServers"] = f"./{servers_file}"
+    (plugin_dir / manifest_dir).mkdir(parents=True, exist_ok=True)
     # The manifest's own files (icons), beside it; never a marketplace catalog.
     for path in (root / manifest_dir).iterdir():
         if path.is_file() and path.name not in ("plugin.json", "marketplace.json"):
             shutil.copy2(path, plugin_dir / manifest_dir / path.name)
-    if host == "cursor" and manifest.get("logo"):
+    if manifest_dir == ".cursor-plugin" and manifest.get("logo"):
         # Cursor's logo is a path inside the plugin; ours is the Claude icon.
         logo = plugin_dir / manifest["logo"]
         logo.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(root / manifest["logo"], logo)
     write_json(plugin_dir / manifest_dir / "plugin.json", manifest)
-    write_json(plugin_dir / servers_file, {"mcpServers": {"cad": server}})
     return manifest
 
 
@@ -341,25 +368,28 @@ def runtime(host: str, args: argparse.Namespace, version: str) -> tuple[dict, di
     start.
     """
     if args.wheel:
-        wheel = build_wheel(host, args.build)
+        # One build a run, for every host it installs: one version, one environment.
+        wheel = getattr(args, "built", None) or build_wheel(host, args.build)
+        args.built = wheel
         shim = sorted(wheel.parent.glob("cad_mcp-*.whl"))
         if not shim:
             raise Refused(f"no shim wheel beside {wheel}.")
-        server = {"command": LAUNCHER[0], "args": [*LAUNCHER[1:], str(shim[0]), "cad-mcp"], "env": dict(CHANNEL)}
+        server = {"command": LAUNCHER[0], "args": [*LAUNCHER[1:], str(shim[0]), "cad-mcp"]}
         if host == "codex":
             server["startup_timeout_sec"] = CODEX_STARTUP_SECONDS
         if host not in PLUGIN_HOSTS:  # Claude Desktop's chat runs no skills
             return server, {}, None
-        server["env"][VERSION_ENV] = version
-        register(host, [*uvx_from(wheel), "python"], version)
-        return server, skill_rewrites(), None
+        # Its name makes it a development build to the server (the server's _internal/channel.py).
+        server["env"] = {VERSION_ENV: version}
+        register([*uvx_from(wheel), "python"], version)
+        return server, skill_rewrites(version), None
     python = interpreter()
     # Codex keeps an earlier install's server running until it restarts, so its page stays too.
     page_dir = copy_page(host, args.build, version, prune=host != "codex")
     if host not in PLUGIN_HOSTS:  # Claude Desktop's chat runs no skills
         return server_entry(host, python, page_dir), {}, page_dir
-    register(host, [python], version)
-    return server_entry(host, python, page_dir, version), skill_rewrites(), page_dir
+    register([python], version)
+    return server_entry(host, python, page_dir, version), skill_rewrites(version), page_dir
 
 
 def dev_version() -> str:
@@ -425,7 +455,6 @@ def install_codex(args: argparse.Namespace) -> str:
             run(codex, "plugin", "remove", dev_id)
         if marketplace_known():
             run(codex, "plugin", "marketplace", "remove", MARKETPLACE)
-        unregister("codex")
         shutil.rmtree(root, ignore_errors=True)
         return f"Removed {dev_id}."
     others = [plugin_id for plugin_id in installed() if plugin_id != dev_id]
@@ -433,7 +462,7 @@ def install_codex(args: argparse.Namespace) -> str:
         raise Refused(f"Another CAD plugin is installed: {', '.join(others)}\n"
                       "Remove it first (codex plugin remove <id>); two copies means every skill twice.")
     refuse_other_copies("codex")
-    version = dev_version()
+    version = args.version
     server, rewrites, page_dir = runtime("codex", args, version)
     assemble("codex", root / "plugins" / name, version, server, rewrites=rewrites)
     write_json(root / ".agents" / "plugins" / "marketplace.json", {
@@ -470,11 +499,10 @@ def install_claude(args: argparse.Namespace) -> str:
             run(claude, "plugin", "uninstall", dev_id)
         if MARKETPLACE in marketplaces:
             run(claude, "plugin", "marketplace", "remove", MARKETPLACE)
-        unregister("claude")
         shutil.rmtree(root, ignore_errors=True)
         return f"Removed {dev_id}."
     refuse_other_copies("claude")
-    version = dev_version()
+    version = args.version
     server, rewrites, _ = runtime("claude", args, version)
     assemble("claude", root / "plugins" / name, version, server, rewrites=rewrites)
     write_json(root / ".claude-plugin" / "marketplace.json", {
@@ -496,11 +524,10 @@ def install_cursor(args: argparse.Namespace) -> str:
         raise Refused(f"{target} exists and is not this script's install; move it away first.")
     if args.uninstall:
         shutil.rmtree(target, ignore_errors=True)
-        unregister("cursor")
         shutil.rmtree(dev_root("cursor"), ignore_errors=True)
         return f"Removed {target}."
     refuse_other_copies("cursor")
-    version = dev_version()
+    version = args.version
     server, rewrites, _ = runtime("cursor", args, version)
     # Cursor follows no symlink out of its plugins folder, so the plugin is a real copy there.
     staged = dev_root("cursor") / "plugins" / name
@@ -519,11 +546,10 @@ def install_grok(args: argparse.Namespace) -> str:
     if args.uninstall:
         if str(plugin_dir) in grok_installed():
             run(grok, "plugin", "uninstall", name)
-        unregister("grok")
         shutil.rmtree(root, ignore_errors=True)
         return f"Removed {name} from Grok Build."
     refuse_other_copies("grok")
-    version = dev_version()
+    version = args.version
     server, rewrites, _ = runtime("grok", args, version)
     assemble("grok", plugin_dir, version, server, rewrites=rewrites)
     if str(plugin_dir) in grok_installed():
@@ -541,7 +567,6 @@ def install_gemini(args: argparse.Namespace) -> str:
     if args.uninstall:
         if linked:
             run(gemini, "extensions", "uninstall", name)
-        unregister("gemini")
         shutil.rmtree(dev_root("gemini"), ignore_errors=True)
         return f"Removed {name} from Gemini CLI."
     others = [source for source in gemini_installed(gemini) if source != str(plugin_dir)]
@@ -549,7 +574,7 @@ def install_gemini(args: argparse.Namespace) -> str:
         raise Refused(f"Gemini CLI already has {name} from {', '.join(others)}; uninstall it first "
                       f"(gemini extensions uninstall {name}): two copies means every skill twice.")
     refuse_other_copies("gemini")
-    version = dev_version()
+    version = args.version
     server, rewrites, _ = runtime("gemini", args, version)
     assemble("gemini", plugin_dir, version, server, rewrites=rewrites)
     if not linked:
@@ -565,49 +590,54 @@ def desktop_config() -> Path:
 
 
 def install_claude_desktop(args: argparse.Namespace) -> str:
+    """Claude gets no CAD server, as from the release (``providers._plan_desktop``): installing and uninstalling
+    alike take out the `cad-dev` server an earlier development install wrote, the rest of the config kept, its
+    .bak beside it, and add nothing. A config that is not plain JSON is left alone."""
     path = desktop_config()
-    text = path.read_text(encoding="utf-8").strip() if path.exists() else ""
-    config = json.loads(text) if text else {}
-    servers = config.setdefault("mcpServers", {})
-    if args.uninstall:
-        servers.pop(DESKTOP_SERVER, None)
-        write_json(path, config)
-        shutil.rmtree(dev_root("claude-desktop"), ignore_errors=True)
-        return f"Removed {DESKTOP_SERVER} from {path}. Restart Claude Desktop to drop it."
-    others = [key for key, entry in servers.items()
-              if key != DESKTOP_SERVER and providers.runs_cadgen(entry)]
-    if others:
-        raise Refused(f"{path} already runs CAD's server as {', '.join(others)}; remove that entry first: "
-                      "two servers means every tool twice.")
-    servers[DESKTOP_SERVER] = runtime("claude-desktop", args, time.strftime("%Y%m%d%H%M%S"))[0]
-    write_json(path, config)
-    return (f"Added {DESKTOP_SERVER} to {path}. Restart Claude Desktop (or Developer > Reload MCP "
-            "Configuration) to load it.")
+    shutil.rmtree(dev_root("claude-desktop"), ignore_errors=True)
+    try:
+        text = path.read_text(encoding="utf-8").strip() if path.exists() else ""
+        servers = (json.loads(text) if text else {}).get("mcpServers")
+    except (OSError, ValueError, AttributeError) as error:
+        raise Refused(f"{path} cannot be read ({error}); left alone") from error
+    if not isinstance(servers, dict) or DESKTOP_SERVER not in servers:
+        return "Claude Desktop gets no CAD server: Claude gets the skills alone, through Claude Code's plugin."
+    providers.edit_servers(path, remove=[DESKTOP_SERVER])
+    return (f"Removed {DESKTOP_SERVER} from {path} (its .bak beside it): Claude gets the skills alone, through "
+            "Claude Code's plugin. Claude Desktop drops the server when it next starts.")
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      epilog=__doc__.split("\n\n", 1)[1])
-    parser.add_argument("host", choices=HOSTS)
-    parser.add_argument("--uninstall", action="store_true", help="take this host's install out")
+    parser.add_argument("host", nargs="+", choices=HOSTS, help="the hosts to install in, one version for all")
+    parser.add_argument("--uninstall", action="store_true", help="take these hosts' installs out")
     parser.add_argument("--no-build", dest="build", action="store_false", help="serve the page already built")
     parser.add_argument("--restart", action="store_true", help="codex: quit and reopen the app")
     parser.add_argument("--wheel", action="store_true", help="build this checkout's wheel and run it through uvx")
     args = parser.parse_args(argv)
-    if args.restart and args.host != "codex":
+    hosts = list(dict.fromkeys(args.host))
+    if args.restart and "codex" not in hosts:
         parser.error("--restart is for codex")
+    args.version = dev_version()
     install = {"claude": install_claude, "codex": install_codex, "cursor": install_cursor, "grok": install_grok,
-               "gemini": install_gemini, "claude-desktop": install_claude_desktop}[args.host]
-    try:
-        print(install(args))
-        return 0
-    except Refused as refusal:
-        print(f"error: {refusal}", file=sys.stderr)
-        return 1
-    except subprocess.CalledProcessError as error:
-        print(f"error: {' '.join(map(str, error.cmd))} exited {error.returncode}", file=sys.stderr)
-        return 1
+               "gemini": install_gemini, "claude-desktop": install_claude_desktop}
+    code = 0
+    for host in hosts:
+        try:
+            print(install[host](args))
+        except Refused as refusal:
+            print(f"error: {host}: {refusal}", file=sys.stderr)
+            code = 1
+        except subprocess.CalledProcessError as error:
+            print(f"error: {host}: {' '.join(map(str, error.cmd))} exited {error.returncode}", file=sys.stderr)
+            code = 1
+    if args.uninstall:
+        install, install_windows = INSTALL_COMMANDS
+        print(f"To go back to the published release, run the install command: {install} (on Windows: "
+              f"{install_windows})")
+    return code
 
 
 if __name__ == "__main__":

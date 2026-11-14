@@ -50,6 +50,13 @@ enough. Every other job runs on the changes that reach it. The two there now:
   few pull requests, and before this layout they ran only after a merge (in November 2026 the Linux
   one had passed 7 runs of 7, the Windows one 23 pushes of 25); a release pull request runs every job,
   so no release ships unrehearsed. They also run on a change to the installers themselves.
+- The update rehearsal (`update-rehearsal`, `scripts/test/rehearse-update.py`) installs real releases
+  from PyPI on private devices and updates them into this tree's build, on Linux, macOS and Windows, in
+  two legs a system that run side by side: `into` (0.11.10's and 0.11.0's own update paths, and the
+  interruptions) and `around` (this build's own automatic update, work in flight, a new server before
+  the switch, an app an update could not reach, and 0.10.4). About 11 to 13 minutes a system on macOS:
+  the migration every device makes unattended. It runs with the installer rehearsals, and on a change
+  to the rehearsal itself. A scenario runs alone too, as `scripts/test/rehearse-update.py in-flight`.
 
 A job moves into the tier, or out of it, with that argument in its pull request.
 
@@ -187,7 +194,7 @@ decide which tests reach it. The components:
 
 | Job | Runs on | What it runs |
 | --- | --- | --- |
-| `static` | every change | With Python and Node alone: the version check (canonical version, derived metadata, the release's pins; on a pull request, what merging it releases, see [Shipping a release](../../CONTRIBUTING.md#shipping-a-release)), the shipping contract's tree rules, the light contracts (every policy test that reads only the repository's text, and the print3d, render and sendcutsend suites) and the API's tests |
+| `static` | every change | With Python and Node alone: the version check (canonical version, derived metadata, the release's pins; on a pull request, what merging it releases, see [Shipping a release](../../CONTRIBUTING.md#shipping-a-release)), the shipping contract's tree rules, the light contracts (every policy test that reads only the repository's text, and the render and sendcutsend suites) and the API's tests |
 | `packages (Linux I/2)` | the packages, a package test | The library's, the server's (the engine's and the CAD Viewer backend's included) and the shim's suites under Xvfb, or the files of them the change selected; the type check |
 | `packages (Windows I/3)` | the same | The same suites and the type check on Windows: paths, locks, subprocesses, file URLs and the daemon are platform-sensitive |
 | `routing (macOS)` | the packages, the router's unit files | The router's unit files on the third C library (its copper is held to a digest on all three) |
@@ -219,8 +226,8 @@ tests resolve. Root prose, the plugin manifests and configs, the release scripts
 
 **The release tier** runs on a full run only, so before a release ships and not
 on every push ([its criterion](#what-runs-where)): the packages' suites on Python
-3.13, and the installer rehearsals, which also run on a change to the installers
-themselves (`scripts/install`, the two workflows). The nightly run, on `main`, is
+3.13, and the installer and update rehearsals, which also run on a change to the installers
+themselves (`scripts/install`, the two workflows) or to the update rehearsal. The nightly run, on `main`, is
 that tier for whatever merged without a release; it runs nothing when a run
 already tested `main`'s tree in full.
 
@@ -372,7 +379,9 @@ keeps them out of `models/`.
 **Rehearsals.** The release pipeline is rehearsed on `build-test`
 ([Rehearsing on `build-test`](../../CONTRIBUTING.md#rehearsing-on-build-test)), and the installers on
 a fresh machine by `install-linux.yml` and `install-windows.yml`, which `test.yml` calls in the release
-tier and which a dispatch with `published` runs against the release people install today.
+tier and which a dispatch with `published` runs against the release people install today. The update
+from 0.11.10 into this tree is rehearsed by `scripts/test/rehearse-update.py`, which `test.yml`'s
+`update-rehearsal` job runs in the same tier and which runs locally too (it needs uv and the network).
 
 ### Performance changes
 

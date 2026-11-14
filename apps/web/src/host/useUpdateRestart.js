@@ -11,7 +11,9 @@ import { RECONNECT_UPDATE_MS } from "./useEngineReconnect.js";
  *   back -- and the page reloads into it (`reload`: `reloadWhenClean`), where the update's end is
  *   said (`followedUpdate`);
  * - an answer of the page's own engine whose update `failed` ends the restart there (`settle`:
- *   `useUpdate`'s -- the toast, the button offered again);
+ *   `useUpdate`'s -- the toast, the button offered again), and so does one whose update ended with it staying
+ *   (`moved`: another channel is on its version, or work is in flight there; `useUpdate` hands it to the page,
+ *   which goes to the new server's address);
  * - anything else -- the same engine still `working` or `restarting`, an engine draining, nothing
  *   answering, an error -- and it asks again.
  *
@@ -59,7 +61,7 @@ export function useUpdateRestart(restarting, {
           options.reload();
           return;
         }
-        if (answer.update?.state === "failed") {
+        if (answer.update?.state === "failed" || answer.update?.state === "moved") {
           loop.active = false;
           options.settle(answer);
           return;

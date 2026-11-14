@@ -19,8 +19,11 @@ The contract is three things, any of which a release may change:
   (``cadquery-ocp-novtk``), whose shapes and documents the server's kernel processes read back.
 
 The server refuses an order whose contract is not its own before it starts any worker, in one line
-naming which package to update, and to what release (``refusal``): a refusal with a remedy, and no
-window in which the newer side answers the older. Equal contracts of different releases build, and the
+naming which package to update, and to what release, or the ``cad run`` that runs the program as one
+release (``refusal``): a refusal with a remedy, and no window in which the newer side answers the older.
+Such a caller is a process with no version of its own (a person's own environment, ``python model.py``):
+each version's server is reached by its own version's processes alone, and by the rest through the door
+of the default channel's version, which never takes another version's data for a release number. Equal contracts of different releases build, and the
 script then says once which package to update for the other's fixes (``notice``). The library's side is
 the cad package in the caller's environment, and no installer is named: the person or the agent has
 their own way. The server's side is ``cad-server`` and its one way, ``cad update``: installing it into a
@@ -118,8 +121,11 @@ def refusal(named: Any, *, ours: dict[str, Any] | None = None, server: str | Non
         # the protocol and kept its version). Neither update moves either one: one build of both does.
         return f"{said}: both are {server}, but different builds of it: use one build of both"
     if newer > 0:
-        return f"{said}: {_server_to(here)}"
-    return f"{said}: {_library_to(server)}"
+        # The caller's own release, run exactly, its own server with it (a pin installs a release missing).
+        pinned = "" if _preview(here) else f"run it with `{COMMAND} +{here} run`, or "
+        return f"{said}: {pinned}{_server_to(here)}"
+    # The server's release: ``cad run`` runs a program with the device's library, that release's.
+    return f"{said}: {_library_to(server)}, or run it with `{COMMAND} run`"
 
 
 def notice(server: Any, here: str | None = None) -> str | None:

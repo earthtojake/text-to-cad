@@ -59,7 +59,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   document; where it cannot it is plain text. The ⋯
   is the file menu, stock shadcn items and submenus (`DropdownMenuSub`), the menu and each
   submenu shadcn's own width (`min-w-[8rem]`, sized to its items: no width of their own), in this order:
-  **Copy path**; **Copy link** (the document's page with a fresh link, `<engine origin>/<id>?token=<link>`,
+  **Copy path**; **Copy link** (the document's page with its link, `<engine origin>/<id>?token=<link>`,
   the address the page itself holds: on every document, model or file of any kind, always enabled,
   its source there or not; copied silently, as Copy path is; `fileActions.perform["copy-link"]`); **Open in**, a submenu of **Browser** (the document's page in the person's
   browser: the CAD app's, where a launch carried the web viewer's page, `fileActions.perform.browser`)

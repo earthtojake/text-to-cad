@@ -27,12 +27,12 @@ terminal UI show none and are served as text clients.
   view on updates too. A conditional server result cannot promise host-side tab reuse. A host that declares tabs does what
   Codex does: it starts one `cad-mcp` shim per thread. Each connects to a separate
   engine session, so an unnamed view belongs to that thread.
-- **Inline (Claude Desktop, and every other MCP Apps host).** Each `cad_show`
+- **Inline (Cursor, and every other MCP Apps host).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
   the whole viewer at card size, as a tab is: its navbar (`chrome: "page"`: the logo, which
   opens the app menu, first; Back and Forward; the file name that opens the name menu; the ⋯,
   the file menu: Copy path, Copy link (the engine's own page of the document,
-  `<engine origin>/<id>?token=<fresh link>`, the origin from the launch and the link asked through the
+  `<engine origin>/<id>?token=<link>`, the origin from the launch and the link asked through the
   tunnel; never the tunnel's address), then Open in › Browser and Finder (File Explorer, File manager), a
   model's Copy path and Finder acting on its script (Finder disabled, with its reason, where the
   script was moved or deleted; Browser needs none), then the apps the server finds on this computer
@@ -42,9 +42,8 @@ terminal UI show none and are served as text clients.
   button; Back and Forward are dropped on a phone-width view), the tool strip ending
   in Projection, Display and Preview, the view's panel, the view cube, and Quick Edit. In
   Preview its own bar (the file's name, its settings, its exit) takes the navbar's place. A
-  newer card retires the older ones. The Claude app's Code tab draws the card of Claude Desktop's own
-  server and carries its calls; a server Claude Code starts there gets cards whose calls it refuses, so
-  that server lists no tools ([Claude: where the card comes from](#claude-where-the-card-comes-from)).
+  newer card retires the older ones. Claude is set up with no CAD server, on any route; a Claude host
+  that starts one anyway is served, as below ([Claude: no CAD server](#claude-no-cad-server)).
 
 A client that renders no MCP Apps never loads this page. Its `cad_show` opens the
 model's page in this machine's CAD Viewer, `/<id>` (the file registered by its id, as
@@ -81,28 +80,51 @@ nothing.
 No tool exports, inspects or draws a picture for the agent: those are the `cad` command's, which the
 agent runs in its shell (`cad model export <id> <file>`, `cad model inspect <id>`, `cad model snapshot
 <id> out.png`; a file's, `cad <type> ...` with its path), and every presentation's instructions say so
-at initialize, Claude Code's among them, for an agent that has not loaded the cad skill. No tool builds
+at initialize, Claude Code's among them, for an agent that has not loaded the cad skill. The three tools
+0.11.10 removed (`cad_export`, `cad_snapshot`, `cad_inspect`) are never listed, but a call by one of those
+names, from a session that still lists it, answers with the `cad` command that replaced it. No tool builds
 source text: to build a shape, wrap the shape in a decorated function and run its script. The web
 viewer's Export is a browser download; this page has no Export, having no HTTP origin to download from.
 
-## Claude: where the card comes from
+## Starting: how long a host waits for `cad-mcp`
+
+A thread's first start on a computer without its version installs it (30 seconds to minutes), so
+how long the host waits for `initialize`, and what it does with a late tool list, decide whether
+that thread gets CAD's tools.
+
+| Host | Startup timeout | A late `initialize` | `tools/list_changed` |
+| --- | --- | --- | --- |
+| Codex (codex-cli 0.169.0-alpha.11.1, measured 2026-11-14) | 30 s where the server config sets no `startup_timeout_sec`; the OpenAI directory's ZIP sets 300 | a turn never waits for MCP servers; a server answered late (9 s and 25 s tried) has its tools added to the running turn | not acted on for the rest of a turn: a list answered empty stays empty in that turn |
+
+So `cad-mcp` holds `initialize` for its version as long as the host waits: 20 seconds by default
+(inside Codex's 30), and 80% of the startup timeout where the server config says it as
+`cad-mcp --startup-timeout N` (a day at most). The other 20% is what the host's timeout counts
+besides: uvx fetching and starting `cad-mcp` before the `initialize` arrives, and the server's
+start and its own answer to the `initialize` after the version is ready. Only the OpenAI ZIP says it (`scripts/release/plugin_zip.py`, N
+read from that config's own `startup_timeout_sec`: `--channel codex --startup-timeout 300`). For
+the plugin folder and `main`, Codex reads the Agent Plugins standard's root `mcp.json` rather than
+`codex.mcp.json`, and any Codex-only key there makes the server vanish with no error: nothing
+can be configured for the default channel, which keeps 20 seconds, the placeholder greeting and
+its `list_changed` past them.
+
+## Claude: no CAD server
+
+Decided 2026-11-13: Claude gets text-to-cad as skills alone, on every install route, the install
+command's and by hand: its MCP Apps support was too flaky to build on. A model is shown by the
+skills' `cad viewer` link, in the browser pane or the browser.
 
 | Host | CAD's server | Cards |
 | --- | --- | --- |
-| Claude Desktop, Chat tab | `mcpServers.cad` in `claude_desktop_config.json`, which `cad setup` writes wherever Claude Desktop is | yes |
-| Claude Desktop, Code tab | the same entry: the desktop app starts it and offers it to the Claude Code session | yes |
-| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone, and `cad setup` removes a `claude mcp add` CAD server, the user's or a project's. claude.ai's directory's copy (`claude-plugin`) still names one, which lists no tools when Claude Code starts it | none: the skills' `cad viewer` link, in the browser pane or the browser |
+| Claude Desktop (Chat and Code tabs) | none: `cad setup` writes no entry in `claude_desktop_config.json`, and takes out the `mcpServers.cad` releases through 0.11.10 wrote there (the rest of the file kept, a `.bak` beside it) | none |
+| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone, and `cad setup` removes a `claude mcp add` CAD server, the user's or a project's. claude.ai's directory's copy (`claude-plugin`) carries the skills alone too; its copies through 0.11.10 name one, which lists no tools when Claude Code starts it | none |
 | Claude Code in a terminal | none | it draws none |
 
-Claude Desktop reads its config only when it starts: once `cad setup` first gives it CAD's server,
-quit and reopen it (setup's last lines say so; on Windows, quit it from the system tray). A new pin
-needs no restart: the server it runs keeps working with the newer engine. No developer mode is needed.
-
-What decides it, measured:
+The server still serves a Claude host that starts it: a config someone wrote by hand, or an older
+entry until Claude Desktop next starts. What was measured of those hosts, for whoever revisits this:
 
 - **The desktop-config server works in the Code tab.** 2026-10-04: its card drew and `cad_view`
   and `cad_screenshot` answered. 2026-11-09, Claude Desktop 4.23118: the same (the server
-  `CAD_INSTALL_CHANNEL=claude-desktop`), and again with `developer_settings.json` at
+  as releases through 0.11.10 wrote it), and again with `developer_settings.json` at
   `"allowDevTools": false`. The first card after the app starts can take a while to connect: a
   `cad_view` about 6 s after `cad_show` said it had not reached CAD's server, and at about 20 s it
   answered.
@@ -117,16 +139,14 @@ What decides it, measured:
   terminal, `sdk-cli` headless, `claude-desktop` in the Code tab, with `CLAUDECODE=1`); the
   `cad-mcp` processes the desktop app starts have neither (measured 2026-11-09). `cad-mcp` passes it
   with the host's `initialize` (`claudeCode`), and the server lists no tools for that session
-  (`cad_server/mcp/host.py`'s `claude_code`), its instructions naming the cad skill, the `cad` command
-  and the desktop config. `CAD_MCP_CARDS=1` in `cad-mcp`'s environment keeps the tools, to test the
-  Claude Code path.
+  (`cad_server/mcp/host.py`'s `claude_code`), its instructions naming the cad skill and the `cad`
+  command. `CAD_MCP_CARDS=1` in `cad-mcp`'s environment keeps the tools, to test the Claude Code path.
 
-Decided 2026-11-09: Claude Code gets the skills from the plugin, and CAD's card from Claude
-Desktop's config. To undo it once flag 1824765482 is on: name `./claude.mcp.json` in
-`.claude-plugin/plugin.json` again, drop `CLAUDE_SERVER` from `scripts/release/plugin_branch.py`
-(the directory's copy is then main's), drop the `remove server` step for Claude Code in
-`cad_server/_internal/providers.py`'s `_removal`, and drop `host.claude_code`. Then decide which one
-server the Code tab gets: with both, it lists CAD twice.
+To give Claude a server again: Claude Desktop's step (`cad_server/_internal/providers.py`'s
+`_plan_desktop`, which takes the entry out) would write it, and for Claude Code, once flag 1824765482
+is on, `.claude-plugin/plugin.json` would name `./claude.mcp.json` (claude.ai's directory's copy stays
+the skills alone: `scripts/release/plugin_branch.py` fails a server in it), `_removal` would keep a
+`claude mcp add` server, and `host.claude_code` would go. With both, the Code tab lists CAD twice.
 
 ## Cursor: where the card's capability comes from
 
@@ -216,21 +236,32 @@ the launch's `_meta` first (`host/capability.ts`).
   with the page; the page reads it again (`/api/v1/server`) when the person comes back to
   it. A press is the update (`POST /api/v1/local/update`, through `cad_http`): the engine installs
   the release, updates each agent app's plugin and restarts on it, on the same port with
-  the same token (`cad_server/_internal/update.py`). Meanwhile the button is a ring that fills
+  the same token where the old version's server stops (`cad_server/_internal/update.py`). Meanwhile the button is a ring that fills
   as the update goes, then a spinner while the engine restarts; once the engine answers
   with the new release, the card loads that release's app in its own place
   (`host/release.ts`, the shell's `reload`), and nothing goes to the chat. An update that
-  fails says why in a toast, and the engine stays as it was; one whose switch fails brings
-  the release before back, and the card, reading its own release again with the update failed
-  (`useUpdate`'s `settle`), says why in the same toast and offers the button again.
+  fails says why in a toast, and the engine stays on the release it ran: the card, reading its
+  own release again with the update failed (`useUpdate`'s `settle`), says why in the same toast
+  and offers the button again. The card's launcher belongs
+  to the version the update leaves: where every call through it answers that the thread is stale, or the engine
+  says the update is done and it stays (`moved`: another channel is still on its version, or work is in flight
+  there), the restart ends and
+  the card says the update is done and to start a new thread (`updateMoved`) -- no spinner waits on an answer the
+  thread cannot get.
   A text client gets one line with its first `cad_show` result instead, naming the install
-  command. Where the
-  install came from is its channel, which each plugin's startup config names in
-  the server's environment (`CAD_INSTALL_CHANNEL`, `cad_server/_internal/channel.py`),
-  with `CAD_AUTO_UPDATED=1` where a store keeps the copy up to date: only a
-  copy nothing else updates checks and is told. A store's copy (the Claude or OpenAI directory, the Cursor
-  Marketplace) is left to its store, until the store moves an app's plugin ahead of the engine: then
-  the button shows there too, and moves the engine to that release. The telemetry: the server
+  command. Only the
+  default channel's version, on a device where the install command has run, has an updater
+  (`cad_server/_internal/channel.py`'s `told`): every other server's card shows no notice, no button
+  and no automatic-updates switch (its settings answer `updates` null), and neither does a card whose launcher was
+  started with `--channel`, whatever version serves it (the session's channel, `ViewerApp._updater`). A store's copy is on the store's
+  own channel -- its launcher is started with `--channel NAME` and every pin in its skills carries the
+  name -- and is updated by the store alone; a copy Cursor installed from a marketplace added in Cursor is the
+  repository as Cursor fetched it, our own text, so it is on the default channel, and only Cursor fetching the
+  repository again changes it, never the install command. `cad setup` installs ours beside a store's copy
+  all the same: the app loads the skills of both. Codex, given two plugins that each name a server `cad`, lists one, the
+  one of the plugin whose id sorts first (`text-to-cad@openai-curated` before `text-to-cad@text-to-cad`;
+  `codex mcp list`, codex-cli 0.153.4 and 0.169.0-alpha.11.1, measured 2026-11-14, no agent turn), so the CAD
+  tab is likely the store's channel's then. The telemetry: the server
   counts its use -- tool calls (not the page's plumbing), view activity from each
   view's sync (`focused`), and the files views show (counted by format, once a day,
   as a view adds one to the library) --
@@ -514,7 +545,6 @@ npm run build:mcp                             # packages, then this app
 npm --prefix apps/mcp run typecheck          # tsc over src/ (the Vite build checks no types)
 npm --prefix apps/mcp run test               # jsdom units
 scripts/install/dev_install.py codex --restart  # run it in the Codex app
-scripts/install/dev_install.py claude-desktop   # run it in Claude Desktop (then restart it)
 ```
 
 `scripts/test/test-js.sh --select mcp` is what CI runs: the type check, the tests,

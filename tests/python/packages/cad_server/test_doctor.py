@@ -57,9 +57,13 @@ class DoctorTests(unittest.TestCase):
         state = TemporaryDirectory()
         self.addCleanup(state.cleanup)
         self.state = Path(state.name)
-        # A plugin's install outside CI, where telemetry's default holds.
+        # A release's install outside CI, where telemetry's default holds: not a source tree (a checkout is a
+        # development build), with no version named, so what the doctor registers is its own to decide.
+        tree = mock.patch("cad_server._internal.channel._source_tree", return_value=False)
+        tree.start()
+        self.addCleanup(tree.stop)
         environment = mock.patch.dict("os.environ", {"CAD_STATE_DIR": state.name, "DO_NOT_TRACK": "", "CAD_TELEMETRY": "",
-                                                     "CAD_INSTALL_CHANNEL": "claude-github", "CI": "",
+                                                     "CI": "",
                                                      # The cad command goes to a folder of the test's, never ~/.local/bin.
                                                      "CAD_LAUNCHER_DIR": str(self.state / "bin"),
                                                      "PATH": str(self.state / "unrelated-bin"),
@@ -361,48 +365,34 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual([f"  {check['name']:<8} {check['detail']}" for check in found["checks"]],
                          out.splitlines()[1:])
 
-    def test_prune_removes_a_release_folder_but_the_current_one_and_the_one_before(self) -> None:
-        # An update to 1.2.0 that failed and went back left its folder: --prune takes it, and its failure stays.
-        from cad_server import auto_updates
-        from cad_server._internal import base, installations, releases, switch
+    def test_prune_removes_every_version_no_channel_is_on(self) -> None:
+        # The flat folders of 0.11.10 and earlier are that layout's to remove once nothing runs from them
+        # (``legacy.remove``); --prune sweeps (``versions.sweep``): every version no pointer names.
+        from cad_server._internal import versions
 
-        for version in ("1.0.0", "1.1.0", "1.2.0"):
-            folder = releases.where(version)
-            python, command = base.interpreter(folder), releases.console(folder)
-            python.parent.mkdir(parents=True)
-            for path in (python, command):
-                path.write_text("", encoding="utf-8")
-            (folder / releases.MARKER).write_text('{"schema": "%s", "version": "%s"}' % (releases.SCHEMA, version),
-                                                  encoding="utf-8")
-        installations.point("1.1.0")
-        switch._record({"from": "1.1.0", "to": "1.2.0", "ok": False, "error": "its engine exited 3",
-                        "at": "2026-11-03T21:00:00+0000"})
-        auto_updates.attempt("1.2.0", error="its engine exited 3", now=1000.0)
-        out = _run(["--no-server"])[1]
-        self.assertIn("  releases 1.0.0 (the release before), 1.1.0 (current), 1.2.0 (cad doctor --prune removes it) "
-                      f"in {releases.root()}\n", out)
-        self.assertTrue(releases.where("1.2.0").is_dir(), "nothing is removed without --prune")
-        # What it asks a yes for names the folder, with how many, as its help says it removes them.
-        self.assertIn("1 release folder but the current release's and the one before's: 1.2.0", doctor._prune_plan())
         with redirect_stdout(io.StringIO()) as helped, self.assertRaises(SystemExit):
             doctor.main(["--help"])
-        self.assertIn("every release folder but the current release's and the one before's",
-                      " ".join(helped.getvalue().split()))
-        with mock.patch.object(releases, "running", return_value=False):
+        self.assertIn("every installed version no channel is on", " ".join(helped.getvalue().split()))
+        plan = versions.Prune(versions={"1.2.0": "installed and never used"})
+        with mock.patch.object(versions, "prune_plan", return_value=plan) as planned, \
+                mock.patch.object(versions, "prune", return_value={"1.2.0": "removed"}) as pruned, \
+                mock.patch.object(versions, "sweep", side_effect=AssertionError("exactly its plan: no sweep")):
             code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(code, 0)
-        self.assertIn(f"removed {releases.where('1.2.0')}\n", out)
-        self.assertEqual([release["version"] for release in releases.listing()], ["1.0.0", "1.1.0"])
-        self.assertEqual((switch.last()["to"], switch.last()["ok"]), ("1.2.0", False), "the failure stays recorded")
-        self.assertEqual(auto_updates.attempted()["error"], "its engine exited 3")
+        planned.assert_called_once()  # read once, shown, and done: the same plan
+        pruned.assert_called_once_with(plan, told=mock.ANY)
+        self.assertIn("removed text-to-cad 1.2.0\n", out)
+        with mock.patch.object(versions, "prune_plan", return_value=versions.Prune()), \
+                mock.patch.object(versions, "prune", side_effect=AssertionError("an empty plan does nothing")):
+            self.assertEqual(_run(["--prune", "--yes"])[0], 0)
 
     def test_the_report_says_what_the_device_runs(self) -> None:
-        from cad_server._internal import installations, releases, switch
+        from cad_server._internal import installations, releases
 
         from cad_server._internal import base
 
         for version in ("1.0.0", "1.1.0"):
-            folder = releases.where(version)
+            folder = releases.root() / version
             python, command = base.interpreter(folder), releases.console(folder)  # bin/, or Windows' Scripts/
             python.parent.mkdir(parents=True)
             for path in (python, command):
@@ -411,13 +401,11 @@ class DoctorTests(unittest.TestCase):
                                                   encoding="utf-8")
             installations.register(version, (str(command), str(python), str(folder)))
         installations.point("1.1.0")
-        switch._record({"from": "1.0.0", "to": "1.1.0", "ok": True, "gapMs": 640, "at": "2026-10-31T09:00:00+0000"})
         code, out, _ = _run(["--no-server"])
         self.assertEqual(code, 0, out)
-        self.assertIn(f"  current  cad-server 1.1.0 ({releases.where('1.1.0')})\n", out)
-        self.assertIn(f"  releases 1.0.0 (the release before), 1.1.0 (current) in {releases.root()}\n", out)
-        self.assertIn("  update   2026-10-31T09:00:00+0000: switched to cad-server 1.1.0 from 1.0.0, 640 ms without an "
-                      "engine\n", out)
+        self.assertIn(f"  current  cad-server 1.1.0 ({releases.root() / '1.1.0'})\n", out)
+        self.assertIn(f"  releases 1.0.0, 1.1.0 (current) in {releases.root()}: of 0.11.10 or earlier, removed once "
+                      "nothing runs from them\n", out)
         # Another installation's doctor (a skill's one-time step run by uvx) registers nothing and leaves
         # the CAD kernel to the current one's.
         self.assertIn("registry cad-server 1.1.0 is the current installation: this one registers nothing", out)
@@ -430,6 +418,7 @@ class DoctorTests(unittest.TestCase):
         class App:
             def __init__(self, label: str, ours, stores=(), present: bool = True) -> None:
                 self.label, self._ours, self._stores, self.present = label, ours, list(stores), present
+                self.id = {value: key for key, value in providers.LABELS.items()}[label]
 
             def ours(self):
                 return self._ours
@@ -439,18 +428,20 @@ class DoctorTests(unittest.TestCase):
 
         folder = str(plugin.folder())
         found = {
+            # A store's copy beside ours: it stays, and the line says how to keep one.
             "claude": App("Claude Code", providers.Copy("claude", "plugin", providers.PLUGIN_ID, version="1.1.0", ours=True,
-                                                        source=folder, via="in place")),
+                                                        source=folder, via="in place"),
+                          [providers.Copy("claude", "plugin", "text-to-cad@claude-plugins-official", version="1.0.0",
+                                          detail="claude.ai's directory's", store=True, enabled=True)]),
             "claude-desktop": App("Claude Desktop", providers.Copy("claude-desktop", "server", "cad", version="1.1.0",
                                                                    ours=True)),
             "codex": App("Codex", providers.Copy("codex", "plugin", providers.PLUGIN_ID, version="1.2.0", ours=True,
                                                  source=folder, via="copied", when="2026-10-31 02:41")),
-            "cursor": App("Cursor", None, [providers.Copy("cursor", "store", "/c/text-to-cad", store=True,
-                                                          detail="the Cursor Marketplace's")]),
+            "cursor": App("Cursor", None),  # nothing of text-to-cad's: no line
             "gemini": App("Gemini CLI", providers.Copy("gemini", "extension", "text-to-cad", version="1.1.0", ours=True,
                                                        source=folder, via="linked")),
             "grok": App("Grok Build", None, present=False)}
-        # The receipt: the app directory's copy `cad setup` replaced, and the skills it copied.
+        # The receipt: the app directory's copy an earlier release's `cad setup` replaced, and the skills it copied.
         replaced = {"app": "codex", "action": "remove duplicate", "kind": "command", "ok": True, "at": "2026-10-31T02:39:00Z",
                     "command": ["codex", "plugin", "remove", "text-to-cad@openai-curated"],
                     "store": "text-to-cad@openai-curated (its app directory's)"}
@@ -465,15 +456,29 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(detect.call_args.kwargs["folder"], plugin.folder())
         self.assertEqual(lines, [
             f"app      Claude Code: text-to-cad@text-to-cad 1.1.0, reads {folder} in place",
-            "app      Claude Desktop: text-to-cad 1.1.0",
+            "app      Claude Code: text-to-cad@claude-plugins-official 1.0.0 (claude.ai's directory's): it stays beside "
+            "ours, and Claude Code loads the skills of both, so every skill shows twice; to keep one, remove the "
+            "directory's copy in Claude Code's plugin manager (ours is the one every update brings up to date)",
+            # Claude gets the skills alone: the server an earlier release wrote is said, and that setup takes it out.
+            "app      Claude Desktop: CAD's server text-to-cad 1.1.0, which an earlier release wrote; the next "
+            "`cad setup` takes it out (Claude gets the skills alone)",
             f"app      Codex: text-to-cad@text-to-cad 1.2.0, a copy of {folder}, made 2026-10-31 02:41",
-            "app      Cursor: /c/text-to-cad (the Cursor Marketplace's), which its store updates",
             f"app      Gemini CLI: text-to-cad 1.1.0, linked to {folder}",
-            "app      Codex: text-to-cad@openai-curated (its app directory's): the directory's copy, replaced by cad setup "
-            "(2026-10-31 02:39)",
+            "app      Codex: text-to-cad@openai-curated (its app directory's): the directory's copy, replaced by an "
+            "earlier release's cad setup (2026-10-31 02:39)",
             # The folder the Skills CLI keeps for it, read again: the skill gone since is said.
             f"app      Windsurf: the skills of text-to-cad 1.1.0, copied into {windsurf} by the Skills CLI "
             "(2026-10-31 02:40); cad not there now: run the install command again"])
+        # Codex's plugin cache alone holds a copy from OpenAI's directory: the doctor, which runs no app, names it.
+        cached = machine.home / ".codex" / "plugins" / "cache" / "openai-curated" / "text-to-cad"
+        (cached / "1.0.0").mkdir(parents=True)
+        (cached / providers.CODEX_REMOTE_MARK).write_text("{}", encoding="utf-8")
+        with mock.patch.object(providers.Machine, "here", return_value=machine), \
+                mock.patch.object(providers, "detect", return_value=found):
+            lines = self.apps()
+        self.assertIn("app      Codex: its plugin cache also holds text-to-cad@openai-curated 1.0.0 (from OpenAI's plugin "
+                      "directory), which Codex loads while you are signed in to your OpenAI account; if every skill shows "
+                      "twice, remove that copy in Codex's plugin manager", lines)
         with mock.patch.object(providers.Machine, "here", side_effect=OSError("no home")):
             self.assertEqual(self.apps(), ["apps     unknown (OSError: no home)"])
 
@@ -497,6 +502,10 @@ class PrivateFolders(unittest.TestCase):
         patcher = mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_OK, "/site/OCP.pyd"))
         patcher.start()
         self.addCleanup(patcher.stop)
+        # The apps are this machine's, which no test here reads (a store's copy there may name any release).
+        apps = mock.patch.object(doctor, "_apps", return_value=[])
+        apps.start()
+        self.addCleanup(apps.stop)
         root = TemporaryDirectory()
         self.addCleanup(root.cleanup)
         self.root = Path(root.name).resolve()

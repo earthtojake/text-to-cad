@@ -27,6 +27,9 @@ from cad_server.viewer.recents import RecentStore
 from cad_server.mcp.server import _AGENT_TOOLS, CLAUDE_CODE_INSTRUCTIONS, FOLLOWS, Server, local_path, no_drive
 from cad_server.mcp.tunnel import MAX_REPLY_BYTES
 from cad_server.mcp.ui import AppPage
+# A release's process: a checkout is a development build, never told of a release and sending nothing by default,
+# unless it is told the version it runs as (``cad_server/_internal/channel.py``).
+RELEASE = __import__("cad_server").__version__
 
 CODEX = {"name": "codex-mcp-client", "title": "Codex", "version": "0.159.0"}
 CLAUDE = {"name": "claude-ai", "version": "0.1.0"}
@@ -56,11 +59,13 @@ def offer_an_update(test: unittest.TestCase) -> None:
     """A feed read today that offers 99.0.0 to the Claude plugin installed from GitHub (`cad_server/updates.py`)."""
     state = Path(tempfile.mkdtemp())
     test.addCleanup(shutil.rmtree, state, ignore_errors=True)
-    patched = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(state), "CAD_INSTALL_CHANNEL": "claude-github", "CAD_AUTO_UPDATED": "", "CI": "",
+    patched = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(state), "CAD_INSTALLATION_VERSION": RELEASE, "CI": "",
                                            "CAD_UPDATE_CHECK": ""})
     patched.start()
     test.addCleanup(patched.stop)
     (state / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": "99.0.0"}}), encoding="utf-8")
+    # The install command ran here (its receipt): a process with no version is the default's, which is told.
+    (state / "install-receipt.json").write_text("{}", encoding="utf-8")
 
 
 PAGE_TOOLS = ("cad_sync", "cad_capture_reply")
@@ -394,6 +399,28 @@ class TabServerTest(_Session):
         before = len(asked)
         launch = self.launch("cad_file", {"file": {"name": "bracket.stl", "resourceUri": "x"}}, {"openai/resource": {"path": self.bracket}})
         self.assertEqual((launch["surface"], "browser" in launch, "engine" in launch, len(asked)), ("file", False, False, before))
+
+    def test_a_tool_0_11_10_removed_answers_with_its_command_and_is_never_listed(self) -> None:
+        # A session opened before the update still holds them: its agent is told the command, not "unknown tool".
+        listed = [tool["name"] for tool in self.server.tools()]
+        context = RequestContext(1, {"threadId": "t"})
+        with mock.patch.object(self.server.analytics, "called") as counted:
+            for name, command in (("cad_export", "`cad model export <id> <file>...`"),
+                                  ("cad_snapshot", "`cad model snapshot <id> <out.png>`"),
+                                  ("cad_inspect", "`cad model inspect <id> [ref]`")):
+                with self.subTest(name=name):
+                    self.assertNotIn(name, listed)
+                    answered = self.server.handle("tools/call", {"name": name, "arguments": {"source": "x"}}, context)
+                    self.assertTrue(answered["isError"])
+                    [text] = answered["content"]
+                    self.assertIn("removed in text-to-cad 0.11.10", text["text"])
+                    self.assertIn(command, text["text"])
+                    self.assertIn("cad skill", text["text"])
+        # Counted as the caller's call naming no tool of cadgen's, never as the system's failure.
+        self.assertEqual({call.args for call in counted.call_args_list}, {("cad_unknown", False, "bad_request")})
+        with self.assertRaisesRegex(RpcError, "unknown tool 'cad_render'") as refused:
+            self.server.handle("tools/call", {"name": "cad_render", "arguments": {}}, context)
+        self.assertEqual(refused.exception.code, -32602)
 
     def test_the_hosts_file_view_shows_the_file_it_opened_and_nothing_the_agent_shows(self) -> None:
         self.call("cad_sync", {"view": "f1", "surface": "file", "model": self.bracket})
@@ -979,8 +1006,8 @@ class ClaudeCodeSessionTest(_Session):
         self.assertEqual(self.tools(), [])
         self.assertIn("cad skill", self.initialized["instructions"])
         self.assertIn("`cad viewer`", self.initialized["instructions"])
-        # A Code tab missing Claude Desktop's own server, whose card works there: what makes it appear.
-        self.assertIn("run `cad setup` and ask the user to quit and reopen Claude Desktop", self.initialized["instructions"])
+        # Claude gets no CAD server: nothing sends the agent to set one up.
+        self.assertNotIn("cad setup", self.initialized["instructions"])
         with self.assertRaises(RpcError):
             self.call("cad_show", {"source": self.bracket})
 

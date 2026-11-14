@@ -324,6 +324,7 @@ export default {
   "update.failed": "更新失败：{error}",
   "update.updated": "已更新到 {version}。",
   "update.updatedRestart": "已更新到 {version}。重新启动应用以加载新技能。",
+  "update.newThread": "已更新到 {version}。请开始新的会话来使用它。",
   // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
   "whatsNew.gotIt": "知道了",
   "whatsNew.title": "新功能（v{version}）",

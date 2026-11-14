@@ -1,10 +1,12 @@
-"""The update end to end, as a person's machine runs it (``cad_server._internal.update``, ``switch``,
-``releases``): release A set up by its own ``cad setup`` in a home of this test's own, its engine
-started as any client starts it; release B published -- its wheel in a folder uv reads beside the
-index (``CAD_UPDATE_FIND_LINKS``), and named by a version feed served here (``CAD_API_URL``);
-then the button's request (``POST /api/v1/local/update``, ``cad_server.viewer.http_app``), and the engine back on
-the same port, with the same token, running B -- the answer a page reloads on --, A's folder kept as
-the way back.
+"""The update end to end, as a person's machine runs it (``cad_server._internal.update``, ``versions``,
+``cad_server.cli.setup``): release A set up by its own ``cad setup`` in a home of this test's own -- present in
+``versions/A``, the default channel on it --, its server started as any client starts it; release B published --
+its wheel in a folder uv reads beside the index (``CAD_UPDATE_FIND_LINKS``), and named by a version feed served here
+(``CAD_API_URL``); then the button's request (``POST /api/v1/local/update``, ``cad_server.viewer.http_app``): B
+installed by its own ``cad setup --add`` and its own ``cad setup --engine-update`` run, which moves the default
+channel to B and hands B's server A's port; the server back on the same port, with the same token, running B -- the
+answer a page reloads on --, and A's folder removed, which nothing names now. A real 0.11.10 updating into this
+build is scripts/test/rehearse-update.py's.
 
 Each release is this source tree's library and server as wheels, the library's ``build123d`` extra naming
 nothing: the update's path is what is tested, and the kernel's install is uv's (the base's own tests
@@ -183,7 +185,10 @@ def command(env: Path) -> Path:
     return env / ("Scripts/cad.exe" if WINDOWS else "bin/cad")
 
 
-class UpdateEndToEndTest(unittest.TestCase):
+class Machine(unittest.TestCase):
+    """A machine of the test's own (``environment``), a version feed served here and a folder of wheels uv reads; every
+    server of it stopped, and every process from its folder ended, as the test ends. No test of its own."""
+
     def setUp(self) -> None:
         # Short, under /tmp: the engine's door is a Unix socket in its folder, whose path caps near 104 bytes.
         self.work = Path(tempfile.mkdtemp(prefix="cu.", dir=None if WINDOWS else "/tmp")).resolve()
@@ -245,16 +250,18 @@ class UpdateEndToEndTest(unittest.TestCase):
                               capture_output=True, text=True, encoding="utf-8", errors="replace", **options)
 
     def release(self, version: str) -> Path:
-        return self.work / "state" / "releases" / version
+        """Version ``version``'s server environment (``versions/<version>/code/server``)."""
+        return self.work / "state" / "versions" / version / "code" / "server"
 
     def stop(self) -> None:
-        """The engine stopped, as any client stops it, and anything still running from this test's folder ended."""
-        for version in (B, A):
+        """Each version's server stopped, as any client of it stops it, and anything still running from this test's
+        folder ended."""
+        versions = self.work / "state" / "versions"
+        for version in sorted(os.listdir(versions), reverse=True) if versions.is_dir() else []:
             python = base.interpreter(self.release(version))
             if python.exists():
                 self.run_here([python, "-c", "from cad.engine import client\n"
                                "client.request({'op': 'stop'}, start=False)\nclient.wait_gone(timeout=60)"], timeout=90)
-                break
         if not WINDOWS:
             listed = subprocess.run(["ps", "-axo", "pid=,command="], capture_output=True, text=True).stdout
             for line in listed.splitlines():
@@ -281,8 +288,12 @@ class UpdateEndToEndTest(unittest.TestCase):
         return response.status, (json.loads(body) if response.status == 200 else {"body": body.decode("utf-8", "replace")})
 
     def said(self) -> str:
-        log = self.work / "state" / "update.log"
-        return log.read_text(encoding="utf-8", errors="replace") if log.exists() else "(no update log)"
+        """Where the update got to, as the state folder says it: the pointer, the mirror, the versions present."""
+        state = self.work / "state"
+        read = lambda path: path.read_text(encoding="utf-8").strip() if path.exists() else "(none)"  # noqa: E731
+        versions = sorted(os.listdir(state / "versions")) if (state / "versions").is_dir() else []
+        return (f"default {read(state / 'default')}, current {read(state / 'installations' / 'current')}, "
+                f"versions {versions}")
 
     def running(self) -> str:
         """Every process still running from this test's folder, its pid and command line: on a stalled update,
@@ -299,28 +310,38 @@ class UpdateEndToEndTest(unittest.TestCase):
         found = [line.strip() for line in listed.splitlines() if str(self.work) in line]
         return "processes from the test's folder:\n" + ("\n".join(found) if found else "(none)")
 
-    def test_the_button_installs_the_next_release_and_its_engine_takes_the_port_and_token(self) -> None:
-        # Release A, as the install command sets it up: uvx's environment, whose `cad setup` makes A's
-        # release folder and sets it up from there. Claude Desktop's folder is there: its config gets CAD's
-        # server, A's, which the update moves to B's (an app updated with no app's command, no network).
-        release(A, self.wheels)
-        machine = providers.Machine(Path(self.env["HOME"]), self.env, platform=sys.platform, bundled={})
-        desktop = providers.desktop_config(machine)
-        desktop.parent.mkdir(parents=True)
-        uv, boot = base.find_uv(), self.work / "uvx"
+    def installer(self, version: str) -> Path:
+        """Release ``version``'s server environment as the install command makes it (uvx's, outside the state folder),
+        from the folder of wheels: what its ``cad setup`` and ``cad uninstall`` run from."""
+        uv, boot = base.find_uv(), self.work / f"uvx-{version}"
         made = self.run_here([uv, "venv", "--no-project", "--python", sys.executable, boot])
         self.assertEqual(made.returncode, 0, made.stderr)
         install = [uv, "pip", "install", "--python", base.interpreter(boot), "--find-links", self.wheels,
-                   f"{base.SERVER}=={A}"]
+                   f"{base.SERVER}=={version}"]
         made = self.run_here([*install, "--offline"])
         if made.returncode != 0:
             made = self.run_here(install)
         self.assertEqual(made.returncode, 0, made.stderr)
+        return boot
+
+
+class UpdateEndToEndTest(Machine):
+
+    def test_the_button_installs_the_next_release_and_its_engine_takes_the_port_and_token(self) -> None:
+        # Release A, as the install command sets it up: uvx's environment, whose `cad setup` makes A's
+        # release folder and sets it up from there. Cursor's folder is there: it gets a copy of the plugin folder,
+        # A's, which the update copies again for B (an app updated with no app's command, no network).
+        release(A, self.wheels)
+        machine = providers.Machine(Path(self.env["HOME"]), self.env, platform=sys.platform, bundled={})
+        (machine.home / ".cursor").mkdir(parents=True)
+        cursor = providers.cursor_plugins(machine) / "text-to-cad" / ".cursor-plugin" / "plugin.json"
+        boot = self.installer(A)
         set_up = self.run_here([command(boot), "setup"], timeout=600)
         self.assertEqual(set_up.returncode, 0, set_up.stdout + set_up.stderr)
+        self.assertEqual((self.work / "state" / "default").read_text(encoding="utf-8").strip(), A)
         self.assertEqual((self.work / "state" / "installations" / "current").read_text(encoding="utf-8"), A)
-        self.assertTrue(desktop.is_file(), set_up.stdout + set_up.stderr)
-        self.assertIn(f"cad-mcp=={A}", desktop.read_text(encoding="utf-8"))
+        self.assertTrue(cursor.is_file(), set_up.stdout + set_up.stderr)
+        self.assertEqual(json.loads(cursor.read_text(encoding="utf-8"))["version"], A)
         # The plugin folder every app is pointed at, A's.
         folder = self.work / "state" / plugin.FOLDER
         self.assertEqual(json.loads((folder / plugin.MANIFEST).read_text(encoding="utf-8"))["version"], A)
@@ -379,26 +400,25 @@ class UpdateEndToEndTest(unittest.TestCase):
                 if stage and stage not in stages:
                     stages.append(stage)
             time.sleep(0.05)
-        switched = json.loads((self.work / "state" / "update.json").read_text(encoding="utf-8"))
-        self.assertEqual((switched["ok"], switched["from"], switched["to"], switched["port"]), (True, A, B, self.port),
-                         switched)
-        order = ("install", "build123d", "apps", "restart")  # cad_server._internal.update.STAGES: as the page saw them
+        order = ("install", "build123d", "restart", "apps")  # cad_server._internal.update.STAGES: as the page saw them
+        self.assertTrue(set(stages) <= {"install", "build123d", "restart"}, stages)
         self.assertEqual(stages, sorted(stages, key=order.index))
+        self.assertEqual((self.work / "state" / "default").read_text(encoding="utf-8").strip(), B)
         self.assertEqual((self.work / "state" / "installations" / "current").read_text(encoding="utf-8"), B)
-        for version in (A, B):  # A's folder stays: the way back, and what a process of A's may still run from
-            self.assertTrue((self.release(version) / "cad-release.json").is_file(), version)
-        self.assertIn(f"cad-mcp=={B}", desktop.read_text(encoding="utf-8"))
-        proxy = self.work / "bin" / ("cad.exe" if WINDOWS else "cad")  # the cad command runs current
-        self.assertEqual(self.run_here([proxy, "--version"]).stdout.strip(), f"cad {B}")
-        # The plugin folder is B's, written by B's setup; the helper, once B's engine answered, had B write it
-        # again (`cad plugin --refresh`), which found it already B's.
-        self.assertEqual(json.loads((folder / plugin.MANIFEST).read_text(encoding="utf-8"))["version"], B)
-        while f"text-to-cad {B}, up to date" not in self.said():
-            self.assertLess(time.monotonic(), deadline, f"the helper did not have {B} write its plugin folder\n{self.said()}")
+        self.assertTrue((self.release(B).parent / "cad-version.json").is_file())
+        # A, which nothing names now and whose server stopped for the handover, is removed with it.
+        while (self.work / "state" / "versions" / A).exists():
+            self.assertLess(time.monotonic(), deadline, f"{A}'s folder stayed\n{self.said()}\n{self.running()}")
             time.sleep(0.05)
-        print(f"\nupdate {A} -> {B}: {back - clicked:.1f} s from the click to {B}'s engine answering; no engine "
-              f"for {switched['gapMs']} ms (the switch), {round((back - (gone or back)) * 1000)} ms as the page "
-              "saw it", file=sys.stderr)
+        # The apps step, B's setup's last: Cursor's copy and the plugin folder are B's.
+        while json.loads(cursor.read_text(encoding="utf-8"))["version"] != B:
+            self.assertLess(time.monotonic(), deadline, f"Cursor's copy stayed {A}'s\n{self.said()}")
+            time.sleep(0.05)
+        self.assertEqual(json.loads((folder / plugin.MANIFEST).read_text(encoding="utf-8"))["version"], B)
+        proxy = self.work / "bin" / ("cad.exe" if WINDOWS else "cad")  # the cad command runs the default channel's
+        self.assertEqual(self.run_here([proxy, "--version"]).stdout.strip(), f"cad {B}")
+        print(f"\nupdate {A} -> {B}: {back - clicked:.1f} s from the click to {B}'s server answering; "
+              f"{round((back - (gone or back)) * 1000)} ms without a server as the page saw it", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -161,7 +161,7 @@ if __name__ == "__main__":
 leaves out as built (a state that names none is the as-built pose under a name: a key, a
 `--zero`), and returns the assembly. A cylindrical joint takes
 `(angle, distance)` and a ball joint its three angles; a coupling takes its value
-(`curl=0.5`). Mechanism states are what the viewer's Position lists as presets, and what
+(`bend=0.5`). Mechanism states are what the viewer's Position lists as presets, and what
 a snapshot's `--pose` names.
 
 A file of the mechanism in another pose is a model of its own: `posed(hinge(), state)`
@@ -218,7 +218,7 @@ import build123d as bd
 from cad import model
 from cad.build123d import configuration_sequence, gear_pair
 
-CURL = {"index_mcp": 90, "index_pip": 100, "index_dip": 70}           # degrees at a full curl
+BEND = {"index_mcp": 90, "index_pip": 100, "index_dip": 70}           # degrees at a full bend
 BONES = {"base": 30, "proximal": 40, "middle": 25, "distal": 20}     # lengths along +X
 
 
@@ -229,22 +229,22 @@ def index_finger():
         bone = bd.Pos(x, 0, 0) * bd.Box(length, 16, 12, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
         bone.label, x = name, x + length
         bones.append(bone)
-    for joint, parent, child in zip(CURL, bones, bones[1:]):
+    for joint, parent, child in zip(BEND, bones, bones[1:]):
         knuckle = bd.Axis(child.location.position, (0, 1, 0))
-        hinge = bd.RevoluteJoint(joint, parent, axis=knuckle, angular_range=(0, CURL[joint]))
+        hinge = bd.RevoluteJoint(joint, parent, axis=knuckle, angular_range=(0, BEND[joint]))
         bd.RigidJoint(joint, child, hinge.location)
         hinge.connect_to(child.joints[joint], angle=0)   # as built: straight
     finger = bd.Compound(children=bones, label="index_finger")
-    gear_pair(finger, "index_curl", **CURL)                             # 0 straight, 1 a fist
-    return configuration_sequence(finger, "grip", [(0, {"index_curl": 0}), (1.5, {"index_curl": 1}),
-                                                   (3, {"index_curl": 0})])
+    gear_pair(finger, "index_bend", **BEND)                             # 0 straight, 1 a fist
+    return configuration_sequence(finger, "grip", [(0, {"index_bend": 0}), (1.5, {"index_bend": 1}),
+                                                   (3, {"index_bend": 0})])
 
 
 if __name__ == "__main__":
     index_finger()
 ```
 
-`--pose '{"index_curl": 0.6}'` poses the knuckles at 54, 60 and 42 degrees; its range,
+`--pose '{"index_bend": 0.6}'` poses the knuckles at 54, 60 and 42 degrees; its range,
 `[0, 1]`, is where every knuckle stays within its own. The viewer shows the coupling's
 slider and none of its joints', and setting one of its joints alone is refused. A
 planetary stage turns its carrier and planets from the sun, ranged by the sun's limits;
@@ -302,7 +302,7 @@ hinge("pin", rocker, coupler, C, connect=False)   # the loop's last joint: the c
 
 The document keeps every pair; a loop's pairs are not posed (there is no solver), so a
 mechanism state or a configuration sequence that moves one is refused or left out, and
-`cad model ranges` sweeps none of them. A robot description follows the pairs from the
+`cad +0.11.11 model ranges` sweeps none of them. A robot description follows the pairs from the
 ground and leaves out the pair that reaches a link a second time, the one paired last: the
 MJCF closes the loop there with an equality between two sites, one on each body where the
 joint stands (a hinge is two `connect`s, a ball one), and the URDF, a tree, leaves it out
@@ -340,7 +340,7 @@ free(root)                                  # the base is not bolted to the worl
 - **`limits(assembly, joint, effort=, velocity=)`** bounds every revolute or linear joint of that
   label on the assembly or below it, in SI, from the drive's datasheet: URDF's `<limit>`, MJCF's
   `actuatorfrcrange` (MJCF has no speed bound). Declare it after the joint is made. A joint without
-  one is written `effort="0" velocity="0"` in a URDF, which `cad urdf validate` warns a ROS
+  one is written `effort="0" velocity="0"` in a URDF, which `cad +0.11.11 urdf validate` warns a ROS
   controller reads literally.
 - **`mass(part_or_assembly, grams)`** is what it weighs in all: its solids keep the ratios their
   materials' densities give (one density for all where none of them has a material; a part with no material among parts that have one carries none of the total, and the export says so) and are scaled alike to
@@ -427,8 +427,8 @@ apart, a cover vanishing, a part spinning for show) is an animation of the GLB:
 A pose is drawn on demand:
 
 ```bash
-cad model snapshot "$ID" tmp/open.png --pose open
-cad model snapshot "$ID" tmp/elbow_45.png --pose '{"elbow": 45}'
+cad +0.11.11 model snapshot "$ID" tmp/open.png --pose open
+cad +0.11.11 model snapshot "$ID" tmp/elbow_45.png --pose '{"elbow": 45}'
 ```
 
 `--pose` takes a mechanism state's name, or joint and coupling values as JSON (a turn
@@ -446,7 +446,7 @@ of jobs draws its frames in one command, each from one camera
 ([a camera that does not move](snapshot-review.md#annotations-and-quick-edit-views)):
 
 ```bash
-cad model snapshot "$ID" tmp/stride.png --pose walk@0.6
+cad +0.11.11 model snapshot "$ID" tmp/stride.png --pose walk@0.6
 ```
 
 ```json
@@ -459,14 +459,14 @@ is its pelvis walks in the air.
 
 A pose or a motion shows movement; it does not measure it. A check of the model measures
 the parts as built, so a part that clears there can still pass through another
-mid-motion. `cad model interference "$ID" --pose crouch --pose walk@0.6` measures every pair of
+mid-motion. `cad +0.11.11 model interference "$ID" --pose crouch --pose walk@0.6` measures every pair of
 parts at each pose it is given, a state or a sequence at a time of it: give it every state, and
 each sequence at the times that matter
 ([interference](inspection-and-validation.md#interference)). To measure one pair at a pose in a
 check script, pose the model there, taking its parts placed with
 `leaves(tree)` (`cad.build123d`) through `find_part`, copied from
 [Opening geometry](inspection-and-validation.md#opening-geometry). Where a joint's stops are
-the parts meeting, `cad model ranges` finds them ([Joint stops](../SKILL.md#joint-stops)):
+the parts meeting, `cad +0.11.11 model ranges` finds them ([Joint stops](../SKILL.md#joint-stops)):
 
 ```python
 from cad.build123d import leaves, overlap_volume, posed

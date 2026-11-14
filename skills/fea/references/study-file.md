@@ -115,7 +115,7 @@ approximates a pin or bolt load.
 
 ## Faces
 
-Face references are the engine's refs, the ones the CAD Viewer copies and `cad <type> inspect`
+Face references are the engine's refs, the ones the CAD Viewer copies and `cad +0.11.11 <type> inspect`
 resolves: `bracket/face 17` is face 17 of the part `bracket` (`face 17` alone in a one-part
 document), and a face the document names is named by its name (`bracket/f:plate.relief.3`). A
 reference the user selected arrives after its document's path (`/work/bracket.step#bracket/face
@@ -129,7 +129,7 @@ unchanged), so list the faces again before re-running a study on a new revision.
 ## Assemblies
 
 A document of several parts is solved as an assembly, bonded where parts touch. Run
-`cad step solve assembly.step` (the setup) first to see the parts and the pairs.
+`cad +0.11.11 step solve assembly.step` (the setup) first to see the parts and the pairs.
 
 ```json
 {
@@ -149,8 +149,8 @@ A document of several parts is solved as an assembly, bonded where parts touch. 
   use a ref. A part named twice is refused.
 - `connections`: optional overrides, `{"between": [A, B], "type": ...}` with `bonded` or `free`.
   Without it every pair that touches within the tolerance is bonded. `bonded` needs the pair to
-  touch within the tolerance; `free` leaves them unjoined (their faces stay separate and may not
-  pass load). A `free` pair that is still joined through other bonded parts is refused. Parts that press
+  touch within the tolerance; `free` leaves them unjoined (their faces stay separate and carry no
+  load). A `free` pair that is still joined through other bonded parts is refused. Parts that press
   and slide, and bolts, are not in this version.
 - `contact_tolerance_mm`: default 0.1. Faces this close are touching; a gap within it is closed to
   bond the pair, and so is an overlap no thicker than it (an interference; a `gap_closed` finding
@@ -213,7 +213,7 @@ the stress check's findings are the `yields` and `low_margin` findings already m
 
 ## What comes out
 
-`cad step solve part.step --study study.json --out DIR` writes into the folder `DIR` (made when missing;
+`cad +0.11.11 step solve part.step --study study.json --out DIR` writes into the folder `DIR` (made when missing;
 nothing else in it is touched):
 
 - `result.json`: the result, exactly what `--json` prints (below).

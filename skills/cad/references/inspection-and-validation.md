@@ -4,7 +4,7 @@ Read this file when resolving a reference, measuring a model, checking clearance
 contact, or diagnosing geometry.
 
 This is the catalogue of what exists. Write a check only when the person asks for a dimension, a
-fit or a mass, or the change is numeric and the number matters; run `cad <type> inspect` only when a
+fit or a mass, or the change is numeric and the number matters; run `cad +0.11.11 <type> inspect` only when a
 prompt names a reference ([Check each change](../SKILL.md#check-each-change)).
 
 ## Contents
@@ -18,12 +18,12 @@ prompt names a reference ([Check each change](../SKILL.md#check-each-change)).
 - [Mass properties](#mass-properties)
 
 Checks are small Python scripts in the project's ignored `tmp/` (or a `checks/` folder
-for ones worth keeping); `cad <type> inspect` answers what a ref names. A check calls the
+for ones worth keeping); `cad +0.11.11 <type> inspect` answers what a ref names. A check calls the
 model, so it measures the model as its code is now.
 
 A dimension the person gave is checked where the server already holds the geometry: an
-`assert` inside the model's body, on the shape it is about to return, or `cad <type> inspect`
-(`cad model inspect "$ID" bracket` gives a part's bounds, volume and mass). Never append the
+`assert` inside the model's body, on the shape it is about to return, or `cad +0.11.11 <type> inspect`
+(`cad +0.11.11 model inspect "$ID" bracket` gives a part's bounds, volume and mass). Never append the
 check to the model's script after its call: reading `.shape` there brings the shape into the
 script's own process and loads the CAD kernel there, about 3 s, after the server has answered,
 on every run. A check script pays the same once, so it is for a derived number the person
@@ -63,7 +63,7 @@ def find_part(tree, label):
 
 `find_part` is a project helper, not the library's: it requires a unique leaf label and
 refuses both missing and repeated labels. For repeated components, pick by path
-(`leaves(tree, paths=True)`) or use an occurrence path with `cad <type> inspect`
+(`leaves(tree, paths=True)`) or use an occurrence path with `cad +0.11.11 <type> inspect`
 ([references](#references)).
 
 ```python
@@ -110,7 +110,7 @@ def arm():
   changed) and returns its document, whose `.shape` keeps each assembly's placement.
   Walk it by labels and select within a part with build123d
   (`faces()`, `edges()`, `sort_by`, `filter_by`).
-- A ref a person gave names one element exactly: `cad <type> inspect` answers it
+- A ref a person gave names one element exactly: `cad +0.11.11 <type> inspect` answers it
   ([below](#which-code-made-it)), and its facts (centroid, box, surface) tell which
   face of the part it is.
 - `bounding_box()` is the axis-aligned envelope in the shape's current frame. It is
@@ -151,7 +151,7 @@ plate/face 3                            in a document of one part, its elements 
   hand/finger.1, hand/finger.2, hand/finger.3`), but for one that an assembly shares
   with a part inside it: `stem` is then the assembly, and the part is `stem/stem`.
 - **An element is named by its name or its number.** Numbers are the part's own
-  face, edge and vertex numbers, the ones the viewer and `cad <type> inspect` show; a
+  face, edge and vertex numbers, the ones the viewer and `cad +0.11.11 <type> inspect` show; a
   name survives edits that a number does not. A bare element after an owner belongs
   to that owner (`palm,f:palm.body.1`).
 - **`FILE` must be the document resolved in**: the same model's id, the same file, or
@@ -161,7 +161,7 @@ plate/face 3                            in a document of one part, its elements 
   resolves where it is; one it deleted fails, naming it; one whose making changed
   fails too, listing what its atom is named now (`plate.body.6 is now
   f:plate.body.6`), never guessing.
-- **The canonical ref**, what `cad <type> inspect` answers, spells an element by its name under its part's label where that label
+- **The canonical ref**, what `cad +0.11.11 <type> inspect` answers, spells an element by its name under its part's label where that label
   names one occurrence, else under the occurrence's path from the root.
 
 ### Element names
@@ -196,13 +196,13 @@ renames nothing.
 
 ### A picked element in a model's body
 
-A ref resolves in the server (`cad <type> inspect`, the viewer), never in a model: a
+A ref resolves in the server (`cad +0.11.11 <type> inspect`, the viewer), never in a model: a
 body selects from the live shape it is building with build123d, by what the element
 is. To change what a person picked, read the ref's answer and either edit the code
 its `made_by` names or pick the same element in the body:
 
 ```bash
-cad model inspect "$ID" "plate/f:plate.body.6;M:plate.relief"   # centroid (0, 0, 6), a plane
+cad +0.11.11 model inspect "$ID" "plate/f:plate.body.6;M:plate.relief"   # centroid (0, 0, 6), a plane
 ```
 
 ```python
@@ -221,7 +221,7 @@ def bracket():
 
 ## Which code made it
 
-`cad model inspect ID REF` (`cad xbf inspect FILE REF` of a saved `.xbf`) answers what a ref names, placed where its occurrence stands:
+`cad +0.11.11 model inspect ID REF` (`cad +0.11.11 xbf inspect FILE REF` of a saved `.xbf`) answers what a ref names, placed where its occurrence stands:
 
 - an element: its kind, number, name and canonical ref; the kernel's facts (a face's
   area, centroid, surface type, exact box, radius; an edge's length, curve type, class
@@ -231,7 +231,7 @@ def bracket():
   with the parts that have no material listed under `unweighed`.
 
 ```text
-$ cad model inspect "$ID" "bracket/face 7"
+$ cad +0.11.11 model inspect "$ID" "bracket/face 7"
 {
   "ref": "bracket/f:bracket_body.hole.1;M:bracket_body.body_dedanl",
   "path": "bracket/bracket",
@@ -255,12 +255,12 @@ the xbf a model declares among them -- answers none: a file names no model. A re
 several selectors answers a list; one
 that names nothing is refused (exit 2).
 
-Without a REF, `cad model inspect ID` prints what the document holds, one screen, then what
+Without a REF, `cad +0.11.11 model inspect ID` prints what the document holds, one screen, then what
 it was built from. Read it for the names a ref, a pose or a snapshot takes, rather than
 guessing them:
 
 ```text
-$ cad model inspect "$ID"
+$ cad +0.11.11 model inspect "$ID"
 hinge  fb5d7d22-372e-5e1e-a44b-a2aebf954533
 state       live, cached, built 12s ago
 parts       2 in hinge
@@ -325,7 +325,7 @@ contact and containment all give 0, so it does not measure penetration.
 oriented solids, 0 for mere contact; pair bodies with a group's `solids()`, the
 group found in the model's tree by its label. Kernel failures raise.
 
-`cad model interference` is this measure of every pair of a document, posed too
+`cad +0.11.11 model interference` is this measure of every pair of a document, posed too
 ([interference](#interference)). Two solids at `overlap_volume` 0 at most touch. A pair meant to overlap (a
 press-fit pin, a bearing in its bore) is named as such, not inferred from where it
 sits in the tree. A part meant to sit on, bolt to or bear against another measures
@@ -363,20 +363,20 @@ usually a sliver a boolean left.
 
 ## Interference
 
-`cad model interference "$ID"` (`cad xbf interference FILE`, `cad step interference FILE`) says which
+`cad +0.11.11 model interference "$ID"` (`cad +0.11.11 xbf interference FILE`, `cad +0.11.11 step interference FILE`) says which
 parts of a document share volume. The verdict is the kernel's, exact, on the parts' own solids, so a
 plate through a 2.6 mm skin is found and a part 0.3 mm from another is not. A mesh only rules out the
 pairs with air between them, which need no kernel:
 
 ```bash
-cad model interference "$ID"                                  # as built
-cad model interference "$ID" --pose crouch --pose bow       # and at mechanism states
-cad model interference "$ID" --pose walk@0 --pose walk@0.6 --pose '{"l_knee": 90}'   # a sequence at times of it, joint values
-cad model interference "$ID" --fit 'bearing*' housing --fit pin base   # pairs meant to share volume
+cad +0.11.11 model interference "$ID"                                  # as built
+cad +0.11.11 model interference "$ID" --pose crouch --pose bow       # and at mechanism states
+cad +0.11.11 model interference "$ID" --pose walk@0 --pose walk@0.6 --pose '{"l_knee": 90}'   # a sequence at times of it, joint values
+cad +0.11.11 model interference "$ID" --fit 'bearing*' housing --fit pin base   # pairs meant to share volume
 ```
 
 ```text
-$ cad model interference "$ID" --pose down
+$ cad +0.11.11 model interference "$ID" --pose down
 error: overlapping_parts, 2 place(s). Hint: move or resize one of the two, or name the pair a fit if it is meant to share volume (--fit A B)
   arm/bar: shares 739 mm^3 with arm/stop (down)
   arm/base: shares 125.7 mm^3 with arm/pin (as built, down)
@@ -400,7 +400,7 @@ FAILED arm: 2 pairs of parts share volume (5 parts at 2 poses, the boxes of 6 pa
 - **It checks the poses it is given, and chooses none.** `--pose` repeats, and takes what a snapshot's
   does: a mechanism state's name, a configuration sequence at a time of it (`walk@0.6`), or
   `{joint or coupling: value}`. Which states, and which times of a sequence, is yours to say:
-  `cad model inspect "$ID"` lists the states and the sequences with their durations. What a pose does
+  `cad +0.11.11 model inspect "$ID"` lists the states and the sequences with their durations. What a pose does
   not move is not measured again, so a long sequence costs its moving pairs alone.
 - **A fit is named, never inferred.** `--fit A B` takes two refs or globs; the pair's overlap is
   listed as a fit and is no overlap to fix. A shared volume of 0.001 mm^3 or less is the rounding
@@ -417,7 +417,7 @@ FAILED arm: 2 pairs of parts share volume (5 parts at 2 poses, the boxes of 6 pa
 
 A part given a native material (`from bd_materials import metals`; `part.material = metals.aluminum()`,
 [materials](build123d-modeling.md#colour-and-materials)) is weighed by
-`cad model inspect "$ID" OWNER`. A script that needs every part's density (a link's mass summed
+`cad +0.11.11 model inspect "$ID" OWNER`. A script that needs every part's density (a link's mass summed
 from its parts, a simulator's description) asks the server, which transfers no solid:
 
 ```python

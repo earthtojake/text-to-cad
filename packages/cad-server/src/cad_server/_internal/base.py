@@ -12,13 +12,15 @@ exists (``Making.made``), never before.
 - **What it is**: ``cad[build123d]`` at the installation's own release -- or the source tree, or the
   wheel, the installation was made from (``Installation.requirement``) -- on the installation's own
   Python (the line ``cad_server._internal.launch.PYTHON`` names, for one uvx made), so the engine and the
-  base are one Python. uv makes it at ``base/<key>`` in the cache folder, its files hard links into
+  base are one Python. uv makes it at ``base/<key>`` in the version's code (``folder``: in 0.11.10 and earlier, and
+  for a
+  process with no version, in the cache folder), its files hard links into
   uv's cache (``LINK``). An installation whose own environment carries the kernel (installed with the
   extra: ``pip install 'cad[build123d]==<release>'``, a checkout's development environment) is its own base, and
   none is made.
-- **The key** digests the installation (its environment, the version it runs as, its release and
-  where its cadgen installs from), its Python and the architecture: an upgrade makes a base of its
-  own, from uv's cache, and nothing is made twice.
+- **The key** digests the installation (the version it runs as, its release, where its cadgen installs
+  from, and with no version its environment), its Python and the architecture: an upgrade makes a base of
+  its own, from uv's cache, and nothing is made twice.
 - **The marker**, ``cad-env.json``, written last, makes it complete: a later use reads the marker
   and resolves nothing. It names the installation the base belongs to (``home``), so a process
   running there reaches that installation's engine and starts it with that installation's Python, and
@@ -26,8 +28,10 @@ exists (``Making.made``), never before.
 - **One maker**: a lock beside it, so a process that finds another making it waits for it.
 - **The network** waits on nothing it need not: uv is asked ``--offline`` first, from its cache, and
   online only for what the cache does not hold, said in a line before it starts.
-- **Made on first need**, never ahead of it: nothing makes it at install time or at the engine's
-  start. The one exception is an automatic update's first half (``cli.setup``'s ``PREPARE_ENV``): the
+- **Made on first need** for a process with no version, never ahead of it: nothing makes it at the
+  engine's start. Two exceptions: a version of the per-version layout has its base made as it is installed
+  (``cad_server._internal.versions.make_present``), so a version that is present has nothing left to make --
+  a sandboxed command of it cannot write its code folder --; and an automatic update's first half (``cli.setup``'s ``PREPARE_ENV``): the
   release the engine will switch to by itself makes its base before the switch, so that the person's first
   build after it, which they never asked to wait for an update, waits on nothing. The first ``cad run`` that needs it, or the first of the engine's kernel processes -- a build's
   worker, a view or an operation that reads a STEP or an xbf or meshes one -- makes it (``kernel``,
@@ -62,7 +66,7 @@ from cad.engine import places
 
 __all__ = ["BASE", "EXTRA", "FIND_LINKS_ENV", "MAKING", "PASSING", "RETRY", "RETRY_SECONDS", "Environment",
            "Installation", "MARKER", "Making", "Recipe", "Refused", "Remembered", "SCHEMA", "complete", "ensure",
-           "failure", "find_uv", "halt", "interpreter", "kernel", "make", "marked", "where"]
+           "failure", "find_uv", "folder", "halt", "interpreter", "kernel", "make", "marked", "where"]
 
 # The bases' folder in the cache folder, and the marker that makes one complete, written last: the one a
 # process in the base reads its installation from (``places.home``).
@@ -188,7 +192,7 @@ def _own() -> Installation:
 
 
 def server_source() -> str | None:
-    """Where this installation's server installs from again (``releases.make``): its source tree, the wheel
+    """Where this installation's server installs from again (``versions.make_present``): its source tree, the wheel
     it was installed from, or None, its release on the index (``_source``)."""
     import cad_server
 
@@ -258,18 +262,28 @@ def interpreter(env: Path) -> Path:
 
 
 def _inputs(installation: Installation) -> dict[str, Any]:
-    """What makes the base, which its key digests and its marker holds."""
-    return {"schema": SCHEMA, "installation": installation.name, "release": installation.release,
-            "prefix": os.path.normcase(os.path.realpath(installation.prefix)), "source": installation.source,
-            "python": installation.python, "arch": installation.arch}
+    """What makes the base, which its key digests and its marker holds. A version's environments are its
+    alone, in its own code (``folder``), so its installation's environment (``prefix``) is no input; in 0.11.10 and
+    earlier every installation's were in one cache folder, told apart by it."""
+    found = {"schema": SCHEMA, "installation": installation.name, "release": installation.release,
+             "source": installation.source, "python": installation.python, "arch": installation.arch}
+    if places.versioned() is None:
+        found["prefix"] = os.path.normcase(os.path.realpath(installation.prefix))
+    return found
+
+
+def folder() -> Path:
+    """The folder the base and ``cad run``'s environments (``cad_server._internal.extras``) are made in, each
+    ``<key>`` in it: ``base`` in this process's version's code (``places.code_dir``), which goes with the
+    version; with no version, ``base`` in the cache folder of 0.11.10 and earlier (``places.legacy_cache_dir``)."""
+    mine = places.versioned()
+    return (places.code_dir(mine) if mine is not None else places.legacy_cache_dir()) / BASE
 
 
 def where(installation: Installation | None = None) -> Path:
-    """The folder of the installation's base, made or not: ``base/<key>`` in the cache folder."""
-    from cad.engine.places import cache_dir
-
+    """The folder of the installation's base, made or not: ``<key>`` in the environments' ``folder``."""
     found = installation or Installation.here()
-    return cache_dir() / BASE / hashlib.sha256(json.dumps(_inputs(found), sort_keys=True).encode("utf-8")).hexdigest()[:16]
+    return folder() / hashlib.sha256(json.dumps(_inputs(found), sort_keys=True).encode("utf-8")).hexdigest()[:16]
 
 
 def complete(env: Path) -> dict[str, Any] | None:
@@ -606,12 +620,15 @@ def _say(line: str) -> None:
     print(f"cad: {line}", file=sys.stderr, flush=True)
 
 
-def _make(env: Path, installation: Installation, told: Callable[[str], None]) -> dict[str, Any]:
+def _make(env: Path, installation: Installation, told: Callable[[str], None],
+          inputs: dict[str, Any] | None = None) -> dict[str, Any]:
     """The base at ``env`` made (``make``): the import path its Python starts with asked of it, and its
-    marker, naming the installation it belongs to, written last."""
+    marker, naming the installation it belongs to, written last. ``inputs``: what its key digests, as the
+    installation's own process works it out (``cad_server._internal.versions`` makes a version's base from
+    another process); by default this process's (``_inputs``)."""
 
     def finish(steps: list[list[str]], seconds: float) -> dict[str, Any]:
-        return {"schema": SCHEMA, "key": env.name, "inputs": _inputs(installation),
+        return {"schema": SCHEMA, "key": env.name, "inputs": inputs if inputs is not None else _inputs(installation),
                 "installation": dataclasses.asdict(installation), "path": _path(env), "commands": steps,
                 "seconds": round(seconds, 2), "made": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
 

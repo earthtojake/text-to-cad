@@ -12,12 +12,20 @@ export interface UpdateNotice {
 
 /** Where an update a click started is (`cad_server/_internal/update.py`): its last progress frame among the rest. */
 export interface UpdateState {
-  state: "idle" | "working" | "restarting" | "failed";
+  /**
+   * `moved`: the update is done, and this page's server stays (another channel is on its version, or work is in
+   * flight there): the new release serves elsewhere, at `address`, which a page carrying `link` opens.
+   */
+  state: "idle" | "working" | "restarting" | "moved" | "failed";
   target?: string | null;
   /** The update's progress frame (`cad/engine/progress.py`, kind `update`): its stage, counted of the four. */
   progress?: { stage?: string; done?: number; total?: number | null } | null;
   /** Why it failed, in one line. */
   error?: string | null;
+  /** `moved`: where the new release's server serves pages (`http://127.0.0.1:<port>`), null where it did not answer. */
+  address?: string | null;
+  /** `moved`: a link for that server, which a page going there carries. */
+  link?: string | null;
 }
 
 /** `GET /api/v1/server` (and `POST /api/v1/local/update`, which answers the same of it): the notice, the engine's release and this start of it, the update's state. */
@@ -56,15 +64,20 @@ const STAGES = 4;
  * it reads where the update ended once, and says a switch that failed and went back -- or, the engine
  * running the release it moved to, that it is updated, once, as the same toast (or to `onUpdated`);
  * `restartForSkills`, said by a host app that reads a release's skills only in a new session of its own,
- * suggests restarting it. A host that keeps
+ * suggests restarting it. An update the page followed that ends with its server staying (`moved`: another channel is
+ * on its version, or work is in flight there) is handed to `onMoved`, once -- the host's to follow, which returns
+ * `true` once it has: the web page goes to the new server's address, a CAD card says to start a new thread --, else
+ * it is said as the same toast; the button is gone (this server is no longer the one that updates). A host that keeps
  * its page through the restart (a CAD card) reads the engine itself meanwhile and hands each answer of
  * its own release to `settle`: one that says the switch failed and went back ends the restart the same
- * way. A read that fails changes nothing; one while the engine restarts is the restart.
+ * way, and so does one that says the update ended with this server staying (`moved`). A read that fails changes
+ * nothing; one while the engine restarts is the restart.
  */
 export function useUpdate({ read, start }: { read: UpdateCall; start: UpdateCall },
   initial: UpdateNotice | null,
-  { onFailed, onUpdated, followed = false, restartForSkills = false }: { onFailed?: (error: string) => void;
-    onUpdated?: (version: string) => void; followed?: boolean; restartForSkills?: boolean } = {}) {
+  { onFailed, onUpdated, onMoved, followed = false, restartForSkills = false }: { onFailed?: (error: string) => void;
+    onUpdated?: (version: string) => void; onMoved?: (update: UpdateState) => boolean | void; followed?: boolean;
+    restartForSkills?: boolean } = {}) {
   const [notice, setNotice] = useState<UpdateNotice | null>(initial);
   const [phase, setPhase] = useState<UpdatePhase>({ phase: "idle" });
   const polling = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -78,6 +91,11 @@ export function useUpdate({ read, start }: { read: UpdateCall; start: UpdateCall
   updated.current = onUpdated ?? (restartForSkills
     ? (version => { toast.success(t("update.updatedRestart", { version })); })
     : (version => { toast.success(t("update.updated", { version })); }));
+  const moved = useRef(onMoved);
+  moved.current = onMoved;
+  // An update that ended with this server staying, which the host did not follow: said done, as the same toast.
+  const done = useRef<(update: UpdateState) => void>(() => {});
+  done.current = update => { toast.success(t("update.updated", { version: update.target ?? "" })); };
 
   const stopPolling = () => {
     if (polling.current !== null) clearTimeout(polling.current);
@@ -96,6 +114,14 @@ export function useUpdate({ read, start }: { read: UpdateCall; start: UpdateCall
     if (update?.state === "restarting") {
       setPhase({ phase: "restarting" });
       return "restarting";
+    }
+    if (update?.state === "moved" && following.current) {
+      // Done, and this server stays: the host follows it to the new one (or says so), once; no spinner waits on it.
+      following.current = false;
+      setNotice(null);
+      setPhase({ phase: "idle" });
+      if (moved.current?.(update) !== true) done.current(update);
+      return "idle";
     }
     if (update?.state === "failed" && following.current) failed.current?.(update.error || "");
     following.current = false;
@@ -122,22 +148,27 @@ export function useUpdate({ read, start }: { read: UpdateCall; start: UpdateCall
     }, () => {});
   }, [read, apply, follow]);
   // Where the update this page followed before its reload ended: read once, as the page loads. An engine
-  // whose update neither runs nor failed runs the release the update moved to: said once.
+  // whose update neither runs nor failed nor ended elsewhere (`moved`: `apply` hands that to the host, once, and this
+  // engine still runs the release before) runs the release the update moved to: said once.
   const resumed = useRef(followed);
   useEffect(() => {
     if (!resumed.current) return;
     resumed.current = false;
     following.current = true;
     void read().then(reply => {
+      const state = reply.update?.state;
       const phase = apply(reply);
       if (phase === "working" && polling.current === null) follow();
-      else if (phase === "idle" && reply.update?.state !== "failed" && reply.release && alive.current) updated.current?.(reply.release);
+      else if (phase === "idle" && state !== "failed" && state !== "moved" && reply.release && alive.current) {
+        updated.current?.(reply.release);
+      }
     }, () => {});
   }, [read, apply, follow]);
   // An answer the host read itself while the engine restarted: a switch that failed and went back ends the
-  // restart (said once, the button offered again); any other is the restart still going.
+  // restart (said once, the button offered again), and so does an update that ended with this server staying
+  // (`onMoved`); any other is the restart still going.
   const settle = useCallback((reply: UpdateReply) => {
-    if (reply.update?.state === "failed") apply(reply);
+    if (reply.update?.state === "failed" || reply.update?.state === "moved") apply(reply);
   }, [apply]);
   useEffect(() => {
     alive.current = true;

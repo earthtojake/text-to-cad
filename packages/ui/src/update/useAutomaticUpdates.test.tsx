@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest';
 import { useAutomaticUpdates, type AutomaticUpdates } from './index.js';
 
-function Menu({ call }: { call: (automatic?: boolean) => Promise<AutomaticUpdates> }) {
+function Menu({ call }: { call: (automatic?: boolean) => Promise<AutomaticUpdates | null> }) {
   const { appSettings } = useAutomaticUpdates(call);
   return <ul>{appSettings?.map(setting => <li key={setting.id}>
     <label><input type="checkbox" checked={setting.checked} disabled={setting.disabled}
@@ -29,4 +29,12 @@ it('one the environment turned off is shown fixed', async () => {
   render(<Menu call={async () => ({ automatic: false, reason: 'environment' })} />);
   const box = await screen.findByRole('checkbox', { name: 'Automatic updates (off in your environment)' });
   expect((box as HTMLInputElement).disabled).toBe(true);
+});
+
+it('a server with no updater answers null, and there is no switch', async () => {
+  const call = vi.fn(async (): Promise<AutomaticUpdates | null> => null);
+  render(<Menu call={call} />);
+  await act(async () => { await Promise.resolve(); });
+  expect(call).toHaveBeenCalled();
+  expect(screen.queryByRole('checkbox')).toBeNull();
 });

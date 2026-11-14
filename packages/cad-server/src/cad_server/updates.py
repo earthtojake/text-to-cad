@@ -6,7 +6,7 @@ At most once an hour, the server reads the version feed (``GET /v1/versions``, `
 
 It is one anonymous request: no id, no path, nothing about the person or their machine beyond what
 any web request carries. ``CAD_UPDATE_CHECK=0`` turns it off, and it never runs in CI (``CI``
-set) or for a copy that is not told. The feed as last read is kept in the state directory
+set) or for a copy that is not told. The feed as last read is kept in the data folder
 (``versions.json``), where every process of the person's reads it. It says a release is out; the
 update moves to it when the person asks -- the update button in the CAD Viewer and the CAD app
 (``cad_server._internal.update``), ``cad update``, or the install command run again -- or, with
@@ -16,13 +16,13 @@ A release is also known with no network at all: an agent app whose plugin moved 
 release's CAD server, which says its release as it connects (``see``), and that proves the release
 exists. The newer of the two is offered.
 
-Only a copy nothing else updates is told of the feed's release (``told``: ``cad_server/_internal/channel.py``):
-a plugin the person installed and updates by hand, and a process no plugin started, such as the CAD
-Viewer of a skills-only install. A plugin that something else keeps up to date -- a store, once a
-release passes its review -- says so in its startup config (``CAD_AUTO_UPDATED=1``) and is never
-told of it; nor is a development install. A newer server's release is offered to every copy but a
-development install: the store moved the plugin, and the device's engine is still behind it. An
-update a person asks for reads the feed whatever the copy (``checking(asked=True)``).
+Only a process with an updater is told of a release (``told``: ``cad_server/_internal/channel.py``): the
+default channel's version, on a device where the install command has run (its receipt), never a development
+build. A named channel's copy is updated by whoever delivers it, and a device with no receipt has no install to
+update: neither reads the feed, and neither shows a notice, an update button or the automatic-updates switch --
+not even for a newer release an agent app's server proved (``see``). An update a person asks for reads the feed
+whatever the copy (``checking(asked=True)``); the updater itself says when there is nothing it may update
+(``cad_server._internal.update``).
 
 The notice is ``{latest, version}``: the CAD Viewer's and the CAD app's update button, an icon and
 nothing else, while this install is behind; a click updates (``POST /api/v1/local/update``). A text-only app
@@ -56,7 +56,7 @@ LOG = logging.getLogger("cad_server.updates")
 
 INSTALL = "curl -fsSL https://texttocad.dev/install.sh | sh"  # installs or updates text-to-cad: macOS and Linux
 INSTALL_WINDOWS = "irm https://www.texttocad.dev/install.ps1 | iex"  # the same, in Windows PowerShell
-FILE = "versions.json"  # the feed as last read, in the state directory
+FILE = "versions.json"  # the feed as last read, in the data folder
 CHECK_SECONDS = 60 * 60  # how old the feed may get before it is read again
 TIMEOUT_SECONDS = 5
 MAX_BYTES = 64 * 1024  # a feed is a few dozen bytes
@@ -96,9 +96,10 @@ def checking(*, asked: bool = False) -> bool:
 
 
 def _cache() -> Path:
-    from cad.engine.places import state_dir
+    """The feed's cache, in this process's data folder (``places.data_dir``)."""
+    from cad.engine.places import data_dir
 
-    return state_dir() / FILE
+    return data_dir() / FILE
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -229,13 +230,12 @@ def offer(found: dict[str, Any] | None, version: str, told: bool) -> str | None:
 
 def notice(*, path: Path | None = None) -> dict[str, str] | None:
     """``{latest, version}``: the newer release the update button offers, from the feed as last read
-    (never read here: ``refresh``) where this copy is told, and the releases agent apps' servers run
-    (``see``) for any copy but a development install; or ``None`` when there is none."""
+    (never read here: ``refresh``) and the releases agent apps' servers run (``see``), where this process has an
+    updater (``told``); or ``None`` when there is none, or no updater."""
     try:
         from cad_server import __version__
-        from cad_server._internal.channel import DEV, channel
 
-        if channel() == DEV:
+        if not told():
             return None
         with _seen_lock:
             candidates: list[Any] = [*_seen]

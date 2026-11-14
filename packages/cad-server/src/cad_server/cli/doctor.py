@@ -11,15 +11,31 @@ the proxy's place that is not text-to-cad's, another command shadowing it on PAT
 releases left behind that none running now needs (``cad_server._internal.leftovers``: engine records of an older
 format, the bytecode of installations no longer registered, cache folders no record names, environments
 of models' packages unused for a week), and
-cadgen 0.7's store and state files, with their size and when they were last written. ``--prune``
-removes those records, the release folders but the current release's and the one before's (one an update
-failed to move to among them: ``releases.kept``), the launchers earlier releases published beside the proxy (0.8's ``cadgen``
+cadgen 0.7's store and state files, with their size and when they were last written. ``--prune``, a person's
+command and never run by itself, reads its plan once (``versions.prune_plan``), shows it, asks, and does exactly that
+(``versions.prune``): every named channel unused for 30 days forgotten (``pointers.unused``: never the default
+channel; its version's data goes to the default channel's version), every version no pointer names removed -- its data
+carried into its successor first, never one with work in flight -- with those installed and never used and those
+whose install is incomplete, and the layout of 0.11.10 and earlier once that is safe, each thing it did said; and
+those records, the
+launchers earlier releases published beside the proxy (0.8's ``cadgen``
 proxy, ``cadgen-<version>``, ``cadgen-python-<version>``: ``installations.prune_legacy``) and those leftovers, but
 any written in the last seven days, a line for each kind; ``--all-versions`` with it removes 0.7's
 however recently written. Nothing is removed without ``--prune``.
 
-It says what the device runs, comparing nothing: the current installation, the release folders on
-disk (``cad_server._internal.releases``), the last update's switch, the engine running and its release,
+It is the one command that reads every version and channel on the device (``_versions``): each installed version
+(``versions/<version>``: where it is, whether it is completely installed, which channels are on it, whether its
+server runs and on which port, and what becomes of one no pointer names), each channel with its version and when it
+was last used, each pointer that cannot be read, and what is left of the layout of 0.11.10 and earlier and whether it
+can go yet. Without ``--check`` it writes again each pointer that names no version (a crash emptied it, or a release
+wrote it in a form this one does not know), naming the newest version present that a channel has been on
+(``versions.mend``): no pinned command runs while one cannot be read, and only it, ``cad setup`` and the updater write
+one again. The ``cad`` command runs ``cad doctor`` with no pin even while the default pointer cannot be read, as the
+newest version that has started, so it can.
+Everything else it does acts on the one version it runs as (the pinned one, or the default with no pin).
+
+It says what the device runs, comparing nothing: the current installation, the flat release folders of
+0.11.10 and earlier on disk (``cad_server._internal.releases``), the engine running and its release,
 the plugin folder every app's plugin comes from (``cad_server._internal.plugin``) and each agent app's
 copy of the plugin: the release it pins and where it comes from -- the folder read in place, linked, or
 copied, and when (``cad_server._internal.providers``) --, and the agents the Skills CLI copied the
@@ -27,8 +43,9 @@ skills for. Registering the current installation writes the plugin folder again,
 that is gone.
 
 It says whether the CAD kernel environment, the base the engine's own kernel processes start from
-(``cad_server._internal.base``: ``cad[build123d]`` at this release), is made -- it never makes it: it is
-made on first need, by the first build or view that needs the kernel; an installation that carries the
+(``cad_server._internal.base``: ``cad[build123d]`` at this release), is made -- it never makes it: a version
+installed in its own folder made it as it was installed (``versions.make_present``), and an installation with no
+version makes it on first need, by the first build or view that needs the kernel; an installation that carries the
 kernel itself is its own -- and, where it is, proves the CAD kernel loads there. ``OCP`` is imported in a fresh
 interpreter of that environment (never in this one, so the report itself stays stdlib-only and
 fast to reach), and a refused load is named for what it is: on Windows 11 that is Smart App
@@ -104,9 +121,9 @@ def _server(start: bool = True, answered: list | None = None) -> tuple[str, str]
 
 
 def _current() -> list[str]:
-    """What the device runs, comparing nothing: the current installation, the release folders on disk
-    and the last update's switch (``cad_server._internal.switch``)."""
-    from cad_server._internal import installations, releases, switch
+    """What the device runs, comparing nothing: the current installation and the flat release folders of 0.11.10
+    and earlier on disk, which go with that layout (``cad_server._internal.legacy``)."""
+    from cad_server._internal import installations, releases
 
     lines = []
     try:
@@ -121,22 +138,127 @@ def _current() -> list[str]:
         found = releases.listing()
         if found:
             current = (record or {}).get("version") or named
-            kept = releases.kept(current) if current else {release["version"] for release in found}
             said = ", ".join(release["version"] + ("" if release["complete"] else " (incomplete)")
-                             + (" (current)" if release["version"] == current else
-                                " (the release before)" if release["version"] in kept else
-                                " (cad doctor --prune removes it)")
+                             + (" (current)" if release["version"] == current else "")
                              for release in found)
-            lines.append(f"releases {said} in {_home(str(releases.root()))}")
-        last = switch.last()
-        if last is not None:
-            how = (f"to cad-server {last.get('to')}" + (f" from {last.get('from')}" if last.get("from") else "")
-                   + (f", {last['gapMs']} ms without an engine" if last.get("gapMs") is not None else ""))
-            lines.append(f"update   {last.get('at')}: switched {how}" if last.get("ok")
-                         else f"update   {last.get('at')}: the switch {how} failed: {last.get('error')}")
+            lines.append(f"releases {said} in {_home(str(releases.root()))}: of 0.11.10 or earlier, removed once "
+                         "nothing runs from them")
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         lines.append(f"current  unknown ({type(error).__name__}: {error})")
     return lines
+
+
+def _when(stamp: float | None) -> str:
+    """A time as a person reads it in a report, ``2026-11-13 09:41``, or ``unknown``."""
+    import time
+
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(stamp)) if stamp is not None else "unknown"
+
+
+def _versions() -> list[str]:
+    """Every installed version and every channel on the device -- the one report that reads them all; everything
+    else ``cad doctor`` does acts on the version it runs as. A line for each version (``versions/<version>``): where
+    it is, whether it is completely installed, which channels are on it, whether its server runs and on which port,
+    and, where no pointer names it, what becomes of it (``versions.fate``): removed by the next sweep, its data
+    carried into its successor; installed and never used, or incomplete, which ``--prune`` removes; or its data kept
+    because where it would go is unknown, and why. A line for each channel: its version and when it was last used
+    (``pointers.last_used``), and for a named one unused for ``FORGOTTEN_DAYS`` that ``--prune`` forgets it; a line for
+    each pointer that cannot be read (``pointers.Unreadable``: no version is removed while one cannot). Then what is
+    left of the layout of 0.11.10 and earlier, and whether it can go yet (``legacy.unsafe``). Read alone: nothing is
+    started, stopped, made or written (``versions.serves`` asks a door, and takes no lock)."""
+    import time
+
+    from cad.engine import places
+    from cad_server._internal import legacy, pointers, versions
+
+    lines: list[str] = []
+    try:
+        surveyed = pointers.survey()
+        listed = [found for found in surveyed if isinstance(found, pointers.Pointer)]
+        unreadable = [found for found in surveyed if isinstance(found, pointers.Unreadable)]
+        for found in unreadable:
+            repair = "; cad doctor writes it again" if found.corrupt else ""
+            lines.append(f"pointer  {found}: no version is removed, and no command pinned to its channel runs, until it "
+                         f"can be read{repair}")
+        try:
+            kept = versions._kept()
+            default = pointers.default()
+        except pointers.Unreadable as mirror:
+            if not any(str(found.path) == str(mirror.path) for found in unreadable):  # the mirror, which survey reads not
+                lines.append(f"pointer  {mirror}: no version is removed until it can be read")
+                unreadable.append(mirror)
+            kept, default = {found.version for found in listed}, pointers.Default(None, None)
+        for name in versions.folders():
+            on = [pointer.channel or "default" for pointer in listed if pointer.version == name]
+            if not on and default.version == name:
+                on = ["default (no pointer: the version a command with no pin runs)"]
+            present = places.version_record(name) is not None
+            words = [f"text-to-cad {name} at {_home(str(places.version_dir(name)))}"
+                     + ("" if present else ", not completely installed")]
+            words.append(f"channels {', '.join(on)}" if on else "no channel is on it")
+            if versions.serves(name):
+                port = versions.serving(name)
+                words.append("its server runs" + (f", pages on port {port}" if port else ""))
+            else:
+                words.append("its server is not running")
+            if name not in kept and not unreadable:
+                words += _fate_words(name, kept)
+            lines.append("version  " + "; ".join(words))
+        if not versions.folders():
+            lines.append("version  none installed in their own folders")
+        now = time.time()
+        stale = {pointer.channel for pointer in listed if pointer.channel is not None
+                 and (pointers.last_used(pointer) or now) <= now - pointers.FORGOTTEN_DAYS * 86400}
+        for pointer in listed:
+            when = pointers.last_used(pointer)
+            line = (f"channel  {pointer.channel or 'default'}: text-to-cad {pointer.version}, last used {_when(when)}")
+            if pointer.channel in stale:
+                line += f"; unused for {pointers.FORGOTTEN_DAYS} days: cad doctor --prune forgets it"
+            lines.append(line)
+        if legacy.removable():
+            if default.version is None or default.source != "pointer":
+                why = "the default channel has not moved off it yet"
+            else:
+                why = legacy.unsafe(default.version, read_only=True)
+            lines.append("legacy   the layout of 0.11.10 and earlier is here: "
+                         + (f"kept, {why}" if why else "safe to remove: the next sweep, or cad doctor --prune, removes it"))
+    except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
+        lines.append(f"version  unknown ({type(error).__name__}: {error})")
+    return lines
+
+
+def _fate_words(name: str, kept: set[str]) -> list[str]:
+    """What becomes of version ``name``, which no pointer names, in the report's words: what the device does with it
+    (``versions.fate``'s states), whichever version's process removes it -- its heir's, never this report's."""
+    import os
+
+    from cad.engine import places
+    from cad_server._internal import imports, versions
+
+    words = []
+    if versions._code_left(name):
+        words.append("cad uninstall could not remove its code then: the next sweep does")
+    if not versions.used(name):
+        words.append("installed and never a channel's: cad doctor --prune removes it"
+                     if places.version_record(name) is not None
+                     else "its install is incomplete: cad doctor --prune removes it")
+        return words
+    heir, why = versions.successor(name)
+    if heir is not None:
+        try:
+            imports._read_ledger(places.data_dir(heir))
+        except OSError as error:
+            words.append(f"its data is kept for now: text-to-cad {heir}'s record of what it took cannot be read "
+                         f"({error.strerror or error}), so nothing is carried into it")
+            return words
+        words.append(f"text-to-cad {heir} carries its data in and removes it (its server as it tends itself, or its "
+                     "next move)")
+    elif os.path.lexists(places.version_dir(name) / versions.UNINSTALLED):
+        words.append("cad uninstall removed it and kept its data (settings, Recents, documents' records) for a later "
+                     "install, which takes it; cad uninstall --purge removes it")
+    else:
+        words.append(f"its data is kept: {why}")
+    return words
 
 
 def _plugin() -> list[str]:
@@ -157,8 +279,10 @@ def _plugin() -> list[str]:
 def _apps() -> list[str]:
     """Each agent app's copy of the plugin, the release it pins and where it comes from -- the plugin folder
     read in place, linked or copied, and when -- as the app says it (``cad_server._internal.providers``),
-    comparing nothing; and, as the receipt says, the store's copies ``cad setup`` replaced with ours and
-    the agents the Skills CLI copied the skills for."""
+    comparing nothing; a store's copy the app's own files show, which stays, and beside ours how to keep one
+    (``providers.store_line``); Claude Desktop's server an earlier release wrote, which the next ``cad setup``
+    takes out; and, as the receipt says, the store's copies an earlier release's ``cad setup`` replaced with ours
+    and the agents the Skills CLI copied the skills for."""
     try:
         import json
 
@@ -174,27 +298,41 @@ def _apps() -> list[str]:
         if not app.present:
             continue
         ours, stores = app.ours(), app.stores()
+        if ours is not None and name == "claude-desktop":
+            lines.append(f"app      {app.label}: CAD's server text-to-cad {ours.version or '?'}, which an earlier "
+                         "release wrote; the next `cad setup` takes it out (Claude gets the skills alone)")
+            continue
         if ours is not None:
             origin = ours.origin(machine)
-            lines.append(f"app      {app.label}: " + (f"text-to-cad {ours.version or '?'}" if name == "claude-desktop"
-                                                     else ours.words(machine)) + (f", {origin}" if origin else ""))
-        elif stores:
-            lines.append(f"app      {app.label}: {stores[0].words(machine)}, which its store updates")
+            lines.append(f"app      {app.label}: {ours.words(machine)}" + (f", {origin}" if origin else ""))
+        lines += [f"app      {app.label}: {line}" for line in providers.beside(app, machine)]
     try:
         receipt = json.loads((Path(state_dir()) / "install-receipt.json").read_text(encoding="utf-8"))
         skills = receipt.get("skills") if isinstance(receipt, dict) else None
     except (OSError, ValueError):
         receipt, skills = None, None
-    for gone in providers.replaced(receipt if isinstance(receipt, dict) else None):
+    for gone in providers.replaced(receipt if isinstance(receipt, dict) else None, found):
         lines.append(f"app      {providers.label(gone['app'])}: {gone['store']}: the directory's copy, replaced by "
-                     "cad setup"
+                     "an earlier release's cad setup"
                      + (f" ({str(gone['at']).replace('T', ' ').rstrip('Z')[:16]})" if gone.get("at") else ""))
     for agent, got in (skills or {}).items() if isinstance(skills, dict) else ():
         if agent in providers.SKILLS_AGENTS and isinstance(got, dict):
             lost = providers.skills_lost(agent, got, machine)
             lines.append(f"app      {providers.label(agent)}: {providers.skills_words(agent, got, machine)}"
                          + (f"; {', '.join(lost)} not there now: run the install command again" if lost else ""))
+    behind = receipt.get("behind") if isinstance(receipt, dict) else None
+    for app, row in behind.items() if isinstance(behind, dict) else ():
+        if isinstance(row, dict):
+            when = str(row.get("at") or "").replace("T", " ").rstrip("Z")[:16]
+            lines.append(f"app      {providers.label(app)}: {BEHIND} text-to-cad {row.get('release') or '?'}: its setup "
+                         f"could not give it that release's text" + (f" ({when})" if when else "")
+                         + f": {row.get('why') or 'it failed'}; `cad update` gives it again (the default version's "
+                           "server tries again by itself once a day while idle)")
     return lines
+
+
+# How a line of ``_apps`` says an app is behind (the receipt's ``behind``): a warning in the report.
+BEHIND = "behind"
 
 
 def _command_path_hint(path: str) -> str:
@@ -387,10 +525,10 @@ def _cache() -> str:
     from cad_server.engine.cli import cache_text
     from cad.engine.ids import is_id
     from cad_server.engine.registry import DOCUMENTS, RECORD
-    from cad.engine.places import cache_dir, state_dir
+    from cad.engine.places import cache_dir, data_dir
 
     try:
-        root, state = cache_dir(), state_dir()
+        root, state = cache_dir(), data_dir()
         count = size = 0
         for name in sorted(os.listdir(root / DOCUMENTS)) if (root / DOCUMENTS).is_dir() else []:
             if not is_id(name) or not (state / DOCUMENTS / name / RECORD).is_file():
@@ -407,20 +545,22 @@ def _cache() -> str:
 
 def _leftovers(gone=frozenset()):
     """What earlier releases left behind that none running now needs (``cad_server._internal.leftovers``):
-    the state and cache folders, and each class found in them -- read as if the installations whose prefixes
+    the state and cache folders of the layout of 0.11.10 and earlier (``places``: a version's own go with it), and each
+    class found in them -- read as if the installations whose prefixes
     are ``gone`` were no longer registered (``--prune``'s plan, before it removes them). What 0.8 and 0.7 kept
     outside what 0.10 moved into its own state folder (``cad.engine.places.adopt``) is in theirs, named for
     cadgen (``earlier_state_dir``, ``earlier_cache_dir``: the folders named, where ``CAD_STATE_DIR`` and
     ``CAD_CACHE_DIR`` name them)."""
     from cad_server._internal import installations, leftovers
-    from cad.engine.places import (appdata_cache_dir, appdata_state_dir, cache_dir, earlier_cache_dir,
-                                   earlier_state_dir, engine_dir, state_dir)
+    from cad.engine.places import (appdata_cache_dir, appdata_state_dir, earlier_cache_dir, earlier_state_dir,
+                                   engines_dir, legacy_cache_dir, state_dir)
 
-    state, cache = state_dir(), cache_dir()
+    # The layout of 0.11.10 and earlier (``places``): its state and cache folders, and its flat engine folder.
+    state, cache = state_dir(), legacy_cache_dir()
     before, before_cache = earlier_state_dir(), earlier_cache_dir()
     prefixes = [record["prefix"] for record in installations.records() if record["prefix"] not in gone]
     return (state, cache, leftovers.engine_records(state),
-            leftovers.bytecode_folders(cache, prefixes, engine_dir()), leftovers.unrecorded(state, cache),
+            leftovers.bytecode_folders(cache, prefixes, engines_dir()), leftovers.unrecorded(state, cache),
             leftovers.earlier(before), leftovers.package_environments(cache), leftovers.seven(before, before_cache),
             leftovers.appdata(appdata_state_dir(), appdata_cache_dir()))
 
@@ -477,26 +617,30 @@ def _report_leftovers() -> list[str]:
     return lines
 
 
-def _prune_plan(all_versions: bool = False) -> list[str]:
+def _prune_plan(all_versions: bool = False, plan=None) -> list[str]:
     """What ``--prune`` removes, a line per kind with its count, read and nothing removed: what it asks
-    consent for (``cad_server._internal.consent``). The leftovers are read as they will be once the records
+    consent for (``cad_server._internal.consent``), and exactly what it then does. The channels and versions are
+    ``plan``'s (``versions.prune_plan``, read once). The leftovers are read as they will be once the records
     and release folders it removes first are gone (``_leftovers``' ``gone``): the bytecode of an installation
     it takes out is among them."""
-    from cad_server._internal import installations, leftovers, releases
+    from cad_server._internal import installations, leftovers, pointers
     from cad_server._internal.leftovers import count
 
     lines = []
+    if plan is not None:
+        for pointer in plan.channels:
+            lines.append(f"the {pointer.channel} channel (text-to-cad {pointer.version}), unused since "
+                         f"{_when(pointers.last_used(pointer))}")
+        for name, why in plan.versions.items():
+            lines.append(f"text-to-cad {name}: {why} (kept should it have work in flight)")
+        if plan.legacy:
+            lines.append("the code, records and caches of 0.11.10 and earlier, what they hold carried into the default "
+                         "channel's version first")
     records = installations.records()
     dangling = [record for record in records if not installations.alive(record)]
     if dangling:
         lines.append(f"{count(len(dangling), 'installation record', 'installation records')} whose interpreter is gone")
     folders: list[dict] = []
-    if installations.current_version():
-        kept = releases.kept()
-        folders = [found for found in releases.listing() if found["version"] not in kept]
-        if folders:
-            lines.append(f"{count(len(folders), 'release folder', 'release folders')} but the current release's and "
-                         f"the one before's: {', '.join(found['version'] for found in folders)}")
     legacy = installations.legacy_launchers()
     if legacy:
         lines.append(f"{count(len(legacy), 'launcher', 'launchers')} earlier releases published beside the cad command: "
@@ -567,8 +711,10 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
     parser.add_argument(
         "--prune",
         action="store_true",
-        help="Remove the record of every registered installation whose interpreter is gone, every release folder "
-             "but the current release's and the one before's, the per-version launchers earlier builds published "
+        help="Forget every named channel unused for 30 days; remove every installed version no channel is on (its "
+             "data carried into the version its channel moved to first), every one installed and never used, the "
+             "layout of 0.11.10 and earlier once nothing runs from it, the record of every registered installation "
+             "whose interpreter is gone, the per-version launchers earlier builds published "
              "beside the cad command, engine records of an older format, the bytecode folders of installations no "
              "longer registered, cache folders with no record, environments of models' packages and cadgen 0.7's "
              "store and state files (none written or used in the last 7 days), and exit: listed, with how many of "
@@ -636,7 +782,18 @@ def _prune(args, prog: str) -> int:
     from cad_server._internal.cli_errors import Failure, write
     from cad_server._internal.consent import confirm, retry
 
-    plan = _prune_plan(args.all_versions)
+    from cad_server._internal import pointers, versions
+
+    lines = _mend()
+    try:
+        pruning = versions.prune_plan()
+    except pointers.Unreadable as unreadable:
+        pruning = None
+        lines.append(f"no channel or version is pruned: {unreadable}")
+    except OSError as error:
+        pruning = None
+        lines.append(f"the versions could not be looked at: {error}")
+    plan = _prune_plan(args.all_versions, pruning)
     if plan:
         try:
             confirm(f"removing {len(plan)} kind{'' if len(plan) == 1 else 's'} of leftovers", "Remove them?",
@@ -647,17 +804,24 @@ def _prune(args, prog: str) -> int:
                              *(f"  {line}" for line in plan), "This cannot be undone."])
         except Failure as failure:
             return write(failure, prog=prog, as_json=bool(args.json))
-    lines = []
     removed = installations.prune()
     lines += [f"removed {path}" for path in removed]
     if not removed:
         lines.append("no registered installation has lost its interpreter")
-    # And the release folders but the current one's and the one before's (``releases.kept``): one an update
-    # failed to move to among them, its failure still recorded. None while no installation is current.
-    from cad_server._internal import releases
-
-    if installations.current_version():
-        lines += [f"removed {path}" for path in releases.collect(releases.kept())]
+    # The plan's channels forgotten, versions removed and the layout of 0.11.10 and earlier, exactly as it said them.
+    if pruning:
+        try:
+            said: list[str] = []
+            verdicts = versions.prune(pruning, told=said.append)
+            # What the prune said beside its verdicts; each version's own line is its verdict's.
+            lines += [line for line in said if not any(line.startswith(f"removed text-to-cad {name}") for name in verdicts)]
+            lines += [f"removed text-to-cad {name}" if verdict == "removed"
+                      else f"kept text-to-cad {name}: {VERDICTS.get(verdict, verdict)}"
+                      for name, verdict in verdicts.items() if verdict != "absent"]
+        except OSError as error:
+            lines.append(f"the versions could not be pruned: {error}")
+    for name, why in (pruning.kept.items() if pruning is not None else ()):
+        lines.append(f"kept text-to-cad {name}: no channel is on it, and {why}")
     # And the launchers earlier releases published beside the cad command: 0.8's proxy among them.
     lines += [f"removed {path}, a launcher the cad command replaces" for path in installations.prune_legacy()]
     # And what no cadgen needs any more: old engine records, bytecode, cache folders no record names.
@@ -667,6 +831,26 @@ def _prune(args, prog: str) -> int:
     else:
         sys.stdout.write("".join(f"{line}\n" for line in lines))
     return 0
+
+
+# Why ``versions.sweep`` kept a version it would remove (``versions.remove``'s verdicts), in a report's words.
+VERDICTS = {"named": "a channel is on it", "connected": "it has work in flight, or its server cannot say",
+            "in use": "a process still runs from it", "refused": "the system refused to move it (a file in use)",
+            "successor": "where its data would go is unknown", "carry": "what it holds could not all be carried over",
+            "heir": "the version its data goes to carries it in and removes it, by its server or its next move",
+            "uninstalled": "cad uninstall kept its data for a later install",
+            "used": "it has been a channel's", "unused": "installed and never a channel's",
+            "partial": "its install is incomplete"}
+
+
+def _mend() -> list[str]:
+    """Each pointer that names no version written again (``versions.mend``), in the report's words. Never raises."""
+    try:
+        from cad_server._internal import versions
+
+        return versions.mend()
+    except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
+        return [f"the pointers could not be looked at ({type(error).__name__}: {error})"]
 
 
 def _check(name: str, status: str, detail: str, more: list[str] | None = None) -> dict:
@@ -701,8 +885,14 @@ def _report(*, check: bool, start: bool) -> tuple[str, list[dict]]:
               _check("install", INFO, str(location))]
     # Its record and the command the skills run it by (`cad_server._internal.installations`).
     checks += [_line(line, status) for status, line in _setup(check)]
-    # What the device runs: the current installation, the release folders, the last switch.
+    # What the device runs: the current installation, and the flat release folders of 0.11.10 and earlier.
     checks += [_line(line) for line in _current()]
+    # A pointer that names no version written again (never with --check), naming no version older than the newest a
+    # channel has been on (``versions.mend``).
+    if not check:
+        checks += [_line(f"pointer  {line}") for line in _mend()]
+    # Every installed version and every channel: the one report that reads them all.
+    checks += [_line(line) for line in _versions()]
     # The engine's document cache: what it keeps, until a person deletes it.
     cache = _cache()
     checks.append(_check("cache", WARNING if cache.startswith("unknown (") else INFO, cache))
@@ -724,7 +914,7 @@ def _report(*, check: bool, start: bool) -> tuple[str, list[dict]]:
         checks.append(_check("sharing", INFO, sharing))
     # The plugin folder, and each agent app's copy of the plugin: the release it pins and where it comes from.
     checks += [_line(line, OK if line.startswith("plugin") and ", written " in line else None) for line in _plugin()]
-    checks += [_line(line) for line in _apps()]
+    checks += [_line(line, WARNING if line.partition(": ")[2].startswith(BEHIND + " ") else None) for line in _apps()]
     # The version this installation runs as: a development install's own name, else its release.
     return own_version() or installed, checks
 
@@ -734,7 +924,7 @@ def _kernel(check: bool) -> dict:
     where it is made: ``FAILED`` -- the one failure of the report, exit 1 -- when it is installed and does
     not load. The current installation's doctor checks the current one's."""
     from cad_server._internal import installations
-    from cad_server._internal.kernel_load_hint import kernel_load_hint
+    from cad_server._internal.kernel_load_hint import kernel_load_hint, system_library_hint
 
     current = installations.current()
     if current is not None and not installations.mine(current):
@@ -750,7 +940,8 @@ def _kernel(check: bool) -> dict:
         return _check("kernel", OK, f"OK — OCP at {detail} ({where})")
     if kernel_state == KERNEL_MISSING:
         return _check("kernel", WARNING, f"not installed — OCP is absent from {python} ({where})")
-    return _check("kernel", FAILED, f"FAILED — {detail}", list(kernel_load_hint(detail) or ()))
+    return _check("kernel", FAILED, f"FAILED — {detail}",
+                  list(kernel_load_hint(detail) or system_library_hint(detail) or ()))
 
 
 def _integrations() -> list[tuple[str, str]]:

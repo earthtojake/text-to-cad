@@ -8,27 +8,28 @@ must change for, so it can land under a running agent thread unannounced. One th
 part may (a command renamed, a migration guide) -- a major release from 1.0 (1.9.3 to 2.0.0), a minor or
 major one below it (0.11.3 to 0.12.0 or 1.0.0) -- so it waits for the person's click: the update button,
 ``cad update``, the install command. The release process holds a release to that (the release check
-refuses a migration guide in a release this takes).
+refuses a new migration guide in a release this takes).
 
-With automatic updates on -- the default (``DEFAULT``) -- the device's engine reads the version feed
-once an hour (``cad_server/updates.py``) and, when it names a newer release that it takes, updates
-to it with no click (``cad_server._internal.update.Update.automatic``): the release is installed and its
-CAD kernel environment made at once, in the background, and the agent apps' plugins are moved to it
-and the engine switched (``cad_server._internal.switch``) only once nothing has run for a minute
-(``IDLE_SECONDS``): no build, draw, export or agent's call in flight, no switch or other update
-underway. The update button, ``cad update`` and the install command work as ever and come first: a
+With automatic updates on -- the default (``DEFAULT``) -- the default channel's version's server, on a device
+where the install command has run, reads the version feed once an hour (``cad_server/updates.py``) and, when it
+names a newer release that it takes, updates to it with no click (``cad_server._internal.update.Update.automatic``):
+the release is installed, its CAD kernel environment with it, at once, in the background, and its setup -- which
+moves the default channel to it and gives the agent apps its text -- runs only once the server has handled no
+command for an hour (``IDLE_SECONDS``): no build, draw, export, request that serves or agent's call in flight
+(``Daemon.working``) and none ended (``Daemon.worked``), no other update underway. So an update rarely lands under
+a chat that is working. The update button, ``cad update`` and the install command act at once and come first: a
 click while an automatic update gets ready makes it the click's, done at once.
 
-The setting is the person's, one for every CAD app and release: the ``updates`` section of their
-settings (``cad_server/settings.py``: ``settings.json`` in the state folder), ``{"automatic": false}``
+The setting is the person's, one for every CAD app of a version, which a new version imports: the ``updates`` section of their
+settings (``cad_server/settings.py``: ``settings.json`` in the version's data folder), ``{"automatic": false}``
 once they turn it off (``cad update auto off``, or the app menu's Automatic updates in the CAD Viewer
 and the CAD app), ``{"automatic": true}`` once they turn it on; no section is the default. An
 environment that turns the version check off (``CAD_UPDATE_CHECK=0``, CI) turns it off too, and no
 click changes that (``reason``: ``environment``). A development install is never updated by itself,
 as it is never told of a release.
 
-An update that fails leaves the engine as it was, or brings the release before back (the switch's
-way back), and is not tried again in a loop: the last automatic attempt is kept in the state folder
+An update that fails leaves the device working, on the version it was on or on the new one
+(``cad_server._internal.update``), and is not tried again in a loop: the last automatic attempt is kept in the data folder
 (``RECORD``: its release and when), and the same release is tried again only ``RETRY_SECONDS`` later;
 a newer release the feed names is tried at the next check. Offline, or a feed that cannot be read:
 nothing happens, and nothing waits on it.
@@ -53,10 +54,11 @@ SECTION = "updates"  # this module's part of the settings file
 KEY = "automatic"
 # Whether automatic updates are on for a person who never chose: the one place to flip it.
 DEFAULT = True
-# The last automatic attempt, in the state folder: its release, when it began, and why it failed.
+# The last automatic attempt, in the data folder: its release, when it began, and why it failed.
 RECORD = "update-automatic.json"
-# How long nothing may have run before the engine switches by itself.
-IDLE_SECONDS = 60.0
+# How long the default version's server must have handled no command before an automatic update runs the new
+# release's setup: the one number, read by ``cad_server._internal.update.Update._wait``.
+IDLE_SECONDS = 60 * 60.0
 # How long before the same release is tried again by itself once an attempt of it did not hold.
 RETRY_SECONDS = 24 * 60 * 60
 _OFF = ("0", "off", "false", "no")
@@ -110,7 +112,7 @@ def enabled(*, path: Path | None = None) -> bool:
 
 
 def change(choice: Any, *, path: Path | None = None) -> dict[str, Any]:
-    """Keep the person's answer (``{"automatic": true | false}``) under the state folder's one lock,
+    """Keep the person's answer (``{"automatic": true | false}``) under the data folder's one lock,
     beside every other setting, and answer the setting as it now is (``read``). ``ValueError`` for
     anything else; ``OSError`` when the settings cannot be written."""
     if not isinstance(choice, dict) or set(choice) != {KEY} or not isinstance(choice[KEY], bool):
@@ -123,9 +125,10 @@ def change(choice: Any, *, path: Path | None = None) -> dict[str, Any]:
 
 
 def _record_path() -> Path:
-    from cad.engine.places import state_dir
+    """The last automatic attempt's record, in this process's data folder (``places.data_dir``)."""
+    from cad.engine.places import data_dir
 
-    return Path(state_dir()) / RECORD
+    return Path(data_dir()) / RECORD
 
 
 def attempted(*, path: Path | None = None) -> dict[str, Any] | None:
@@ -227,15 +230,15 @@ def describe(engine: dict[str, Any] | None = None, *, now: float | None = None) 
     feed was last read and when it is next due, and -- from the engine's ``status`` (its ``update``) --
     a release it is getting ready to switch to; else the last automatic attempt that failed."""
     from cad_server import updates
-    from cad_server._internal.channel import DEV, channel
+    from cad_server._internal.channel import development
 
     now = time.time() if now is None else now
     found = read()
     reason = {"default": "by default", "choice": "your choice",
               "environment": "CAD_UPDATE_CHECK or CI in this environment"}[found["reason"]]
     line = f"{'on' if found['automatic'] else 'off'} ({reason})"
-    development = channel() == DEV
-    if found["automatic"] and development:
+    development_build = development()
+    if found["automatic"] and development_build:
         line += ", but a development install is never updated by itself"
     try:
         checked = updates._load(updates._cache()).get("checked")
@@ -245,7 +248,7 @@ def describe(engine: dict[str, Any] | None = None, *, now: float | None = None) 
         line += f"; feed last read {_when(checked)}"
         if found["automatic"]:
             line += f", next due {_when(max(now, checked + updates.CHECK_SECONDS))}"
-    elif found["automatic"] and not development:
+    elif found["automatic"] and not development_build:
         line += "; feed not read yet: the engine reads it within the hour"
     pending = ((engine or {}).get("automatic") if isinstance(engine, dict) else None) or None
     if isinstance(pending, dict) and pending.get("release"):

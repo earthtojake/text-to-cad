@@ -119,6 +119,53 @@ it('a host that keeps its page through the restart ends it on a switch that fail
   expect(onFailed).toHaveBeenCalledOnce();
 });
 
+it('an update that ends with this server staying ends the button: the host follows it once, or it is said done, never a spinner', async () => {
+  // Another channel is on this server's version: the default channel moved, and the new release serves elsewhere.
+  const moved = reply({ state: 'moved', target: '0.9.1', address: 'http://127.0.0.1:3246', link: 'l' }, null as never);
+  const restarting = reply({ state: 'restarting', target: '0.9.1' });
+  for (const followed of [true, false]) {
+    vi.mocked(toast.success).mockClear();
+    const onMoved = vi.fn(() => followed);
+    let settle: (answer: UpdateReply) => void = () => {};
+    function Card() {
+      const updater = useUpdate({ read: async () => restarting, start: async () => restarting }, NOTICE, { onMoved });
+      settle = updater.settle;
+      return updater.notice || updater.phase.phase !== 'idle'
+        ? <UpdateButton notice={updater.notice} phase={updater.phase} onUpdate={updater.update} /> : <p>No notice</p>;
+    }
+    render(<Card />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Update to 0.9.1' })); });
+    expect(screen.getByRole('status', { name: 'Restarting with 0.9.1' })).toBeTruthy();
+    await act(async () => { settle(moved); });
+    expect(onMoved).toHaveBeenCalledWith(moved.update);
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByText('No notice')).toBeTruthy();  // no longer the server that updates: no button
+    expect(toast.success).toHaveBeenCalledTimes(followed ? 0 : 1);
+    await act(async () => { settle(moved); });
+    expect(onMoved).toHaveBeenCalledOnce();  // said once
+    cleanup();
+  }
+});
+
+it('a page reloaded while following an update that ended elsewhere says it once, as done, never updated to its own release', async () => {
+  // The old server stays (`moved`): the page reloaded on it reads that, and it still runs the release before.
+  const moved = reply({ state: 'moved', target: '0.9.1', address: null }, null as never);
+  for (const followedBy of [undefined, vi.fn(() => true)]) {
+    vi.mocked(toast.success).mockClear();
+    const read = vi.fn<UpdateCall>(async () => moved);
+    function Page() {
+      const { notice, phase, update } = useUpdate({ read, start: read }, NOTICE, { followed: true, onMoved: followedBy });
+      return notice || phase.phase !== 'idle' ? <UpdateButton notice={notice} phase={phase} onUpdate={update} /> : <p>No notice</p>;
+    }
+    render(<StrictMode><Page /></StrictMode>);
+    await act(async () => {});
+    expect(toast.success).not.toHaveBeenCalledWith('Updated to 0.9.0.');
+    expect(toast.success).toHaveBeenCalledTimes(followedBy ? 0 : 1);  // the host follows it, or it is said done once
+    if (!followedBy) expect(toast.success).toHaveBeenCalledWith('Updated to 0.9.1.');
+    cleanup();
+  }
+});
+
 it('draws with the page from what the host knew, and reads the server again only when the person comes back', async () => {
   const read = vi.fn<UpdateCall>(async () => reply(null, null as never));
   render(<Host read={read} start={read} />);

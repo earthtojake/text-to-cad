@@ -20,6 +20,9 @@ from cad_server.mcp.protocol import RequestContext
 from cad_mcp.shim import Proxy
 from cad_mcp.engine import EngineClient
 from tests.python.support import engine_daemon
+# A release's process: a checkout is a development build, never told of a release and sending nothing by default,
+# unless it is told the version it runs as (``cad_server/_internal/channel.py``).
+RELEASE = __import__("cad_server").__version__
 
 INIT = {'protocolVersion': '2025-11-25', 'clientInfo': {'name': 'codex-mcp-client'}, 'capabilities': {}}
 TEXT = {'protocolVersion': '2025-11-25', 'clientInfo': {'name': 'some-cli'}, 'capabilities': {}}
@@ -48,17 +51,19 @@ class HttpSessionsTest(unittest.TestCase):
         # own browser (macOS's osascript), which no test may reach.
         cls.opened = cls.root / 'opened.jsonl'
         cls.engine_browser = cls.browser('engine', 0)
-        # A plugin's engine that is told of releases (``cad_server.updates``), the feed never read.
+        # An engine that is told of releases (``cad_server.updates``), the feed never read: a release's, as the
+        # version it runs as is named to it alone (a checkout is a development build otherwise). The transports
+        # keep no version (a source tree's), so they reach this engine by the flat door and install nothing.
         cls.env = engine_daemon.watched({**os.environ, 'CAD_ENGINE_DIR': str(cls.root / 'engine'),
                    'CAD_STATE_DIR': str(cls.root / 'state'), 'CAD_ENGINE_MESH': 'inline',
-                   'CAD_VIEWER_DIST': str(cls.page), 'BROWSER': cls.engine_browser,
-                   'CAD_INSTALL_CHANNEL': 'claude-github', 'CAD_AUTO_UPDATED': '', 'CI': '',
+                   'CAD_VIEWER_DIST': str(cls.page), 'BROWSER': cls.engine_browser, 'CI': '',
                    'CAD_UPDATE_CHECK': '0'}, cls.addClassCleanup)
         changed = patch.dict(os.environ, cls.env)
         changed.start()
         cls.addClassCleanup(changed.stop)
         cls.addClassCleanup(cls.stop_engine)
-        cls.endpoint = EngineClient().connect()
+        with patch.dict(os.environ, {'CAD_INSTALLATION_VERSION': RELEASE}):
+            cls.endpoint = EngineClient().connect()
         cls.model = cls.root / 'part.stl'
         cls.model.write_bytes(b'solid part\nendsolid part\n')
 
@@ -255,7 +260,13 @@ class HttpSessionsTest(unittest.TestCase):
         # newer than the engine's proves a release is out, and the button shows it, with no feed read.
         import cad_mcp
         import cad_server
+        from cad.engine.api import stop
 
+        # An engine that is told of releases: one a release runs as (named to it alone, as in ``setUpClass``), started
+        # afresh -- a test before this one may have started another with no version named, a checkout's.
+        stop()
+        with patch.dict(os.environ, {'CAD_INSTALLATION_VERSION': cad_server.__version__}):
+            EngineClient().connect()
         client = EngineClient()
 
         def version():
@@ -264,6 +275,10 @@ class HttpSessionsTest(unittest.TestCase):
             return json.loads(body)
 
         release = cad_server.__version__
+        # The install command ran here (its receipt): the engine, a process with no version, is the default's.
+        receipt = self.root / 'state' / 'install-receipt.json'
+        receipt.write_text('{}', encoding='utf-8')
+        self.addCleanup(receipt.unlink, missing_ok=True)
         self.assertEqual(version()['release'], release)
         with patch.object(cad_mcp, '_version', return_value='0.0.1'):
             self.proxy()  # an older release's server: no release is out

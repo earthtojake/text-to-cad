@@ -112,7 +112,7 @@ def read(*, path: Path | None = None, release: str | None = None,
 
 def change(choice: Any, *, path: Path | None = None, release: str | None = None) -> dict[str, Any]:
     """Keep the releases a view says the person has seen (``{"seen": ["0.11"]}``; the ``release`` a
-    read answered may ride along and is ignored) beside those kept, under the state folder's one lock --
+    read answered may ride along and is ignored) beside those kept, under the data folder's one lock --
     a release once seen stays seen, whichever view put back what -- and answer as ``read``. Raises
     ``ValueError`` for anything else, and ``OSError`` when the settings cannot be written."""
     if not isinstance(choice, dict) or "seen" not in choice or not set(choice) <= {"seen", "release"} \

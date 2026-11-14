@@ -53,8 +53,9 @@ evidence that this host shows none.
 Apps without advertising them (the reference host, ``basic-host``, is one).
 
 A session Claude Code started -- its terminal, or the desktop app's Code tab running it -- lists no
-tools at all (``host.claude_code``): there CAD is the cad skill and the ``cad`` command, and the Code
-tab's card comes from Claude Desktop's own config, whose server Claude Code does not start.
+tools at all (``host.claude_code``): there CAD is the cad skill and the ``cad`` command, and a model
+is shown in the browser. Claude is set up with no CAD server on any route; one someone added by hand
+(Claude Desktop's config) is served as any other host's.
 ``CAD_MCP_CARDS=1`` in the transport's environment keeps the tools, for testing.
 """
 
@@ -152,10 +153,8 @@ TEXT_INSTRUCTIONS = (
 # A session Claude Code started (``host.claude_code``): CAD lists no tools there and says how to use CAD instead.
 CLAUDE_CODE_INSTRUCTIONS = (
     "This CAD server offers no tools in Claude Code: use the cad skill and the `cad` command. " + COMMANDS
-    + " In the Claude desktop app's Code tab, CAD's inline card comes from Claude Desktop's own config: show models "
-    "with its cad_show where it is listed; where it is not, run `cad setup` and ask the user to quit and reopen "
-    "Claude Desktop. Elsewhere, and meanwhile, give the user the `cad viewer` link, which opens in the app's browser "
-    "pane or their browser."
+    + " To show a model, give the user the `cad viewer` link, which opens in the app's browser pane or their "
+    "browser."
 )
 
 _ICON_SVG = (
@@ -229,19 +228,40 @@ _APP_TOKEN_SCHEMA = {"type": "string", "description": "The view's capability, fr
 _BROWSER_OPEN_ROUTE = "/api/v1/local/browser/open"
 
 
-def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
+def _stamped(launch: dict[str, Any], updater: bool = True) -> dict[str, Any]:
     """A launch with what the page needs to start on it alone: this server's version and platform,
     whether this computer has a file chooser for the home's Open, and the update notice as the
-    server last read it (``cad_server/updates.py``; a launch never waits on the feed)."""
+    server last read it (``cad_server/updates.py``; a launch never waits on the feed) -- none for a session with no
+    ``updater`` (a store's launcher's: ``Server.updater``)."""
     from cad_server import __version__, updates
     from cad_server._internal.picker import available
 
     launch["version"] = __version__
     launch["platform"] = sys.platform if sys.platform in ("darwin", "win32") else "linux"
     launch["pick"] = available()
-    launch["notice"] = updates.notice()
-    updates.refresh()  # a server can run for days: a feed that is due is read in the background, for the next launch
+    launch["notice"] = updates.notice() if updater else None
+    if updater:
+        updates.refresh()  # a server can run for days: a feed that is due is read in the background, for the next launch
     return launch
+
+
+# The tools 0.11.10 removed, each answered by name with the `cad` command that does its work now: a session
+# opened before the update still lists them, and its agent reads this, not a bare "unknown tool". Never
+# listed (``tools``); counted as any call naming no tool of cadgen's (``_refused``). The commands carry no
+# pin: such a session's skill names none, and an unpinned command runs the default channel's release,
+# this one. Goes at the next minor release.
+_REMOVED_TOOLS = {
+    "cad_export": "The cad_export tool was removed in text-to-cad 0.11.10. Export with the cad command instead: "
+                  "`cad model export <id> <file>...` for a model's document id, or `cad <type> export <file> <file>...` "
+                  "for a CAD file (type: step, xbf, stl, glb or threemf); read the cad skill again for the details.",
+    "cad_snapshot": "The cad_snapshot tool was removed in text-to-cad 0.11.10. Draw a PNG with the cad command instead: "
+                    "`cad model snapshot <id> <out.png>` for a model's document id, `cad <type> snapshot <file> <out.png>` "
+                    "for a CAD file, or `cad model snapshot --job <packet>` for a Quick Edit packet; read the cad skill "
+                    "again for the details.",
+    "cad_inspect": "The cad_inspect tool was removed in text-to-cad 0.11.10. Inspect with the cad command instead: "
+                   "`cad model inspect <id> [ref]` for a model's document id, or `cad <type> inspect <file> [ref]` for a "
+                   "CAD file (type: step, xbf or glb); read the cad skill again for the details.",
+}
 
 
 def _text(text: str, structured: dict[str, Any] | None = None, *, error: bool = False) -> dict[str, Any]:
@@ -343,8 +363,11 @@ class Server:
     def __init__(self, *, page: AppPage | None = None, recents=None, tunnel=None, viewer_url=None, browser_opener=None,
                  sidebar_views=None, analytics=None, sync_document=lambda path: None, warm=lambda: None,
                  in_browser=lambda model: False, browser_opened=lambda model: None, engine_origin: str | None = None,
-                 app_token: str | None = None) -> None:
+                 app_token: str | None = None, updater: bool = True) -> None:
         self.page = page or AppPage()
+        # Whether this session tells of an update (the launch's notice, a text app's line): not one a store's launcher
+        # opened (its ``--channel``), whatever version serves it -- whoever delivers that copy updates it.
+        self.updater = updater
         # The engine's own origin (``http://127.0.0.1:<port>``), which an inline host is asked to let
         # the card reach (``_resource_meta``): where the host carries no tool call back, the card
         # reads the engine directly with its launch's link (``_reach``).
@@ -422,7 +445,7 @@ class Server:
             from cad_server.analytics import Recorder
             from cad_server.settings import FILE
 
-            # The settings beside the model library (the state directory, by default): shared by every process.
+            # The settings beside the model library (this version's data folder, by default): shared by its every process.
             path = Path(self._recents.root).parent / FILE if self._recents is not None else None
             self._analytics = Recorder(path=path)
         return self._analytics
@@ -508,12 +531,6 @@ class Server:
         meta = params.get("_meta") if isinstance(params.get("_meta"), dict) else {}
         transport = meta.get("dev.texttocad/transport") if isinstance(meta.get("dev.texttocad/transport"), dict) else {}
         presentation, self.renders, why = host.presentation(client, offered, transport.get("launcher"))
-        if isinstance(transport.get("channel"), str):
-            # Where the plugin that started the transport came from, written down for this installation's
-            # processes that no plugin told (``cad_server._internal.channel.remember``), in the background.
-            from cad_server._internal.channel import remember
-
-            threading.Thread(target=remember, args=(transport["channel"],), name="cad-channel", daemon=True).start()
         self._peer_browser = transport.get("browser") if isinstance(transport.get("browser"), dict) else None
         self._declared = why.startswith("declared")
         self.tabs, self.text = presentation == "tabs", presentation == "text"
@@ -659,6 +676,9 @@ class Server:
         # Shared HTTP calls enforce their own route and consent authorization.
         listed = any(tool["name"] == name for tool in self.tools())
         handler = getattr(self, f"_tool_{name}", None) if listed else None
+        if handler is None and isinstance(name, str) and name in _REMOVED_TOOLS:
+            self._refused(name, "bad_request")  # the caller's stale list: as a name cadgen has no tool by
+            return _text(_REMOVED_TOOLS[name], error=True)
         if handler is None:
             self._refused(name, "no_view")  # a tool of cadgen's this host was not listed: a view it does not show
             raise RpcError(INVALID_PARAMS, f"unknown tool {name!r}")
@@ -737,7 +757,7 @@ class Server:
         self._model = model
         if _reads_with_kernel(model):
             self.warm()  # the view's first document meshes on a pool already starting
-        return _stamped(launch)
+        return _stamped(launch, self.updater)
 
     def _home(self, *, surface: str | None = None) -> dict[str, Any]:
         """The launch that shows the home: the models opened before, which come with it so its cards
@@ -751,7 +771,7 @@ class Server:
         launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "home", "model": None, "recents": recents}
         if surface:
             launch["surface"] = surface
-        return _stamped(launch)
+        return _stamped(launch, self.updater)
 
     def _mounted(self, launch: dict[str, Any]) -> dict[str, Any]:
         """Stamp a launch that mounts a new inline view: its token, and its place among the views."""
@@ -1056,7 +1076,7 @@ class Server:
     def _told(self, result: dict[str, Any]) -> dict[str, Any]:
         """A text-only app has no card for the update notice (``cad_server/updates.py``): this process's
         first result that can carry it does, as a line for the agent to pass on."""
-        if self._update_told:
+        if self._update_told or not self.updater:
             return result
         from cad_server import updates
 

@@ -51,9 +51,15 @@ skills/<name>/
   deeper. Everything an agent needs on most runs is in SKILL.md; everything else is a reference.
 - **References** are one level deep. A reference that sends the agent to another reference gets read
   partially or not at all.
-- **No runtime of its own.** A skill that uses the server runs the `cad` command and names no
-  release. It installs nothing: no `requirements.txt`, no vendored packages. Code a skill needs is
-  the library's or the server's, reached by a command or an import.
+- **No runtime of its own.** A skill that uses the server runs the `cad` command, every command
+  pinned to the skill's release: `cad +<VERSION> <verb>`, written with the current `VERSION`, which the
+  release script stamps (`scripts/release/sync-version.mjs`). It installs nothing: no `requirements.txt`, no vendored packages. Code a skill needs is
+  the library's or the server's, reached by a command or an import. Its SKILL.md carries the setup block
+  every such skill carries, word for word (`tests/python/global/test_skill_requirements.py`): the store
+  builders rewrite it in their copies (each pin given the store's channel; in claude.ai's directory copy,
+  the install line the `uvx` command), and an install line or Windows sentence the builder does not find
+  exactly once fails the release
+  ([The install branches](../../CONTRIBUTING.md#the-install-branches)).
 - **Independent of other skills.** A skill never imports another, and never puts `skills/` or the
   repository root on a lookup path. Each installs alone through the Skills CLI.
 
@@ -89,8 +95,14 @@ section named for each.
 Each skill installs on its own, so the few things every skill must say are copied into each, word
 for word, and tests keep the copies from drifting:
 
-- **Setup** (`tests/python/global/test_skill_requirements.py`): how to get the `cad` command, in every
-  skill that runs the server, and in no other.
+- **Setup** (`tests/python/global/test_skill_requirements.py`): how to get the `cad` command, and what
+  a pinned command's exit codes mean, in every skill that runs the server, and in no other.
+- **Pins** (`tests/python/global/test_skill_commands_pin_their_release.py`): every `cad` command in a
+  code block or span, placeholders such as `cad +<VERSION> <type> inspect` too, starts `cad +<VERSION>`.
+  The header's `metadata.version` and these pins are stamped by the release script
+  (`scripts/release/sync-version.mjs`) and never edited by hand; a new skill copies them from one beside it.
+  The source never names a channel: the release adds one to every pin of a store's copy as it builds it
+  (`cad +<VERSION>@claude` for claude.ai's directory, `@codex` for OpenAI's).
 - **Show the model** (`tests/python/global/test_skill_show_the_model.py`): how to show the person what
   was made, in every skill that makes something they look at.
 

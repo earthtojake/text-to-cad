@@ -117,7 +117,9 @@ class Dispatch(unittest.TestCase):
             env.update({"PYTHONPATH": str(add_sources()), "CAD_STATE_DIR": state,
                         "CAD_CACHE_DIR": os.path.join(folder, "cache"), "CAD_ENGINE_DIR": os.path.join(folder, "e"),
                         "CAD_LAUNCHER_DIR": os.path.join(folder, "bin"),
-                        "CAD_INSTALL_CHANNEL": "test"})  # a plugin's channel: a checkout's tells no one
+                        # A release's run: a checkout not told the version it runs as is a development build,
+                        # which tells no one.
+                        "CAD_INSTALLATION_VERSION": __import__("cad_server").__version__})
 
             def run(*argv):
                 return subprocess.run([sys.executable, "-m", "cad_server.cli", *argv], cwd=folder, env=env,

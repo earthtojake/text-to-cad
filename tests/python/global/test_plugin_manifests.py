@@ -258,15 +258,14 @@ class PluginManifestPolicyTest(unittest.TestCase):
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         self.assertEqual(args[args.index("--from") + 1], f"cad-mcp=={version}")
 
-    def test_claude_code_gets_the_skills_alone_and_claude_s_config_keeps_the_server(self) -> None:
-        # Every plugin ships the skills with CAD's server but Claude Code's: a server Claude Code starts gets
-        # no card it can use (its terminal draws none; the desktop app's Code tab refuses their calls), so its
-        # manifest on main, and on latest, names none, and the Code tab takes CAD's server from Claude
-        # Desktop's own config. claude.mcp.json stays: Grok Build's manifest names it, and claude.ai's
-        # directory's copy names it (scripts/release/plugin_branch.py), whose server lists no tools under
-        # Claude Code. It is Codex's command without its startup timeout, which Claude's config has no field
-        # for. Never a root .mcp.json, which Claude Code would read, and would offer to anyone who opens this
-        # repository as a project.
+    def test_claude_code_gets_the_skills_alone_and_grok_build_keeps_claude_mcp_json(self) -> None:
+        # Every plugin ships the skills with CAD's server but Claude Code's: Claude gets no CAD server on any
+        # route (a server Claude Code starts gets no card it can use: its terminal draws none, the desktop app's
+        # Code tab refuses their calls), so its manifest on main, and on latest, names none. claude.mcp.json
+        # stays: Grok Build's manifest names it (claude.ai's directory's copy carries neither,
+        # scripts/release/plugin_branch.py). It is Codex's command without its startup
+        # timeout, which Claude's config has no field for. Never a root .mcp.json, which Claude Code would read,
+        # and would offer to anyone who opens this repository as a project.
         self.assertNotIn("mcpServers", load_json(CLAUDE_PLUGIN_PATH))
         self.assertEqual(load_json(GROK_PLUGIN_PATH).get("mcpServers"), "./claude.mcp.json")
         self.assertFalse((REPO_ROOT / ".mcp.json").exists())
@@ -288,9 +287,9 @@ class PluginManifestPolicyTest(unittest.TestCase):
 
     def test_cursor_starts_claudes_server_and_shows_its_icon(self) -> None:
         # Cursor reads only .cursor-plugin/plugin.json. Its MCP config format is Claude's, and it starts
-        # the same pinned server from a config of its own, which names the Cursor Marketplace as its
-        # channel: the marketplace reads main. Its logo must be a relative path inside the plugin
-        # tree: Cursor resolves it to that commit's raw file.
+        # the same pinned server from a config of its own, which names no channel: a marketplace added in
+        # Cursor reads main as it is. Its logo must be a relative path inside the plugin tree: Cursor
+        # resolves it to that commit's raw file.
         manifest = load_json(CURSOR_PLUGIN_PATH)
         self.assertEqual(manifest.get("mcpServers"), "./cursor.mcp.json")
         cursor, claude = load_json(CURSOR_MCP_PATH)["mcpServers"]["cad"], load_json(CLAUDE_MCP_PATH)["mcpServers"]["cad"]
@@ -350,46 +349,21 @@ class PluginManifestPolicyTest(unittest.TestCase):
             with self.subTest(path=path.name):
                 server = load_json(path)["mcpServers"]["cad"]
                 self.assertEqual((server["command"], server["args"]), (LAUNCHER[0], expected))
-        # So does the Claude Desktop config the install page has a person write by hand.
-        page = (REPO_ROOT / "docs" / "install.md").read_text(encoding="utf-8")
-        self.assertIn('"args": [' + ", ".join(json.dumps(arg) for arg in expected) + "]", page)
 
-    def test_every_plugin_on_main_names_its_own_channel(self) -> None:
-        # Each plugin's startup config names where its installs come from, in its server's
-        # environment, and CAD_AUTO_UPDATED=1 where a store keeps the copy up to date: the Cursor
-        # Marketplace, which reads main. Gemini updates its extension only when asked. Environment, not
-        # flags: main pins the last release, and a release ignores a variable it does not know but
-        # refuses a flag. Nothing is worked out at runtime (the server's _internal/channel.py); the plugin
-        # branch and the OpenAI ZIP stamp their own.
-        import sys
-
-        from tests.python.support.paths import add_sources
-
-        add_sources()
-        from cad_server._internal.channel import is_channel
-        from cad_server._internal.plugin import CHANNELS as FOLDER_CHANNELS
-
-        said = {path.name: load_json(path)["mcpServers"]["cad"]["env"]
-                for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH)}
-        page = (REPO_ROOT / "docs" / "install.md").read_text(encoding="utf-8")
-        said["docs/install.md"] = json.loads(re.search(r'"env": (\{"CAD_INSTALL_CHANNEL"[^}]*\})', page).group(1))
-        self.assertEqual(said, {
-            "claude.mcp.json": {"CAD_INSTALL_CHANNEL": "claude-github"},
-            "codex.mcp.json": {"CAD_INSTALL_CHANNEL": "codex-github"},
-            "cursor.mcp.json": {"CAD_INSTALL_CHANNEL": "cursor-marketplace", "CAD_AUTO_UPDATED": "1"},
-            "mcp.json": {"CAD_INSTALL_CHANNEL": "agent-plugins"},
-            "gemini-extension.json": {"CAD_INSTALL_CHANNEL": "gemini-github"},
-            "docs/install.md": {"CAD_INSTALL_CHANNEL": "claude-desktop"},
-        })
-        # Every channel any package names is one the analytics receiver takes.
-        receiver = (REPO_ROOT / "apps" / "api" / "src" / "events.mjs").read_text(encoding="utf-8")
-        named = {env["CAD_INSTALL_CHANNEL"] for env in said.values()} | {"claude-directory", "cursor-github",
-                                                                           "openai-directory", "dev"} \
-            | set(FOLDER_CHANNELS.values())
-        for channel in sorted(named):
-            with self.subTest(channel=channel):
-                self.assertTrue(is_channel(channel))
-                self.assertIn(f"'{channel}'", receiver)
+    def test_no_plugin_on_main_names_a_channel(self) -> None:
+        # Main's text is our own, the default channel: no config names a channel or says who updates the copy
+        # (the variables 0.11.10 and earlier read, which a copy of those releases still sets, are ignored now),
+        # and no launcher is given `--channel`. A store's copy is told its channel by the builder that makes it
+        # (scripts/release/plugin_branch.py, plugin_zip.py). A marketplace added in Cursor takes main as it is
+        # when Cursor fetches the repository, so the copies Cursor installs from one are on the default channel too.
+        for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH):
+            with self.subTest(path=path.name):
+                server = load_json(path)["mcpServers"]["cad"]
+                self.assertNotIn("env", server)
+                self.assertNotIn("--channel", server["args"])
+                # Nor its startup timeout: Codex takes the standard's mcp.json for this folder, where a Codex key
+                # makes the server vanish, so only a store's builder that writes Codex's own config says it.
+                self.assertNotIn("--startup-timeout", server["args"])
 
     def test_no_stale_plugin_subdirectory_package_remains(self) -> None:
         # The generated `plugins/cad/skills` copy is what the repo-root move

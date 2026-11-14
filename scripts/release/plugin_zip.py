@@ -15,6 +15,14 @@ that `mcpServers` "must resolve to the root `.mcp.json`". A server config kept
 under another name (a root `.mcp.json` is one Claude Code would load too) goes
 into the archive as `.mcp.json`, and the archived manifest points there.
 
+The package is the copy OpenAI's directory delivers, on its own channel, `codex`: every pin in it is stamped
+`@codex` (`cad +<VERSION>@codex <verb>`, `channel_stamp.py`, the routine the directory branch of claude.ai
+uses too), and its launcher is told the channel as an argument in its server config (`cad-mcp --channel
+codex`), so the device keeps that copy's version apart from the default channel's and the install
+command's updates never move it. It is told Codex's startup timeout too, the config's own `startup_timeout_sec`
+(`--startup-timeout 300`): a first start installs its version, and the launcher holds Codex's `initialize` for most
+of that time rather than answer early, since Codex acts on no `tools/list_changed` within a turn.
+
 The checks are the package rules the portal documents, named by its error codes
 (https://developers.openai.com/plugins/deploy/submission-errors). Listing limits
 are the final-submission ones, such as 30 characters for the name and subtitle,
@@ -37,10 +45,17 @@ import subprocess
 import sys
 import zipfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import channel_stamp  # noqa: E402 - beside this script: the one stamping routine, plugin_branch.py's too
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ".codex-plugin/plugin.json"
 ROOTS = (".codex-plugin", "skills", "LICENSE")
 MCP_CONFIG = ".mcp.json"
+# The delivery channel of the copy this package is: OpenAI's directory's.
+CHANNEL = "codex"
+# The longest startup timeout the launcher takes (`cad_mcp.shim.STARTUP_MOST`, held equal by a test): a day.
+STARTUP_MOST = 86400
 ICONS = ("logo", "logoDark", "composerIcon", "composerIconDark")
 SEMVER = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?")
 # A clone without git-lfs (CI's included) checks LFS-tracked files out as pointers.
@@ -155,13 +170,22 @@ def collect(root: Path) -> Package:
     if sources:
         package.files[MANIFEST] = (json.dumps(manifest, indent=2, ensure_ascii=False).encode("utf-8") + b"\n",
                                    False)
+    version = manifest.get("version")
+    if isinstance(version, str) and version:
+        stamped, errors = channel_stamp.stamp({path: data for path, (data, _) in package.files.items()},
+                                              version, CHANNEL)
+        package.files = {path: (stamped[path], executable) for path, (_, executable) in package.files.items()}
+        package.errors.extend(errors)
     return package
 
 
 def with_channel(package: Package, data: bytes) -> bytes:
-    """The server config naming OpenAI's directory as the install's channel, in its server's
-    environment (the server's `_internal/channel.py`): this package goes only there. Analytics report
-    it, and `CAD_AUTO_UPDATED` leaves the copy to the directory, which updates it."""
+    """The server config whose one `cad-mcp` launcher is told this package's channel as its argument (`cad-mcp
+    --channel codex`): the launcher runs its version on that channel. Nothing in its environment says a channel
+    or who updates the copy (a config of 0.11.10 or earlier did, and is ignored now). Where the config gives Codex a
+    startup timeout (`startup_timeout_sec`), the launcher is told that same number (`--startup-timeout N`), read from
+    it so the two never drift: its first start, which installs its version, then holds the app's `initialize` that
+    long rather than answer early, since Codex acts on no `tools/list_changed` within a turn."""
     try:
         config = json.loads(data)
         servers = [server for server in config["mcpServers"].values() if server["args"][-1:] == ["cad-mcp"]]
@@ -171,8 +195,16 @@ def with_channel(package: Package, data: bytes) -> bytes:
     if len(servers) != 1:
         package.errors.append(f"{MCP_CONFIG} must start exactly one `cad-mcp` server (found {len(servers)})")
         return data
-    servers[0]["env"] = {**servers[0].get("env", {}), "CAD_INSTALL_CHANNEL": "openai-directory",
-                         "CAD_AUTO_UPDATED": "1"}
+    args = [*servers[0]["args"], "--channel", CHANNEL]
+    timeout = servers[0].get("startup_timeout_sec")
+    if timeout is not None:
+        # The launcher's own rule (`cad_mcp.shim`'s `--startup-timeout`): never a line it would refuse.
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 0 < timeout <= STARTUP_MOST:
+            package.errors.append(f"{MCP_CONFIG}'s startup_timeout_sec is not a positive number of seconds, a day at "
+                                  f"most: {timeout!r}")
+            return data
+        args += ["--startup-timeout", f"{timeout:g}"]
+    servers[0]["args"] = args
     return json.dumps(config, indent=2).encode("utf-8") + b"\n"
 
 

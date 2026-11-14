@@ -41,10 +41,10 @@ disk (a model's: its script, `sourceFile`), and `browser` opens the document's p
 browser (its path or a model's id; the CAD app's, where a launch carried the web viewer's page).
 The ⋯ draws them as Copy path, Copy link and Open in › Browser and the file manager by its name; a home
 card's ⋯ offers Copy path, Copy link and Reveal (a model's card, Copy link alone). `copy-link` copies
-the document's page with a fresh link, `<engine origin>/<document id>?token=<link>`; an entry may carry
+the document's page with its link, `<engine origin>/<document id>?token=<link>`; an entry may carry
 its document's `id` (a home card's does). `createCadFileActions({ link: { origin, client } })` makes it
 from a CAD client's `link()` (`GET /api/v1/local/link`) and `entryOf`: the web viewer hands its page's
-origin, the CAD app the engine's origin from its launch (never its tunnel's), its fresh link asked
+origin, the CAD app the engine's origin from its launch (never its tunnel's), its link asked
 through the tunnel. A host that cannot make a link offers no Copy link. A host that can open the document's files in this
 computer's apps adds `apps(entry, { signal })` — the files (`source`, a model's `export:<format>`s),
 whether each is on disk and the apps that take it (`OpenInFiles`, `GET /api/v1/local/open-in`'s
@@ -605,7 +605,12 @@ update, then a spinner while the engine restarts, and a failure is a toast in th
 button offered again. The host reloads its page once its engine answers with the new release (or,
 for the web page, as another start of it: `/api/v1/server`'s `instance`), and
 only once nothing on it is unsaved (`reloadWhenClean`, with the host's own `reload`: the shared UI
-never navigates the page). Nothing it does is an answer the server keeps: the button stays while the
+never navigates the page). An update that ends with the page's server staying (its state `moved`: another
+channel is on that server's version, or work is in flight there, so the new release serves pages elsewhere, at the
+update's `address`, which its `link` opens) ends the button: no spinner waits on a server that does not go. The hook
+hands it once to the host's `onMoved`, which follows it and returns `true` -- the web page goes to the same document
+at that address with the link, once nothing is unsaved; a CAD card, whose launcher belongs to the version before,
+says the update is done and to start a new thread --, else it is said done as a toast. Nothing it does is an answer the server keeps: the button stays while the
 install is behind and goes once the update lands. The shell handles placement and hides the toolbar in
 Preview; the host owns callbacks and preferences. None of these imply platform
 detection or move application-specific release/network behavior into shared UI.

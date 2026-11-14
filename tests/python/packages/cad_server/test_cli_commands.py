@@ -253,14 +253,15 @@ class MujocoCheck(unittest.TestCase):
         self.model.write_text(_MJCF, encoding="utf-8")
 
     def test_the_command_table_names_the_integration_apart_from_the_types(self) -> None:
-        self.assertEqual({"mujoco": "cad_server.cli.mujoco"}, cli.INTEGRATION_COMMANDS)
+        self.assertEqual({"mujoco": "cad_server.cli.mujoco", "orcaslicer": "cad_server.cli.orcaslicer"},
+                         cli.INTEGRATION_COMMANDS)
         self.assertFalse(set(cli.INTEGRATION_COMMANDS) & set(cli.TYPE_COMMANDS), "a name is a type's or an integration's")
         self.assertEqual(("mujoco check", ["arm.xml"]), cli.resolve(["mujoco", "check", "arm.xml"]))
         self.assertIsNone(cli.resolve(["mujoco", "validate", "arm.xml"]))
         code, said, _ = _run(["--help"])
         self.assertEqual(0, code)
-        self.assertIn("integrations, for a tool's own file cad checks and does not show (cad <integration> <operation> "
-                      "FILE):\n  mujoco  check  ", said)
+        self.assertIn("integrations, for a tool's own files cad checks or writes and does not show (cad <integration> "
+                      "<operation> [FILE]):\n  mujoco      check              compile a MuJoCo model", said)
         code, said, _ = _run(["mujoco", "--help"])
         self.assertEqual(0, code)
         self.assertIn("usage: cad mujoco <operation> FILE [options]", said)
@@ -317,6 +318,78 @@ class MujocoCheck(unittest.TestCase):
         answer = json.loads(said)
         self.assertEqual(("OK elsewhere", {"collisions": {"geoms": 1}}), (answer["summary"], answer["measurements"]))
         self.assertEqual([("/env/mujoco/python", "mujoco", "check", [str(self.model.resolve())], {"strict": True})], calls)
+
+
+# What `cad orcaslicer ...` runs, in a process of its own: the preset folders are the test's alone (the app's own
+# profiles left out), and it says what it loaded of cad's and whether the engine's folder was made.
+_ORCASLICER = """
+import json, os, sys
+before = set(sys.modules)
+from cad.orcaslicer import _presets
+_presets.app_profiles = lambda: []
+import cad_server.cli as cli
+code = cli.main(sys.argv[1:])
+loaded = sorted(name for name in set(sys.modules) - before if name.split(".")[0] in ("OCP", "build123d", "socket")
+                or name.startswith("cad.engine"))
+print(json.dumps({"code": code, "loaded": loaded, "engine": os.path.exists(os.environ["CAD_ENGINE_DIR"])}),
+      file=sys.stderr)
+"""
+
+
+class OrcaslicerCommands(unittest.TestCase):
+    """``cad orcaslicer presets`` and ``complete``: an integration's operations on its tool's own files found by
+    name, no FILE. The integration has no extra, so they run in the command's own process: no engine, no kernel,
+    no environment made."""
+
+    def test_the_presets_are_listed_and_written_complete_in_the_command_s_own_process(self) -> None:
+        import os
+        import subprocess
+        import sys
+        import tempfile
+        from pathlib import Path
+
+        from tests.python.support.paths import SOURCE_PATH
+
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            for relative, preset in (
+                    ("Acme/machine/acme.json", {"type": "machine", "name": "Acme One 0.4 nozzle", "from": "system",
+                                                "instantiation": "true", "bed_shape": "0x0,200x200"}),
+                    ("Acme/process/fine.json", {"type": "process", "name": "0.20mm @Acme", "from": "system",
+                                                "instantiation": "true"}),
+                    ("Acme/filament/pla.json", {"type": "filament", "name": "Generic PLA", "from": "system",
+                                                "instantiation": "true"})):
+                (root / "profiles" / relative).parent.mkdir(parents=True, exist_ok=True)
+                (root / "profiles" / relative).write_text(json.dumps(preset), encoding="utf-8")
+            (root / "home").mkdir()
+            env = {key: value for key, value in os.environ.items() if key not in ("APPDATA", "XDG_CONFIG_HOME")}
+            env.update(PYTHONPATH=SOURCE_PATH, HOME=str(root / "home"), USERPROFILE=str(root / "home"),
+                       CAD_ENGINE_DIR=str(root / "engine"), CAD_STATE_DIR=str(root / "state"),
+                       CAD_CACHE_DIR=str(root / "cache"), CAD_UPDATE_CHECK="0", CAD_API_URL="http://127.0.0.1:9")
+
+            def cad(*argv: str) -> tuple[str, dict]:
+                done = subprocess.run([sys.executable, "-c", _ORCASLICER, "orcaslicer", *argv,
+                                       "--profiles", str(root / "profiles")],
+                                      capture_output=True, text=True, env=env, cwd=root, timeout=60)
+                return done.stdout, json.loads(done.stderr.strip().splitlines()[-1])
+
+            said, ran = cad("presets", "machine", "--match", "ACME")
+            self.assertEqual(("Acme One 0.4 nozzle\n", {"code": 0, "loaded": [], "engine": False}), (said, ran))
+            said, ran = cad("complete", "--printer", "Acme One 0.4 nozzle", "--process", "0.20mm @Acme",
+                            "--filament", "Generic PLA", "--out", "presets", "--json")
+            self.assertEqual({"code": 0, "loaded": [], "engine": False}, ran)
+            out = (root / "presets").resolve()
+            self.assertEqual({"printer": str(out / "printer.json"), "process": str(out / "process.json"),
+                              "filaments": [str(out / "filament-1.json")]}, json.loads(said))
+            process = json.loads((out / "process.json").read_text(encoding="utf-8"))
+            self.assertEqual((["Acme One 0.4 nozzle"], "User"), (process["compatible_printers"], process["from"]))
+        code, said, _ = _run(["orcaslicer", "--help"])
+        self.assertEqual(0, code)
+        self.assertIn("usage: cad orcaslicer <operation> [options]", said)
+        self.assertIn("operations:\n  presets   ", said)
+        code, _, err = _run(["orcaslicer", "complete", "--process", "x", "--filament", "y"])
+        self.assertEqual(2, code)
+        self.assertIn("the following arguments are required: --printer", err)
 
 
 if __name__ == "__main__":

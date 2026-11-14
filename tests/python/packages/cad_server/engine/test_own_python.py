@@ -102,7 +102,7 @@ class OwnPythonTest(unittest.TestCase):
         self.assertEqual(answer, {"failed": f"cad here is 0.0.1, worker contract 0 ({contract.CONTRACT['format']}, "
                                             f"{contract.CONTRACT['kernel']}); cad-server {contract.release()} speaks "
                                             f"{contract.spelled(contract.CONTRACT)}: update the cad package in this "
-                                            f"environment to {contract.release()}"})
+                                            f"environment to {contract.release()}, or run it with `cad run`"})
         self.assertEqual(self.workers(), [], "refused before any worker started")
         self.assertIsNone(re.search(r"\n", answer["failed"]))
 

@@ -3,11 +3,16 @@
 Three kinds of command. A document type's: ``cad <document_type> <operation> <file>``, one per type in
 the registry (``cad.registry``), each its own module, ``cad_server.cli.<type>``
 (``cad_server.cli.document_types``: ``cad xbf export``, ``cad stl snapshot``, ``cad urdf validate``). An
-integration's, for a file of its tool's own that is no document type, which cad checks and never shows:
-``cad <integration> <operation> <file>`` (``cad_server.cli.integrations``: ``cad mujoco check``), only for
-the integrations the registry gives operations. And the commands that are no file's: the engine's process control (``serve``, ``status``, ``stop``,
+integration's, for its tool's own files, which are no document type, which cad checks or writes and never
+shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations``: ``cad mujoco check``,
+``cad orcaslicer presets``), only for the integrations the registry gives operations. And the commands that are no file's: the engine's process control (``serve``, ``status``, ``stop``,
 ``delete``, ``server``), ``run``, and the installation's (``setup``, ``update``, ``uninstall``,
 ``doctor``, ``plugin``, ``viewer``, ``telemetry``).
+
+A command line may start with a pin, ``cad +<version>[@<channel>] ...``, as every command a skill runs does:
+the ``cad`` command runs the version it names, and that version reads it here before anything else
+(``cad_server._internal.pins``): a pin to another version is refused (exit 5), and the pin's channel is moved to
+this version where it is behind it, or the command refused as stale where it is ahead (exit 4).
 
 Every command is also reachable as ``python -m <module>``; this is the friendly front door, not a
 second implementation. A command's parser lives in its own module and owns its arguments, so the
@@ -71,7 +76,7 @@ TYPE_COMMANDS: dict[str, str] = {document_type: f"cad_server.cli.{document_type}
 INTEGRATION_COMMANDS: dict[str, str] = {name: f"cad_server.cli.{name}" for name, entry in INTEGRATIONS.items()
                                         if entry.operations}
 
-_USAGE_HEAD = ("usage: cad <document_type> <operation> FILE [args...] | cad <integration> <operation> FILE [args...]\n"
+_USAGE_HEAD = ("usage: cad <document_type> <operation> FILE [args...] | cad <integration> <operation> [FILE] [args...]\n"
                "       | cad <command> [args...]\n\n")
 _USAGE_TAIL = (
     "\nRun 'cad <document_type> --help' for a type's operations ('cad <integration> --help' for an\n"
@@ -98,17 +103,25 @@ def _type_lines() -> str:
 
 
 def _integration_lines() -> str:
-    """The integrations with operations of their own, each with them and the files they take (``cad.registry``)."""
+    """The integrations with operations of their own, each with them and the files they take, or, for one whose
+    tool's files are found by name in its own folders, that tool (``cad.registry``)."""
     width = max(len(name) for name in INTEGRATION_COMMANDS)
-    return "\n".join(f"  {name.ljust(width)}  {', '.join(INTEGRATIONS[name].operation_names)}  "
-                     f"{INTEGRATIONS[name].operations[0].summary.split(':')[0]}: {', '.join(INTEGRATIONS[name].files)}"
+    ops = {name: ", ".join(INTEGRATIONS[name].operation_names) for name in INTEGRATION_COMMANDS}
+    ops_width = max(len(text) for text in ops.values())
+
+    def takes(entry) -> str:
+        if entry.files:
+            return f"{entry.operations[0].summary.split(':')[0]}: {', '.join(entry.files)}"
+        return f"found by name in {entry.summary.split(',')[0]}'s own folders"
+
+    return "\n".join(f"  {name.ljust(width)}  {ops[name].ljust(ops_width)}  {takes(INTEGRATIONS[name])}"
                      for name in INTEGRATION_COMMANDS) + "\n"
 
 
 def _usage() -> str:
     return (_USAGE_HEAD + "document types, the files cad shows (cad <type> <operation> FILE):\n" + _type_lines()
-            + "\nintegrations, for a tool's own file cad checks and does not show (cad <integration> <operation> "
-              "FILE):\n" + _integration_lines()
+            + "\nintegrations, for a tool's own files cad checks or writes and does not show (cad <integration> "
+              "<operation> [FILE]):\n" + _integration_lines()
             + "\ncommands:\n" + _command_lines(_COMMANDS) + _USAGE_TAIL)
 
 
@@ -226,6 +239,20 @@ def _output_closed() -> int:
 def _main(argv: list[str]) -> int:
     _harden_std_stream_errors()
 
+    # A pinned command, `cad +<version>[@<channel>] ...`: the pin names this version, or nothing runs; its
+    # channel is this command's (`cad_server._internal.pins`, imported only for one: a command imports no more
+    # than it uses).
+    pin = None
+    if argv[:1] and argv[0].startswith("+"):
+        from cad_server._internal import pins
+        from cad_server._internal.cli_errors import Failure, wants_json, write
+
+        try:
+            pin, argv = pins.take(argv)
+            pins.check(pin)
+        except Failure as failure:
+            return write(failure, prog="cad", as_json=wants_json(argv))
+
     if not argv or argv[0] in {"-h", "--help"}:
         sys.stdout.write(_usage())
         return 0
@@ -233,12 +260,13 @@ def _main(argv: list[str]) -> int:
         return _main([*argv[1:], "--help"]) if argv[1:] else _main([])
 
     if argv[0] in {"-V", "--version"}:
-        # The installation's own version, as doctor's header says it: a development install's
-        # name (0.8.0-dev.<stamp>), so two installations are told apart; else the package's.
+        # The version this is: the installed version it belongs to, the name a pin names it by; else the
+        # installation's own version, as doctor's header says it: a development install's name
+        # (0.8.0-dev.<stamp>), so two installations are told apart; else the package's.
         from cad_server import __version__
-        from cad_server._internal.installations import own_version
+        from cad_server._internal import pins
 
-        sys.stdout.write(f"cad {own_version() or __version__}\n")
+        sys.stdout.write(f"cad {pins.own() or __version__}\n")
         return 0
 
     command, rest = argv[0], argv[1:]
@@ -258,6 +286,31 @@ def _main(argv: list[str]) -> int:
     from cad_server._internal.cli_errors import options
 
     helping = _asks_help(command, rest) or (command in _REGISTERS and "--check" in options(rest))
+    # The pin's channel made to run this version: equal, nothing; newer, or its first use, moved to it; older, the
+    # chat's copy of the skill is stale and nothing runs (`pins.apply`). Help reads no pointer.
+    if pin is not None and not helping:
+        from cad_server._internal import pins
+        from cad_server._internal.cli_errors import Failure, wants_json, write
+
+        try:
+            pins.apply(pin)
+        except Failure as failure:
+            return write(failure, prog="cad", as_json=wants_json(rest))
+    # No pin, run by a version that has never started where the default channel has no pointer (the newest version
+    # present, which the cad command runs where none has started): the default channel's first use made first, so
+    # nothing is written before the version's data is imported (`pins.first_use`). `setup` moves the channel itself,
+    # and `uninstall` takes things out.
+    elif pin is None and not helping and command not in _MOVES_ITSELF and _maybe_a_version():
+        from cad.engine.places import versioned
+
+        if versioned() is not None:
+            from cad_server._internal import pins
+            from cad_server._internal.cli_errors import Failure, wants_json, write
+
+            try:
+                pins.first_use()
+            except Failure as failure:
+                return write(failure, prog="cad", as_json=wants_json(rest))
     # `doctor` registers this installation, as `setup` does: on a device an earlier release set up, what
     # this release keeps of its state folder moves into its own first, before the notice below writes there.
     if command in _REGISTERS and not helping:
@@ -324,6 +377,21 @@ def _report(error: Exception) -> None:
 # `setup` (`update`), which say it their own way; `uninstall`; `run`, which is only the python it runs,
 # as the `cad` command's `run` is; `plugin`, which a switch runs with no one to read it; and `requirement`,
 # whose output a program reads.
+def _maybe_a_version() -> bool:
+    """Whether this process may be an installed version, told without importing the engine (a command imports no
+    more than it uses): told its name (a development version, ``CAD_INSTALLATION_VERSION``), or its environment is a
+    version's server, ``versions/<version>/code/server``. ``places.versioned`` then says."""
+    import os
+
+    if os.environ.get("CAD_INSTALLATION_VERSION"):
+        return True
+    parts = os.path.normcase(sys.prefix).split(os.sep)
+    return len(parts) >= 4 and parts[-1] == "server" and parts[-2] == "code" and parts[-4] == "versions"
+
+
+# Commands that never make the default channel's first use before they run (``pins.first_use``): setup moves it
+# itself (an updater's first run of it stops once its release is present), uninstall takes things out.
+_MOVES_ITSELF = frozenset({"setup", "uninstall"})
 _UNTOLD = frozenset({"server", "telemetry", "setup", "update", "uninstall", "run", "plugin", "requirement"})
 
 

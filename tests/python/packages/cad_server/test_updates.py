@@ -28,14 +28,18 @@ class UpdatesTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        self.environment({"CAD_STATE_DIR": str(self.tmp), "CAD_INSTALL_CHANNEL": "claude-github",
-                          "CAD_AUTO_UPDATED": "", "CI": "", "CAD_UPDATE_CHECK": ""})
+        # A release's process (a checkout is a development build unless told the version it runs as).
+        self.environment({"CAD_STATE_DIR": str(self.tmp), "CAD_INSTALLATION_VERSION": "0.8.1", "CI": "",
+                          "CAD_UPDATE_CHECK": ""})
         version = mock.patch.object(cad_server, "__version__", "0.8.1")
         version.start()
         self.addCleanup(version.stop)
         seen = mock.patch.object(updates, "_seen", set())
         seen.start()
         self.addCleanup(seen.stop)
+        # The install command ran here (its receipt): the default channel, and a process with no version, has an
+        # updater, and is told of a release.
+        (self.tmp / "install-receipt.json").write_text("{}", encoding="utf-8")
 
     def environment(self, values: dict[str, str]) -> None:
         patched = mock.patch.dict(os.environ, values)
@@ -53,25 +57,48 @@ class UpdatesTest(unittest.TestCase):
                 self.assertIsNone(updates.offer(feed, version, True))
         self.assertIsNone(updates.offer(feed, "0.1.0", False))  # never, however far behind
 
-    def test_who_is_told_is_what_the_plugins_startup_config_says(self) -> None:
-        # A plugin's server environment names its channel, and CAD_AUTO_UPDATED=1 where its store
-        # or the app that installed it keeps the copy up to date: cadgen decides by that, never by the
-        # channel's name. A Viewer a skill opens names nothing, a skills-only install; a development
-        # install is never told.
-        from cad_server._internal.channel import told
+    def test_who_is_told_is_the_default_channel_s_version(self) -> None:
+        # Only the default channel has an updater: a version a named channel alone is on (a store's copy) is
+        # never told, nor a development build -- a development version's name, or a source tree not told the
+        # version it runs as. CAD_INSTALL_CHANNEL and CAD_AUTO_UPDATED, which configs of 0.11.10 and earlier set,
+        # decide nothing. A process with no version is the default's, on a device the install command set up.
+        from cad.engine import places
+        from cad_server._internal import channel, pointers
 
-        for values, expected in (
-            ({"CAD_INSTALL_CHANNEL": "claude-github"}, True),
-            ({"CAD_INSTALL_CHANNEL": "claude-directory", "CAD_AUTO_UPDATED": "1"}, False),
-            ({"CAD_INSTALL_CHANNEL": "gemini-github", "CAD_AUTO_UPDATED": "1"}, False),
-            ({"CAD_INSTALL_CHANNEL": "a-store-of-tomorrow", "CAD_AUTO_UPDATED": "1"}, False),
-            ({"CAD_INSTALL_CHANNEL": "a-store-of-tomorrow"}, True),
-            ({"CAD_INSTALL_CHANNEL": ""}, True),
-            ({"CAD_INSTALL_CHANNEL": "dev"}, False),
+        receipt = places.state_dir() / pointers.RECEIPT
+        receipt.parent.mkdir(parents=True, exist_ok=True)
+        receipt.write_text("{}", encoding="utf-8")
+        for values, source_tree, expected in (
+            ({"CAD_INSTALL_CHANNEL": "claude-directory", "CAD_AUTO_UPDATED": "1"}, False, True),
+            ({"CAD_INSTALL_CHANNEL": "dev", "CAD_INSTALLATION_VERSION": ""}, False, True),
+            ({"CAD_INSTALLATION_VERSION": ""}, True, False),
+            ({"CAD_INSTALLATION_VERSION": "0.8.1"}, True, True),
+            ({"CAD_INSTALLATION_VERSION": "0.8.1-dev.20261113120000"}, False, False),
         ):
-            with self.subTest(values=values), mock.patch.dict(os.environ, values), \
-                    mock.patch("cad_server._internal.channel._source_tree", return_value=False):
-                self.assertEqual(told(), expected)
+            with self.subTest(values=values, source_tree=source_tree), mock.patch.dict(os.environ, values), \
+                    mock.patch("cad_server._internal.channel._source_tree", return_value=source_tree):
+                self.assertEqual(channel.told(), expected)
+        # No receipt: a person's own `pip install cad-server` or `uvx ... cad viewer`, which has no install to update.
+        receipt.unlink()
+        with mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": "0.8.1"}), \
+                mock.patch("cad_server._internal.channel._source_tree", return_value=False):
+            self.assertIsNone(places.versioned())
+            self.assertFalse(channel.told())
+
+        # A version is told where it is the default channel's on a device the install command set up (its receipt):
+        # where it never ran, there is no install to update.
+        receipt = places.state_dir() / pointers.RECEIPT
+        with mock.patch.object(places, "versioned", return_value="0.12.1"):
+            for default, installed, expected in (("0.12.1", True, True), ("0.12.2", True, False), (None, True, False),
+                                                 ("0.12.1", False, False)):
+                if installed:
+                    receipt.parent.mkdir(parents=True, exist_ok=True)
+                    receipt.write_text("{}", encoding="utf-8")
+                else:
+                    receipt.unlink(missing_ok=True)
+                with self.subTest(default=default, installed=installed), mock.patch.object(
+                        pointers, "default", return_value=pointers.Default(default, "pointer" if default else None)):
+                    self.assertEqual(channel.told(), expected)
 
     def test_the_notice_is_the_release_and_a_text_app_s_line_names_the_install_command(self) -> None:
         self.just_read(FEED)
@@ -80,10 +107,9 @@ class UpdatesTest(unittest.TestCase):
         self.assertEqual(updates.line(found, "posix"), "text-to-cad 0.9.0 is out (this is 0.8.1); to update every agent "
                                                        "app here, run: curl -fsSL https://texttocad.dev/install.sh | sh")
         self.assertTrue(updates.line(found, "nt").endswith("run: irm https://www.texttocad.dev/install.ps1 | iex"))
-        # The same in the CAD Viewer a skill opens, which no plugin names a channel for.
-        with mock.patch.dict(os.environ, {"CAD_INSTALL_CHANNEL": ""}), \
-                mock.patch("cad_server._internal.channel._source_tree", return_value=False):
-            self.assertEqual(updates.notice(), found)
+        # Never from a process with no updater: a named channel's version, a development build.
+        with mock.patch("cad_server._internal.channel.default_version", return_value=False):
+            self.assertIsNone(updates.notice())
 
     def test_an_app_s_newer_server_shows_the_release_with_no_network(self) -> None:
         """A shim whose release is newer than the engine's proves a release exists: the button shows,
@@ -98,19 +124,19 @@ class UpdatesTest(unittest.TestCase):
             self.assertEqual(updates.notice(), {"latest": "0.9.2", "version": "0.8.1"})
             self.assertEqual(updates.newest(), "0.9.2")
 
-    def test_a_store_s_copy_is_offered_the_release_its_plugin_moved_to_and_reads_the_feed_when_asked(self) -> None:
-        """A store updates the plugin, never the device's engine: a newer server's release is offered to
-        its copy too (never the feed's), and an update the person asks for reads the feed; a development
-        install is offered nothing."""
+    def test_a_store_s_copy_shows_no_notice_and_reads_the_feed_when_asked(self) -> None:
+        """A store updates its own copy, never the device's default: a version only a named channel is on shows no
+        notice, not even for a newer server's release, and an update the person asks for reads the feed; a
+        development install is offered nothing."""
         self.just_read({"latest": "0.9.5"})
         updates.see("0.9.2")
-        with mock.patch.dict(os.environ, {"CAD_INSTALL_CHANNEL": "claude-directory", "CAD_AUTO_UPDATED": "1"}):
-            self.assertEqual(updates.notice(), {"latest": "0.9.2", "version": "0.8.1"})
+        with mock.patch("cad_server._internal.channel.default_version", return_value=False):
+            self.assertIsNone(updates.notice())
             asked: list[str] = []
             with mock.patch.object(updates, "_get", lambda url: asked.append(url) or {"latest": "0.9.6"}):
                 self.assertEqual(updates.newest(), "0.9.6")
             self.assertEqual(len(asked), 1)
-        with mock.patch.dict(os.environ, {"CAD_INSTALL_CHANNEL": "dev"}):
+        with mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": "0.8.1-dev.20261113120000"}):
             self.assertIsNone(updates.notice())
 
     def test_an_update_reads_the_feed_now_and_moves_to_the_newest_it_knows(self) -> None:
@@ -173,9 +199,10 @@ class UpdatesTest(unittest.TestCase):
 
     def test_nothing_is_checked_when_turned_off_in_ci_or_for_a_copy_that_is_not_told(self) -> None:
         self.just_read(FEED)
-        for values in ({"CAD_UPDATE_CHECK": "0"}, {"CI": "true"}, {"CAD_INSTALL_CHANNEL": "dev"},
-                       {"CAD_INSTALL_CHANNEL": "claude-directory", "CAD_AUTO_UPDATED": "1"}):
-            with self.subTest(values=values), mock.patch.dict(os.environ, values):
+        for values, default in (({"CAD_UPDATE_CHECK": "0"}, True), ({"CI": "true"}, True),
+                                ({"CAD_INSTALLATION_VERSION": "0.8.1-dev.1"}, True), ({}, False)):  # a named channel's
+            with self.subTest(values=values, default=default), mock.patch.dict(os.environ, values), \
+                    mock.patch("cad_server._internal.channel.default_version", return_value=default):
                 asked: list[str] = []
                 self.assertIsNone(updates.notice())
                 updates.feed(now=time.time() + 2 * updates.CHECK_SECONDS, get=asked.append)

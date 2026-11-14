@@ -1,7 +1,8 @@
 # Migrating from 0.10 to the next release
 
 Draft: this guide is renamed for its release when it ships. It covers the skills, the library's
-imports, the `cad` command, what `cad run` runs a program in, and setting up and updating.
+imports, the `cad` command, what `cad run` runs a program in, and setting up and updating, and ends
+with what 0.11.11 changes ([In 0.11.11](#in-01111)).
 The next release is a minor release, so it never installs itself: update with the update button or
 `cad update` when you are ready. Its patch releases then install themselves, with automatic updates on
 ([Setting up and updating](#setting-up-and-updating)).
@@ -20,7 +21,7 @@ names its new one.
 | `urdf`, `srdf`, `sdf` | `robot-simulation` |
 | `dxf` | `cad`, which makes 2D profiles, flat patterns and DXFs |
 | `dfm`, `dfam-check` | `cad`'s manufacturing checks ("Can it be made?"); their scripts are `cad <type> dfm` ([The manufacturing measurements](#the-manufacturing-measurements-tier-1)) |
-| `gcode`, `bambu-labs` | `print3d`: slicing with OrcaSlicer (`scripts/orca_presets.py`, which was `gcode/scripts/orca_presets.py`) and the Bambu Connect or Bambu Studio handoff |
+| `gcode`, `bambu-labs` | `print3d`: slicing with OrcaSlicer, its presets written by `cad orcaslicer presets` and `cad orcaslicer complete` (through 0.11.10 by the skill's `scripts/orca_presets.py`, which was `gcode/scripts/orca_presets.py`: [In 0.11.11](#in-01111)), and the Bambu Connect or Bambu Studio handoff |
 | `step-parts` and its `scripts/download_step_part.py` | gone: step.parts stays a service of its own |
 | (new) | `pcb`: KiCad boards and schematics |
 
@@ -110,7 +111,8 @@ the checks are `dfm` (a 3D type's manufacturing check), `drc` (a board's), `erc`
 0.10 answered `issues`, each with `element`. A file of another type is refused by name before anything
 runs (`part.glb is a glb, not a stl: use cad glb snapshot`).
 
-These stay as they were, but for how they fail and what one that destroys asks (below): `serve`,
+These stay as they were, but for how they fail and what one that destroys asks (below), and what
+`uninstall` removes from 0.11.11 ([In 0.11.11](#in-01111)): `serve`,
 `status`, `stop`, `delete`, `server`, `uninstall`, `plugin`, `viewer`, `telemetry`. `cad run` changes
 what it runs a program in ([`cad run`](#cad-run-tier-1)), and `setup`, `update` and `doctor` what they
 set up ([Setting up and updating](#setting-up-and-updating)); what `cad doctor` reports, and what `cad
@@ -125,8 +127,9 @@ destroys run where no one can be asked, without `--yes`), 1 for a failure of the
 and under `--json` it is one JSON document on stdout, `{"ok": false, "error": ..., "reason": ...}`,
 with nothing else there and no traceback. `reason` is one of `usage`, `invalid_argument`, `wrong_type`,
 `not_found`, `confirmation_required` (exit 2), `declined`, `engine_unavailable`, `failed`,
-`internal_error` (exit 1) and `canceled` (130). Read the exit status, then `reason`; `error` is for a
-person. A check's findings are still its answer, not a failure: a check that finds a blocking one exits
+`internal_error` (exit 1) and `canceled` (130); 0.11.11 adds `bad_pin` (exit 2), `cannot_install_here` (3),
+`stale_pin` (4) and `other_version` (5), for a command that names its release ([In 0.11.11](#in-01111)).
+Read the exit status, then `reason`; `error` is for a person. A check's findings are still its answer, not a failure: a check that finds a blocking one exits
 1 with its result (`"ok": false`, its `findings`), as `cad doctor` does with its report.
 
 | 0.10 | Now |
@@ -236,20 +239,70 @@ release, and what it runs a program in follows the program:
 
 - **Automatic updates are on** (tier 3: your settings). The CAD server installs a newer release that
   breaks nothing (a patch release, before 1.0) by itself, in the background, and switches to it once
-  nothing has run for a minute; 0.10 installed nothing until you asked. A 0.10 settings file says
-  nothing of them, so they are on: `cad update auto off`, or unchecking Automatic updates in the menu
+  text-to-cad has had nothing to do for an hour; 0.10 installed nothing until you asked. A 0.10
+  settings file says nothing of them, so they are on: `cad update auto off`, or unchecking Automatic updates in the menu
   under CAD's logo, turns them off, and `cad update auto` says whether they are on.
   `CAD_UPDATE_CHECK=0` in the server's environment turns them off too, as it turns off the version
   check. A release that may break something, this one among them, still waits for you.
-- **The CAD kernel environment is made on first need** (tier 1). The install command (`cad setup`),
-  `cad update` and `cad doctor` no longer make it: the first build, or the first view or operation
-  that needs the kernel, makes it, from uv's cache where it holds it, else the network. An automatic
-  update makes its release's before it switches. An image or a CI step that ran `cad doctor` to make
-  it and then built offline makes it at its first build now: run one (`cad run model.py`) while the
-  network is there.
-- **`cad doctor --prune` removes more** (tier 1): every release folder too, but the current
-  release's and the one before's; 0.10's left the release folders alone.
+- **The CAD kernel environment is made with the release** (tier 1). 0.10's `cad doctor` made it;
+  0.11.0 to 0.11.10 made it on first need, by the first build or view that needed the kernel. From
+  0.11.11 it is made in the release's own folder as the release is installed: by the install command,
+  `cad update`, an automatic update, or the first command that names a release not yet installed.
+  `cad doctor` never makes it: an image or a CI step that ran `cad doctor` to make it and then built
+  offline runs the install command while the network is there.
+- **`cad doctor --prune` removes more** (tier 1); 0.10's left the release folders alone. From 0.11.11
+  it removes what nothing needs -- a channel no command has used for 30 days, a release no channel is
+  on or never used, what releases before 0.11.11 left behind -- never a release with work in flight,
+  and lists it first ([Checking what your computer
+  runs](../install.md#checking-what-your-computer-runs)).
 - **On Windows the command is `cad.exe`** (tier 1), with a Python of its own beside it
   (`cad-launcher`), in place of 0.10's batch file, `cad.cmd`. The install command or `cad update`
   writes it, and deletes `cad.cmd` at the write after, so nothing of yours moves (tier 3). `cad` alone
   runs it, as it ran `cad.cmd`; a script or a shortcut that named `cad.cmd` names `cad.exe`, or `cad`.
+
+## In 0.11.11
+
+0.11.11 is a patch release, so with automatic updates on it installs itself
+([Updates](../install.md#updates)). What it changes:
+
+- **Claude gets the skills alone** (tier 1). Claude Code and Claude Desktop get no CAD server, so no
+  CAD cards or CAD tools: a model is shown by the link its run prints (`cad run model.py`), in the
+  desktop app's browser pane or your browser. The install command and every update take out the `cad`
+  entry releases through 0.11.10 wrote into Claude Desktop's config, keeping the rest of the file and a
+  `.bak` beside it ([Claude Desktop](../install.md#claude-desktop)).
+- **Every command a skill runs names its release** (tier 1): `cad +0.11.11 <verb>`, and in a plugin
+  directory's copy its channel too (`cad +0.11.11@claude`, `@codex`). It runs exactly that release,
+  installing it first where it is missing ([Releases side by side](../install.md#releases-side-by-side)).
+  A command typed with no release still works: it runs the default channel's release. A pinned command
+  can fail in three new ways, each named in every skill's Setup: exit 3 (`cannot_install_here`), the
+  release could not be installed from this shell: run the line it prints outside the sandbox; exit 4
+  (`stale_pin`), this copy of the skill is older than the release its channel is on: read the skill
+  again, and if it still names the older release, run `cad update` (or update the plugin in the app it
+  came from), then start a new chat; exit 5 (`other_version`), the `cad` found is another copy of
+  text-to-cad: run `~/.local/bin/cad` ([After an update](../install.md#after-an-update)).
+- **print3d's presets are `cad` commands** (tier 1). `python scripts/orca_presets.py --list <kind>
+  --match <text>` is `cad orcaslicer presets <kind> --match <text>`, and `python scripts/orca_presets.py
+  --printer ... --process ... --filament ... --out <folder>` is `cad orcaslicer complete` with the same
+  options. The script is gone, and no skill ships a program.
+- **Each release has its own folder and data** (tier 3). The state folder's `releases/<release>` is
+  `versions/<release>`, its code and its data (settings, Recents, the documents' records) in it, and each
+  release runs its own CAD server. The update to 0.11.11 carries your settings, Recents, records and the
+  pages' port and token into it. The move is one way: going back to a release before 0.11.11 by hand is
+  not supported, and the install command refuses `--version` with one.
+- **`cad status`, `cad stop` and `cad server` act on one release** (tier 1): the default channel's with
+  no release named, a plugin directory's with its release and channel (`cad +0.11.11@claude stop`).
+  `cad doctor` lists every installed release and channel
+  ([Checking what your computer runs](../install.md#checking-what-your-computer-runs)).
+- **What the install command gives, it takes back** (tier 1). It no longer replaces a copy from a
+  plugin directory (claude.ai's, Codex's), and never changes or removes it: the directory updates it, on a
+  release of its own. Every app still gets the install command's copy beside it, so the app loads the skills of both and
+  every skill shows twice; the install command and `cad doctor` say so, and to keep one you remove the
+  directory's copy in the app's plugin manager. `cad uninstall` removes what the install command put on
+  the computer and keeps your settings, Recents and documents' records; a plugin directory's copy stays,
+  with its release and the `cad` command. `--purge` removes everything
+  ([What the install command does](../install.md#what-the-install-command-does)).
+- **The CAD app's three removed tools answer by name** (tier 1, an exception until the next minor
+  release). `cad_export`, `cad_snapshot` and `cad_inspect`, removed in 0.11.10, answer a chat that still
+  lists them with one line naming the `cad` command that does the same (`cad model export`, `cad model
+  snapshot`, `cad model inspect`, or a file's type's). Tier 1 would answer as for a tool that never
+  existed.

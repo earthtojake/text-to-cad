@@ -1,15 +1,24 @@
-"""``cad``, the command (``~/.local/bin/cad``): the current installation, run.
+"""The module the ``cad`` command of the layout of 0.11.10 and earlier ran: the current installation, run.
 
-The proxy's ``sh`` (on Windows ``cad.exe``'s ``__main__.py``) runs this module with the current
-installation's interpreter (``cad_server._internal.installations``: ``current``), or with no current one
-the interpreter registered last; it runs one installation's ``cad`` console script with the arguments:
+The ``cad`` command of revisions before 12 (``installations``) ran this module with the current installation's
+interpreter (``installations/current``), or with no current one the interpreter registered last, and it runs one
+installation's ``cad`` console script with the arguments:
 
 a. the current installation, while its interpreter and console script are there;
 b. else the installation registered last (no installation is current yet: one from before there was
    a current one).
 
+The command of revision 12 reads a pin and runs a version's own ``cad`` itself; it runs this module only for a
+command with no pin on a device the install command set up with 0.11.10 or earlier and no update has moved yet, with
+that
+installation's interpreter -- that release's own copy of it. This release's copy is run where a command of an
+earlier revision is still on the device while ``installations/current`` names a version of this layout (the record
+clients of 0.11.10 and earlier find its server by, ``pointers.mirror``): it runs that version's ``cad``, which reads
+any pin.
+
 There is one installation a command runs, and nothing here compares versions: the arguments go to it as
-they are. With no installation at all it says, in one line, the command that installs one.
+they are. With no installation at all it says, in one line, the command that installs one (``NONE_INSTALLED``,
+which the ``cad`` command says too).
 
 The console script runs by ``exec``, so the proxy adds no process and no output of its own -- or,
 when the installation chosen is the one this interpreter is (the usual case), as its console script

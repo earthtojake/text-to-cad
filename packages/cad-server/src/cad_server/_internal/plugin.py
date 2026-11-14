@@ -9,10 +9,10 @@ server configs they name, the icons, the licence, and ``skills/`` -- written fro
 of them (``source``: ``_runtime/plugin`` in its wheel, which ``scripts/bundle`` builds; a checkout's
 root in a source tree). Three things change on the way (``tree``): every version is this
 distribution's, the catalog is a local one of its own (``MARKETPLACE``), and each host's CAD server
-is the line the installer gives that host: ``uvx ... --from cad-mcp==<version> cad-mcp``, told
-the install channel of the install command (``CHANNELS``). Claude Code's manifest names no server: Claude
-Code gets the skills, and the Code tab of the desktop app gets CAD's server from Claude Desktop's own config
-(``providers``). ``claude.mcp.json`` stays for Grok Build's manifest, which names it, and for the store's
+is the line the installer gives that host: ``uvx ... --from cad-mcp==<version> cad-mcp`` (``SERVERS``), with
+no channel: the install command's copies are our own text, on the default channel, as every pin in the skills
+says (``cad +<version> <verb>``). Claude Code's manifest names no server: Claude
+gets the skills alone, on every route (``providers``). ``claude.mcp.json`` stays for Grok Build's manifest, which names it, and for the store's
 copy (``scripts/release/plugin_branch.py``). There is no root ``.mcp.json``: Claude Code would read it.
 
 It is a stable path, regenerated in place (``write``): a file that differs is written to a hidden
@@ -22,10 +22,9 @@ local-directory marketplace) and Gemini CLI (a linked extension) read the folder
 regenerated folder is what their next session reads; Codex and Cursor keep copies of it, which the
 installer refreshes, and Codex drops a symlink without a word.
 
-The folder follows the release that is current. It is written at a registration of the current
-installation (``installations.setup``), by ``cad setup`` before the apps are pointed at it, and after
-every switch of the device's engine, by the release then current (``cad plugin``, run by
-``cad_server._internal.switch``); ``cad plugin`` prints its path.
+The folder follows the default channel's version. It is written by ``cad setup`` before the apps are pointed at
+it -- every update runs the new release's setup -- and by ``cad plugin --refresh``, which the updater of 0.11.10
+and earlier runs once the release it moved to serves; ``cad plugin`` prints its path.
 
 Nothing here imports the packages at module scope, so a test reads this file by its path: what it
 borrows -- the one atomic rename, the state folder, the lock, this release's version and its bundled
@@ -71,19 +70,9 @@ FILES = (
 # The manifests that carry the plugin's version.
 MANIFESTS = (".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".cursor-plugin/plugin.json",
              ".grok-plugin/plugin.json", "gemini-extension.json", "plugin.json")
-# Each file that starts CAD's server, and the install channel the server is told there
-# (``cad_server._internal.channel``): what happened, the install command, for each host it points at this
-# folder, never the `latest` branch's `-github` (an install by hand from GitHub). The standard's has no host of
-# its own. None is auto-updated: an update is the person's.
-CHANNELS = {
-    "claude.mcp.json": "claude-install",
-    "codex.mcp.json": "codex-install",
-    "cursor.mcp.json": "cursor-install",
-    "gemini-extension.json": "gemini-install",
-    "mcp.json": "agent-plugins",
-}
-CHANNEL_ENV = "CAD_INSTALL_CHANNEL"
-AUTO_UPDATED_ENV = "CAD_AUTO_UPDATED"
+# Each file that starts CAD's server: its launcher is pinned to this version, on the default channel (no
+# ``--channel``), as the repository's configs are.
+SERVERS = ("claude.mcp.json", "codex.mcp.json", "cursor.mcp.json", "gemini-extension.json", "mcp.json")
 # The CAD app's transport, as the plugin's server configs run it (``cad_server._internal.launch``).
 SHIM, SHIM_COMMAND = "cad-mcp", "cad-mcp"
 # The lock two writers of the folder take, beside it.
@@ -156,24 +145,22 @@ def _mode(path: Path) -> int:
     return 0o755 if os.stat(path).st_mode & 0o111 else 0o644
 
 
-def _server(entry: Any, version: str, channel: str, where: str) -> Dict[str, Any]:
-    """A server entry that runs the CAD app's transport, its pin this ``version``'s and its install channel
-    ``channel``; ``ValueError`` for one that is not."""
+def _server(entry: Any, version: str, where: str) -> Dict[str, Any]:
+    """A server entry that runs the CAD app's transport, its pin this ``version``'s; ``ValueError`` for one that is
+    not."""
     arguments = entry.get("args") if isinstance(entry, dict) else None
     pins = [index for index, word in enumerate(arguments or []) if isinstance(word, str) and word.startswith(f"{SHIM}==")]
     if not pins or arguments[-1:] != [SHIM_COMMAND]:
         raise ValueError(f"{where}: its server does not run {SHIM}'s {SHIM_COMMAND}")
     arguments = list(arguments)
     arguments[pins[0]] = f"{SHIM}=={version}"
-    environment = {key: value for key, value in (entry.get("env") or {}).items() if key != AUTO_UPDATED_ENV}
-    environment[CHANNEL_ENV] = channel
-    return {**entry, "args": arguments, "env": environment}
+    return {**entry, "args": arguments}
 
 
 def _transform(relative: str, data: bytes, version: str) -> bytes:
     """A plugin file as the folder holds it: its version this one, the catalog a local one listing the
-    plugin at ``./``, and each CAD server this version's, told its channel. Other files as they are."""
-    if relative not in MANIFESTS and relative not in CHANNELS and relative != CATALOG:
+    plugin at ``./``, and each CAD server this version's. Other files as they are."""
+    if relative not in MANIFESTS and relative not in SERVERS and relative != CATALOG:
         return data
     try:
         document = json.loads(data.decode("utf-8"))
@@ -187,11 +174,11 @@ def _transform(relative: str, data: bytes, version: str) -> bytes:
         for entry in document.get("plugins") or []:
             if isinstance(entry, dict) and entry.get("name") == NAME:
                 entry.update({"version": version, "source": "./"})
-    if relative in CHANNELS:
+    if relative in SERVERS:
         servers = document.get("mcpServers")
         if not isinstance(servers, dict) or not servers:
             raise ValueError(f"{relative} names no server")
-        document["mcpServers"] = {key: _server(entry, version, CHANNELS[relative], relative)
+        document["mcpServers"] = {key: _server(entry, version, relative)
                                   for key, entry in servers.items()}
     return (json.dumps(document, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 

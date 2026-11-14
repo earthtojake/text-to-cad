@@ -393,7 +393,8 @@ class Models:
 
     @staticmethod
     def url(server: Any, ident: str) -> str:
-        """The page of document ``ident`` on ``server``: ``/<id>``, with a fresh link that lets it in."""
+        """The page of document ``ident`` on ``server``: ``/<id>``, with the link that lets it in (the same text every
+        build, until the token is rotated)."""
         app = getattr(server.http, "app", None)
         return f"{server.url}/{ident}" + (f"?token={app.link()}" if app is not None else "")
 

@@ -182,7 +182,7 @@ jobs:
           $out = Get-Content "$env:RUNNER_TEMP\install.txt" -Raw
           Write-Host $out
           if ($out -match 'cad setup exited') { throw "cad setup failed" }
-          if ($out -notmatch "server\s+registered $([regex]::Escape($env:CAD_RELEASE))") { throw "the server did not register" }
+          if ($out -notmatch "default\s+text-to-cad $([regex]::Escape($env:CAD_RELEASE))") { throw "the default channel is not on the release" }
           $cmd = Join-Path $env:USERPROFILE '.local\bin\cad.exe'
           if (-not (Test-Path $cmd)) { throw "the cad command was not written at $cmd" }
           $python = Join-Path $env:USERPROFILE '.local\bin\cad-launcher\Scripts\python.exe'
@@ -199,6 +199,24 @@ jobs:
           if ($LASTEXITCODE) { throw "cad doctor exited $LASTEXITCODE" }
           & $env:CAD_CMD setup --dry-run
           if ($LASTEXITCODE) { throw "a second cad setup --dry-run exited $LASTEXITCODE" }
+
+      # The skills' setup block's Windows line, `& ([scriptblock]::Create((irm .../install.ps1))) --add X`: that
+      # release installed alone, the script block's arguments handed to the installer, and the pinned command run.
+      - name: --add, as a skill's setup block runs it (5.1)
+        if: ${{ !inputs.published }}
+        shell: cmd
+        env:
+          CAD_INSTALL_FROM: ${{ env.CAD_WHEEL }}
+        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((Get-Content -Raw '%CAD_SCRIPT%'))) --add %CAD_RELEASE%" > "%RUNNER_TEMP%\add.txt" 2>&1
+
+      - name: What --add did
+        if: ${{ !inputs.published }}
+        shell: pwsh
+        run: |
+          Write-Host (Get-Content "$env:RUNNER_TEMP\add.txt" -Raw)
+          if ((Get-Content "$env:RUNNER_TEMP\add.txt" -Raw) -match 'cad setup exited') { throw "cad setup --add failed" }
+          $said = & $env:CAD_CMD "+$env:CAD_RELEASE" --version
+          if ($LASTEXITCODE -or $said -ne "cad $env:CAD_RELEASE") { throw "cad +$env:CAD_RELEASE --version said $said" }
 
       # What the model steps share: run a program and keep its stdout and stderr together (Windows
       # PowerShell 5.1 turns a native command's stderr lines into error records, so they are

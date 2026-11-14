@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -37,8 +37,8 @@ export const pinPattern = /(?<![\w.-])(cad(?:-server|-mcp)?(?:\[[a-z0-9_,.-]+\])
 // Files that pin a release by a requirement string rather than a version field: the commands the
 // agent apps run to start the CAD app's transport (`cad-mcp==`), the install page's Claude Desktop
 // config and the command it says the installer runs, and the distributions that pin the library at
-// their own release (the server, the alias). The skills name no release: they run the `cad` command,
-// whatever installation is current. A file may
+// their own release (the server, the alias). The skills pin theirs a different way, in their
+// commands (`skillPinPatterns`, below). A file may
 // also be a JSON or TOML target (the Gemini extension, those pyprojects); its pin is stamped on top of that
 // change, not over it.
 export const pinTargets = [
@@ -62,12 +62,91 @@ export const bootstrapTargets = [
   { path: "scripts/install/install.ps1", pattern: /^([ \t]*\$CadVersion = ")([^"\n]*)(")$/m },
 ];
 
+// Every command a skill runs names its release: `cad +<VERSION> <verb> ...`, the pin the first
+// argument, so the skill text of a release runs that release's software. Every Markdown file under
+// `skills/` is stamped, in place, by three patterns:
+// - the pin, `cad +X.Y.Z` (a suffix allowed, ending in a letter or digit) followed by a space, a
+//   backtick, a quote or the line's end. `cad` stands alone (not `scad +1.2.3`, not `my-cad`), and
+//   the version is three dotted numbers, so arithmetic such as `cad +0.5 ` is never touched;
+// - the setup block's install argument, `--add X.Y.Z`;
+// - the setup block itself, from "Every command in this skill starts `cad +" to "step it prints.",
+//   where the release is named in prose too ("runs text-to-cad X.Y.Z"): every X.Y.Z in it.
+// - a SKILL.md's header, `metadata.version` (quoted: the Agent Skills format's `metadata` values are
+//   strings), in the front matter alone; every SKILL.md must carry it.
+// Every skill that runs `cad` carries that block (tests/python/global/test_skill_requirements.py), and
+// no command goes unpinned (test_skill_commands_pin_their_release.py).
+export const skillsDir = "skills";
+const releaseName = String.raw`\d+\.\d+\.\d+(?:[0-9A-Za-z.+_-]*[0-9A-Za-z])?`;
+export const skillPinPatterns = {
+  pin: new RegExp(String.raw`(?<![\w.-])(cad \+)(${releaseName})(?=[\s\x60'"]|$)`, "gm"),
+  add: new RegExp(String.raw`(?<![\w-])(--add )(${releaseName})`, "g"),
+  setupBlock: /Every command in this skill starts `cad \+[\s\S]*?step it prints\./g,
+  frontMatter: /^---\n[\s\S]*?\n---\n/,
+  metadataVersion: /^(metadata:\n(?:  .*\n)*?  version: ")([^"\n]*)(")$/m,
+};
+
+function skillDocuments(dir = skillsDir) {
+  let entries;
+  try {
+    entries = readdirSync(repoPath(dir), { withFileTypes: true });
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+  return entries
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .flatMap((entry) => {
+      const relative = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) {
+        return entry.name === "__pycache__" ? [] : skillDocuments(relative);
+      }
+      return entry.isFile() && entry.name.endsWith(".md") ? [relative] : [];
+    });
+}
+
+/** The skill text with every pin, install argument and the setup block's release set to `version`. */
+export function stampSkillText(text, version) {
+  const { pin, add, setupBlock } = skillPinPatterns;
+  const { frontMatter, metadataVersion } = skillPinPatterns;
+  return text
+    .replace(frontMatter, (header) => header.replace(metadataVersion, (_, before, _stale, after) => `${before}${version}${after}`))
+    .replace(new RegExp(setupBlock.source, "g"), (block) => block.replace(/\b\d+\.\d+\.\d+\b/g, version))
+    .replace(new RegExp(pin.source, "gm"), (_, prefix) => `${prefix}${version}`)
+    .replace(new RegExp(add.source, "g"), (_, prefix) => `${prefix}${version}`);
+}
+
+function syncSkillTargets(version) {
+  const documents = skillDocuments();
+  const changes = [];
+  let pinned = 0;
+  for (const relativePath of documents) {
+    const text = readRequiredText(relativePath);
+    pinned += [...text.matchAll(new RegExp(skillPinPatterns.pin.source, "gm"))].length;
+    if (relativePath.endsWith("/SKILL.md")) {
+      const header = text.match(skillPinPatterns.frontMatter);
+      if (!header || !skillPinPatterns.metadataVersion.test(header[0])) {
+        throw new Error(`${relativePath} must carry metadata.version: "<version>" in its header`);
+      }
+    }
+    const stamped = stampSkillText(text, version);
+    if (stamped !== text) {
+      changes.push({ path: relativePath, labels: ["skill command pins"], text: stamped });
+    }
+  }
+  if (documents.length > 0 && pinned === 0) {
+    throw new Error(`no skill under ${skillsDir}/ pins its commands (cad +<version>)`);
+  }
+  return changes;
+}
+
 function usage() {
   console.log(`Usage:
   scripts/release/sync-version.mjs [--check]
 
 Synchronizes duplicate package and plugin metadata versions from the canonical
-VERSION file. Release preparation edits that file, then
+VERSION file, and the release each skill command pins (cad +<version>). Release preparation edits that file, then
 stamps derived metadata from it; the bundle script and the Publish Release
 workflow re-check the same metadata before production output is written.
 
@@ -320,6 +399,8 @@ function main() {
       changes.push(change);
     }
   }
+
+  changes.push(...syncSkillTargets(version));
 
   if (options.check) {
     if (changes.length > 0) {

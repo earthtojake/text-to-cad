@@ -118,10 +118,19 @@ class VersionSyncMirrorTests(unittest.TestCase):
                 if repo_path(relative).is_file():
                     (root / relative).parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(repo_path(relative), root / relative)
-            # A skill names no release: it runs the `cad` command, and the release stamps nothing in it.
+            # A skill pins its release in every command, and the setup block names it in prose and in the
+            # install argument; nothing else in a skill is a pin: not arithmetic, not another word's `cad`,
+            # not a version outside the setup block.
             skill = root / "skills/fixture/SKILL.md"
             skill.parent.mkdir(parents=True)
-            skill.write_text("Run `cad run model.py`. An older release used cadgen==0.1.0.\n", encoding="utf-8")
+            unstamped = ("---\nname: fixture\nmetadata:\n  repository: o/r\n  version: \"1.0.0\"\n---\n"
+                         "Every command in this skill starts `cad +1.0.0`: it runs text-to-cad 1.0.0, the release.\n"
+                         "```bash\ncurl -fsSL https://texttocad.dev/install.sh | sh -s -- --add 1.0.0\n```\n"
+                         "`cad +1.0.0 doctor --check`. Tell the person any next\nstep it prints.\n\n"
+                         "Run `cad +1.0.0 run model.py`, then\n```bash\ncad +0.11.10-dev.1 model export \"$ID\" a.step\n```\n"
+                         "Not pins: `x = cad +0.5 * y`, `scad +1.2.3 run`, bpy 5.2.3, cadgen==0.1.0.\n")
+            stamped = unstamped.replace("1.0.0", "9.9.9").replace("0.11.10-dev.1", "9.9.9")
+            skill.write_text(unstamped, encoding="utf-8")
             (root / "VERSION").write_text("9.9.9\n", encoding="utf-8")
             result = subprocess.run(["node", str(root / "scripts/release/sync-version.mjs")],
                                     capture_output=True, text=True, timeout=120)
@@ -143,7 +152,12 @@ class VersionSyncMirrorTests(unittest.TestCase):
             self.assertIn('--from "$requirement" cad "$verb"', installer)
             self.assertIn('requirement="cad-server==$version"', installer)
             self.assertIn('\n    $CadVersion = "9.9.9"\n', (root / "scripts/install/install.ps1").read_text(encoding="utf-8"))
-            self.assertEqual(skill.read_text(encoding="utf-8"), "Run `cad run model.py`. An older release used cadgen==0.1.0.\n")
+            self.assertEqual(skill.read_text(encoding="utf-8"), stamped)
+            # Stamped once, it is stamped: a second run changes nothing.
+            again = subprocess.run(["node", str(root / "scripts/release/sync-version.mjs")],
+                                   capture_output=True, text=True, timeout=120)
+            self.assertEqual(0, again.returncode, again.stdout + again.stderr)
+            self.assertIn("already synced", again.stdout)
             # The README, the docs site's homepage and its policy pages are prose and no pin target: a
             # pin there would never be stamped. The privacy policy's telemetry commands run `cad`.
             self.assertIn("<code>cad telemetry off</code>",
@@ -151,13 +165,13 @@ class VersionSyncMirrorTests(unittest.TestCase):
             for page in ("README.md", "apps/docs/src/lib/content.ts", "apps/docs/src/app/privacy-policy/page.tsx",
                          "apps/docs/src/app/terms-of-service/page.tsx"):
                 self.assertNotRegex(repo_path(page).read_text(encoding="utf-8"), r"(?<![\w.-])(cadgen|cad(-server|-mcp)?(\[[a-z0-9_,.-]+\])?)==", page)
-            # And the install page's Claude Desktop config and the installer it says the command runs.
+            # And the installer the install page says the command runs.
             page = (root / "docs/install.md").read_text(encoding="utf-8")
-            self.assertIn('"--from", "cad-mcp==9.9.9", "cad-mcp"', page)
             self.assertIn("--from cad-server==9.9.9 cad setup", page)
 
     def test_the_version_check_holds_the_installer_s_fallback_to_the_release(self) -> None:
-        """check-version.sh refuses an installer script that would fall back to another release."""
+        """check-version.sh refuses an installer script that would fall back to another release, and a skill
+        command pinned to one."""
         # The four distributions' pyprojects, which it checks too, as they are.
         projects = json.loads(_node("const { tomlTargets } = await import(%s);\nconsole.log(JSON.stringify(tomlTargets));"
                                     % json.dumps(SYNC_SCRIPT.as_uri())))
@@ -169,6 +183,8 @@ class VersionSyncMirrorTests(unittest.TestCase):
                 (root / relative).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(repo_path(relative), root / relative)
             shutil.copy2(repo_path("VERSION"), root / "VERSION")
+            # And the skills, whose commands pin the release.
+            shutil.copytree(repo_path("skills"), root / "skills")
             check = [str(root / "scripts/release/check-version.sh")]
             passed = subprocess.run(check, capture_output=True, text=True, timeout=60)
             self.assertEqual(0, passed.returncode, passed.stdout + passed.stderr)
@@ -178,6 +194,9 @@ class VersionSyncMirrorTests(unittest.TestCase):
             released = repo_path("VERSION").read_text(encoding="utf-8").strip()
             for script in ("install.sh", "install.ps1"):
                 self.assertIn(f"scripts/install/{script} falls back to {released}; expected 9.9.9", stale.stderr)
+            self.assertIn(f"skills/ pins cad +{released}; expected 9.9.9", stale.stderr)
+            self.assertIn(f"skills/ pins --add {released}; expected 9.9.9", stale.stderr)
+            self.assertIn(f"skills/cad/SKILL.md's header says metadata.version {released}; expected 9.9.9", stale.stderr)
 
     def test_derived_metadata_is_synced_at_the_current_version(self) -> None:
         """The gate the release workflows run, at the version in VERSION."""

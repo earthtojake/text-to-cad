@@ -64,9 +64,9 @@ the thickness `t`; a shop's tooling and bend table move them):
 ## Check it
 
 ```bash
-cad step dfm tab.step --process sheet --material steel --thickness 2
-cad model dfm "$ID" --process sheet --material aluminum --bend-radius 2 --k-factor 0.42
-cad dxf dfm bracket.dxf --thickness 2 --kerf 0.2 --sheet-size 1219x2438
+cad +0.11.11 step dfm tab.step --process sheet --material steel --thickness 2
+cad +0.11.11 model dfm "$ID" --process sheet --material aluminum --bend-radius 2 --k-factor 0.42
+cad +0.11.11 dxf dfm bracket.dxf --thickness 2 --kerf 0.2 --sheet-size 1219x2438
 ```
 
 The check unfolds the part and measures every feature on the flat pattern, each mapped back to its
@@ -144,10 +144,10 @@ can be made.
 ## Cut files (DXF)
 
 A laser, plasma, waterjet or routing shop cuts the DXF, so check the exact file it gets (a
-text-to-cad drawing's is the one `cad xbf export <id> part.dxf` wrote), not the model it came from:
+text-to-cad drawing's is the one `cad +0.11.11 xbf export <id> part.dxf` wrote), not the model it came from:
 
 ```bash
-cad dxf dfm part.dxf --process sheet --material aluminum --thickness 3 --kerf 0.2
+cad +0.11.11 dxf dfm part.dxf --process sheet --material aluminum --thickness 3 --kerf 0.2
 ```
 
 It reads the file as a cutter does -- every entity on a cut layer, a block reference's too, where

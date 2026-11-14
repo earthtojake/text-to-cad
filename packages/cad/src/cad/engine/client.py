@@ -1,5 +1,6 @@
 """Reaching the daemon: connect through its door (on Windows, its loopback port), starting it first
-when none answers."""
+when none answers. Every request names the delivery channel its command is on where that is a named one
+(``with_channel``, ``places.channel``)."""
 
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from cad.engine.atomic_replace import RETRY_DELAYS_SECONDS
 from cad.engine.door import DOOR_PROTOCOL, GREETING_SECONDS, HELLO_LIMIT, Connection, answering, dial, greeted, hello
 from cad.engine.said import COMMAND, SERVER
 
-__all__ = ["hold", "request", "sweep"]
+__all__ = ["hold", "request", "sweep", "with_channel"]
 
 # The module the server runs its engine as: the daemon with its application host installed. Named, never
 # imported: a client in the CAD kernel environment has only the library, and starts the engine with the
@@ -169,10 +170,12 @@ def environment() -> dict[str, str]:
 
 def _start() -> subprocess.Popen:
     """A daemon started, detached: its process, whose ``pid`` says whether the daemon that answers
-    is the one this process started (``_told_started``). It is the current installation's engine
-    (``places.engine``, read now), started with that installation's Python whatever release this client
-    is -- a client of another release is handed nothing of its own import path --; with none current,
-    the installation whose base this process runs in (``places.HOME``: ``cad run``'s). Where neither is,
+    is the one this process started (``_told_started``). It is the engine ``places.engine`` names, read
+    now -- this client's own version's, for a client with a version (it reaches that version's door alone,
+    ``places.engine_dir``); the current installation's for one with none --, started with that
+    installation's Python whatever release this client is -- a client of another release is handed nothing
+    of its own import path --; with none, the installation whose base this process runs in (``places.HOME``:
+    ``cad run``'s). Where neither is,
     nothing starts: the library never starts a server of its own environment, and says so in one line
     (``NOT_INSTALLED``, a ``ConnectionError``) -- every installation registers itself as it is set up.
     Started by its own installation (this process's environment, or its base's), the engine's folder is
@@ -228,7 +231,7 @@ def connect(*, start: bool = True, timeout: float = 60.0) -> Connection | None:
     if _sandboxed():
         raise ConnectionError(SANDBOXED)
     try:
-        places.engine_dir().mkdir(parents=True, exist_ok=True, mode=0o700)
+        places.make_engine_dir()
     except PermissionError as error:
         raise _denied(f"making the engine's folder: {error.strerror or error}") from None
     refusal = places.folder_refusal(places.engine_dir())
@@ -308,6 +311,7 @@ def hold(*, start: bool = True, host: Callable[[], str | None] | None = None,
             message["host"] = named
         if holder:
             message["holder"] = holder
+        message = with_channel(message)
         if places.WINDOWS:
             message = {"token": places.port_path().read_text(encoding="utf-8").split()[1], **message}
         connection.writer.write((json.dumps(message) + "\n").encode())
@@ -331,8 +335,17 @@ def request(message: dict[str, Any], on_log: Callable[[dict[str, Any]], None] = 
     return _exchange(connection, message, on_log, on_progress)
 
 
+def with_channel(message: dict[str, Any]) -> dict[str, Any]:
+    """``message`` as a request carries it to the engine: with the channel this command is on (``places.channel``)
+    as ``channel`` when it is a named one -- a request without it is the default channel's, as every request of a
+    release of 0.11.10 or earlier is."""
+    named = places.channel()
+    return message if named == places.DEFAULT_CHANNEL else {**message, "channel": named}
+
+
 def _exchange(connection: Connection, message: dict[str, Any], on_log: Callable[[dict[str, Any]], None] = lambda _m: None,
               on_progress: Callable[[dict[str, Any]], None] | None = None, address: Path | None = None) -> dict[str, Any]:
+    message = with_channel(message)
     if places.WINDOWS:  # the token in the request too, which the daemon checks as it did the hello's
         message = {"token": (address or places.port_path()).read_text(encoding="utf-8").split()[1], **message}
     with connection:

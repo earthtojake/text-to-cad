@@ -78,10 +78,10 @@ assembly's body, on the parts it places.
 ## Child models and imported components
 
 A project model is composed by calling it; `xbf.read` reads a vendor part converted
-once from its STEP (`cad step export vendor.step vendor.xbf`), and `step.read` a STEP
+once from its STEP (`cad +0.11.11 step export vendor.step vendor.xbf`), and `step.read` a STEP
 as it is. Both are inputs, like every file a run reads
 ([inputs](model-contract.md#inputs)). An imported part keeps its vendor's origin and
-orientation; a snapshot or `cad <type> inspect` shows them and its functional features, and the
+orientation; a snapshot or `cad +0.11.11 <type> inspect` shows them and its functional features, and the
 measured offsets or joint frames go in the source.
 
 ## Alignment and measurement checks

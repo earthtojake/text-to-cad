@@ -338,6 +338,7 @@ export default {
   "update.failed": "The update failed: {error}",
   "update.updated": "Updated to {version}.",
   "update.updatedRestart": "Updated to {version}. Restart the app to load its new skills.",
+  "update.newThread": "Updated to {version}. Start a new thread to use it.",
   // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
   "whatsNew.gotIt": "Got it",
   "whatsNew.title": "What's New (v{version})",

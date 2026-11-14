@@ -15,18 +15,11 @@ import os
 
 
 def http_factory(server, host, port):
-    from cad_server._internal.update import UPDATE
     from cad_server.viewer.engine_app import EngineApp
     from cad_server.viewer.handler import CadHTTPServer, make_handler_class
 
     from cad_server.mcp.http import Sessions
 
-    # An update whose switch failed moments ago started this release's engine again: said as failed to the
-    # page that followed it through the restart (``cad_server._internal.update.Update.recall``).
-    try:
-        UPDATE.recall()
-    except Exception:  # noqa: BLE001 - a note for the page, never a reason the engine does not serve
-        pass
     # Open in's apps, looked for in the background as the server starts, with no command
     # (``cad_server._internal.apps``): a page's first menu reads them, never looks for them.
     from cad_server._internal.apps import DETECTED
@@ -44,6 +37,21 @@ def http_factory(server, host, port):
         raise
 
 
+def listen_also(server, host, port):
+    """Another listener of the engine's one HTTP application (``daemon.Daemon._take_port``): the application of the
+    server's own listener, its page token and its sessions, bound on ``port`` and serving in a thread of its own.
+    ``OSError`` where the port cannot be bound."""
+    import threading
+
+    from cad_server.viewer.handler import CadHTTPServer, make_handler_class
+
+    app = server.http.app
+    listener = CadHTTPServer((host, port), make_handler_class(app), app)
+    listener.daemon_threads = True
+    threading.Thread(target=listener.serve_forever, name="cad-http-also", daemon=True).start()
+    return listener
+
+
 def kernel(make):
     """The environment the engine's kernel processes run in (``cad_server._internal.base.kernel``)."""
     from cad_server._internal.base import kernel as made
@@ -59,22 +67,12 @@ def making():
 
 
 def automatic(daemon):
-    """The engine's automatic update, asked for as it tends itself (``cad_server._internal.update.Update.automatic``);
-    first, the folder of a release a switch failed to move to, removed once nothing runs from it
-    (``cad_server._internal.releases.discard``): a ``cad update`` whose switch went back ran from it until it
-    ended."""
-    try:
-        from cad_server._internal import releases
-
-        failed = releases.failed()
-        if failed is not None:
-            releases.discard(failed)
-    except Exception:  # noqa: BLE001 - the engine's tending never fails for a folder
-        pass
+    """The engine's automatic update, asked for as it tends itself (``cad_server._internal.update.Update.automatic``)."""
     try:
         from cad_server._internal.update import UPDATE
 
         UPDATE.automatic(daemon)
+        UPDATE.catch_up(daemon)  # the apps a setup left behind, given its text again once the server is idle
     except Exception:  # noqa: BLE001 - the engine's tending never fails for an update
         pass
 
@@ -97,11 +95,11 @@ def halt():
 
 
 # The variables an agent host sets in the shells it runs a command in, which name it there as
-# ``cad_server.mcp.host.family`` names it from its process: Codex's (seen with ``env`` in codex-cli
-# 0.163's ``exec`` and ``sandbox`` shells), then Claude Code's. Codex first: a Codex started from a
-# Claude Code shell inherits Claude Code's.
+# ``cad_server.mcp.host.family`` names it from its process, each by the app's token as telemetry reports it
+# (``app``): Codex's (seen with ``env`` in codex-cli 0.163's ``exec`` and ``sandbox`` shells), then Claude Code's.
+# Codex first: a Codex started from a Claude Code shell inherits Claude Code's.
 SHELLS = (("codex", ("CODEX_THREAD_ID", "CODEX_SESSION_ID", "CODEX_TOOL_CALL_ID", "CODEX_SANDBOX")),
-          ("claude code", ("CLAUDECODE",)))
+          ("claude-code", ("CLAUDECODE",)))
 
 
 def shell(environ=None) -> str | None:
@@ -111,3 +109,39 @@ def shell(environ=None) -> str | None:
         if any(environ.get(variable) for variable in variables):
             return name
     return None
+
+
+# The apps an MCP handshake's client name (``clientInfo.name``) names, where it is not the app's own name, as
+# telemetry's receiver reads them too (``AGENT_APPS``, held equal by a test). Any other name is the app itself,
+# made a token (``_token``). Each is a name the code meets already: Codex's and Cursor's MCP clients
+# (``cad_server.mcp.host``), Claude Code's and Claude Desktop's, and the names Gemini CLI, Grok Build and VS Code
+# call themselves, by which the CAD app's page names its host -- VS Code's also as a batch of schema 10 or earlier
+# carries it, its spaces made ``-`` (``analytics._token``).
+APPS = {"codex-mcp-client": "codex", "cursor-vscode": "cursor", "claude-code": "claude-code",
+        "claude-ai": "claude-desktop", "gemini-cli": "gemini", "grok-build": "grok", "visual studio code": "vscode",
+        "visual-studio-code": "vscode"}
+# Client names that are no MCP client's and name no app: the browser viewer's page names itself (``cad-viewer``,
+# ``cadgen-viewer`` before 0.10), and a client that could not say is ``unknown``.
+NO_APP = frozenset({"cad-viewer", "cadgen-viewer", "unknown"})
+
+
+def _token(name: str) -> str | None:
+    """A client's name as an app's token: each run of characters outside ``[a-z0-9._-]`` one ``-``, leading
+    characters that are not a letter or digit dropped, at most 40 characters; None for nothing left."""
+    import re
+
+    return re.sub(r"^[^a-z0-9]+", "", re.sub(r"[^a-z0-9._-]+", "-", name))[:40] or None
+
+
+def app(client=None, environ=None) -> str | None:
+    """The agent app an event comes from, detected, as a token: the MCP handshake's client name where there is one
+    (``client``: ``APPS``, else the name made a token; a name of ``NO_APP`` is none), else the app whose shell this
+    is (``shell``, from ``environ``), else None."""
+    name = str(client or "").strip().lower()
+    if name in APPS:
+        return APPS[name]
+    if name and name not in NO_APP:
+        found = _token(name)
+        if found is not None:
+            return found
+    return shell(environ)

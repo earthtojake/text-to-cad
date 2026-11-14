@@ -1,4 +1,6 @@
-"""The registry: one self-describing record per document the engine knows, in the user's state folder.
+"""The registry: one self-describing record per document the engine knows, in the data folder of the
+version the engine is (``places.data_dir``: ``versions/<version>/data``; the state folder itself for an engine
+with no version, as in 0.11.10 and earlier), called ``<state>`` here.
 
 ``<state>/documents/<id>/document.json`` is a document's record, one shape for every kind:
 ``{schema, id, kind, root, home, entry, namespace, name, fingerprint?, module?, line?, declares?, relocated?,
@@ -30,16 +32,16 @@ The cache folder is a second ``Folder``, written the same way; forgetting a docu
 (``delete``) forgets its cache file too, and its Recents pictures (``preview``: PNGs under
 ``PICTURES``, which Recents writes and bounds, ``cad_server.viewer.recents``) that no other record names.
 
-Beside the documents, ``<state>/engines/token`` is the user's page token, which every engine
-serves with, whatever its release (``Registry.token``; the first engine makes it, ``make_token``),
-and ``<state>/engines/engine.json`` the engine's record (``Registry.engine``, ``put_engine``, its own
+Beside the documents, ``<state>/engines/token`` is the user's page token, which the version's engine
+serves with, each version holding its own, which a new version imports from the one before so that a link
+outlives an update (``Registry.token``; the first engine makes it, ``make_token``), and ``<state>/engines/engine.json`` the engine's record (``Registry.engine``, ``put_engine``, its own
 ``ENGINE_SCHEMA``): while the default port is another program's, the port the engine rolled to
 (``port``). Both are written this user's alone (0600). Links stay valid across restarts and updates
 because of them (``daemon.bind``); ``cad server --rotate-token`` replaces the token.
 
 A record's shape, and the words said of one (``home``, ``rerun``), are the library's (``records``): a
-model's run reads a record of its own in its process, where the registry is not installed. The state and
-cache folders are where ``places`` says; ``FACTORY`` makes the registry of another (a test's).
+model's run reads a record of its own in its process, where the registry is not installed. The data and
+cache folders are where ``places`` says (``data_dir``, ``cache_dir``); ``FACTORY`` makes the registry of another (a test's).
 """
 from __future__ import annotations
 
@@ -65,7 +67,7 @@ ENGINES = "engines"
 ENGINE_SCHEMA = 3
 # What an engine record holds (``put_engine``): one carrying anything else is an earlier build's.
 ENGINE_FIELDS = ("port", "schema")
-# The user's page token, one for every installation's engine: a link outlives an upgrade.
+# The user's page token, one for every engine of a version (each imports the one before's): a link outlives an upgrade.
 TOKEN = f"{ENGINES}/token"
 
 # Where a record's Recents pictures are (its ``preview``'s ``thumbnail`` and ``thumbnailDark``: file names).
@@ -98,13 +100,14 @@ _LOCKS_LOCK = threading.Lock()
 
 
 def current() -> "Registry | None":
-    """The registry of the user's state folder and its cache folder (``places``), where they are now
-    (``CAD_STATE_DIR`` and ``CAD_CACHE_DIR`` are read each time); ``FACTORY``'s where one is set."""
+    """The registry of this process's data folder and its cache (``places.data_dir``, ``places.cache_dir``:
+    its version's, else the state and cache folders of 0.11.10 and earlier), where they are now (``CAD_STATE_DIR`` and
+    ``CAD_CACHE_DIR`` are read each time); ``FACTORY``'s where one is set."""
     if FACTORY is not None:
         return FACTORY()
-    from cad.engine.places import cache_dir, state_dir
+    from cad.engine.places import cache_dir, data_dir
 
-    return Registry(state_dir(), cache=cache_dir())
+    return Registry(data_dir(), cache=cache_dir())
 
 
 class Folder:

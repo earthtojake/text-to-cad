@@ -281,7 +281,7 @@ class CadApp:
     relative files were read from; the explorer never opens there, and it bounds nothing.
     """
 
-    # A fresh link for the engine's page (``GET /api/v1/local/link``): the page's own address
+    # The link for the engine's page (``GET /api/v1/local/link``): the page's own address
     # (``EngineApp.default_app``) and a CAD app card's Copy link (``mcp/http.py``). None: no link here.
     issue_link = None
 
@@ -306,6 +306,13 @@ class CadApp:
         self.pick = available()
         self.host = host
         self.port = port
+        # The delivery channel of the CAD app session this app serves (``mcp.http.Sessions``: its launcher's
+        # ``--channel``), None for the default's and for the browser page: a session on a named channel has no
+        # updater, whatever this server's version is (``_updater``). Only a launcher's session carries one: no host
+        # reaches the engine's HTTP application directly on a named channel today (a browser page, a store's skills'
+        # ``cad viewer``, comes with none), so a request with no session is the default's here, and the update route
+        # refuses it on a server that is not the default channel's version (``channel.told``).
+        self.channel = None
         # dist_dir is compared as a string prefix, so resolve it ONCE here and
         # never re-resolve at request time.
         self.dist_dir = os.path.abspath(dist_dir) if dist_dir else ""
@@ -625,19 +632,30 @@ class CadApp:
         chose (``cad_server/language.py``), whether usage stats are shared (``telemetry``: null
         where this server keeps none), the releases whose What's new they have seen, with the one
         this installation runs (``whats_new``, ``cad_server/whats_new.py``), and whether the engine
-        updates by itself (``updates``: ``cad_server/auto_updates.py``, one setting for every CAD app)."""
+        updates by itself (``updates``: ``cad_server/auto_updates.py``, one setting for every CAD app) -- null
+        where this server has no updater (``channel.told``: a named channel's version, a device the install
+        command never set up, a development build), which a page shows no switch for."""
         from cad_server import auto_updates, language, whats_new
 
         return {"language": language.read(), "telemetry": self._consent(share) if self.analytics is not None else None,
-                "whats_new": whats_new.read(), "updates": auto_updates.read()}
+                "whats_new": whats_new.read(), "updates": auto_updates.read() if self._updater() else None}
+
+    def _updater(self) -> bool:
+        """Whether what this app serves has an updater: this server's (``channel.told``: the default channel's version,
+        on a device the install command set up, no development build), and for a CAD app session its launcher's
+        channel the default (``channel``): a session a store's launcher opened shows no update notice, button or
+        switch, whatever version serves it."""
+        from cad_server._internal.channel import told
+
+        return self.channel is None and told()
 
     def _change_settings(self, request) -> dict:
         """``PUT /api/v1/settings`` with part of the settings -- ``{"language": {"locale"}}``,
         ``{"telemetry": {"share"}}``, ``{"whats_new": {"seen"}}``, ``{"updates": {"automatic"}}`` or
         several -- answered with the settings as they now are. It takes what ``GET`` answers: the
         telemetry's read-only ``reason``, ``policy`` and ``saved``, What's new's ``release`` and the
-        updates' ``reason`` ride along and are ignored, a null telemetry (a server that keeps none)
-        changes nothing, and What's new's ``seen`` is added to what is kept, never taken from it, so a
+        updates' ``reason`` ride along and are ignored, a null telemetry (a server that keeps none) and null
+        updates (a server with no updater) change nothing, and What's new's ``seen`` is added to what is kept, never taken from it, so a
         page that puts back what it read, one value changed, changes that value."""
         from cad_server import auto_updates, language, whats_new
 
@@ -650,10 +668,13 @@ class CadApp:
             language.change(payload["language"])
         if "whats_new" in payload:
             whats_new.change(payload["whats_new"])
-        if "updates" in payload:
+        if payload.get("updates") is not None:
             updates = payload["updates"]
             if type(updates) is not dict or not set(updates) <= {"automatic", "reason"}:
                 raise ValueError("an updates change is {\"automatic\": true or false}")
+            if not self._updater():
+                raise ApiError(409, "this text-to-cad has no updater",
+                               "only the default channel's version, set up by the install command, updates itself")
             # The app menu's Automatic updates: the person's setting, one for every CAD app. What a read
             # answered, put back as it was, changes nothing: a default stays a default.
             if updates != auto_updates.read():
@@ -1007,7 +1028,7 @@ class CadApp:
 
     def _local(self, request, response, rest) -> None:
         """``/api/v1/local``: what a local engine does on this computer -- the update, the explorer,
-        files by path, Quick Edit's files, Reveal, Open in, the clipboard, Open's chooser, the page's fresh link,
+        files by path, Quick Edit's files, Reveal, Open in, the clipboard, Open's chooser, the page's link,
         the page's activity."""
         route = rest[0] if rest else ""
         if rest == ["update"]:
@@ -1305,14 +1326,24 @@ class CadApp:
         from cad_server import __version__, updates
         from cad_server._internal.update import UPDATE
 
+        if self.channel is not None:  # a store's session: no updater, whatever this server is
+            return {"notice": None, "release": __version__, "instance": INSTANCE, "update": None}
         updates.refresh()
-        return {"notice": updates.notice(), "release": __version__, "instance": INSTANCE, "update": UPDATE.snapshot()}
+        update = UPDATE.snapshot()
+        if update.get("state") == "moved":
+            token = UPDATE.moved_token()  # the page going to the new default's server carries a link for it
+            if token is not None:
+                from .engine_app import link_of
+
+                update["link"] = link_of(token)
+        return {"notice": updates.notice(), "release": __version__, "instance": INSTANCE, "update": update}
 
     def _update(self) -> tuple[int, dict]:
         """``POST /api/v1/local/update``: the update button's click. The update starts in the background (or the
         one running is joined) and the request is answered at once with ``_version``'s answer, its state
-        ``working``; with no newer release, ``idle``. Only the engine's application updates: one with no
-        engine under it (a test's) answers 409."""
+        ``working``; with no newer release, ``idle``. Only the engine's application updates, and only where it has an
+        updater (``channel.told``): one with no engine under it (a test's), a store's session, or a server that is not
+        the default channel's version answers 409."""
         from cad_server._internal.update import UPDATE
 
         server = getattr(self, "server", None)
@@ -1321,6 +1352,14 @@ class CadApp:
 
             return 409, {"error": "no engine serves this page: nothing to update",
                          "hint": f"update with the install command: `{command()}`"}
+        from cad_server._internal.channel import told
+
+        if self.channel is not None or not told():
+            # A store's session, or a server that is not the default channel's version (a version only a store's channel
+            # is on, the server an update left): no updater.
+            return 409, {"error": "this text-to-cad has no updater",
+                         "hint": "only the default channel's version, set up by the install command, updates itself; "
+                                 "a store's copy is updated by its store"}
         UPDATE.start(server)
         return 202, self._version()
 

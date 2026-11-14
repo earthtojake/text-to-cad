@@ -47,12 +47,13 @@ class ContractTest(unittest.TestCase):
     def test_an_older_cad_is_told_to_update_cad_here_to_the_server_s_release(self) -> None:
         self.assertEqual(contract.refusal(named("0.10.0", 1), ours=OURS, server="0.10.2"),
                          "cad here is 0.10.0, worker contract 1 (xbf/9, OCP 8.0); cad-server 0.10.2 speaks contract 2 "
-                         "(xbf/9, OCP 8.0): update the cad package in this environment to 0.10.2")
+                         "(xbf/9, OCP 8.0): update the cad package in this environment to 0.10.2, or run it with `cad run`")
 
     def test_a_newer_cad_is_told_to_update_cad_server_to_its_own_release(self) -> None:
         said = contract.refusal(named("0.10.3", 3), ours=OURS, server="0.10.2")
         self.assertEqual(said, "cad here is 0.10.3, worker contract 3 (xbf/9, OCP 8.0); cad-server 0.10.2 speaks "
-                               "contract 2 (xbf/9, OCP 8.0): update cad-server to 0.10.3: run `cad update`")
+                               "contract 2 (xbf/9, OCP 8.0): run it with `cad +0.10.3 run`, or update cad-server to 0.10.3: "
+                               "run `cad update`")
         library = contract.refusal({}, ours=OURS, server="0.10.2")
         for line in (said, library):
             self.assertNotIn("\n", line)
@@ -72,7 +73,8 @@ class ContractTest(unittest.TestCase):
         self.assertTrue(contract.refusal(named("0.10.1rc1.dev2", 3), ours=OURS, server="0.10.0").endswith(
             ": update cad-server to 0.10.1rc1.dev2"), "newer, and `cad update` reaches no pre-release")
         self.assertTrue(contract.refusal(named("0.10.1rc1.dev2", 1), ours=OURS, server="0.10.1").endswith(
-            ": update the cad package in this environment to 0.10.1"), "older than the release it leads to")
+            ": update the cad package in this environment to 0.10.1, or run it with `cad run`"),
+                        "older than the release it leads to")
         self.assertEqual(contract.notice("0.10.0", "0.10.1rc1"), "cad here is 0.10.1rc1; cad-server is 0.10.0: "
                                                                 "update cad-server to 0.10.1rc1")
         self.assertEqual(contract.notice("0.10.0", "0.10.1.post1"), "cad here is 0.10.1.post1; cad-server is 0.10.0: "

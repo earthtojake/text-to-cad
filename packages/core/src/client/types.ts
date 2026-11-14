@@ -256,8 +256,9 @@ export interface CadWorkspaceService {
   language(locale?: string | null): Promise<{ locale: string | null }>;
   /** What's new: the releases whose notes the person has seen and the one the engine runs (null from a server before it); with `seen`, releases to add to them. */
   whatsNew(seen?: readonly string[]): Promise<CadWhatsNew | null>;
-  /** Whether the engine updates by itself; with `automatic`, the person's answer (the app menu's Automatic updates). */
-  automaticUpdates(automatic?: boolean): Promise<CadAutomaticUpdates>;
+  /** Whether the engine updates by itself; with `automatic`, the person's answer (the app menu's Automatic updates).
+   * Null from a server with no updater (a named channel's version, a device the install command never set up). */
+  automaticUpdates(automatic?: boolean): Promise<CadAutomaticUpdates | null>;
   /** Whether a newer text-to-cad is out (the update button's notice, or null), the release the engine runs and where an update is. */
   version(): Promise<CadVersion>;
   /** The update button's click: the engine updates in the background, and answers as `version` does. */
