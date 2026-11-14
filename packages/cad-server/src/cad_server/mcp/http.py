@@ -113,7 +113,7 @@ class Sessions:
         # A session on a named channel has no updater: no notice, button or switch (``ViewerApp._updater``).
         app.channel = channel
         app.consent_by = "app"
-        # A fresh link to the engine's own page (``GET /api/v1/local/link``), for a card's Copy link:
+        # The link to the engine's own page (``GET /api/v1/local/link``), for a card's Copy link:
         # the card's capability already reaches everything a link does.
         app.issue_link = self.engine.fresh_link
         def viewer_url(model=None):

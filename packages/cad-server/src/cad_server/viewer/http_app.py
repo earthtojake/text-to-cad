@@ -281,7 +281,7 @@ class CadApp:
     relative files were read from; the explorer never opens there, and it bounds nothing.
     """
 
-    # A fresh link for the engine's page (``GET /api/v1/local/link``): the page's own address
+    # The link for the engine's page (``GET /api/v1/local/link``): the page's own address
     # (``EngineApp.default_app``) and a CAD app card's Copy link (``mcp/http.py``). None: no link here.
     issue_link = None
 
@@ -1028,7 +1028,7 @@ class CadApp:
 
     def _local(self, request, response, rest) -> None:
         """``/api/v1/local``: what a local engine does on this computer -- the update, the explorer,
-        files by path, Quick Edit's files, Reveal, Open in, the clipboard, Open's chooser, the page's fresh link,
+        files by path, Quick Edit's files, Reveal, Open in, the clipboard, Open's chooser, the page's link,
         the page's activity."""
         route = rest[0] if rest else ""
         if rest == ["update"]:
@@ -1333,9 +1333,9 @@ class CadApp:
         if update.get("state") == "moved":
             token = UPDATE.moved_token()  # the page going to the new default's server carries a link for it
             if token is not None:
-                from .engine_app import LINK_SECONDS, sign
+                from .engine_app import link_of
 
-                update["link"] = sign(token, "link", LINK_SECONDS)
+                update["link"] = link_of(token)
         return {"notice": updates.notice(), "release": __version__, "instance": INSTANCE, "update": update}
 
     def _update(self) -> tuple[int, dict]:

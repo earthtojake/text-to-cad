@@ -44,19 +44,20 @@ credentials, all made from one token:
   until you rotate the token (`cad server --rotate-token`, which ends every link
   and every session at once), as a Jupyter server's URL token does; the token is
   kept in your state folder and survives restarts, reboots and updates, and so do
-  links. It stays in the page's address (a page opened without one is given
+  links. Every link of one token is the same text, whenever it is printed (its
+  expiry is one fixed date, the start of the year 3000), until the token is rotated. It stays in the page's address (a page opened without one is given
   one), so the address copied into another browser on this machine opens the
   same page. A link works only from this machine: the server listens on
   loopback (unless you bind another `--host`, below) and refuses any other Host. It never leaves in a Referer
   (every page is sent `Referrer-Policy: no-referrer`). A page's
-  and a CAD app card's **Copy link** copy a fresh one; the card asks for it
+  and a CAD app card's **Copy link** copy that link; the card asks for it
   through its tunnel, with a capability that already reaches everything a link
   does, so this widens nothing.
 - **The session cookie** is what a browser is given for a link it opens:
   HttpOnly, SameSite=Strict, one name for every port of this host, holding the
   token's signature of its own expiry, never the token. It lasts 30 days from
   its last use: every page load renews it, and so does any request once it is a
-  day old. It is what lets a reloaded page get a fresh link for its address.
+  day old. It is what lets a reloaded page get the link for its address.
 
 A server checks a link or a cookie by signing it again, so it keeps no
 sessions: links and cookies outlive a restart, a reboot, a port that moved and
@@ -81,8 +82,7 @@ starts, so it takes the new one when it restarts. Behind the credentials:
   so the session cookie never rides a cross-origin read. A link in a URL, the
   cookie, your own token and `/mcp` get no CORS headers.
 
-**The credentials are the boundary.** Whoever holds the token, a link within its
-day, or a session cookie can read any CAD file on your machine by its path, list
+**The credentials are the boundary.** Whoever holds the token, a link, or a session cookie can read any CAD file on your machine by its path, list
 folders, export, and use every Viewer action. So keep links private: treat a
 link, and the address of an open CAD page, as you would a password for your
 files on this computer. Do not bind

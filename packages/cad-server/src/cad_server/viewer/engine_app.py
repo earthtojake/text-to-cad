@@ -29,8 +29,9 @@ from .http_app import CadApp, RAW_FILE_HEADERS, host_is_allowed
 # The page's credentials all come from the user's one token (``engines/token``, read at the start:
 # ``cad_server.engine.daemon.bind``), which only the user's own clients present, as a Bearer header: the
 # door hands it to them. Every URL a launch prints or opens carries a link instead,
-# ``?token=<expires>.<mac>``, good until the token is rotated (``LINK_SECONDS``: its expiry a century
-# out, as a Jupyter server's URL token lasts until it is revoked), and a browser that opens one is given
+# ``?token=<expires>.<mac>``, good until the token is rotated, as a Jupyter server's URL token lasts until
+# it is revoked: its expiry is one fixed instant (``LINK_EXPIRES``), so the link of one token is the same
+# text every time it is printed, on any port, after any restart (``link``), and a browser that opens one is given
 # the session cookie, ``<expires>.<mac>`` too, good for 30 days from its last use, which renews it
 # (``SESSION_SECONDS``, ``EngineApp._admitted``). The link stays in the page's address, which the page
 # gives one where it has none (``GET /api/v1/local/link``), so the address copied into another browser on this machine
@@ -41,9 +42,13 @@ from .http_app import CadApp, RAW_FILE_HEADERS, host_is_allowed
 # every link and session at once. The cookie is named for the token too (``EngineApp.cookie``): one
 # name on every port of the host, while another user's engine, or one with a rotated token, reads a
 # name of its own and never sees, refuses or replaces this one.
-# A link lasts until ``cad server --rotate-token``: the signed ``<expires>.<mac>`` form is kept (links are
-# read across releases), its expiry a hundred years out.
-LINK_SECONDS = 100 * 365 * 24 * 60 * 60
+# A link lasts until ``cad server --rotate-token``. The signed ``<expires>.<mac>`` form is kept (links are
+# read across releases, and a server of any release admits one by its mac and an expiry still ahead), its
+# expiry the first second of the year 3000 (UTC): the same for every link, later than the "then plus a
+# hundred years" earlier releases signed, and well inside what every reader holds (Python's ``datetime``
+# ends with the year 9999, and the last second of that year fails as a local time east of UTC; a
+# JavaScript number holds this one exactly). ``standing`` reads every expiry as before.
+LINK_EXPIRES = 32503680000
 SESSION_SECONDS = 30 * 24 * 60 * 60
 
 
@@ -52,10 +57,18 @@ def _mac(master, message):
     return base64.urlsafe_b64encode(digest).rstrip(b'=').decode('ascii')
 
 
+def _signed(master, kind, expires):
+    return f'{expires}.{_mac(master, f"{kind} {expires}")}'
+
+
 def sign(master, kind, seconds, now=None):
     """A ``kind`` credential (``link``, ``session``) of token ``master``, good for ``seconds``."""
-    expires = int(time.time() if now is None else now) + seconds
-    return f'{expires}.{_mac(master, f"{kind} {expires}")}'
+    return _signed(master, kind, int(time.time() if now is None else now) + seconds)
+
+
+def link_of(master):
+    """The link of token ``master``: one text, whenever and wherever it is made, until the token is rotated."""
+    return _signed(master, 'link', LINK_EXPIRES)
 
 
 def standing(master, kind, value):
@@ -273,19 +286,20 @@ class EngineApp:
             self.cookie = 'cad-' + _mac(token, 'cookie')[:12]
 
     def link(self):
-        """A fresh link for a URL this engine prints or opens: good for ``LINK_SECONDS``."""
-        return sign(self.token, 'link', LINK_SECONDS)
+        """The link for a URL this engine prints or opens: the same text on every call, until the token is
+        rotated (``link_of``)."""
+        return link_of(self.token)
 
     def fresh_link(self):
-        """``GET /api/v1/local/link``: a fresh link for the page's own address, and when it expires."""
+        """``GET /api/v1/local/link``: a link for the page's own address (``link``), and when it expires."""
         link = self.link()
         return {'link': link, 'expires': int(link.partition('.')[0])}
 
     def launch(self, options):
         """A launch of the one page (``cad viewer``, a text-only host's link, the dev client's
         ``--api-only``): each file it names (``files``: on-disk CAD files, a relative one read from its
-        folder, ``start``, or ids the engine holds) is registered and given its page, ``/<id>``. ``url`` is the first file's page, else the home's, each with a fresh link,
-        which ``token`` is too -- the user's token itself only for the dev client's ``--api-only``,
+        folder, ``start``, or ids the engine holds) is registered and given its page, ``/<id>``. ``url`` is the first file's page, else the home's, each with the link
+        (``link``), which ``token`` is too -- the user's token itself only for the dev client's ``--api-only``,
         whose proxy outlives a link."""
         from .main import Unopened, resolve_dist_dir
         start = os.path.abspath(options.get('start') or os.path.expanduser('~'))
