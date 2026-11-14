@@ -17,7 +17,7 @@ build). `cad run gsl ...` installs it on first use and runs it as it is:
 
 | Task | Command |
 | --- | --- |
-| The language reference, before writing GSL | omega-core's [language specification](https://github.com/Gradient-Control-Laboratories/omega-core/blob/v0.1.1/doc/gsl_lang_spec_current.md) and [standard library](https://github.com/Gradient-Control-Laboratories/omega-core/tree/v0.1.1/stdlib/builtin) at the pinned release |
+| The language reference, before writing GSL | omega-core's [language specification](https://github.com/Gradient-Control-Laboratories/omega-core/blob/v0.1.1/doc/gsl_lang_spec_current.md) and [standard library](https://github.com/Gradient-Control-Laboratories/omega-core/tree/v0.1.1/stdlib) (`builtin`, and `mechanical`, `map`, `lattice` and the rest beside it) at the pinned release |
 | Check it parses and links | `cad run gsl compile -t ast --no-meta -o - part.gsl > /dev/null` (silent when it is fine; errors name the line) |
 | Picture the field, no mesh | `cad run gsl render --views iso,top --light -o part.png part.gsl` |
 | Ask the field (values, extrema, volume, proofs) | `cad run gsl eval REQUEST.json`, or `omega_core.Session` in a script run with `cad run` |
@@ -61,8 +61,10 @@ return min(skin, infill);
 - A lattice that meets a skin at an edge is non-manifold there: let it run into the skin (`solid + 1` inside
   a 2 mm skin), never stop at its surface, and join the two with a small round blend (`unionRound(skin,
   lattice, 1)`): a sharp `min` leaves surfaces passing through each other where they cross.
-- The `lattice` package has the lattices: `lattice.solidify(tpms.gyroid([8, 8, 8]), 0, 1.0)` is a 1 mm gyroid
-  sheet, `lattice.solidify(beam.octet([8, 8, 8]), 0.8)` octet struts of 0.8 mm radius; a `wall` that is a field
+- The `lattice` package has the lattices: `lattice.solidify(normalizeField(tpms.gyroid([8, 8, 8])), 0, 1.0)` is
+  a gyroid sheet of 0.95 mm (a gyroid's field changes 1.5 to 1.8 times as fast as distance, so without
+  `normalizeField` the same call gives 0.56 to 0.68 mm), `lattice.solidify(beam.octet([8, 8, 8]), 0.8)` octet
+  struts of 0.8 mm radius; a `wall` that is a field
   grades it. A strut lattice cut sharply by a shell or a box can go non-manifold where the cut just grazes
   a strut; blended into its shell (`unionRound(shell, struts, 1)`) it is manifold, though omega-core 0.1.1 can still leave
   places where its surface passes through itself: `cad stl dfm` finds them. A lattice cut by a body's outline leaves loose fragments (`cad stl dfm`: `several_solids`).
@@ -126,8 +128,9 @@ bracket.color = col;
 return bracket;
 ```
 
-Shell a solid with `shell(d, thickness)`; grow it with `d - r` and shrink it with `d + r`. Patterns are
-`remap(shape, map.patternPolarXY(n))` and `map.patternRepeatXY([dx, dy])`. Fasteners, threads, gears and joints
+Hollow a solid and keep its outside with `max(d, -(d + t))`; grow it with `d - r` and shrink it with `d + r`.
+Patterns are `remap(shape, map.patternPolarXY(n))` and `map.patternRepeatXY([dx, dy])`. Fasteners, threads, gears
+and joints
 are `fastener.*`, `thread.*`, `gears.*` and `joint.*`; `gsl compile` names a function's arguments when a call is
 wrong.
 
@@ -136,7 +139,7 @@ wrong.
 | A hole, feature by feature, from its mouth at `zTop` | `drill.hole([...], zTop)` of `drill.thru(d)`, `drill.blind(d, depth)`, `drill.bore(d, depth)`, `drill.chamfer(d, leg)`, `drill.countersink(d, included)` (the angle in radians: `90 * 3.141592653589793 / 180`), `drill.tap(major, pitch, depth)`, `drill.slot(d, centers, ang)` |
 | A screw's hole, to ISO 273 `fit` (`fastener.fitFine`, `fitMedium`, `fitCoarse`) | `fastener.clearanceHole(m, fit)`, `fastener.countersunkHole(m, fit)` (ISO 10642), `fastener.tappedHole(m, shankLength)` |
 | Place it | a hole by `map.axisAt(point, outwardNormal)`; a screw by `fastener.seatedAt(seat, shankDir)` |
-| Hollow | `shell(d, thickness)`, or `shell(d, thickness, bias)`: bias -1 inward to +1 outward |
+| Hollow | `max(d, -(d + t))` keeps the outside and hollows a wall `t` thick inward. `shell(d, thickness)` centres the wall on the surface, half of it outside; `shell(d, thickness, bias)` in omega-core 0.1.1 puts it outside at bias -1 and inside at +1, the reverse of its own comment |
 
 ## Blends and fillets
 
@@ -146,7 +149,9 @@ What a blend makes decides whether a build123d remodel can match the concept:
   boss standing on a plate. Where the faces meet at another angle it departs from a fillet: by about 1.2, 2.5 and
   5.2 mm at 60, 45 and 30 degrees for `r = 3`.
 - Besides its bulge along flush faces (above), it raises bumps where a face hidden inside either body comes within
-  `r` of the surface. For an L-corner, union sharply and add the fillet as its own solid, as in the idioms.
+  `r` of the surface. So it suits an upright standing on a plate inside the plate's outline, as in Write a
+  model, where no face of one is flush with a face of the other. For an L-corner, whose wall and base share
+  their back, bottom and end faces, union sharply and add the fillet as its own solid, as in the idioms.
 - For a fillet that keeps its radius at any angle, use the closing of the two bodies with exact distance fields:
   `unionRoundExact(() { return a - r; }, () { return b - r; }) + r`. A max of planes is exact only on its faces;
   write a rectangle as `m = max([qx, qy], 0);` then `sqrt(max(dot(m, m), 1e-30)) + min(max(qx, qy), 0)`. On a
@@ -169,13 +174,40 @@ The model is its field, and the field answers at once, with no mesh. After every
 ```sh
 cad run gsl compile -t ast --no-meta -o - part.gsl > /dev/null       # it parses and links
 cad run gsl render --views iso,front,top --light -o part.png part.gsl
-cad run gsl eval REQUEST.json                                         # its box, its volume, a wall proved
+cad run gsl eval REQUEST.json                                         # a face's place, a hole proved open
 ```
 
-A request names what it asks: `{"op": "bounds", "source": "part.gsl"}` is the box the part fills, `"volume"`
-with a `region` its volume, bracketed, and `"certify"` a proof that an expression stays above a threshold over a
-region. `"defs"` gives a name another value for that question alone (`"defs": "r = 6.5;"`), so a size is tried
-without editing the file.
+A request is one JSON object that names its `op` and the model; `cad run gsl eval --help` lists every op and
+its fields. `--stdio` in place of the file answers one request a line, which is how to ask many. The four the
+loop leans on, for a plate named `plate`:
+
+```json
+{"op": "eval", "source": "part.gsl", "exprs": ["plate"], "points": [[0, 0, 0], [25, 0, 0], [39.5, 0, 0]]}
+{"op": "surface", "source": "part.gsl", "points": [[50, 0, 0]]}
+{"op": "certify", "source": "part.gsl", "expr": "plate", "region": [24, -1, -7, 26, 1, 7], "threshold": 0.5}
+{"op": "volume", "source": "part.gsl", "region": [-45, -30, -8, 45, 30, 8]}
+```
+
+- **`eval` is the check for a dimension.** It gives the field at each point: negative inside, positive outside,
+  zero on the surface (a face reads `1e-15`). A point 0.5 mm inside a face reads -0.5 and one on a 10 mm hole's
+  axis +5, so a few points say whether each face and hole is where it was asked for. It needs its `exprs`: names
+  the model declares.
+- **`surface` finds a face.** It moves each point onto the surface and gives the normal there: `[50, 0, 0]` lands
+  on `[40, 0, 0]` for a plate 80 mm long.
+- **`certify` proves, where the others sample.** Its verdict is `proven` when `expr` stays at or above
+  `threshold` over the whole `region`, a box `[x0, y0, z0, x1, y1, z1]`. `plate >= 0.5` over a box inside a hole
+  proves the hole open; `-plate >= 0.5` over a box inside the material proves it solid, so two bodies meant to be
+  one are joined. `"overSliders": true` proves it for every value of every slider at once. Keep the box about
+  0.5 mm clear of the surface: nearer, and on most lattices anywhere, the verdict is `indeterminate`, which is no
+  answer; measure with `eval` and `surface` there.
+- **`volume` catches a gross error only.** Its bracket is 2 to 4 percent wide on a plain part and wider on a
+  lattice, whatever tolerance is asked.
+- **`bounds` is no measure of size.** Its box is fitted on a coarse grid (8 mm cells in `@scene(120)`), so it can
+  be larger or smaller than the part and can miss a wall thinner than a cell. The mesh's box, which `cad omega
+  mesh` reports, is the part's.
+
+`"defs"` gives a name another value for that question alone (`"defs": "r = 6.5;"`), so a size is tried without
+editing the file.
 
 A mesh is a translation of the field for something that needs triangles: a slicer, a renderer, another program.
 Make one when a file is wanted, not on every edit:
@@ -216,6 +248,6 @@ or a thin shell, which a slicer may fill wrongly).
 ## From concept to exact geometry
 
 GSL is for the shape: iterate on the field and its pictures (`gsl render` is fast, no mesh), mesh it once it is
-settled, print it. When the part needs exact faces (a machined part, a STEP for a supplier, toleranced holes), remodel it in
-build123d from the dimensions the GSL settled, and keep the GSL as the concept. A lattice or an infill, which has
+settled, print it. When the part needs exact faces (a machined part, a STEP for a supplier, toleranced holes),
+remodel it in build123d from the dimensions the GSL settled, and keep the GSL as the concept. A lattice or an infill, which has
 no exact form, stays a mesh.
