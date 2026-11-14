@@ -35,7 +35,18 @@ reads it the same way:
   is not its channel's any more: it installs nothing, starts no server and connects to none (``connect``), and
   every request is answered here with one line that says so (``stale_line``: the ``cad`` command's words for
   which version this is and which its channel is on, then a thread's repair; ``shim``). A pointer naming an older version is no such thing: it is the channel this transport is moving.
-- **Every wait bounded**: a request waits for the version a few seconds at most (``unavailable``), a server's
+- **Its channel gone** (``stale`` too): once its channel has named its version (``Pin.named``: ``prepare`` found it so,
+  or moved it), a pointer FILE that is not there any more means the channel was taken off this computer on purpose
+  (``cad uninstall``, ``cad uninstall --purge``, ``cad doctor --prune``). The transport then does as a stale one does:
+  it starts no server (a server that stops under it is never started again), connects to none and installs nothing,
+  and answers every request with one line (``removed_line``: which version this is, that its channel is not on this
+  computer any more, and the repair). A pointer that is there and cannot be read, or names no version, is no such
+  thing (on Windows an update's replace of it can refuse a reader for a moment); nor is a channel this transport never
+  saw named (its first start, still installing). Nothing of it is kept: once an install writes the pointer again, the
+  same process serves again.
+- **Every wait bounded**: a request waits for the version a few seconds at most (``unavailable``), the app's
+  ``initialize`` 20 seconds, or 80% of the app's own startup timeout where its server config gives it
+  (``--startup-timeout``, ``shim.initialize_seconds``), a server's
   answer through the door ``DOOR_SECONDS`` a line (``_line``), its start 60 seconds, its HTTP answer 10 minutes;
   ``prepare``'s runs are bounded by ``PREPARE_SECONDS`` each, which bounds every wait for it (``READY_LIMIT``).
 - **The hold** (``hold``): a connection the server keeps while it is open, under a name the transport's
@@ -173,7 +184,8 @@ INSTALLING, STALE, FAILED = "installing", "stale", "failed"
 class Pin:
     """This transport's version (None: a source tree, which has none) and channel (None: the default), set once
     at start (``configure``), and what preparing it found (``prepare``): ``ready`` once done, ``failed`` the one
-    line saying why it cannot serve, ``stale`` the one line saying its channel has moved past it."""
+    line saying why it cannot serve, ``stale`` the one line saying its channel has moved past it, ``named`` that its
+    channel has named its version (so a pointer gone since is the channel taken off this computer: ``stale``)."""
 
     def __init__(self, version: str | None = None, channel: str | None = None) -> None:
         self.version = version
@@ -181,6 +193,7 @@ class Pin:
         self.ready = threading.Event()
         self.failed: str | None = None
         self.stale: str | None = None
+        self.named = False
         if version is None:
             self.ready.set()
 
@@ -228,13 +241,18 @@ def configure(channel: str | None) -> Pin:
     return PIN
 
 
+def pointer_path(channel: str | None = None) -> Path:
+    """Channel ``channel``'s pointer file (None: the default's), there or not: the server's ``pointers``."""
+    return state_dir() / (DEFAULT_POINTER if channel is None else f"{CHANNELS}/{channel}")
+
+
 def pointer(channel: str | None = None) -> str | None:
     """The version channel ``channel``'s pointer names (None: the default's), or None with none: the server's
-    ``pointers.read``, copied and held equal by a test."""
+    ``pointers.read``, copied and held equal by a test. None too for one that is there and cannot be read now, or
+    names no version: only ``pointer_path`` not there is no pointer (``stale``)."""
     import re
 
-    inside = DEFAULT_POINTER if channel is None else f"{CHANNELS}/{channel}"
-    data = _read(state_dir() / inside)
+    data = _read(pointer_path(channel))
     text = data.decode("utf-8", "replace").strip() if data is not None else ""
     return text if re.fullmatch(VERSION, text) else None
 
@@ -258,6 +276,12 @@ def add_command(version: str, system: str | None = None) -> str:
     if (system or os.name) == "nt":
         return f"& ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --add {version}"
     return f"{INSTALL} -s -- --add {version}"
+
+
+def install_command(system: str | None = None) -> str:
+    """The install command for this computer (or ``system``, an ``os.name``): the server's ``updates.INSTALL`` and
+    ``INSTALL_WINDOWS``, copied and held equal by a test."""
+    return INSTALL_WINDOWS if (system or os.name) == "nt" else INSTALL
 
 
 # A release as PEP 440 spells one (the library's ``contract._RELEASE``), and a development build's name,
@@ -317,21 +341,43 @@ def stale_line(version: str, channel: str | None, now: str | None) -> str:
     return f"{head}: start a new thread; if a new thread says the same, {repair}"
 
 
+def removed_line(version: str, channel: str | None, system: str | None = None) -> str:
+    """What a transport whose channel was taken off this computer answers with (``stale``), in one sentence: which
+    version this is and that its channel is not on this computer any more; then the repair. The default channel goes
+    with ``cad uninstall``, which took the app's copy of the plugin out too: the install command for this computer
+    (``install_command``; ``system``, an ``os.name``), then a new thread. A named channel goes with ``--purge`` or ``cad
+    doctor --prune``, and its store's copy is still in the app: a new thread, whose transport installs it again."""
+    head = (f"this is text-to-cad {version}, and its channel ({channel or DEFAULT_CHANNEL}) is not on this computer "
+            "any more")
+    if channel is None:
+        return (f"{head}: text-to-cad was uninstalled here; run the install command, {install_command(system)}, then "
+                "start a new thread")
+    return f"{head}: start a new thread, and this app's copy of the text-to-cad plugin installs it again"
+
+
 def installing_line(version: str) -> str:
     """What a transport answers while its version is being installed, or its channel moved to it (``prepare``)."""
     return f"text-to-cad {version} is being installed on this computer: try again shortly"
 
 
 def stale() -> str | None:
-    """The line this transport answers with once its channel has moved past its version (``stale_line``): its
-    channel's pointer, read now, names a newer version (``older``), or preparing it found so; else None."""
+    """The line this transport answers with where it must not serve: once its channel has moved past its version
+    (``stale_line``: its channel's pointer, read now, names a newer version, ``older``, or preparing it found so), or
+    once its channel, having named its version (``Pin.named``), is gone from this computer (``removed_line``: its
+    pointer file not there; one that is there and cannot be read is not gone). Else None. Reading the pointer naming its
+    version marks it named; nothing else is kept, so a pointer written again serves again."""
     pin = PIN
     if pin.version is None:
         return None
     if pin.stale is not None:
         return pin.stale
     now = pointer(pin.channel)
-    return stale_line(pin.version, pin.channel, now) if now is not None and older(pin.version, now) else None
+    if now is None:
+        gone = pin.named and not os.path.lexists(pointer_path(pin.channel))
+        return removed_line(pin.version, pin.channel) if gone else None
+    if now == pin.version:
+        pin.named = True
+    return stale_line(pin.version, pin.channel, now) if older(pin.version, now) else None
 
 
 def unavailable(wait: float = 0.0) -> tuple[str, str] | None:
@@ -383,6 +429,7 @@ def prepare(pin: Pin | None = None) -> Pin:
                               f"({said or 'uvx failed'}): run {add_command(pin.version)}")
                 return pin
         if pointer(pin.channel) == pin.version:
+            pin.named = True  # its channel on it: a pointer gone from now on is the channel taken off (``stale``)
             return pin
         word = f"+{pin.version}" + (f"@{pin.channel}" if pin.channel else "")
         code, said = _run_code([record["cad"], word, "setup", "--add", "--quiet"], _cad_environment(pin.version))
@@ -390,6 +437,8 @@ def prepare(pin: Pin | None = None) -> Pin:
             pin.stale = stale_line(pin.version, pin.channel, pointer(pin.channel))
         elif code != 0:
             pin.failed = said or f"text-to-cad {pin.version} could not be started for the {pin.label} channel"
+        else:
+            pin.named = True  # its own cad moved its channel to it
         return pin
     finally:
         pin.ready.set()
@@ -801,6 +850,11 @@ def _start() -> subprocess.Popen:
     installation's, with its Python; on a device with none, one registered first (``register``); and with none
     still, the one this environment carries, if any."""
     if PIN.version is not None:
+        # Looked at again here, the last moment before a start: a request that found its channel's pointer, then its
+        # server gone, finds now that an uninstall took the channel off first (it does so before any stop).
+        line = stale()
+        if line is not None:
+            raise ConnectionError(line)
         record = version_record(PIN.version)
         if record is None:  # removed once its channel moved on: the thread is stale
             raise ConnectionError(stale() or PIN.failed or f"text-to-cad {PIN.version} is not installed on this "
@@ -822,7 +876,7 @@ def _start() -> subprocess.Popen:
         python, own = sys.executable, True
     else:
         raise ConnectionError(f"no CAD server is installed on this computer, and installing {SERVER} "
-                              "failed: run the install command, `curl -fsSL https://texttocad.dev/install.sh | sh`")
+                              f"failed: run the install command, `{install_command()}`")
     env = {name: value for name, value in os.environ.items() if name not in PER_PROCESS}
     if not own:
         env.pop("PYTHONPATH", None)  # another installation imports its own server

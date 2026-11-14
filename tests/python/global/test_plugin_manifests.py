@@ -361,6 +361,9 @@ class PluginManifestPolicyTest(unittest.TestCase):
                 server = load_json(path)["mcpServers"]["cad"]
                 self.assertNotIn("env", server)
                 self.assertNotIn("--channel", server["args"])
+                # Nor its startup timeout: Codex takes the standard's mcp.json for this folder, where a Codex key
+                # makes the server vanish, so only a store's builder that writes Codex's own config says it.
+                self.assertNotIn("--startup-timeout", server["args"])
 
     def test_no_stale_plugin_subdirectory_package_remains(self) -> None:
         # The generated `plugins/cad/skills` copy is what the repo-root move

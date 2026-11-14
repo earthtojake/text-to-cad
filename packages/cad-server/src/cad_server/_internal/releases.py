@@ -24,7 +24,7 @@ from typing import Any
 
 from cad_server._internal import base
 
-__all__ = ["FOLDER", "MARKER", "SCHEMA", "complete", "console", "listing", "recipe", "root", "running"]
+__all__ = ["FOLDER", "MARKER", "SCHEMA", "complete", "console", "listing", "processes", "recipe", "root", "running"]
 
 FOLDER = "releases"
 MARKER = "cad-release.json"
@@ -96,17 +96,24 @@ def running(folder: Path | str, *, besides: int | None = None) -> bool:
     folder is kept rather than taken from under a process. On Windows, where it cannot be asked, False: there a
     folder is renamed aside before it is removed, which the system refuses for a file in use (``versions.remove``,
     ``legacy.remove``)."""
+    found = processes(folder, besides=besides)
+    return found is None or bool(found)
+
+
+def processes(folder: Path | str, *, besides: int | None = None) -> list[int] | None:
+    """The ids of the processes that run from ``folder``, as ``running`` finds them (``besides`` as there), in order:
+    what a message names. None when that cannot be asked; none on Windows."""
     if os.name == "nt":
-        return False
+        return []
     named = os.path.realpath(folder).rstrip(os.sep) + os.sep
     plain = os.path.abspath(folder).rstrip(os.sep) + os.sep
     try:
         listed = subprocess.run(["ps", "-axo", "pid=,ppid=,command="], stdin=subprocess.DEVNULL, capture_output=True,
                                 text=True, encoding="utf-8", errors="replace", timeout=10)
     except (OSError, subprocess.SubprocessError):
-        return True
+        return None
     if listed.returncode != 0:
-        return True
+        return None
     rows: list[tuple[int, int, str]] = []
     for line in listed.stdout.splitlines():
         parts = line.split(None, 2)
@@ -131,5 +138,5 @@ def running(folder: Path | str, *, besides: int | None = None) -> bool:
             resolved[head] = os.path.realpath(head)
         return (os.path.join(resolved[head], tail) + os.sep).startswith(named)
 
-    return any(named in line or plain in line or any(word.startswith(os.sep) and within(word) for word in line.split())
-               for pid, _parent, line in rows if pid not in spared)
+    return sorted(pid for pid, _parent, line in rows if pid not in spared and (
+        named in line or plain in line or any(word.startswith(os.sep) and within(word) for word in line.split())))

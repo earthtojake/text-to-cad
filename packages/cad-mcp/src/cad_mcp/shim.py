@@ -10,17 +10,23 @@ browser: made here, in the environment the host gave this process, never in the 
 
 **Answered here** (``Proxy.handle``): where this transport cannot reach its own version's server now
 (``engine.unavailable``), a request is answered by this process, never left waiting, and nothing reaches any
-server. Three cases: its version is being installed, or its channel moved to it (``engine.prepare``, at start;
+server. Four cases: its version is being installed, or its channel moved to it (``engine.prepare``, at start;
 minutes on a slow network); its channel is on a newer version (stale, ``engine.stale``: for good, this process
-never installs, starts or connects); or its version could not be made ready (failed). Each request waits for the
-version ``engine.READY_SECONDS`` at most (``initialize`` ``INITIALIZE_SECONDS``, ``ping`` not at all), then:
+never installs, starts or connects); its channel, once on its version, is not on this computer any more (taken off
+by ``cad uninstall``, ``--purge`` or ``cad doctor --prune``: the stale kind too, ``engine.removed_line``, so a server
+that stops under the thread is never started again; until an install writes the channel's pointer again, when this
+process serves again); or its version could not be made ready (failed). Each request waits for the version
+``engine.READY_SECONDS`` at most (``ping`` not at all; ``initialize`` ``initialize_seconds``: 80% of the app's own
+startup timeout where its server config gives it, ``--startup-timeout``, never less than ``INITIALIZE_SECONDS``, so
+a first start that installs the version is answered by the server's own session wherever the app waits for it: Codex
+adds a late start's tools to the running turn, but acts on no ``list_changed`` within a turn), then:
 
 - ``initialize``: being installed, a greeting of this process's own (``_greeting``) that says the tool and
   resource lists can change, and the server's session opened at the first request after the version is ready.
   Stale or failed, a JSON-RPC error carrying the line: the app's start says why, and a new thread after the
   repair starts again.
-- ``tools/call``: a result marked ``isError`` whose text is the line (``engine.installing_line``, ``stale_line``
-  or why it failed), which the agent reads and relays; nothing ran.
+- ``tools/call``: a result marked ``isError`` whose text is the line (``engine.installing_line``, ``stale_line``,
+  ``removed_line`` or why it failed), which the agent reads and relays; nothing ran.
 - ``tools/list``, ``resources/list``, ``resources/templates/list``: being installed, an empty list, and once the
   version is ready ``notifications/tools/list_changed`` (``resources/list_changed``) so the app asks again.
   Stale or failed, the list this process last had from its server, where it had one (a thread open across its
@@ -49,10 +55,21 @@ from cad_mcp.host import MIME, TABS_EXTENSION, UI_EXTENSION, family, launcher
 from cad_mcp.protocol import Connection, RequestContext, RpcError, claim_stdin, claim_stdout
 
 LOG = logging.getLogger("cad_mcp")
-# How long the host's initialize waits for this transport's version to be ready (``engine.prepare``): within the
-# 30 seconds Codex gives a server to start. Past it -- a version being installed for the first time -- the
-# initialize is answered here, and the server's session opened at the host's next request.
+# How long the host's initialize waits for this transport's version to be ready (``engine.prepare``) where its app's
+# config says nothing of the app's startup timeout: within the 30 seconds Codex gives a server to start by default.
+# Past it -- a version being installed for the first time -- the initialize is answered here, and the server's session
+# opened at the host's next request.
 INITIALIZE_SECONDS = 20.0
+# The share of the app's startup timeout (``--startup-timeout``) the initialize waits: the rest is uvx fetching this
+# transport and the handshake.
+STARTUP_SHARE = 0.8
+
+
+def initialize_seconds(startup=None):
+    """How long the host's initialize waits for this transport's version: ``STARTUP_SHARE`` of ``startup``, the app's
+    own startup timeout as its server config gives it (``--startup-timeout``), never less than ``INITIALIZE_SECONDS``;
+    ``INITIALIZE_SECONDS`` without one."""
+    return max(INITIALIZE_SECONDS, STARTUP_SHARE * startup) if startup else INITIALIZE_SECONDS
 # The JSON-RPC error a request answered here carries (the server's own -32000, an implementation's).
 UNAVAILABLE = -32000
 # The lists an app asks for, what each answer holds them under, and the notification that it changed.
@@ -104,7 +121,8 @@ class Holder:
     ready (``engine.prepare``), starting the server when none runs -- its own version's (a transport with no
     version: the current installation's) -- and kept while the host runs, so a shell the host runs in a sandbox
     that cannot start a server always finds one. A stale transport holds nothing and starts nothing
-    (``engine.connect``). A hold does not keep a version whose channel moved on: its
+    (``engine.connect``), nor does one whose channel is gone from this computer: a server an uninstall stops is not
+    started again here. A hold does not keep a version whose channel moved on: its
     server stops once nothing is in flight, and the next call is told the thread is stale. Once the host has
     quit, and this process with it, the server runs on unheld until it is stopped or an update replaces it. A
     server that goes while held (``cad stop``, a crash, an update) is held again at the host's next request,
@@ -163,8 +181,9 @@ class Proxy:
     connection was refused. Each session it opens is given the same app capability (``app``), so the views
     the host shows keep reaching CAD through the new one."""
 
-    def __init__(self, client=None, holder=None, launcher=lambda: None, opener=None):
+    def __init__(self, client=None, holder=None, launcher=lambda: None, opener=None, startup=None):
         self.client = client or EngineClient()
+        self.startup = startup  # the app's startup timeout, as its server config gives it (``initialize_seconds``)
         self.opener = opener  # what opens a page's redirect file: ``webbrowser.open``, in this environment
         self.holder = holder
         self.launcher = launcher  # the host that started this process, read once (``serve``)
@@ -257,7 +276,7 @@ class Proxy:
         if method == "initialize":
             params = initialize_params(params, self.launcher(), self.holder.ident if self.holder is not None else None,
                                        self.app)
-            why = engine.unavailable(INITIALIZE_SECONDS)
+            why = engine.unavailable(initialize_seconds(self.startup))
             if why is not None and why[0] != engine.INSTALLING:
                 raise RpcError(UNAVAILABLE, why[1])  # stale or failed: the app's start says why
             if why is not None:
@@ -369,10 +388,11 @@ def _leave(number, _frame):
     raise SystemExit(128 + number)
 
 
-def serve(argv=None, channel=None):
+def serve(argv=None, channel=None, startup=None):
     """Serve the host on standard input and output until it closes them, or ends this process: on channel
     ``channel`` (None: the default), this transport's version made ready in the background first
-    (``engine.prepare``), which every request to the server waits for."""
+    (``engine.prepare``), which every request to the server waits for -- the host's initialize the longest where
+    ``startup``, the app's startup timeout in seconds, says the app waits that long (``initialize_seconds``)."""
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="cad-mcp: %(message)s")
     pin = engine.configure(channel)
     if pin.version is not None:
@@ -393,7 +413,7 @@ def serve(argv=None, channel=None):
     holder = Holder(host=lambda: family(launched()))
     holder.start()
 
-    proxy = Proxy(holder=holder, launcher=launched)
+    proxy = Proxy(holder=holder, launcher=launched, startup=startup)
     connection = Connection(requests, output, proxy.handle, workers=64, notification=proxy.notify)
     proxy.tell = connection.notify
     # A host that ends this process with a signal rather than by closing its input (or both, at once): it
@@ -412,37 +432,58 @@ def serve(argv=None, channel=None):
     return 0
 
 
-USAGE = ("usage: cad-mcp [--channel NAME]\n\nServe CAD to an agent app over MCP (stdio). The app starts one process "
-         "per thread, from its plugin's startup config. --channel names the delivery channel of the plugin copy that "
-         "config belongs to (a store's), none for the default channel; it is the config's to say.\n")
+USAGE = ("usage: cad-mcp [--channel NAME] [--startup-timeout SECONDS]\n\nServe CAD to an agent app over MCP (stdio). "
+         "The app starts one process per thread, from its plugin's startup config. --channel names the delivery "
+         "channel of the plugin copy that config belongs to (a store's), none for the default channel; it is the "
+         "config's to say. --startup-timeout is how long that app waits for this process to start, as the same config "
+         "says it: the app's first request waits up to 80% of it (never less than 20 seconds; 20 without it) for this "
+         "version to be installed and its server ready, so an app that never asks for its tools again in a turn gets "
+         "them in the one that started it.\n")
+
+
+def _seconds(text):
+    """``--startup-timeout``'s value as seconds, or ``ValueError`` saying the rule."""
+    try:
+        seconds = float(text)
+    except ValueError:
+        seconds = float("nan")
+    if not (0 < seconds < float("inf")):
+        raise ValueError(f"not a startup timeout: {text!r} (a startup timeout is a positive number of seconds)")
+    return seconds
 
 
 def arguments(args):
-    """``cad-mcp``'s arguments: the channel ``--channel NAME`` (or ``--channel=NAME``) names, None for none or
-    ``default``. ``ValueError`` saying what is wrong."""
-    channel, rest = None, list(args)
+    """``cad-mcp``'s arguments: ``(channel, startup)``, the channel ``--channel NAME`` (or ``--channel=NAME``) names,
+    None for none or ``default``, and the app's startup timeout in seconds ``--startup-timeout SECONDS`` (or
+    ``--startup-timeout=SECONDS``) gives, None for none. ``ValueError`` saying what is wrong."""
+    channel, startup, rest = None, None, list(args)
     while rest:
         word = rest.pop(0)
         if word == "--channel" and rest:
             channel = rest.pop(0)
         elif word.startswith("--channel="):
             channel = word.partition("=")[2]
+        elif word == "--startup-timeout" and rest:
+            startup = _seconds(rest.pop(0))
+        elif word.startswith("--startup-timeout="):
+            startup = _seconds(word.partition("=")[2])
         else:
             raise ValueError(f"unrecognized arguments: {word}")
         engine.channel_name(channel)
-    return engine.channel_name(channel)
+    return engine.channel_name(channel), startup
 
 
 def main(argv=None):
-    """``cad-mcp [--channel NAME]``: serve CAD to the agent app that started this process, over MCP on standard
-    input and output, as this package's version on that delivery channel. The app's plugin starts it."""
+    """``cad-mcp [--channel NAME] [--startup-timeout SECONDS]``: serve CAD to the agent app that started this process,
+    over MCP on standard input and output, as this package's version on that delivery channel, its first request
+    waiting as long as the app's startup timeout allows. The app's plugin starts it."""
     args = list(sys.argv[1:] if argv is None else argv)
     if args[:1] in (["-h"], ["--help"]):
         sys.stdout.write(USAGE)
         return 0
     try:
-        channel = arguments(args)
+        channel, startup = arguments(args)
     except ValueError as error:
         sys.stderr.write(f"cad-mcp: {error}\n")
         return 2
-    return serve(channel=channel)
+    return serve(channel=channel, startup=startup)

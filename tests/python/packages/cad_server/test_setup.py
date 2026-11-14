@@ -990,6 +990,55 @@ sys.exit(0)
         self.assertFalse(self.state.exists())
         self.assertFalse(self.cache.exists())
 
+    def test_an_uninstall_takes_the_channels_off_before_it_asks_any_server_to_stop(self) -> None:
+        # A thread's transport whose server stops starts it again unless its channel is gone (cad_mcp.engine.stale):
+        # so at the first stop the default pointer and the mirror are gone, and with --purge every channel's pointer.
+        from cad_server._internal import pointers
+
+        for purge, left in ((False, ["codex"]), (True, [])):
+            with self.subTest(purge=purge):
+                pointers.write(None, "0.12.0", mirrored=False)
+                pointers.write("codex", "0.12.1", mirrored=False)
+                installations.point("0.12.0")
+                seen: list = []
+                stopping = lambda *_args: seen.append(  # noqa: E731
+                    ([pointer.channel for pointer in pointers.listing()], installations.current_version())) or 0
+                with mock.patch.object(stop, "main", side_effect=stopping):
+                    code, out, _err = self.run_uninstall(*(["--purge"] if purge else []))
+                self.assertEqual(code, 0, out)
+                self.assertEqual(seen, [(left, None)])
+                self.assertIn("default  removed the default channel (on text-to-cad 0.12.0)\n", out)
+                self.assertEqual("channel  removed the codex channel (on text-to-cad 0.12.1)" in out, purge, out)
+
+    def test_a_version_something_still_runs_from_is_said_with_what_runs_and_how_to_finish(self) -> None:
+        # Never "stop it, then run this again": the cad command is gone by then, and a second uninstall would not find
+        # the version (no channel is on it). What runs, that the code stays and the data is kept, and what finishes it.
+        from cad.engine import places
+        from cad_server._internal import pointers
+
+        name = "0.12.0"
+        code = places.code_dir(name)
+        code.mkdir(parents=True)
+        pointers.write(None, name, mirrored=False)
+        with mock.patch.object(releases, "processes", return_value=[4242]):
+            status, out, _err = self.run_uninstall()
+        self.assertEqual(status, 1, out)
+        self.assertIn(f"version  the code of text-to-cad {name} stays, in {providers.shown(code, self.machine)}: "
+                      f"process 4242 still runs from it. Its data is kept. Delete that code folder once nothing runs "
+                      f"from it to finish the uninstall; a later install of text-to-cad {name} uses it instead, and of "
+                      "a newer release removes it\n", out)
+        self.assertNotIn("run this again", out)
+        self.assertEqual(out.count(f"{name}'s code stays"), 0, "said once, by the uninstall")
+        self.assertTrue(code.is_dir())
+        self.assertTrue((places.version_dir(name) / versions.UNINSTALLED).exists(), "its data kept for a later install")
+        with mock.patch.object(releases, "processes", return_value=[]), \
+                mock.patch.object(versions, "remove_now", return_value="connected"):
+            pointers.write(None, name, mirrored=False)
+            status, out, _err = self.run_uninstall("--purge")
+        self.assertEqual(status, 1, out)
+        self.assertIn(f"version  {providers.shown(places.version_dir(name), self.machine)} stays: its server still runs. "
+                      "Delete that folder once nothing runs from it\n", out)
+
     def test_an_uninstall_with_no_record_of_a_setup_says_so_and_takes_out_what_it_finds(self) -> None:
         self.desktop_with({"cad": self.entry()})
         code, out, _err = self.run_uninstall("--dry-run")

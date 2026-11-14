@@ -45,6 +45,11 @@ class PluginZipTests(unittest.TestCase):
                            != (REPO_ROOT / name).read_text(encoding="utf-8")
                            or plugin_zip.channel_stamp.unstamped(text, version, "codex")]
                 pinned = sum(text.count(f"+{version}@codex") for text in skills.values())
+                server = json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"]
+        # The launcher on its channel, told Codex's startup timeout from the same config: its first start, which
+        # installs its version, holds Codex's initialize that long (Codex acts on no list_changed within a turn).
+        timeout = server["startup_timeout_sec"]
+        self.assertEqual(server["args"][-5:], ["cad-mcp", "--channel", "codex", "--startup-timeout", f"{timeout:g}"])
         # The plugin is at the archive's root, each folder with an entry of its own: the
         # portal turned away a top-level folder without one as holding no plugin.
         names = {name for name in members if not name.endswith("/")}
@@ -110,6 +115,22 @@ class PluginZipTests(unittest.TestCase):
                                  {**server, "args": [*server["args"], "--channel", "codex"]})
                 self.assertNotIn("codex.mcp.json", archive.namelist())
                 self.assertIn(b"Run `cad +1.0.0@codex x`.", archive.read("skills/demo/SKILL.md"))
+
+            # A config that gives Codex a startup timeout tells the launcher the same number; one that is no
+            # positive number of seconds fails the package.
+            for timeout, args, errors in ((300.0, ["--startup-timeout", "300"], []), (45.5, ["--startup-timeout", "45.5"], []),
+                                          ("300", None, [".mcp.json's startup_timeout_sec"]),
+                                          (0, None, [".mcp.json's startup_timeout_sec"])):
+                with self.subTest(timeout=timeout):
+                    (root / "codex.mcp.json").write_text(json.dumps(
+                        {"mcpServers": {"cad": {**server, "startup_timeout_sec": timeout}}}), encoding="utf-8")
+                    found = build(manifest, root / "out.zip")
+                    self.assertEqual([error.split(" is not")[0] for error in found], errors)
+                    if args is not None:
+                        with zipfile.ZipFile(root / "out.zip") as archive:
+                            self.assertEqual(json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"]["args"],
+                                             [*server["args"], "--channel", "codex", *args])
+            (root / "codex.mcp.json").write_text(json.dumps({"mcpServers": {"cad": server}}), encoding="utf-8")
 
             # A pin of another version, or a file whose pins cannot be read, fails the package.
             (root / "skills/demo/notes.md").write_bytes("caf\u00e9 `cad +0.9.0 x`".encode("latin-1"))

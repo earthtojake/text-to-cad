@@ -86,6 +86,25 @@ names, from a session that still lists it, answers with the `cad` command that r
 source text: to build a shape, wrap the shape in a decorated function and run its script. The web
 viewer's Export is a browser download; this page has no Export, having no HTTP origin to download from.
 
+## Starting: how long a host waits for `cad-mcp`
+
+A thread's first start on a computer without its version installs it (30 seconds to minutes), so
+how long the host waits for `initialize`, and what it does with a late tool list, decide whether
+that thread gets CAD's tools.
+
+| Host | Startup timeout | A late `initialize` | `tools/list_changed` |
+| --- | --- | --- | --- |
+| Codex (codex-cli 0.169.0-alpha.11.1, measured 2026-11-14) | 30 s where the server config sets no `startup_timeout_sec`; the OpenAI directory's ZIP sets 300 | a turn never waits for MCP servers; a server answered late (9 s and 25 s tried) has its tools added to the running turn | not acted on for the rest of a turn: a list answered empty stays empty in that turn |
+
+So `cad-mcp` holds `initialize` for its version as long as the host waits: 20 seconds by default
+(inside Codex's 30), and 80% of the startup timeout where the server config says it as
+`cad-mcp --startup-timeout N`. Only the OpenAI ZIP says it (`scripts/release/plugin_zip.py`, N
+read from that config's own `startup_timeout_sec`: `--channel codex --startup-timeout 300`). For
+the plugin folder and `main`, Codex reads the Agent Plugins standard's root `mcp.json` rather than
+`codex.mcp.json`, and any Codex-only key there makes the server vanish with no error: nothing
+can be configured for the default channel, which keeps 20 seconds, the placeholder greeting and
+its `list_changed` past them.
+
 ## Claude: no CAD server
 
 Decided 2026-11-13: Claude gets text-to-cad as skills alone, on every install route, the install

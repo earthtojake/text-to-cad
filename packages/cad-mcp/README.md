@@ -17,8 +17,12 @@ It holds no tool, view or document: the server does. What it does on its own:
   nothing; else installed where it is not, as the `cad` command installs one (`uvx --from
   cad-server==<version> cad setup --add --quiet`); then, where the pointer does not name it, that version's
   own `cad` run pinned to it (`cad +<version>[@<channel>] setup --add --quiet`), which moves the channel to it,
-  or finds the channel past it. The app's `initialize` waits for this at most 20 seconds, inside Codex's start
-  window: past that it is answered here and the server's session opened once the version is ready.
+  or finds the channel past it. The app's `initialize` waits for this at most 20 seconds, inside Codex's
+  default 30-second start window, or 80% of the app's startup timeout where its server config gives it as
+  `--startup-timeout SECONDS` (a store's copy whose config sets the app's timeout says the same number): past
+  that it is answered here and the server's session opened once the version is ready. Holding it matters: an
+  app that does not act on `tools/list_changed` within a turn (Codex) keeps the empty list an early answer
+  gave for the rest of that turn.
 - **Never leaves a request waiting**: every wait is bounded. While its version is being installed (minutes,
   on a slow network), a request is answered here within seconds: a tool call with a result saying text-to-cad
   `<version>` is being installed and to try again shortly; a tool or resource list empty, and a list-changed
@@ -34,6 +38,14 @@ It holds no tool, view or document: the server does. What it does on its own:
   thread whose transport is old: start a new thread, and where a new thread says the same, bring the app's copy
   up (`cad update` for the default channel, the plugin's update in its app for another). A pointer naming an
   older version is the channel it is about to move, never stale.
+- **Says its channel is gone**: once its channel was on its version, a pointer file that is not there any more
+  means the channel was taken off this computer (`cad uninstall`, `cad uninstall --purge`, `cad doctor
+  --prune`). It then does as a stale thread does -- no server started (one the uninstall stopped stays
+  stopped), none reached, nothing installed -- and answers every request with one line: which version it is,
+  that its channel is not on this computer any more, and the repair (the default channel: run the install
+  command, then start a new thread; another: start a new thread, whose copy installs it again). A pointer that
+  is there but cannot be read is not gone, and nothing is kept: once an install writes the pointer again, the
+  same thread is served again.
 - **From a source tree** (a checkout, which has no version) it reaches the server as every transport of 0.11.10
   and earlier does: the flat door, the current installation's server (`installations/current`), and on a
   computer with none, the one its environment carries registered first, else its own release's installed by

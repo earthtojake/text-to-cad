@@ -19,7 +19,9 @@ The package is the copy OpenAI's directory delivers, on its own channel, `codex`
 `@codex` (`cad +<VERSION>@codex <verb>`, `channel_stamp.py`, the routine the directory branch of claude.ai
 uses too), and its launcher is told the channel as an argument in its server config (`cad-mcp --channel
 codex`), so the device keeps that copy's version apart from the default channel's and the install
-command's updates never move it.
+command's updates never move it. It is told Codex's startup timeout too, the config's own `startup_timeout_sec`
+(`--startup-timeout 300`): a first start installs its version, and the launcher holds Codex's `initialize` for most
+of that time rather than answer early, since Codex acts on no `tools/list_changed` within a turn.
 
 The checks are the package rules the portal documents, named by its error codes
 (https://developers.openai.com/plugins/deploy/submission-errors). Listing limits
@@ -178,7 +180,10 @@ def collect(root: Path) -> Package:
 def with_channel(package: Package, data: bytes) -> bytes:
     """The server config whose one `cad-mcp` launcher is told this package's channel as its argument (`cad-mcp
     --channel codex`): the launcher runs its version on that channel. Nothing in its environment says a channel
-    or who updates the copy (a config of 0.11.10 or earlier did, and is ignored now)."""
+    or who updates the copy (a config of 0.11.10 or earlier did, and is ignored now). Where the config gives Codex a
+    startup timeout (`startup_timeout_sec`), the launcher is told that same number (`--startup-timeout N`), read from
+    it so the two never drift: its first start, which installs its version, then holds the app's `initialize` that
+    long rather than answer early, since Codex acts on no `tools/list_changed` within a turn."""
     try:
         config = json.loads(data)
         servers = [server for server in config["mcpServers"].values() if server["args"][-1:] == ["cad-mcp"]]
@@ -188,7 +193,14 @@ def with_channel(package: Package, data: bytes) -> bytes:
     if len(servers) != 1:
         package.errors.append(f"{MCP_CONFIG} must start exactly one `cad-mcp` server (found {len(servers)})")
         return data
-    servers[0]["args"] = [*servers[0]["args"], "--channel", CHANNEL]
+    args = [*servers[0]["args"], "--channel", CHANNEL]
+    timeout = servers[0].get("startup_timeout_sec")
+    if timeout is not None:
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 0 < timeout < float("inf"):
+            package.errors.append(f"{MCP_CONFIG}'s startup_timeout_sec is not a positive number of seconds: {timeout!r}")
+            return data
+        args += ["--startup-timeout", f"{timeout:g}"]
+    servers[0]["args"] = args
     return json.dumps(config, indent=2).encode("utf-8") + b"\n"
 
 

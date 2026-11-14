@@ -193,7 +193,8 @@ where those files ship, so these scripts are what produces them.
   `LICENSE` and every file the manifest names, with the MCP config as the root
   `.mcp.json`) and checks it against the portal's documented package rules. Every
   command its skills run is pinned to the `codex` channel (`cad +<VERSION>@codex`), and
-  its MCP config starts the launcher with `--channel codex`.
+  its MCP config starts the launcher with `--channel codex --startup-timeout <N>`, N its own
+  `startup_timeout_sec`.
   Called by `release-publish.yml`; tested by
   `tests/python/global/test_plugin_zip.py`.
 - `plugin_branch.py --check | --commit --copy latest|directory [--parent REF]` —

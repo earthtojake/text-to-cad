@@ -114,8 +114,11 @@ receipt. Your settings, Recents and documents' records stay: install again and t
 release finds them, or a newer release takes them over. A copy from a plugin directory stays, with its release, its settings and its
 Recents: its store delivered it. While one does, so does the `cad` command it runs,
 and a line says which channel is still installed, on which release: its store's plugin
-uses the command, and `cad uninstall --purge` removes it too. Nothing is removed from
-under a program still running from it: the line says so, and the uninstall fails.
+uses the command, and `cad uninstall --purge` removes it too. A chat an app still has
+open with text-to-cad stops using it and says text-to-cad was uninstalled. Nothing is
+removed from under a program still running from it: the line says which program, the
+release's folder stays with your data kept, and the uninstall fails. Delete the folder
+the line names once that program has ended, or install again, which uses it or removes it.
 A plugin directory's copy that the install command of a release through 0.11.10
 replaced is not put back: install it from the directory again to get it back.
 `--purge` with it removes everything: every release, a store's among them, and

@@ -751,7 +751,8 @@ green: that is the release. `Publish Release`, on the merge commit:
    published either way.
 3. **Build.** `scripts/release/plugin_zip.py` builds the plugin ZIP from the
    untouched release commit, every pin in its skills stamped with its channel
-   (`cad +<VERSION>@codex`) and its launcher started with `--channel codex`, and checks it
+   (`cad +<VERSION>@codex`) and its launcher started with `--channel codex --startup-timeout 300` (the
+   config's own `startup_timeout_sec`), and checks it
    against the portal's package rules,
    so a package the portal would refuse stops the release before anything
    irreversible; the ZIP is kept as a workflow artifact
@@ -921,7 +922,7 @@ the build when what it replaces is not there exactly once:
 | | `latest` and the plugin folder | the OpenAI ZIP | `claude-plugin` |
 | --- | --- | --- | --- |
 | Pins | as `main` | `@codex` | `@claude` |
-| Launcher | as `main` | `cad-mcp --channel codex` in `.mcp.json` | none: no MCP config |
+| Launcher | as `main` | `cad-mcp --channel codex --startup-timeout 300` in `.mcp.json` (the number its `startup_timeout_sec`) | none: no MCP config |
 | Setup block's install line | the install script, `curl ... \| sh -s -- --add <VERSION>`, and the Windows sentence | as `main` | `uvx ... --from cad-server==<VERSION> cad setup --add`; no Windows sentence |
 | README's install section | `latest`'s: the two one-liners and what they do (the plugin folder has no README) | no README | the `uvx` command and one paragraph |
 | `.claude-plugin/plugin.json` | as `main` | not shipped | without `documentationUrl`, `privacyPolicyUrl`, `supportUrl` and `termsOfServiceUrl`, which the directory's validation does not know; the README links the same pages |
@@ -954,7 +955,9 @@ holding no plugin.) The portal requires `mcpServers` to resolve to a root
 `.mcp.json`, so a server config the checkout keeps under another name is
 archived as `.mcp.json`, and the archived manifest points there. That config
 starts the launcher with its channel as an argument, `cad-mcp --channel codex`, and
-sets no environment.
+Codex's startup timeout, the config's own `startup_timeout_sec`, as `--startup-timeout 300` (the
+launcher holds a first start's `initialize` for 80% of it: Codex acts on no `tools/list_changed`
+within a turn, `apps/mcp/README.md`), and sets no environment.
 
 For each release, a person with the access below:
 

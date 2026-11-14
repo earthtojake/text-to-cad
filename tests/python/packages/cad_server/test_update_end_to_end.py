@@ -185,7 +185,10 @@ def command(env: Path) -> Path:
     return env / ("Scripts/cad.exe" if WINDOWS else "bin/cad")
 
 
-class UpdateEndToEndTest(unittest.TestCase):
+class Machine(unittest.TestCase):
+    """A machine of the test's own (``environment``), a version feed served here and a folder of wheels uv reads; every
+    server of it stopped, and every process from its folder ended, as the test ends. No test of its own."""
+
     def setUp(self) -> None:
         # Short, under /tmp: the engine's door is a Unix socket in its folder, whose path caps near 104 bytes.
         self.work = Path(tempfile.mkdtemp(prefix="cu.", dir=None if WINDOWS else "/tmp")).resolve()
@@ -253,7 +256,8 @@ class UpdateEndToEndTest(unittest.TestCase):
     def stop(self) -> None:
         """Each version's server stopped, as any client of it stops it, and anything still running from this test's
         folder ended."""
-        for version in (B, A):
+        versions = self.work / "state" / "versions"
+        for version in sorted(os.listdir(versions), reverse=True) if versions.is_dir() else []:
             python = base.interpreter(self.release(version))
             if python.exists():
                 self.run_here([python, "-c", "from cad.engine import client\n"
@@ -306,6 +310,23 @@ class UpdateEndToEndTest(unittest.TestCase):
         found = [line.strip() for line in listed.splitlines() if str(self.work) in line]
         return "processes from the test's folder:\n" + ("\n".join(found) if found else "(none)")
 
+    def installer(self, version: str) -> Path:
+        """Release ``version``'s server environment as the install command makes it (uvx's, outside the state folder),
+        from the folder of wheels: what its ``cad setup`` and ``cad uninstall`` run from."""
+        uv, boot = base.find_uv(), self.work / f"uvx-{version}"
+        made = self.run_here([uv, "venv", "--no-project", "--python", sys.executable, boot])
+        self.assertEqual(made.returncode, 0, made.stderr)
+        install = [uv, "pip", "install", "--python", base.interpreter(boot), "--find-links", self.wheels,
+                   f"{base.SERVER}=={version}"]
+        made = self.run_here([*install, "--offline"])
+        if made.returncode != 0:
+            made = self.run_here(install)
+        self.assertEqual(made.returncode, 0, made.stderr)
+        return boot
+
+
+class UpdateEndToEndTest(Machine):
+
     def test_the_button_installs_the_next_release_and_its_engine_takes_the_port_and_token(self) -> None:
         # Release A, as the install command sets it up: uvx's environment, whose `cad setup` makes A's
         # release folder and sets it up from there. Cursor's folder is there: it gets a copy of the plugin folder,
@@ -314,15 +335,7 @@ class UpdateEndToEndTest(unittest.TestCase):
         machine = providers.Machine(Path(self.env["HOME"]), self.env, platform=sys.platform, bundled={})
         (machine.home / ".cursor").mkdir(parents=True)
         cursor = providers.cursor_plugins(machine) / "text-to-cad" / ".cursor-plugin" / "plugin.json"
-        uv, boot = base.find_uv(), self.work / "uvx"
-        made = self.run_here([uv, "venv", "--no-project", "--python", sys.executable, boot])
-        self.assertEqual(made.returncode, 0, made.stderr)
-        install = [uv, "pip", "install", "--python", base.interpreter(boot), "--find-links", self.wheels,
-                   f"{base.SERVER}=={A}"]
-        made = self.run_here([*install, "--offline"])
-        if made.returncode != 0:
-            made = self.run_here(install)
-        self.assertEqual(made.returncode, 0, made.stderr)
+        boot = self.installer(A)
         set_up = self.run_here([command(boot), "setup"], timeout=600)
         self.assertEqual(set_up.returncode, 0, set_up.stdout + set_up.stderr)
         self.assertEqual((self.work / "state" / "default").read_text(encoding="utf-8").strip(), A)

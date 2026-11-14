@@ -298,16 +298,38 @@ class PinTest(unittest.TestCase):
     def test_the_channel_is_an_argument_of_the_server_config(self) -> None:
         from cad_mcp import shim
 
-        for args, expected in (([], None), (["--channel", "codex"], "codex"), (["--channel=codex"], "codex"),
-                               (["--channel", "default"], None)):
+        for args, expected in (([], (None, None)), (["--channel", "codex"], ("codex", None)),
+                               (["--channel=codex"], ("codex", None)), (["--channel", "default"], (None, None)),
+                               (["--channel", "codex", "--startup-timeout", "300"], ("codex", 300.0)),
+                               (["--startup-timeout=12.5"], (None, 12.5))):
             with self.subTest(args=args):
                 self.assertEqual(shim.arguments(args), expected)
-        for args in (["--channel", "Not a channel"], ["--channel"], ["--other"], ["--channel=@"]):
+        for args in (["--channel", "Not a channel"], ["--channel"], ["--other"], ["--channel=@"], ["--startup-timeout"],
+                     ["--startup-timeout", "0"], ["--startup-timeout=-5"], ["--startup-timeout", "soon"],
+                     ["--startup-timeout=nan"], ["--startup-timeout", "inf"]):
             with self.subTest(args=args), self.assertRaises(ValueError):
                 shim.arguments(args)
-        with mock.patch.object(sys, "stderr", io.StringIO()) as err:
-            self.assertEqual(shim.main(["--channel", "Bad"]), 2)
-        self.assertIn("not a channel", err.getvalue())
+        for args, said in ((["--channel", "Bad"], "not a channel"), (["--startup-timeout", "0"], "not a startup timeout")):
+            with self.subTest(args=args), mock.patch.object(sys, "stderr", io.StringIO()) as err:
+                self.assertEqual(shim.main(args), 2)
+            self.assertIn(said, err.getvalue())
+
+    def test_the_initialize_waits_for_its_version_as_long_as_its_app_waits_for_it_to_start(self) -> None:
+        # Codex acts on no list_changed within a turn: a thread whose initialize is answered by the placeholder greeting
+        # before the version is installed never gets its tools in that turn. Where its config says how long the app
+        # waits (`--startup-timeout`), the initialize waits 80% of it, never less than 20 seconds.
+        from cad_mcp import shim
+        from cad_mcp.protocol import RequestContext
+
+        for startup, seconds in ((None, 20.0), (300.0, 240.0), (30.0, 24.0), (10.0, 20.0)):
+            with self.subTest(startup=startup):
+                self.assertEqual(shim.initialize_seconds(startup), seconds)
+                asked: list = []
+                proxy = shim.Proxy(client=object(), startup=startup)
+                with mock.patch.object(engine, "unavailable",
+                                       side_effect=lambda wait: asked.append(wait) or (engine.INSTALLING, "")):
+                    proxy.handle("initialize", {"protocolVersion": "2025-06-18"}, RequestContext(1, {}))
+                self.assertEqual(asked, [seconds])
 
     def test_its_version_is_its_own_release_and_a_source_tree_has_none(self) -> None:
         self.assertIsNone(engine.own_version(), "this checkout's transport: no version, the flat door")
@@ -449,6 +471,71 @@ class PinTest(unittest.TestCase):
                 self.assertRaises(ConnectionError) as said:
             engine.connect()
         self.assertEqual(str(said.exception), engine.stale_line(self.X, None, self.Y))
+
+    def test_a_channel_taken_off_this_computer_starts_nothing_until_an_install_writes_it_again(self) -> None:
+        # `cad uninstall` removed the pointer of the channel this transport's version was on, then stopped its server:
+        # every request is answered here with one line, and nothing starts, connects or installs (it used to start the
+        # server again within a second). A pointer that is there but cannot be read, or names no version, is not gone;
+        # written again, the same transport serves again.
+        from cad_mcp.protocol import RequestContext
+
+        self.installed(self.X)
+        self.point(self.X)
+        pin = self.pinned()
+        with self.run_as(lambda command: self.fail(f"on its channel's version: nothing runs: {command}")):
+            engine.prepare(pin)
+        self.assertEqual((engine.unavailable(), pin.named), (None, True))
+        path = self.state / "default"
+        path.unlink()
+        line = engine.removed_line(self.X, None)
+        self.assertEqual(engine.unavailable(), (engine.STALE, line))
+        with self.run_as(lambda command: self.fail(f"installs nothing: {command}")), \
+                mock.patch.object(engine, "_connect", side_effect=AssertionError("never connects")), \
+                mock.patch.object(subprocess, "Popen", side_effect=AssertionError("never starts a server")):
+            for call in (engine.connect, engine.hold):
+                with self.assertRaises(ConnectionError) as said:
+                    call()
+                self.assertEqual(str(said.exception), line)
+            self.assertEqual(self.proxy().handle("tools/call", {"name": "cad_show", "arguments": {}},
+                                                 RequestContext(1, {})),
+                             {"content": [{"type": "text", "text": line}], "isError": True})
+        for there in (b"", b"not a version\n", None):  # None: a folder, which cannot be read as a file
+            with self.subTest(there=there):
+                if there is None:
+                    path.unlink()
+                    path.mkdir()
+                else:
+                    path.write_bytes(there)
+                self.assertIsNone(engine.unavailable(), "there and unreadable: not gone")
+        path.rmdir()
+        self.assertEqual(engine.unavailable(), (engine.STALE, line))
+        self.point(self.X)  # installed again
+        self.assertIsNone(engine.unavailable(), "served again")
+        self.assertEqual(engine.engine_dir(), self.engines.resolve() / self.X)
+
+    def test_a_channel_never_seen_naming_its_version_is_not_gone(self) -> None:
+        # Its first start, still installing: no pointer yet is the channel's first use, never a channel taken off.
+        self.pinned()
+        self.assertEqual(engine.unavailable()[0], engine.INSTALLING)
+        self.assertIsNone(engine.stale())
+        # Its own cad moved a named channel to it: from then on, the pointer gone is the channel taken off.
+        self.installed(self.X)
+        pin = self.pinned("codex")
+        with self.run_as(lambda command: (self.point(self.X, "codex"), (0, ""))[1]):
+            engine.prepare(pin)
+        self.assertIsNone(engine.unavailable())
+        (self.state / "channels" / "codex").unlink()
+        self.assertEqual(engine.unavailable(), (engine.STALE, engine.removed_line(self.X, "codex")))
+
+    def test_the_line_says_which_version_its_channel_gone_and_the_repair(self) -> None:
+        self.assertEqual(engine.removed_line("0.11.11", None, "posix"),
+                         "this is text-to-cad 0.11.11, and its channel (default) is not on this computer any more: "
+                         "text-to-cad was uninstalled here; run the install command, curl -fsSL "
+                         "https://texttocad.dev/install.sh | sh, then start a new thread")
+        self.assertIn(f"run the install command, {engine.INSTALL_WINDOWS}, then", engine.removed_line("0.11.11", None, "nt"))
+        self.assertEqual(engine.removed_line("0.11.11", "codex"),
+                         "this is text-to-cad 0.11.11, and its channel (codex) is not on this computer any more: start "
+                         "a new thread, and this app's copy of the text-to-cad plugin installs it again")
 
     def test_a_thread_open_across_its_channel_s_update_keeps_its_lists(self) -> None:
         # Stale after it listed its tools: the list it had is answered again, each tool then answering the line.
@@ -595,9 +682,12 @@ class SameFoldersTest(unittest.TestCase):
 
     def test_the_copies_of_the_server_s_rules_say_what_the_server_does(self) -> None:
         from cad.engine import places
+        from cad_server import updates
         from cad_server._internal import cli_errors, pins, pointers, versions
 
         self.assertEqual((engine.CHANNEL, engine.DEFAULT_CHANNEL), (places.CHANNEL.pattern, places.DEFAULT_CHANNEL))
+        self.assertEqual((engine.install_command("posix"), engine.install_command("nt")),
+                         (updates.INSTALL, updates.INSTALL_WINDOWS))
         self.assertEqual((engine.VERSION, engine.RELEASED), (places.VERSION.pattern, pins.RELEASED.pattern))
         self.assertEqual((engine.VERSION_MARKER, engine.VERSION_SCHEMA), (places.VERSION_MARKER, places.VERSION_SCHEMA))
         self.assertEqual((engine.INSTALLATION_ENV, engine.STALE_EXIT),
@@ -609,8 +699,9 @@ class SameFoldersTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(root)}):
             for channel in (None, "codex"):
                 self.assertIsNone(engine.pointer(channel))
-                pointers.write(channel, "0.12.0", mirrored=False)
+                path = pointers.write(channel, "0.12.0", mirrored=False)
                 self.assertEqual(engine.pointer(channel), pointers.read(channel))
+                self.assertEqual(engine.pointer_path(channel), path)
             code = root / "versions" / "0.12.0" / "code"
             (code / "bin").mkdir(parents=True)
             for script in ("python", "cad"):

@@ -1276,7 +1276,7 @@ def remove_code(name: str, *, told: Callable[[str], None] | None = None) -> str:
     settings, Recents, documents' records, page token and port -- kept for a later install (``UNINSTALLED``, written
     first: the default channel's next first use leaves it, ``move``), under the install lock: its code removed
     (``_strip``). ``removed``, ``absent``, ``connected``, ``in use`` or ``refused`` (on Windows the uninstall runs from
-    it: its code goes at the next sweep)."""
+    it: its code goes at the next sweep, a later install's, or when the person deletes it)."""
     from cad_server._internal.pointers import _land
 
     say = told or (lambda _line: None)

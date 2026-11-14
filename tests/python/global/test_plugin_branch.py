@@ -179,6 +179,7 @@ class PluginTreeTests(unittest.TestCase):
                         self.assertNotIn(b"CAD_INSTALL_CHANNEL", data)
                         self.assertNotIn(b"CAD_AUTO_UPDATED", data)
                         self.assertNotIn(b"--channel", data)
+                        self.assertNotIn(b"--startup-timeout", data)  # the Codex directory's ZIP's alone
 
     def test_readme_links_outside_the_tree_point_at_the_commit(self) -> None:
         text = ('[cad](skills/cad/SKILL.md) [dir](skills/cad/) [license](LICENSE) [web](https://x.dev) [top](#install)\n'

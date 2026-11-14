@@ -198,7 +198,10 @@ may break something waits for the update button or `cad update`);
 `cad uninstall` takes out what the install command put here -- our plugin copies, the plugin folder, the default
 channel and its version's code unless a store's channel is on it (its data -- settings, Recents, documents' records,
 page token and port -- stays for a later install, which finds it), the receipt, and the `cad` command unless a store's
-copy still runs it (said, with which) --, and `--purge` everything, that data with it; asked first as every command that destroys is (`cad
+copy still runs it (said, with which) --, and `--purge` everything, that data with it. The channels go before any
+server is stopped, so a thread an app still has open finds its channel gone and starts no server again; a version
+something still runs from stays, said with what runs and that deleting its folder once that has ended finishes it;
+asked first as every command that destroys is (`cad
 delete`, `cad doctor --prune`, `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`;
 `_internal/consent.py`);
 `cad plugin` writes
