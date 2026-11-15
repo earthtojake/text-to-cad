@@ -14,8 +14,8 @@ Every command in this skill starts `cad +0.11.10`: it runs cad 0.11.10, the vers
 and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your PATH; `cad.exe`
 on Windows).
 
-If `cad` is missing, or says 0.11.10 is not installed, install it, outside the sandbox, then run the
-command again:
+If `cad` is missing, says 0.11.10 is not installed, or says `unknown command '+…'` (an older cad), install it,
+outside the sandbox, then run the command again:
 
 ```bash
 uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.10 cad setup

@@ -7,8 +7,9 @@ agent's sandbox, the command can. Every command a skill runs names the skill's r
 <verb>`, so the skill text of a release runs that release's software and no other; the release stamps the
 pin (scripts/release/sync-version.mjs) and test_skill_commands_pin_their_release.py holds every command to
 it. The setup block says what the pin does and how to install that release when the command says it is not
-installed; our own text (main, `latest`) adds the update paragraph between two markers, which a store's copy
-leaves out (scripts/release/channel_stamp.py), and every copy ends the block with the migration guides' link.
+installed, or is an older `cad` that does not know the pin; our own text (main, `latest`) adds the update
+paragraph between two markers, which a store's copy leaves out (scripts/release/channel_stamp.py), and every
+copy ends the block with the migration guides' link.
 A skill that runs the server any other way -- a `pip install -r requirements.txt` into the project's
 interpreter -- makes a second installation, and its docs may describe a release that is not the one running.
 
@@ -32,8 +33,8 @@ SETUP = """Every command in this skill starts `cad +{X}`: it runs cad {X}, the v
 and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your PATH; `cad.exe`
 on Windows).
 
-If `cad` is missing, or says {X} is not installed, install it, outside the sandbox, then run the
-command again:
+If `cad` is missing, says {X} is not installed, or says `unknown command '+…'` (an older cad), install it,
+outside the sandbox, then run the command again:
 
 ```bash
 uvx --no-config --managed-python --python 3.14 --from cad-server=={X} cad setup
