@@ -17,9 +17,9 @@ Steps 1 to 5 are ``versions.make_present``. The first setup of a version also gi
 copied ONCE from the newest older installed version, or, on a computer coming from 0.11.10 and earlier, from that
 layout, what 0.7 and 0.8 kept in their own folder taken into it first (``cad_server._internal.imports.ensure``;
 nothing once they are there). On a computer an earlier release ran on, what it left running is handed over
-(``cad_server._internal.legacy``: ``stop_earlier``, ``hand_over``): 0.8's server (and 0.10.0's on Windows) stopped by
-its own stop command BEFORE that copy, so nothing it writes after it is lost, and a server of 0.11.10 or earlier asked
-to stop once idle. The records a process with no version starts a server by (``installations/current`` and the
+(``cad_server._internal.legacy``: ``stop_earlier``, ``hand_over``): 0.8's server (and 0.10.0's on Windows, where it
+is 0.10.0's own server that answers at its port file) stopped by its own stop command BEFORE that copy, so nothing it
+writes after it is lost, and a server of 0.11.10 or earlier asked to stop once idle. The records a process with no version starts a server by (``installations/current`` and the
 record it names: a client of 0.11.10 and earlier, the library in a person's own Python) are written for this version
 where they name nothing yet, a version not installed, or an older one (``legacy.hand_over``).
 
@@ -43,7 +43,9 @@ steps 1 to 5 (from the flat folder, the version made present and the same comman
 the hand-over from that layout (the installation record naming the version's server, which the switch starts once it
 has pointed ``current`` at it: ``installations.register``), and last owes the computer the hosted install script's
 run (``cad_server._internal.install_script.owe``): the version's own server runs it once it serves, and again until it
-has worked. It starts nothing.
+has worked. It starts nothing, and stops no earlier release's server: 0.10.0's own stop on Windows stops whatever
+answers at its port file, which a server of 0.11.x writes a copy of its own to -- the updater running this, before its
+switch --, and a 0.8 server left running is stopped by the plain setup the hand-over runs.
 
 But for one updater, whose switch cannot start this version: 0.10.0 on Windows keeps its state, the records its switch
 starts a server by among it, in the local application data, apart from this version's, so its switch would only go
@@ -224,7 +226,7 @@ def setup() -> int:
     if failed is not None:
         return _ended(name, arrival.SETUP, came, failed)
     first = _keep(name, arrival.SETUP, came)
-    handing_over = _arrive(name, engine_update=False)
+    handing_over = _arrive(name)
     _out(f"cad {name} is {'installed' if was else 'installed now'}: {places.version_dir(name)}")
     if not handing_over:  # else said: this version's server starts at the next command (``legacy.hand_over``)
         _serve(name)
@@ -302,10 +304,10 @@ def engine_update() -> int:
         return 0 if failed is None else _ended(name, arrival.UPDATER, came, failed)
     if alone:
         return _ended(name, arrival.UPDATER, came, failed, first=failed is None and _take_over(name, came))
-    failed = failed or _hand_over(name)
-    if failed is None:
-        _arrive(name, engine_update=True)
-        failed = _owe(name)
+    # No earlier release's server is stopped here: 0.10.0's own stop on Windows stops whatever answers at its port
+    # file, which a server of 0.11.x mirrors -- the updater running this run among them, before its switch. A 0.8
+    # server left running is stopped by the plain setup the hand-over's install script runs.
+    failed = failed or _hand_over(name) or _owe(name)
     first = failed is None and _keep(name, arrival.UPDATER, came)
     return _ended(name, arrival.UPDATER, came, failed, first=first)
 
@@ -352,7 +354,7 @@ def _take_over(name: str, came: str | None) -> bool:
 
     _command(name)
     first = _keep(name, arrival.UPDATER, came)
-    _arrive(name, engine_update=False)
+    _arrive(name)
     try:
         installations.mirror(name, Folder(places.appdata_state_dir()))
     except (OSError, TypeError, ValueError) as error:
@@ -389,20 +391,15 @@ def _stop_earlier() -> None:
         _say(f"what an earlier release left running was not stopped: {type(error).__name__}: {error}")
 
 
-def _arrive(name: str, *, engine_update: bool) -> bool:
-    """What earlier releases left running, handed over to version ``name`` (``cad_server._internal.legacy``): for
-    ``--engine-update``, the servers of 0.8 (and of 0.10.0 on Windows) stopped by their own stop command (plain setup
-    stops them before its copy, ``_stop_earlier``); and, by the install command's route (not an updater's, whose own
-    switch stops its server), the mirror written where it names nothing, a version not installed or an older one, and
-    a server of 0.11.10 or earlier at the flat door asked to stop once idle. Whether such a server was asked to stop
-    (it still runs). Never a failed setup."""
+def _arrive(name: str) -> bool:
+    """What earlier releases left running, handed over to version ``name`` by the install command's route (not an
+    updater's, whose own switch stops its server: ``legacy.hand_over``): the mirror written where it names nothing, a
+    version not installed or an older one, and a server of 0.11.10 or earlier at the flat door asked to stop once idle.
+    Whether such a server was asked to stop (it still runs). Never a failed setup."""
     from cad_server._internal import legacy
 
     try:
-        if engine_update:
-            legacy.stop_earlier(_say)
-        else:
-            return legacy.hand_over(name, _say)
+        return legacy.hand_over(name, _say)
     except Exception as error:  # noqa: BLE001 - what an earlier release left never fails this version's setup
         _say(f"what an earlier release left running was not handed over: {type(error).__name__}: {error}")
     return False

@@ -34,7 +34,10 @@ stop command (``stop_earlier``); and, on the install command's route rather than
 the version and a server of 0.11.10 or earlier at the flat door asked to stop once idle (``hand_over``). The updater of
 0.10.0 on Windows, whose switch cannot start this version, has its server stopped the same way before anything of
 it is taken in (``stop_appdata``, which says whether it held), and the version's setup then takes over as the install
-command's route does (``cad_server.cli.setup``). These are cad's own past processes and records, found the way each
+command's route does (``cad_server.cli.setup``). 0.10.0's own stop stops whatever answers at its port file, which
+later servers write a copy of their own to: it is run only where nothing answers there, or 0.10.0's own server does.
+An updater's run of ``cad setup --engine-update`` stops no earlier server: the server that answers may be the
+updater's own, before its switch. These are cad's own past processes and records, found the way each
 release recorded them; nothing of an app's is touched.
 
 What it keeps, because a client of 0.11.10 or earlier may still read it and it is small, or it is the computer's: the
@@ -254,8 +257,11 @@ def stop_earlier(told: Callable[[str], None] | None = None) -> list[str]:
     recorded it (its installation record, ``installations.earlier``, ``installations.appdata``, whose Python and
     console script are still there), run in its own environment with its telemetry off (``NO_TELEMETRY``). Those
     releases have no updater, and their servers stop on no timer: one left running would serve beside this version's
-    for as long as the computer runs. A stop that fails fails nothing; what one did is said to ``told``. The versions
-    whose stop ran."""
+    for as long as the computer runs. 0.8's stop reaches 0.8's own engine folder alone. 0.10.0's reaches whatever
+    answers at the port file in the temporary folder, which a server of 0.11.x and this layout's default server write
+    a copy of their own to (``daemon._mirror``): it is run only where no server answers there, or the one that answers
+    runs from that 0.10.0's own environment (``_appdata_serving``), never to stop another release's server. A stop that
+    fails fails nothing; what one did is said to ``told``. The versions whose stop ran."""
     from cad_server._internal import installations
 
     return _stop((("cadgen", installations.earlier(), installations.EARLIER_CONSOLE),
@@ -284,11 +290,17 @@ def _stop(kinds: tuple[tuple[str, list[dict], str], ...], told: Callable[[str], 
     environment.update(NO_TELEMETRY)
     ran: list[str] = []
     held = True
+    serving: list[str | None] = []  # what answers at 0.10.0's port file, asked once, where there is a 0.10.0 to stop
     for name, records, key in kinds:
         for record in records:
             console = record.get(key)
             if not (isinstance(console, str) and os.path.isfile(record["python"]) and os.path.isfile(console)):
                 continue
+            if key != installations.EARLIER_CONSOLE:  # 0.10.0's: never a stop of another release's server
+                if not serving:
+                    serving.append(_appdata_serving())
+                if serving[0] is not None and not installations._same_place(serving[0], record["prefix"]):
+                    continue
             verb = f"{'cadgen' if key == installations.EARLIER_CONSOLE else 'cad'} stop"
             try:
                 done = subprocess.run([console, "stop", "--json"], env=environment, stdin=subprocess.DEVNULL,
@@ -310,6 +322,20 @@ def _stop(kinds: tuple[tuple[str, list[dict], str], ...], told: Callable[[str], 
             elif stopped:
                 say(f"stopped {name} {record['version']}'s server (its own `{verb}`)")
     return ran, held
+
+
+def _appdata_serving() -> str | None:
+    """The environment of the server that answers where 0.10.0's clients look for one on Windows (the port file in
+    ``places.appdata_engine_dir``: 0.10.0's own, or a copy a later server writes of its own), as its ``status`` says it
+    (``prefix``); None where none answers, or there is no such folder."""
+    from cad_server._internal import versions
+
+    folder = places.appdata_engine_dir()
+    if folder is None:
+        return None
+    answer = versions._ask_at(folder / f"{places.NAME}.port", {"op": "status"}, ASK_SECONDS)
+    prefix = (answer or {}).get("prefix")
+    return prefix if isinstance(prefix, str) and prefix else None
 
 
 def _flat_legacy(status: dict | None) -> bool:

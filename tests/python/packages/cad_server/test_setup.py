@@ -259,10 +259,11 @@ class EngineUpdate(Computer):
             self.assertEqual(ended, [], "a prepare run that held, and a run that hands on, tell no end")
             # Y's own run: set up, handed over, the install script's run owed, nothing started.
             with mock.patch.object(places, "versioned", return_value=Y), \
-                    mock.patch.object(legacy, "hand_over") as hand_over:
+                    mock.patch.object(legacy, "hand_over") as hand_over, mock.patch.object(legacy, "_stop") as stops:
                 code, out, err = self.main(setup, ["--engine-update"])
             self.assertEqual(code, 0, out + err)
             hand_over.assert_not_called()  # the updater's own switch stops its server: never asked here
+            stops.assert_not_called()  # nor any earlier release's: on Windows that may be the updater's own
             self.served.assert_not_called()  # and starts Y's: none started here
         self.assertEqual(ended, [(Y, "updater", OLD, "ok", None, {"first": True})],
                          "its end told once, from the version it came from, by the run that kept its arrival")
@@ -318,6 +319,17 @@ class TakeOver(Computer):
         patch = mock.patch.object(places, "appdata_state_dir", return_value=self.appdata)
         patch.start()
         self.addCleanup(patch.stop)
+
+    def test_0_10_0_s_stop_runs_only_against_0_10_0_s_own_server(self) -> None:
+        # Its `cad stop` stops whatever answers at its port file, where later servers write a copy of their own.
+        for answering, runs in ((str(places.code_dir(Y) / "server"), False), (str(self.root / "ten"), True),
+                                (None, True)):
+            with self.subTest(answering=answering):
+                self.stopped.unlink(missing_ok=True)
+                with mock.patch.object(legacy, "_appdata_serving", return_value=answering):
+                    self.assertEqual(legacy.stop_earlier(), ["0.10.0"] if runs else [])
+                    self.assertTrue(legacy.stop_appdata(), "held: nothing of 0.10.0's serves, or it stopped")
+                self.assertEqual(self.stopped.exists(), runs, "0.10.0's own stop run")
 
     def test_it_is_told_by_where_0_10_0_made_its_flat_folder(self) -> None:
         with mock.patch.object(sys, "prefix", str(self.appdata / "releases" / Y)):

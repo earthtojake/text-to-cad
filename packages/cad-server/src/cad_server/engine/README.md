@@ -365,7 +365,11 @@ before the data is copied in, so a 0.8 server writes nothing after the copy; `le
 (the drain), never waited for, and the mirror names this version, so the next client -- this release's or an old
 one's -- starts this version's server, which takes the page token and port it imported. A 0.8 server is stopped by
 0.8's own `cadgen stop`, run from the installation record 0.8 keeps, with its telemetry off: 0.8 has no updater, and
-its server stops on no timer.
+its server stops on no timer. On Windows 0.10.0's is stopped by its own `cad stop` only where nothing answers at its
+port file or 0.10.0's own server does: a server of 0.11.x and this layout's default server write a copy of their own
+port file there, and 0.10.0's stop stops whatever answers. An updater's `cad setup --engine-update` stops no earlier
+server at all (the one that answers may be the updater's own, before its switch); a 0.8 server left running is
+stopped by the plain setup the hand-over runs.
 
 Every plain `cad setup` then starts its version's server, detached, where none runs (`cad_server.cli.setup`'s
 `_serve`, through `client.connect` as that version's own client), so a later session whose shell a sandbox keeps

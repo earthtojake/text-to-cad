@@ -163,8 +163,9 @@ exact requirement a Python of a program's own installs this release's cad by
 its settings and store in once, from the newest older version installed, or from the layout of 0.11.10 and earlier,
 what 0.7 and 0.8 kept in their own state folder taken into it first (`_internal/imports.py`); and on a computer an
 earlier release ran on it hands over what that release left running, its own processes and records alone
-(`_internal/legacy.py`): 0.8's server stopped by 0.8's own `cadgen stop`, and a server of 0.11.10 or earlier asked to
-stop once idle, with the records its clients start a server by naming this version. Last, it starts the version's own
+(`_internal/legacy.py`): 0.8's server stopped by 0.8's own `cadgen stop` (on Windows 0.10.0's by its own `cad stop`,
+where it is 0.10.0's own server that answers at its port file, which later servers write a copy of theirs to), and a
+server of 0.11.10 or earlier asked to stop once idle, with the records its clients start a server by naming this version. Last, it starts the version's own
 server, detached, where none runs, and says in a line that it is running (or why not, which never fails the setup):
 setup always runs outside a sandbox, where an agent's sandboxed shell cannot start one, so every later session finds
 it running. It starts none where a server of 0.11.10 or earlier was just asked to stop once idle: that server still
