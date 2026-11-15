@@ -23,6 +23,34 @@ BOARD = '''(kicad_pcb (version 20241229) (generator "pcbnew")
   (pad "" np_thru_hole circle (at 0 0) (size 2 2) (drill 2) (layers "*.Cu" "*.Mask")))
 )'''
 
+
+def _track(start: str, end: str, number: int) -> str:
+    return (f'(segment (start {start}) (end {end}) (width 0.25) (layer "F.Cu") (net "LED") '
+            f'(uuid "7a1c0000-0000-4000-8000-{number:012x}"))')
+
+
+# The test board's one unrouted net, routed: with it the board passes DRC as it is written.
+LED_ROUTE = (_track("20 23.175", "28 23.175", 0xa1) + _track("28 23.175", "35.825 23.175", 0xa2)
+             + _track("35.825 23.175", "35.825 15", 0xa3))
+# A spur off that route that ends 0.075 mm from the 1 mm VBUS track: one clearance error, and no other.
+SPUR = _track("28 23.175", "28 15.7", 0xa4)
+# The project's exclusion of that error, as KiCad 10.99 saves one: the rule, the two items by uuid, and the
+# marker's place, the point of the first item (the VBUS track's centre line) nearest the second.
+EXCLUSION = {"comment": "a probe point, meant", "marker": {
+    "error_type": "DRCET_CLEARANCE", "layer": "BL_F_Cu", "position": {"x_nm": "28000000", "y_nm": "15000000"},
+    "items": [{"value": "7a1c0000-0000-4000-8000-000000000001"}, {"value": "7a1c0000-0000-4000-8000-0000000000a4"}]}}
+
+
+def routed(folder: Path, more: str = "", edit=lambda text: text) -> Path:
+    """The test board in ``folder`` with its LED net routed (and ``more`` items, its text through ``edit``)."""
+    from tests.python.support.kicad_board import write_board
+
+    board = write_board(folder)
+    text = edit(board.read_text(encoding="utf-8")).rstrip()
+    board.write_text(text[:-1] + LED_ROUTE + more + "\n)\n", encoding="utf-8")
+    return board
+
+
 class NativeFiles(unittest.TestCase):
     def test_drc_step_mesh_and_same_path_edit(self):
         isolate(self.addCleanup)
@@ -105,3 +133,62 @@ class NativeFiles(unittest.TestCase):
         self.assertEqual({"#D1.2", "#R1.2"}, {item["ref"] for item in unrouted["items"]}, unrouted)
         self.assertTrue(all(item["kind"] == "pad" and item["net"] == "LED" and len(item["pos"]) == 2
                             for item in unrouted["items"]), unrouted)
+
+    def test_drc_judges_a_pour_as_kicad_refills_it_not_as_it_was_saved(self):
+        # The board as written passes only refilled: KiCad calls J1.2 in its saved fill, which has no thermal
+        # spokes, a starved thermal (an error). Then the pour's outline is notched round J1.2 and the fill saved
+        # with the old outline left, covering the pad: stale, as an edit that does not refill leaves it. Read as
+        # saved, that fill joins J1.2 to GND; KiCad's refill does not.
+        notched = lambda text: text.replace("(xy 1 16) (xy 20 16) (xy 20 29) (xy 1 29)",
+                                            "(xy 10 16) (xy 20 16) (xy 20 29) (xy 1 29) (xy 1 22) (xy 10 22)")
+        with tempfile.TemporaryDirectory(prefix="kicad-drc-") as folder, tempfile.TemporaryDirectory(prefix="kicad-drc-") as other:
+            passing = kicode.call(self, "drc", routed(Path(folder)))
+            stale = routed(Path(other), edit=notched)
+            saved = stale.read_bytes()
+            result = kicode.call(self, "drc", stale)
+            self.assertEqual(saved, stale.read_bytes(), "refilled in memory: the file keeps the fill it was saved with")
+            self.assertEqual([stale.name], [path.name for path in Path(other).iterdir()], "its folder is as it was found")
+        self.assertTrue(passing["ok"], passing)
+        self.assertFalse(result["ok"], result)
+        [unconnected] = [finding for finding in result["findings"] if finding["code"] == "unconnected_items"]
+        self.assertIn("#J1.2", {item["ref"] for item in unconnected["items"]}, unconnected)
+
+    def test_drc_holds_the_board_to_the_schematic_beside_it(self):
+        # The routed board passes on its own (the test above); its schematic gives R1 another value and joins
+        # no pins, and KiCad calls each difference a warning: the check fails the board on them.
+        from tests.python.support.kicad_board import write_schematic
+
+        with tempfile.TemporaryDirectory(prefix="kicad-drc-") as folder:
+            board = routed(Path(folder))
+            write_schematic(Path(folder))
+            result = kicode.call(self, "drc", board)
+        self.assertFalse(result["ok"], result)
+        parity = [found for found in result["measurements"]["drc"] if found["check"] == "parity"]
+        self.assertLessEqual({("footprint_symbol_mismatch", "#R1"), ("net_conflict", "#R1.1")},
+                             {(found["type"], found["items"][0]["ref"]) for found in parity}, parity)
+        self.assertEqual({"warning"}, {found["severity"] for found in parity})
+        failing = {finding["code"] for finding in result["findings"] if finding["severity"] == "error"}
+        self.assertEqual({found["type"] for found in parity}, failing, result["findings"])
+
+    def test_drc_passes_a_violation_the_project_excludes_and_lists_it(self):
+        import json
+
+        with tempfile.TemporaryDirectory(prefix="kicad-drc-") as folder:
+            board = routed(Path(folder), SPUR)
+            project = board.with_suffix(".kicad_pro")
+
+            def checked(exclusions):
+                project.write_text(json.dumps({"board": {"design_settings": {"drc_exclusions": exclusions}},
+                                               "meta": {"filename": project.name, "version": 3}}), encoding="utf-8")
+                return kicode.call(self, "drc", board)
+
+            failing, result = checked([]), checked([EXCLUSION])
+        self.assertEqual((False, ["clearance"]), (failing["ok"], [finding["code"] for finding in failing["findings"]
+                                                                   if finding["severity"] == "error"]), failing)
+        self.assertTrue(result["ok"], result)
+        self.assertTrue(result["summary"].endswith(", 1 excluded)"), result["summary"])
+        [listed] = [finding for finding in result["findings"] if finding["code"] == "clearance"]
+        self.assertEqual("info", listed["severity"])
+        self.assertTrue(listed["message"].endswith("(excluded in the project: a probe point, meant)"), listed)
+        [row] = [found for found in result["measurements"]["drc"] if found["type"] == "clearance"]
+        self.assertEqual(("error", True, "a probe point, meant"), (row["severity"], row["excluded"], row["comment"]))

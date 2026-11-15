@@ -97,8 +97,9 @@ file the viewer opens, a DXF or a robot among them); every other operation is na
 --help` lists a type's operations, `cad <type> <operation> --help` its options, and a file of another
 type is refused by name (`cli/document_types.py`, each type's module `cli/<type>.py`). A KiCad board's
 `drc` and `export` are the `kicad` integration's: `cad kicad_pcb drc` is KiCad's design rule check
-(it fails on errors or unconnected items, says the warnings, and answers `kicad_failed` when KiCad refuses
-the board) and `cad kicad_pcb export BOARD --to gerbers|drill|pos|bom|step|glb|odb|ipc2581|pdf|dxf -o DIR`
+(the zones refilled in memory, the board held to the schematic beside it; it fails on errors, unconnected
+items or a difference from the schematic, says the warnings and what the project excludes, and answers
+`kicad_failed` when KiCad refuses the board) and `cad kicad_pcb export BOARD --to gerbers|drill|pos|bom|step|glb|odb|ipc2581|pdf|dxf -o DIR`
 its fabrication, assembly and 3D outputs, each the library's function (`cad.kicad_pcb.drc`, `export`)
 run by kicode's `kicad-cli`: in this process where it runs KiCad itself (`CAD_KICAD_CLI` names a
 `kicad-cli`, or kicode is installed here), else in the environment of `cad[kicad]` the engine makes once,

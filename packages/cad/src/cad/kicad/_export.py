@@ -7,7 +7,9 @@ wrote. The board is read, never rewritten. What each writes into ``out_dir``:
 ============  ===========================================================================================
 ``gerbers``   every plot layer the board's own plot settings choose, one file a layer and a job file
 ``drill``     Excellon drill files in millimetres
-``pos``       ``<board>-pos.csv``: the placement of both sides, CSV, millimetres
+``pos``       ``<board>-pos.csv``: the placement of both sides, CSV, millimetres, Do-Not-Populate parts
+              left out as the BOM leaves them out (by the board's own flags: a footprint's "Do not
+              populate", and its "Exclude from position files", which leaves a mounting hole out)
 ``bom``       ``<board>-bom.csv``: from the schematic beside the board (``<board>.kicad_sch``), grouped
               by value and footprint, Do-Not-Populate parts left out; columns ``Reference`` (every
               designator, comma-separated, no ranges), ``Value``, ``Footprint``, ``Quantity``, then
@@ -31,6 +33,16 @@ name that is a place (``${KIPRJMOD}/...``, an absolute path) kicad-cli reads its
 A STEP or GLB written without some of its parts' 3D models (a model file not found, or, for a STEP, a model
 only in VRML) is written, with a warning naming them; kicad-cli calls it an error. A BOM needs a schematic,
 and KiCad's schematic support (kicode-sch): without either it is refused in one line.
+
+The files a fab and an assembler build from (``FABRICATION``: Gerbers, drill, placement, BOM, ODB++,
+IPC-2581) are written of a board whatever its design rule check says, and say so: each such export runs
+the board's DRC once after its files are written (``_check.run_drc``, as ``cad kicad_pcb drc`` runs it:
+one more kicad-cli run), and a board that fails it (``_check.fails``) is one warning beside the files, as
+is a check that could not run. No export is refused for it, and a schematic's ERC is not run. The check
+is the cost of the export several times over, so one process checks a saved board once (``_CHECKED``, by
+the DRC's key: the bytes of the board, its project, its rules and its schematic): a script that writes
+every kind in a loop runs it for the first, and a board saved again is checked again. Nothing is kept
+between processes.
 """
 
 from __future__ import annotations
@@ -44,13 +56,16 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from ._check import fails, run_drc
 from ._program import KicadRunError, library_variables, private_run, project_as_found, ready
 from ._program import quiet as _quiet
 
-__all__ = ["BOM_FIELDS", "EXPORTS", "FOLDERS", "PDF_LAYERS", "commands", "export", "library"]
+__all__ = ["BOM_FIELDS", "EXPORTS", "FABRICATION", "FOLDERS", "PDF_LAYERS", "commands", "export", "library"]
 
 #: What can be exported, in the order they are listed to a person.
 EXPORTS = ("gerbers", "drill", "pos", "bom", "step", "glb", "odb", "ipc2581", "pdf", "dxf")
+#: The exports a fab and an assembler build from: a board that fails its design rule check is written with a warning.
+FABRICATION = ("gerbers", "drill", "pos", "bom", "odb", "ipc2581")
 #: The exports that write a folder of files (the CAD Viewer zips them); every other writes one file (a PDF two).
 FOLDERS = ("gerbers", "drill")
 #: Each PDF page's layers, by side: the copper, silkscreen and fabrication drawing over the outline.
@@ -63,6 +78,9 @@ BOARD_LAYERS = ("--include-tracks", "--include-pads", "--include-zones", "--incl
 BOM_FIELDS = {"MPN": ("MPN", "Manufacturer_Part_Number", "Manufacturer Part Number", "MFR Part Number"),
               "LCSC": ("LCSC", "LCSC Part", "LCSC Part #", "LCSC_Part", "JLCPCB Part #")}
 _BOM_COLUMNS = ("Reference", "Value", "Footprint", "Quantity")
+
+#: The warning (None for a board that passes) each check gave in this process, by kicad-cli and the DRC's key.
+_CHECKED: dict[tuple[str, str], str | None] = {}
 
 _TIMEOUT_SECONDS = 600
 
@@ -90,8 +108,9 @@ def commands(cli: Path, board: Path, to: str, out_dir: Path, scratch: Path | Non
     if to == "drill":
         return [[*pcb, "--format", "excellon", "--excellon-units", "mm", "-o", folder, str(board)]]
     if to == "pos":
-        return [[*pcb, "--format", "csv", "--units", "mm", "--side", "both", "-o", str(out_dir / f"{stem}-pos.csv"),
-                 str(board)]]
+        # Without the Do-Not-Populate parts, as the BOM is: the two files an assembler reads name the same parts.
+        return [[*pcb, "--format", "csv", "--units", "mm", "--side", "both", "--exclude-dnp",
+                 "-o", str(out_dir / f"{stem}-pos.csv"), str(board)]]
     if to == "bom":
         fields = [*("Reference", "Value", "Footprint", "${QUANTITY}"), *(name for names in BOM_FIELDS.values()
                                                                        for name in names)]
@@ -235,12 +254,44 @@ def _bom(raw: Path, out: Path) -> Path:
     return out
 
 
+def _design_rules(board: Path, cli: Path, timeout: float) -> str | None:
+    """The warning for fabrication files of a board that fails its design rule check (``_check.fails``), or
+    whose check could not run; None for a board that passes it. A check that ran is this process's answer for
+    the same bytes (``poured.drc_key``); one that could not run is tried again."""
+    from cad.engine.formats.kicad.poured import drc_key
+
+    try:
+        known = (str(cli), drc_key(board))
+        if known in _CHECKED:
+            return _CHECKED[known]
+        failing = [finding for finding in run_drc(cli, board, timeout=timeout) if fails(finding)]
+    except (KicadRunError, OSError, ValueError) as error:
+        return (f"{board.name} was not checked against its design rules, the check could not run ({error}): "
+                f"run cad kicad_pcb drc before these files are used")
+    _CHECKED[known] = _failing(board, failing) if failing else None
+    return _CHECKED[known]
+
+
+def _failing(board: Path, failing: list) -> str:
+    """The one line for the findings that fail ``board``: how many of each kind, and what to run."""
+    unconnected = sum(finding.check == "unconnected" for finding in failing)
+    parity = sum(finding.check == "parity" for finding in failing)
+    errors = len(failing) - unconnected - parity
+    counts = ", ".join(filter(None, (
+        f"{errors} error{'s' if errors != 1 else ''}" if errors else "",
+        f"{unconnected} unconnected" if unconnected else "",
+        f"{parity} difference{'s' if parity != 1 else ''} from its schematic" if parity else "")))
+    return (f"{board.name} fails its design rule check ({counts}): these files are of a board with errors; "
+            f"run cad kicad_pcb drc")
+
+
 def export(board: Path, to: str, out_dir: Path, *, cli: Path | None = None, timeout: float = _TIMEOUT_SECONDS,
            warn: Callable[[str], None] | None = None) -> list[Path]:
     """Export the saved ``board`` as ``to`` (one of :data:`EXPORTS`) into ``out_dir``, made if missing,
     and return the files the run wrote or changed there, sorted. ``cli`` defaults to the ``kicad-cli``
-    that :func:`~cad.kicad._program.ready` finds; what is said beside (a part without its 3D model) goes to
-    ``warn``, else stderr. Raises :class:`KicadRunError` when ``kicad-cli`` cannot run or refuses the board,
+    that :func:`~cad.kicad._program.ready` finds; what is said beside (a part without its 3D model, a board
+    whose fabrication files are written although it fails its DRC: ``FABRICATION``) goes to ``warn``, else
+    stderr. Raises :class:`KicadRunError` when ``kicad-cli`` cannot run or refuses the board,
     and :class:`KicadMissingError` when there is none."""
     if to not in EXPORTS:
         raise _unknown(to)
@@ -289,4 +340,8 @@ def export(board: Path, to: str, out_dir: Path, *, cli: Path | None = None, time
     if to == "gerbers" and not any("edge_cuts" in path.stem.lower() or path.suffix.lower() == ".gm1" for path in written):
         # The board's own plot settings choose the layers (--board-plot-params); a fab needs the outline.
         say(f"the gerbers of {board.name} have no board outline (Edge.Cuts): the board's plot settings leave it out")
+    if to in FABRICATION:
+        warning = _design_rules(board, cli, timeout)
+        if warning is not None:
+            say(warning)
     return written

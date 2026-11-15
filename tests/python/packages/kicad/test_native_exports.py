@@ -9,7 +9,8 @@ from cad.engine.formats.kicad import sexpr
 from tests.python.support import kicode
 
 # Stable KiCad 9 syntax, so the same file loads in 9, 10 and the nightly: a 40 x 30 mm board, one 0603-like
-# resistor R1 at (20, 15) and a mounting hole H1 at (5, 5) that the placement file leaves out.
+# resistor R1 at (20, 15), another marked Do-Not-Populate, R2 at (30, 15), and a mounting hole H1 at (5, 5):
+# the placement file leaves out the last two. It passes its DRC.
 BOARD = '''(kicad_pcb (version 20241229) (generator "pcbnew")
  (general (thickness 1.6)) (paper "A4")
  (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (36 "B.SilkS" user "b.silkscreen") (37 "F.SilkS" user "f.silkscreen")
@@ -20,6 +21,12 @@ BOARD = '''(kicad_pcb (version 20241229) (generator "pcbnew")
   (property "Reference" "R1" (at 0 -2) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))
   (property "Value" "10k" (at 0 2) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))
   (attr smd)
+  (pad "1" smd rect (at -0.8 0) (size 0.9 1) (layers "F.Cu" "F.Mask"))
+  (pad "2" smd rect (at 0.8 0) (size 0.9 1) (layers "F.Cu" "F.Mask")))
+ (footprint "test:r" (layer "F.Cu") (at 30 15)
+  (property "Reference" "R2" (at 0 -2) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))
+  (property "Value" "10k" (at 0 2) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))
+  (attr smd dnp)
   (pad "1" smd rect (at -0.8 0) (size 0.9 1) (layers "F.Cu" "F.Mask"))
   (pad "2" smd rect (at 0.8 0) (size 0.9 1) (layers "F.Cu" "F.Mask")))
  (footprint "test:hole" (layer "F.Cu") (at 5 5)
@@ -37,9 +44,13 @@ class NativeExports(unittest.TestCase):
             board = root / "board.kicad_pcb"
             board.write_text(BOARD, encoding="utf-8")
             original = board.read_bytes()
-            made = {to: [Path(path) for path in kicode.call(self, "export", board, to, root / "fab" / to)["written"]]
-                    for to in ("gerbers", "drill", "pos", "step")}
+            found = {to: kicode.call(self, "export", board, to, root / "fab" / to)
+                     for to in ("gerbers", "drill", "pos", "step")}
+            made = {to: [Path(path) for path in answer["written"]] for to, answer in found.items()}
             self.assertEqual(board.read_bytes(), original)
+            # The board passes its DRC, which each fabrication export ran: nothing is said beside the files.
+            self.assertEqual({to: answer["warnings"] for to, answer in found.items()},
+                             {"gerbers": [], "drill": [], "pos": [], "step": []})
             # The board's folder as found: kicad-cli's local settings (.kicad_prl) and project are not left.
             self.assertEqual(["board.kicad_pcb", "fab"], sorted(path.name for path in root.iterdir()))
             for to, files in made.items():
@@ -58,7 +69,8 @@ class NativeExports(unittest.TestCase):
             self.assertEqual(pos.name, "board-pos.csv")
             rows = [line.split(",") for line in pos.read_text(encoding="utf-8").splitlines() if line.strip()]
             self.assertEqual([cell.strip('"') for cell in rows[0][:1]], ["Ref"])
-            self.assertEqual([row[0].strip('"') for row in rows[1:]], ["R1"])  # the hole is left out
+            # The hole (excluded from position files) and R2 (Do-Not-Populate) are left out.
+            self.assertEqual([row[0].strip('"') for row in rows[1:]], ["R1"])
             self.assertAlmostEqual(float(rows[1][3].strip('"')), 20, places=3)  # PosX, mm
 
             (step,) = made["step"]
@@ -102,6 +114,13 @@ class SharedTestBoard(unittest.TestCase):
         (unrouted,) = [found for found in result["measurements"]["drc"] if found["type"] == "unconnected_items"]
         self.assertTrue(all(item["uuid"] and len(item["pos"]) == 2 for item in unrouted["items"]), unrouted)
 
+    def test_fabrication_files_of_a_board_that_fails_its_drc_say_so(self):
+        # The LED's net is unrouted (``test_a_nightly_checks_it``): the files are written, with the one warning.
+        _, warnings = self.exported("drill")
+        self.assertEqual(1, len(warnings), warnings)
+        self.assertRegex(warnings[0], r"^blinky\.kicad_pcb fails its design rule check \(.*\b1 unconnected\b.*\): "
+                                      r"these files are of a board with errors; run cad kicad_pcb drc$")
+
     def test_bom(self):
         import csv
 
@@ -135,8 +154,9 @@ class SharedTestBoard(unittest.TestCase):
         self.assertIn("<IPC-2581", xml.read_text(encoding="utf-8", errors="replace")[:2000])
 
     def test_pdf(self):
-        written, _ = self.exported("pdf")
+        written, warnings = self.exported("pdf")
         self.assertEqual(["blinky-back.pdf", "blinky-front.pdf"], [path.name for path in written])
+        self.assertEqual([], warnings, "a drawing is no fabrication file: the board, which fails its DRC, is not checked")
         self.assertTrue(all(path.read_bytes()[:5] == b"%PDF-" for path in written))
 
     def test_dxf(self):

@@ -29,10 +29,11 @@ __all__ = ["EXPORTS", "ErcFinding", "check", "commands", "export", "run_erc"]
 #: What a schematic is exported as, in the order they are listed to a person.
 EXPORTS = ("pdf", "svg", "netlist", "bom")
 _TIMEOUT_SECONDS = 600
-# The fields a BOM lists, and its columns' names: one line per value, footprint and part number.
+# The fields a BOM lists, and its columns' names: one line per value, footprint and part number, the parts
+# not fitted on a line of their own (grouped with the fitted ones, one of them marks the whole line DNP).
 _BOM_FIELDS = "Reference,Value,Footprint,MPN,${QUANTITY},${DNP}"
 _BOM_LABELS = "Refs,Value,Footprint,MPN,Qty,DNP"
-_BOM_GROUPS = "Value,Footprint,MPN"
+_BOM_GROUPS = "Value,Footprint,MPN,${DNP}"
 # The project files kicad-cli makes beside a schematic it only reads, when they are missing.
 _PROJECT_FILES = (".kicad_prl", ".kicad_pro")
 

@@ -80,14 +80,18 @@ def edit(board: Path | str) -> AbstractContextManager[Any]:
 def drc(board: Path) -> CheckResult:
     """Check the KiCad board BOARD with KiCad's design rule check.
 
-    Runs ``kicad-cli pcb drc`` on the saved file with every severity reported
-    and lists each violation and unconnected item with where it is (millimetres
-    from the board's origin). The board fails when any error-severity violation
-    or any unconnected item exists; warnings are reported and do not fail it.
+    Runs ``kicad-cli pcb drc`` on the saved file with every severity reported,
+    its zones refilled in memory first (the file is not rewritten), and lists
+    each violation, unconnected item and difference from the schematic with
+    where it is (millimetres from the board's origin). The board fails when any
+    error-severity violation, any unconnected item or any difference from its
+    schematic exists; warnings are reported and do not fail it, and neither
+    does a finding the project excludes, which is listed as excluded.
     The result's ``measurements["drc"]`` is every finding as KiCad reported it,
     each item with its uuid and position.
 
-    board: the .kicad_pcb to check (its .kicad_pro beside it carries the rules).
+    board: the .kicad_pcb to check (its .kicad_pro beside it carries the rules,
+        its .kicad_sch beside it the parts and nets the board is held to).
     """
     from cad.kicad._check import check
 
@@ -98,7 +102,10 @@ def export(board: Path | str, to: str, out: Path | str) -> ExportResult:
     """KiCad's ``to`` export of the saved ``board`` into the folder ``out`` (``cad kicad_pcb export BOARD
     --to KIND -o DIR``): ``to`` is one of ``gerbers``, ``drill``, ``pos``, ``bom``, ``step``, ``glb``,
     ``odb``, ``ipc2581``, ``pdf`` and ``dxf`` (``cad.kicad._export``'s table says what each writes). The
-    result says the files written and any warning. ``RuntimeError`` in KiCad's words when it fails."""
+    result says the files written and any warning: a part without its 3D model, and, for the files a fab or
+    an assembler builds from (``gerbers``, ``drill``, ``pos``, ``bom``, ``odb``, ``ipc2581``), a board that
+    fails its design rule check, whose files are written all the same (the export runs ``drc`` once to
+    say so). ``RuntimeError`` in KiCad's words when it fails."""
     from cad.kicad._export import export as run
 
     said: list[str] = []

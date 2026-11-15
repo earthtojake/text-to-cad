@@ -1,7 +1,8 @@
 """``cad.kicad._export``: the exports of a saved board by kicad-cli, headless, in private homes.
 
-The command each export builds, the files it reports and what it refuses. No KiCad: ``subprocess.run``
-is replaced by a function that writes what kicad-cli would. (The real runs are
+The command each export builds, the files it reports, what it refuses, and the warning fabrication files
+of a board that fails its DRC carry. No KiCad: ``subprocess.run`` is replaced by a function that writes
+what kicad-cli would, and the DRC (``run_drc``) by its findings. (The real runs are
 ``tests/python/packages/kicad``.)
 """
 
@@ -14,6 +15,7 @@ from pathlib import Path
 from unittest import mock
 
 from cad.kicad import _export as export
+from cad.kicad._check import Finding
 from cad.kicad._program import KicadRunError
 
 CLI = Path("/opt/kicad/bin/kicad-cli")
@@ -42,9 +44,10 @@ class Commands(unittest.TestCase):
         self.assertEqual(self.command("drill")[4:-1],
                          ["--format", "excellon", "--excellon-units", "mm", "-o", folder])
 
-    def test_pos_is_csv_in_millimetres_for_both_sides(self) -> None:
+    def test_pos_is_csv_in_millimetres_for_both_sides_without_the_unfitted_parts(self) -> None:
+        # --exclude-dnp, as the BOM's command has it: the placement file and the BOM name the same parts.
         self.assertEqual(self.command("pos")[4:-1], ["--format", "csv", "--units", "mm", "--side", "both",
-                                                     "-o", str(self.out / "uart-pos.csv")])
+                                                     "--exclude-dnp", "-o", str(self.out / "uart-pos.csv")])
 
     def test_step_and_glb_substitute_step_models_for_vrml_ones(self) -> None:
         for to in ("step", "glb"):
@@ -96,6 +99,11 @@ class Run(unittest.TestCase):
         self.board.write_text("(kicad_pcb)", encoding="utf-8")
         self.out = self.root / "fab" / "out"  # made by the export
         self.seen: list[dict] = []
+        # The board's DRC, which a fabrication export runs: clean, unless a test says what it finds, and none
+        # this process has run before (``_CHECKED``).
+        self.drc = mock.patch.object(export, "run_drc", return_value=[]).start()
+        mock.patch.dict(export._CHECKED, clear=True).start()
+        self.addCleanup(mock.patch.stopall)
 
     def fake(self, *, returncode: int = 0, files: tuple[str, ...] = ("a.gtl", "b.gbl"), stderr: str = ""):
         def run(command, *, env, **_options):
@@ -136,6 +144,43 @@ class Run(unittest.TestCase):
     def test_a_run_that_writes_nothing_is_an_error(self) -> None:
         with self.fake(files=()), self.assertRaisesRegex(KicadRunError, "wrote no file"):
             export.export(self.board, "drill", self.out, cli=CLI)
+
+    def test_fabrication_files_of_a_board_that_fails_drc_are_written_with_one_warning(self) -> None:
+        def finding(check: str, severity: str = "error", **more) -> Finding:
+            return Finding(check=check, severity=severity, type="rule", description="", items=(), at=None, **more)
+
+        # What fails the board is counted; a warning and a finding the project excludes are not.
+        self.drc.return_value = [finding("violation"), finding("violation"), finding("unconnected"),
+                                 finding("parity", "warning"), finding("violation", "warning"),
+                                 finding("violation", excluded=True)]
+        self.assertEqual(export.FABRICATION, ("gerbers", "drill", "pos", "bom", "odb", "ipc2581"))
+        checked = [to for to in export.FABRICATION if to != "bom"]  # a BOM reads a schematic: the real runs' test
+        said: list[str] = []
+        for to in (*checked, "step", "pdf", "dxf"):
+            with self.subTest(to=to), self.fake(files=(f"uart-Edge_Cuts.{to}",)):
+                self.assertTrue(export.export(self.board, to, self.out, cli=CLI, warn=said.append))
+        self.assertEqual(said, ["uart.kicad_pcb fails its design rule check (2 errors, 1 unconnected, 1 difference "
+                                "from its schematic): these files are of a board with errors; run cad kicad_pcb drc"]
+                         * len(checked))
+        self.assertEqual(self.drc.call_count, 1, "one check of the board as saved, however many kinds are written")
+        # Saved again, it is checked again: now a warning alone, which fails no board.
+        said.clear()
+        self.board.write_text("(kicad_pcb (version 2))", encoding="utf-8")
+        self.drc.return_value = [finding("violation", "warning")]
+        with self.fake(files=("uart-Edge_Cuts.gbr",)):
+            export.export(self.board, "gerbers", self.out, cli=CLI, warn=said.append)
+        self.assertEqual((said, self.drc.call_count), ([], 2))
+
+    def test_a_check_that_cannot_run_is_a_warning_and_the_files_are_written(self) -> None:
+        self.drc.side_effect = KicadRunError("kicad-cli pcb drc did not finish in 600 s")
+        said: list[str] = []
+        with self.fake(files=("uart.drl",)):
+            written = export.export(self.board, "drill", self.out, cli=CLI, warn=said.append)
+        self.assertEqual([path.name for path in written], ["uart.drl"])
+        self.assertEqual(said, ["uart.kicad_pcb was not checked against its design rules, the check could not run "
+                                "(kicad-cli pcb drc did not finish in 600 s): run cad kicad_pcb drc before these "
+                                "files are used"])
+        self.assertEqual(export._CHECKED, {}, "a check that could not run is tried again")
 
     def test_the_bom_keeps_its_columns_and_the_part_numbers_any_part_has(self) -> None:
         import csv

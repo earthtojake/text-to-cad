@@ -9,7 +9,8 @@ KiCad reports a copper sliver with no item and no position (its sliver checker m
 merged copper that it never writes to the report). :func:`slivers` finds them again in the saved copper of
 that layer as KiCad's checker does: a convex corner of a fill or a filled copper shape sharper than
 ``SLIVER_ANGLE`` degrees that no other copper on the layer covers. It runs on the board as saved: the fills
-KiCad last wrote, which are what its DRC checked (``cad kicad_pcb drc`` does not refill).
+KiCad last wrote. The check refills the zones in memory (``cad kicad_pcb drc``), so where the saved fills
+are stale a sliver it reports may not be in them, and the finding says that no corner was found.
 
 The standard library alone: it runs where the check runs, in the environment of ``cad[kicad]``.
 """

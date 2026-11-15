@@ -134,7 +134,7 @@ class PlotRules(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("broken.kicad_pcb is not a KiCad board", body["error"])
 
-    def test_the_drc_is_kicads_check_kept_by_the_boards_bytes_its_items_named(self) -> None:
+    def test_the_drc_is_kicads_check_kept_by_the_boards_and_its_schematics_bytes_its_items_named(self) -> None:
         found = {"ok": False, "path": str(self.board), "summary": "", "findings": [
             {"severity": "error", "code": "unconnected_items", "message": "Missing connection", "location": "(20, 23) mm",
              "hint": None}],
@@ -145,17 +145,45 @@ class PlotRules(unittest.TestCase):
                                                 "pos": [5.0, 15.0]}]}]}}
         calls = []
 
-        def drc(board, board_key):
-            calls.append(board_key)
+        def drc(board, board_key, key):
+            calls.append((board_key, key))
             return json.loads(json.dumps(found))
 
         with mock.patch("cad_server._internal.boards.drc", drc):
             answers = BoardAnswers(refill=Refill())
             status, body, key = self.answered(answers, "drc")
             self.assertEqual(self.answered(answers, "drc"), (status, body, key))
-        self.assertEqual((status, calls), (200, [key]))
+            # The check holds the board to the schematic beside it: every sheet's bytes are in the DRC's key,
+            # and none in the board's own, the plot's.
+            plot = answers.key(str(self.board))
+            write_schematic(self.folder).rename(self.board.with_suffix(".kicad_sch"))
+            beside = self.answered(answers, "drc")[2]
+            with (self.folder / "load.kicad_sch").open("a", encoding="utf-8") as sheet:  # the root's child sheet
+                sheet.write("\n")
+            edited = self.answered(answers, "drc")[2]
+        self.assertEqual((status, calls), (200, [(plot, key), (plot, beside), (plot, edited)]))
+        self.assertEqual(len({plot, key, beside, edited}), 4)
+        self.assertEqual(answers.key(str(self.board)), plot)
         items = json.loads(body)["measurements"]["drc"][0]["items"]
         self.assertEqual([item.get("ref") for item in items], ["#D1.2", "#track:7a1c0000-0000-4000-8000-000000000001"])
+
+    def test_a_drc_kept_on_disk_is_answered_for_its_own_key_alone(self) -> None:
+        from cad.engine.formats.kicad.poured import key
+        from cad_server._internal import boards
+
+        runs = []
+
+        def call(_python, _type, _operation, arguments, _options):
+            runs.append(arguments)
+            return {"ok": True, "findings": []}
+
+        with mock.patch.object(boards, "_python", return_value="python"), \
+                mock.patch("cad_server._internal.integration_env.call", call):
+            plot = key(self.board)
+            first = boards.drc(self.board, plot, "the schematic as it was")
+            self.assertEqual(boards.drc(self.board, plot, "the schematic as it was"), first)
+            boards.drc(self.board, plot, "the schematic edited")
+        self.assertEqual(len(runs), 2, "checked again for a schematic that changed, in the same board's folder")
 
 
 class Codings(unittest.TestCase):

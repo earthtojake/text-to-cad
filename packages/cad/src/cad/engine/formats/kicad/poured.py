@@ -16,6 +16,9 @@ in the engine's document cache beside the board's own document, under its docume
 deleting the document (``cad delete``, the home's Delete) deletes it too, and where the snapshot's render
 process reads what the engine plotted; a plot as saved (no refill) is never kept there, so a later run with
 KiCad refills it.
+
+The board's DRC holds it to its schematic too, so its key (``drc_key``) is the board's with the bytes of every
+sheet file of the schematic beside it (``schematic_files``); the plot's key reads none.
 """
 
 from __future__ import annotations
@@ -29,7 +32,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-__all__ = ["Refill", "cached", "folder", "key", "payload", "plot", "warning_of"]
+__all__ = ["Refill", "cached", "drc_key", "folder", "key", "payload", "plot", "schematic_files", "warning_of"]
 
 #: What refills a copy: ``refill(board, out_dir)`` writes KiCad's refill of ``board`` into ``out_dir`` and
 #: answers the refilled file's path; it raises (any ``Exception``) when it cannot.
@@ -61,6 +64,27 @@ def key(path: Path | str, *, extra: bytes = b"") -> str:
         digest.update(file.read_bytes() if file.is_file() else b"\0none")
     digest.update(extra)
     return digest.hexdigest()
+
+
+def schematic_files(path: Path | str) -> tuple[Path, ...]:
+    """The schematic files KiCad's DRC holds the board at ``path`` to (schematic parity): the project's root
+    sheet beside it, ``<board>.kicad_sch``, and every sheet file its hierarchy names (``schematic.sheet_files``),
+    there or not; the root alone, where the board has none (so one written later is seen)."""
+    from cad.engine.formats.kicad.schematic import sheet_files
+
+    root = Path(path).with_suffix(".kicad_sch")
+    return sheet_files(root) or (root,)
+
+
+def drc_key(path: Path | str, files: tuple[Path, ...] | None = None) -> str:
+    """The key of the board's DRC: the board's key (``key``) with the bytes of its schematic's ``files``
+    (``schematic_files``, read when not given), since the check holds the board to them. The plot reads no
+    schematic, and its key is ``key`` alone."""
+    digest = hashlib.sha256()
+    for file in schematic_files(path) if files is None else files:
+        digest.update(file.name.encode())
+        digest.update(file.read_bytes() if file.is_file() else b"\0none")
+    return key(path, extra=digest.digest())
 
 
 def folder(path: Path | str, board_key: str) -> Path:

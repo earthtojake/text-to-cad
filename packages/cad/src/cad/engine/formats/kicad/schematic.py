@@ -79,6 +79,7 @@ __all__ = [
     "read_schematic_index",
     "root_of",
     "screen_transform",
+    "sheet_files",
     "span_joins",
     "symbol_transform",
 ]
@@ -1315,6 +1316,21 @@ def read_schematic_index(path: Path | str) -> tuple[SchematicIndex, list[str]]:
         junctions=tuple(named(reader.junctions)), labels=tuple(labels), no_connects=tuple(reader.no_connects),
         bus_entries=tuple(reader.bus_entries), nets=tuple(nets), trees=reader.trees, lib_symbols=reader.libraries)
     return index, [*reader.warnings, *warnings]
+
+
+def sheet_files(root: Path | str) -> tuple[Path, ...]:
+    """Every file of the hierarchy under the root sheet ``root``, the root first, each once: a sheet's file
+    whether it is there or not (the sheet names it either way). None for a root that is not there; for a
+    hierarchy that does not read, the files read until then."""
+    root = Path(root).expanduser().resolve()
+    if not root.is_file():
+        return ()
+    reader = _Reader(root)
+    try:
+        reader.read()
+    except (OSError, ValueError):
+        pass
+    return tuple(dict.fromkeys([root, *(sheet.file for sheet in reader.sheets), *reader.trees]))
 
 
 def _with_net(item, net: str | None):

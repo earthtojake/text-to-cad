@@ -10,6 +10,7 @@ homes.
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -102,6 +103,24 @@ class SchematicFiles(unittest.TestCase):
         rows = bom.read_text(encoding="utf-8").splitlines()
         self.assertEqual(rows[0], '"Refs","Value","Footprint","MPN","Qty","DNP"')
         self.assertTrue(any(row.startswith('"R1","10k"') and "RC0603FR-0710KL" in row for row in rows), rows)
+
+    def test_a_part_not_fitted_is_a_bom_line_of_its_own(self) -> None:
+        """Two resistors alike, one marked Do Not Populate: it does not mark the fitted one's line DNP."""
+        project = Path(self.folder.name) / "unfitted"
+        shutil.copytree(self.busses.parent, project)
+        marked = 0
+        for sheet in project.glob("*.kicad_sch"):
+            text = sheet.read_text(encoding="utf-8")
+            named = text.find('"Reference" "R2"')
+            flag = text.rfind("(dnp no)", 0, named) if named >= 0 else -1
+            if flag >= 0:
+                sheet.write_text(text[:flag] + "(dnp yes)" + text[flag + len("(dnp no)"):], encoding="utf-8")
+                marked += 1
+        self.assertEqual(marked, 1)
+        [bom] = export(self, project / self.busses.name, "bom", project / "out")
+        rows = {row.split(",")[0].strip('"'): row for row in bom.read_text(encoding="utf-8").splitlines()}
+        self.assertTrue(rows["R2"].endswith('"DNP"'), rows)
+        self.assertTrue(rows["R1"].endswith('""'), rows)
 
 
 # A footprint as KiCad's library holds it (``header``: its file's version) and as a board places it (``at``), the

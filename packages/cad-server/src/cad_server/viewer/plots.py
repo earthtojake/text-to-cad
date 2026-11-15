@@ -24,8 +24,9 @@ with the reason (``PlotError``).
 * ``drc``: ``cad kicad_pcb drc --json``'s ``CheckResult`` as data (``boards.drc``): ``ok``, ``path``,
   ``findings`` (each a severity, a code, a message and a location) and ``measurements.drc``, every finding
   as KiCad reported it -- ``check`` (violation, unconnected, parity), ``severity``, ``type``,
-  ``description``, ``at`` ([x, y] mm in KiCad's frame, y down) and ``items``, each ``{uuid, description,
-  pos}`` and, where the board's index names its uuid, ``ref`` (``#R1``, ``#R1.2``, ``#track:<uuid>``...).
+  ``description``, ``excluded`` and ``comment`` (one the project excludes, which fails nothing), ``at``
+  ([x, y] mm in KiCad's frame, y down) and ``items``, each ``{uuid, description, pos}`` and, where the
+  board's index names its uuid, ``ref`` (``#R1``, ``#R1.2``, ``#track:<uuid>``...).
 
 Each is made off the request, one per board key at a time (every request for that key joins it): a request
 waits on it as long as ``hold_seconds``, then answers 202 ``{"state": "plotting"|"checking", "retryMs"}``
@@ -33,7 +34,10 @@ and is asked again; KiCad and the plot never run on a request's thread. The last
 in memory by key, the plot's codings with it (``compressed``); the refilled plot and the DRC are kept on
 disk by the same key (``boards``). The key is the board's bytes, its project's and rules' and the plotting
 code's (``poured.key``), worked out again whenever the file's ``mtime_ns``, size or inode differs, so a
-changed file is a new key and nothing stale is answered. Each 200 carries ``etag: "<key>"``; a request
+changed file is a new key and nothing stale is answered. The DRC holds the board to its schematic, so its
+key is that one with the bytes of every sheet file of the schematic beside the board (``poured.drc_key``,
+worked out again when any of those files' stats differs): an edit to a sheet is a new DRC, and the same
+plot. Each 200 carries ``etag: "<key>"``; a request
 naming it (``If-None-Match``) is answered 304. The answers stay ``cache-control: no-store``, as every
 answer of the engine's is (``response``): the browser keeps no board on disk under the page's origin, and
 a reload is answered from the engine's memory or disk instead.
@@ -219,6 +223,8 @@ class BoardAnswers:
         self._work: dict[tuple[str, str], _Work] = {}
         self._held: OrderedDict[tuple[str, str], _Work] = OrderedDict()
         self._keys: dict[str, tuple[tuple[int, int, int], str]] = {}
+        # Each board's DRC key, with the board's key and the stamps of the schematic files it was read from.
+        self._drc_keys: dict[str, tuple[str, tuple, str]] = {}
         # The model names each board key's text writes (``models``): the last ``HELD``.
         self._names: OrderedDict[tuple[str, str], list[str]] = OrderedDict()
 
@@ -241,6 +247,25 @@ class BoardAnswers:
         self._keys[path] = (stamp, found)  # type: ignore[assignment]
         return found
 
+    def drc_key(self, path: str) -> str:
+        """The key of the board's DRC (``poured.drc_key``): the board's key and its schematic's sheet files,
+        worked out again when the board's key or the stat of any of those files changes."""
+        from cad.engine.formats.kicad.poured import drc_key, schematic_files
+
+        board_key = self.key(path)
+        known = self._drc_keys.get(path)
+        if known is not None and known[0] == board_key and all(_stamp(file) == stamp for file, stamp in known[1]):
+            return known[2]
+        started = time.time_ns()
+        files = schematic_files(path)
+        stamps = tuple((file, _stamp(file)) for file in files)
+        found = drc_key(path, files)
+        # A sheet written while it was read may hold what was not read: such a key answers this request and
+        # is worked out again on the next, never kept as the files'.
+        if not any(stamp is not None and stamp[0] >= started for _file, stamp in stamps):
+            self._drc_keys[path] = (board_key, stamps, found)
+        return found
+
     def response(self, product: str, file_ref, *, if_none_match: str = "") -> tuple[int, Any, str]:
         """``(status, body, key)``: the product's ``compressed.Coded`` at 200, 304 for the key the client
         named, 202 while it is made, or a JSON error dict."""
@@ -250,7 +275,7 @@ class BoardAnswers:
         if not candidate.lower().endswith(".kicad_pcb"):
             raise ValueError(f"a board's {product} is a .kicad_pcb's; {node_basename(candidate)} is not one")
         try:
-            board_key = self.key(candidate)
+            board_key = self.drc_key(candidate) if product == "drc" else self.key(candidate)
         except OSError as error:
             return 400, {"error": f"{node_basename(candidate)} could not be read ({error}); "
                                   "check that it is a file this user may read"}, ""
@@ -340,7 +365,8 @@ class BoardAnswers:
             else:
                 from cad_server._internal.boards import drc
 
-                found = _refs(drc(board, board_key), board)
+                # Kept in the folder of the board's own key (the plot's), which a schematic's edit leaves.
+                found = _refs(drc(board, self.key(str(board)), board_key), board)
                 work.status, work.body = 200, Coded(json.dumps(found, separators=(",", ":")).encode("utf-8"))
         except PlotError as error:
             work.status, work.body = 400, {"error": str(error)}

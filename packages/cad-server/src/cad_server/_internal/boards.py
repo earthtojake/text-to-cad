@@ -14,7 +14,9 @@ them with it:
   the test runner's default, but for the KiCad suite); ``payload`` is that payload, the one the CAD Viewer's board page and ``cad kicad_pcb
   snapshot`` both draw (``prepare`` keeps it before a snapshot's render process reads it).
 * ``drc``: ``cad.kicad_pcb.drc`` of the saved board, the ``CheckResult`` ``cad kicad_pcb drc --json``
-  prints, as data (``drc.json``).
+  prints, as data (``drc.json``). The check holds the board to its schematic, which the board's key does
+  not read: the file says the key of the DRC it is (``poured.drc_key``: the board's key with every sheet
+  file's bytes), and a schematic that changed since is checked again.
 * ``exported``: an export's download kept by its kind (``exports/<kind>/``), for the kinds a function of
   the key alone (not ``step`` and ``glb``, whose 3D models are files of their own, outside it; nor a BOM,
   whose schematic sheets are too: ``KEPT``).
@@ -82,20 +84,23 @@ def prepare(board: Path) -> None:
         pass  # the render process says what is wrong with the board, as it draws it
 
 
-def drc(board: Path, board_key: str) -> dict[str, Any]:
-    """KiCad's DRC of the saved board, as ``cad kicad_pcb drc --json`` prints it: kept for ``board_key``."""
+def drc(board: Path, board_key: str, key: str) -> dict[str, Any]:
+    """KiCad's DRC of the saved board, as ``cad kicad_pcb drc --json`` prints it: kept in ``board_key``'s
+    folder for ``key``, the DRC's own (``poured.drc_key``: the board's key and its schematic's sheets)."""
     from cad.engine.formats.kicad.poured import folder
 
     kept = folder(board, board_key) / "drc.json"
     try:
-        return json.loads(kept.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        held = json.loads(kept.read_text(encoding="utf-8"))
+        if held["key"] == key:
+            return held["result"]
+    except (OSError, ValueError, KeyError, TypeError):
         pass
     from cad_server._internal import integration_env
 
     found = integration_env.call(_python(), "kicad_pcb", "drc", [str(board)], {})
     if not any(finding.get("code") in ("kicad_missing", "kicad_failed") for finding in found.get("findings") or ()):
-        _write(kept, json.dumps(found, separators=(",", ":")).encode("utf-8"))
+        _write(kept, json.dumps({"key": key, "result": found}, separators=(",", ":")).encode("utf-8"))
     return found
 
 

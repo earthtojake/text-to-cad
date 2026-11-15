@@ -112,7 +112,7 @@ The steps:
    `packages/ui/src/renderers/registrations.test.ts`.
 
 The worked example is the KiCad board view (`packages/ui/src/renderers/board/`): a flat view like a
-drawing's, on `FlatViewFrame`, with Select, Annotate and Measure, its Parts, Nets and Layers tabs, a
+drawing's, on `FlatViewFrame`, with Select, Annotate and Measure, its Parts, Nets, Layers and Checks tabs, a
 Display and Settings menus of its own, and its refs as chips.
 
 ## Walkthrough: a type and its integration together (KiCad)
@@ -144,8 +144,9 @@ that runs KiCad's own command, `kicad-cli`. Each step names the checklist it bel
    kicode is installed; the command runs them in the environment of `cad[kicad]`. `kicad_pcb.edit(path)`
    hands the board to the `kicad` integration (`cad.kicad._session`) the same way, so the type's package
    still imports no third-party library.
-5. **The commands**: `cad kicad_pcb drc BOARD` (KiCad's DRC: it fails on errors or unconnected items,
-   says the warnings, and answers `kicad_failed` when KiCad refuses the board), `cad kicad_pcb export
+5. **The commands**: `cad kicad_pcb drc BOARD` (KiCad's DRC, the zones refilled in memory and the board
+   held to the schematic beside it: it fails on errors, unconnected items or a difference from the
+   schematic, says the warnings, and answers `kicad_failed` when KiCad refuses the board), `cad kicad_pcb export
    BOARD --to gerbers|drill|pos|bom|step|glb|odb|ipc2581|pdf|dxf -o DIR`, `cad kicad_pcb snapshot` and
    `cad kicad_pcb inspect`
    (its parts, nets and layers).
