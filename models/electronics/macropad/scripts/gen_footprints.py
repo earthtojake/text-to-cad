@@ -19,8 +19,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROJ = os.path.dirname(HERE)
 LIB = os.path.join(PROJ, "macropad.pretty")
-STOCK = os.environ.get("KICAD10_FOOTPRINT_DIR", "/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints")
 sys.path.insert(0, HERE)
+import stock  # noqa: E402
 from schlib import uid  # noqa: E402
 
 
@@ -88,7 +88,7 @@ def hotswap():
 
 def encoder():
     name = "RotaryEncoder_Alps_EC11E-Switch_Vertical_H20mm"
-    text = open(f"{STOCK}/Rotary_Encoder.pretty/{name}.kicad_mod", encoding="utf-8").read()
+    text = stock.footprint_file("Rotary_Encoder", name).read_text(encoding="utf-8")
     text = re.sub(r'\(model "[^"]*"', '(model "${KIPRJMOD}/macropad.3dshapes/Alps_EC11E_Switch_H20mm.step"', text, count=1)
     return text
 

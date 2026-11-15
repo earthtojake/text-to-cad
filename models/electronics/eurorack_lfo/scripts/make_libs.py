@@ -6,7 +6,10 @@
 - LED_D3.0mm_Spacer3.5mm: the stock LED_D3.0mm with its 3D model raised 3.6 mm, the height of the LED
   spacer that brings a 3 mm LED's dome into the panel's hole.
 
-Run: python3 scripts/make_libs.py   (standard library only)"""
+A stock symbol library's row names it as the stock folder holds it: an installed KiCad's one file
+(``Device.kicad_sym``) or the library repository's folder (``Device.kicad_symdir``), which KiCad reads alike.
+
+Run: cad run scripts/make_libs.py"""
 
 from __future__ import annotations
 
@@ -16,7 +19,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import kilib  # noqa: E402
+import stock  # noqa: E402
 
 ROOT = HERE.parent
 LIB = ROOT / "twin_orbit.pretty"
@@ -27,7 +30,7 @@ STOCK_SYM = ["Device", "Amplifier_Operational", "Transistor_BJT", "Diode", "Conn
 
 
 def copy(lib: str, name: str, new_name: str, model: str | None = None, offset_z: float | None = None) -> None:
-    text = (kilib.FOOTPRINTS / f"{lib}.pretty" / f"{name}.kicad_mod").read_text(encoding="utf-8")
+    text = stock.footprint_file(lib, name).read_text(encoding="utf-8")
     text = text.replace(f'(footprint "{name}"', f'(footprint "{new_name}"', 1)
     if model:
         text = re.sub(r'\(model "[^"]+"', f'(model "{model}"', text, count=1)
@@ -49,8 +52,10 @@ def main() -> None:
           '  (lib (name "twin_orbit")(type "KiCad")(uri "${KIPRJMOD}/twin_orbit.pretty")(options "")(descr "Twin Orbit project footprints"))']
     fp += [f'  (lib (name "{n}")(type "KiCad")(uri "${{KICAD10_FOOTPRINT_DIR}}/{n}.pretty")(options "")(descr ""))' for n in STOCK_FP]
     (ROOT / "fp-lib-table").write_text("\n".join(fp + [")"]) + "\n", encoding="utf-8")
+    symbols = stock.folder("symbols")
+    files = {n: f"{n}.kicad_sym" if (symbols / f"{n}.kicad_sym").is_file() else f"{n}.kicad_symdir" for n in STOCK_SYM}
     sym = ["(sym_lib_table", "  (version 7)"]
-    sym += [f'  (lib (name "{n}")(type "KiCad")(uri "${{KICAD10_SYMBOL_DIR}}/{n}.kicad_sym")(options "")(descr ""))' for n in STOCK_SYM]
+    sym += [f'  (lib (name "{n}")(type "KiCad")(uri "${{KICAD10_SYMBOL_DIR}}/{files[n]}")(options "")(descr ""))' for n in STOCK_SYM]
     (ROOT / "sym-lib-table").write_text("\n".join(sym + [")"]) + "\n", encoding="utf-8")
     print("wrote", sorted(p.name for p in LIB.iterdir()), "fp-lib-table, sym-lib-table")
 

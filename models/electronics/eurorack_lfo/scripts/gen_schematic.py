@@ -1,7 +1,7 @@
 """Writes Twin Orbit's schematic: the root sheet (the shared LM13700 dual OTA and the three sheet symbols),
 one LFO sheet used twice (LFO A and LFO B, references 1xx and 2xx), and the power sheet.
 
-Run: python3 scripts/gen_schematic.py   (standard library only; then `cad kicad_sch erc twin_orbit.kicad_sch`)
+Run: cad run scripts/gen_schematic.py   (KiCad is not run; then `cad kicad_sch erc twin_orbit.kicad_sch`)
 
 The circuit, per LFO: a PNP exponential current source (Q1/Q2 and op-amp C as its servo) sets the LM13700
 OTA's bias current from the RATE pot and the CV input; the OTA, hard-switched by the square, charges C2

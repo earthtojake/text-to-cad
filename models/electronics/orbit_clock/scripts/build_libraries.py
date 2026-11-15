@@ -8,16 +8,18 @@
   ${KIPRJMOD}/orbit.3dshapes/<footprint>.step, which src/part_models.py writes.
 - sym-lib-table, fp-lib-table beside the project.
 
-Usage: cad run scripts/build_libraries.py   (the stock libraries: KICAD_STOCK, default the KiCad.app's)
+Usage: cad run scripts/build_libraries.py   (the stock libraries: where scripts/stock.py finds them)
 """
-import os
 import re
-import sys  # noqa: F401
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cad.engine.formats.kicad import sexpr as S  # noqa: E402
 
-STOCK = Path(os.environ.get("KICAD_STOCK", "/Applications/KiCad/KiCad.app/Contents/SharedSupport"))
+import stock  # noqa: E402
+
 HERE = Path(__file__).resolve().parent.parent  # the project folder
 
 # name -> (stock lib, stock symbol, value, footprint "lib:name", MPN, manufacturer)
@@ -47,17 +49,15 @@ POWER = ["GND", "+5V", "+3V3", "VBUS", "PWR_FLAG"]
 # Footprints KiCad ships without a STEP model; src/part_models.py makes these.
 MADE_MODELS = {"LED_WS2812B-2020_PLCC4_2.0x2.0mm", "Lite-On_LTR-303ALS-01"}
 
-_libs = {}
-
-
-def stock_lib(name):
-    if name not in _libs:
-        _libs[name] = S.parse((STOCK / "symbols" / f"{name}.kicad_sym").read_text())
-    return _libs[name]
+_files = {}
 
 
 def stock_symbol(lib, name):
-    for sym in S.find_all(stock_lib(lib), "symbol"):
+    """The stock symbol, from its library's one file or its own file in the library's folder (stock.symbol_file)."""
+    path = stock.symbol_file(lib, name)
+    if path not in _files:
+        _files[path] = S.parse(path.read_text(encoding="utf-8"))
+    for sym in S.find_all(_files[path], "symbol"):
         if sym[1] == name:
             return sym
     raise KeyError(f"{lib}:{name}")
@@ -138,8 +138,9 @@ def main():
 
     pretty = HERE / "orbit.pretty"
     pretty.mkdir(exist_ok=True)
+    no_model = []  # stock STEP models the footprints name that no 3D library here holds
     for fp_name, fp_lib in sorted(footprints.items()):
-        text = (STOCK / "footprints" / f"{fp_lib}.pretty" / f"{fp_name}.kicad_mod").read_text()
+        text = stock.footprint_file(fp_lib, fp_name).read_text(encoding="utf-8")
         tree = S.parse(text)
         models = list(S.find_all(tree, "model"))
         if fp_name in MADE_MODELS and not models:
@@ -151,9 +152,9 @@ def main():
                 model[1] = "${KIPRJMOD}/orbit.3dshapes/" + f"{fp_name}.step"
                 continue
             # The stock model where the library footprint names it: KiCad's 3D library holds its STEP.
-            stock = (STOCK / "3dmodels" / re.sub(r"^\$\{KICAD\d*_3DMODEL_DIR\}/", "", model[1])).with_suffix(".step")
-            if not stock.exists():
-                raise SystemExit(f"no STEP model for {fp_name}: {stock}")
+            name = Path(re.sub(r"^\$\{KICAD\d*_3DMODEL_DIR\}/", "", model[1])).with_suffix(".step").as_posix()
+            if stock.model_file(name) is None:
+                no_model.append(name)
         (pretty / f"{fp_name}.kicad_mod").write_text(S.dumps(tree) + "\n")
 
     (HERE / "sym-lib-table").write_text(
@@ -164,6 +165,10 @@ def main():
         "(fp_lib_table\n  (version 7)\n"
         '  (lib (name "orbit")(type "KiCad")(uri "${KIPRJMOD}/orbit.pretty")(options "")(descr "Orbit\'s footprints"))\n)\n')
     print(f"{len(PARTS)} symbols, {len(POWER)} power symbols, {len(footprints)} footprints")
+    if no_model:
+        print(f"note: {len(no_model)} stock 3D models are in no 3D library here ({stock.VARIABLE}'s folders, an "
+              "installed KiCad's): the board builds, and its 3D view and STEP export leave those parts out. From "
+              "kicad-packages3D (README.md, Rebuild), into that 3dmodels folder:\n  " + "\n  ".join(sorted(set(no_model))))
 
 
 if __name__ == "__main__":

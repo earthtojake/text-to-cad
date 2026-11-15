@@ -81,6 +81,11 @@ def setup(b):
         result = b.import_netlist(str(netlist))
         print("netlist:", result.report.strip().splitlines()[-3:] if result.report else "", "new footprints",
               result.new_footprint_count, "errors", result.error_count)
+        if result.error_count:  # a footprint no library of the project holds, most often: stop, the board not saved
+            lines = [line for line in result.report.splitlines() if line.strip()]
+            lines = [line for line in lines if "not found" in line or line.startswith(("Cannot", "Error"))] or lines
+            print("\n".join(lines[:15] + ([f"... and {len(lines) - 15} more lines"] if len(lines) > 15 else [])))
+            sys.exit(f"netlist import: {result.error_count} errors in KiCad's report (above); the board is not saved")
 
 
 # ------------------------------------------------------------------------------------------- place

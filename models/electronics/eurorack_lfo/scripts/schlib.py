@@ -1,6 +1,6 @@
 """A tiny writer for KiCad schematic sheets: symbols copied from KiCad's stock libraries, each pin given a
 stub wire and a label, power symbol, hierarchical label or no-connect; wires, junctions, boxes and text.
-Standard library only. Coordinates are millimetres on the sheet, y down, every point on the 1.27 mm grid."""
+Coordinates are millimetres on the sheet, y down, every point on the 1.27 mm grid."""
 
 from __future__ import annotations
 

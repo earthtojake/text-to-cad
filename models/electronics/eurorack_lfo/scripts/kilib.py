@@ -1,17 +1,11 @@
 """Small helpers shared by the generator scripts: balanced S-expression blocks out of KiCad's stock
-libraries, flattened symbols (``extends`` resolved), and pin geometry. Standard library only."""
+libraries (found by ``stock.py``), flattened symbols (``extends`` resolved), and pin geometry."""
 
 from __future__ import annotations
 
-import os
 import re
-from pathlib import Path
 
-# KiCad's stock libraries, where the project's library tables find them (KICAD10_SYMBOL_DIR and
-# KICAD10_FOOTPRINT_DIR); unset, macOS's KiCad.app.
-KICAD = Path("/Applications/KiCad/KiCad.app/Contents/SharedSupport")
-SYMBOLS = Path(os.environ.get("KICAD10_SYMBOL_DIR") or KICAD / "symbols")
-FOOTPRINTS = Path(os.environ.get("KICAD10_FOOTPRINT_DIR") or KICAD / "footprints")
+import stock  # KiCad's stock libraries, where the project's library tables find them
 
 
 def block_at(text: str, start: int) -> str:
@@ -69,17 +63,19 @@ def children(block: str, head: str) -> list[str]:
     return out
 
 
-_cache: dict[str, str] = {}
+_cache: dict = {}
 
 
-def _lib(lib: str) -> str:
-    if lib not in _cache:
-        _cache[lib] = (SYMBOLS / f"{lib}.kicad_sym").read_text(encoding="utf-8")
-    return _cache[lib]
+def _lib(lib: str, name: str) -> str:
+    """The text of the stock file that holds `lib:name`: the library's one file, or the symbol's own."""
+    path = stock.symbol_file(lib, name)
+    if path not in _cache:
+        _cache[path] = path.read_text(encoding="utf-8")
+    return _cache[path]
 
 
 def raw_symbol(lib: str, name: str) -> str:
-    text = _lib(lib)
+    text = _lib(lib, name)
     m = re.search(r'\n\t\(symbol "' + re.escape(name) + r'"\n', text)
     if not m:
         raise KeyError(f"{lib}:{name}")

@@ -1,6 +1,6 @@
 """Write the Nine macropad's schematic: a root sheet and three hierarchical sheets.
 
-    python3 scripts/gen_schematic.py      (any Python 3.10+; no KiCad needed)
+    cad run scripts/gen_schematic.py      (KiCad is not run: the stock symbols are read as text, scripts/stock.py)
 
 Rerunning writes the same files (every uuid is derived from its item's name). Check with
 `cad kicad_sch erc macropad.kicad_sch` and `cad kicad_sch snapshot ... --sheet /mcu/`.

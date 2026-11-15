@@ -3,8 +3,8 @@
 **Build the board first.** Its KiCad files (the board, the seven schematic sheets, the project file and its custom
 rules, the project libraries and their tables) are generated from the design model by `scripts/`, not committed:
 `cad run build.py`, from this folder, makes them in about eight minutes, most of it the routes' plan. It needs the
-`cad` command (KiCad 10.99's kicad-cli and API come with it) and KiCad's stock libraries (macOS's KiCad.app, or
-`KICAD_STOCK`). Opening the board or the schematic in the CAD Viewer or in KiCad, `check_board.py` and
+`cad` command (KiCad 10.99's kicad-cli and API come with it) and KiCad's stock libraries (an installed KiCad's, or a
+download `CAD_KICAD_3DMODELS` leads to: [Rebuild](#rebuild)). Opening the board or the schematic in the CAD Viewer or in KiCad, `check_board.py` and
 `check_fit.py` all read what it writes, so run it before any of them.
 
 The playfield of the SHORT CIRCUIT pinball machine is this circuit board: its gold art is the machine's switches (the
@@ -88,6 +88,7 @@ pads (J5) and to the backbox link (J4, JST SH: +5V, I2C, speaker, GND).
 | `build.py` | the one command that makes the KiCad project: every script below, in order |
 | `scripts/geometry.py` | every place, from the design model: holes, combs, LEDs, the art clipped for the fab, the GPIO map, part places |
 | `scripts/build_libraries.py` | the libraries from KiCad's stock ones, the combs' footprints from `playfield.py` |
+| `scripts/stock.py` | where KiCad's stock libraries are: found as the `cad` command finds them for KiCad |
 | `scripts/schlib.py`, `scripts/schematic.py` | the schematic, as text |
 | `scripts/board.py` | the board: setup (with the project's netclasses and custom rules), place, art, route, zones, silk, finish, each stage a `kicad_pcb.edit` |
 | `scripts/routes.py` | every track and via, planned from the placed board (`tmp/routes.json`) |
@@ -103,7 +104,26 @@ fills (about 6.5 MB), which DRC and `check_board.py` read.
 
 ## Rebuild
 
-From this folder, with the `cad` command:
+From this folder, with the `cad` command. `build_libraries.py` copies the project's libraries out of KiCad's
+stock ones, found as `scripts/stock.py` says, which is where the `cad` command finds them for KiCad: in the KiCad
+you installed (nothing to set), else in the `symbols/` and `footprints/` folders beside the `3dmodels` folder
+`CAD_KICAD_3DMODELS` names. No other variable is read (`KICAD_STOCK`, `KICAD10_SYMBOL_DIR`). Without the
+libraries `build.py` stops before its first step, saying what it looked for. With no KiCad installed, download
+them once (25 MB; 0.7 GB unpacked, 0.4 GB once `kicad-symbols-10.0.8/` is deleted):
+
+```bash
+# KiCad 10's stock libraries, where no KiCad is installed: once, into any folder (here ~/kicad-10)
+mkdir -p ~/kicad-10/footprints ~/kicad-10/3dmodels && cd ~/kicad-10
+curl -fsSL https://gitlab.com/kicad/libraries/kicad-footprints/-/archive/10.0.8/kicad-footprints-10.0.8.tar.gz | tar xz --strip-components=1 -C footprints
+curl -fsSL https://gitlab.com/kicad/libraries/kicad-symbols/-/archive/10.0.8/kicad-symbols-10.0.8.tar.gz | tar xz
+python3 kicad-symbols-10.0.8/tools/kicad_lib_pack.py -i kicad-symbols-10.0.8 -o symbols   # a file a library, as KiCad installs them
+export CAD_KICAD_3DMODELS=~/kicad-10/3dmodels    # in the shell that runs the commands below
+```
+
+The stock 3D models are optional: `build_libraries.py` lists each one the footprints name that the `3dmodels`
+folder lacks, and the board's 3D view and STEP export leave those parts out. Each is one file of
+`kicad-packages3D`, by the name listed:
+`curl -fsSL --create-dirs -o ~/kicad-10/3dmodels/<name> https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/10.0.8/<name>`.
 
 ```bash
 # the board and its schematic, from the design model (the board made afresh each time)

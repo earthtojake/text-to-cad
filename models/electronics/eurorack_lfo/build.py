@@ -7,9 +7,10 @@ The KiCad files the scripts write are build output (`.gitignore` keeps them out 
 the board or the schematic in the CAD Viewer or in KiCad, and before any script that reads the board (`src/`,
 `check_twin_orbit.py`, `scripts/check_schematic.py`). `twin_orbit.kicad_pro` is not written by a script: it is the
 source of the board's rules and netclasses, and KiCad makes the board beside it. It needs the `cad` command (KiCad
-10.99's kicad-cli and API come with it) and KiCad's stock libraries, which the generators read from macOS's
-KiCad.app or from `KICAD10_SYMBOL_DIR` and `KICAD10_FOOTPRINT_DIR`. Rerunning it over a built board is harmless:
-each step states the board it wants.
+10.99's kicad-cli and API come with it) and KiCad's stock libraries, which the generators and KiCad read in an
+installed KiCad or beside the `3dmodels` folder `CAD_KICAD_3DMODELS` names (`scripts/stock.py`; README.md, Rebuild):
+without them it stops before the first step, saying so. Rerunning it over a built board is harmless: each step
+states the board it wants.
 """
 import shutil
 import subprocess
@@ -19,9 +20,12 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 DRC_BEFORE_CLEANUP = "tmp/drc_before_cleanup.json"
+sys.path.insert(0, str(HERE / "scripts"))
+import stock  # noqa: E402
 
-# (how, script, arguments): "python" runs with this interpreter (the standard library alone), "cad" through
-# `cad run`, "drc" saves `cad kicad_pcb drc --json` of the board as it stands to the file named.
+# (how, script, arguments): "python" runs with this interpreter (`cad run`'s: the standard library, and the `cad`
+# library for where KiCad's libraries are), "cad" through `cad run` (KiCad's API for the script), "drc" saves
+# `cad kicad_pcb drc --json` of the board as it stands to the file named.
 STEPS = (
     ("python", "scripts/make_libs.py"),            # twin_orbit.pretty and the library tables
     ("python", "scripts/gen_schematic.py"),        # root, LFO (x2) and power sheets
@@ -41,6 +45,7 @@ def main() -> None:
     cad = shutil.which("cad")
     if cad is None:
         sys.exit("build.py: no `cad` command on PATH; install text-to-cad (README's Quickstart) first")
+    stock.require("symbols", "footprints")
     start = time.monotonic()
     for how, script, *args in STEPS:
         began = time.monotonic()
@@ -53,7 +58,8 @@ def main() -> None:
                 subprocess.run([cad, "kicad_pcb", "drc", "twin_orbit.kicad_pcb", "--json"], cwd=HERE, stdout=fh)
         else:
             command = [sys.executable, script, *args] if how == "python" else [cad, "run", script, *args]
-            subprocess.run(command, cwd=HERE, check=True)
+            if subprocess.run(command, cwd=HERE).returncode:  # the step said why: no traceback over it
+                sys.exit(f"build.py: {script} failed; the steps after it did not run")
         print(f"    {time.monotonic() - began:.0f} s", flush=True)
     print(f"built twin_orbit.kicad_pcb and its schematic in {time.monotonic() - start:.0f} s")
 

@@ -12,9 +12,8 @@
   playfield.sensors(), so the ball's switches are real pads on real nets), the NPTH fixing holes, the speaker pads.
 - sym-lib-table, fp-lib-table beside the project.
 
-Usage: cad run scripts/build_libraries.py   (the stock libraries: KICAD_STOCK, default the KiCad.app's)
+Usage: cad run scripts/build_libraries.py   (the stock libraries: where scripts/stock.py finds them)
 """
-import os
 import re
 import sys
 from pathlib import Path
@@ -25,8 +24,8 @@ from cad.engine.formats.kicad import sexpr as S  # noqa: E402
 from shapely.ops import unary_union  # noqa: E402
 
 import geometry as G  # noqa: E402
+import stock  # noqa: E402
 
-STOCK = Path(os.environ.get("KICAD_STOCK", "/Applications/KiCad/KiCad.app/Contents/SharedSupport"))
 HERE = G.PROJECT
 R0402, C0402 = "Resistor_SMD:R_0402_1005Metric", "Capacitor_SMD:C_0402_1005Metric"
 R0603, C0603 = "Resistor_SMD:R_0603_1608Metric", "Capacitor_SMD:C_0603_1608Metric"
@@ -90,17 +89,15 @@ MADE_MODELS = {"LED_WS2812B-2020_PLCC4_2.0x2.0mm", "USB_C_Receptacle_HRO_TYPE-C-
 MODEL_STANDINS = {"TQFN-16-1EP_3x3mm_P0.5mm_EP1.23x1.23mm":
                   "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/TQFN-16-1EP_3x3mm_P0.5mm_EP1.6x1.6mm.step"}
 
-_libs = {}
-
-
-def stock_lib(name):
-    if name not in _libs:
-        _libs[name] = S.parse((STOCK / "symbols" / f"{name}.kicad_sym").read_text())
-    return _libs[name]
+_files = {}
 
 
 def stock_symbol(lib, name):
-    for sym in S.find_all(stock_lib(lib), "symbol"):
+    """The stock symbol, from its library's one file or its own file in the library's folder (stock.symbol_file)."""
+    path = stock.symbol_file(lib, name)
+    if path not in _files:
+        _files[path] = S.parse(path.read_text(encoding="utf-8"))
+    for sym in S.find_all(_files[path], "symbol"):
         if sym[1] == name:
             return sym
     raise KeyError(f"{lib}:{name}")
@@ -268,10 +265,11 @@ def main():
 
     pretty = HERE / "pinball.pretty"
     pretty.mkdir(exist_ok=True)
+    no_model = []  # stock STEP models the footprints name that no 3D library here holds
     for old in pretty.glob("*.kicad_mod"):
         old.unlink()
     for fp_name, fp_lib in sorted(footprints.items()):
-        text = (STOCK / "footprints" / f"{fp_lib}.pretty" / f"{fp_name}.kicad_mod").read_text()
+        text = stock.footprint_file(fp_lib, fp_name).read_text(encoding="utf-8")
         tree = S.parse(text)
         models = list(S.find_all(tree, "model"))
         if fp_name in MADE_MODELS and not models:
@@ -284,9 +282,9 @@ def main():
                 continue
             if fp_name in MODEL_STANDINS:
                 model[1] = MODEL_STANDINS[fp_name]
-            stock = (STOCK / "3dmodels" / re.sub(r"^\$\{KICAD\d*_3DMODEL_DIR\}/", "", model[1])).with_suffix(".step")
-            if not stock.exists():
-                raise SystemExit(f"no STEP model for {fp_name}: {stock}")
+            name = Path(re.sub(r"^\$\{KICAD\d*_3DMODEL_DIR\}/", "", model[1])).with_suffix(".step").as_posix()
+            if stock.model_file(name) is None:
+                no_model.append(name)
         (pretty / f"{fp_name}.kicad_mod").write_text(S.dumps(tree) + "\n")
     made = [comb_footprint(s) for s in G.sensors()] + [hole_footprint(2.2), hole_footprint(6.0), speaker_footprint()]
     for name, fp in made:
@@ -300,6 +298,10 @@ def main():
         "(fp_lib_table\n  (version 7)\n"
         '  (lib (name "pinball")(type "KiCad")(uri "${KIPRJMOD}/pinball.pretty")(options "")(descr "SHORT CIRCUIT\'s footprints"))\n)\n')
     print(f"{len(PARTS)} symbols, {len(POWER)} power symbols, {len(footprints)} stock footprints, {len(made)} of its own")
+    if no_model:
+        print(f"note: {len(no_model)} stock 3D models are in no 3D library here ({stock.VARIABLE}'s folders, an "
+              "installed KiCad's): the board builds, and its 3D view and STEP export leave those parts out. From "
+              "kicad-packages3D (README.md, Rebuild), into that 3dmodels folder:\n  " + "\n  ".join(sorted(set(no_model))))
 
 
 if __name__ == "__main__":

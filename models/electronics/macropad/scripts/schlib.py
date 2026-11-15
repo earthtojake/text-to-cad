@@ -7,9 +7,9 @@ import math
 import os
 import uuid as _uuid
 
+import stock
 from sexp import Sym, dump, find, first, parse
 
-SYMBOL_DIR = os.environ.get("KICAD10_SYMBOL_DIR", "/Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols")
 PROJECT = "macropad"
 NS = _uuid.UUID("6d1c9a4e-2b7f-4c1a-9e55-0b5a1c0de000")
 
@@ -19,27 +19,27 @@ def uid(*parts) -> str:
     return str(_uuid.uuid5(NS, "/".join(str(p) for p in parts)))
 
 
-_LIBS: dict[str, dict] = {}
+_FILES: dict = {}
 
 
-def _library(lib: str) -> dict:
-    if lib not in _LIBS:
-        tree = parse(open(f"{SYMBOL_DIR}/{lib}.kicad_sym", encoding="utf-8").read())[0]
-        _LIBS[lib] = {s[1]: s for s in find(tree, "symbol")}
-    return _LIBS[lib]
+def _stock(lib: str, name: str):
+    """The stock symbol `lib:name`, from the library's one file or the symbol's own (`stock.symbol_file`)."""
+    path = stock.symbol_file(lib, name)
+    if path not in _FILES:
+        _FILES[path] = {s[1]: s for s in find(parse(path.read_text(encoding="utf-8"))[0], "symbol")}
+    return _FILES[path][name]
 
 
 def lib_symbol(lib_id: str):
     """The symbol flattened as a schematic embeds it: an `extends` resolved into its base's units."""
     lib, name = lib_id.split(":")
-    syms = _library(lib)
-    sym = syms[name]
+    sym = _stock(lib, name)
     ext = first(sym, "extends")
     if ext is None:
         out = [x for x in sym]
         out[1] = lib_id
         return out
-    base = syms[ext[1]]
+    base = _stock(lib, ext[1])
     base_name = base[1]
     out = [Sym("symbol"), lib_id]
     for item in base[2:]:
