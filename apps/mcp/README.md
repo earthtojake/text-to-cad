@@ -53,7 +53,10 @@ says what each app declared and what it was offered (below).
   sidebar (the home: the models opened before, and Open), a **CAD** tab beside
   each thread, and *Open with CAD* for a model file. The sidebar and every tab are the
   whole viewer under its navbar, as a card is (below); *Open with CAD* alone shows its file
-  bare, with no navbar. The agent opens a tab once
+  bare, with no navbar. A tab's name and icon in Codex's tab strip are the page's own `<title>` and icon
+  (`shell.html`: **CAD**, and the blue mark as a 32px PNG data URL), which the Codex app (26.1111.21308,
+  read from its bundle 2026-11-15) prefers to the tool's title and icon; it takes an icon only as a PNG, JPEG, WebP or GIF
+  data URL of at most 8192 characters (or an `https:` URL), so never the tools' `currentColor` SVG. The agent opens a tab once
   (`cad_open`) and drives it (`cad_show`). These remain separate because the host mounts
   the UI from static tool metadata: adding that metadata to `cad_show` would mount a new
   view on updates too. A conditional server result cannot promise host-side tab reuse. A host that declares tabs does what
