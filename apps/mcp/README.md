@@ -31,6 +31,14 @@ none and are offered no tools, whatever they declare.
 | Codex where the launcher cannot be read (Windows, a wrapper) | either | tabs; a call whose turn says `exec` is answered as below, by opening the browser, before anything declared |
 | Every other app (Cursor, the Claude apps, Gemini CLI, Grok Build, ...) | anything | no tools |
 
+Known limit, not fixed: on Windows the shim cannot read its parent processes, so the `codex` terminal UI there
+is taken for the app and offered tabs it cannot show (a turn of `codex exec` is still told by its own metadata).
+Its CAD calls answer, but no tab opens; the skills' web link still shows the model.
+
+The shim takes `app-server` anywhere on Codex's command line for the app server (`codex --log-dir DIR
+app-server` among them: Codex has options whose values it spells apart that the shim does not list); the Codex
+app's own Electron processes (`Codex --type=...`) name no subcommand and are never it.
+
 To add an app back: verify its CAD view in the real app, then add its manifest's server entry and its name
 to `host.presentation`, in one change.
 
@@ -129,14 +137,15 @@ that thread gets CAD's tools.
 
 | Host | Startup timeout | A late `initialize` | `tools/list_changed` |
 | --- | --- | --- | --- |
-| Codex (codex-cli 0.169.0-alpha.11.1, measured 2026-11-14) | 30 s where the server config sets no `startup_timeout_sec`; the OpenAI directory's ZIP sets 300 | a turn never waits for MCP servers; a server answered late (9 s and 25 s tried) has its tools added to the running turn | not acted on for the rest of a turn: a list answered empty stays empty in that turn |
+| Codex (codex-cli 0.169.0-alpha.11.1, measured 2026-11-14) | 30 s where the server config sets no `startup_timeout_sec`; ours (`codex.mcp.json`, and the OpenAI directory's ZIP made from it) sets 300 | a turn never waits for MCP servers; a server answered late (9 s and 25 s tried) has its tools added to the running turn | not acted on for the rest of a turn: a list answered empty stays empty in that turn |
 
 So `cad-mcp` holds `initialize` for its version as long as the host waits: 20 seconds by default
 (inside Codex's 30), and 80% of the startup timeout where the server config says it as
 `cad-mcp --startup-timeout N` (a day at most). The other 20% is what the host's timeout counts
 besides: uvx fetching and starting `cad-mcp` before the `initialize` arrives, and the server's
-start and its own answer to the `initialize` after the version is ready. Only the OpenAI ZIP says it (`scripts/release/plugin_zip.py`, N
-read from that config's own `startup_timeout_sec`: `--channel codex --startup-timeout 300`).
+start and its own answer to the `initialize` after the version is ready. The repository's `codex.mcp.json` says it
+(`--startup-timeout 300`, its own `startup_timeout_sec`), so the copies from `latest` and `main` and the OpenAI ZIP
+(`scripts/release/plugin_zip.py`, which checks the two agree and adds `--channel codex`) all do.
 
 Which config Codex reads (measured 2026-11-15, Codex CLI 0.153.4 and 0.169.0-alpha.11.1, `codex mcp get
 cad --json` in a private `CODEX_HOME`): a folder with the Agent Plugins standard's root `plugin.json` is

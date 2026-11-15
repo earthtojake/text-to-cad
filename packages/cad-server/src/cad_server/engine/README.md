@@ -266,11 +266,15 @@ server, each on its own port (the second rolls from the first's, below); nothing
   client of 0.11.10 and earlier finds (their launchers, their updater, their library) and every process with no
   version (a person's own environment running `python model.py`); `installations/current` and its record name
   that version's server environment (`installations.mirror`, written by `cad setup --engine-update`, and by a plain
-  `cad setup` where `current` names a release of that layout, a version no longer installed or an older one:
-  `legacy.hand_over`), so such a
+  `cad setup` where `current` names nothing -- a new computer, one coming from 0.8, so a person's own Python finds a
+  server --, a release of that layout, a version no longer installed or an older one: `legacy.hand_over`), so such a
   client that finds no server starts that version's, which takes the flat door as it starts (a second start of a
   version whose server runs asks that server to, `daemon._front`). It is let go as soon as `current` names another,
-  and taken by that one's server at its next tending (`{"op": "bridge"}` asks at once). Such a client's builds are
+  and taken by that one's server at its next tending (`{"op": "bridge"}` asks at once). A drain no process of this
+  release asked (`{"op": "stop", "drain": true}` without the `internal` mark: a shipped updater's switch, which knows
+  only this door) lets the flat door alone go (`Bridge.step_aside`), left free by the tending for 15 seconds so that
+  switch goes on; the version's own server and sessions run on. The tending never retries faster: taking the door
+  the moment a shipped server lets it go would fail that release's switch, which waits for the door to go quiet. Such a client's builds are
   refused only for another worker contract (`contract.refusal`, naming `cad run`).
 - **Use** (`versions.used`): each version records its own last use by an agent, `versions/<version>/used`, its
   time: a `cad` command run for it (`cad_server.cli`), a request its server takes from a command or an app (never
@@ -281,9 +285,13 @@ server, each on its own port (the second rolls from the first's, below); nothing
   2 days (never used: 2 days from its install, its code marker's time): where nothing is in flight on it
   (`versions.connected`: a build, a draw, an export, a request that serves, an agent's tool call; never an idle app's
   hold or an open page) its server is asked to stop over its own door (the drain), and its folder is renamed aside
-  and removed, its data with it. With work in flight, a process running from its folder (`releases.running`, the
-  server's own processes aside), or a folder the system will not move (Windows: a file in use), it stays for the next
-  cleanup, which looks once and never waits. A version that is not the newest cleans nothing. The same cleanup
+  and removed, its data with it: Recents entries and cached records written to that version after the newer one's
+  one-time copy go with it (files in a person's own project are never touched). With work in flight, a process
+  running from its folder (`releases.running`, the server's own processes aside: on POSIX by its command line, on
+  Windows by its program's path), or a folder the system will not move (Windows: a file in use), it stays for the
+  next cleanup, which looks once and never waits. The 2 days are counted by the wall clock: a clock set days
+  forward removes the older versions at the next cleanup, a cost accepted (a guard by the boot's start would keep a
+  version used weeks ago on a computer never restarted). A version that is not the newest cleans nothing. The same cleanup
   removes the layout of 0.11.10 and earlier once it is safe (`legacy.remove`), what that layout wrote after the
   version imported it carried in first (`imports.carry`); while that layout is there, the server tries its removal
   again every minute between cleanups (`versions.clean_legacy`), since the one as it starts often finds the shipped
@@ -331,9 +339,14 @@ through it, and reloads once its server answers with another release or start (`
 folders, and every other part of the layout of 0.11.10 and earlier, go once nothing runs from them, by the newest
 version's cleanup (`cad_server._internal.legacy`).
 
+The install script `--engine-update` starts waits first (`cad_server._internal.install_script`): until the site's
+`install.py` names this release or a later one as its fallback, asked at once and then after growing delays for
+about an hour, then gives up quietly. A release reaches the version feed (and so these updaters) before the docs
+site serving the new script is deployed, and the script of the release before would set up cad alone.
+
 A computer reaches this release by the install command instead (0.7 and 0.8, which have no updater, and any release
 whose person runs it): its plain `cad setup` hands over what the earlier release left running (`legacy.stop_earlier`,
-`legacy.hand_over`). A server of 0.11.10 or earlier at the flat door is asked to stop once nothing is in flight there
+before the data is copied in, so a 0.8 server writes nothing after the copy; `legacy.hand_over`). A server of 0.11.10 or earlier at the flat door is asked to stop once nothing is in flight there
 (the drain), never waited for, and the mirror names this version, so the next client -- this release's or an old
 one's -- starts this version's server, which takes the page token and port it imported. A 0.8 server is stopped by
 0.8's own `cadgen stop`, run from the installation record 0.8 keeps, with its telemetry off: 0.8 has no updater, and

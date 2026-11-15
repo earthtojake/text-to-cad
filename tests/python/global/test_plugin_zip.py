@@ -52,7 +52,8 @@ class PluginZipTests(unittest.TestCase):
         # The launcher on its channel, told Codex's startup timeout from the same config: its first start, which
         # installs its version, holds Codex's initialize that long (Codex acts on no list_changed within a turn).
         timeout = server["startup_timeout_sec"]
-        self.assertEqual(server["args"][-5:], ["cad-mcp", "--channel", "codex", "--startup-timeout", f"{timeout:g}"])
+        # The repository's config tells its launcher the timeout itself (latest and main are installed from it).
+        self.assertEqual(server["args"][-5:], ["cad-mcp", "--startup-timeout", f"{timeout:g}", "--channel", "codex"])
         # The plugin is at the archive's root, each folder with an entry of its own: the
         # portal turned away a top-level folder without one as holding no plugin.
         names = {name for name in members if not name.endswith("/")}
@@ -149,6 +150,17 @@ class PluginZipTests(unittest.TestCase):
                         with zipfile.ZipFile(root / "out.zip") as archive:
                             self.assertEqual(json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"]["args"],
                                              [*server["args"], "--channel", "codex", *args])
+            # The repository's config tells its launcher the timeout already: kept, never twice; another number than
+            # its startup_timeout_sec fails the package.
+            told = {**server, "args": [*server["args"], "--startup-timeout", "300"], "startup_timeout_sec": 300}
+            (root / "codex.mcp.json").write_text(json.dumps({"mcpServers": {"cad": told}}), encoding="utf-8")
+            self.assertEqual(build(manifest, root / "out.zip"), [])
+            with zipfile.ZipFile(root / "out.zip") as archive:
+                self.assertEqual(json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"]["args"],
+                                 [*told["args"], "--channel", "codex"])
+            (root / "codex.mcp.json").write_text(json.dumps(
+                {"mcpServers": {"cad": {**told, "startup_timeout_sec": 120}}}), encoding="utf-8")
+            self.assertEqual([error.split(" is told")[0] for error in build(manifest)], [".mcp.json's launcher"])
             (root / "codex.mcp.json").write_text(json.dumps({"mcpServers": {"cad": server}}), encoding="utf-8")
 
             # A pin of another version, or a file whose pins cannot be read, fails the package.

@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -115,8 +116,10 @@ class Setup(Computer):
             record = places.version_record(DEV)
             self.assertIsNotNone(record, "the version's complete marker")
             self.assertTrue(any("-e" in step for step in self.uv.steps), "a development version from its checkout")
-            self.assertEqual(sorted(os.listdir(self.state)), ["install.lock", "versions"],
-                             "nothing but the version's folder: no pointer, no record, no setting")
+            self.assertEqual(sorted(os.listdir(self.state)), ["install.lock", "installations", "versions"],
+                             "nothing but the version's folder and, on a new computer, the record a process with "
+                             "no version (the library in a person's own Python) starts a server by")
+            self.assertEqual(installations.current()["prefix"], places.version_record(DEV)["prefix"])
             self.assertEqual(installations.proxy_status(), installations.OK, "the cad command, of this revision")
             steps = len(self.uv.steps)
             code, out, err = self.main(setup, [])
@@ -127,6 +130,44 @@ class Setup(Computer):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             setup.main(["--only", "claude"])
         self.assertNotIn("--engine-update", setup.build_parser().format_help(), "hidden")
+
+    def test_earlier_servers_stop_before_the_copy_and_current_names_this_version_where_it_named_none_installed(
+            self) -> None:
+        # A computer whose `current` names a release no longer installed: the library in a person's own Python starts
+        # the server it names, so it names this version now. 0.8's server stops before the copy, not after it.
+        installations.point("0.9.9")
+        order: list[str] = []
+        real = imports.ensure
+        with mock.patch.dict(os.environ, {places.INSTALLATION_ENV: DEV}), \
+                mock.patch.object(legacy, "stop_earlier", side_effect=lambda told: order.append("stop") or []), \
+                mock.patch.object(imports, "ensure", side_effect=lambda name, told: order.append("copy")
+                                  or real(name, told=told)):
+            code, out, err = self.main(setup, [])
+        self.assertEqual((code, order), (0, ["stop", "copy"]), out + err)
+        self.assertEqual(installations.current_version(), DEV)
+        # A current naming an installed newer version stays as it is.
+        installations.point(DEV)
+        with mock.patch.object(setup, "_name", return_value=X), mock.patch.object(legacy, "stop_earlier"):
+            self.assertEqual(self.main(setup, [])[0], 0)
+        self.assertEqual(installations.current_version(), DEV)
+
+    @unittest.skipIf(os.name == "nt", "a foreign cad.exe is the Windows command's own test")
+    def test_a_command_of_another_s_fails_setup_but_never_the_updater_s_run(self) -> None:
+        command = Path(installations.proxy_path())
+        command.parent.mkdir()
+        command.write_text("#!/bin/sh\necho someone else's cad\n", encoding="utf-8")
+        with mock.patch.dict(os.environ, {places.INSTALLATION_ENV: DEV}):
+            code, out, err = self.main(setup, [])
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("is not cad's, and is left alone", err)
+            with mock.patch.object(places, "versioned", return_value=DEV), \
+                    mock.patch.object(setup, "start_installer") as started:
+                code, out, err = self.main(setup, ["--engine-update"])
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("is not cad's, and is left alone", err)
+        started.assert_called_once_with(DEV)
+        self.assertEqual(installations.current_version(), DEV, "the hand-over done all the same")
+        self.assertEqual(command.read_text(encoding="utf-8"), "#!/bin/sh\necho someone else's cad\n")
 
     def test_the_first_setup_copies_settings_and_store_once_from_the_newest_older_version(self) -> None:
         import json
@@ -274,6 +315,89 @@ class Installer(unittest.TestCase):
             time.sleep(0.02)
 
 
+class Site:
+    """A stand-in for the docs site: ``install.py`` served from a local port, its text what ``pages`` holds next (each
+    ask takes the next; the last stays), or not found while that is None."""
+
+    def __init__(self, test: unittest.TestCase, *pages: str | None) -> None:
+        import http.server
+
+        self.pages, self.asked = list(pages), 0
+        site = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802 - the standard library's name
+                site.asked += 1
+                page = site.pages.pop(0) if len(site.pages) > 1 else site.pages[0]
+                if page is None:
+                    self.send_error(404)
+                    return
+                body = page.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args) -> None:
+                pass
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        test.addCleanup(self.server.server_close)
+        test.addCleanup(self.server.shutdown)
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}/install.py"
+
+
+def install_py(fallback: str) -> str:
+    return f'#!/usr/bin/env python3\n"""The installer."""\nFALLBACK = "{fallback}"\n'
+
+
+class InstallerWaits(unittest.TestCase):
+    """The install script ``--engine-update`` starts waits until the site's install.py names this release: the site
+    is deployed after the version feed names it (``cad_server._internal.install_script``)."""
+
+    def test_it_waits_for_the_site_to_name_this_release_and_gives_up_once_its_delays_are_spent(self) -> None:
+        from cad_server._internal import install_script
+
+        slept: list[float] = []
+        site = Site(self, None, install_py("0.11.10"), install_py(Y))
+        self.assertTrue(install_script.wait(site.url, Y, delays=(1.0, 2.0, 4.0, 8.0), sleep=slept.append))
+        self.assertEqual((site.asked, slept), (3, [1.0, 2.0]), "not found, then the release before, then this one")
+        for named, version, ready in ((Y, f"{Y}-dev.20261115000000", True), ("0.13.0", Y, True),
+                                      ("0.12.0", Y, False), ("0.12", "0.12.0", True)):
+            with self.subTest(named=named, version=version):
+                self.assertEqual(install_script.serves(Site(self, install_py(named)).url, version), ready)
+        slept.clear()
+        site = Site(self, install_py("0.11.10"))
+        self.assertFalse(install_script.wait(site.url, Y, delays=(1.0, 2.0), sleep=slept.append))
+        self.assertEqual((site.asked, slept), (3, [1.0, 2.0]), "asked at once and after each delay, then no more")
+        self.assertFalse(install_script.serves("http://127.0.0.1:9/install.py", Y), "an address that does not answer")
+        self.assertEqual(install_script.main([Y, "http://127.0.0.1:9/install.py"]), 0, "no command: nothing run")
+
+    def test_the_updater_s_installer_starts_detached_once_the_site_names_this_release(self) -> None:
+        folder = Path(tempfile.mkdtemp(prefix="cad installer "))
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        stand_in, ran = folder / "stand in.py", folder / "it ran"
+        stand_in.write_text("import pathlib, sys\npathlib.Path(sys.argv[1]).write_text('ran', encoding='utf-8')\n",
+                            encoding="utf-8")
+        site = Site(self, install_py(Y))
+        with mock.patch.dict(os.environ, {setup.INSTALLER_ENV: f'"{sys.executable}" "{stand_in}" "{ran}"',
+                                          setup.INSTALL_PY_ENV: site.url}):
+            self.assertIsNotNone(setup.start_installer(Y))
+        deadline = time.monotonic() + 60
+        while not ran.exists():
+            self.assertLess(time.monotonic(), deadline, "the installer ran")
+            time.sleep(0.02)
+        self.assertGreaterEqual(site.asked, 1, "the site was asked first")
+        # The hosted script waits for the site's install.py; a test's stand-in waits for none unless told one.
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(setup.INSTALLER_ENV, None)
+            os.environ.pop(setup.INSTALL_PY_ENV, None)
+            self.assertEqual(setup.install_py(), "https://www.texttocad.dev/install.py")
+            os.environ[setup.INSTALLER_ENV] = "printf ok"
+            self.assertIsNone(setup.install_py())
+
+
 class Serving(Servers, Computer):
     """The server plain ``cad setup`` leaves running for every later session, a real one."""
 
@@ -310,15 +434,37 @@ class Uninstall(Servers, Computer):
         self.assertIn(installations.write_proxy()[1], (installations.MISSING, installations.STALE))
         beside = self.state.parent / "kept.txt"
         beside.write_text("not cad's", encoding="utf-8")
+        others = self.engines / "someone-else.txt"  # the engines' folder a variable named: only cad's entries go
+        others.write_text("not cad's", encoding="utf-8")
+        self.assertTrue((self.engines / X).is_dir())
         code, out, err = self.main(uninstall, ["--yes"])
         self.assertEqual(code, 0, out + err)
         self.assertIsNone(versions.ask(X, {"op": "pid"}, seconds=2.0), "its server stopped")
-        for gone in (self.state, self.cache, Path(installations.proxy_path())):
+        for gone in (self.state, self.cache, Path(installations.proxy_path()), self.engines / X):
             self.assertFalse(gone.exists(), gone)
+        self.assertEqual(os.listdir(self.engines), [others.name])
         self.assertTrue(beside.exists())
         self.no_app_touched()
         code, out, _err = self.main(uninstall, ["--yes"])
         self.assertEqual((code, out), (0, "cad is not installed on this computer: nothing to remove.\n"))
+
+    def test_folders_of_cad_s_names_with_no_mark_of_cad_s_are_another_program_s(self) -> None:
+        # A state and a cache folder of the same names, another program's: generic names alone, nothing only cad writes.
+        (self.state / "documents").mkdir(parents=True)
+        (self.state / "settings.json").write_text('{"theme": "dark"}', encoding="utf-8")
+        (self.cache / "documents").mkdir(parents=True)
+        (self.cache / "downloads").mkdir()
+        before = snapshot(self.root)
+        code, out, _err = self.main(uninstall, ["--yes"])
+        self.assertEqual((code, out), (0, "cad is not installed on this computer: nothing to remove.\n"))
+        self.assertEqual(snapshot(self.root), before)
+        self.assertTrue((self.state / "documents").is_dir() and (self.cache / "downloads").is_dir())
+        # cad's settings are a mark of cad's: that folder is cad's.
+        (self.state / "settings.json").write_text('{"telemetry": {"choice": "off"}}', encoding="utf-8")
+        code, out, err = self.main(uninstall, ["--yes"])
+        self.assertEqual(code, 0, out + err)
+        self.assertFalse(self.state.exists())
+        self.assertTrue((self.cache / "downloads").is_dir(), "the cache folder holds what cad's never does")
 
     def test_nobody_to_ask_and_no_yes_changes_nothing(self) -> None:
         self.version(X)

@@ -49,7 +49,9 @@ it, and a store's copy of the plugin can run a different release from a person's
 has to understand another release's files or commands.
 
 **What it costs.** Disk space, until an old version is cleaned up, and settings changed in one
-version do not reach another.
+version do not reach another. Recents entries and cached records written to an older version after
+the newer one's one-time copy go when the cleanup removes it; files in a person's own project are
+never touched.
 
 ## Who updates what
 
@@ -120,7 +122,7 @@ run here. A row that is wrong fails for that app alone.
 
 **Decision.** `cad setup` takes one hidden option, `--engine-update`. It sets up the release, hands
 over from the layout of earlier releases, and starts the hosted install script once, in the
-background.
+background, once the site's script is this release's or later (it waits up to about an hour).
 
 **Why.** Releases 0.10.0 to 0.11.10 shipped an updater that installs a newer release and runs its
 `cad setup --engine-update`. That call is the only way those computers reach the new install model

@@ -533,24 +533,42 @@ class Cleanup(Device):
         self.assertEqual(versions.present(), [Y])
 
     @unittest.skipIf(os.name == "nt", "POSIX lists processes (ps); Windows has its own answer, the test below")
-    def test_running_spares_the_server_s_own_processes_and_no_other(self) -> None:
-        listed =("  10   1 /bin/zsh\n  20  10 /v/code/server/bin/python -m cad_server._internal.engine_daemon\n"
-                  "  21  20 /v/code/base/k/bin/python -m cad.engine.worker\n")
+    def test_running_spares_the_server_s_own_processes_and_the_asker_s_launchers_and_no_other(self) -> None:
+        listed = ("  10   1 /bin/zsh\n  20  10 /v/code/server/bin/python -m cad_server._internal.engine_daemon\n"
+                  "  21  20 /v/code/base/k/bin/python -m cad.engine.worker\n"
+                  "  30  10 /v/code/server/bin/python /v/code/server/bin/cad uninstall\n"
+                  "  31  30 /v/code/server/bin/python -m cad_server._internal.engine_daemon\n")
         done = subprocess.CompletedProcess([], 0, listed, "")
         with mock.patch.object(releases.subprocess, "run", return_value=done), \
                 mock.patch.object(releases.os.path, "realpath", side_effect=lambda path: str(path)):
             self.assertTrue(releases.running("/v"))
-            self.assertFalse(releases.running("/v", besides=20), "the server and its worker")
-            self.assertTrue(releases.running("/v", besides=21), "the worker alone: the server is another")
+            self.assertEqual(releases.processes("/v", besides=20), [30, 31], "the server and its worker spared")
+            self.assertEqual(releases.processes("/v", besides=21), [20, 30, 31], "the worker alone: the server is another")
+            # The asker and what started it are spared, never what it started: a server cad uninstall started
+            # itself is waited for like any other.
+            self.assertEqual(releases.processes("/v", asking=30), [20, 21, 31])
+            self.assertEqual(releases.processes("/v", asking=31), [20, 21])
 
     @unittest.skipIf(os.name != "nt", "Windows' answer; POSIX lists processes, the test above")
-    def test_running_on_windows_asks_nothing_and_leaves_the_folder_to_its_rename(self) -> None:
-        # Windows cannot be asked which process runs from a folder: False, nothing run, and the removal's rename
-        # aside, which the system refuses while a file there is in use (a running python.exe, a loaded .pyd), keeps it.
-        with mock.patch.object(releases.subprocess, "run") as run:
-            self.assertFalse(releases.running(r"C:\v"))
-            self.assertFalse(releases.running(r"C:\v", besides=20))
-        run.assert_not_called()
+    def test_running_on_windows_sees_a_process_whose_program_is_in_the_folder_until_it_ends(self) -> None:
+        # Windows cannot be asked a process's command line, but it says each process's program: a virtual
+        # environment's python.exe, a launcher that waits for the interpreter it starts, runs from the environment for
+        # as long as its interpreter does. Seen, spared as the asker or as besides, and gone once it has ended.
+        folder = self.root / "env"
+        subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(folder)], check=True)
+        child = subprocess.Popen([str(folder / "Scripts" / "python.exe"), "-c", "import sys; sys.stdin.read()"],
+                                 stdin=subprocess.PIPE)
+        self.addCleanup(child.kill)
+        ended = releases.exits(child.pid)
+        self.assertIn(child.pid, releases.processes(folder))
+        self.assertTrue(releases.running(folder))
+        self.assertNotIn(child.pid, releases.processes(folder, besides=child.pid))
+        self.assertNotIn(child.pid, releases.processes(folder, asking=child.pid))
+        self.assertEqual(releases.processes(self.root / "elsewhere"), [])
+        child.stdin.close()
+        self.assertTrue(ended(60.0), "the wait opened before it ended sees it end")
+        child.wait(timeout=60)
+        self.assertFalse(releases.running(folder))
 
 
     def test_the_server_cleans_as_it_starts_then_every_24_hours(self) -> None:

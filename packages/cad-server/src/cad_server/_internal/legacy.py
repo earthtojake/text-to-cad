@@ -11,8 +11,8 @@ why not yet), removed by the newest installed version's server in its cleanup, a
 Safe means all of: that version has its data imported (its marker); its server runs (``versions.serves``); no server
 but that version's own holds the flat engine folder every client of 0.11.10 and earlier finds (``flat_server``: one
 of those releases still running, or one started by uvx outside ``releases/``); no process runs from the layout
-(``releases.running`` on its release folders and its kernel environments; on Windows, where that cannot be asked, a
-rename that the system refuses for a file in use keeps the folder). A client of 0.11.10 or earlier that starts after
+(``releases.running`` on its release folders and its kernel environments: on Windows a process whose program is
+there; and on Windows a rename that the system refuses for a file in use keeps the folder too). A client of 0.11.10 or earlier that starts after
 it is gone finds the record ``installations/current`` names gone too, and starts a server of its own, as it would on
 a new computer. Nothing of an agent app's is read for it, and no record is kept: the layout's own folders are the
 record.
@@ -300,14 +300,16 @@ def _flat_legacy(status: dict | None) -> bool:
 
 
 def hand_over(version: str, told: Callable[[str], None] | None = None) -> bool:
-    """``cad setup`` of version ``version`` on a computer with the layout of 0.11.10 and earlier, reached by the install
-    command rather than by that layout's own updater (whose ``cad setup --engine-update`` writes the mirror, and whose
+    """``cad setup`` of version ``version``, reached by the install command rather than by the updater of the layout of
+    0.11.10 and earlier (whose ``cad setup --engine-update`` writes the mirror, and whose
     switch stops its own server):
 
     - the records clients of those releases start a server by written for ``version`` (``installations.mirror``)
-      where ``installations/current`` names a release of that layout, a version no longer installed, or an older one,
-      so such a client -- an app session still open on that release -- starts or finds ``version``'s server, which
-      holds the flat door once it is free (``daemon.Bridge``), rather than one of its own;
+      where ``installations/current`` names nothing (a new computer, one coming from 0.8), a release of that layout,
+      a version no longer installed, or an older one, so such a client -- an app session still open on that release,
+      or the library in a person's own Python, a process with no version, which starts the server ``current`` names
+      -- starts or finds ``version``'s server, which holds the flat door once it is free (``daemon.Bridge``), rather
+      than one of its own, or none;
     - a server of 0.11.10 or earlier that holds the flat door (``_flat_legacy``: it answers there, from outside
       ``versions/``) asked to stop once nothing is in flight there (``{"op": "stop", "drain": true}``, which every
       release since 0.10 speaks), never waited for: its work runs to its end, and the next client starts
@@ -322,8 +324,8 @@ def hand_over(version: str, told: Callable[[str], None] | None = None) -> bool:
     status = versions.ask_flat({"op": "status"}, seconds=ASK_SECONDS)
     serving = _flat_legacy(status)
     current = installations.current_version()
-    stale = current is not None and current != version and (current not in versions.present()
-                                                             or versions.older(current, version))
+    stale = current is None or current != version and (current not in versions.present()
+                                                        or versions.older(current, version))
     if serving or stale:
         try:
             installations.mirror(version)

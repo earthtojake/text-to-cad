@@ -671,7 +671,10 @@ As many past releases as reasonable can reach the latest one:
 - **0.10.0 to 0.11.10** update through their own updater, which installs the newest release and runs its
   `cad setup --engine-update`. That option, hidden from help and documents, sets the release up, hands
   over from the layout those releases kept, and starts the hosted install script once, in the
-  background, which brings each app's plugin up to date.
+  background, which brings each app's plugin up to date. It starts it only once the site's `install.py`
+  names the release (it waits up to about an hour), and `Publish Release` purges the version feed only
+  after `Deploy Docs`: those updaters run the release once, and the release before's script would leave
+  the apps as they were.
 - **Older releases** reach the latest when a person or an agent runs the install command. The script
   removes what each past layout left in the agent apps (`scripts/install/install.py`, the `cleanup` of
   each row of `APPS` and `remove_loose_skills`).
@@ -767,8 +770,8 @@ green: that is the release. `Publish Release`, on the merge commit:
    published either way.
 3. **Build.** `scripts/release/plugin_zip.py` builds the plugin ZIP from the
    untouched release commit, every pin in its skills stamped with its channel
-   (`cad +<VERSION>@codex`) and its launcher started with `--channel codex --startup-timeout 300` (the
-   config's own `startup_timeout_sec`), and checks it
+   (`cad +<VERSION>@codex`) and its launcher started with `--startup-timeout 300 --channel codex` (the
+   timeout is the repository's config's own, its `startup_timeout_sec`), and checks it
    against the portal's package rules,
    so a package the portal would refuse stops the release before anything
    irreversible; the ZIP is kept as a workflow artifact
@@ -824,12 +827,17 @@ green: that is the release. `Publish Release`, on the merge commit:
    the plugin ZIP and the source maps (`text-to-cad-sourcemaps-<version>.zip`, to
    upload a version's maps again) attached as release assets (PyPI stays the
    install channel; the release page is the provenance copy), and beside them the
-   one-line installer, `install.sh` and `install.ps1`, with their `SHA256SUMS`: the
-   copy pinned to the release (`Deploy Docs` serves the newest at texttocad.dev).
-   Also after the branches, the `feed` job purges the CDN cache that keeps the version
+   one-line installer, `install.sh`, `install.ps1` and `install.py`, with their `SHA256SUMS`:
+   this release's copies, kept for the record. They install no particular release: run from
+   anywhere, `install.sh` and `install.ps1` download the newest `install.py` from
+   texttocad.dev (`Deploy Docs` serves it), which installs the newest release.
+   After the branches and `Deploy Docs`, the `feed` job purges the CDN cache that keeps the version
    feed's answer an hour (`api.texttocad.dev`), five minutes after them, when no
    instance of the feed's function still holds what it read from PyPI before: best
-   effort, and nothing waits on it.
+   effort, and nothing waits on it. It waits for the docs because an updater of 0.10.0 to
+   0.11.10 that reads the feed runs the release's `cad setup --engine-update` once, which
+   starts the hosted install script; that script (`cad_server._internal.install_script`)
+   also waits, up to about an hour, until the site's `install.py` names the release.
 
 `main` has the new pins from the merge on, a few minutes before PyPI has the
 wheels. Only an install of `main` itself sees that: a command that names no
@@ -924,8 +932,8 @@ the build when what it replaces is not there exactly once:
 | --- | --- | --- | --- |
 | Pins | as `main` | `@codex` | `@claude` |
 | Setup block's update paragraph | as `main` | left out | left out |
-| Launcher | as `main` | `cad-mcp --channel codex --startup-timeout 300` in `.mcp.json` (the number its `startup_timeout_sec`) | none: no MCP config |
-| README's install section | the two one-liners and what they do | no README | the `uvx` command and one paragraph |
+| Launcher | as `main`: `cad-mcp --startup-timeout 300` in `codex.mcp.json` (the number its `startup_timeout_sec`) | `cad-mcp --startup-timeout 300 --channel codex` in `.mcp.json` | none: no MCP config |
+| README's install section | the `uvx` command and one paragraph | no README | the `uvx` command and one paragraph |
 | `.claude-plugin/plugin.json` | as `main` | not shipped | without `documentationUrl`, `privacyPolicyUrl`, `supportUrl` and `termsOfServiceUrl`, which the directory's validation does not know; the README links the same pages |
 
 `CAD_INSTALL_CHANNEL` and `CAD_AUTO_UPDATED`, which the configs of 0.11.10 and earlier set, are
@@ -952,7 +960,8 @@ holding no plugin.) The portal requires `mcpServers` to resolve to a root
 `.mcp.json`, so a server config the checkout keeps under another name is
 archived as `.mcp.json`, and the archived manifest points there. That config
 starts the launcher with its channel as an argument, `cad-mcp --channel codex`, and
-Codex's startup timeout, the config's own `startup_timeout_sec`, as `--startup-timeout 300` (the
+Codex's startup timeout, the config's own `startup_timeout_sec`, as `--startup-timeout 300` (kept from the
+repository's `codex.mcp.json`, which tells it so for `latest` and `main` too; the
 launcher holds a first start's `initialize` for 80% of it, the rest of it left to uvx starting the launcher before the `initialize` arrives and to the server's start and its own answer after the version is ready: Codex acts on no
 `tools/list_changed` within a turn, `apps/mcp/README.md`), and sets no environment.
 
@@ -1113,10 +1122,12 @@ admin's or an agent's with an admin's credentials included. Its gate stops a
 release on `main` that lacks the secret, before the PyPI upload. GitHub allows no
 exception for the workflow's own token on a personal account's repository. To
 replace the key, add a new write deploy key, set the secret to its private half,
-then delete the old key. A new install branch needs both rulesets extended to it, and
-the deploy key's write permission over it, before its first release: the owner does this once
-in the repository's settings (for `codex-plugin`, before the release that first writes it), or
-the release's atomic push of the branches fails. The source map upload needs three more secrets, which the
+then delete the old key. A deploy key cannot be limited to some branches: its write access is
+to the whole repository, and the rulesets are what keep everyone else off the install branches
+(the deploy key is their one bypass). A new install branch needs both rulesets extended to it
+before its first release, the owner's change once in the repository's settings (for
+`codex-plugin`, before the release that first writes it): without it the branch is not protected,
+though the release's push still succeeds. The source map upload needs three more secrets, which the
 gate checks the same way: `POSTHOG_CLI_API_KEY`, a PostHog personal API key scoped to
 the telemetry project with `error_tracking:write` alone (not the receiver's, which
 lives in Vercel); `POSTHOG_CLI_PROJECT_ID`; and `POSTHOG_CLI_HOST`

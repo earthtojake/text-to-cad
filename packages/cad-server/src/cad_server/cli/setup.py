@@ -17,9 +17,11 @@ Steps 1 to 5 are ``versions.make_present``. The first setup of a version also gi
 copied ONCE from the newest older installed version, or, on a computer coming from 0.11.10 and earlier, from that
 layout, what 0.7 and 0.8 kept in their own folder taken into it first (``cad_server._internal.imports.ensure``;
 nothing once they are there). On a computer an earlier release ran on, what it left running is handed over
-(``cad_server._internal.legacy``: ``stop_earlier``, ``hand_over``): 0.8's server stopped by its own stop command,
-and a server of 0.11.10 or earlier asked to stop once idle, with the records its clients start a server by naming
-this version.
+(``cad_server._internal.legacy``: ``stop_earlier``, ``hand_over``): 0.8's server (and 0.10.0's on Windows) stopped by
+its own stop command BEFORE that copy, so nothing it writes after it is lost, and a server of 0.11.10 or earlier asked
+to stop once idle. The records a process with no version starts a server by (``installations/current`` and the
+record it names: a client of 0.11.10 and earlier, the library in a person's own Python) are written for this version
+where they name nothing yet, a version not installed, or an older one (``legacy.hand_over``).
 
 Last, setup starts the version's own server, detached, where none runs (``_serve``): setup always runs outside an
 agent's sandbox, since it installs, and a sandboxed shell cannot start a server, so every later session -- an agent's
@@ -38,8 +40,12 @@ half, it stops once the version is present), then the hand-over from that layout
 ``installations.mirror``: the installation record naming the version's server and ``installations/current`` naming
 the version, so the switch starts this version's server, which holds the flat door its clients find), and then
 starts the hosted install script once, detached, never waited on: ``curl -fsSL https://texttocad.dev/install.sh | sh`` (Windows PowerShell: ``irm
-https://www.texttocad.dev/install.ps1 | iex``). ``CAD_ENGINE_UPDATE_INSTALLER`` names a command to run instead (a test
-names a stand-in), and empty, runs nothing.
+https://www.texttocad.dev/install.ps1 | iex``), by a program of its own that first waits, up to about an hour, until
+the site's ``install.py`` names this release or a later one (``cad_server._internal.install_script``): the site is
+deployed after the version feed names a release, and the script of the release before would set up cad alone.
+``CAD_ENGINE_UPDATE_INSTALLER`` names a command to run instead (a test names a stand-in), and empty, runs nothing;
+``CAD_ENGINE_UPDATE_INSTALL_PY`` names the ``install.py`` that wait reads (a test's own server), and empty, waits for
+none, as a command ``CAD_ENGINE_UPDATE_INSTALLER`` names waits for none unless it is set.
 
 Exit status: 0 done; 1 a step failed; 2 bad arguments; 3 this version cannot be installed from this shell (no uv, no
 network for what uv's cache lacks, a folder it may not write: an agent's sandbox).
@@ -62,6 +68,8 @@ INSTALLER_ENV = "CAD_ENGINE_UPDATE_INSTALLER"
 INSTALLER = ("sh", "-c", "curl -fsSL https://texttocad.dev/install.sh | sh")
 INSTALLER_WINDOWS = ("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
                      "irm https://www.texttocad.dev/install.ps1 | iex")
+# The ``install.py`` the installer is started after, once it names this release (``install_script``): its address.
+INSTALL_PY_ENV = "CAD_ENGINE_UPDATE_INSTALL_PY"
 # How long setup waits for the server it started to answer at its door (``_serve``): a server answers there within a
 # second or two of starting; its kernel processes start with its first build, never here.
 SERVE_SECONDS = 30.0
@@ -138,8 +146,11 @@ def _present(name: str) -> int | None:
     return None
 
 
-def _command(name: str) -> int | None:
-    """Step 6: the ``cad`` command written where it is missing or older. None when it is there; else 1, said."""
+def _command(name: str, *, engine_update: bool = False) -> int | None:
+    """Step 6: the ``cad`` command written where it is missing or older. None when it is there; else 1, said. For
+    ``--engine-update`` (``engine_update``) a command that could not be written -- a file of that name that is not
+    cad's, a folder it may not write -- is said and the run goes on: the shipped updater that runs it needs the
+    hand-over and the install script, not the command, and would otherwise fail the same way every day."""
     from cad_server._internal import installations
     from cad_server._internal.cli_errors import FAILED
 
@@ -147,7 +158,7 @@ def _command(name: str) -> int | None:
     if error is not None or status == installations.FOREIGN:
         why = error or "a file of that name there is not cad's, and is left alone"
         _say(f"cad {name} is installed, but the cad command could not be written at {path}: {why}")
-        return FAILED
+        return None if engine_update else FAILED
     return None
 
 
@@ -162,6 +173,7 @@ def setup() -> int:
              f"({places.INSTALLATION_ENV})")
         return FAILED
     was = places.version_record(name) is not None
+    _stop_earlier()
     failed = _present(name)
     if failed is not None:
         return failed
@@ -226,28 +238,42 @@ def engine_update() -> int:
         return _again(record["cad"])
     if prepare:
         return _present(name) or 0
-    failed = _present(name) or _command(name)
+    failed = _present(name) or _command(name, engine_update=True)
     if failed is not None:
         return failed
     failed = _hand_over(name)
     if failed is not None:
         return failed
     _arrive(name, engine_update=True)
-    start_installer()
+    start_installer(name)
     return 0
 
 
-def _arrive(name: str, *, engine_update: bool) -> bool:
-    """What earlier releases left running, handed over to version ``name`` (``cad_server._internal.legacy``): the
-    servers of 0.8 (and of 0.10.0 on Windows) stopped by their own stop command; and, by the install command's route
-    (not an updater's, whose own switch stops its server), the mirror written and a server of 0.11.10 or earlier at
-    the flat door asked to stop once idle. Whether such a server was asked to stop (it still runs). Never a failed
+def _stop_earlier() -> None:
+    """The servers of 0.8 (and of 0.10.0 on Windows) stopped by their own stop command (``legacy.stop_earlier``),
+    before this version's data is copied in: what such a server wrote after the copy would be lost. Never a failed
     setup."""
     from cad_server._internal import legacy
 
     try:
         legacy.stop_earlier(_say)
-        if not engine_update:
+    except Exception as error:  # noqa: BLE001 - what an earlier release left never fails this version's setup
+        _say(f"what an earlier release left running was not stopped: {type(error).__name__}: {error}")
+
+
+def _arrive(name: str, *, engine_update: bool) -> bool:
+    """What earlier releases left running, handed over to version ``name`` (``cad_server._internal.legacy``): for
+    ``--engine-update``, the servers of 0.8 (and of 0.10.0 on Windows) stopped by their own stop command (plain setup
+    stops them before its copy, ``_stop_earlier``); and, by the install command's route (not an updater's, whose own
+    switch stops its server), the mirror written where it names nothing, a version not installed or an older one, and
+    a server of 0.11.10 or earlier at the flat door asked to stop once idle. Whether such a server was asked to stop
+    (it still runs). Never a failed setup."""
+    from cad_server._internal import legacy
+
+    try:
+        if engine_update:
+            legacy.stop_earlier(_say)
+        else:
             return legacy.hand_over(name, _say)
     except Exception as error:  # noqa: BLE001 - what an earlier release left never fails this version's setup
         _say(f"what an earlier release left running was not handed over: {type(error).__name__}: {error}")
@@ -309,15 +335,32 @@ def installer() -> list[str] | str:
     return list(INSTALLER_WINDOWS if os.name == "nt" else INSTALLER)
 
 
-def start_installer() -> int | None:
+def install_py() -> str | None:
+    """The ``install.py`` whose fallback release the installer waits for (``install_script``):
+    ``CAD_ENGINE_UPDATE_INSTALL_PY``'s where it is set (empty: none), else none for a command
+    ``CAD_ENGINE_UPDATE_INSTALLER`` names, else the site's."""
+    from cad_server._internal import install_script
+
+    if INSTALL_PY_ENV in os.environ:
+        return os.environ[INSTALL_PY_ENV].strip() or None
+    return None if INSTALLER_ENV in os.environ else install_script.URL
+
+
+def start_installer(name: str | None = None) -> int | None:
     """The install script (``installer``) started once, detached -- a session of its own, its output nowhere --
-    and never waited on: the updater that runs this command reads its output until it ends. Its process id, or
-    None where there is none to start, or it could not start (said)."""
+    and never waited on: the updater that runs this command reads its output until it ends. Started by a program of
+    this version's Python that first waits until ``install_py`` names version ``name`` (this one's by default) or a
+    later one (``cad_server._internal.install_script``), where there is one to wait for. Its process id, or None
+    where there is none to start, or it could not start (said)."""
     from cad.engine.places import detached
 
     command = installer()
     if not command:
         return None
+    version, url = name or _name(), install_py()
+    if url and version:
+        command = [sys.executable, "-I", "-m", "cad_server._internal.install_script", version, url, "--",
+                   *([command] if isinstance(command, str) else command)]
     try:
         started = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL, env=_environment(), close_fds=True, **detached())

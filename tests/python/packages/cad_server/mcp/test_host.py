@@ -41,6 +41,12 @@ class LauncherTest(unittest.TestCase):
                 ([[NPM_CODEX, "resume", "--last"]], "codex resume", False),
                 ([UVX, *CODEX_APP], "codex app-server", True),
                 ([["codex", "app-server"]], "codex app-server", True),
+                # An option this does not know, its value spelled apart: the app server all the same.
+                ([["codex", "--log-dir", "/x", "app-server"]], "codex app-server", True),
+                # The Codex app's own Electron processes name no subcommand: never the app server.
+                ([["/Applications/Codex.app/Contents/MacOS/Codex", "--type=utility",
+                   "--utility-sub-type=node.mojom.NodeService"]], "codex", False),
+                ([["/Applications/Codex.app/Contents/MacOS/Codex"]], "codex", False),
                 ([UVX, *CLAUDE_CODE], "claude code", False),
                 (CLAUDE_DESKTOP, "claude desktop", True),
                 (CLAUDE_DESKTOP[1:], "claude desktop", True),

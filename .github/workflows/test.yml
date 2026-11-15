@@ -165,8 +165,11 @@ jobs:
           scripts/release/check-version.sh
           node scripts/release/sync-version.mjs --check
 
+      # `shell: bash` runs the step with pipefail: without it the default shell takes tee's status, and a
+      # refusal the guard printed would pass the step.
       - name: Check what merging releases
         if: github.event_name == 'pull_request'
+        shell: bash
         env:
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: scripts/release/check-pr-version.sh "$HEAD_REPO" | tee -a "$GITHUB_STEP_SUMMARY"

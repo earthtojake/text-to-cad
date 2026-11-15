@@ -498,8 +498,10 @@ def mirror(version: str, folder=None) -> bool:
     """The records a client of 0.11.10 or earlier starts a server by, written for installed version ``version``: its
     record naming its server environment (its code marker's interpreter, console script and environment), and
     ``current`` naming it, so such a client -- the switch of a shipped updater handing over to it among them -- starts
-    or finds that version's server (``versions.flat``). Written by ``cad setup --engine-update`` alone. Whether it was
-    written (False: ``version`` is not installed). ``OSError`` when it cannot be."""
+    or finds that version's server (``versions.flat``), as does a process with no version (the library in a person's
+    own Python). Written by ``cad setup --engine-update``, and by ``cad setup`` where ``current`` names nothing, a
+    version not installed or an older one (``legacy.hand_over``). Whether it was written (False: ``version`` is not
+    installed). ``OSError`` when it cannot be."""
     from cad.engine.places import version_record
 
     record = version_record(version)
@@ -513,6 +515,10 @@ def mirror(version: str, folder=None) -> bool:
 
 # --- the proxy --------------------------------------------------------------------------------
 
+# Both command files below order versions (their ``older``) for the two forms a version's name takes: a release,
+# always ``X.Y.Z`` (never a pre-release), and a development build ``X.Y.Z-dev.<stamp>``, after its release. They agree
+# with ``versions.order`` on those forms; PEP 440's pre-releases and post-releases, which no release is, they do not
+# order as it does.
 _SH = """#!/bin/sh
 # {mark}{revision}
 # The cad command. `cad +<version>[@<name>] ...` runs that version of cad and no other: its own cad, which

@@ -469,11 +469,11 @@ def stop_server(name: str) -> bool:
     return gone(name)
 
 
-def gone(name: str, seconds: float = STOP_SECONDS, *, besides: int | None = None) -> bool:
+def gone(name: str, seconds: float = STOP_SECONDS, *, besides: int | None = None, asking: int | None = None) -> bool:
     """Whether version ``name``'s server, asked to stop (by this process or another, answered or not: a server on
     its way out answers nothing more), is gone within ``seconds``: its lock free -- held until its workers have
-    stopped -- and then no process left running from its folder (``quiet``; ``besides`` as there). What every removal
-    waits for before it tries the folder."""
+    stopped -- and then no process left running from its folder (``quiet``; ``besides`` and ``asking`` as there). What
+    every removal waits for before it tries the folder."""
     from cad.engine import client
 
     began = time.monotonic()
@@ -482,7 +482,8 @@ def gone(name: str, seconds: float = STOP_SECONDS, *, besides: int | None = None
             return False
     except ConnectionError:
         return False
-    return quiet(places.version_dir(name), max(0.0, seconds - (time.monotonic() - began)), besides=besides)
+    return quiet(places.version_dir(name), max(0.0, seconds - (time.monotonic() - began)), besides=besides,
+                 asking=asking)
 
 
 # How long a removal waits for the processes of a version whose server has let its lock go to end (``quiet``): a
@@ -490,15 +491,18 @@ def gone(name: str, seconds: float = STOP_SECONDS, *, besides: int | None = None
 QUIET_SECONDS = 10.0
 
 
-def quiet(folder: Path, seconds: float | None = None, *, besides: int | None = None) -> bool:
+def quiet(folder: Path, seconds: float | None = None, *, besides: int | None = None,
+          asking: int | None = None) -> bool:
     """Whether no process runs from ``folder`` (``releases.running``), awaited for ``seconds`` at most
     (``QUIET_SECONDS``): a server lets its lock go, and removes it, before its process, and its workers', have ended.
-    ``besides``: a process that does not count, nor its descendants: the one asking, where it runs from the folder
-    itself (``cad uninstall`` typed in a terminal runs from the version it removes)."""
+    ``besides``: a process that does not count, nor its descendants (a server and its workers). ``asking``: a process
+    that does not count, nor its ancestors: the one asking, where it runs from the folder itself (``cad uninstall``
+    typed in a terminal runs from the version it removes, started by launchers there), while a server it started
+    still counts."""
     from cad_server._internal import releases
 
     deadline = time.monotonic() + (QUIET_SECONDS if seconds is None else seconds)
-    while releases.running(folder, besides=besides):
+    while releases.running(folder, besides=besides, asking=asking):
         if time.monotonic() >= deadline:
             return False
         time.sleep(0.05)
@@ -528,7 +532,8 @@ def flat(name: str | None) -> bool:
     """Whether version ``name``'s server holds the flat door of 0.11.10 and earlier (``places.engines_dir``'s own
     ``engine.door``, on Windows ``engine.port``, and ``engine.lock``) beside its own, and answers every client of
     those releases there: it is the version ``installations/current`` names, the record those clients start a server
-    by. Only the hand-over from a shipped release (``cad setup --engine-update``) and a registration where none is
+    by. Only ``cad setup`` (``installations.mirror``: its hand-over from a shipped release, ``--engine-update``, and a
+    setup where ``current`` names nothing, a version not installed or an older one) and a registration where none is
     current (``installations.bootstrap``) write that file."""
     from cad_server._internal import installations
 

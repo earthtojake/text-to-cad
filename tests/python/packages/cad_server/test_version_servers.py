@@ -160,6 +160,23 @@ class FlatDoor(Servers):
         self.assertTrue(self.within(self.old({"op": "status"}, start=False)["prefix"], Y))
 
 
+class ShippedSwitchAtTheFlatDoor(Servers):
+    def test_a_shipped_updater_s_drain_lets_the_flat_door_go_and_never_the_version_s_server(self) -> None:
+        """0.11.10's switch asks whatever holds the flat door to drain before it points ``installations/current``
+        (``{"op": "stop", "drain": true}``, unmarked): a version's server lets that door go, and only that, so the
+        switch goes on and the version's own sessions are not stopped; a process of the version takes it back."""
+        self.version(X)
+        self.assertTrue(installations.mirror(X))
+        x = self.start(X)
+        self.until(lambda: versions.ask(X, {"op": "status"})["bridge"], "its server holds the flat door")
+        self.assertEqual(self.old({"op": "stop", "drain": True}, start=False), {"ok": True, "draining": True})
+        self.until(lambda: not versions.ask(X, {"op": "status"})["bridge"], "the flat door let go")
+        self.assertIsNone(self.old({"op": "pid"}, start=False), "nothing answers at the flat door")
+        self.assertEqual(versions.ask(X, {"op": "pid"})["pid"], x, "the version's server runs on at its own door")
+        self.assertEqual(versions.ask(X, {"op": "bridge"}), {"ok": True, "flat": True}, "taken back when asked")
+        self.assertEqual(self.old({"op": "pid"}, start=False)["pid"], x)
+
+
 class PortHandedToARunningServer(Servers):
     def test_the_flat_door_asked_for_the_old_port_on_a_server_serving_another_takes_it_too_and_never_fails(self) -> None:
         """0.11.10's switch helper asks the server ``installations/current`` names, through the flat door, to serve on the port 0.11.10

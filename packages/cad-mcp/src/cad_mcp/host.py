@@ -40,7 +40,12 @@ def _name(path: str) -> str:
 
 
 def _codex_subcommand(args: list[str]) -> str | None:
-    """The subcommand of a ``codex`` command line (its arguments after the program), else None."""
+    """The subcommand of a ``codex`` command line (its arguments after the program), else None. ``app-server``
+    wherever it stands: Codex has options whose values are spelled apart (``--log-dir DIR``) that this does not list,
+    and its app server is the one that shows CAD tabs. Electron's processes of the Codex app (``Codex --type=...``)
+    name no subcommand."""
+    if "app-server" in args:
+        return "app-server"
     skip = False
     for arg in args:
         if skip:

@@ -64,7 +64,7 @@ def condition(job: str) -> str:
 
 def evaluate(expression: str, results: dict[str, str], outputs: dict[str, str], ref: str = "refs/heads/main") -> bool:
     """A job condition, given the needed jobs' results, the gate's outputs and the run's ref."""
-    expression = re.sub(r"needs\.(\w+)\.result (==|!=) '(\w*)'",
+    expression = re.sub(r"needs\.([\w-]+)\.result (==|!=) '(\w*)'",
                         lambda m: str((results[m[1]] == m[3]) == (m[2] == "==")), expression)
     expression = re.sub(r"github\.ref (==|!=) '([^']*)'", lambda m: str((ref == m[2]) == (m[1] == "==")), expression)
     expression = re.sub(r"needs\.gate\.outputs\.(\w+) (==|!=) '(\w*)'",
@@ -236,15 +236,18 @@ class PublishGate(unittest.TestCase):
 
     def test_the_version_feed_names_the_release_once_the_branches_carry_it(self):
         # The feed (apps/api) reads PyPI, but Vercel's edge keeps its answer an hour. Once the branches every
-        # install takes carry the release -- after the pypi job's wait for PyPI's index, which they need --
-        # a job of its own purges that cache, on main alone, and nothing waits on it.
+        # install takes carry the release -- after the pypi job's wait for PyPI's index, which they need -- and
+        # the docs site serves the release's install script (a shipped updater that reads the feed starts that
+        # script once), a job of its own purges that cache, on main alone, and nothing waits on it.
         feed = condition("feed")
-        self.assertTrue(evaluate(feed, {"branches": "success"}, {"is_main": "true"}))
-        self.assertFalse(evaluate(feed, {"branches": "success"}, {"is_main": "false"}))
+        done = {"branches": "success", "deploy-docs": "success"}
+        self.assertTrue(evaluate(feed, done, {"is_main": "true"}))
+        self.assertFalse(evaluate(feed, done, {"is_main": "false"}))
         for result in ("failure", "skipped", "cancelled"):
-            self.assertFalse(evaluate(feed, {"branches": result}, {"is_main": "true"}))
+            self.assertFalse(evaluate(feed, {**done, "branches": result}, {"is_main": "true"}))
+            self.assertFalse(evaluate(feed, {**done, "deploy-docs": result}, {"is_main": "true"}))
         body = JOBS["feed"]
-        self.assertRegex(body, re.compile(r"^    needs:\n      - gate\n      - branches\n", re.M))
+        self.assertRegex(body, re.compile(r"^    needs:\n      - gate\n      - branches\n      - deploy-docs\n", re.M))
         self.assertEqual([job for job, text in JOBS.items() if re.search(r"^      - feed$", text, re.M)], [])
         # The job that may mint a PyPI token runs nothing from npm; this one holds no token at all.
         self.assertNotRegex(JOBS["pypi"], r"\b(npm|npx|vercel)\b")
@@ -270,8 +273,9 @@ class PublishGate(unittest.TestCase):
                       JOBS["publish"].split("- name: Rehearsal summary (build-test)", 1)[1])
 
     def test_the_release_carries_the_installer_and_its_checksums(self):
-        # releases/download/v<VERSION>/install.sh is the installer pinned to a release (texttocad.dev
-        # serves the newest), checked against the SHA256SUMS beside it; a rehearsal lists the same.
+        # releases/download/v<VERSION>/ keeps the release's installer files for the record, checked against the
+        # SHA256SUMS beside them (install.sh, run from anywhere, downloads the newest install.py from
+        # texttocad.dev); a rehearsal lists the same.
         body = JOBS["tag-release"]
         gather = body.split("- name: Gather the installer scripts and their checksums\n", 1)[1].split("\n      - name: ", 1)[0]
         self.assertIn("cp scripts/install/install.sh scripts/install/install.ps1 scripts/install/install.py", gather)

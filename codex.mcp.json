@@ -9,7 +9,9 @@
         "3.14",
         "--from",
         "cad-mcp==0.11.11",
-        "cad-mcp"
+        "cad-mcp",
+        "--startup-timeout",
+        "300"
       ],
       "startup_timeout_sec": 300
     }

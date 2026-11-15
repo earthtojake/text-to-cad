@@ -205,10 +205,16 @@ class PluginTreeTests(unittest.TestCase):
                         self.assertNotIn(b"CAD_AUTO_UPDATED", data)
                         if copy != "codex":
                             self.assertNotIn(b"--channel", data)
-                            self.assertNotIn(b"--startup-timeout", data)
         codex = branch.build(REPO_ROOT, "codex")[0]
         args = json.loads(codex[".mcp.json"][1])["mcpServers"]["cad"]["args"]
         self.assertEqual(args[args.index("--channel") + 1], "codex")
+        # Every copy with a server tells its launcher Codex's startup timeout, once (latest's from main's file).
+        latest = branch.build(REPO_ROOT, "latest")[0]
+        for config in (json.loads(latest["codex.mcp.json"][1]), json.loads(codex[".mcp.json"][1])):
+            server = config["mcpServers"]["cad"]
+            self.assertEqual(server["args"].count("--startup-timeout"), 1)
+            self.assertEqual(server["args"][server["args"].index("--startup-timeout") + 1],
+                             f"{server['startup_timeout_sec']:g}")
 
     def test_readme_links_outside_the_tree_point_at_the_commit(self) -> None:
         text = ('[cad](skills/cad/SKILL.md) [dir](skills/cad/) [license](LICENSE) [web](https://x.dev) [top](#install)\n'

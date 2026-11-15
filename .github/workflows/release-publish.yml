@@ -572,18 +572,22 @@ jobs:
   # The version feed (api.texttocad.dev/v1/versions, apps/api) names the newest release PyPI lists, and
   # the install command and every copy's hourly update check read it; but Vercel's edge keeps each answer
   # an hour (s-maxage=3600), so for up to an hour after a release the feed can still name the one before.
-  # Once the install branches carry the release -- the plugin every install takes -- this purges the API
-  # project's CDN cache, and the feed names the release at once. Its own job, after the branches: the
-  # pypi job, the one that may mint a PyPI token, runs nothing from npm. Best effort, and nothing waits
-  # on it (the network never blocks a release): without the Vercel secrets, or when the purge fails, the
-  # feed names the release within the hour on its own, and meanwhile the install command's script
-  # installs at least the release stamped into it.
+  # Once the install branches carry the release -- the plugin every install takes -- and the docs site
+  # serves its install script, this purges the API project's CDN cache, and the feed names the release at
+  # once. After the docs: an updater of 0.10.0 to 0.11.10 that reads the feed runs the release's hidden
+  # `cad setup --engine-update` once, which starts the hosted install script (and waits, up to an hour, for
+  # the site's install.py to name the release: cad_server._internal.install_script). A docs deploy that
+  # failed purges nothing; re-running it re-runs this. Its own job: the pypi job, the one that may mint a
+  # PyPI token, runs nothing from npm. Best effort, and nothing waits on it (the network never blocks a
+  # release): without the Vercel secrets, or when the purge fails, the feed names the release within the
+  # hour on its own, and meanwhile the install command's script installs at least the release stamped into it.
   feed:
     name: Version feed
     needs:
       - gate
       - branches
-    if: ${{ !cancelled() && needs.branches.result == 'success' && needs.gate.outputs.is_main == 'true' }}
+      - deploy-docs
+    if: ${{ !cancelled() && needs.branches.result == 'success' && needs.deploy-docs.result == 'success' && needs.gate.outputs.is_main == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions: {}
@@ -695,8 +699,10 @@ jobs:
           path: ${{ runner.temp }}/sourcemaps
 
       # The one-line installer as this release publishes it (install.sh, install.ps1 and install.py, the
-      # program both run), and the SHA-256 of each: releases/download/v<VERSION>/ holds the copies of this
-      # release (texttocad.dev serves the newest), and SHA256SUMS is what a person checks a download against.
+      # program both run), and the SHA-256 of each: releases/download/v<VERSION>/ keeps this release's copies
+      # for the record, and SHA256SUMS is what a person checks a download against. They are not an installer
+      # pinned to the release: install.sh and install.ps1, wherever they are run from, download the newest
+      # install.py from texttocad.dev, which installs the newest release.
       - name: Gather the installer scripts and their checksums
         run: |
           mkdir -p "$RUNNER_TEMP/installer"

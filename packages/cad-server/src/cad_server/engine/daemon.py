@@ -1747,13 +1747,22 @@ class Daemon:
             # (``cad_server._internal.versions.connected``). An idle app's hold and an open page do not.
             send({"ok": True, "working": self.working()})
         elif op == "bridge":
-            # The flat door of 0.11.10 and earlier looked at again (``Bridge``): after ``installations/current`` moved.
-            send({"ok": True, "flat": self.bridge.reconcile()})
+            # The flat door of 0.11.10 and earlier looked at again (``Bridge``): after ``installations/current`` moved,
+            # or by a process of this version started while it runs (``_front``), which takes it at once.
+            send({"ok": True, "flat": self.bridge.reconcile(now=True)})
         elif op == "token":
             # ``cad server --rotate-token`` (``rotate_token``): the page token read again, taken at once.
             send(self.retoken())
         elif op == "stop":
-            # ``drain``: an update's switch, which waits for what is in flight (``drain``); else at once.
+            # ``drain``: an update's switch, which waits for what is in flight (``drain``); else at once. A drain no
+            # process of this release asked (``internal`` unmarked) is a shipped updater's of 0.10.0 to 0.11.10, which
+            # knows only the flat door: a version's server holding it lets that door go, and only that
+            # (``Bridge.step_aside``), never its own door's sessions.
+            if request.get("drain") and not request.get("internal") and versioned() is not None \
+                    and self.bridge.held is not None:
+                self.bridge.step_aside()
+                send({"ok": True, "draining": True})
+                return
             send({"ok": True, "draining": True} if request.get("drain") else {"ok": True})
             if request.get("drain"):
                 self.drain()
@@ -2337,8 +2346,18 @@ class Bridge:
 
     Held only by a server whose version ``installations/current`` names (``versions.flat``): taken as it starts and
     at each tending while it does, and on ``{"op": "bridge"}`` (a process of its version started while it runs,
-    ``_front``); let go once it does not. A server with no version (a checkout's, a test's) does not hold this: its
-    own door is that folder already."""
+    ``_front``); let go once it does not. A drain a shipped updater asks (``{"op": "stop", "drain": true}``, unmarked:
+    its switch stops what holds the flat door before it points ``installations/current``) lets this door go alone
+    (``step_aside``), and the tending leaves it free for ``ASIDE_SECONDS``, so that switch finds the door free and
+    goes on: to this version, whose process it starts fronts this server and takes the door back at once
+    (``bridge``); to another, whose server takes it. Never retried faster than the tending: a server that takes the
+    flat door the moment a shipped server lets it go would make that release's switch, which waits for the door to
+    go quiet, fail. A server with no version (a checkout's, a test's) does not hold this: its own door is that folder
+    already."""
+
+    # How long the flat door stays free after a shipped updater's drain asked it to (``step_aside``): its switch then
+    # takes the lock within moments to point ``installations/current``.
+    ASIDE_SECONDS = 15.0
 
     def __init__(self, daemon: "Daemon") -> None:
         self.daemon = daemon
@@ -2349,6 +2368,8 @@ class Bridge:
         # The port the server of 0.11.10 or earlier that held the flat door last said it served pages on (``_take``):
         # this server takes it as it takes the door, should that server's updater not ask in time.
         self.predecessor: int | None = None
+        # Until when (monotonic) the tending leaves the flat door free (``step_aside``).
+        self.aside_until = 0.0
 
     @staticmethod
     def folder() -> Path:
@@ -2365,17 +2386,25 @@ class Bridge:
         except Exception:  # noqa: BLE001 - a state folder it cannot read: kept as it is
             return self.held is not None
 
-    def reconcile(self) -> bool:
+    def reconcile(self, *, now: bool = False) -> bool:
         """Held when wanted and free, let go when not wanted (and taken anew when its door went from under it):
-        whether it is held now."""
+        whether it is held now. Not taken while a shipped updater's drain set it aside (``step_aside``) unless
+        ``now`` (``{"op": "bridge"}``)."""
         with self.lock:
             want = self.wanted()
             if self.held is not None and (not want or (self.door is not None and _identity(self.door.path)
                                                        != self.identity)):
                 self._let_go()
-            if want and self.held is None:
+            if want and self.held is None and (now or time.monotonic() >= self.aside_until):
                 self._take()
             return self.held is not None
+
+    def step_aside(self) -> None:
+        """The flat door let go for a shipped updater's switch, and left free by the tending for ``ASIDE_SECONDS``
+        (see the class)."""
+        with self.lock:
+            self.aside_until = time.monotonic() + self.ASIDE_SECONDS
+            self._let_go()
 
     def _take(self) -> None:
         folder = self.folder()

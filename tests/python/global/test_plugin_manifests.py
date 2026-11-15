@@ -269,7 +269,10 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertNotIn("--offline", args)
         self.assertGreaterEqual(server.get("startup_timeout_sec", 0), 300)
         self.assertIn("--no-config", args)
-        self.assertEqual(args[-1], "cad-mcp")
+        # Its launcher told the same startup timeout, so its first start holds Codex's initialize that long rather
+        # than answer early with no tools (Codex acts on no tools/list_changed within a turn): `latest` and `main`
+        # are installed from this file.
+        self.assertEqual(args[args.index("cad-mcp"):], ["cad-mcp", "--startup-timeout", f"{server['startup_timeout_sec']:g}"])
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         self.assertEqual(args[args.index("--from") + 1], f"cad-mcp=={version}")
 
@@ -327,7 +330,8 @@ class PluginManifestPolicyTest(unittest.TestCase):
         expected = mcp_command(version)[1:]
         self.assertEqual(expected, [*LAUNCHER[1:], f"cad-mcp=={version}", "cad-mcp"])
         server = load_json(CODEX_MCP_PATH)["mcpServers"]["cad"]
-        self.assertEqual((server["command"], server["args"]), (LAUNCHER[0], expected))
+        self.assertEqual((server["command"], server["args"][:len(expected)]), (LAUNCHER[0], expected))
+        self.assertEqual(server["args"][len(expected):], ["--startup-timeout", f"{server['startup_timeout_sec']:g}"])
 
     def test_no_plugin_on_main_names_a_channel(self) -> None:
         # Main's text is our own, the default channel: Codex's config, the one there is, names no channel or says
@@ -337,8 +341,6 @@ class PluginManifestPolicyTest(unittest.TestCase):
         server = load_json(CODEX_MCP_PATH)["mcpServers"]["cad"]
         self.assertNotIn("env", server)
         self.assertNotIn("--channel", server["args"])
-        # Nor the shim's startup timeout: only the store's builder tells its launcher that (plugin_zip.py).
-        self.assertNotIn("--startup-timeout", server["args"])
 
     def test_no_stale_plugin_subdirectory_package_remains(self) -> None:
         # The generated `plugins/cad/skills` copy is what the repo-root move

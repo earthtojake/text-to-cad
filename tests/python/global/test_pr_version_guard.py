@@ -17,6 +17,23 @@ from tests.python.support.paths import repo_path
 REPOSITORY = "owner/repo"
 
 
+class StepsThatPipeTheirOutput(unittest.TestCase):
+    def test_a_step_that_pipes_into_tee_fails_when_its_command_does(self) -> None:
+        # A run step on Linux with no `shell:` is `bash -e {0}`, no pipefail: `guard | tee` took tee's status, so the
+        # version guard printed a refusal and its step passed. `shell: bash` is `bash -eo pipefail {0}`.
+        import re
+
+        found = []
+        for workflow in sorted(repo_path(".github/workflows").glob("*.yml")):
+            text = workflow.read_text(encoding="utf-8")
+            for step in re.split(r"\n\s+- name: ", text)[1:]:
+                if re.search(r"\|\s*tee\b", step):
+                    found.append(step.split("\n", 1)[0])
+                    with self.subTest(workflow=workflow.name, step=step.split("\n", 1)[0]):
+                        self.assertRegex(step, r"\n\s+shell: (bash|pwsh)\b")
+        self.assertIn("Check what merging releases", found)
+
+
 class PrVersionGuardTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="pr-version-guard-")
