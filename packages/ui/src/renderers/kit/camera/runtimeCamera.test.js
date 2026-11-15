@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
 
-import { stepCameraTransition, transitionCameraToPerspectiveSnapshot } from './runtimeCamera.js';
+import { cancelCameraTransition, stepCameraTransition, transitionCameraToPerspectiveSnapshot } from './runtimeCamera.js';
 import { viewPlaneCameraBasis, WORLD_UP } from './viewportCameraKit.js';
 
 /**
@@ -50,9 +50,12 @@ function assertTurns(frames, label) {
   }
 }
 
+// Straight above as the view cube's top face and a double-click's Look at leave it: exactly on the pole,
+// +Y up the screen.
+const TOP = viewPlaneCameraBasis({ direction: [0, 0, 1], up: [0, 1, 0] }, WORLD_UP);
+
 test("Flip from straight above turns the camera over about its target, the screen's up kept, and lands on the camera turned over", () => {
-  // Straight above as the view cube's top face and a double-click's Look at leave it: a hair toward the front.
-  const runtime = runtimeAt(viewPlaneCameraBasis({ direction: [0, 0, 1], up: [0, 1, 0] }, WORLD_UP).direction);
+  const runtime = runtimeAt(TOP.direction, 150, TOP.up);
   const start = { up: new THREE.Vector3(0, 1, 0).applyQuaternion(runtime.camera.quaternion), right: new THREE.Vector3(1, 0, 0).applyQuaternion(runtime.camera.quaternion) };
   const to = turnedOver(runtime);
   const frames = framesOf(runtime, to);
@@ -64,12 +67,13 @@ test("Flip from straight above turns the camera over about its target, the scree
   for (const frame of frames) assert.ok(frame.up.dot(start.up) > 0.999, 'the screen\'s up never moves');
   const end = frames.at(-1);
   assert.deepEqual(runtime.camera.position.toArray().map(value => Math.round(value * 1e6) / 1e6), to.position.map(value => Math.round(value * 1e6) / 1e6));
-  assert.deepEqual(runtime.camera.up.toArray(), [...WORLD_UP], 'it ends on the world\'s up, which the orbit turns about');
+  assert.deepEqual(runtime.camera.up.toArray(), to.up, 'it ends on the up it was sent: the screen\'s, kept');
   assert.ok(end.right.dot(start.right) < -0.999, 'mirrored left to right');
 });
 
 test('near the pole, and from any side of it, the turn is the same: no frame jumps, and its way is the pole\'s on its side', () => {
-  const pole = framesOf(runtimeAt(viewPlaneCameraBasis({ direction: [0, 0, 1], up: [0, 1, 0] }, WORLD_UP).direction), turnedOver(runtimeAt([0, -1e-4, 1])));
+  const top = runtimeAt(TOP.direction, 150, TOP.up);
+  const pole = framesOf(top, turnedOver(top));
   for (const [x, y] of [[1e-6, -1e-4], [0.02, -0.03], [0.09, -0.07], [-0.09, 0.05], [0.3, -0.2]]) {
     const runtime = runtimeAt(new THREE.Vector3(x, y, 1).normalize().toArray());
     const frames = framesOf(runtime, turnedOver(runtime));
@@ -90,4 +94,19 @@ test("a camera that comes up from under the board to Home's tilt from below stay
   const frames = framesOf(runtime, { position: below.map((value, axis) => TARGET[axis] + value * 150), target: [...TARGET], up: [...WORLD_UP] });
   assertTurns(frames, 'from below');
   for (const frame of frames) assert.ok(frame.look.z > 0, 'the camera looks up at the board the whole way');
+});
+
+test('a turn cut short leaves the camera where it is, level, as the orbit keeps it: upside down still, where it was nearest that', () => {
+  // From upside down at the front, turning to an upright corner, grabbed early.
+  const runtime = runtimeAt([0, -1, 0], 150, [0, 0, -1]);
+  assert.equal(transitionCameraToPerspectiveSnapshot(runtime, { position: [TARGET[0] + 150, TARGET[1], TARGET[2] + 150], target: [...TARGET], up: [...WORLD_UP] }), true);
+  stepCameraTransition(runtime, runtime.cameraTransition.startTime + 100);
+  const axis = (x, y, z) => new THREE.Vector3(x, y, z).applyQuaternion(runtime.camera.quaternion);
+  assert.ok(Math.abs(axis(1, 0, 0).z) > 0.01, 'the turn leans on its way');
+  const eye = runtime.camera.position.clone();
+  cancelCameraTransition(runtime, { scheduleIdle: false });
+  runtime.camera.lookAt(...TARGET);
+  assert.ok(runtime.camera.position.equals(eye), 'where it is');
+  assert.ok(Math.abs(axis(1, 0, 0).z) < 1e-9, 'level');
+  assert.ok(axis(0, 1, 0).z < 0, 'upside down, as it was nearest: not snapped to the world\'s up');
 });

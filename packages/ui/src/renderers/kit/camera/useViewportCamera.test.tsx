@@ -79,3 +79,33 @@ it('a cube face or a drag across the cube makes the camera the user\'s; Zoom to 
   act(() => { expect(result.current.orbitFromViewCube(24, -8)).toBe(true); });
   expect(runtime.userMovedCamera).toBe(true);
 });
+
+// The cube's drag is the turntable a drag on the model is (`turntable.js`): over the poles, its
+// sideways sense picked on its first move and held to its end.
+it('a drag across the cube goes over the top, holding its sideways sense; one begun upside down turns the other way', () => {
+  const runtimeRef = ref();
+  const { result } = renderHook(() => useViewportCamera({
+    runtimeRef, modelBounds: { min: [-20, -10, -5], max: [20, 10, 5] }, modelKey: 'fixture', modelKeyRef: ref('fixture'),
+    coordinateSystemFor: () => 'cad-z-up-v1', activeViewPlaneFaceRef: ref(''), lastEmittedPerspectiveRef: ref(),
+    modelTransformRef: ref({ offset: [0, 0, 0] }), perspectiveChangeRef: ref(), perspectivePropRef: ref(), perspectiveRef: ref(),
+    runWithoutPerspectiveEvents: (callback: () => unknown) => callback(), sceneScaleModeRef: ref('cad'),
+    setActiveViewPlaneFace: vi.fn(), setViewPlaneOrientation: vi.fn(), suppressPerspectiveEventsRef: ref(0)
+  }));
+  const camera = new THREE.PerspectiveCamera(48, 1.25, 0.01, 10000);
+  camera.up.set(0, 0, 1);
+  camera.position.set(0, -300, 150);
+  camera.lookAt(0, 0, 0);
+  runtimeRef.current = { THREE, camera, perspectiveCamera: camera, controls: { target: new THREE.Vector3(), update() {} } } as any;
+  // The cube dragged 10px right: how far the camera turned about the world's z (anticlockwise from above).
+  const sideways = (starts: boolean) => {
+    const before = Math.atan2(camera.position.y, camera.position.x);
+    act(() => { result.current.orbitFromViewCube(10, 0, starts); });
+    return Math.atan2(camera.position.y, camera.position.x) - before;
+  };
+  expect(sideways(true)).toBeLessThan(0);
+  // 90px down the cube, 135° toward the camera's up: over the top, upside down beyond it.
+  for (let step = 0; step < 3; step += 1) act(() => { result.current.orbitFromViewCube(0, 30); });
+  expect(new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion).z).toBeLessThan(0);
+  expect(sideways(false), 'the same drag: its sense held').toBeLessThan(0);
+  expect(sideways(true), 'a drag begun upside down: the other way').toBeGreaterThan(0);
+});
