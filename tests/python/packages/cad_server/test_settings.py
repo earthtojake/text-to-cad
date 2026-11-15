@@ -56,7 +56,8 @@ class StateFolderTest(unittest.TestCase):
             self.assertTrue(telemetry_send.start_if_due(now=later, spawn=started.append))
             self.assertFalse(telemetry_send.start_if_due(now=later + 1, spawn=started.append), "one sender a window")
         self.assertEqual(sorted(path.name for path in state.iterdir()),
-                         ["install-receipt.json", "settings.json", "settings.lock", "telemetry-spool.jsonl", "versions.json"])
+                         ["install-receipt.json", "settings.json", "settings.lock", "telemetry-spool.jsonl",
+                          "telemetry-started", "versions.json"])
         self.assertEqual(os.stat(state / "settings.lock").st_mtime, later, "the lock's time is the last sender's start")
         self.assertEqual(set(json.loads((state / "versions.json").read_text(encoding="utf-8"))), {"checked", "feed"})
         self.assertEqual(json.loads((state / "settings.json").read_text(encoding="utf-8"))["language"], {"locale": "ja"})

@@ -192,6 +192,29 @@ class ArrivalTest(unittest.TestCase):
         self.assertEqual(call.args[0], [sys.executable, "-P", "-m", "cad_server._internal.telemetry_send", "--at", "12.5"])
         self.assertEqual(call.kwargs["stdout"], subprocess.DEVNULL)
 
+    def test_a_fresh_folder_s_first_arrival_starts_a_sender_at_once_and_still_one_a_window(self) -> None:
+        # A version's data folder, made a moment ago as its setup imported (its lock taken then: made then): no sender
+        # was ever started there, so its first arrival is sent at once, not a window later.
+        analytics.choose(True, by="cli", path=self.settings)
+        lock = self.settings.with_name(file_lock.STATE_LOCK)
+        self.assertLess(time.time() - lock.stat().st_mtime, analytics.FLUSH_SECONDS, "the lock made a moment ago")
+        self.assertFalse(self.settings.with_name(telemetry_send.STARTED).exists())
+        now = time.time()
+        self.assertTrue(analytics.arrival("setup", route="updater", earlier="0.11.10", outcome="ok"))
+        self.assertTrue(analytics.arrival("serving", route="updater", earlier="0.11.10", outcome="ok"))
+        self.assertTrue(analytics.arrival("handover", route="updater", earlier="0.11.10", outcome="done", attempts=1))
+        self.assertEqual([at is None for _settings, at in self.started], [True, False],
+                         "at once, then one as that window ends, and none more")
+        later = self.started[1][1]
+        self.assertGreaterEqual(later - now, analytics.FLUSH_SECONDS)
+        stamp = self.settings.with_name(telemetry_send.STARTED)
+        self.assertEqual((stamp.stat().st_mtime, lock.stat().st_mtime), (later, later),
+                         "when the next starts: the stamp's time, and the lock's, which 0.11.10 and earlier read")
+        # A command's sender too goes by the stamp: none while one is set to start.
+        self.assertTrue(analytics.spool({"builds": [{"kind": "xbf", "via": "script", "outcome": "ok", "seconds": 1.0}]},
+                                        path=self.settings))
+        self.assertFalse(telemetry_send.start_if_due(self.settings, now=later - 1, spawn=lambda settings: None))
+
 
 class WithNoServerTest(unittest.TestCase):
     """The hard case: a ``cad setup`` that counts its step and ends, no server of its version running then or after."""

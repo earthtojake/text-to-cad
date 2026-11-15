@@ -14,8 +14,9 @@ from pathlib import Path
 # install channels, the telemetry spool and the batches kept, the start of a telemetry sender --
 # holds it (``state``), so none needs a lock file of its own. Named as cadgen 0.7 names the
 # settings' lock, so a 0.7 still installed and this cadgen changing the settings exclude each other.
-# Its time is when the last telemetry sender was started (``telemetry_send.start_if_due``): nothing
-# else changes it, as taking a lock writes nothing.
+# Its time is set to when the last telemetry sender was started (``telemetry_send._started``), for
+# the releases of 0.11.10 and earlier that read it; this release reads a file of its own beside it
+# (``telemetry_send.STARTED``), since making the lock gives it a time that says nothing of a sender.
 STATE_LOCK = "settings.lock"
 
 # What msvcrt.locking raises when LK_LOCK gives up: it tries ten times, a second apart.
