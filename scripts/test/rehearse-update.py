@@ -412,7 +412,13 @@ class Computer:
         return base.interpreter(self.state / "versions" / version / "code" / "server")
 
     def proxy(self) -> Path:
-        return self.work / "bin" / ("cad.exe" if WINDOWS else "cad")
+        """The ``cad`` command: on Windows ``cad.exe``, or, where there is none, the batch file a release before 0.11
+        wrote (``cad.cmd``), which an updater's run leaves in place until the hand-over's own setup writes the
+        command (a stand-in here); both run the installation ``installations/current`` names."""
+        folder = self.work / "bin"
+        if WINDOWS and not (folder / "cad.exe").exists() and (folder / "cad.cmd").exists():
+            return folder / "cad.cmd"
+        return folder / ("cad.exe" if WINDOWS else "cad")
 
     def current(self) -> str:
         path = self.state / "installations" / "current"
@@ -833,6 +839,13 @@ def main(argv: list[str] | None = None) -> int:
                         help=f"one or more of: all, {', '.join(routes)}")
     parser.add_argument("--old", default=OLD, help="the shipped release every route but from-0.8 starts on")
     args = parser.parse_args(argv)
+    # A failed route prints what its programs said: a character this output's encoding has not (Windows' code page)
+    # is printed escaped, never raised in place of the failure.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError):
+            pass
     if shutil.which("uv") is None and shutil.which("uvx") is None:
         print("rehearse-update: uv is not installed", file=sys.stderr)
         return 1

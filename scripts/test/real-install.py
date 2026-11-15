@@ -381,6 +381,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--install-py", type=Path, default=REPO_ROOT / "scripts" / "install" / "install.py",
                         help="the install.py the script runs (default: this tree's)")
     args = parser.parse_args(argv)
+    # What a program said is printed as it was read: a character this output's encoding has not (Windows' code
+    # page) is printed escaped, never raised.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError):
+            pass
     required = [name for name in args.require.split(",") if name]
     unknown = [name for name in required if name not in rc.PROGRAMS]
     if unknown:
