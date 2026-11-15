@@ -11,7 +11,7 @@
 #   platform   the packages' suites on Windows; the router's unit files on macOS.
 #   integration  fea, kicad, blender, packaging, viewer-e2e: each with what it drives installed.
 #   release    a full run only (and a change to the thing itself): the packages' suites on their
-#              oldest Python, and the installer rehearsals.
+#              oldest Python, the installer rehearsals and the real install.
 #   CI         the one required check: every job above that ran passed (ci_gate.py).
 #
 # main requires `CI` alone, so a job is added, renamed, split or sharded here without a
@@ -414,6 +414,18 @@ jobs:
     needs: changes
     if: needs.changes.outputs.installer == 'true'
     uses: ./.github/workflows/install-windows.yml
+    with:
+      ref: ${{ inputs.ref }}
+
+  # The install script against the real programs of Claude Code, Codex and Gemini CLI, on Windows, macOS and Linux,
+  # each on a private computer: install, again, and from 0.11.10's installer's state (real-install.yml,
+  # scripts/test/real-install.py). About 10 minutes a system on top of the wheel's 6 (cad's first download and
+  # its kernel's), Windows the slowest. With the rehearsals: a full run, nightly, and a change to the installers.
+  real-install:
+    name: real install
+    needs: changes
+    if: needs.changes.outputs.installer == 'true'
+    uses: ./.github/workflows/real-install.yml
     with:
       ref: ${{ inputs.ref }}
 
@@ -877,6 +889,7 @@ jobs:
       - packages-floor
       - install-linux
       - install-windows
+      - real-install
       - update-rehearsal
       - fea
       - blender

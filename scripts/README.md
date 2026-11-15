@@ -126,6 +126,19 @@ where those files ship, so these scripts are what produces them.
   the `cad` command with and without a pin, the install script started once, and one server: the old
   release's stopped and its layout removed by this build's cleanup. Needs uv and the network. Called by
   `test.yml`'s `update-rehearsal` job on Linux, macOS and Windows.
+- `real-install.py --wheels DIR [--require claude,codex,gemini] [--keep] [--work DIR]` — the install script
+  run for real against the real `claude`, `codex` and `gemini` found on PATH, on a private computer
+  (`real_computer.py`: its own home and folders, each program told its configuration folder there, the
+  machine's own home compared before and after and never changed). The script runs as a person runs it
+  (piped to `sh`; on Windows handed to `Invoke-Expression` by Windows PowerShell 5.1), cad from this tree's
+  wheels in `DIR`, the plugin from this tree's `latest` copy (`plugin_branch.py`) in a local repository the
+  computer's git reads for every address of ours on GitHub (Gemini CLI still asks GitHub's API for a release
+  first, and finds none). It checks each program's own list (ours, once, this run's copy), `cad` with and
+  without a pin, a model built and its page; then the script again; then each program moved from the state
+  0.11.10's installer left. It cannot test the desktop apps, or GitHub's `latest` branch before a release.
+  A program missing is skipped and said, unless `--require` names it. Called by `real-install.yml`, which
+  `test.yml`'s `real-install` job calls, on Windows, macOS and Linux, with each program pinned there.
+  `real_computer.py` is the computer alone, for another test to run real programs on.
 - `test-viewer-launch.sh` — launches `cad viewer` against the built client and
   verifies reuse, the engine serving a tiny test-owned STEP and the bundled client
   drawing it. Called by `test.yml`'s `viewer-e2e` job.

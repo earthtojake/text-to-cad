@@ -27,7 +27,7 @@ from tests.python.support.tmp_root import temporary_directory
 WORKFLOWS = REPO_ROOT / ".github/workflows"
 WORKFLOW = (WORKFLOWS / "test.yml").read_text(encoding="utf-8")
 JOBS = dict(re.findall(r"^  ([a-z][\w-]*):\n(.*?)(?=^  [a-z][\w-]*:\n|\Z)", WORKFLOW.split("\njobs:\n", 1)[1], re.M | re.S))
-REHEARSALS = ("install-linux.yml", "install-windows.yml")
+REHEARSALS = ("install-linux.yml", "install-windows.yml", "real-install.yml")
 
 
 def _load(name: str):
@@ -530,6 +530,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/install/install.sh": jobs_on("installer", "docs"),
             "scripts/install/install.py": jobs_on("installer", "docs"),
             ".github/workflows/install-windows.yml": jobs_on("installer"),
+            ".github/workflows/real-install.yml": jobs_on("installer"),
+            "scripts/test/real-install.py": jobs_on("installer"),
             # A runner runs what it feeds.
             "scripts/test/test-js.sh": jobs_on("core_js", "web_ui", "web_client", "mcp"),
             "scripts/test/test-floor.sh": jobs_on("floor"),

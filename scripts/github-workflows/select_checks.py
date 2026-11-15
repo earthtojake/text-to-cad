@@ -204,6 +204,10 @@ RULES: tuple[Rule, ...] = (
          select(flags=["installer"])),
     # The update rehearsal (test.yml's update-rehearsal): a real 0.11.10 updating into this tree's build.
     Rule(("scripts/test/rehearse-update.py",), select(flags=["installer"]), final=True),
+    # The real install (real-install.yml, which test.yml calls): the install script against the real programs of
+    # agent apps, on a private computer of its own.
+    Rule((".github/workflows/real-install.yml", "scripts/test/real-install.py", "scripts/test/real_computer.py"),
+         select(flags=["installer"]), final=True),
     # The one-line installer: the docs site serves copies of install.sh, install.ps1 and install.py. Its own
     # tests (tests/python/global/test_install_script.py) are a light contract: static runs them on every change.
     Rule(("scripts/install/install.sh", "scripts/install/install.ps1", "scripts/install/install.py"),

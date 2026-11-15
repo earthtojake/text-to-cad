@@ -57,6 +57,14 @@ enough. Every other job runs on the changes that reach it. The two there now:
   minutes a system on macOS (the four routes measured at 49 to 128 seconds each). It is the one test of the migration every computer makes, unattended or by the install command. It runs
   with the installer rehearsals, and on a change to the rehearsal itself. A route runs alone too, as
   `scripts/test/rehearse-update.py from-0.8`.
+- The real install (`real install`, `real-install.yml`, `scripts/test/real-install.py`) runs the install script
+  against the real `claude`, `codex` and `gemini` on Windows, macOS and Linux, each on a private computer: the
+  one test of the half of the script that touches agent apps on Windows, where its unit tests (stand-in
+  programs) are skipped. It installs, runs the script again, and migrates each program from the state 0.11.10's
+  installer left; cad comes from this tree's wheel, the plugin from this tree's `latest` copy in a local
+  repository each program's git reads in GitHub's place. It cannot test the desktop apps (they need a person) or
+  GitHub's `latest` branch itself, which before a release is the last release's. About 10 minutes a system.
+  It runs with the installer rehearsals, and on a change to the runner.
 
 A job moves into the tier, or out of it, with that argument in its pull request.
 
@@ -211,6 +219,7 @@ decide which tests reach it. The components:
 | `viewer-e2e` | the packages, the UI, `apps/web`, `tests/browser` | The bundle's viewer through the real backend: the launch smoke test and the format and camera gates in Chromium |
 | `packages (Python 3.13 floor)` | a full run | The three suites on the packages' oldest Python (`test-floor.sh`) |
 | `install (Linux)`, `install (Windows)` | a full run; `scripts/install`, the two workflows | `install-linux.yml` and `install-windows.yml`: the one-line installers on a fresh machine, against this tree's wheel |
+| `real install` | a full run; `scripts/install`, its workflow, its runner | `real-install.yml`: the install script against the real `claude`, `codex` and `gemini` on Windows, macOS and Linux |
 | `CI` | always | The one required check: every job that ran passed (`scripts/github-workflows/ci_gate.py`) |
 
 **A full run** is every job on every suite. `VERSION` (a release is tested
@@ -226,8 +235,8 @@ tests resolve. Root prose, the plugin manifests and configs, the release scripts
 
 **The release tier** runs on a full run only, so before a release ships and not
 on every push ([its criterion](#what-runs-where)): the packages' suites on Python
-3.13, and the installer and update rehearsals, which also run on a change to the installers
-themselves (`scripts/install`, the two workflows) or to the update rehearsal. The nightly run, on `main`, is
+3.13, the installer and update rehearsals and the real install, which also run on a change to the
+installers themselves (`scripts/install`, their workflows) or to the update rehearsal or the real install. The nightly run, on `main`, is
 that tier for whatever merged without a release; it runs nothing when a run
 already tested `main`'s tree in full.
 
@@ -383,6 +392,10 @@ tier and which a dispatch with `published` runs against the release people insta
 of a computer on 0.11.10, 0.10.4 or 0.8.4 at this tree's build is rehearsed by `scripts/test/rehearse-update.py`,
 which `test.yml`'s
 `update-rehearsal` job runs in the same tier and which runs locally too (it needs uv and the network).
+The install script against the real programs of Claude Code, Codex and Gemini CLI is `scripts/test/real-install.py`
+(`real install`, the same tier), which runs locally too against the programs on your PATH, never your own
+configuration of them: `--wheels` names this tree's wheels (`CAD_KEEP_WHEEL=1 CAD_WHEEL_OUT_DIR=<dir>
+scripts/release/check-wheel-contents.sh` after `scripts/bundle/bundle.sh`).
 
 ### Performance changes
 
