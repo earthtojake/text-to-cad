@@ -48,6 +48,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -224,19 +225,26 @@ class Run:
     # --- cad ----------------------------------------------------------------------------------------------------
 
     def cad_works(self) -> None:
-        """This tree's server installed; the command with and without a pin; a box built and its page answering."""
+        """The server installed is this tree's wheel (every file of its package there, the same bytes: the wheel, not
+        the checkout, which Windows checks out with other line ends); the command with and without a pin; a box built
+        and its page answering."""
         server = self.computer.state / "versions" / VERSION / "code" / "server"
         servers = sorted(server.rglob("site-packages/cad_server"))
-        source = REPO_ROOT / "packages" / "cad-server" / "src" / "cad_server"
-        differ = [str(path.relative_to(source)) for path in sorted(source.rglob("*.py")) if "_runtime" not in path.parts
-                  and servers and (servers[0] / path.relative_to(source)).read_bytes() != path.read_bytes()]
-        if not servers or differ:
-            raise rc.Failed(f"the server installed is not this tree's: {servers[:1]}, differing {differ[:5]}")
+        with zipfile.ZipFile(self.server_wheel) as wheel:
+            files = {name: wheel.read(name) for name in wheel.namelist()
+                     if name.startswith("cad_server/") and not name.endswith("/")}
+        installed = servers[0].parent if servers else None
+        differ = [name for name, data in sorted(files.items())
+                  if installed is None or not (installed / name).is_file() or (installed / name).read_bytes() != data]
+        if not servers or not files or differ:
+            raise rc.Failed(f"the server installed is not the wheel's: {servers[:1]}, {len(files)} files in the wheel, "
+                            f"missing or differing {differ[:5]}")
         for argv in ([self.cad, "--version"], [self.cad, f"+{VERSION}", "--version"]):
             said = self.computer.must(argv).lines()[:1]
             if said != [f"cad {VERSION}"]:
                 raise rc.Failed(f"{' '.join(map(str, argv[1:]))} said {said}")
-        say(f"ok    cad --version and cad +{VERSION} --version: cad {VERSION}; the server is this tree's")
+        say(f"ok    cad --version and cad +{VERSION} --version: cad {VERSION}; the server is the wheel's "
+            f"({len(files)} files, each the same)")
         models = self.computer.work / "models" / "box"
         models.mkdir(parents=True, exist_ok=True)
         (models / "box.py").write_text(BOX, encoding="utf-8")

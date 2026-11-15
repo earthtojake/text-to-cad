@@ -405,7 +405,9 @@ class ACommandOfAVersion(unittest.TestCase):
         mine = cad_server.__version__
         read, write = os.pipe()
         with open(read, "rb") as reader:
-            with open(write, "w", encoding="utf-8") as out, open(os.dup(write), "w", encoding="utf-8") as err:
+            # newline="\n": the writers keep each line's end as written, on Windows too, where text files write \r\n.
+            with (open(write, "w", encoding="utf-8", newline="\n") as out,
+                  open(os.dup(write), "w", encoding="utf-8", newline="\n") as err):
                 with redirect_stdout(out), redirect_stderr(err):
                     self.assertEqual(cli.main(["--version"]), 0)
             self.assertEqual(reader.read().decode("utf-8"),

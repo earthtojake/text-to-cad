@@ -328,11 +328,12 @@ class Computer:
         again), and a new run (``MARK``). The commit."""
         self.nonce = uuid.uuid4().hex
         source, bare = self.work / "stand-in" / "source", self.work / "stand-in" / "text-to-cad.git"
-        (source / MARK).write_text(f"{self.nonce}\n", encoding="utf-8")
+        (source / MARK).write_text(f"{self.nonce}\n", encoding="utf-8", newline="\n")
         for manifest in source.rglob("*.json"):
             if "skills" not in manifest.relative_to(source).parts:
-                text = manifest.read_text(encoding="utf-8")
-                manifest.write_text(text.replace(f'"version": "{version}"', f'"version": "{following}"'), "utf-8")
+                text = manifest.read_bytes().decode("utf-8")
+                manifest.write_text(text.replace(f'"version": "{version}"', f'"version": "{following}"'),
+                                    encoding="utf-8", newline="\n")
         who = ["-c", "user.name=real-install", "-c", "user.email=real-install@localhost"]
         self.must(["git", *who, "-C", source, "commit", "--quiet", "--all", "--message", "the next copy"])
         self.must(["git", "-C", source, "push", "--quiet", bare, BRANCH])
