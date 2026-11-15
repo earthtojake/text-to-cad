@@ -36,14 +36,17 @@ THEIRS = "---\nname: {name}\ndescription: someone else's\n---\n"
 # A stand-in: records {name, argv} as a JSON line; fails (exit FAKE_EXIT, default 1) where FAKE_FAIL names it
 # (`name`, or `name:word` for a call whose arguments hold that word); `git clone` writes a small plugin folder with our
 # skills, `git ls-remote` names the commit LATEST, `git status` prints FAKE_GIT_STATUS (a clean clone of `latest` by
-# default); `uv --version` says FAKE_UV_VERSION; `gemini extensions uninstall <name>` removes that extension's folder.
+# default); `uv --version` says FAKE_UV_VERSION; `gemini extensions uninstall <name>` removes that extension's folder,
+# and, with FAKE_GEMINI_RECORD, `gemini extensions install <url> --ref <ref>` writes its record. Each call notes its
+# folder and Gemini's trust.
 STAND_IN = textwrap.dedent('''\
     #!{python}
     import json, os, shutil, sys
     from pathlib import Path
     name = Path(sys.argv[0]).name
     with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as log:
-        log.write(json.dumps({{"name": name, "argv": sys.argv[1:]}}) + "\\n")
+        log.write(json.dumps({{"name": name, "argv": sys.argv[1:], "cwd": os.getcwd(),
+                               "trust": os.environ.get("GEMINI_CLI_TRUST_WORKSPACE")}}) + "\\n")
     if any(fail == name or (fail.partition(":")[0] == name and fail.partition(":")[2] in sys.argv[1:])
            for fail in os.environ.get("FAKE_FAIL", "").split(",")):
         print(f"{{name}}: something went wrong")
@@ -56,6 +59,11 @@ STAND_IN = textwrap.dedent('''\
         print("uv " + os.environ.get("FAKE_UV_VERSION", "0.11.0") + " (stand-in)")
     if name == "gemini" and "uninstall" in sys.argv:
         shutil.rmtree(Path(os.environ["HOME"]) / ".gemini" / "extensions" / sys.argv[-1], ignore_errors=True)
+    if name == "gemini" and sys.argv[1:3] == ["extensions", "install"] and os.environ.get("FAKE_GEMINI_RECORD"):
+        record = Path(os.environ["HOME"]) / ".gemini" / "extensions" / "text-to-cad" / ".gemini-extension-install.json"
+        record.parent.mkdir(parents=True, exist_ok=True)
+        ref = sys.argv[sys.argv.index("--ref") + 1]
+        record.write_text(json.dumps({{"source": sys.argv[3], "type": "git", "ref": ref}}))
     if name == "git" and "clone" in sys.argv:
         target = Path(sys.argv[-1])
         (target / ".git").mkdir(parents=True)
@@ -176,9 +184,66 @@ class InstallScriptTests(unittest.TestCase):
                                                 ["plugin", "update", "text-to-cad@earthtojake"]])
         self.assertEqual(self.calls("codex"), [["plugin", "marketplace", "upgrade", "earthtojake"],
                                                ["plugin", "add", "text-to-cad@earthtojake"]])
-        self.assertEqual(self.calls("gemini"), [["extensions", "update", "text-to-cad"]])
+        self.assertEqual(self.calls("gemini"), [["extensions", "uninstall", "text-to-cad"],
+                                                ["extensions", "install", install.URL, "--ref", "latest", "--consent"]])
         for name in ("Claude Code", "Codex", "Gemini CLI"):
             self.assertIn(f"{name}: updated\n", done.stdout)
+
+    def test_gemini_s_github_copy_is_installed_again_never_asked_to_update(self) -> None:
+        # `extensions update` asks twice and takes no --consent: with no one to answer, it waits for ever.
+        self.programs("gemini")
+        github = {"type": "git", "source": install.URL, "ref": "latest"}
+        self.write(".gemini/extensions/text-to-cad/.gemini-extension-install.json", github)
+        done = self.run_install(FAKE_GEMINI_RECORD="1")
+        self.assertEqual(0, done.returncode, done.stderr)
+        self.assertNotIn(["extensions", "update", "text-to-cad"], self.calls("gemini"))
+        self.assertEqual(self.calls("gemini"), [["extensions", "uninstall", "text-to-cad"],
+                                                ["extensions", "install", install.URL, "--ref", "latest", "--consent"]])
+        self.assertIn("Gemini CLI: updated\n", done.stdout)
+        self.assertEqual([path.name for path in (self.home / ".gemini/extensions").iterdir()], ["text-to-cad"])
+        record = self.home / ".gemini/extensions/text-to-cad/.gemini-extension-install.json"
+        self.assertEqual(json.loads(record.read_text(encoding="utf-8")), github)
+
+    def test_gemini_s_github_copy_is_put_back_where_installing_it_again_fails(self) -> None:
+        self.programs("gemini")
+        github = {"type": "git", "source": install.URL, "ref": "latest"}
+        record = self.write(".gemini/extensions/text-to-cad/.gemini-extension-install.json", github)
+        skill = self.write(".gemini/extensions/text-to-cad/skills/cad/SKILL.md", OURS.format(name="cad"))
+        enablement = self.write(".gemini/extensions/extension-enablement.json", {"text-to-cad": {"overrides": []}})
+        done = self.run_install(FAKE_FAIL="gemini:install", FAKE_GEMINI_RECORD="1")
+        self.assertEqual(1, done.returncode, done.stdout)
+        self.assertEqual(self.calls("gemini")[0], ["extensions", "uninstall", "text-to-cad"])
+        self.assertIn("Gemini CLI: failed", done.stdout)
+        self.assertIn("the earlier copy was put back", done.stdout)
+        self.assertEqual(json.loads(record.read_text(encoding="utf-8")), github)
+        self.assertEqual(skill.read_text(encoding="utf-8"), OURS.format(name="cad"))
+        self.assertEqual(json.loads(enablement.read_text(encoding="utf-8")), {"text-to-cad": {"overrides": []}})
+
+    def test_gemini_s_commands_run_in_a_folder_of_their_own_never_the_person_s(self) -> None:
+        # Run in the person's folder, `--consent` records it as trusted in Gemini's trustedFolders.json.
+        self.programs("gemini")
+        person = self.home / "projects"
+        person.mkdir()
+        if self.log.exists():
+            self.log.unlink()
+        done = subprocess.run([sys.executable, str(INSTALL / "install.py")], env=self.environ(), cwd=person,
+                              capture_output=True, text=True, timeout=120)
+        self.assertEqual(0, done.returncode, done.stderr)
+        self.write(".gemini/extensions/text-to-cad/.gemini-extension-install.json",
+                   {"type": "git", "source": install.URL, "ref": "latest"})
+        again = subprocess.run([sys.executable, str(INSTALL / "install.py")], env=self.environ(), cwd=person,
+                               capture_output=True, text=True, timeout=120)
+        self.assertEqual(0, again.returncode, again.stderr)
+        found = [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines()]
+        runs = [call for call in found if call["name"] == "gemini"]
+        self.assertEqual(len(runs), 3)  # the install, then the uninstall and the install again
+        for call in runs:
+            with self.subTest(argv=call["argv"]):
+                where = Path(call["cwd"]).resolve()
+                self.assertNotEqual(where, person.resolve())
+                self.assertFalse(where.is_relative_to(self.home.resolve()))
+                self.assertFalse(where.exists())  # made for the command, and removed after it
+                self.assertEqual(call["trust"], "true")
 
     def test_a_second_run_removes_nothing_it_installed_and_says_nothing_of_removing(self) -> None:
         (self.home / ".cline").mkdir()
@@ -340,6 +405,21 @@ class InstallScriptTests(unittest.TestCase):
             self.assertTrue(clone.is_symlink())
             self.assertEqual(self.calls("git"), [])
             self.assertIn("~/.cursor/plugins/local/text-to-cad is a link: left alone", done.stdout)
+
+    def test_a_character_the_output_cannot_encode_stops_no_app(self) -> None:
+        # Windows captures output in its ANSI code page, which has no ✘: the line is printed with a `?`, and the run
+        # goes on to the next app and the loose skills.
+        self.programs("claude", "gemini")
+        stand_in = self.bin / "claude"
+        stand_in.write_text(stand_in.read_text(encoding="utf-8").replace(
+            "    sys.exit(int(", "    sys.stdout.flush()\n    sys.stdout.buffer.write('\u2718 Failed to add marketplace\\n'.encode())\n    sys.exit(int(", 1),
+            encoding="utf-8")
+        done = self.run_install(FAKE_FAIL="claude", PYTHONIOENCODING="cp1252")
+        self.assertEqual(0, done.returncode, done.stderr)
+        self.assertNotIn("Traceback", done.stderr)
+        self.assertIn("Claude Code: failed: ", done.stdout)
+        self.assertIn("? Failed to add marketplace", done.stdout)
+        self.assertIn("Gemini CLI: installed", done.stdout)
 
     def test_what_past_releases_left_is_removed_once_ours_is_in_and_nothing_else(self) -> None:
         self.programs("claude", "codex", "gemini", "grok", "npx")

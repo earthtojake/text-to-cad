@@ -990,7 +990,9 @@ def cursor(app: App, here: Here, context: Context) -> Outcome:
 
 
 def gemini(app: App, here: Here, context: Context) -> Outcome:
-    """Gemini CLI: its extension, installed from GitHub at ``latest`` (a copy), updated by ``extensions update``.
+    """Gemini CLI: its extension, installed from GitHub at ``latest`` (a copy), and installed again to update it:
+    ``extensions update`` asks twice (to clone, since GitHub has no release ``latest``; to accept the skills) and
+    takes no ``--consent``, so with no one to answer it waits for ever (measured, 0.62.0).
     0.10.0-0.11.10 linked ``<state>/plugin`` under the same name, which must go for ours to come in: GitHub is
     checked first, the old extension's folder and the enablement file are kept aside, and put back where the new
     one does not install. Read from ``~/.gemini/extensions/text-to-cad/.gemini-extension-install.json`` (``type``,
@@ -1013,10 +1015,20 @@ def gemini(app: App, here: Here, context: Context) -> Outcome:
             return found.get("type") == "link" and same_path(found.get("source"), source.folder)
         return found.get("type") == "git" and our_repository(found.get("source")) and found.get("ref") == BRANCH
 
+    def run(argv: List[Any], answer: Optional[str] = None) -> Ran:
+        """A gemini command, run in an empty folder of its own that it is told to trust for that run alone: run in the
+        person's folder (their home, often), ``--consent`` records that folder as trusted in trustedFolders.json."""
+        neutral = tempfile.mkdtemp(prefix="text-to-cad-gemini-run-")
+        try:
+            return here.run([cli, *argv], cwd=Path(neutral), answer=answer,
+                            environ={"GEMINI_CLI_TRUST_WORKSPACE": "true"})
+        finally:
+            shutil.rmtree(neutral, ignore_errors=True)
+
     def put_in() -> Ran:
         if source.local:
-            return here.run([cli, "extensions", "link", source.folder, "--consent"], answer="y\n")
-        return here.run([cli, "extensions", "install", URL, "--ref", BRANCH, "--consent"])
+            return run(["extensions", "link", source.folder, "--consent"], answer="y\n")
+        return run(["extensions", "install", URL, "--ref", BRANCH, "--consent"])
 
     if not (folder.exists() or folder.is_symlink()):
         ran = put_in()
@@ -1024,13 +1036,11 @@ def gemini(app: App, here: Here, context: Context) -> Outcome:
             raise Failed(ran.last())
         return Outcome("installed")
     found = record()
-    if ours_now():
-        if source.local:
-            return Outcome("updated", f"linked to {source.folder}")
-        here.must([cli, "extensions", "update", PLUGIN])
-        return Outcome("updated")
+    same = ours_now()  # ours from GitHub already: installed again, below
+    if same and source.local:
+        return Outcome("updated", f"linked to {source.folder}")
     linked = found.get("type") == "link" and our_folder(here, found.get("source"))
-    if not (linked or our_repository(found.get("source"))):
+    if not (same or linked or our_repository(found.get("source"))):
         raise Failed(f"another extension named {PLUGIN} is installed (from {found.get('source') or 'elsewhere'}): "
                      "left alone")
     source.reachable(here)
@@ -1039,7 +1049,9 @@ def gemini(app: App, here: Here, context: Context) -> Outcome:
         shutil.copytree(str(folder), str(aside / PLUGIN), symlinks=True)
         enablement = extensions / "extension-enablement.json"
         kept = enablement.read_bytes() if enablement.is_file() else None
-        here.must([cli, "extensions", "uninstall", PLUGIN])
+        removed = run(["extensions", "uninstall", PLUGIN])
+        if not removed.ok:
+            raise Failed(f"`extensions uninstall` said: {removed.last()}")
         ran = put_in()
         if not ran.ok and not ours_now():
             if folder.exists() or folder.is_symlink():
@@ -1050,6 +1062,8 @@ def gemini(app: App, here: Here, context: Context) -> Outcome:
             raise Failed(f"{ran.last()}; the earlier copy was put back")
     finally:
         shutil.rmtree(aside, ignore_errors=True)
+    if same:
+        return Outcome("updated")
     old = ("linked to " + str(found.get("source")) if linked else
            f"from {found.get('source')} at {found.get('ref') or 'its default branch'}")
     return Outcome("updated", removed=[f"{PLUGIN} {old}"])
@@ -1647,7 +1661,10 @@ def install_apps(here: Here, source: Source, apps: Sequence[App] = APPS,
 
     def tell(line: str) -> None:
         lines.append(line)
-        say(line)
+        try:
+            say(line)
+        except (OSError, ValueError):  # a line the output cannot take is lost, never the apps after it
+            pass
 
     for app in apps:
         try:
@@ -1673,6 +1690,12 @@ def install_apps(here: Here, source: Source, apps: Sequence[App] = APPS,
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    # A character the output's encoding has not (an app's own mark, on Windows' code page) is printed as `?`, never
+    # raised: the encoding itself stays as it is.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(errors="replace")
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv:
         print("This installer takes no options: run it as it is to install or update text-to-cad in every agent app "
