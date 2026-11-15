@@ -113,10 +113,11 @@ runs (`part.glb is a glb, not a stl: use cad glb snapshot`).
 
 These stay as they were, but for how they fail and what one that destroys asks (below), and what
 `uninstall` removes from 0.11.11 ([In 0.11.11](#in-01111)): `serve`,
-`status`, `stop`, `delete`, `server`, `uninstall`, `plugin`, `viewer`, `telemetry`. `cad run` changes
-what it runs a program in ([`cad run`](#cad-run-tier-1)), and `setup`, `update` and `doctor` what they
-set up ([Setting up and updating](#setting-up-and-updating)); what `cad doctor` reports, and what `cad
-update --dry-run` reads, are below too.
+`status`, `stop`, `delete`, `server`, `uninstall`, `viewer`, `telemetry`. `cad run` changes
+what it runs a program in ([`cad run`](#cad-run-tier-1)), and `setup` and `doctor` what they
+set up ([Setting up and updating](#setting-up-and-updating)); what `cad doctor` reports is below too.
+0.11.11 removes `cad plugin`, `cad update` (with `cad update auto`), `cad uninstall --purge` and `cad
+doctor --prune` ([In 0.11.11](#in-01111)).
 
 ### How a command fails
 
@@ -127,8 +128,10 @@ destroys run where no one can be asked, without `--yes`), 1 for a failure of the
 and under `--json` it is one JSON document on stdout, `{"ok": false, "error": ..., "reason": ...}`,
 with nothing else there and no traceback. `reason` is one of `usage`, `invalid_argument`, `wrong_type`,
 `not_found`, `confirmation_required` (exit 2), `declined`, `engine_unavailable`, `failed`,
-`internal_error` (exit 1) and `canceled` (130); 0.11.11 adds `bad_pin` (exit 2), `cannot_install_here` (3),
-`stale_pin` (4) and `other_version` (5), for a command that names its release ([In 0.11.11](#in-01111)).
+`internal_error` (exit 1) and `canceled` (130); 0.11.11 adds `bad_pin` (exit 2) and `other_version` (5), for a
+command that names its release, and `cannot_install_here` (3), for `cad setup` run where it cannot install (an
+agent's sandbox). A command that names a release not installed is answered by the `cad` command itself: one line
+on stderr, `cad X is not installed on this computer.`, exit 3 ([In 0.11.11](#in-01111)).
 Read the exit status, then `reason`; `error` is for a person. A check's findings are still its answer, not a failure: a check that finds a blocking one exits
 1 with its result (`"ok": false`, its `findings`), as `cad doctor` does with its report.
 
@@ -247,7 +250,7 @@ release, and what it runs a program in follows the program:
 - **The CAD kernel environment is made with the release** (tier 1). 0.10's `cad doctor` made it;
   0.11.0 to 0.11.10 made it on first need, by the first build or view that needed the kernel. From
   0.11.11 it is made in the release's own folder as the release is installed: by the install command,
-  `cad update`, an automatic update, or the first command that names a release not yet installed.
+  `cad setup`, or the CAD app's first start of a release not yet installed.
   `cad doctor` never makes it: an image or a CI step that ran `cad doctor` to make it and then built
   offline runs the install command while the network is there.
 - **On Windows the command is `cad.exe`** (tier 1), with a Python of its own beside it
@@ -261,7 +264,7 @@ release, and what it runs a program in follows the program:
 runs the install command once, which brings each app's plugin up to date. What it changes:
 
 - **text-to-cad no longer updates itself** (tier 1). Automatic updates, the update button, the
-  Automatic updates switch and `cad update` are gone. Run the install command again to update
+  Automatic updates switch, `cad update` and `cad update auto` are gone. Run the install command again to update
   ([docs/install.md](../install.md)); a plugin store updates its own copy. When a newer release is out,
   `cad` says so after a command's output, in one line that names no command (`A new version of cad is
   available: X -> Y`), and the skills tell your agent to install the new version of the plugin from the
@@ -274,7 +277,8 @@ runs the install command once, which brings each app's plugin up to date. What i
   command get the skills in their own skills folder.
 - **cad sets up cad alone** (tier 1). `cad setup` installs its own release and the `cad` command, and
   changes no app; `cad plugin` is gone. `cad uninstall` removes every release, their settings and
-  data, and the `cad` command, and changes no app: remove the plugin with each app's own command.
+  data, and the `cad` command, and changes no app: remove the plugin with each app's own command. It keeps
+  nothing, so `--purge` is gone.
 - **Claude gets the skills alone** (tier 1). Claude Code and Claude Desktop get no CAD server, so no
   CAD cards or CAD tools: a model is shown by the link its run prints, in the desktop app's browser
   pane or your browser. The install command takes out the `cad` entry releases through 0.11.10 wrote
@@ -290,7 +294,8 @@ runs the install command once, which brings each app's plugin up to date. What i
 - **Each release has its own folder and data** (tier 3). The state folder's `releases/<release>` is
   `versions/<release>`, its code and its data (settings, Recents, the documents' records) in it, and each
   release runs its own CAD server. A new release starts with a copy of the settings and data of the
-  newest release before it. Going back to a release before 0.11.11 by hand is not supported.
+  newest release before it. The newest release's server removes an older release no agent has used for
+  2 days, so `cad doctor --prune` is gone. Going back to a release before 0.11.11 by hand is not supported.
 - **The CAD app's three removed tools answer by name** (tier 1, an exception until the next minor
   release). `cad_export`, `cad_snapshot` and `cad_inspect`, removed in 0.11.10, answer a chat that still
   lists them with one line naming the `cad` command that does the same (`cad model export`, `cad model

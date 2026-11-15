@@ -261,11 +261,14 @@ def _hand_over(name: str) -> int | None:
     return FAILED
 
 
-def installer() -> list[str]:
+def installer() -> list[str] | str:
     """The command ``--engine-update`` starts once it is done: ``CAD_ENGINE_UPDATE_INSTALLER``'s where it is set
-    (empty: none), else the hosted install script for this computer."""
+    (empty: none), else the hosted install script for this computer. On Windows the variable's command line is
+    started as it is written, one string that Windows splits as its programs do: ``shlex`` there keeps a quoted
+    word's quotes, naming a program that is not there."""
     if INSTALLER_ENV in os.environ:
-        return shlex.split(os.environ[INSTALLER_ENV], posix=os.name != "nt")
+        named = os.environ[INSTALLER_ENV].strip()
+        return named if os.name == "nt" else shlex.split(named)
     return list(INSTALLER_WINDOWS if os.name == "nt" else INSTALLER)
 
 

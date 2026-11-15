@@ -74,7 +74,7 @@ mkdir -p "$EMPTY" "$DIST"
 # folder, stopped on the way out.
 export CAD_ENGINE_DIR="$WORK/engine" CAD_CACHE_DIR="$WORK/no-0.7-store"
 cleanup() {
-  # The version's server the CAD app started (the cad command stops the default channel's), and the daemon the
+  # The version's server the CAD app started (the cad command stops the newest installed version's), and the daemon the
   # installed server's own commands started, if any.
   if [ -x "$WORK/bin/cad" ]; then
     "$WORK/bin/cad" stop >/dev/null 2>&1 \
@@ -256,25 +256,18 @@ watchdog.cancel()
 print(f"   {len(tools)} tools; the app is {len(page) // 1024} KiB at {uri}")
 PY
 
-step "Starting the CAD app installed its version from these wheels, moved the default channel to it, and wrote the $COMMAND command"
+step "Starting the CAD app installed its version from these wheels and wrote the $COMMAND command"
 VERSION_INSTALLED="$("$VENV/bin/python" -c 'import cad_server; print(cad_server.__version__)')"
 MARKER="$CAD_STATE_DIR/versions/$VERSION_INSTALLED/code/cad-version.json"
-RECORD="$CAD_STATE_DIR/installations/$VERSION_INSTALLED.json"
 PROXY="$CAD_LAUNCHER_DIR/$COMMAND"
 [ -f "$MARKER" ] || fail "$VERSION_INSTALLED is not installed: no $MARKER"
-[ "$(cat "$CAD_STATE_DIR/default")" = "$VERSION_INSTALLED" ] || fail "the default channel is not on $VERSION_INSTALLED"
-[ -f "$RECORD" ] || fail "no record of $VERSION_INSTALLED in $CAD_STATE_DIR/installations (the mirror)"
-# The version's server is the wheel under test, file for file (an index's release of the same number is not), and
-# the mirror's record names it. Compared resolved: the temporary folder may be spelled through a symlink.
-"$VENV/bin/python" - "$MARKER" "$RECORD" "$WHEELS" <<'PY' || exit 1
-import base64, glob, hashlib, json, os, sys, zipfile
+# The version's server is the wheel under test, file for file (an index's release of the same number is not).
+"$VENV/bin/python" - "$MARKER" "$WHEELS" <<'PY' || exit 1
+import glob, hashlib, json, os, sys, zipfile
 marker = json.load(open(sys.argv[1], encoding="utf-8"))
-record = json.load(open(sys.argv[2], encoding="utf-8"))
-if os.path.realpath(record["prefix"]) != os.path.realpath(marker["prefix"]):
-    sys.exit(f"FAIL: {sys.argv[2]} names {record['prefix']}, not the version's server {marker['prefix']}")
 site = (glob.glob(os.path.join(marker["prefix"], "lib", "python*", "site-packages"))
         or [os.path.join(marker["prefix"], "Lib", "site-packages")])[0]
-wheel = glob.glob(os.path.join(sys.argv[3], "cad_server-[0-9]*.whl"))[0]
+wheel = glob.glob(os.path.join(sys.argv[2], "cad_server-[0-9]*.whl"))[0]
 with zipfile.ZipFile(wheel) as archive:
     files = [name for name in archive.namelist() if name.startswith("cad_server/") and name.endswith(".py")]
     for name in files:
@@ -285,14 +278,10 @@ with zipfile.ZipFile(wheel) as archive:
 print(f"   {len(files)} modules of {os.path.basename(wheel)} in {marker['prefix']}")
 PY
 [ -x "$PROXY" ] && grep -q "^# $COMMAND proxy: " "$PROXY" || fail "$PROXY is not the $COMMAND command"
-same() { "$VENV/bin/python" -c 'import os, sys; sys.exit(os.path.realpath(sys.argv[1]) != os.path.realpath(sys.argv[2]))' "$1" "$2"; }
 # cad run is uv run with cad pinned at the installation's release: the program runs on that release's library.
 [ "$("$PROXY" run -c 'import cad; print(cad.__version__)' | tail -n 1)" = "$("$VENV/bin/python" -c 'import cad; print(cad.__version__)')" ] \
   || fail "$COMMAND run does not run the installation's release of cad"
-# The mirror clients of 0.11.10 and earlier read names the default channel's version.
-[ "$(cat "$CAD_STATE_DIR/installations/current")" = "$VERSION_INSTALLED" ] \
-  || fail "$VERSION_INSTALLED is not the current installation"
-echo "   versions/$VERSION_INSTALLED, the default channel, $(basename "$RECORD"), current, and $PROXY"
+echo "   versions/$VERSION_INSTALLED and $PROXY"
 
 step "Build a real model with no repo in sight"
 mkdir -p "$EMPTY/models"

@@ -18,8 +18,10 @@ from __future__ import annotations
 import contextlib
 import io
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -242,6 +244,22 @@ class EngineUpdate(Computer):
         self.assertIs(started.call_args.kwargs["stdout"], subprocess.DEVNULL, "its output read by no one")
         os.environ.pop(setup.INSTALLER_ENV)
         self.assertEqual(setup.installer(), ["sh", "-c", "curl -fsSL https://texttocad.dev/install.sh | sh"])
+
+
+class Installer(unittest.TestCase):
+    def test_a_command_of_quoted_paths_with_spaces_starts_on_every_platform(self) -> None:
+        # Windows's rehearsal named its stand-in this way and it never started: the quotes were kept in each word.
+        folder = Path(tempfile.mkdtemp(prefix="cad installer "))
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        stand_in, ran = folder / "stand in.py", folder / "it ran"
+        stand_in.write_text("import pathlib, sys\npathlib.Path(sys.argv[1]).write_text('ran', encoding='utf-8')\n",
+                            encoding="utf-8")
+        with mock.patch.dict(os.environ, {setup.INSTALLER_ENV: f'"{sys.executable}" "{stand_in}" "{ran}"'}):
+            self.assertIsNotNone(setup.start_installer())
+        deadline = time.monotonic() + 60
+        while not ran.exists():
+            self.assertLess(time.monotonic(), deadline, "the installer ran")
+            time.sleep(0.02)
 
 
 class Uninstall(Servers, Computer):
