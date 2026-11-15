@@ -5,7 +5,6 @@ traceback in the host's terminal."""
 from __future__ import annotations
 
 import io
-import os
 import signal
 import unittest
 from unittest import mock
@@ -30,8 +29,9 @@ class ShimServeInterruptTest(unittest.TestCase):
 
     def _serve_with(self, interrupt_in):
         """Run ``shim.serve`` with its collaborators stubbed; ``interrupt_in`` names
-        where the interrupt lands (``serve`` or ``close``) and sends SIGINT to this
-        process from there. Returns the ``SystemExit`` ``serve`` raises."""
+        where the interrupt lands (``serve`` or ``close``) and delivers SIGINT there by
+        invoking the handler ``serve`` installed. Returns the ``SystemExit`` ``serve``
+        raises."""
         with mock.patch.object(shim, "Holder"), \
                 mock.patch.object(shim, "Proxy") as mock_proxy, \
                 mock.patch.object(shim, "Connection") as mock_connection, \
@@ -39,7 +39,12 @@ class ShimServeInterruptTest(unittest.TestCase):
                 mock.patch.object(shim, "claim_stdout", return_value=io.BytesIO()), \
                 mock.patch.object(shim, "launcher", return_value=None):
             def interrupt():
-                os.kill(os.getpid(), signal.SIGINT)
+                # Deliver the signal by invoking the handler serve() installed:
+                # os.kill(os.getpid(), ...) kills this interpreter on Windows,
+                # where SIGINT is not delivered through Python's signal machinery
+                # and SIGTERM terminates the process outright. _leave ignores the
+                # frame, so this is exactly what the OS would invoke.
+                signal.getsignal(signal.SIGINT)(signal.SIGINT, None)
 
             if interrupt_in == "serve":
                 mock_connection.return_value.serve.side_effect = interrupt
@@ -72,7 +77,7 @@ class ShimServeInterruptTest(unittest.TestCase):
                 mock.patch.object(shim, "claim_stdout", return_value=io.BytesIO()), \
                 mock.patch.object(shim, "launcher", return_value=None):
             def interrupt():
-                os.kill(os.getpid(), signal.SIGTERM)
+                signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
 
             mock_connection.return_value.serve.side_effect = interrupt
             with self.assertRaises(SystemExit) as caught:
