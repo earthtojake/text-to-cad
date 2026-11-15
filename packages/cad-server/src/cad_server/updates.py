@@ -8,9 +8,9 @@ in the background (``refresh``), never waited on. It is one anonymous request: n
 person or their machine beyond what any web request carries. ``CAD_UPDATE_CHECK=0`` turns it off, and it never runs
 in CI (``CI`` set) or for a copy that is not told (``cad_server/_internal/channel.py``). The feed as last read is
 kept in the data folder (``versions.json``), where every process of the person's reads it: ``latest`` says the
-newest release the last check saw, and ``notice`` whether it is newer than this one. Nothing here updates anything,
-and the notice (``line``) names no command: it says only that a newer version exists. What installs it is for
-whoever installed this one to say.
+newest release the last check saw, and ``notice`` whether it is newer than this one, and only the newest installed
+version says it (``_newer_installed``). Nothing here updates anything, and the notice (``line``) names no command:
+it says only that a newer version exists. What installs it is for whoever installed this one to say.
 
 A release is also known with no network at all: an MCP client running a newer release's server says its release as
 it connects (``see``), and that proves the release exists.
@@ -152,10 +152,29 @@ def _newest(candidates: list[Any], version: str) -> str | None:
     return max(newer)[1] if newer else None
 
 
+def _newer_installed() -> bool:
+    """Whether a version newer than this process's own is installed on this computer: the newest installed
+    (``versions.newest``, which the cleanup asks too) is newer than this one (``versions.older``). False for a process
+    of no version, and where the installed versions cannot be listed: then the notice is said as before."""
+    try:
+        from cad.engine import places
+        from cad_server._internal import versions
+
+        own = places.versioned()
+        if own is None:
+            return False
+        found = versions.newest()
+        return found is not None and versions.older(own, found)
+    except Exception:  # noqa: BLE001 - a notice never goes quiet by accident
+        LOG.debug("could not list the installed versions", exc_info=True)
+        return False
+
+
 def notice(*, path: Path | None = None) -> dict[str, str] | None:
     """``{latest, version}``: a release newer than this one, from the feed as last read (never read here:
-    ``refresh``) and the releases connecting servers run (``see``), where this process is told (``told``); or
-    ``None`` when there is none, or it is not told."""
+    ``refresh``) and the releases connecting servers run (``see``), where this process is told (``told``), and only
+    the newest installed version says it (``_newer_installed``); or ``None`` when there is none, it is not told, or
+    a newer version is installed beside this one."""
     try:
         from cad_server import __version__
 
@@ -168,7 +187,7 @@ def notice(*, path: Path | None = None) -> dict[str, str] | None:
             if known is not None:
                 candidates.append(known["latest"])
         latest = _newest(candidates, __version__)
-        if latest is None:
+        if latest is None or _newer_installed():
             return None
         return {"latest": latest, "version": __version__}
     except Exception:  # noqa: BLE001 - a notice never fails what shows it

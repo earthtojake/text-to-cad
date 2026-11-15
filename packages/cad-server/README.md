@@ -219,7 +219,8 @@ knows no pin: it says `+<version>` is an unknown command (exit 2).
 **The update notice.** cad updates nothing by itself. Each version's server reads the version feed in the
 background at most once an hour (`updates.py`; never waited on; `CAD_UPDATE_CHECK=0` turns it off), and where the
 last read names a newer release, a command says so on stderr after its own output, at most once every 24 hours on
-the computer (a stamp in the state folder, `update-notice`), and never for a command that names a channel:
+the computer (a stamp in the state folder, `update-notice`), never for a command that names a channel, and only
+from the newest version installed on the computer (a version with a newer one beside it says nothing):
 
 ```
 A new version of cad is available: X -> Y

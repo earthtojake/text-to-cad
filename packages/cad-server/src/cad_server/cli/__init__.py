@@ -418,6 +418,10 @@ def _notice(*, daily: bool) -> None:
             with open(stamp, "ab"):
                 pass
             os.utime(stamp, (now, now))
+        try:
+            sys.stdout.flush()  # the command's output first, where both streams share one pipe (`2>&1`)
+        except (OSError, ValueError):  # stdout closed: the line still goes to stderr
+            pass
         sys.stderr.write(updates.line(found) + "\n")
         sys.stderr.flush()
     except Exception:  # noqa: BLE001 - a notice never fails the command it follows

@@ -57,11 +57,11 @@ never touched.
 
 **Decision.** A plugin store (Codex's directory, claude.ai's) updates the copy it installed. The
 agent updates a manual install. cad says only that a version exists, in one line after a command's
-output: `A new version of cad is available: X -> Y`, with no command and no link. The skill holds
-the rest: at a session's start it checks `cad +X --version`, and when `cad` reports a new version
-it tells the agent to "install the new version of the plugin from
-https://github.com/earthtojake/text-to-cad", and then to tell the person. The agent installs it; a
-cautious agent asks the person first. Nothing installs itself.
+output: `A new version of cad is available: X -> Y`, with no command and no link, and only the
+newest version installed on the computer says it. The skill holds the rest: at a session's start it
+checks `cad +X --version`, and when `cad` reports a new version it tells the agent to "install the
+new version of the plugin from https://github.com/earthtojake/text-to-cad", and then to tell the
+person. The agent installs it; a cautious agent asks the person first. Nothing installs itself.
 
 **Why.** cad cannot update a plugin without knowing the apps, which the first decision rules out.
 The store already updates its copy, and the agent is already running commands for the person, with
@@ -79,16 +79,17 @@ notice, the only nudge is the viewer's (below).
 ## The viewer's update nudge
 
 **Decision.** The web viewer and the CAD app show a small blue button, last in the navbar, only
-while the server's version check knows a newer release. Pressed, it opens a popover saying a new
-version of the text-to-cad plugin is available, with a ready prompt for the person's agent: `A new
-version of the text-to-cad plugin is available (vY). Update it from
-https://github.com/earthtojake/text-to-cad`. The CAD app sends it to the chat where the host takes
-messages; otherwise, and in the web viewer, the person copies it. The nudge is the one place the
-software tells a person, rather than an agent, that a new version exists, and all it does is hand
-them that prompt: nothing in the page or the server installs, downloads or restarts anything. Only
-the default channel gets the nudge: a CAD app session a store's launcher opened is never shown it,
-and the web viewer shows it only where the default channel (a command or a session with no store's
-name) has used that version, which the version records once, in a marker file beside its last use.
+while the server's version check knows a newer release and its version is the newest installed.
+Pressed, it opens a popover saying a new version of the text-to-cad plugin is available, with a
+ready prompt for the person's agent: `A new version of the text-to-cad plugin is available (vY).
+Update it from https://github.com/earthtojake/text-to-cad`. The CAD app sends it to the chat where
+the host takes messages; otherwise, and in the web viewer, the person copies it. The nudge is the
+one place the software tells a person, rather than an agent, that a new version exists, and all
+it does is hand them that prompt: nothing in the page or the server installs, downloads or restarts
+anything. Only the default channel gets the nudge: a CAD app session a store's launcher opened is
+never shown it, and the web viewer shows it only where the default channel (a command or a session
+with no store's name) has used that version, which the version records once, in a marker file beside
+its last use.
 
 **Why.** A skill cannot make an agent install without the person's say-so: in blind tests, agents
 told to install "without asking" refused. The person has to agree, and the viewer is where they

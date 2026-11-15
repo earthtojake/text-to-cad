@@ -9,6 +9,7 @@ import io
 import json
 import os
 import shutil
+import sys
 import tempfile
 import threading
 import time
@@ -17,7 +18,9 @@ from pathlib import Path
 from unittest import mock
 
 import cad_server
+from cad.engine import places
 from cad_server import updates
+from cad_server._internal import versions
 from cad_server.cli import main as cadgen_main
 
 FEED = {"latest": "0.9.0"}
@@ -117,6 +120,51 @@ class UpdatesTest(unittest.TestCase):
         self.assertEqual(updates.notice()["latest"], "0.9.1")
         with mock.patch.object(cad_server, "__version__", "0.9.1"):
             self.assertIsNone(updates.notice())
+
+    def installed(self, name: str) -> Path:
+        """Version ``name``'s code marker, as ``versions.make_present`` writes it (its environment this Python's)."""
+        code = self.tmp / places.VERSIONS / name / places.CODE
+        code.mkdir(parents=True)
+        record = {"schema": places.VERSION_SCHEMA, "version": name, "python": sys.executable, "cad": sys.executable,
+                  "prefix": sys.prefix}
+        (code / places.VERSION_MARKER).write_text(json.dumps(record), encoding="utf-8")
+        places._versioned.cache_clear()
+        self.addCleanup(places._versioned.cache_clear)
+        return self.tmp / places.VERSIONS / name
+
+    def read_by_this_version(self, feed: dict) -> None:
+        """The feed as just read, in this installed version's own data folder."""
+        cache = places.data_dir() / updates.FILE
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps({"checked": time.time(), "feed": feed}), encoding="utf-8")
+
+    def test_only_the_newest_installed_version_says_a_newer_release_is_out(self) -> None:
+        # Decided as the cleanup decides whether its version is the newest installed (``versions.newest``): a version
+        # with a newer one beside it says nothing, on a command's line or a page's nudge.
+        (self.installed("0.8.1") / versions.DEFAULT_CHANNEL_USED).write_bytes(b"")
+        self.installed("0.8.0")
+        self.read_by_this_version(FEED)
+        expected = {"latest": "0.9.0", "version": "0.8.1"}
+        self.assertEqual((updates.notice(), updates.offered()), (expected, expected), "the newest installed: told")
+        self.installed("0.8.2")
+        self.assertEqual((updates.notice(), updates.offered()), (None, None), "a newer one installed: quiet")
+        with mock.patch.object(versions, "newest", side_effect=OSError("unreadable")):
+            self.assertEqual(updates.notice(), expected, "the versions not listed: as before, never quiet by accident")
+        self.just_read(FEED)  # where a process of no version keeps it
+        with mock.patch.object(places, "versioned", return_value=None):
+            self.assertEqual(updates.notice(), expected, "a process of no version: as before")
+
+    @unittest.skipIf(os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+                     "a folder's mode does not keep this user out")
+    def test_a_versions_folder_that_cannot_be_read_leaves_the_notice_as_it_was(self) -> None:
+        self.installed("0.8.1")
+        self.installed("0.8.2")
+        self.just_read(FEED)  # where a process of no version keeps it: this one, once its folder cannot be read
+        root = self.tmp / places.VERSIONS
+        root.chmod(0)
+        self.addCleanup(root.chmod, 0o755)
+        places._versioned.cache_clear()
+        self.assertEqual(updates.notice(), {"latest": "0.9.0", "version": "0.8.1"})
 
     def test_nothing_is_checked_when_turned_off_in_ci_or_for_a_development_build(self) -> None:
         self.just_read(FEED)

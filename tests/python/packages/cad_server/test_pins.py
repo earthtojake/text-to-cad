@@ -388,6 +388,29 @@ class ACommandOfAVersion(unittest.TestCase):
         self.notice(latest=mine)
         self.assertEqual(self.main("--version"), (0, f"cad {mine}\n", ""), "the newest already")
 
+    def test_a_version_with_a_newer_one_installed_beside_it_says_nothing(self) -> None:
+        self.installed(DEV)
+        self.notice()  # in DEV's own data folder
+        mine = cad_server.__version__
+        self.assertIn("new version", self.main("--version")[2], "the newest installed: told")
+        self.installed(NEWER)
+        self.assertEqual(self.main("--version"), (0, f"cad {mine}\n", ""))
+        code, _out, err = self.main("requirement")
+        self.assertEqual((code, err), (0, ""), "nor after a command, though no notice was said today")
+        self.assertFalse((self.state / cli.NOTICE).exists())
+
+    def test_the_notice_comes_after_the_output_where_both_streams_share_one_pipe(self) -> None:
+        # `2>&1`: stdout block-buffered on a pipe, stderr on the same pipe; the output is flushed before the line.
+        self.notice()
+        mine = cad_server.__version__
+        read, write = os.pipe()
+        with open(read, "rb") as reader:
+            with open(write, "w", encoding="utf-8") as out, open(os.dup(write), "w", encoding="utf-8") as err:
+                with redirect_stdout(out), redirect_stderr(err):
+                    self.assertEqual(cli.main(["--version"]), 0)
+            self.assertEqual(reader.read().decode("utf-8"),
+                             f"cad {mine}\nA new version of cad is available: {mine} -> 99.0.0\n")
+
 
 class TheChannel(unittest.TestCase):
     def setUp(self) -> None:
