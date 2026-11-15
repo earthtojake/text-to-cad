@@ -6,12 +6,20 @@ not prove a match. Keep manufacturer, MPN, sourcing reference and DNP in footpri
 project BOM; do not infer purchase quantities from pad count.
 
 A native board embeds its footprints. `fp-lib-table` is needed to resolve or update the original
-library, not to display an existing board. A project-local footprint library is a `.pretty`
-folder containing `.kicad_mod` files, referenced with `${KIPRJMOD}`. Stock libraries use the
-installed KiCad major's environment variable, such as `${KICAD9_FOOTPRINT_DIR}`, which DRC, ERC and an
-edit read in the KiCad you installed ([SKILL.md](../SKILL.md#setup)); with no KiCad installed, DRC warns
-`lib_footprint_issues` for each such footprint. Preserve project-local libraries when handing off a
-board. Read the library footprint before placing it.
+library and for a netlist import to find a new part's footprint, not to display an existing board. A
+project-local footprint library is a `.pretty` folder containing `.kicad_mod` files, referenced with
+`${KIPRJMOD}`: copy each footprint a design uses into it, so the project needs no KiCad. KiCad's stock
+libraries are its repositories at [gitlab.com/kicad/libraries](https://gitlab.com/kicad/libraries), at the
+tag of a release (`10.0.8`): `kicad-footprints` (a `.pretty` folder a library), `kicad-symbols`
+([schematic](schematic.md#edit-it)) and `kicad-packages3D` (the STEP models); an installed KiCad holds
+them as `footprints`, `symbols` and `3dmodels`. With no KiCad installed, fetch the one file
+(`https://gitlab.com/kicad/libraries/kicad-footprints/-/raw/10.0.8/Resistor_SMD.pretty/R_0603_1608Metric.kicad_mod`)
+or a repository's archive (`.../kicad-footprints/-/archive/10.0.8/kicad-footprints-10.0.8.tar.gz`, about
+12 MB). A row that names a stock library in place (`${KICAD10_FOOTPRINT_DIR}/Resistor_SMD.pretty`) is read
+in the KiCad you installed, or in a downloaded `footprints` folder that `CAD_KICAD_3DMODELS` leads to
+([SKILL.md](../SKILL.md#setup)); with neither, DRC warns `lib_footprint_issues` for each such footprint and
+a netlist import cannot place it. Preserve project-local libraries when handing off a board. Read the
+library footprint before placing it.
 
 Several physical pads may share one number (a shield or thermal pad). `part.pads_numbered("1")`
 returns every shape for that logical pin; `part.pad("1")` returns the first. Check connectivity
@@ -48,7 +56,9 @@ next export.
 
 ## A new footprint
 
-1. Look in KiCad's stock library first; a footprint there has been reviewed against its conventions.
+1. Look in KiCad's stock library first (with no KiCad installed, in `kicad-footprints`' archive, above); a
+   footprint there has been reviewed against its conventions. Copy its `.kicad_mod` into the project's
+   `.pretty`.
 2. Otherwise describe the land pattern from the datasheet in words and numbers (pad sizes, pitch,
    each pad's centre from the part's origin, the exposed pad, pin 1) and have the person confirm it
    before drawing it.

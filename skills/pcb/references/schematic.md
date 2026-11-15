@@ -87,9 +87,11 @@ against the circuit you meant.
 
 `libraries_not_checked` is a note, not a finding: the check runs KiCad with private settings, so it
 cannot see your global symbol and footprint library tables (it reads a project's own `sym-lib-table` and
-`fp-lib-table`, a row of them naming a stock library by KiCad's variable in the KiCad you installed:
-[SKILL.md](../SKILL.md#setup)). `lib_symbol_issues` saying a library "was not found" at a stock path is
-such a row with no KiCad installed: copy the library into the project.
+`fp-lib-table`, a row of them naming a stock library by KiCad's variable in the KiCad you installed or
+beside `CAD_KICAD_3DMODELS`'s folder: [SKILL.md](../SKILL.md#setup)). `lib_symbol_issues` saying a library
+"was not found" at a stock path is such a row where neither holds it, or a row naming `Device.kicad_sym`
+where the folder holds `Device.kicad_symdir`: copy the symbols into the project ([Libraries](#edit-it)),
+or lead KiCad to the stock folder.
 
 ## Edit it
 
@@ -122,7 +124,9 @@ with kicad_sch.edit("board.kicad_sch") as s:  # any sheet of the project
         s.create_items(wire)
 ```
 
-Then read it back (`kicad_sch.read`: the pins and their nets), draw it and check it with ERC.
+Then read it back (`kicad_sch.read`: the pins and their nets), draw it and check it with ERC. A label, a
+junction, a no-connect, a power symbol, a turned symbol and a symbol's value and footprint are in
+[KiCad's API, by example](kicad-api.md#a-schematic).
 
 **The safe calls.**
 
@@ -140,17 +144,28 @@ Then read it back (`kicad_sch.read`: the pins and their nets), draw it and check
 
 **Libraries.** A symbol is placed from the project's own symbol libraries: the rows of its `sym-lib-table`,
 beside the `.kicad_pro` (`${KIPRJMOD}` is that folder). The script runs KiCad with private settings, so no
-global library table is there. A row may name a stock library as KiCad's own tables do
-(`${KICAD10_SYMBOL_DIR}/Device.kicad_sym`), read in the KiCad you installed ([SKILL.md](../SKILL.md#setup));
-for a project that opens anywhere, copy each library a design needs (its `.kicad_sym`) into the project and
-list it:
+global library table is there. A library is one `.kicad_sym` file or a folder of them, a file a symbol:
+KiCad 10's own repository, `kicad-symbols`, keeps each library as such a folder
+(`Device.kicad_symdir/R.kicad_sym`), and an installed KiCad packs each into one file (`Device.kicad_sym`).
+For a project that opens anywhere, copy the file of each symbol the design uses into a folder of the
+project, with the file of the symbol it `extends`, if its file names one (`AMS1117-3.3` extends
+`AP1117-15`; a library missing a parent does not load), and list the folder:
 
 ```
 (sym_lib_table
   (version 7)
-  (lib (name "parts")(type "KiCad")(uri "${KIPRJMOD}/parts.kicad_sym")(options "")(descr ""))
+  (lib (name "parts")(type "KiCad")(uri "${KIPRJMOD}/parts.kicad_symdir")(options "")(descr ""))
 )
 ```
+
+With no KiCad installed, a symbol's file is
+`https://gitlab.com/kicad/libraries/kicad-symbols/-/raw/10.0.8/Device.kicad_symdir/R.kicad_sym` (the tag
+of a KiCad release; the whole repository is a 12 MB archive: [parts](parts.md)). A row may also name a
+stock library in place, as it is there: `${KICAD10_SYMBOL_DIR}/Device.kicad_sym` in an installed KiCad,
+`${KICAD10_SYMBOL_DIR}/Device.kicad_symdir` in a downloaded `symbols` folder, which
+[SKILL.md](../SKILL.md#setup) says how KiCad is led to. KiCad does not take one form for the other:
+`cad run kicad-cli sym upgrade --force -o Device.kicad_sym Device.kicad_symdir` packs a folder into one
+file, in the nightly's format.
 
 A placement from a library the table does not list fails in one line naming it and the row to add; a
 listed library that did not load is said when the block starts.
@@ -250,19 +265,20 @@ A board's and a schematic's edits of one project can also share one block, and o
 own end (the board's first). The netlist is read from the saved schematic, so import it after the
 schematic's block, as above.
 
-After a layout or a schematic edit, hold the board to the schematic pin by pin:
+After a layout or a schematic edit, hold the board to the schematic: DRC checks the board against its
+schematic. `cad kicad_pcb drc board.kicad_pcb` reads the saved `board.kicad_sch` beside the board (every
+sheet under it) and fails on any difference, each a finding:
 
-```python
-from cad import kicad_pcb, kicad_sch
+| Finding | The difference |
+| --- | --- |
+| `net_conflict` | a pad on another net than the schematic gives its pin |
+| `extra_footprint` | a part on the board that the schematic lacks |
+| `missing_footprint` | a part of the schematic with no footprint on the board (it has no place there: the message names it) |
+| `footprint_symbol_mismatch` | a footprint, or a value, that is not its symbol's |
+| `footprint_symbol_field_mismatch` | a field of the symbol (an `LCSC`, an `MPN`) that the footprint lacks or holds differently |
 
-sch, board = kicad_sch.read("board.kicad_sch"), kicad_pcb.read("board.kicad_pcb")
-want = {(pin.ref, pin.number): pin.net for pin in sch.pins if not pin.ref.startswith("#")}
-have = {(pad.part, pad.number): pad.net for pad in board.pads}
-for key in sorted(set(want) | set(have)):
-    if want.get(key) != have.get(key):
-        print(key, "schematic:", want.get(key), "board:", have.get(key))
-```
-
+KiCad calls each a warning; the check fails the board on any of them. With no `board.kicad_sch` beside the
+board none of this is checked, and the result says `no_schematic`.
 A part on one and not the other, or a pin on another net, is a change the netlist import has not
 carried, or one made on the board alone. The other exports: `--to pdf` (every sheet), `--to svg` (a
 file per sheet), `--to bom` (a CSV a line per value, footprint and `MPN`, its `Refs` in ranges such as

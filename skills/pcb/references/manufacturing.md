@@ -4,8 +4,10 @@ Use the chosen manufacturer's current capability page for the specific layer cou
 weight, finish and assembly service. Compare those limits with `.kicad_pro` and `.kicad_dru`;
 DRC checks the project's rules, not a manufacturer's catalog. Record unresolved findings.
 
-Run `cad kicad_pcb drc board.kicad_pcb --json` after saving and refilling zones. DRC reports include
-violations and unconnected items, with severity and board positions. No report is cached and
+Run `cad kicad_pcb drc board.kicad_pcb --json` on the board as saved, its zones refilled in the edit: DRC
+refills them in memory and judges that, while the exports below plot the fill the file holds. DRC reports
+include violations, unconnected items and differences from the schematic beside the board, with severity
+and board positions; a violation excluded in the project is listed as excluded. No report is cached and
 the board source is not rewritten. KiCad may create a local `.kicad_prl` during file commands. An exit code of zero does not establish circuit correctness.
 
 KiCad exports the same saved source, with `cad kicad_pcb export BOARD --to KIND -o DIR` (kicode's
@@ -15,7 +17,7 @@ KiCad exports the same saved source, with `cad kicad_pcb export BOARD --to KIND 
 | --- | --- |
 | `gerbers` | every plot layer the board's own plot settings choose, and a job file |
 | `drill` | Excellon drill files, mm |
-| `pos` | `<board>-pos.csv`: placement of both sides, mm, from KiCad's page origin, every placed part (DNP ones too): KiCad's columns `Ref`, `Val`, `Package`, `PosX`, `PosY`, `Rot`, `Side` |
+| `pos` | `<board>-pos.csv`: placement of both sides, mm, from KiCad's page origin, the fitted parts: a footprint marked Do-Not-Populate is left out, as the BOM leaves its part out, and so is one marked "exclude from position files" (a mounting hole). KiCad's columns `Ref`, `Val`, `Package`, `PosX`, `PosY`, `Rot`, `Side` |
 | `bom` | `<board>-bom.csv` from the schematic beside the board (`<board>.kicad_sch`), grouped by value and footprint, DNP parts left out: `Reference` (every designator, no ranges), `Value`, `Footprint`, `Quantity`, then `MPN` and `LCSC` where any part carries one (read from fields named `MPN`, `Manufacturer_Part_Number`, `LCSC`, `LCSC Part`, ...) |
 | `step`, `glb` | `<board>.step` / `<board>.glb`: the board and its parts, each part's STEP model read where the board view reads it (the board's folder, KiCad's installed 3D library, `CAD_KICAD_3DMODELS`; a `.wrl` name as the STEP beside it); parts without a model are named. The GLB holds the board's copper, mask and silkscreen too, each KiCad's own mesh named by its layer (`<board>_copper`, `_pad`, `_via`, `_silkscreen`, `_soldermask`, `_PCB`), so it is the larger and slower of the two (tens of MB on a four-layer board) |
 | `odb` | `<board>-odb.zip`: ODB++, mm |
@@ -36,23 +38,42 @@ cad run kicad-cli pcb export step --force --subst-models --user-origin 0x0mm -o 
 Confirm the fab's required layers and drill format. Include the BOM with verified MPNs,
 quantities, DNP flags and assembler placement conventions.
 
-Review the files the fab will receive, not the editor's view: open the exported Gerbers and drill
-files in a Gerber viewer (the fab's own upload preview, or KiCad's GerbView) and look for shorts,
-vias that collide or land in pads, and missing layers (both masks, both silkscreens, the outline, the
-drill). The board view and its snapshots approximate those layers; they are not a manufacturing plot.
+The files the fab will receive are reviewed by the person, not by you. kicode's KiCad has no Gerber
+viewer (`cad run kicad-cli gerber convert png` fails on a missing `_gerbview.kiface`), and the board view
+and its snapshots approximate those layers; they are not a manufacturing plot. The person opens the
+exported Gerbers and drill file in the fab's upload preview (or KiCad's GerbView, where they have KiCad)
+and looks for shorts, vias that collide or land in pads, and missing layers: say so in the handover, and
+list it under checks not run. What you check is what the files say as text: the layers written (`cad
+kicad_pcb export --to gerbers --json`'s `written`: every copper layer, both masks, both silkscreens and
+the outline, which `export` warns about when the plot settings leave it out), and the drill file's tools
+(`T2C0.400`: a diameter each, plated or not on the line above) and hits (its `X` lines) against the board
+read back: the vias, the pads with a `drill` and `board.holes` (`counts.vias` and `counts.holes` of `cad
+kicad_pcb inspect --json`).
 
-A placement file without the DNP parts, or from the drill/place origin, is KiCad's command line run
-yourself: `cad run kicad-cli pcb export pos --format csv --units mm --side both --exclude-dnp
---use-drill-file-origin -o out/board-pos.csv board.kicad_pcb`. JLCPCB's assembly reads `Designator`,
+`--to pos` and `--to bom` name the same parts: each leaves the Do-Not-Populate ones out, the placement
+file by the board's footprints and the BOM by the schematic's symbols, so a part marked in the schematic
+is still placed until its netlist is imported into the board again. A placement file from the
+drill/place origin is KiCad's command line run yourself: `cad run kicad-cli pcb export pos --format csv
+--units mm --side both --exclude-dnp --use-drill-file-origin -o out/board-pos.csv board.kicad_pcb`.
+JLCPCB's assembly reads `Designator`,
 `Mid X`, `Mid Y`, `Layer` (`Top` or `Bottom`) and `Rotation` in millimetres and degrees
 ([its placement file guide](https://jlcpcb.com/help/article/pick-place-file-for-pcb-assembly)):
 rename KiCad's columns in a script, never by hand in the file, and check the rotations in the order
 page's preview.
 
+JLCPCB's order form takes one `.zip` (or `.rar`) holding every Gerber and the drill file side by side,
+under plain English file names
+([its KiCad guide](https://jlcpcb.com/help/article/how-to-generate-gerber-and-drill-files-in-kicad-9)):
+`--to gerbers` and `--to drill` each write a folder, so zip the files of both. Its assembly BOM reads the
+columns `Comment` (the value), `Designator`, `Footprint` and, for the LCSC number, `JLCPCB Part #`
+([its BOM guide](https://jlcpcb.com/help/article/bill-of-materials-for-pcb-assembly), whose sample BOM
+has that header): rename the exported BOM's columns in a script too.
+
 ## Standard-tier limits
 
-From each fab's capability page, read 2026-11-04; recheck the page for anything near a limit. The
-standard tier is a price, not a physical limit: finer work is often made at a surcharge.
+From each fab's capability page, read 2026-11-04 (the plated hole and slot rows 2026-11-15); recheck
+the page for anything near a limit. The standard tier is a price, not a physical limit: finer work is
+often made at a surcharge.
 
 | Limit | [JLCPCB](https://jlcpcb.com/capabilities/pcb-capabilities) 1–2 layers | JLCPCB 4 layers | [PCBWay](https://www.pcbway.com/capabilities.html) standard | [OSH Park](https://docs.oshpark.com/services/) 2 layers | OSH Park 4 layers |
 | --- | --- | --- | --- | --- | --- |
@@ -60,12 +81,17 @@ standard tier is a price, not a physical limit: finer work is often made at a su
 | Smallest drill | 0.15 mm (0.1 mm costs more) | 0.15 mm | 0.2 mm (smaller costs more) | 0.254 mm (10 mil) | 0.254 mm |
 | Via, hole / pad | 0.15 / 0.25 mm minimum; a 0.15 mm hole, or a 0.2–0.25 mm one on a pad under 0.45 mm, costs more | as 1–2 layers | (drill above) | (drill above) | (drill above) |
 | Annular ring | 0.18 mm minimum, 0.25 mm advised (plated holes) | 0.15 mm minimum, 0.20 mm advised | 0.15 mm (vias) | 0.127 mm (5 mil) | 0.102 mm (4 mil) |
+| Plated hole to track | 0.28 mm minimum, 0.35 mm advised (a via's hole: 0.2 mm) | as 1–2 layers; to inner-layer copper 0.3 mm (a via's hole: 0.2 mm) | not stated for outer layers; a hole to inner-layer copper 0.178 mm (7 mil) on 4 layers | not stated | not stated |
+| Plated slot, width | 0.5 mm, at least twice as long as wide | 0.35 mm listed, beside a note that says 0.5 mm: hold 0.5 mm | 0.5 mm, at least twice as long as wide | 0.508 mm (20 mil), on its [2-layer page](https://docs.oshpark.com/services/two-layer/) | 0.508 mm (20 mil), on its [4-layer page](https://docs.oshpark.com/services/four-layer/) |
 | Copper to a routed edge | 0.2 mm | 0.2 mm | 0.25 mm | not stated | not stated |
 | Silkscreen text height / stroke | 1.0 / 0.15 mm | 1.0 / 0.15 mm | 0.8 / 0.15 mm | not stated | not stated |
 
 Map each to the board's rules: track and space to the netclass's track width and clearance, the drill
 and via to the via size and hole, the ring to Board Setup's minimum annular width, the edge to its
-copper-to-edge clearance.
+copper-to-edge clearance, the plated hole to track to its minimum hole clearance (`min_hole_clearance`;
+KiCad's default, 0.25 mm, is under JLCPCB's 0.28 mm). A slot has no rule of its own: the minimum through
+hole (`min_through_hole_diameter`) holds a slot's width together with every pad's and via's drill, so
+read each slot in its footprint (`(drill oval 0.5 1.2)`) against the fab's width and length.
 
 ## STEP and mesh for an enclosure
 

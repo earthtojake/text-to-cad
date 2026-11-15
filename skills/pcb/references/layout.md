@@ -11,7 +11,10 @@ board at its block's end, and the next step reads what the last one saved. Each 
    -o tmp`, or `kicad_sch.export("board.kicad_sch", "netlist", "tmp")` in the script), then bring the
    parts and nets onto the board in an edit:
    `b.import_netlist("tmp/board.net")` (`dry_run=True` first to see what it would change). The
-   schematic, not the footprints, says what connects to what.
+   schematic, not the footprints, says what connects to what. An import whose result has errors
+   (`result.error_count`, their lines in `result.report`: most often a footprint that no library of the
+   `fp-lib-table` holds) must stop the script, by raising inside the block so nothing is saved: KiCad
+   returns normally, having left those parts off the board.
 2. **Rules before copper.** Set the clearances, netclasses and track widths from the fab's limits and
    each net's current (`b.get_design_rules()`, `b.set_design_rules(...)`, the project's
    `.kicad_pro`). Width for current: IPC-2221, `I = k * dT^0.44 * A^0.725` (A in mil², k = 0.048 on

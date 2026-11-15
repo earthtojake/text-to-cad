@@ -23,7 +23,7 @@ footprint):
 | A fitted part with pads has no part number (`LCSC` for JLCPCB, `MPN` for every other assembler) | **fail** for an assembled order: the assembler cannot match the row. Holes, test points, fiducials and logos (`H`, `MH`, `TP`, `FID`, `LOGO` references) are made, not bought: skip them |
 | One part number on parts with different footprints | **fail**: one of them has the wrong number or the wrong footprint; an assembler places one package per number |
 | A BOM row's footprint does not match the part number's package (0402 vs 0603, SOT-23 vs SOT-23-5) | **fail** |
-| A do-not-populate part appears in the BOM or the placement file | **fail**: mark it DNP in the schematic and update the board (`part.dnp` from `kicad_pcb.read` says which are); `cad kicad_pcb export --to bom` leaves DNP parts out, `--to pos` keeps them, so write the placement file with `--exclude-dnp` ([manufacturing](manufacturing.md)) |
+| A do-not-populate part appears in the BOM or the placement file | **fail**: mark it DNP in the schematic and import its netlist into the board again (`part.dnp` from `kicad_pcb.read` says which footprints are). `cad kicad_pcb export --to bom` leaves out the symbols marked DNP and `--to pos` the footprints marked DNP, so the two files name the same parts once the board has the schematic's marks ([manufacturing](manufacturing.md)); the schematic's own BOM (`cad kicad_sch export --to bom`) lists them, under a `DNP` column |
 
 Never invent a part number. Search the assembler's library for a part matching
 the value, package and rating, give the user the candidates, and let them pick.
@@ -31,9 +31,15 @@ the value, package and rating, give the user the candidates, and let them pick.
 ## The placement file
 
 The placement file is KiCad's position export (`cad kicad_pcb export board.kicad_pcb
---to pos -o out/`), one row per placed part: reference, value, footprint, x, y,
+--to pos -o out/`), one row per fitted part: reference, value, footprint, x, y,
 rotation, side. Check:
 
+- What it lists: a mounting hole, fiducial or logo in the file is a footprint without
+  "exclude from position files", which a netlist import sets, with each footprint's other
+  fabrication attributes, from its schematic symbol, whatever the library footprint says (KiCad's
+  own `Mechanical:MountingHole` symbol does not say it). Set it on the symbol in a `kicad_sch.edit`
+  (`symbol.attributes.exclude_from_position_files = True`, then `s.update_items([symbol])`),
+  export the netlist and import it again.
 - Its origin: `--to pos` measures from KiCad's page origin. An assembler that wants
   the drill/place origin, set on a corner of the outline, gets the file from KiCad's
   command line with `--use-drill-file-origin` ([manufacturing](manufacturing.md)).

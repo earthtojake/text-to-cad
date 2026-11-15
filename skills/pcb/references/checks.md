@@ -24,10 +24,16 @@ the board as drawn; a track's arc is coarser (10 degree chords). It does not lau
 Project netclass names are read from the sibling `.kicad_pro` when present. Refresh the index
 after an edit. `part.pads_numbered(number)` includes all shapes for a shared pin number.
 `from cad.kicad_pcb import inside` tests whether a point lies in a polygon (a pour's fill, the
-outline) by the even-odd rule, in the same millimetres. DRC is `cad kicad_pcb drc` (`--json`: each
+outline) by the even-odd rule, in the same millimetres. DRC is `cad kicad_pcb drc`: KiCad's check of the
+saved board, its zones refilled in memory first (the file is not rewritten) and, with `board.kicad_sch`
+beside it, the board held to its schematic (`net_conflict`, `extra_footprint`, `missing_footprint`,
+`footprint_symbol_mismatch`; with none, `no_schematic` says so). An error, an unconnected item and a
+difference from the schematic each fail it, as an `error`; a finding excluded in the project is an `info`
+ending `(excluded in the project: <its comment>)`, and fails nothing (`--json`: each
 finding's `items`, as under `measurements.drc`, each with KiCad's `uuid`, `description` and `pos`, and what the
 board says it is: `kind` (track, via, pad, zone, footprint, shape, text, field), `layers`, `net`, `ref` (the
 reference `board.resolve` takes: `#track:<uuid>`, `#U3.7`, `#U3`) and `part`; each `measurements.drc` entry
+keeps KiCad's own `severity`, says `excluded` and the exclusion's `comment`, and
 adds the `layer` its description ends with. KiCad reports a copper sliver with no item or position: the
 check finds it again in that layer's saved copper (`at_source: "board"`, the finding's location), and where
 it cannot, says why in `note`), and
@@ -78,6 +84,9 @@ return paths under signals. Thresholds come from the circuit/datasheets and stac
 apply an arbitrary universal distance or current rule. Report assumptions and inaccessible
 information. Measure repeated pad shapes together and account for vias and both copper sides.
 
-KiCad's `cad kicad_pcb drc` result is the connectivity and rule gate. A zone outline is not proof
-of connected copper: regenerate the fill in KiCad, save it, then run DRC. An unfilled or stale
-zone must not be called routed solely because its outline encloses a pin.
+KiCad's `cad kicad_pcb drc` result is the connectivity and rule gate. It refills the zones in memory
+before it judges them, so a stale saved fill neither hides an unconnected pad nor reports a clearance
+the pour gives way to. The file keeps the fill it was saved with, which is what `kicad_pcb.read`
+measures and an export plots: still regenerate the fill in the edit (`b.refill_zones()`) and save it.
+A zone outline is not proof of connected copper: a zone must not be called routed solely because its
+outline encloses a pin.
