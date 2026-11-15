@@ -4,7 +4,6 @@ description: Creates and edits parametric CAD parts, assemblies and 2D profiles 
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
-  version: "0.11.11"
 ---
 
 # CAD modeling and inspection
@@ -33,32 +32,22 @@ the page the person has open updates. Files are exports, made when asked.
 
 ## Setup and paths
 
-Every command in this skill starts `cad +0.11.11@claude`: it runs text-to-cad 0.11.11, the release this skill was
-written for, and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your
-PATH; `cad.exe` on Windows). The first command after a new release installs it, once.
+Every command in this skill starts `cad +0.11.11@claude`: it runs cad 0.11.11, the version this skill was written for,
+and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your PATH; `cad.exe`
+on Windows).
 
-If `cad` is missing, or says it does not know `+0.11.11@claude` (an older text-to-cad), install this release,
-outside the sandbox or with its permission, then run the command again:
+If `cad` is missing, or says 0.11.11 is not installed, install it, outside the sandbox, then run the
+command again:
 
 ```bash
-uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.11 cad setup --add
+uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.11 cad setup
 ```
 
-It installs 0.11.11 and the `cad` command and changes nothing else.
+It installs cad 0.11.11 and the `cad` command and changes nothing else. If `uvx` is missing, install uv
+first.
 
-When a command fails, its exit code says why:
-
-- 3: it could not install or switch to 0.11.11 from this shell. Do what it says, outside
-  the sandbox or with its permission, then run the command again.
-- 4: this copy of the skill is older than the text-to-cad its channel is on now. Read the skill again;
-  if it still names the same release, this app's copy of the text-to-cad plugin is out of date: run
-  cad update (with no pin), or, where the copy came from an app's plugin store, update it there; then start
-  a new chat.
-- 5: the `cad` this shell found is not the `cad` command but another copy of text-to-cad. Run
-  `~/.local/bin/cad` (`%USERPROFILE%\.local\bin\cad.exe` on Windows) instead.
-
-`cad +0.11.11@claude doctor --check` explains any other failure, changing nothing; `cad +0.11.11@claude doctor` repairs what
-it reports. Tell the person any next step it prints.
+A project written for an earlier text-to-cad may need changes. The migration guides say what, one per
+version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
 One server runs for this release: the first run starts it, every run and every
 command goes through it, and it serves the viewer. `cad +0.11.11@claude status` lists its workers
@@ -569,13 +558,21 @@ and every assumption or departure from the request.
 
 ### Show the model
 
-Show the person each model you create or change, and any model or file they ask to see. If your
-tools include `cad_show` (your host may prefix it), call it with the model's id or the file's
-absolute path; its description says the rest. Otherwise give the person the page's link once, to
-open in the app's browser pane where it has one, or their browser: a model's page is the `view:` line its run prints, and a file's is the `url` that
-`cad +0.11.11@claude viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
-download: give its path. Never screenshot the viewer to check your own work; review with
-`cad +0.11.11@claude <type> snapshot`. If it fails to launch, say so.
+Show the person each model you create or change as soon as its first run succeeds, and any model
+or file they ask to see. A model's page is the `view:` line its run prints, and a file's is the `url`
+that `cad +0.11.11@claude viewer --json FILE [FILE ...]` prints for it (never guess the port). Show it with
+the first of these you have:
+
+1. `cad_show` among your tools (your host may prefix it): call it with the model's id or the file's
+   absolute path; its description says the rest.
+2. A tool that opens a page in the app's own browser pane, not in the person's own browser (in the
+   Claude desktop app, the Browser pane's `preview_start` with the page's `url`, or its `navigate`):
+   open the page there yourself, and give the person the link as well.
+3. Neither: give the person the link, to open in their browser.
+
+The page follows every run of the model. A file you export is a download: give its path. Showing is
+for the person: to check your own work, review with `cad +0.11.11@claude <type> snapshot`, never a screenshot
+of the page. If it fails to launch, say so.
 
 Exact selection and measurement need a model's document, an `.xbf` or a STEP; mesh viewers
 measure approximately, on triangles.

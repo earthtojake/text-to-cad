@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/earthtojake/text-to-cad/raw/7e3daf0a54eb9d1bcf5a5236e71b1d9bc37a3190/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
+<img src="https://github.com/earthtojake/text-to-cad/raw/f690b976af4581d5cb39a0f56093a969b21a0e75/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
 
 Design physical products with AI.
 
@@ -21,17 +21,22 @@ Design physical products with AI.
 ## 🚀 Quickstart
 
 ```bash
-uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.11 cad setup --add
+uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.11 cad setup
 ```
 
-The skills run text-to-cad's `cad` command. The first time, your agent installs it with
+The skills run the `cad` command. The first time, your agent installs it with
 [uv](https://docs.astral.sh/uv/), with your permission, or you run the command above yourself. It installs
-text-to-cad 0.11.11 and the `cad` command and changes nothing else.
+cad 0.11.11 and the `cad` command and changes nothing else.
 
 Then ask your agent for a part or an assembly: it writes the model as a Python
 script, runs it to build the model and shows it in the CAD viewer.
 
-Installing by hand, app by app, and updates: [docs/install.md](https://github.com/earthtojake/text-to-cad/blob/7e3daf0a54eb9d1bcf5a5236e71b1d9bc37a3190/docs/install.md)
+It works in Claude Code, Codex, Cursor, Gemini CLI, Grok Build, Hermes Agent,
+Antigravity, Devin CLI, Factory Droid, GitHub Copilot CLI, Kimi Code, Muse, Pi,
+Qwen Code, Amp, Cline, Goose, Kilo Code, Kiro CLI, OpenClaw, OpenCode, Roo Code,
+Trae and Windsurf.
+
+Installing by hand, app by app, updating and removing: [docs/install.md](https://github.com/earthtojake/text-to-cad/blob/f690b976af4581d5cb39a0f56093a969b21a0e75/docs/install.md)
 
 ## ✨ Features
 
@@ -53,14 +58,13 @@ text-to-cad is MIT-licensed and built in the open.
 - **Bugs and plugin requests**: [open an issue](https://github.com/earthtojake/text-to-cad/issues/new).
   A bug report with the model script and the output of `cad doctor --check` is the
   fastest to fix, and an agent app without a plugin gets one on request. A
-  security problem is reported privately, as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/7e3daf0a54eb9d1bcf5a5236e71b1d9bc37a3190/SECURITY.md) says.
+  security problem is reported privately, as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/f690b976af4581d5cb39a0f56093a969b21a0e75/SECURITY.md) says.
 - **Questions, ideas and what you made**: the [Discord](https://discord.gg/5FGB9DwJYU).
   Say what the skills got wrong, too: that is what improves them.
 - **Code, skills and models**: a new skill (a fabrication service, a printer, a
   CAD workflow) goes in `skills/`, an example model in `models/`, and fixes
-  anywhere. [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/7e3daf0a54eb9d1bcf5a5236e71b1d9bc37a3190/CONTRIBUTING.md) has the local setup and how to
-  test in the agent apps; an agent working in the repository starts at
-  [AGENTS.md](https://github.com/earthtojake/text-to-cad/blob/7e3daf0a54eb9d1bcf5a5236e71b1d9bc37a3190/AGENTS.md).
+  anywhere. [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/f690b976af4581d5cb39a0f56093a969b21a0e75/CONTRIBUTING.md) has the local setup, how to
+  test in the agent apps, and the guidance for agents working in the repository.
 
 By default, text-to-cad sends usage stats and crash reports, tagged with a random
 ID and never including your files, paths or prompts. The

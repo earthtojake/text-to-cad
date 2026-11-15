@@ -4,7 +4,6 @@ description: Renders photoreal images and videos of a text-to-cad model, a STEP 
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
-  version: "0.11.11"
 ---
 
 # Renders for people
@@ -32,32 +31,22 @@ dimension off one.
 
 ## Setup
 
-Every command in this skill starts `cad +0.11.11@claude`: it runs text-to-cad 0.11.11, the release this skill was
-written for, and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your
-PATH; `cad.exe` on Windows). The first command after a new release installs it, once.
+Every command in this skill starts `cad +0.11.11@claude`: it runs cad 0.11.11, the version this skill was written for,
+and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your PATH; `cad.exe`
+on Windows).
 
-If `cad` is missing, or says it does not know `+0.11.11@claude` (an older text-to-cad), install this release,
-outside the sandbox or with its permission, then run the command again:
+If `cad` is missing, or says 0.11.11 is not installed, install it, outside the sandbox, then run the
+command again:
 
 ```bash
-uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.11 cad setup --add
+uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.11 cad setup
 ```
 
-It installs 0.11.11 and the `cad` command and changes nothing else.
+It installs cad 0.11.11 and the `cad` command and changes nothing else. If `uvx` is missing, install uv
+first.
 
-When a command fails, its exit code says why:
-
-- 3: it could not install or switch to 0.11.11 from this shell. Do what it says, outside
-  the sandbox or with its permission, then run the command again.
-- 4: this copy of the skill is older than the text-to-cad its channel is on now. Read the skill again;
-  if it still names the same release, this app's copy of the text-to-cad plugin is out of date: run
-  cad update (with no pin), or, where the copy came from an app's plugin store, update it there; then start
-  a new chat.
-- 5: the `cad` this shell found is not the `cad` command but another copy of text-to-cad. Run
-  `~/.local/bin/cad` (`%USERPROFILE%\.local\bin\cad.exe` on Windows) instead.
-
-`cad +0.11.11@claude doctor --check` explains any other failure, changing nothing; `cad +0.11.11@claude doctor` repairs what
-it reports. Tell the person any next step it prints.
+A project written for an earlier text-to-cad may need changes. The migration guides say what, one per
+version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
 `cad +0.11.11@claude run render.py` sees `import bpy` and gives the script cad's blender integration: an
 environment on Python 3.13, the one Blender is built for, holding bpy 5.2.3 (Blender 5.2 LTS)
