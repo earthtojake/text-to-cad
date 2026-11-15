@@ -115,7 +115,10 @@ export default function PrivacyPolicyPage() {
             time and a user agent (“cadgen”). It is not made in CI, and section 5 says how to turn it off.
             A copy a plugin store keeps up to date is never told of an update: the store updates it.
             text-to-cad never updates itself: you update it by running our install command again, which asks the same question, then
-            downloads the release from PyPI.
+            downloads the release from PyPI. One exception: if an earlier release that updated itself brought
+            your computer to the current one, text-to-cad finishes that update once, by downloading our install
+            script from this website and running it, which updates the plugin in your agent apps. It tries
+            again, for up to 30 days, until that has worked.
           </li>
           <li>
             <strong>This website:</strong> page views, with the referring page, browser, device type
@@ -201,7 +204,8 @@ export default function PrivacyPolicyPage() {
       <LegalSection title="5. Your choices and controls">
         <ul>
           <li>
-            The plugin works without contacting us, apart from the hourly version check.
+            The plugin works without contacting us, apart from the hourly version check and, once after
+            an update from an earlier release, the download of our install script (section 1).
           </li>
           <li>
             <strong>Telemetry is on once text-to-cad has told you.</strong> The first <code>cad</code>{" "}
