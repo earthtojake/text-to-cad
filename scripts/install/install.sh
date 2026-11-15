@@ -3,15 +3,19 @@
 #
 #   curl -fsSL https://texttocad.dev/install.sh | sh
 #
-# It makes sure uv is here (installing it with uv's own installer when it is not), downloads install.py
-# from beside this script and runs it with uv's Python: that installs the newest release of text-to-cad
-# and puts the plugin into every agent app on this computer (install.py says how). Run it again to update.
-# It takes no options. Everything happens inside main, called on the last line, so a download cut short
+# It makes sure uv is here and new enough (installing it with uv's own installer when it is not), downloads
+# install.py from beside this script and runs it with uv's Python: that installs the newest release of
+# text-to-cad and puts the plugin into every agent app on this computer (install.py says how). Run it again to
+# update. It takes no options. Everything happens inside main, called on the last line, so a download cut short
 # runs nothing.
 
 set -eu
 
 INSTALL_PY="https://texttocad.dev/install.py"
+UV_INSTALLER="https://astral.sh/uv/install.sh"
+# The oldest uv that runs it: `--managed-python` came in uv 0.6.8, and a stable CPython 3.14 (`--python 3.14`)
+# in uv 0.9.0 (uv's changelog, changelogs/0.6.x.md and 0.9.x.md). An older uv's downloads know no 3.14.0.
+UV_MINIMUM="0.9.0"
 
 say() {
   printf '%s\n' "$*" >&2
@@ -48,6 +52,29 @@ download() {
   fi
 }
 
+# uv's version, "0.9.5" from "uv 0.9.5 (Homebrew 2025-10-21)"; empty where it does not say.
+uv_version() {
+  "$1" --version 2>/dev/null | awk 'NR == 1 { print $2 }'
+}
+
+# Whether version $1 is older than $2 (each major.minor.patch; a missing part is 0).
+older_than() {
+  awk -v a="$1" -v b="$2" 'BEGIN {
+    n = split(a, x, "."); m = split(b, y, ".")
+    for (i = 1; i <= 3; i++) {
+      p = (i <= n) ? x[i] + 0 : 0; q = (i <= m) ? y[i] + 0 : 0
+      if (p < q) exit 0
+      if (p > q) exit 1
+    }
+    exit 1
+  }'
+}
+
+# uv installed by its own installer: that installer leaves a receipt, which `uv self update` needs.
+uv_standalone() {
+  [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/uv/uv-receipt.json" ]
+}
+
 main() {
   if [ "$#" -gt 0 ]; then
     say "This installer takes no options: run it as it is to install or update text-to-cad in every agent app"
@@ -55,23 +82,33 @@ main() {
     say "To remove text-to-cad, run \`cad uninstall\`, and each app's own remove command."
     exit 2
   fi
+  scratch=$(mktemp -d 2>/dev/null || mktemp -d -t text-to-cad)
+  trap 'rm -rf "$scratch"' EXIT
+
   if ! uv=$(find_uv); then
     say "uv is not installed: installing it with uv's own installer (https://docs.astral.sh/uv/)."
-    if command -v curl >/dev/null 2>&1; then
-      curl -LsSf https://astral.sh/uv/install.sh | sh
-    elif command -v wget >/dev/null 2>&1; then
-      wget -qO- https://astral.sh/uv/install.sh | sh
-    else
-      die "neither curl nor wget is here to download uv with; install uv (https://docs.astral.sh/uv/), then run this again"
-    fi
+    download "$UV_INSTALLER" "$scratch/uv-install.sh" ||
+      die "could not download uv's installer from $UV_INSTALLER: check the network connection, or install uv (https://docs.astral.sh/uv/), then run this again"
+    sh "$scratch/uv-install.sh" ||
+      die "uv's installer failed (what it said is above): install uv (https://docs.astral.sh/uv/), then run this again"
     uv=$(find_uv) || die "uv was installed, but not found: open a new terminal and run this again"
+  fi
+
+  version=$(uv_version "$uv")
+  if [ -z "$version" ] || older_than "$version" "$UV_MINIMUM"; then
+    if uv_standalone; then
+      say "uv ${version:-of an unknown version} is older than $UV_MINIMUM, the first that installs Python 3.14: updating it (uv self update)."
+      "$uv" self update || die "uv could not update itself (what it said is above): update uv, then run this again"
+      version=$(uv_version "$uv")
+    fi
+    if [ -z "$version" ] || older_than "$version" "$UV_MINIMUM"; then
+      die "uv ${version:-of an unknown version} is older than $UV_MINIMUM, the first that installs Python 3.14: update it the way it was installed (Homebrew: brew upgrade uv; pip: pip install -U uv; uv's own installer: uv self update), then run this again"
+    fi
   fi
   # uv's folder on PATH, so install.py finds uvx beside it.
   PATH="$(dirname "$uv"):$PATH"
   export PATH
 
-  scratch=$(mktemp -d 2>/dev/null || mktemp -d -t text-to-cad)
-  trap 'rm -rf "$scratch"' EXIT
   # CAD_INSTALL_PY: a local install.py instead (the installer rehearsals run this checkout's).
   if [ -n "${CAD_INSTALL_PY:-}" ]; then
     cp "$CAD_INSTALL_PY" "$scratch/install.py"

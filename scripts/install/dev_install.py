@@ -14,8 +14,8 @@ checkout as the source instead of GitHub:
    version (``cad +<VERSION>-dev.<time>``), Codex's CAD server (the one app given one: ``codex.mcp.json``) runs the
    .venv (``uv run ... --python <.venv's python> --module cad_mcp``: a bare command, as the published entry's
    ``uvx``), and its catalog is ``earthtojake-dev``;
-3. removes the published copy of ours from each app and installs that folder instead, with the app's own command
-   (install.py's ``local`` commands; an app that cannot install from a folder is skipped and says so).
+3. installs that folder in each app with the app's own command (install.py's ``local`` commands; an app that cannot
+   install from a folder is skipped and says so), and only then removes the published copy of ours there.
 
 ``--release`` first removes every development version (its server stopped where nothing is in flight there): one
 sorts after its release, so left installed it would stay the newest, the one a ``cad`` command with no pin runs and
@@ -187,10 +187,11 @@ def main(argv=None) -> int:
     source = install.Source(folder=PLUGIN_DIR, catalog=install.DEV_CATALOG, skills_dir=PLUGIN_DIR / "skills")
     apps = [app for app in install.APPS if not args.apps or app.key in args.apps]
     print(f"This checkout is text-to-cad {version}.")
-    for line in install.install_apps(install.Here(), source, apps):
-        print(line)
-    print("Start a new session in each app to use it. To go back: scripts/install/dev_install.py --release")
-    return 0
+    report = install.install_apps(install.Here(), source, apps)  # each app's line printed as it finishes
+    if report.changed:
+        print("Start a new session in each app to use it.")
+    print("To go back: scripts/install/dev_install.py --release")
+    return 1 if report.all_failed else 0
 
 
 if __name__ == "__main__":

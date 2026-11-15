@@ -8,37 +8,54 @@ It takes no options and does five things, in order:
 
 1. finds the newest release (the version feed; ``FALLBACK``, the release it was published with, when the
    feed cannot be read or names an older one);
-2. runs that release's ``cad setup`` through uvx, which installs text-to-cad and the ``cad`` command;
-3. removes what earlier releases left in the agent apps (``cleanup`` in each row of ``APPS``, Claude
-   Desktop's server, and every loose copy of our skills: ``remove_loose_skills``);
-4. installs or updates the plugin in each agent app it finds, with that app's own command, from the
-   GitHub repository's ``latest`` branch, or copies the skills into the agent's own skills folder;
-5. prints one line per app. One app failing never stops the others; only a failed ``cad setup`` makes
-   it exit nonzero.
+2. runs that release's ``cad setup`` through uvx, which installs text-to-cad and the ``cad`` command (where
+   that fails because the shell is an agent's sandbox, exit status 3, it stops: the apps' commands would fail
+   there too);
+3. installs or updates the plugin in each agent app it finds, with that app's own command, from the GitHub
+   repository's ``latest`` branch, or copies the skills into the agent's own skills folder;
+4. only then removes what earlier releases left in that app (each row of ``APPS``), Claude Desktop's server,
+   and the loose copies of our skills (``remove_loose_skills``): the new copy is in place before an old one
+   goes, so a failed download or a GitHub outage leaves every app with what it had;
+5. prints one line per app as it finishes. One app failing, even with an error no row foresaw, never stops
+   the others. It exits nonzero when ``cad setup`` failed or every app it found failed.
+
+What it removes is only what is provably ours: our names AND a sign that it is ours (our catalog, a path in
+cad's state folder, a git origin naming our repository, a SKILL.md whose front matter or provenance line
+names our repository: ``our_skill``). A store's copy (claude.ai's directory, Codex's directory) and every
+plugin or skill of someone else's are never touched. Of what is ours, a copy that is exactly what we wrote
+(``SKILL_MARK``'s digest, a git clone with no change of its own) is deleted; anything else of ours, a copy an
+earlier release or the Skills CLI wrote, or one the person edited, is MOVED into one backup folder per run,
+``~/.text-to-cad-backup/<date-time>/`` (the path below the home kept), never deleted; the run prints where.
+The backup is in the home, outside every app's folders, so no agent loads a copy from it, and outside cad's
+state folder, which ``cad uninstall`` removes whole.
 
 ``APPS`` is the one table of apps: a row says how the app is found, how ours is installed and updated
 (from GitHub, and from a local folder for ``scripts/install/dev_install.py``), and how our old copies
 there are found and removed. A correction is one row. Each row's comment says how its commands were
 checked: by the vendor's documentation (its address), by the CLI's own ``--help``, by superpowers'
-practice, or not at all. A store's copy (claude.ai's directory, Codex's directory) and every plugin or
-skill of someone else's are never touched: only what is provably ours is removed (our names AND a sign
-that it is ours: our catalog, a path in cad's state folder, a SKILL.md naming our repository).
+practice, or not at all.
 
 Test hooks, never documented to people: ``CAD_INSTALL_FEED`` (the version feed's address),
 ``CAD_INSTALL_FROM`` (what uvx runs ``cad setup`` from instead of ``cad-server==<release>``: a wheel, for the
-installer rehearsals), ``CODEX_CLI`` (the codex command, as earlier installers took it).
+installer rehearsals), ``CODEX_CLI`` (the codex command, as earlier installers took it),
+``CAD_INSTALL_PATH_ONLY`` (look for the apps' commands on PATH and in ``~/.local/bin`` alone: never in
+Homebrew's or npm's folders or an app's bundle, where a test would find a real CLI).
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import shutil
+import signal
+import stat
 import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -56,7 +73,7 @@ CATALOG = "earthtojake"          # the repository's catalog: a GitHub copy is te
 DEV_CATALOG = "earthtojake-dev"  # a checkout's development install (dev_install.py)
 LOCAL_CATALOG = "text-to-cad"    # the folder catalog 0.10.0-0.11.10's installer wrote, <state>/plugin
 # Every catalog of ours an app may hold. Of these, the one the source installs from is kept and brought up to date;
-# the others are removed with their plugins.
+# the others are removed with their plugins, once ours is in.
 OUR_CATALOGS = (LOCAL_CATALOG, CATALOG, DEV_CATALOG)
 # The plugin names we ever used: `cad` until 0.7.6, `text-to-cad` since.
 OUR_PLUGINS = ("text-to-cad", "cad")
@@ -64,11 +81,29 @@ SKILLS = ("cad", "engineering-drawing", "fea", "pcb", "print3d", "render", "robo
 # Skills an earlier release shipped and this one does not (implicit-cad: releases before 0.5).
 RETIRED_SKILLS = ("bambu-labs", "dfam-check", "dfm", "dxf", "gcode", "pcb-dfm", "sdf", "simulation", "srdf",
                   "step-parts", "urdf", "cad-viewer", "cad-mcp-setup", "implicit-cad")
+# How a SKILL.md of ours says so, checked in every release tagged from v0.5.0 to v0.11.10 (every skill of each):
+# 0.10.0 and later, its front matter's `metadata:` block holds `repository: earthtojake/text-to-cad`; 0.5.0 to
+# 0.8.4, its body has this line, word for word. A skill that merely mentions the repository is not ours.
+PROVENANCE_LINE = "Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad)."
 # Marks earlier installers wrote: in Cursor's plain copy (0.10.0-0.11.10), in a development install's copy.
 COPY_MARK = ".text-to-cad-copy"
 DEV_MARK = ".text-to-cad-dev"
+# What this installer writes into each skill folder it copies: our repository and the digest of what it copied,
+# so a later run knows a copy is exactly what it wrote (deleted when replaced) or was changed (moved to the backup).
+SKILL_MARK = ".text-to-cad.json"
+BACKUP = ".text-to-cad-backup"
 UVX_ARGS = ("--no-config", "--managed-python", "--python", "3.14")
-COMMAND_SECONDS = 900
+# `cad setup`'s exit status for "this version cannot be installed from this shell" (an agent's sandbox).
+SETUP_SANDBOXED = 3
+# How long one app command may take before it is stopped (with every process it started). The slowest is a
+# clone of the `latest` branch (1.4 MB, about a second measured); three minutes is that a hundredfold on a slow
+# line, and a CLI that hangs (a prompt it should not show, a lock) costs the run three minutes, not fifteen.
+COMMAND_SECONDS = 180
+# Where Homebrew puts the commands it installs (Apple silicon's, Intel macOS's, Linux's): not on the PATH of a
+# shell an app opened, so earlier releases looked there too.
+HOMEBREW = ("/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin")
+# The CLI the Codex app bundles (macOS).
+CODEX_BUNDLED = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"
 _VERSION = re.compile(r"[0-9]+(\.[0-9]+)*([.+-][0-9A-Za-z.+-]*)?")
 
 
@@ -107,27 +142,55 @@ class Here:
     def windows(self) -> bool:
         return self.platform == "win32"
 
+    @property
+    def path_only(self) -> bool:
+        return bool(self.environ.get("CAD_INSTALL_PATH_ONLY"))
+
+    def search_path(self) -> str:
+        """PATH, then ~/.local/bin (where many CLIs install themselves before a new shell has it on PATH), then
+        Homebrew's folders and npm's global folder, which a shell an app opened may lack."""
+        folders = [self.environ.get("PATH", os.defpath), str(self.home / ".local" / "bin")]
+        if not self.path_only:
+            if not self.windows:
+                folders += HOMEBREW
+            prefix = self.environ.get("NPM_CONFIG_PREFIX") or self.environ.get("npm_config_prefix")
+            if prefix:
+                folders.append(prefix if self.windows else str(Path(prefix) / "bin"))
+            if self.windows:
+                folders.append(str(Path(self.environ.get("APPDATA") or self.home / "AppData" / "Roaming") / "npm"))
+            else:
+                folders.append(str(self.home / ".npm-global" / "bin"))
+        return os.pathsep.join(folder for folder in folders if folder)
+
     def which(self, name: str) -> Optional[str]:
-        """A command on PATH, else in ~/.local/bin, where many CLIs install themselves before a new shell has it."""
-        path = os.pathsep.join([self.environ.get("PATH", os.defpath), str(self.home / ".local" / "bin")])
-        return shutil.which(name, path=path)
+        return shutil.which(name, path=self.search_path()) if name else None
 
     def config_home(self) -> Path:
         return Path(self.environ.get("XDG_CONFIG_HOME") or self.home / ".config")
 
+    def shown(self, path: Any) -> str:
+        """``path`` as a person reads it: the home folder spelled ``~``."""
+        text, home = str(path), str(self.home).rstrip("/\\")
+        return "~" + text[len(home):] if home and (text == home or text.startswith(home + os.sep)) else text
+
     def run(self, argv: Sequence[Any], cwd: Optional[Path] = None, answer: Optional[str] = None,
-            timeout: float = COMMAND_SECONDS) -> Ran:
-        """``argv`` run with nothing to read but ``answer``, what it printed captured."""
-        environ = {**self.environ, "GIT_TERMINAL_PROMPT": "0"}
+            timeout: float = COMMAND_SECONDS, environ: Optional[Dict[str, str]] = None) -> Ran:
+        """``argv`` run with nothing to read but ``answer``, what it printed captured; stopped, with every process
+        it started, after ``timeout`` seconds."""
+        env = {**self.environ, "GIT_TERMINAL_PROMPT": "0", **(environ or {})}
+        group = ({"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)} if os.name == "nt"
+                 else {"start_new_session": True})
         try:
-            done = subprocess.run([str(part) for part in argv], cwd=str(cwd) if cwd else None, env=environ,
-                                  input=answer if answer is not None else "", stdout=subprocess.PIPE,
-                                  stderr=subprocess.STDOUT, text=True, errors="replace", timeout=timeout)
-        except subprocess.TimeoutExpired:
-            return Ran(124, f"no answer in {int(timeout)} s")
+            process = subprocess.Popen([str(part) for part in argv], cwd=str(cwd) if cwd else None, env=env,
+                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **group)
         except OSError as error:
             return Ran(127, f"{type(error).__name__}: {error}")
-        return Ran(done.returncode, done.stdout or "")
+        try:
+            out, _ = process.communicate((answer or "").encode("utf-8"), timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _stop(process)
+            return Ran(124, f"no answer in {int(timeout)} s: stopped")
+        return Ran(process.returncode, (out or b"").decode("utf-8", "replace"))
 
     def must(self, argv: Sequence[Any], **options: Any) -> Ran:
         ran = self.run(argv, **options)
@@ -147,8 +210,24 @@ class Here:
         return found
 
 
-def version_key(text: str) -> Tuple[int, ...]:
-    found = re.match(r"\d+(?:\.\d+)*", text or "")
+def _stop(process: "subprocess.Popen[bytes]") -> None:
+    """A command that did not answer stopped, with what it started (its process group; on Windows its tree)."""
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(process.pid)], stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=30)
+        else:
+            os.killpg(process.pid, signal.SIGKILL)
+    except (OSError, subprocess.SubprocessError):
+        process.kill()
+    try:
+        process.communicate(timeout=10)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+
+
+def version_key(text: Any) -> Tuple[int, ...]:
+    found = re.match(r"\d+(?:\.\d+)*", text if isinstance(text, str) else "")
     return tuple(int(part) for part in found.group(0).split(".")) if found else ()
 
 
@@ -164,12 +243,13 @@ def read_toml(path: Path) -> Dict[str, Any]:
     ``[a.b."c"]`` headers and ``key = "string"`` lines."""
     try:
         text = Path(path).read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, ValueError):
         return {}
     try:
         import tomllib  # type: ignore[import-not-found]
 
-        return tomllib.loads(text)
+        found = tomllib.loads(text)
+        return found if isinstance(found, dict) else {}
     except ImportError:
         pass
     except ValueError:
@@ -182,7 +262,8 @@ def read_toml(path: Path) -> Dict[str, Any]:
         if header:
             table = data
             for part in re.findall(r'"([^"]*)"|([^.\s]+)', header.group(1)):
-                table = table.setdefault(part[0] or part[1], {})
+                found = table.setdefault(part[0] or part[1], {})
+                table = found if isinstance(found, dict) else {}
             continue
         pair = re.fullmatch(r'([A-Za-z0-9_-]+)\s*=\s*"([^"]*)"', line)
         if pair:
@@ -190,13 +271,177 @@ def read_toml(path: Path) -> Dict[str, Any]:
     return data
 
 
-def remove_path(path: Path) -> None:
-    """A file, a link (never what it points at) or a folder, gone."""
+def table(value: Any) -> Dict[str, Any]:
+    """``value`` where it is a table (a dict), else an empty one: a config is a person's file, of any shape."""
+    return value if isinstance(value, dict) else {}
+
+
+# --- removing, never half ---------------------------------------------------------------------------
+
+
+def _rmtree(path: Path) -> None:
+    """A folder deleted, read-only files too (Windows will not delete a read-only file, and git marks its packs
+    read-only): each one refused is made writable and tried again."""
+    def again(function: Callable[[str], Any], name: str, *_error: Any) -> None:
+        try:
+            os.chmod(name, stat.S_IWRITE | stat.S_IREAD | (stat.S_IEXEC if os.path.isdir(name) else 0))
+            parent = os.path.dirname(name)
+            os.chmod(parent, os.stat(parent).st_mode | stat.S_IWRITE)
+        except OSError:
+            pass
+        function(name)
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=again)
+    else:  # the 3.11 and earlier spelling
+        shutil.rmtree(path, onerror=again)
+
+
+def discard(path: Path) -> None:
+    """A link unlinked (never what it points at), a file deleted, a folder moved out of its place in one rename
+    and then deleted: never half a folder left where an app reads it. The folder is moved into a hidden folder
+    beside it, one level down, where no app looks for a plugin or a skill; if deleting it there fails, what is
+    left is out of the way."""
     path = Path(path)
     if path.is_symlink() or path.is_file():
         path.unlink()
-    elif path.exists():
-        shutil.rmtree(path)
+        return
+    if not path.exists():
+        return
+    trash = Path(tempfile.mkdtemp(prefix=".text-to-cad-trash-", dir=str(path.parent)))
+    os.replace(str(path), str(trash / path.name))
+    try:
+        _rmtree(trash)
+    except OSError:
+        pass
+
+
+class Backup:
+    """The one folder a run moves our earlier copies into, ``~/.text-to-cad-backup/<date-time>``, made on first use;
+    each copy kept at its path below the home (a path outside the home under ``outside-home``)."""
+
+    def __init__(self, here: Here) -> None:
+        self.here = here
+        self.folder: Optional[Path] = None
+        self.kept: List[Path] = []
+
+    def keep(self, path: Path, place: Optional[Path] = None) -> Path:
+        """``path`` moved into the backup, at ``place``'s path below the home (``place``: where it was, for a copy
+        already moved out of its place)."""
+        path = Path(path)
+        place = Path(place) if place is not None else path
+        if self.folder is None:
+            stamp = time.strftime("%Y-%m-%d-%H%M%S")
+            base = self.here.home / BACKUP
+            folder, number = base / stamp, 1
+            while folder.exists():
+                number += 1
+                folder = base / f"{stamp}-{number}"
+            folder.mkdir(parents=True)
+            self.folder = folder
+        try:
+            relative = place.relative_to(self.here.home)
+        except ValueError:
+            relative = Path("outside-home", *[part.strip("/\\:") or "root" for part in place.parts])
+        target = self.folder / relative
+        while target.exists() or target.is_symlink():  # the same place twice in one run
+            target = target.with_name(target.name + "-again")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(path), str(target))
+        self.kept.append(place)
+        return target
+
+
+def digest(folder: Path) -> str:
+    """The digest of a folder's files as ``copy_tree`` copies them (their paths and bytes; caches, ``.git`` and our
+    own mark left out)."""
+    folder = Path(folder)
+    total = hashlib.sha256()
+    for root, folders, files in os.walk(folder):
+        folders[:] = sorted(name for name in folders if name not in ("__pycache__", ".git"))
+        for name in sorted(files):
+            if name in (SKILL_MARK, COPY_MARK, DEV_MARK, ".DS_Store") or name.endswith(".pyc"):
+                continue
+            path = Path(root) / name
+            total.update(path.relative_to(folder).as_posix().encode("utf-8") + b"\0")
+            try:
+                total.update(os.readlink(path).encode("utf-8") if path.is_symlink() else path.read_bytes())
+            except OSError:
+                total.update(b"\1unreadable")
+            total.update(b"\0")
+    return total.hexdigest()
+
+
+def unchanged(path: Path, source: Optional[Path] = None) -> bool:
+    """Whether a folder of ours is exactly what we wrote: its mark's digest is its own, or it is the very copy
+    ``source`` would make. Only then may it be deleted rather than moved to the backup."""
+    mark = read_json(Path(path) / SKILL_MARK)
+    found = digest(path)
+    return ((isinstance(mark, dict) and mark.get("repository") == REPOSITORY and mark.get("digest") == found)
+            or (source is not None and digest(source) == found))
+
+
+def retire(path: Path, backup: Backup, source: Optional[Path] = None) -> str:
+    """One old copy of ours out of its place: a link unlinked, a copy exactly as we wrote it deleted, anything else
+    moved to the backup. What happened: ``unlinked``, ``deleted`` or ``moved``."""
+    path = Path(path)
+    if path.is_symlink():
+        path.unlink()
+        return "unlinked"
+    if path.is_dir() and unchanged(path, source):
+        discard(path)
+        return "deleted"
+    backup.keep(path)
+    return "moved"
+
+
+def copy_tree(source: Path, target: Path, backup: Backup, mark: bool = False) -> Optional[str]:
+    """``source`` copied to ``target``: real files, links followed, caches left out, our mark written in where
+    ``mark``. Staged in a hidden folder beside the target, then swapped in: the old one (``retire``: deleted where
+    it is exactly ours, else moved to the backup) goes only once the new one is whole, and comes back if the swap
+    fails. What happened to the old one, or None where there was none."""
+    target = Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".text-to-cad-new-", dir=str(target.parent)))
+    try:
+        staged = staging / target.name
+        shutil.copytree(str(source), str(staged), symlinks=False,
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store", ".git"))
+        if mark:
+            (staged / SKILL_MARK).write_text(json.dumps({"repository": REPOSITORY, "digest": digest(staged)}) + "\n",
+                                             encoding="utf-8")
+        return swap(staged, target, backup, source)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
+def swap(staged: Path, target: Path, backup: Backup, source: Optional[Path] = None) -> Optional[str]:
+    """``staged`` put in ``target``'s place in two renames on one disk: the old ``target`` moved out (into a hidden
+    folder beside it), the new one in, the old one put back where that fails. Then the old one is retired: a link
+    unlinked, a copy exactly as we wrote it deleted, anything else moved to the backup. What happened to the old one
+    (``unlinked``, ``deleted``, ``moved``), or None where there was none."""
+    if not (target.exists() or target.is_symlink()):
+        os.replace(str(staged), str(target))
+        return None
+    old = "unlinked" if target.is_symlink() else "deleted" if unchanged(target, source) else "moved"
+    held = Path(tempfile.mkdtemp(prefix=".text-to-cad-old-", dir=str(target.parent)))
+    try:
+        os.replace(str(target), str(held / target.name))
+        try:
+            os.replace(str(staged), str(target))
+        except OSError:
+            os.replace(str(held / target.name), str(target))
+            raise
+        if old == "moved":
+            backup.keep(held / target.name, place=target)
+        else:
+            discard(held / target.name)
+    finally:
+        try:
+            held.rmdir()  # only where it is empty: never the old copy, should it still be there
+        except OSError:
+            pass
+    return old
 
 
 def same_path(one: Any, other: Any) -> bool:
@@ -226,7 +471,7 @@ def our_repository(source: Any) -> bool:
 def our_folder(here: Here, path: Any) -> bool:
     """Whether a local plugin folder is ours: one an earlier installer wrote into cad's state folder
     (``<state>/plugin``), or one whose manifest names our repository (a checkout, a development install)."""
-    if not path:
+    if not path or not isinstance(path, (str, Path)):
         return False
     if any(within(path, state) for state in here.state_dirs()):
         return True
@@ -235,34 +480,67 @@ def our_folder(here: Here, path: Any) -> bool:
         return True
     for manifest in (".claude-plugin/marketplace.json", ".claude-plugin/plugin.json", "gemini-extension.json"):
         try:
-            if URL in (Path(path) / manifest).read_text(encoding="utf-8"):
+            if URL in (Path(path) / manifest).read_text(encoding="utf-8", errors="replace"):
                 return True
         except OSError:
             continue
     return False
 
 
-def skill_name(text: str) -> Optional[str]:
-    """The ``name`` in a SKILL.md's front matter."""
+def front_matter(text: str) -> Optional[List[str]]:
+    """The lines of a SKILL.md's front matter, between its first two ``---`` lines."""
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return None
-    for line in lines[1:]:
+    for index, line in enumerate(lines[1:], 1):
         if line.strip() == "---":
-            return None
+            return lines[1:index]
+    return None
+
+
+def skill_name(text: str) -> Optional[str]:
+    """The ``name`` in a SKILL.md's front matter."""
+    for line in front_matter(text) or ():
         if line.startswith("name:"):
             return line[len("name:"):].strip().strip("\"'")
     return None
 
 
+def _metadata_repository(header: Sequence[str]) -> Optional[str]:
+    """``metadata.repository`` in front matter lines: the indented ``repository:`` under a ``metadata:`` line."""
+    inside = False
+    for line in header:
+        if not line.strip():
+            continue
+        if not line[:1].isspace():
+            inside = line.split("#", 1)[0].strip() == "metadata:"
+            continue
+        if inside and line.strip().startswith("repository:"):
+            return line.strip()[len("repository:"):].split(" #", 1)[0].strip().strip("\"'")
+    return None
+
+
 def our_skill(folder: Path) -> Optional[bool]:
-    """Whether a skill folder is ours: its SKILL.md names one of our skills (current or retired) and our
-    repository. None where it holds no readable SKILL.md (a link to nowhere, an empty folder): not ours to judge."""
+    """Whether a skill folder is ours: its SKILL.md has one of our skills' names (current or retired) and says it
+    is ours as our releases wrote it (``PROVENANCE_LINE``): its front matter's ``metadata.repository`` is our
+    repository, or its body has our provenance line. None where it holds no readable SKILL.md (a link to nowhere, an
+    empty folder): not ours to judge."""
     try:
         text = (Path(folder) / "SKILL.md").read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
-    return REPOSITORY in text and skill_name(text) in (*SKILLS, *RETIRED_SKILLS)
+    header = front_matter(text)
+    if header is None or skill_name(text) not in (*SKILLS, *RETIRED_SKILLS):
+        return False
+    return (_metadata_repository(header) == REPOSITORY
+            or any(line.strip() == PROVENANCE_LINE for line in text.splitlines()))
+
+
+def ours_to_replace(folder: Path) -> bool:
+    """A skill folder of one of our names that we may replace: ours by its SKILL.md, or carrying the mark this
+    installer writes."""
+    mark = read_json(Path(folder) / SKILL_MARK)
+    return bool(our_skill(folder)) or (isinstance(mark, dict) and mark.get("repository") == REPOSITORY)
 
 
 # --- where the plugin comes from ---------------------------------------------------------------------
@@ -278,6 +556,7 @@ class Source:
     skills_dir: Optional[Path] = None
     _scratch: Optional[str] = None
     _failed: str = ""
+    _reachable: Optional[str] = None
 
     @property
     def local(self) -> bool:
@@ -286,6 +565,27 @@ class Source:
     def words(self) -> Dict[str, str]:
         return {"repo": REPOSITORY, "url": URL, "branch": BRANCH, "plugin": PLUGIN, "catalog": self.catalog,
                 "folder": str(self.folder or "")}
+
+    def reachable(self, here: Here) -> None:
+        """Before anything of ours is taken out to be replaced: that the ``latest`` branch can be reached
+        (``git ls-remote``, else the branch's archive answering). ``Failed`` where it cannot, nothing changed."""
+        if self.local:
+            return
+        if self._reachable is None:
+            git = here.which("git")
+            if git:
+                ran = here.run([git, "ls-remote", "--exit-code", "--heads", URL, BRANCH], timeout=60)
+                self._reachable = "" if ran.ok else ran.last()
+            else:
+                try:
+                    request = urllib.request.Request(f"https://codeload.github.com/{REPOSITORY}/tar.gz/refs/heads/{BRANCH}",
+                                                     method="HEAD")
+                    with urllib.request.urlopen(request, timeout=20):
+                        self._reachable = ""
+                except Exception as error:  # noqa: BLE001 - any failure means not reachable
+                    self._reachable = type(error).__name__
+        if self._reachable:
+            raise Failed(f"GitHub could not be reached ({self._reachable}): the copy there was left as it was")
 
     def skills(self, here: Here) -> Path:
         """The skills folder to copy from: the local one, else the ``latest`` branch's, fetched once (git, else
@@ -307,17 +607,19 @@ class Source:
         if git and here.run([git, "clone", "--quiet", "--depth", "1", "--branch", BRANCH, URL, target]).ok:
             self.skills_dir = target / "skills"
             return self.skills_dir
-        remove_path(target)
+        shutil.rmtree(target, ignore_errors=True)
         archive = Path(self._scratch) / "latest.tar.gz"
         try:
-            urllib.request.urlretrieve(f"https://codeload.github.com/{REPOSITORY}/tar.gz/refs/heads/{BRANCH}", archive)
+            with urllib.request.urlopen(f"https://codeload.github.com/{REPOSITORY}/tar.gz/refs/heads/{BRANCH}",
+                                        timeout=60) as answer, open(archive, "wb") as out:
+                shutil.copyfileobj(answer, out)
             with tarfile.open(archive) as tar:
                 members = [member for member in tar.getmembers() if member.isfile() or member.isdir()]
                 if any(member.name.startswith("/") or ".." in Path(member.name).parts for member in members):
                     raise Failed("the downloaded archive is not a plain folder")
-                tar.extractall(target, members=members)
-        except (OSError, tarfile.TarError) as error:
-            raise Failed(f"could not download the skills ({type(error).__name__})") from error
+                tar.extractall(target, members=members, **({"filter": "data"} if hasattr(tarfile, "data_filter") else {}))
+        except (OSError, tarfile.TarError, ValueError) as error:
+            raise Failed(f"could not download the skills ({type(error).__name__}): nothing was changed") from error
         roots = [path for path in target.iterdir() if (path / "skills").is_dir()]
         if not roots:
             raise Failed("the downloaded archive has no skills folder")
@@ -338,11 +640,13 @@ class Source:
 
 @dataclass
 class Context:
-    """What one run knows as it goes: the source, and whether Claude Code now has our plugin (Cursor and Grok
-    Build load Claude Code's plugins, so they then need none of their own)."""
+    """What one run knows as it goes: the source, the backup, and whether Claude Code now has our plugin (Cursor and
+    Grok Build load Claude Code's plugins, so they then need none of their own)."""
 
     source: Source
+    backup: Backup
     claude_has_ours: bool = False
+    claude_found: bool = False
 
 
 @dataclass
@@ -350,6 +654,11 @@ class Outcome:
     status: str  # installed, updated, removed, skipped, failed
     words: str = ""
     removed: List[str] = field(default_factory=list)
+    has_ours: Optional[bool] = None  # whether the app now has our plugin; by default, installed or updated
+
+    @property
+    def ours(self) -> bool:
+        return self.has_ours if self.has_ours is not None else self.status in ("installed", "updated")
 
     def line(self, name: str) -> str:
         text = f"{name}: {self.status}" + (f": {self.words}" if self.words else "")
@@ -378,7 +687,7 @@ class App:
     ``{branch}``, ``{plugin}``, ``{catalog}`` and ``{folder}`` filled in. ``installed``: whether ours is there
     already; without it, ``update`` runs first and ``install`` where that fails. ``handler``: an app whose old
     copies need more than its commands (Claude Code, Codex, Cursor, Gemini CLI, Grok Build, Claude Desktop,
-    Hermes Agent).
+    Hermes Agent, Antigravity).
     ``folder``: an agent with no plugin command, given the skills in its own folder; ``marks`` find it."""
 
     key: str
@@ -401,7 +710,7 @@ class App:
 
 
 def plugin_command(app: App, here: Here, context: Context) -> Outcome:
-    """An app installed and updated by its own commands alone."""
+    """An app installed and updated by its own commands alone (nothing of ours is removed)."""
     cli = here.which(app.command or "")
     if not cli:
         return NOT_FOUND
@@ -468,130 +777,226 @@ class Catalog:
 
 
 def marketplace_app(app: App, here: Here, context: Context, cli: Optional[str], catalogs: Dict[str, Catalog],
-                    plugins: Sequence[str], verbs: Dict[str, List[List[str]]]) -> Outcome:
-    """Claude Code's and Codex's flow: our other catalogs removed with their plugins, ours added or brought up to
-    date, our plugin installed or updated. ``verbs``: the app's commands, by what they do."""
+                    plugins: Sequence[str], verbs: Dict[str, Any]) -> Outcome:
+    """Claude Code's and Codex's flow. First ours is put in: the source's catalog added (or brought up to date) and
+    our plugin installed (or updated) from it. Only once that worked do our other catalogs and plugins go. Where a
+    catalog of ours under the source's name points elsewhere (``main``, a checkout) it must be replaced: GitHub is
+    checked first, and if the new one cannot be added and installed, the old one is put back. ``verbs``: the app's
+    commands, by what they do; ``verbs["readd"]`` makes the command that adds a recorded catalog again."""
     if not cli:
         return NOT_FOUND
     source = context.source
     target = source.catalog
-    removed, left = [], []
-    for name in OUR_CATALOGS:
-        catalog = catalogs.get(name)
-        ids = [plugin for plugin in plugins if plugin.endswith(f"@{name}") and plugin.split("@")[0] in OUR_PLUGINS]
-        if catalog is not None and not catalog.ours(here):
-            if ids or name == target:
-                left.append(f"the {name} catalog is another source's ({catalog.where or catalog.kind})")
-            continue
-        if name == target:
-            # Ours, but cad@<catalog> (0.7.6) goes; a catalog of that name from elsewhere is moved to the source.
-            for plugin in ids:
-                if plugin.split("@")[0] != PLUGIN:
-                    here.must([cli, *verbs["remove"][0], plugin])
-                    removed.append(plugin)
-            if catalog is not None and not catalog.matches(here, source):
-                for plugin in ids:
-                    if plugin.split("@")[0] == PLUGIN:
-                        here.must([cli, *verbs["remove"][0], plugin])
-                here.must([cli, *verbs["forget"][0], name])
-                catalogs.pop(name)
-                plugins = [plugin for plugin in plugins if not plugin.endswith(f"@{name}")]
-            continue
-        for plugin in ids:
-            here.must([cli, *verbs["remove"][0], plugin])
-            removed.append(plugin)
-        if catalog is not None:
-            here.must([cli, *verbs["forget"][0], name])
-    if left and target in catalogs and not catalogs[target].ours(here):
-        raise Failed("; ".join(left) + ": left alone")
     ours = f"{PLUGIN}@{target}"
     words = source.words()
-    if target in catalogs:
-        for argv in verbs["refresh"]:
+
+    def do(key: str) -> None:
+        for argv in verbs[key]:
             here.must([cli, *[part.format(**words) for part in argv]])
-        if ours in plugins:
-            for argv in verbs["update"]:
-                here.must([cli, *[part.format(**words) for part in argv]])
-            outcome = Outcome("updated", removed=removed)
-        else:
-            here.must([cli, *[part.format(**words) for part in verbs["install"][0]]])
-            outcome = Outcome("installed", removed=removed)
+
+    def ids(name: str) -> List[str]:
+        return [plugin for plugin in plugins if plugin.endswith(f"@{name}") and plugin.split("@")[0] in OUR_PLUGINS]
+
+    present = catalogs.get(target)
+    if present is not None and not present.ours(here):
+        raise Failed(f"the {target} catalog is another source's ({present.where or present.kind}): left alone")
+    replaced = False
+    if present is not None and present.matches(here, source):
+        do("refresh")
+        do("update" if ours in plugins else "install")
+        status = "updated" if ours in plugins else "installed"
+    elif present is not None:
+        # Ours, from another source: replaced, and put back if the new one does not go in.
+        source.reachable(here)
+        had = ours in plugins
+        for plugin in ids(target):
+            here.must([cli, *verbs["remove"][0], plugin])
+        here.must([cli, *verbs["forget"][0], target])
+        replaced = True
+        try:
+            do("add_local" if source.local else "add")
+            do("install")
+        except Failed as error:
+            try:
+                here.must([cli, *verbs["readd"](present)])
+                if had:
+                    here.must([cli, *[part.format(**words) for part in verbs["install"][0]]])
+                back = "the earlier copy was put back"
+            except Failed as again:
+                back = f"the earlier copy could not be put back ({again}): run this again"
+            raise Failed(f"{error}; {back}") from error
+        status = "updated" if had else "installed"
     else:
-        for argv in verbs["add_local" if source.local else "add"]:
-            here.must([cli, *[part.format(**words) for part in argv]])
-        here.must([cli, *[part.format(**words) for part in verbs["install"][0]]])
-        outcome = Outcome("installed", removed=removed)
-    if left:
-        outcome.words = "; ".join(left) + ": left alone"
-    return outcome
+        do("add_local" if source.local else "add")
+        do("install")
+        status = "installed"
+    # Ours is in: now our other copies go. One that cannot be removed is said, and ours stays installed.
+    removed, notes = [], []
+    for name in OUR_CATALOGS:
+        catalog = catalogs.get(name)
+        found = ids(name)
+        if name == target:
+            for plugin in ([] if replaced else [plugin for plugin in found if plugin != ours]):
+                try:
+                    here.must([cli, *verbs["remove"][0], plugin])
+                    removed.append(plugin)
+                except Failed as error:
+                    notes.append(f"{plugin} stays ({error})")
+            continue
+        if catalog is not None and not catalog.ours(here):
+            if found:
+                notes.append(f"{', '.join(found)} left alone: the {name} catalog is another source's "
+                             f"({catalog.where or catalog.kind})")
+            continue
+        try:
+            for plugin in found:
+                here.must([cli, *verbs["remove"][0], plugin])
+                removed.append(plugin)
+            if catalog is not None:
+                here.must([cli, *verbs["forget"][0], name])
+        except Failed as error:
+            notes.append(f"the {name} catalog stays ({error})")
+    return Outcome(status, "; ".join(notes), removed)
 
 
 def claude_dir(here: Here) -> Path:
     return Path(here.environ.get("CLAUDE_CONFIG_DIR") or here.home / ".claude")
 
 
+def desktop_claude_code(here: Here) -> Optional[str]:
+    """The Claude Code that Claude Desktop downloads for its Code tab, the newest: on macOS
+    ``~/Library/Application Support/Claude/claude-code/<version>/<build>/claude.app/Contents/MacOS/claude`` (seen on
+    a Mac with Claude Desktop, 2.1.321 and 2.1.325). On Windows and Linux the same folder under Claude Desktop's own
+    (``%APPDATA%\\Claude``, the MSIX package's copy of it, ``~/.config/Claude``), with ``claude.exe`` or ``claude``:
+    not seen, so looked for in the same shapes."""
+    roots = []
+    if here.platform == "darwin":
+        roots.append(here.home / "Library" / "Application Support" / "Claude" / "claude-code")
+    elif here.windows:
+        appdata = Path(here.environ.get("APPDATA") or here.home / "AppData" / "Roaming")
+        local = Path(here.environ.get("LOCALAPPDATA") or here.home / "AppData" / "Local")
+        roots.append(appdata / "Claude" / "claude-code")
+        roots += sorted((local / "Packages").glob("Claude_*/LocalCache/Roaming/Claude/claude-code"))
+    else:
+        roots.append(here.config_home() / "Claude" / "claude-code")
+    names = ("claude.exe",) if here.windows else ("claude.app/Contents/MacOS/claude", "claude")
+    for root in roots:
+        try:
+            versions = sorted((path for path in root.iterdir() if path.is_dir()),
+                              key=lambda path: version_key(path.name), reverse=True)
+        except OSError:
+            continue
+        for folder in versions:
+            for name in names:
+                for found in [folder / name, *sorted(folder.glob(f"*/{name}"))]:
+                    if found.is_file() and os.access(found, os.X_OK):
+                        return str(found)
+    return None
+
+
 def claude_code(app: App, here: Here, context: Context) -> Outcome:
     """Claude Code, from its records (``plugins/installed_plugins.json``, ``plugins/known_marketplaces.json``):
     only the user scope's plugins are ours to change; a project's, an administrator's, and claude.ai's synced
-    copies are left. Verified: `claude plugin --help` and its subcommands (2.1.316); docs
-    https://code.claude.com/docs/en/discover-plugins (`owner/repo#ref` pins a branch; `marketplace remove` uninstalls
-    its plugins; `plugin update <plugin>@<marketplace>`)."""
+    copies are left. Its command is ``claude``, else the Claude Code Claude Desktop downloaded for its Code tab
+    (``desktop_claude_code``), which reads the same records. Verified: `claude plugin --help` and its subcommands
+    (2.1.316, 2.1.325: `marketplace remove --scope user`); docs https://code.claude.com/docs/en/discover-plugins
+    (`owner/repo#ref` pins a branch; `marketplace remove` uninstalls its plugins; `plugin update
+    <plugin>@<marketplace>`)."""
+    cli = here.which("claude")
+    bundled = None if cli else desktop_claude_code(here)
+    context.claude_found = bool(cli or bundled)
     folder = claude_dir(here) / "plugins"
-    recorded = read_json(folder / "installed_plugins.json")
-    table = recorded.get("plugins") if isinstance(recorded, dict) else None
-    plugins = [name for name, entries in (table.items() if isinstance(table, dict) else ())
+    recorded = table(read_json(folder / "installed_plugins.json"))
+    plugins = [name for name, entries in table(recorded.get("plugins")).items()
                if any((entry.get("scope") or "user") == "user"
                       for entry in (entries if isinstance(entries, list) else [entries]) if isinstance(entry, dict))]
     catalogs = {}
-    known = read_json(folder / "known_marketplaces.json")
-    for name, entry in (known.items() if isinstance(known, dict) else ()):
-        source = entry.get("source") if isinstance(entry, dict) else None
+    for name, entry in table(read_json(folder / "known_marketplaces.json")).items():
+        source = table(entry).get("source")
         if not isinstance(source, dict):
             continue
         kind = source.get("source")
         where = source.get("path") if kind == "directory" else source.get("repo") or source.get("url") or ""
         catalogs[name] = Catalog(name, kind if kind in ("github", "git", "directory") else "other", str(where or ""),
                                  str(source.get("ref") or ""))
+
+    def readd(catalog: Catalog) -> List[str]:
+        place = catalog.where + (f"#{catalog.ref}" if catalog.ref and catalog.kind != "directory" else "")
+        return ["plugin", "marketplace", "add", place]
+
     verbs = {
         "remove": [["plugin", "uninstall"]],
-        "forget": [["plugin", "marketplace", "remove"]],
+        "forget": [["plugin", "marketplace", "remove", "--scope", "user"]],
         "add": [["plugin", "marketplace", "add", "{repo}#{branch}"]],
         "add_local": [["plugin", "marketplace", "add", "{folder}"]],
         "refresh": [["plugin", "marketplace", "update", "{catalog}"]],
         "install": [["plugin", "install", "{plugin}@{catalog}"]],
         "update": [["plugin", "update", "{plugin}@{catalog}"]],
+        "readd": readd,
     }
-    outcome = marketplace_app(app, here, context, here.which("claude"), catalogs, plugins, verbs)
-    context.claude_has_ours = outcome.status in ("installed", "updated")
+    outcome = marketplace_app(app, here, context, cli or bundled, catalogs, plugins, verbs)
+    if bundled and outcome is not NOT_FOUND:
+        outcome.words = "; ".join(filter(None, ["with the Claude Code Claude Desktop downloaded", outcome.words]))
+    context.claude_has_ours = outcome.ours
     return outcome
 
 
+def _codex_version(path: str, here: Here) -> Tuple[int, ...]:
+    """A ``codex`` command's version: from the metadata its package keeps beside it (the app's bundle's
+    ``codex-package.json``, the npm package's ``package.json``), else asked of the command, with ``CODEX_HOME`` a
+    folder thrown away after (Codex writes into it as it starts, even for ``--version``). As 0.11.10 did."""
+    real = Path(os.path.realpath(path))
+    for manifest, (key, value) in ((Path(path).parent.parent / "codex-package.json", ("variant", "codex")),
+                                   (real.parent.parent / "package.json", ("name", "@openai/codex"))):
+        data = table(read_json(manifest))
+        if data.get(key) == value and version_key(data.get("version")):
+            return version_key(data["version"])
+    thrown_away = tempfile.mkdtemp(prefix="cad-codex-home-")
+    try:
+        ran = here.run([path, "--version"], timeout=60, environ={"CODEX_HOME": thrown_away})
+    finally:
+        shutil.rmtree(thrown_away, ignore_errors=True)
+    words = ran.out.split()
+    return version_key(words[-1]) if ran.ok and words else ()
+
+
 def codex_cli(here: Here) -> Optional[str]:
-    """``CODEX_CLI``, else ``codex`` on PATH, else the one the Codex app bundles (macOS)."""
+    """``CODEX_CLI``, else the newer of the ``codex`` on PATH and the one the Codex app bundles (macOS), as 0.11.10
+    chose: both write the ``~/.codex`` the app, the CLI and the IDE extension share, so an install must come from a
+    CLI at least as new as the app that reads it."""
     named = here.environ.get("CODEX_CLI")
     if named:
         return here.which(named)
-    found = here.which("codex")
-    if found:
-        return found
-    bundled = Path("/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex")
-    return str(bundled) if here.platform == "darwin" and os.access(bundled, os.X_OK) else None
+    candidates = [here.which("codex")]
+    if here.platform == "darwin" and not here.path_only:
+        candidates.append(CODEX_BUNDLED)
+    found = list(dict.fromkeys(path for path in candidates if path and os.access(path, os.X_OK)))
+    if len(found) < 2:
+        return found[0] if found else None
+    versions = {path: _codex_version(path, here) for path in found}
+    return max(found, key=lambda path: versions[path])
 
 
 def codex(app: App, here: Here, context: Context) -> Outcome:
     """Codex, from its config (``$CODEX_HOME/config.toml``: ``[marketplaces.<name>]`` with ``source_type``,
     ``source`` and ``ref``; ``[plugins."<id>"]``). A copy from OpenAI's directory (``openai-*``) is left.
-    Verified: `codex plugin --help` and its subcommands (`marketplace add <owner/repo> --ref`, `marketplace upgrade`,
-    `add`, `remove`); docs https://developers.openai.com/codex/plugins/build (`--ref`, `upgrade`). `add` again after
-    `upgrade` copies the plugin again: Codex keeps a copy, and the docs do not say an upgrade refreshes it."""
+    Verified: `codex plugin --help` and its subcommands (0.169: `marketplace add <owner/repo> --ref`, `marketplace
+    upgrade`, `add`, `remove`); docs https://developers.openai.com/codex/plugins/build (`--ref`, `upgrade`). `add`
+    again after `upgrade` copies the plugin again: Codex keeps a copy, and the docs do not say an upgrade refreshes
+    it."""
     config = read_toml(Path(here.environ.get("CODEX_HOME") or here.home / ".codex") / "config.toml")
-    plugins = list((config.get("plugins") or {}).keys())
+    plugins = list(table(config.get("plugins")).keys())
     catalogs = {}
-    for name, entry in (config.get("marketplaces") or {}).items():
+    for name, entry in table(config.get("marketplaces")).items():
         if isinstance(entry, dict):
             local = entry.get("source_type") == "local"
             catalogs[name] = Catalog(name, "directory" if local else "git", str(entry.get("source") or ""),
                                      str(entry.get("ref") or ""))
+
+    def readd(catalog: Catalog) -> List[str]:
+        return ["plugin", "marketplace", "add", catalog.where,
+                *(["--ref", catalog.ref] if catalog.ref and catalog.kind != "directory" else [])]
+
     verbs = {
         "remove": [["plugin", "remove"]],
         "forget": [["plugin", "marketplace", "remove"]],
@@ -600,80 +1005,139 @@ def codex(app: App, here: Here, context: Context) -> Outcome:
         "refresh": [] if context.source.local else [["plugin", "marketplace", "upgrade", "{catalog}"]],
         "install": [["plugin", "add", "{plugin}@{catalog}"]],
         "update": [["plugin", "add", "{plugin}@{catalog}"]],
+        "readd": readd,
     }
     return marketplace_app(app, here, context, codex_cli(here), catalogs, plugins, verbs)
 
 
 def git_origin(folder: Path) -> Optional[str]:
+    """The ``origin`` URL in a git working copy's config, read as bytes (a config holds any encoding a person's
+    name came in)."""
     try:
-        config = (Path(folder) / ".git" / "config").read_text(encoding="utf-8")
+        config = (Path(folder) / ".git" / "config").read_bytes().decode("utf-8", "replace")
     except OSError:
         return None
     found = re.search(r'\[remote "origin"\][^\[]*?url\s*=\s*(\S+)', config)
     return found.group(1) if found else None
 
 
+def clone_problem(here: Here, path: Path) -> Optional[str]:
+    """Why a git clone of ours may not be updated or removed, or None: it must have no change of its own (``git
+    status --porcelain`` empty), be on the ``latest`` branch, tracking it, with no commit of its own."""
+    git = here.which("git")
+    if not git:
+        return "git is needed to check it"
+    ran = here.run([git, "-C", path, "status", "--porcelain=v1", "--branch"], timeout=60)
+    if not ran.ok:
+        return f"git could not read it ({ran.last()})"
+    lines = ran.out.splitlines()
+    head = lines[0] if lines and lines[0].startswith("## ") else ""
+    branch = head[3:].split("...", 1)[0].strip()
+    if branch != BRANCH:
+        return f"it is on {branch or 'no branch'}, not {BRANCH}"
+    if "..." not in head:
+        return f"its {BRANCH} tracks no branch on GitHub"
+    if "[ahead" in head or "ahead " in head.partition("[")[2]:
+        return "it has commits of its own"
+    if [line for line in lines[1:] if line.strip()]:
+        return "it has changes not committed"
+    return None
+
+
 def cursor(app: App, here: Here, context: Context) -> Outcome:
     """Cursor: a clone of the ``latest`` branch in its local plugins folder (``~/.cursor/plugins/local``). Where
     Claude Code has our plugin, Cursor loads that one (as earlier releases measured), so its own copy of ours goes.
-    Removed: 0.10.0-0.11.10's plain copy (marked ``.text-to-cad-copy``), a development copy (``.text-to-cad-dev``).
-    Verified: docs https://cursor.com/docs/plugins (a plugin is a folder in ~/.cursor/plugins/local; a symlink there is
-    skipped). That Cursor loads Claude Code's plugins is not in its docs: earlier releases' observation."""
+    Earlier copies: 0.10.0-0.11.10's plain copy (marked ``.text-to-cad-copy``), a development copy
+    (``.text-to-cad-dev``), both moved to the backup once ours is in. A clone is updated or removed only when it has
+    nothing of its own (``clone_problem``); a link there is never followed or changed. Verified: docs
+    https://cursor.com/docs/plugins (a plugin is a folder in ~/.cursor/plugins/local; a symlink there is skipped).
+    That Cursor loads Claude Code's plugins is not in its docs: earlier releases' observation."""
     base = here.home / ".cursor"
     if not base.is_dir() and not here.which("cursor-agent"):
         return NOT_FOUND
     local = base / "plugins" / "local"
-    target = local / (f"{PLUGIN}-dev" if context.source.local else PLUGIN)
-    removed = []
-    for path in (local / PLUGIN, local / f"{PLUGIN}-dev"):
-        if not path.exists() and not path.is_symlink():
-            continue
-        clone = our_repository(git_origin(path))
-        marked = (path / COPY_MARK).is_file() or (path / DEV_MARK).is_file()
-        if not clone and not marked:
-            continue
-        keep = path == target and not context.claude_has_ours and (clone if not context.source.local else False)
-        if not keep:
-            remove_path(path)
-            removed.append(str(path).replace(str(here.home), "~"))
-    if context.claude_has_ours:
-        return Outcome("skipped", "it loads Claude Code's plugin", removed)
-    if context.source.local:
-        copy_tree(context.source.folder, target)
-        (target / DEV_MARK).write_text(f"{context.source.folder}\n", encoding="utf-8")
-        return Outcome("installed", f"a copy of {context.source.folder}", removed)
-    if target.exists():
-        if not our_repository(git_origin(target)):
-            raise Failed(f"{target} holds something else: move it away, then run this again")
-        git = here.which("git")
-        if not git:
-            raise Failed("git is needed to update it")
-        here.must([git, "-C", target, "fetch", "--quiet", "--depth", "1", "origin", BRANCH])
-        here.must([git, "-C", target, "checkout", "--quiet", "--force", "-B", BRANCH, "FETCH_HEAD"])
-        return Outcome("updated", removed=removed)
+    source = context.source
+    target = local / (f"{PLUGIN}-dev" if source.local else PLUGIN)
+    removed, notes = [], []
+
+    def kind(path: Path) -> Tuple[str, str]:
+        if path.is_symlink():
+            return "link", f"{here.shown(path)} is a link: left alone"
+        if not path.exists():
+            return "absent", ""
+        if (path / COPY_MARK).is_file() or (path / DEV_MARK).is_file():
+            return "copy", ""
+        if our_repository(git_origin(path)):
+            problem = clone_problem(here, path)
+            return ("clone", "") if problem is None else ("kept", f"{here.shown(path)} left alone: {problem}")
+        return "other", ""
+
+    def clear(path: Path) -> None:
+        """An earlier copy of ours out, once ours is in (or Claude Code's is)."""
+        what, why = kind(path)
+        if what in ("link", "kept"):
+            notes.append(why)
+        elif what == "clone":
+            discard(path)
+            removed.append(here.shown(path))
+        elif what == "copy":
+            context.backup.keep(path)
+            removed.append(f"{here.shown(path)}, moved to the backup")
+
+    if context.claude_has_ours and not source.local:
+        for path in (local / PLUGIN, local / f"{PLUGIN}-dev"):
+            clear(path)
+        return Outcome("skipped", "; ".join(["it loads Claude Code's plugin", *notes]), removed, has_ours=True)
+    if source.local:
+        copy_tree(source.folder, target, context.backup, mark=True)
+        (target / DEV_MARK).write_text(f"{source.folder}\n", encoding="utf-8")
+        clear(local / PLUGIN)
+        return Outcome("installed", "; ".join([f"a copy of {source.folder}", *notes]), removed)
+    what, why = kind(target)
     git = here.which("git")
+    if what == "link":
+        return Outcome("skipped", f"{why} (Cursor does not load a link: put a clone there to use it)")
+    if what == "kept":
+        return Outcome("skipped", why, has_ours=True)
+    if what == "other":
+        raise Failed(f"{here.shown(target)} holds something else: left alone (move it away, then run this again)")
     if not git:
         raise Failed("git is needed to install it")
-    local.mkdir(parents=True, exist_ok=True)
-    here.must([git, "clone", "--quiet", "--depth", "1", "--branch", BRANCH, URL, target])
-    return Outcome("installed", removed=removed)
+    if what == "clone":
+        here.must([git, "-C", target, "fetch", "--quiet", "--depth", "1", "origin", BRANCH])
+        here.must([git, "-C", target, "checkout", "--quiet", "-B", BRANCH, "FETCH_HEAD"])
+        status = "updated"
+    else:  # absent, or an earlier plain copy: the clone made beside it, then swapped in
+        local.mkdir(parents=True, exist_ok=True)
+        staging = Path(tempfile.mkdtemp(prefix=".text-to-cad-new-", dir=str(local)))
+        try:
+            here.must([git, "clone", "--quiet", "--depth", "1", "--branch", BRANCH, URL, staging / PLUGIN])
+            if swap(staging / PLUGIN, target, context.backup) is not None:
+                removed.append(f"{here.shown(target)}, the earlier plain copy, moved to the backup")
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+        status = "updated" if what == "copy" else "installed"
+    clear(local / f"{PLUGIN}-dev")
+    return Outcome(status, "; ".join(notes), removed)
 
 
 def gemini(app: App, here: Here, context: Context) -> Outcome:
     """Gemini CLI: its extension, installed from GitHub at ``latest`` (a copy), updated by ``extensions update``.
-    0.10.0-0.11.10 linked ``<state>/plugin`` under the same name: unlinked first. Read from
-    ``~/.gemini/extensions/text-to-cad/.gemini-extension-install.json`` (``type``, ``source``, ``ref``).
-    Verified: `gemini extensions --help` and its subcommands (`install <source> --ref --consent`, `update <name>`,
-    `uninstall`, `link <path> --consent`); docs https://geminicli.com/docs/extensions/reference/."""
+    0.10.0-0.11.10 linked ``<state>/plugin`` under the same name, which must go for ours to come in: GitHub is
+    checked first, the old extension's folder and the enablement file are kept aside, and put back where the new
+    one does not install. Read from ``~/.gemini/extensions/text-to-cad/.gemini-extension-install.json`` (``type``,
+    ``source``, ``ref``). Verified: `gemini extensions --help` and its subcommands (`install <source> --ref
+    --consent`, `update <name>`, `uninstall`, `link <path> --consent`); docs
+    https://geminicli.com/docs/extensions/reference/."""
     cli = here.which("gemini")
     if not cli:
         return NOT_FOUND
-    folder = Path(here.environ.get("GEMINI_CLI_HOME") or here.home) / ".gemini" / "extensions" / PLUGIN
+    extensions = Path(here.environ.get("GEMINI_CLI_HOME") or here.home) / ".gemini" / "extensions"
+    folder = extensions / PLUGIN
     source = context.source
 
     def record() -> Dict[str, Any]:
-        found = read_json(folder / ".gemini-extension-install.json")
-        return found if isinstance(found, dict) else {}
+        return table(read_json(folder / ".gemini-extension-install.json"))
 
     def ours_now() -> bool:
         found = record()
@@ -681,43 +1145,61 @@ def gemini(app: App, here: Here, context: Context) -> Outcome:
             return found.get("type") == "link" and same_path(found.get("source"), source.folder)
         return found.get("type") == "git" and our_repository(found.get("source")) and found.get("ref") == BRANCH
 
-    removed = []
-    if folder.exists():
-        found = record()
-        if ours_now():
-            if source.local:
-                return Outcome("updated", f"linked to {source.folder}")
-            here.must([cli, "extensions", "update", PLUGIN])
-            return Outcome("updated")
-        linked = found.get("type") == "link" and our_folder(here, found.get("source"))
-        if not (linked or our_repository(found.get("source"))):
-            raise Failed(f"another extension named {PLUGIN} is installed (from {found.get('source') or 'elsewhere'}): "
-                         "left alone")
+    def put_in() -> Ran:
+        if source.local:
+            return here.run([cli, "extensions", "link", source.folder, "--consent"], answer="y\n")
+        return here.run([cli, "extensions", "install", URL, "--ref", BRANCH, "--consent"])
+
+    if not (folder.exists() or folder.is_symlink()):
+        ran = put_in()
+        if not ran.ok and not ours_now():
+            raise Failed(ran.last())
+        return Outcome("installed")
+    found = record()
+    if ours_now():
+        if source.local:
+            return Outcome("updated", f"linked to {source.folder}")
+        here.must([cli, "extensions", "update", PLUGIN])
+        return Outcome("updated")
+    linked = found.get("type") == "link" and our_folder(here, found.get("source"))
+    if not (linked or our_repository(found.get("source"))):
+        raise Failed(f"another extension named {PLUGIN} is installed (from {found.get('source') or 'elsewhere'}): "
+                     "left alone")
+    source.reachable(here)
+    aside = Path(tempfile.mkdtemp(prefix="text-to-cad-gemini-"))
+    try:
+        shutil.copytree(str(folder), str(aside / PLUGIN), symlinks=True)
+        enablement = extensions / "extension-enablement.json"
+        kept = enablement.read_bytes() if enablement.is_file() else None
         here.must([cli, "extensions", "uninstall", PLUGIN])
-        removed.append(f"{PLUGIN} " + ("linked to " + str(found.get("source")) if linked else
-                                       f"from {found.get('source')} at {found.get('ref') or 'its default branch'}"))
-    if source.local:
-        ran = here.run([cli, "extensions", "link", source.folder, "--consent"], answer="y\n")
-    else:
-        ran = here.run([cli, "extensions", "install", URL, "--ref", BRANCH, "--consent"])
-    if not ran.ok and not ours_now():
-        raise Failed(ran.last())
-    return Outcome("installed", removed=removed)
+        ran = put_in()
+        if not ran.ok and not ours_now():
+            if folder.exists() or folder.is_symlink():
+                discard(folder)
+            shutil.copytree(str(aside / PLUGIN), str(folder), symlinks=True)
+            if kept is not None:
+                enablement.write_bytes(kept)
+            raise Failed(f"{ran.last()}; the earlier copy was put back")
+    finally:
+        shutil.rmtree(aside, ignore_errors=True)
+    old = ("linked to " + str(found.get("source")) if linked else
+           f"from {found.get('source')} at {found.get('ref') or 'its default branch'}")
+    return Outcome("updated", removed=[f"{PLUGIN} {old}"])
 
 
 def grok_plugins(here: Here) -> List[Dict[str, str]]:
     """Grok Build's installed plugins, from its registry (``~/.grok/installed-plugins/registry.json``): name, where
-    from, git ref."""
-    registry = read_json(here.home / ".grok" / "installed-plugins" / "registry.json")
+    from, git ref. A registry of another shape gives none."""
+    repos = table(table(read_json(here.home / ".grok" / "installed-plugins" / "registry.json")).get("repos"))
     found = []
-    for entry in ((registry or {}).get("repos") or {}).values() if isinstance(registry, dict) else ():
-        kind = entry.get("kind") if isinstance(entry, dict) else None
-        path = entry.get("path") if isinstance(entry, dict) else None
+    for entry in repos.values():
+        entry = table(entry)
+        kind, path = entry.get("kind"), entry.get("path")
         if not isinstance(kind, dict) or not isinstance(path, str):
             continue
         named = entry.get("plugins")
         names = list(named) if isinstance(named, dict) else [
-            (read_json(Path(path) / ".grok-plugin" / "plugin.json") or read_json(Path(path) / "plugin.json") or {}).get("name")]
+            table(read_json(Path(path) / ".grok-plugin" / "plugin.json") or read_json(Path(path) / "plugin.json")).get("name")]
         for name in names:
             found.append({"name": str(name), "source": str(kind.get("url") or kind.get("path") or ""),
                           "ref": str(kind.get("git_ref") or ""), "path": path})
@@ -727,38 +1209,115 @@ def grok_plugins(here: Here) -> List[Dict[str, str]]:
 def grok(app: App, here: Here, context: Context) -> Outcome:
     """Grok Build: ``grok plugin install earthtojake/text-to-cad@latest --trust``, then enabled; updated by ``grok
     plugin update``. Grok Build loads Claude Code's plugins (its docs), so where Claude Code has ours its own copy of
-    ours goes. Removed: a plugin named ``cad`` from our repository (0.5.0-0.7.6). Verified: `grok plugin --help` and
-    its subcommands (`install <source>` with `@ref`, `--trust`; `enable`; `update [name]`; `uninstall`); docs
-    https://docs.x.ai/build/features/skills-plugins-marketplaces (it reads Claude Code's marketplaces and plugins)."""
+    ours goes. Removed, once ours is in: a plugin named ``cad`` from our repository (0.5.0-0.7.6). A copy of ours from
+    another source is replaced (same name), GitHub checked first and the old one put back where the new one fails.
+    Verified: `grok plugin --help` and its subcommands (`install <source>` with `@ref`, `--trust`; `enable`; `update
+    [name]`; `uninstall`); docs https://docs.x.ai/build/features/skills-plugins-marketplaces (it reads Claude Code's
+    marketplaces and plugins)."""
     cli = here.which("grok")
     if not cli:
         return NOT_FOUND
     source = context.source
-    removed = []
-    mine = None
+    removed: List[str] = []
+    old_cad, mine, other = False, None, None
     for plugin in grok_plugins(here):
         ours = our_repository(plugin["source"]) or our_folder(here, plugin["source"])
         if plugin["name"] == "cad" and ours:
-            here.must([cli, "plugin", "uninstall", "cad"])
-            removed.append("cad")
+            old_cad = True
         elif plugin["name"] == PLUGIN:
             if not ours:
                 raise Failed(f"another plugin named {PLUGIN} is installed (from {plugin['source']}): left alone")
             current = (same_path(plugin["source"], source.folder) if source.local
                        else our_repository(plugin["source"]) and plugin["ref"] == BRANCH)
-            if current and not context.claude_has_ours and not source.local:
-                mine = plugin
-            else:
+            mine, other = (plugin, None) if current else (None, plugin)
+
+    def drop_cad() -> None:
+        if old_cad:
+            here.must([cli, "plugin", "uninstall", "cad"])
+            removed.append("cad")
+
+    if context.claude_has_ours and not source.local:
+        for plugin in (mine, other):
+            if plugin is not None:
                 here.must([cli, "plugin", "uninstall", PLUGIN])
-                removed.append(f"{PLUGIN} from {plugin['source']}" + (f"@{plugin['ref']}" if plugin["ref"] else ""))
-    if context.claude_has_ours:
-        return Outcome("skipped", "it loads Claude Code's plugin", removed)
+                removed.append(PLUGIN)
+        drop_cad()
+        return Outcome("skipped", "it loads Claude Code's plugin", removed, has_ours=True)
     if mine is not None:
         here.must([cli, "plugin", "update", PLUGIN])
+        drop_cad()
         return Outcome("updated", removed=removed)
-    here.must([cli, "plugin", "install", str(source.folder) if source.local else f"{REPOSITORY}@{BRANCH}", "--trust"])
+    install = [cli, "plugin", "install", str(source.folder) if source.local else f"{REPOSITORY}@{BRANCH}", "--trust"]
+    if other is not None:
+        source.reachable(here)
+        here.must([cli, "plugin", "uninstall", PLUGIN])
+        try:
+            here.must(install)
+            here.must([cli, "plugin", "enable", PLUGIN])
+        except Failed as error:
+            back = [cli, "plugin", "install", other["source"] + (f"@{other['ref']}" if other["ref"] else ""), "--trust"]
+            put = here.run(back).ok and here.run([cli, "plugin", "enable", PLUGIN]).ok
+            raise Failed(f"{error}; the earlier copy was {'put back' if put else 'not put back: run this again'}") from error
+        removed.append(f"{PLUGIN} from {other['source']}" + (f"@{other['ref']}" if other["ref"] else ""))
+        drop_cad()
+        return Outcome("updated", removed=removed)
+    here.must(install)
     here.must([cli, "plugin", "enable", PLUGIN])
+    drop_cad()
     return Outcome("installed", removed=removed)
+
+
+def antigravity_plugins(here: Here, cli: str) -> Optional[List[Dict[str, Any]]]:
+    """``agy plugin list --json``'s plugins (name, source, path), or None where it gives none to read."""
+    ran = here.run([cli, "plugin", "list", "--json"], timeout=60)
+    if not ran.ok:
+        return None
+    starts = [index for index in (ran.out.find("["), ran.out.find("{")) if index >= 0]
+    try:
+        data = json.loads(ran.out[min(starts):]) if starts else None
+    except ValueError:
+        return None
+    entries = data if isinstance(data, list) else table(data).get("plugins")
+    return [entry for entry in entries if isinstance(entry, dict)] if isinstance(entries, list) else None
+
+
+def antigravity(app: App, here: Here, context: Context) -> Outcome:
+    """Antigravity. Docs https://antigravity.google/docs/plugins: ``agy plugin install <repo URL or path>``,
+    ``uninstall <name>``, ``list --json`` (each plugin's ``source`` and ``path``; installed into
+    ``~/.gemini/config/plugins/<name>``); no update command, no ref (``main``); it reads
+    ``.antigravity-plugin/plugin.json``. The docs do not say whether installing again replaces a plugin, so an update
+    installs again first; only where that fails, and only a copy ``list`` shows is ours, is it uninstalled and
+    installed again, its folder kept aside and put back where the new one does not install. Not run."""
+    cli = here.which("agy")
+    if not cli:
+        return NOT_FOUND
+    source = context.source
+    install = [cli, "plugin", "install", str(source.folder) if source.local else URL]
+    listed = antigravity_plugins(here, cli)
+    mine = next((entry for entry in listed or () if entry.get("name") == PLUGIN), None)
+    if mine is not None and not (our_repository(mine.get("source")) or our_folder(here, mine.get("source"))
+                                 or our_folder(here, mine.get("path"))):
+        raise Failed(f"another plugin named {PLUGIN} is installed (from {mine.get('source') or 'elsewhere'}): left alone")
+    ran = here.run(install)
+    if ran.ok:
+        return Outcome("updated" if mine is not None else "installed")
+    if mine is None:
+        raise Failed(ran.last())
+    source.reachable(here)
+    folder = Path(str(mine.get("path") or here.home / ".gemini" / "config" / "plugins" / PLUGIN))
+    aside = Path(tempfile.mkdtemp(prefix="text-to-cad-agy-"))
+    try:
+        if folder.is_dir():
+            shutil.copytree(str(folder), str(aside / PLUGIN), symlinks=True)
+        here.must([cli, "plugin", "uninstall", PLUGIN])
+        again = here.run(install)
+        if not again.ok:
+            if (aside / PLUGIN).is_dir() and not folder.exists():
+                shutil.copytree(str(aside / PLUGIN), str(folder), symlinks=True)
+            raise Failed(f"{again.last()}; the earlier copy was put back")
+    finally:
+        shutil.rmtree(aside, ignore_errors=True)
+    return Outcome("updated")
 
 
 def desktop_config(here: Here) -> Path:
@@ -836,45 +1395,55 @@ def without_member(text: str, path: Sequence[str]) -> str:
     return text
 
 
+def unused_backup_name(path: Path) -> Path:
+    """A name beside ``path`` no file has: ``<name>.<date-time>.bak``, numbered where that is taken."""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    candidate, number = path.with_name(f"{path.name}.{stamp}.bak"), 1
+    while candidate.exists() or candidate.is_symlink():
+        number += 1
+        candidate = path.with_name(f"{path.name}.{stamp}-{number}.bak")
+    return candidate
+
+
 def claude_desktop(app: App, here: Here, context: Context) -> Outcome:
-    """Claude Desktop: nothing is installed (Claude gets the skills through Claude Code's plugin). Releases 0.7.6-0.11.10
-    wrote our server into its config as ``mcpServers.cad``: that one member is taken out where it runs text-to-cad,
-    every other byte of the file kept, the file as it was kept beside it as ``.bak``. A ``cad`` that is another
-    server's, or a file that is not plain JSON, is left. Verified: docs https://modelcontextprotocol.io/quickstart/user
-    (servers are keys of ``mcpServers`` in claude_desktop_config.json)."""
+    """Claude Desktop: nothing is installed in it (its Code tab runs Claude Code, which gets the plugin above).
+    Releases 0.7.6-0.11.10 wrote our server into its config as ``mcpServers.cad``: that one member is taken out where
+    it runs text-to-cad, every other byte of the file kept, the file as it was kept beside it under a name no file
+    has (``unused_backup_name``); a config that is a link is edited where it points. A ``cad`` that is another
+    server's, or a file that is not plain JSON, is left. Where no Claude Code was found to install the plugin with,
+    it says what to do. Verified: docs https://modelcontextprotocol.io/quickstart/user (servers are keys of
+    ``mcpServers`` in claude_desktop_config.json)."""
     path = desktop_config(here)
     if not path.parent.is_dir():
         return QUIET
+    ours = context.claude_has_ours  # its Code tab has the plugin where Claude Code does
+    hint = ("" if context.claude_found else
+            "no Claude Code was found to install the plugin with: open the Code tab in Claude Desktop once (it "
+            "downloads Claude Code), then run this again")
     try:
-        text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8") if path.exists() else ""
         data = json.loads(text) if text.strip() else {}
     except (OSError, ValueError):
-        return Outcome("skipped", f"{path.name} is not plain JSON: left alone")
+        return Outcome("skipped", "; ".join(filter(None, [f"{path.name} is not plain JSON: left alone", hint])),
+                       has_ours=ours)
     servers = data.get("mcpServers") if isinstance(data, dict) else None
     if not isinstance(servers, dict) or not runs_text_to_cad(servers.get("cad")):
-        return QUIET
+        return Outcome("skipped", hint, has_ours=ours) if hint else QUIET
     edited = without_member(text, ["mcpServers", "cad"])
     expected = dict(data)
     expected["mcpServers"] = {key: value for key, value in servers.items() if key != "cad"}
     if json.loads(edited) != expected:
         raise Failed(f"{path.name} could not be edited safely: remove mcpServers.cad by hand")
-    shutil.copy2(path, path.with_name(path.name + ".bak"))
-    handle, temporary = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.")
+    real = Path(os.path.realpath(path))
+    kept = unused_backup_name(real)
+    shutil.copy2(real, kept)
+    handle, temporary = tempfile.mkstemp(dir=str(real.parent), prefix=f".{real.name}.")
     with os.fdopen(handle, "w", encoding="utf-8", newline="") as out:
         out.write(edited)
-    os.chmod(temporary, path.stat().st_mode & 0o777)
-    os.replace(temporary, path)
-    return Outcome("removed", f"the old cad server in its settings ({path.name}.bak keeps the file as it was)")
-
-
-def copy_tree(source: Optional[Path], target: Path) -> None:
-    """``source`` copied to ``target``, real files, links followed, caches left out; a folder there replaced."""
-    staged = target.with_name(f".{target.name}.new")
-    remove_path(staged)
-    shutil.copytree(str(source), str(staged), symlinks=False,
-                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store", ".git"))
-    remove_path(target)
-    staged.rename(target)
+    os.chmod(temporary, real.stat().st_mode & 0o777)
+    os.replace(temporary, real)
+    words = f"the old cad server in its settings ({kept.name} keeps the file as it was)"
+    return Outcome("removed", "; ".join(filter(None, [words, hint])), has_ours=ours)
 
 
 def copy_skills(app: App, here: Here, context: Context) -> Outcome:
@@ -886,57 +1455,69 @@ def copy_skills(app: App, here: Here, context: Context) -> Outcome:
 
 
 def put_skills(target: Path, here: Here, context: Context) -> Outcome:
-    """Our skills copied into ``target``, a skills folder: each of ours there replaced, someone else's kept."""
+    """Our skills copied into ``target``, a skills folder, each in place of ours there (``copy_tree``: staged, then
+    swapped in; the old one deleted where it is exactly what we wrote, else moved to the backup); a folder of that
+    name that is someone else's is kept. The skills are fetched before anything is touched."""
     source = context.source.skills(here)
     target.mkdir(parents=True, exist_ok=True)
-    copied, kept = [], []
+    copied, kept, moved, existed = [], [], 0, False
     for skill in sorted(path for path in source.iterdir() if (path / "SKILL.md").is_file()):
         there = target / skill.name
-        if (there.exists() or there.is_symlink()) and not our_skill(there):
+        if (there.exists() or there.is_symlink()) and not ours_to_replace(there):
             kept.append(skill.name)
             continue
-        copy_tree(skill, there)
+        old = copy_tree(skill, there, context.backup, mark=True)
+        existed = existed or old is not None
+        moved += old == "moved"
         copied.append(skill.name)
-    where = str(target).replace(str(here.home), "~")
-    words = f"{len(copied)} skills in {where}" + (f"; left {', '.join(kept)}: someone else's skill of that name"
-                                                  if kept else "")
-    return Outcome("installed", words)
+    words = f"{len(copied)} skills in {here.shown(target)}"
+    if moved:
+        words += f"; {moved} earlier copies moved to the backup"
+    if kept:
+        words += f"; left {', '.join(kept)}: someone else's skill of that name"
+    return Outcome("updated" if existed else "installed", words)
 
 
 # The skill folders every earlier release may have left a loose copy of ours in: the shared ~/.agents/skills, each
 # app's own, the per-agent folders 0.8.4-0.11.4's installer wrote through the Skills CLI, and the folders of the
-# agents the Skills CLI served since.
-def loose_skill_folders(here: Here) -> List[Path]:
+# agents the Skills CLI served since. Each with the key of the app that reads it (None: a folder several apps read).
+def loose_skill_folders(here: Here) -> List[Tuple[Path, Optional[str]]]:
     home, config = here.home, here.config_home()
-    hermes = hermes_home(here)
     folders = [
-        home / ".agents" / "skills",
-        claude_dir(here) / "skills",
-        Path(here.environ.get("CODEX_HOME") or home / ".codex") / "skills",
-        home / ".cursor" / "skills",
-        home / ".grok" / "skills",
-        Path(here.environ.get("GEMINI_CLI_HOME") or home) / ".gemini" / "skills",
-        home / ".copilot" / "skills",
-        config / "agents" / "skills",
-        home / ".gemini" / "antigravity" / "skills",
-        home / ".gemini" / "antigravity-cli" / "skills",
-        home / ".factory" / "skills",
-        home / ".kilo" / "skills",
-        home / ".kilocode" / "skills",
-        config / "opencode" / "skills",
-        home / ".codeium" / "windsurf" / "skills",
-        home / ".openclaw" / "skills",
-        home / ".clawdbot" / "skills",
-        home / ".moltbot" / "skills",
-        config / "goose" / "skills",
-        home / ".kiro" / "skills",
-        hermes / "skills",
-        home / ".roo" / "skills",
-        home / ".trae" / "skills",
-        home / ".cline" / "skills",
-        config / "amp" / "skills",
+        (home / ".agents" / "skills", None),
+        (claude_dir(here) / "skills", "claude"),
+        (Path(here.environ.get("CODEX_HOME") or home / ".codex") / "skills", "codex"),
+        (home / ".cursor" / "skills", "cursor"),
+        (home / ".grok" / "skills", "grok"),
+        (Path(here.environ.get("GEMINI_CLI_HOME") or home) / ".gemini" / "skills", "gemini"),
+        (home / ".copilot" / "skills", "copilot"),
+        (config / "agents" / "skills", None),
+        (home / ".gemini" / "antigravity" / "skills", "antigravity"),
+        (home / ".gemini" / "antigravity-cli" / "skills", "antigravity"),
+        (home / ".factory" / "skills", "droid"),
+        (home / ".kilo" / "skills", "kilo"),
+        (home / ".kilocode" / "skills", "kilo"),
+        (config / "opencode" / "skills", "opencode"),
+        (home / ".codeium" / "windsurf" / "skills", "windsurf"),
+        (home / ".openclaw" / "skills", "openclaw"),
+        (home / ".clawdbot" / "skills", "openclaw"),
+        (home / ".moltbot" / "skills", "openclaw"),
+        (config / "goose" / "skills", "goose"),
+        (home / ".kiro" / "skills", "kiro"),
+        (hermes_home(here) / "skills", "hermes"),
+        (home / ".roo" / "skills", "roo"),
+        (home / ".trae" / "skills", "trae"),
+        (home / ".cline" / "skills", "cline"),
+        (config / "amp" / "skills", "amp"),
     ]
-    return list(dict.fromkeys(folders))
+    return list(dict(folders).items())
+
+
+def copied_folders(here: Here, apps: Sequence[App]) -> List[Path]:
+    """The skills folders the table copies our skills into: there our current skills are replaced in place
+    (``put_skills``), so the loose cleanup takes only the retired ones."""
+    found = [app.folder(here) for app in apps if app.folder is not None]
+    return found + ([hermes_home(here) / "skills"] if any(app.key == "hermes" for app in apps) else [])
 
 
 def skills_locks(here: Here) -> List[Path]:
@@ -946,28 +1527,53 @@ def skills_locks(here: Here) -> List[Path]:
     return ([Path(state) / "skills" / ".skill-lock.json"] if state else []) + [here.home / ".agents" / ".skill-lock.json"]
 
 
-def remove_loose_skills(here: Here) -> Outcome:
-    """Every loose copy of our skills (current and retired names), in every folder an earlier release or the Skills
-    CLI wrote one, that is ours (``our_skill``: our name AND our repository in its SKILL.md), deleted; a link to ours
-    is unlinked, never followed. The Skills CLI's record of each (``skills_locks``) goes with it, only an entry whose
-    source is our repository, or the plugin folder 0.10.0-0.11.10 wrote in cad's state folder. No ``npx skills remove``: it removes by name alone, from
-    folders this does not read, and our names are common words."""
-    ours: List[Path] = []
-    for folder in loose_skill_folders(here):
-        for name in (*SKILLS, *RETIRED_SKILLS):
+def remove_loose_skills(here: Here, context: Context, outcomes: Dict[str, Outcome],
+                        apps: Sequence[App] = ()) -> Outcome:
+    """The loose copies of our skills (``our_skill``: one of our names AND our repository as our releases wrote
+    it), after the apps, so an app loses its loose copies only once it has ours: a folder one app reads only where
+    that app now has our plugin; a folder several apps read only where every app found has it; a folder the table
+    copies into only its retired names (its current ones were replaced in place). A link to ours is unlinked, never
+    followed; a copy exactly as we wrote it deleted; any other moved to the backup. The Skills CLI's record of a
+    skill (``skills_locks``) goes once no copy is left in ``~/.agents/skills``, only an entry whose source is our
+    repository or the plugin folder 0.10.0-0.11.10 wrote in cad's state folder. No ``npx skills remove``: it removes
+    by name alone, from folders this does not read, and our names are common words."""
+    found = [outcome for outcome in outcomes.values() if outcome is not NOT_FOUND and outcome is not QUIET]
+    # A shared folder only after a run over every app (dev_install.py may name a few).
+    every = bool(found) and all(outcome.ours for outcome in found) and {app.key for app in (apps or APPS)} >= {app.key for app in APPS}
+    copied = [os.path.normcase(os.path.realpath(path)) for path in copied_folders(here, APPS)]
+    names = {app.key: app.name for app in APPS}
+    chosen: List[Path] = []
+    waiting = []
+    for folder, owner in loose_skill_folders(here):
+        if not folder.is_dir():
+            continue
+        copies_into = os.path.normcase(os.path.realpath(folder)) in copied
+        if copies_into:
+            allowed = RETIRED_SKILLS
+        elif (every if owner is None else table(outcomes).get(owner, NOT_FOUND).ours):
+            allowed = (*SKILLS, *RETIRED_SKILLS)
+        else:
+            allowed = RETIRED_SKILLS
+        for name in (RETIRED_SKILLS if copies_into else (*SKILLS, *RETIRED_SKILLS)):
             path = folder / name
-            if (path.exists() or path.is_symlink()) and our_skill(path):
-                ours.append(path)
-    for path in ours:
-        # A link to a copy removed just before it reads as nothing now: it was judged ours above.
-        if (path.exists() or path.is_symlink()) and our_skill(path) is not False:
-            remove_path(path)
+            if not (path.exists() or path.is_symlink()) or not our_skill(path):
+                continue
+            if name in allowed:
+                chosen.append(path)
+            else:
+                waiting.append((folder, owner))
+    done = {"unlinked": 0, "deleted": 0, "moved": 0}
+    # Links first: a link to a copy moved just before it would read as nothing.
+    for path in sorted(chosen, key=lambda path: not path.is_symlink()):
+        done[retire(path, context.backup)] += 1
     for lock in skills_locks(here):
         record = read_json(lock)
         entries = record.get("skills") if isinstance(record, dict) else None
         if not isinstance(entries, dict):
             continue
+        shared = here.home / ".agents" / "skills"
         mine = [name for name, entry in entries.items() if name in (*SKILLS, *RETIRED_SKILLS) and isinstance(entry, dict)
+                and not ((shared / name).exists() or (shared / name).is_symlink())
                 and any(our_repository(entry.get(key)) or (isinstance(entry.get(key), str) and os.path.isabs(entry[key])
                                                             and any(within(entry[key], state) for state in here.state_dirs()))
                         for key in ("source", "sourceUrl"))]
@@ -975,10 +1581,17 @@ def remove_loose_skills(here: Here) -> Outcome:
             for name in mine:
                 del entries[name]
             lock.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-    if not ours:
-        return QUIET
-    places = sorted({str(path.parent).replace(str(here.home), "~") for path in ours})
-    return Outcome("removed", f"{len(ours)} old copies of our skills, in {', '.join(places)}")
+    notes = []
+    for folder, owner in dict.fromkeys(waiting):
+        who = names.get(owner, owner) if owner else "every app found here"
+        notes.append(f"kept the ones in {here.shown(folder)} until {who} has the plugin")
+    if not chosen:
+        return Outcome("skipped", "; ".join(notes)) if notes else QUIET
+    places = sorted({here.shown(path.parent) for path in chosen})
+    words = f"{len(chosen)} old copies of our skills, in {', '.join(places)}"
+    if done["moved"]:
+        words += f" ({done['moved']} moved to the backup, not deleted)"
+    return Outcome("removed", "; ".join([words, *notes]))
 
 
 def hermes_home(here: Here) -> Path:
@@ -988,35 +1601,37 @@ def hermes_home(here: Here) -> Path:
 def hermes(app: App, here: Here, context: Context) -> Outcome:
     """Hermes Agent: our skills copied into its own skills folder, ``$HERMES_HOME/skills`` (default
     ``~/.hermes/skills``), where Hermes reads a user's skills, each a folder with its SKILL.md; copied again to
-    update. Found by the ``hermes`` command or its home folder. Removed first: the plugin of ours 0.11.x's installer
-    installed with ``hermes plugins install`` (``plugins/text-to-cad``, ours by Hermes's install record or our
-    repository in its manifests), with ``hermes plugins remove``. No plugin: Hermes takes a plugin only by the
-    Agent Plugins standard's root ``plugin.json``, which Codex would read in place of its own manifest. Verified:
-    docs https://hermes-agent.nousresearch.com/docs/user-guide/features/skills (``~/.hermes/skills`` is the
-    skills folder); its source (``tools/skills_tool.py``: ``HERMES_HOME/skills``, every SKILL.md beneath it);
-    ``hermes skills list`` listing the copied skills with HERMES_HOME in a scratch folder."""
+    update. Found by the ``hermes`` command or its home folder. Then, once the skills are in, the plugin of ours
+    0.11.x's installer installed with ``hermes plugins install`` (``plugins/text-to-cad``, ours by Hermes's install
+    record or our repository in its manifests) is removed with ``hermes plugins remove``, where the command is here.
+    No plugin: Hermes takes a plugin only by the Agent Plugins standard's root ``plugin.json``, which Codex would read
+    in place of its own manifest. Verified: docs https://hermes-agent.nousresearch.com/docs/user-guide/features/skills
+    (``~/.hermes/skills`` is the skills folder); its source (``tools/skills_tool.py``: ``HERMES_HOME/skills``, every
+    SKILL.md beneath it); ``hermes skills list`` listing the copied skills with HERMES_HOME in a scratch folder."""
     cli = here.which("hermes")
     home = hermes_home(here)
     if not cli and not home.is_dir():
         return NOT_FOUND
-    removed = []
+    outcome = put_skills(home / "skills", here, context)
     plugin = home / "plugins" / PLUGIN
     if plugin.is_dir():
-        record = read_json(home / "plugins" / ".install-metadata.json")
-        entry = record.get(PLUGIN) if isinstance(record, dict) else None
-        if our_repository((entry or {}).get("source") if isinstance(entry, dict) else None) or our_folder(here, plugin):
-            if not cli:
-                raise Failed(f"the hermes command is needed to remove the old plugin of ours in {plugin}")
-            here.must([cli, "plugins", "remove", PLUGIN])
-            removed.append(f"the {PLUGIN} plugin")
-    outcome = put_skills(home / "skills", here, context)
-    outcome.removed = removed
+        entry = table(table(read_json(home / "plugins" / ".install-metadata.json")).get(PLUGIN))
+        if our_repository(entry.get("source")) or our_folder(here, plugin):
+            removal = here.run([cli, "plugins", "remove", PLUGIN]) if cli else None
+            if removal is not None and removal.ok:
+                outcome.removed = [f"the {PLUGIN} plugin"]
+            elif removal is not None:
+                outcome.words += f"; the old {PLUGIN} plugin stays (hermes said: {removal.last()})"
+            else:
+                outcome.words += (f"; the old {PLUGIN} plugin in {here.shown(plugin)} stays until the hermes command "
+                                  f"removes it: hermes plugins remove {PLUGIN}")
     return outcome
 
 
 def _pi_installed(here: Here) -> bool:
     try:
-        return f"github.com/{REPOSITORY}" in (here.home / ".pi" / "agent" / "settings.json").read_text(encoding="utf-8")
+        return f"github.com/{REPOSITORY}" in (here.home / ".pi" / "agent" / "settings.json").read_text(
+            encoding="utf-8", errors="replace")
     except OSError:
         return False
 
@@ -1029,7 +1644,8 @@ def _folder_agent(key: str, name: str, folder: Callable[[Here], Path], *marks: C
     return App(key, name, folder=folder, marks=lambda here: [mark(here) for mark in marks])
 
 
-# THE TABLE. Order matters only where it says: Claude Code first (Cursor and Grok Build load its plugin).
+# THE TABLE. Order matters only where it says: Claude Code first (Cursor and Grok Build load its plugin; Claude
+# Desktop says what to do where no Claude Code was found).
 APPS: Tuple[App, ...] = (
     App("claude", "Claude Code", command="claude", handler=claude_code),
     App("claude-desktop", "Claude Desktop", handler=claude_desktop),
@@ -1057,12 +1673,8 @@ APPS: Tuple[App, ...] = (
     App("devin", "Devin CLI", command="devin",
         install=[["plugins", "install", "{repo}", "-y"]], update=[["plugins", "update", "{plugin}"]],
         local=[["plugins", "install", "--local", "{folder}", "-y"]]),
-    # Antigravity. Docs https://antigravity.google/docs/plugins (install <repo URL or path>, uninstall; no update
-    # command, no ref: main; it reads .antigravity-plugin/plugin.json). Updated by installing again. Not run.
-    App("antigravity", "Antigravity", command="agy",
-        install=[["plugin", "install", "{url}"]],
-        update=[["plugin", "uninstall", "{plugin}"], ["plugin", "install", "{url}"]],
-        local=[["plugin", "install", "{folder}"]]),
+    # Antigravity (``antigravity``, above): installed again to update; uninstalled only where that fails. Not run.
+    App("antigravity", "Antigravity", command="agy", handler=antigravity),
     # GitHub Copilot CLI. Docs https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference
     # (marketplace add owner/repo#ref; the catalog is named by its marketplace.json; install name@marketplace;
     # update <name>). Superpowers installs it the same way. Not run.
@@ -1083,7 +1695,9 @@ APPS: Tuple[App, ...] = (
         update=[["plugins", "update", "{plugin}"]],
         local=[["plugins", "install", "{folder}"], ["plugins", "approve", "{plugin}"]]),
     # Agents with no plugin command: the skills copied into each one's own folder, where each one's docs (or, for
-    # Windsurf and Goose, the Skills CLI's agent table and our earlier installers) say it reads them. Not run.
+    # Windsurf and Goose, the Skills CLI's agent table and our earlier installers) say it reads them. Kilo: docs
+    # https://kilo.ai/docs/features/skills (global skills in ~/.kilo/skills; ~/.kilocode is the older extension's
+    # folder, which finds it too). Not run.
     _folder_agent("cline", "Cline", lambda h: h.home / ".cline" / "skills", lambda h: h.home / ".cline"),
     _folder_agent("amp", "Amp", lambda h: h.config_home() / "amp" / "skills", lambda h: h.config_home() / "amp"),
     _folder_agent("openclaw", "OpenClaw", lambda h: h.home / ".openclaw" / "skills", lambda h: h.home / ".openclaw"),
@@ -1115,12 +1729,12 @@ def latest(here: Here) -> str:
     return named
 
 
-def cad_setup(here: Here, release: str) -> bool:
-    """That release's ``cad setup`` through uvx, its output shown as it runs. Whether it worked."""
+def cad_setup(here: Here, release: str) -> int:
+    """That release's ``cad setup`` through uvx, its output shown as it runs. Its exit status (127: no uvx)."""
     uvx = here.which("uvx")
     if not uvx:
         print("cad setup: failed: uvx was not found (install uv: https://docs.astral.sh/uv/)", flush=True)
-        return False
+        return 127
     named = here.environ.get("CAD_INSTALL_FROM")
     requirement = ["--from", named] if named else ["--refresh-package", "cad-server", "--refresh-package", "cad",
                                                     "--from", f"cad-server=={release}"]
@@ -1129,37 +1743,71 @@ def cad_setup(here: Here, release: str) -> bool:
                                stdin=subprocess.DEVNULL)
     except OSError as error:
         print(f"cad setup: failed: {error}", flush=True)
-        return False
+        return 127
     if code:
         print(f"cad setup: failed (exit status {code}); what it said is above", flush=True)
-    return code == 0
+    return code
 
 
-def install_apps(here: Here, source: Source, apps: Sequence[App] = APPS) -> List[str]:
-    """Steps 3 and 4 for ``apps``: old copies out, ours in. One line per app found; one for the loose skills; one
-    naming the apps not found."""
-    context = Context(source)
-    lines, missing = [], []
-    try:
-        loose = remove_loose_skills(here)
-    except (OSError, Failed) as error:
-        loose = Outcome("failed", str(error))
-    if loose is not QUIET:
-        lines.append(loose.line("Loose skills"))
+@dataclass
+class Report:
+    """What the app phase did: its lines, in the order printed, and each app's outcome by key."""
+
+    lines: List[str]
+    outcomes: Dict[str, Outcome]
+
+    def __contains__(self, line: str) -> bool:
+        return line in self.lines
+
+    @property
+    def found(self) -> List[Outcome]:
+        return [outcome for outcome in self.outcomes.values() if outcome is not NOT_FOUND and outcome is not QUIET]
+
+    @property
+    def changed(self) -> bool:
+        return any(outcome.status in ("installed", "updated") for outcome in self.found)
+
+    @property
+    def all_failed(self) -> bool:
+        return bool(self.found) and all(outcome.status == "failed" for outcome in self.found)
+
+
+def install_apps(here: Here, source: Source, apps: Sequence[App] = APPS,
+                 say: Callable[[str], None] = lambda line: print(line, flush=True)) -> Report:
+    """Steps 3 and 4 for ``apps``: ours in, then old copies out, each app's line said as it finishes; one line for
+    the loose skills, one for the backup where anything went there, one counting the apps not found."""
+    context = Context(source, Backup(here))
+    lines: List[str] = []
+    outcomes: Dict[str, Outcome] = {}
+    missing = []
+
+    def tell(line: str) -> None:
+        lines.append(line)
+        say(line)
+
     for app in apps:
         try:
             outcome = app.run(here, context)
         except Failed as error:
             outcome = Outcome("failed", str(error))
-        except OSError as error:
+        except Exception as error:  # noqa: BLE001 - one app's surprise is that app's failure, never the run's
             outcome = Outcome("failed", f"{type(error).__name__}: {error}")
+        outcomes[app.key] = outcome
         if outcome is NOT_FOUND:
             missing.append(app.name)
         elif outcome is not QUIET:
-            lines.append(outcome.line(app.name))
+            tell(outcome.line(app.name))
+    try:
+        loose = remove_loose_skills(here, context, outcomes, apps)
+    except Exception as error:  # noqa: BLE001
+        loose = Outcome("failed", f"{type(error).__name__}: {error}")
+    if loose is not QUIET:
+        tell(loose.line("Loose skills"))
+    if context.backup.folder is not None:
+        tell(f"Earlier copies of ours were moved, not deleted, to {here.shown(context.backup.folder)}")
     if missing:
-        lines.append(f"Not found here: {', '.join(missing)}")
-    return lines
+        tell(f"{len(missing)} other supported apps were not found here.")
+    return Report(lines, outcomes)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -1172,18 +1820,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     here = Here()
     release = latest(here)
     print(f"Installing text-to-cad {release}. The first run downloads it, which takes a minute.", flush=True)
-    ok = cad_setup(here, release)
+    code = cad_setup(here, release)
+    if code == SETUP_SANDBOXED:
+        print("cad setup could not install from this shell (an agent's sandbox, no network, or a folder it may not "
+              "write), and the agent apps' commands would fail here too: nothing was changed in them. Run this again "
+              "in a terminal of your own, outside the sandbox.", flush=True)
+        return 1
+    print("", flush=True)
+    print("Setting up the plugin in each agent app found here:", flush=True)
     source = Source()
     try:
-        lines = install_apps(here, source)
+        report = install_apps(here, source)
     finally:
         source.close()
     print("", flush=True)
-    for line in lines:
-        print(line, flush=True)
-    print("Start a new session in each app to use it." if ok else
-          "text-to-cad itself was not installed: run this again, or see what cad setup said above.", flush=True)
-    return 0 if ok else 1
+    if code:
+        print(f"text-to-cad itself was not installed (cad setup exit status {code}; what it said is above), and the "
+              "plugin's commands need it: run this again.", flush=True)
+    elif report.all_failed:
+        print("No app got the plugin: see each app's line above, then run this again.", flush=True)
+    if report.changed:
+        print("Start a new session in each app to use it.", flush=True)
+    return 1 if code or report.all_failed else 0
 
 
 if __name__ == "__main__":

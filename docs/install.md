@@ -12,10 +12,15 @@ On Windows, in PowerShell:
 irm https://www.texttocad.dev/install.ps1 | iex
 ```
 
-It installs [uv](https://docs.astral.sh/uv/) if it is missing, installs the newest release of
-text-to-cad and the `cad` command, then installs the plugin in each agent app it finds, with that
-app's own command (below). It prints one line per app. Run it again to update. It takes no options.
+It installs [uv](https://docs.astral.sh/uv/) if it is missing (or updates it, where it is older
+than 0.9.0), installs the newest release of text-to-cad and the `cad` command, then installs the
+plugin in each agent app it finds, with that app's own command (below), all but Kimi Code, which
+you install by hand. It prints one line per app. Run it again to update. It takes no options.
 It also starts cad's server, which later sessions use.
+
+Once the new copy is in an app, it removes what earlier releases of text-to-cad left there, and
+nothing else. An earlier copy of our skills that it did not write itself, or that was changed
+since, is moved to `~/.text-to-cad-backup/<date and time>/`, never deleted; the run says so.
 
 Your agent shows each model it makes in a viewer. In the Codex app that is a **CAD** tab beside the
 thread; every other app opens it in its own browser, or gives you a link to open in yours.
@@ -107,6 +112,7 @@ To update:
 
 ```bash
 codex plugin marketplace upgrade earthtojake
+codex plugin add text-to-cad@earthtojake
 ```
 
 In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar, a **CAD** tab beside

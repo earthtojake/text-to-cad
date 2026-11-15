@@ -2,20 +2,28 @@
 #
 #   irm https://www.texttocad.dev/install.ps1 | iex
 #
-# It makes sure uv is here (installing it with uv's own installer when it is not), downloads install.py
-# from beside this script and runs it with uv's Python: that installs the newest release of text-to-cad
-# and puts the plugin into every agent app on this computer (install.py says how). Run it again to update.
-# It takes no options. Everything happens inside Install-TextToCad, called on the last line: a download cut
-# short runs nothing, and a failure returns instead of closing the window.
+# It makes sure uv is here and new enough (installing it with uv's own installer when it is not), downloads
+# install.py from beside this script and runs it with uv's Python: that installs the newest release of
+# text-to-cad and puts the plugin into every agent app on this computer (install.py says how). Run it again to
+# update. It takes no options. Everything happens inside Install-TextToCad, called on the last lines: a download
+# cut short runs nothing, and a failure returns instead of closing the window. Where it fails it writes an
+# error last, so `powershell -Command "irm ... | iex"` exits 1 (its exit status is 1 when the last command failed).
 
 function Install-TextToCad {
-    $ErrorActionPreference = 'Stop'
+    # 'Continue': a native command's line on stderr is never an error that stops the run (Windows PowerShell 5.1
+    # makes each such line an error record where stderr is redirected, as an agent's shell does). Each native
+    # command's $LASTEXITCODE is read instead, and each cmdlet that must stop says -ErrorAction Stop.
+    $ErrorActionPreference = 'Continue'
     $InstallPy = 'https://www.texttocad.dev/install.py'
+    # The oldest uv that runs it: `--managed-python` came in uv 0.6.8, and a stable CPython 3.14 in uv 0.9.0
+    # (uv's changelog, changelogs/0.6.x.md and 0.9.x.md).
+    $UvMinimum = [Version]'0.9.0'
 
     if ($args.Count) {
         Write-Host 'This installer takes no options: run it as it is to install or update text-to-cad in every agent app'
         Write-Host 'on this computer:  irm https://www.texttocad.dev/install.ps1 | iex'
         Write-Host "To remove text-to-cad, run ``cad uninstall``, and each app's own remove command."
+        $global:LASTEXITCODE = 2
         return
     }
 
@@ -32,6 +40,13 @@ function Install-TextToCad {
         return $null
     }
 
+    # uv's version, from "uv 0.9.5 (...)"; $null where it does not say.
+    function Get-UvVersion($uv) {
+        $said = (& $uv --version 2>$null | Select-Object -First 1)
+        if ($LASTEXITCODE -eq 0 -and "$said" -match '^uv (\d+\.\d+(\.\d+)?)') { return [Version]$Matches[1] }
+        return $null
+    }
+
     # An older Windows PowerShell may not offer TLS 1.2 on its own.
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
@@ -40,9 +55,31 @@ function Install-TextToCad {
         Write-Host "uv is not installed: installing it with uv's own installer (https://docs.astral.sh/uv/)."
         $shell = (Get-Process -Id $PID).Path
         & $shell -NoProfile -ExecutionPolicy ByPass -Command 'irm https://astral.sh/uv/install.ps1 | iex'
+        if ($LASTEXITCODE) {
+            Write-Host "error: uv's installer could not be downloaded or failed (exit $LASTEXITCODE; what it said is above): check the network connection, or install uv (https://docs.astral.sh/uv/), then run this again" -ForegroundColor Red
+            $global:LASTEXITCODE = 1
+            return
+        }
         $uv = Find-Uv
         if (-not $uv) {
             Write-Host 'error: uv was installed, but not found: open a new terminal and run this again' -ForegroundColor Red
+            $global:LASTEXITCODE = 1
+            return
+        }
+    }
+
+    $version = Get-UvVersion $uv
+    if (-not $version -or $version -lt $UvMinimum) {
+        # uv's own installer leaves a receipt, which `uv self update` needs.
+        $receipt = Join-Path $(if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path $HOME 'AppData\Local' }) 'uv\uv-receipt.json'
+        if (Test-Path $receipt) {
+            Write-Host "uv $version is older than $UvMinimum, the first that installs Python 3.14: updating it (uv self update)."
+            & $uv self update
+            $version = Get-UvVersion $uv
+        }
+        if (-not $version -or $version -lt $UvMinimum) {
+            Write-Host "error: uv $version is older than $UvMinimum, the first that installs Python 3.14: update it the way it was installed (winget: winget upgrade astral-sh.uv; pip: pip install -U uv; uv's own installer: uv self update), then run this again" -ForegroundColor Red
+            $global:LASTEXITCODE = 1
             return
         }
     }
@@ -50,27 +87,36 @@ function Install-TextToCad {
     $env:Path = "$(Split-Path $uv);$env:Path"
 
     $scratch = Join-Path ([IO.Path]::GetTempPath()) ("text-to-cad-" + [Guid]::NewGuid().ToString('N'))
-    New-Item -ItemType Directory -Path $scratch | Out-Null
-    $script = Join-Path $scratch 'install.py'
     try {
+        New-Item -ItemType Directory -Path $scratch -ErrorAction Stop | Out-Null
+        $script = Join-Path $scratch 'install.py'
         # CAD_INSTALL_PY: a local install.py instead (the installer rehearsals run this checkout's).
         if ($env:CAD_INSTALL_PY) {
-            Copy-Item -LiteralPath $env:CAD_INSTALL_PY -Destination $script
+            Copy-Item -LiteralPath $env:CAD_INSTALL_PY -Destination $script -ErrorAction Stop
         } else {
-            try {
-                Invoke-WebRequest -Uri $InstallPy -OutFile $script -UseBasicParsing
-            } catch {
-                Write-Host "error: could not download $InstallPy ($($_.Exception.Message))" -ForegroundColor Red
-                return
-            }
+            Invoke-WebRequest -Uri $InstallPy -OutFile $script -UseBasicParsing -ErrorAction Stop
         }
+    } catch {
+        Write-Host "error: could not download $InstallPy ($($_.Exception.Message))" -ForegroundColor Red
+        Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
+        $global:LASTEXITCODE = 1
+        return
+    }
+    try {
         & $uv run --no-config --managed-python --python 3.14 --no-project $script
-        if ($LASTEXITCODE) {
-            Write-Host "The installer exited $LASTEXITCODE; what it said is above." -ForegroundColor Red
+        $code = $LASTEXITCODE
+        if ($code) {
+            Write-Host "The installer exited $code; what it said is above." -ForegroundColor Red
         }
+        $global:LASTEXITCODE = $code
     } finally {
         Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
+# Its status is $LASTEXITCODE, which it sets on every path (its output goes to the window as it comes).
+$global:LASTEXITCODE = 0
 Install-TextToCad @args
+if ($LASTEXITCODE) {
+    Write-Error "text-to-cad's installer did not finish (exit $LASTEXITCODE): see what it said above." -ErrorAction Continue
+}

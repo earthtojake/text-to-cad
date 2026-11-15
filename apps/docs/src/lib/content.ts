@@ -19,7 +19,7 @@ export const installCommands = [
 // What the command does, and that running it again is the update, under the commands. The command
 // name is in backticks, which the page sets as code.
 export const installSummary =
-  "It installs uv if it is missing, installs the newest release of text-to-cad and the `cad` command, then installs the plugin in every agent app on your computer, with each app's own command. Run it again to update.";
+  "It installs uv if it is missing, installs the newest release of text-to-cad and the `cad` command, then installs the plugin in each agent app it finds on your computer, with that app's own command (Kimi Code you install by hand). Run it again to update.";
 // Installing by hand, each app's own commands, updating and removing: a page in the repository (the
 // README's Quickstart links it too), which the site does not repeat.
 export const manualInstall = { label: "Installing by hand, app by app, updating and removing", path: "docs/install.md" };

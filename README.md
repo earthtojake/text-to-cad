@@ -33,8 +33,8 @@ irm https://www.texttocad.dev/install.ps1 | iex
 ```
 
 It installs uv if it is missing, installs the newest release of text-to-cad and the
-`cad` command, then installs the plugin in every agent app on your computer, with each
-app's own command. Run it again to update.
+`cad` command, then installs the plugin in each agent app it finds on your computer, with
+that app's own command (Kimi Code you install by hand). Run it again to update.
 
 Then ask your agent for a part or an assembly: it writes the model as a Python
 script, runs it to build the model and shows it in the CAD viewer.
