@@ -299,7 +299,7 @@ def _flat_legacy(status: dict | None) -> bool:
     return not os.path.normcase(os.path.realpath(prefix)).startswith(inside)
 
 
-def hand_over(version: str, told: Callable[[str], None] | None = None) -> None:
+def hand_over(version: str, told: Callable[[str], None] | None = None) -> bool:
     """``cad setup`` of version ``version`` on a computer with the layout of 0.11.10 and earlier, reached by the install
     command rather than by that layout's own updater (whose ``cad setup --engine-update`` writes the mirror, and whose
     switch stops its own server):
@@ -314,7 +314,8 @@ def hand_over(version: str, told: Callable[[str], None] | None = None) -> None:
       ``version``'s server, which takes the page token and port it imported. The layout itself goes by the newest
       version's cleanup once nothing of it runs (``remove``).
 
-    Quiet but for what it did, said to ``told``; never a failure: ``OSError`` writing the mirror is said."""
+    Quiet but for what it did, said to ``told``; never a failure: ``OSError`` writing the mirror is said. Whether a
+    server of 0.11.10 or earlier was asked to stop (it runs on until it is idle)."""
     from cad_server._internal import installations, versions
 
     say = told or (lambda _line: None)
@@ -332,6 +333,8 @@ def hand_over(version: str, told: Callable[[str], None] | None = None) -> None:
         old = (status or {}).get("installation") or (status or {}).get("version") or "0.11.10 or earlier"
         say(f"cad-server {old}'s server stops once nothing is in flight there; cad {version}'s takes its "
             "place at the next command")
+        return True
+    return False
 
 
 def _rmdir(folder: Path) -> None:

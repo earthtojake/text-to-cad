@@ -15,6 +15,10 @@ irm https://www.texttocad.dev/install.ps1 | iex
 It installs [uv](https://docs.astral.sh/uv/) if it is missing, installs the newest release of
 text-to-cad and the `cad` command, then installs the plugin in each agent app it finds, with that
 app's own command (below). It prints one line per app. Run it again to update. It takes no options.
+It also starts cad's server, which later sessions use.
+
+Your agent shows each model it makes in a viewer. In the Codex app that is a **CAD** tab beside the
+thread; every other app opens it in its own browser, or gives you a link to open in yours.
 
 On Windows, run it in Windows Terminal or PowerShell, not in a Windows Store app's shell such as
 the Claude desktop app's: Windows keeps what such an app's commands write inside that app, where no
@@ -50,16 +54,47 @@ claude plugin marketplace add earthtojake/text-to-cad#latest
 claude plugin install text-to-cad@earthtojake
 ```
 
-Claude Code gets the skills alone and shows models in your browser. Claude Desktop's Code tab runs
-Claude Code and uses the same plugin.
+Claude Code shows models in its browser pane or your browser. Claude Desktop's Code tab runs Claude
+Code and uses the same plugin.
 
-To update: `claude plugin marketplace update earthtojake`, then
-`claude plugin update text-to-cad@earthtojake`.
+To update:
+
+```bash
+claude plugin marketplace update earthtojake
+claude plugin update text-to-cad@earthtojake
+```
 
 ### Codex
 
-text-to-cad is in Codex's plugin directory: in the Codex app, open **Plugins** and install
-text-to-cad. The directory updates its copy.
+#### Codex app
+
+text-to-cad is in the [official Codex plugin directory](https://learn.chatgpt.com/docs/plugins).
+
+- In the Codex app, click **Plugins** in the sidebar.
+- Find **text-to-cad**.
+- Click the **+** next to it and follow the prompts.
+
+#### Codex CLI
+
+text-to-cad is in the [official Codex plugin directory](https://learn.chatgpt.com/docs/plugins).
+
+- Open the plugin search:
+
+  ```text
+  /plugins
+  ```
+
+- Search for text-to-cad:
+
+  ```text
+  text-to-cad
+  ```
+
+- Select **Install Plugin**.
+
+The directory updates its copy.
+
+#### From this repository
 
 Or install it from this repository:
 
@@ -68,10 +103,14 @@ codex plugin marketplace add earthtojake/text-to-cad --ref latest
 codex plugin add text-to-cad@earthtojake
 ```
 
-In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar, a **CAD** tab beside
-each thread, and *Open with CAD* for model files.
+To update:
 
-To update: `codex plugin marketplace upgrade earthtojake`.
+```bash
+codex plugin marketplace upgrade earthtojake
+```
+
+In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar, a **CAD** tab beside
+each thread, and *Open with CAD* for model files. It is the only app that gets it.
 
 ### Cursor
 
@@ -79,20 +118,26 @@ To update: `codex plugin marketplace upgrade earthtojake`.
 git clone --depth 1 --branch latest https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad
 ```
 
-Cursor also loads the plugin installed in Claude Code: if Claude Code has it, skip this.
+Cursor also loads the plugin installed in Claude Code: if Claude Code has it, skip this. Cursor shows
+models in its browser.
 
-To update: `git -C ~/.cursor/plugins/local/text-to-cad pull`.
+To update:
+
+```bash
+git -C ~/.cursor/plugins/local/text-to-cad pull
+```
 
 ### Gemini CLI
-
-text-to-cad is in the [Gemini CLI extensions gallery](https://geminicli.com/extensions). Install it
-from this repository's `latest` branch:
 
 ```bash
 gemini extensions install https://github.com/earthtojake/text-to-cad --ref latest --consent
 ```
 
-To update: `gemini extensions update text-to-cad`.
+To update:
+
+```bash
+gemini extensions update text-to-cad
+```
 
 ### Grok Build
 
@@ -103,7 +148,11 @@ grok plugin enable text-to-cad
 
 Grok Build also loads the plugin installed in Claude Code: if Claude Code has it, skip this.
 
-To update: `grok plugin update text-to-cad`.
+To update:
+
+```bash
+grok plugin update text-to-cad
+```
 
 ### Hermes Agent
 
@@ -115,8 +164,12 @@ hermes plugins enable text-to-cad --no-allow-tool-override
 
 Hermes takes a branch only as its commit, which `git ls-remote` looks up.
 
-To update, remove it (`hermes plugins remove text-to-cad`) and run the same commands again:
-`hermes plugins update` follows the repository's default branch.
+To update, remove it and run the commands above again (`hermes plugins update` follows the
+repository's default branch):
+
+```bash
+hermes plugins remove text-to-cad
+```
 
 ### Antigravity
 
@@ -151,7 +204,11 @@ copilot plugin marketplace add earthtojake/text-to-cad#latest
 copilot plugin install text-to-cad@earthtojake
 ```
 
-To update: `copilot plugin update text-to-cad`.
+To update:
+
+```bash
+copilot plugin update text-to-cad
+```
 
 ### Kimi Code
 
@@ -173,7 +230,11 @@ muse plugins approve text-to-cad
 
 Muse keeps its own copy, so the clone can be deleted afterwards.
 
-To update: `muse plugins update text-to-cad`.
+To update:
+
+```bash
+muse plugins update text-to-cad
+```
 
 ### Pi
 
@@ -189,7 +250,11 @@ To update, run the same command again: `pi update` does not move a named branch.
 qwen extensions install https://github.com/earthtojake/text-to-cad --ref latest --consent
 ```
 
-To update: `qwen extensions update text-to-cad`.
+To update:
+
+```bash
+qwen extensions update text-to-cad
+```
 
 ### Other agents
 

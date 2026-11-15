@@ -22,7 +22,6 @@ branch = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(branch)
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 64
-SERVERS = json.dumps({"mcpServers": {"cad": {"command": "uvx", "args": ["--from", "cad-mcp==1.0.0", "cad-mcp"]}}})
 
 
 def git(root: Path, *args: str) -> str:
@@ -34,18 +33,19 @@ class PluginTreeTests(unittest.TestCase):
         on_main = branch.tracked(REPO_ROOT)
         skills = {path for path in on_main if path.startswith("skills/")}
         blobs = branch.read_blobs(REPO_ROOT, sorted({blob for _mode, blob in on_main.values()}))
-        # latest: every app's manifest and config, the marketplace catalogs, Codex's, Grok Build's, the other apps'
-        # and the Agent Plugins standard's, and every skill; each file main's but the README: our own text.
+        # latest: every app's manifest, Codex's config, the marketplace catalogs, Grok Build's, the other apps' and
+        # the Agent Plugins standard's manifests, and every skill; each file main's but the README: our own text.
         install, errors, _manifest = branch.build(REPO_ROOT, "latest")
         self.assertEqual(errors, [])
         self.assertEqual(set(install), {*branch.FILES, *branch.MARKETPLACE_FILES, *branch.STANDARD_FILES,
                                         *branch.GROK_FILES, *branch.OTHER_APP_FILES, "README.md", *skills})
         self.assertEqual([path for path, (_mode, data) in sorted(install.items()) if data != blobs[on_main[path][1]]],
                          ["README.md"])
-        # Claude Code gets the skills alone from latest; Grok Build reads its own manifest first, naming the server.
-        self.assertEqual({path: json.loads(install[path][1]).get("mcpServers")
-                          for path in (".claude-plugin/plugin.json", ".grok-plugin/plugin.json")},
-                         {".claude-plugin/plugin.json": None, ".grok-plugin/plugin.json": "./grok.mcp.json"})
+        # Codex alone is given the CAD server: every other app gets the skills alone from latest.
+        self.assertEqual({path: json.loads(data).get("mcpServers") for path, (_mode, data) in install.items()
+                          if path.endswith(("plugin.json", "extension.json")) and json.loads(data).get("mcpServers")},
+                         {".codex-plugin/plugin.json": "./codex.mcp.json"})
+        self.assertEqual(sorted(path for path in install if path.endswith("mcp.json")), ["codex.mcp.json"])
         # claude.ai's directory: Claude's manifest (main's, naming no server) and icon, LICENSE, the README and
         # every skill, no other host's manifest or config, and every file a type the directory accepts from an
         # organization it has not verified.
@@ -259,7 +259,7 @@ class PluginTreeTests(unittest.TestCase):
                       "It installs it,\nall of it.\n\nThen ask.\n\n[s](skills/s/SKILL.md) [c](CONTRIBUTING.md)\n")
             files = {".claude-plugin/plugin.json": json.dumps(manifest, indent=2) + "\n", ".claude-plugin/icon.png": PNG,
                      ".claude-plugin/marketplace.json": "{}", ".cursor-plugin/plugin.json": "{}",
-                     "gemini-extension.json": "{}", "grok.mcp.json": SERVERS, "cursor.mcp.json": SERVERS, "LICENSE": "MIT\n",
+                     "gemini-extension.json": "{}", "LICENSE": "MIT\n",
                      "skills/s/SKILL.md": "one\n", "skills/p/SKILL.md": "prints\n", "README.md": readme,
                      "CONTRIBUTING.md": "x\n", "apps/web.js": "x\n"}
             for path, content in files.items():
@@ -373,7 +373,7 @@ class PluginTreeTests(unittest.TestCase):
             git(root, "commit", "-q", "-m", "no script")
 
             # A server or hooks in Claude's manifest fails the directory's copy, which carries the skills alone.
-            (root / ".claude-plugin/plugin.json").write_text(json.dumps({**manifest, "mcpServers": "./grok.mcp.json"}),
+            (root / ".claude-plugin/plugin.json").write_text(json.dumps({**manifest, "mcpServers": "./codex.mcp.json"}),
                                                                 encoding="utf-8")
             git(root, "commit", "-q", "-am", "three")
             self.assertIn(".claude-plugin/plugin.json names `mcpServers`; this copy carries the skills alone",

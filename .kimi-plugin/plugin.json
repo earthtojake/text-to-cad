@@ -19,20 +19,6 @@
     "gcode"
   ],
   "skills": "./skills/",
-  "mcpServers": {
-    "cad": {
-      "command": "uvx",
-      "args": [
-        "--no-config",
-        "--managed-python",
-        "--python",
-        "3.14",
-        "--from",
-        "cad-mcp==0.11.11",
-        "cad-mcp"
-      ]
-    }
-  },
   "interface": {
     "displayName": "text-to-cad",
     "shortDescription": "Design 3D models",

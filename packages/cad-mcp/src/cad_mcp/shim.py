@@ -5,7 +5,7 @@ the background, with the version's own line (``engine.prepare``); start that ver
 the host runs (``Holder``); pass the host's requests on and the server's answers back (``Proxy``).
 
 Only connection metadata lives here. Tools, views, pages and document state belong to the server. Host
-capability corrections are made at this boundary: what the person said (``CAD_MCP_PRESENTATION``), and
+capability corrections are made at this boundary: the development switch (``CAD_MCP_PRESENTATION``), and
 which host launched this process, read from its parent processes (``host.launcher``), which only this
 process can see. So is the one act a text host's ``cad_show`` asks of the person's machine, opening their
 browser: made here, in the environment the host gave this process, never in the server's
@@ -49,7 +49,7 @@ import threading
 from cad_mcp import engine
 from cad_mcp.browser import OPENED, deliver, transport_browser
 from cad_mcp.engine import EngineClient, hold
-from cad_mcp.host import MIME, TABS_EXTENSION, UI_EXTENSION, family, launcher
+from cad_mcp.host import family, launcher
 from cad_mcp.protocol import Connection, RequestContext, RpcError, claim_stdin, claim_stdout
 
 LOG = logging.getLogger("cad_mcp")
@@ -80,34 +80,27 @@ LISTS = {"tools/list": ("tools", "notifications/tools/list_changed"),
          "resources/templates/list": ("resourceTemplates", "notifications/resources/list_changed")}
 
 
+# The presentations the development switch forces on any client (``CAD_MCP_PRESENTATION``; the server's
+# ``host.presentation``).
+PRESENTATIONS = ("inline", "tabs", "text")
+
+
 def initialize_params(params, launcher=None, holder=None, app=None):
-    """The host's initialize as the server is sent it: with what the person said of the host
-    (``CAD_MCP_PRESENTATION``) as a declaration, ``launcher``, the host that started this process
-    (``host.launcher``), for the server to weigh (its ``host.presentation``), ``holder``, the name of this
-    process's hold (``Holder``), whose end ends the session, ``app``, the capability the session hands its
-    views (``Proxy.app``), ``browser``: that this process opens the browser a text host's ``cad_show`` asks
-    for (``browser.deliver``), and whether it can here, ``pin``: this process's version and delivery label
-    (``engine.PIN``: its ``--channel``), which the session's counts carry, ``claudeCode``: the
-    ``CLAUDE_CODE_ENTRYPOINT`` Claude Code put in this process's environment, where it started it, and
-    ``cards``: ``CAD_MCP_CARDS=1``, which keeps CAD's tools for an app the server lists as showing no views
-    (the server's ``host.broken``)."""
+    """The host's initialize as the server is sent it: with ``presentation``, the development switch
+    ``CAD_MCP_PRESENTATION`` (``inline``, ``tabs`` or ``text``) where it is set, which the server serves whatever
+    the client is; ``launcher``, the host that started this process (``host.launcher``), for the server to weigh
+    (its ``host.presentation``); ``holder``, the name of this process's hold (``Holder``), whose end ends the
+    session; ``app``, the capability the session hands its views (``Proxy.app``); ``browser``: that this process
+    opens the browser a text host's ``cad_show`` asks for (``browser.deliver``), and whether it can here; and
+    ``pin``: this process's version and delivery label (``engine.PIN``: its ``--channel``), which the session's
+    counts carry."""
     params = copy.deepcopy(params)
-    offered = params.setdefault("capabilities", {})
-    extensions = offered.setdefault("extensions", {})
-    told = os.environ.get("CAD_MCP_PRESENTATION")
-    if told == "inline":
-        extensions[UI_EXTENSION] = {"mimeTypes": [MIME]}
-    elif told == "text":
-        extensions.pop(UI_EXTENSION, None)
-        extensions.pop(TABS_EXTENSION, None)
-        launcher = {"host": "CAD_MCP_PRESENTATION=text", "renders": False}
-    claude_code = str(os.environ.get("CLAUDE_CODE_ENTRYPOINT") or "").strip()
+    told = str(os.environ.get("CAD_MCP_PRESENTATION") or "").strip()
     params.setdefault("_meta", {})["dev.texttocad/transport"] = {
         "appDir": os.environ.get("CAD_MCP_APP_DIR", ""), "cwd": os.getcwd(), "launcher": launcher,
         "browser": transport_browser(),
         "pin": {"version": engine.PIN.version, "channel": engine.PIN.channel},
-        **({"claudeCode": claude_code} if claude_code else {}),
-        **({"cards": True} if str(os.environ.get("CAD_MCP_CARDS") or "").strip() == "1" else {}),
+        **({"presentation": told} if told in PRESENTATIONS else {}),
         **({"holder": holder} if holder else {}), **({"app": app} if app else {}),
     }
     return params
@@ -364,9 +357,9 @@ class Proxy:
 
 def _declared(params, launched):
     """What the app said of itself at ``initialize``, logged to this process's stderr (the app's log of its MCP
-    servers): its client's name and version, the extensions it declares (``io.modelcontextprotocol/ui`` and
-    ``dev.texttocad/tabs`` decide whether the server offers it tools) and the program that launched this process. The
-    server's answer is logged with the first ``tools/list``."""
+    servers): its client's name and version, the extensions it declares and the program that launched this process
+    (which, for a Codex, decides whether the server offers it tools). The server's answer is logged with the first
+    ``tools/list``."""
     params = params if isinstance(params, dict) else {}
     client = params.get("clientInfo") if isinstance(params.get("clientInfo"), dict) else {}
     offered = params.get("capabilities") if isinstance(params.get("capabilities"), dict) else {}

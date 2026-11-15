@@ -236,9 +236,9 @@ scripts/install/dev_install.py --release       # back to the published release, 
 It registers the checkout's `.venv` as a version of its own, `<VERSION>-dev.<time>`
 (`versions/<name>` in the state folder, whose code marker names the `.venv`: nothing is copied),
 and writes the `cad` command. It writes the plugin into `tmp/dev-plugin/text-to-cad`: every
-command in its skills pins that version (`cad +<VERSION>-dev.<time> ...`), its CAD server runs
-`cad_mcp` with the `.venv` (`CAD_PYTHON` overrides it) through `uv run`, since the Agent Plugins
-`mcp.json`, which Codex reads first, takes no path as a command (Codex drops such a server with no
+command in its skills pins that version (`cad +<VERSION>-dev.<time> ...`), Codex's CAD server (the
+one app given one) runs `cad_mcp` with the `.venv` (`CAD_PYTHON` overrides it) through `uv run`, a
+bare command as the published `uvx` (Codex has dropped a server whose command is a path, with no
 error), and its catalog is `earthtojake-dev`. Then it replaces our copy in each app with that folder. Run it again after a
 change, and start a new session in the app. Run `npm ci` and `scripts/bundle/bundle.sh` once
 first: the viewer's page and the CAD app's page come from the bundle (without it a model's link
@@ -263,16 +263,18 @@ remove it in the app before testing there.
 
 Where the server's output goes:
 
-- Codex: its log database, `~/.codex/logs_2.sqlite` (lines starting `MCP server stderr`)
-- Cursor: `mcp-server-plugin-*` logs under `~/Library/Application Support/Cursor/logs/`
-- Gemini CLI: `gemini mcp list` shows whether the server connected
+- Codex, the one app given the CAD server: its log database, `~/.codex/logs_2.sqlite` (lines
+  starting `MCP server stderr`)
 
 What the CAD app is and how hosts present it is in
 [apps/mcp/README.md](apps/mcp/README.md). No agent app can be driven by a test,
 so the standard path is also checked in the MCP Apps reference host
 (`basic-host` from `modelcontextprotocol/ext-apps`): it speaks Streamable HTTP,
-so a local bridge to the stdio server is needed, and it does not advertise the UI
-extension, so start the server with `CAD_MCP_PRESENTATION=inline`.
+so a local bridge to the stdio server is needed, and the server offers tools to
+the Codex app alone, so start it with the development switch
+`CAD_MCP_PRESENTATION=inline` (`tabs` or `text` force the others). To try the
+cards in Cursor, add the server to Cursor by hand with that switch in its
+environment.
 
 ## Testing
 
@@ -315,7 +317,7 @@ Canonical source directories are:
   `cad_server.viewer` (in `packages/cad-server`), and its built `dist/` ships inside the
   server's wheel as `cad_server/_runtime/viewer` — built at release time, never
   committed.
-- `apps/mcp/` for the CAD app agent hosts render (MCP Apps: Codex, Cursor). Its
+- `apps/mcp/` for the CAD app agent hosts render (MCP Apps: the Codex app's tabs). Its
   server is the engine's MCP endpoint (`cad_server/mcp` in `packages/cad-server`), which
   `cad-mcp` (`packages/cad-mcp`) carries a host's requests to, and its one-file
   build ships inside the server's wheel as `cad_server/_runtime/mcp` — built at
@@ -852,13 +854,14 @@ PyPI: one commit per release whose tree is only the plugin
 no commit. There are three copies:
 
 - `latest`, the newest release, which every install command names: every app's
-  manifest and MCP config (`.claude-plugin/plugin.json` and `icon.png`,
-  `.cursor-plugin/plugin.json` and `cursor.mcp.json`, `.grok-plugin/plugin.json`
-  and `grok.mcp.json`, `gemini-extension.json`, `.codex-plugin/` and
-  `codex.mcp.json`, `.antigravity-plugin/`, `.kimi-plugin/`, `.devin-plugin/`,
+  manifest (`.claude-plugin/plugin.json` and `icon.png`, `.cursor-plugin/plugin.json`,
+  `.grok-plugin/plugin.json`, `gemini-extension.json`, `.codex-plugin/` and
+  `codex.mcp.json`, the one MCP config: browser first, only Codex gets the CAD
+  server, `.antigravity-plugin/`, `.kimi-plugin/`, `.devin-plugin/`,
   `.muse-plugin/`), the marketplace catalogs (Claude's, which Codex reads too,
   and Muse's), each listing the plugin at the branch's root, the Agent Plugins
-  standard's `plugin.json` and `mcp.json` (what Hermes reads), `skills/`,
+  standard's `plugin.json` (what Hermes reads; no root `mcp.json`: see
+  [apps/mcp/README.md](apps/mcp/README.md), "Which config Codex reads"), `skills/`,
   `LICENSE` and `README.md`, each README link to a file outside the tree pointed
   at the release commit on GitHub. It is our own text, as `main` has it, but for
   the README's install section, which installs by the skills' own `uvx` line in

@@ -19,12 +19,20 @@ layout, what 0.7 and 0.8 kept in their own folder taken into it first (``cad_ser
 nothing once they are there). On a computer an earlier release ran on, what it left running is handed over
 (``cad_server._internal.legacy``: ``stop_earlier``, ``hand_over``): 0.8's server stopped by its own stop command,
 and a server of 0.11.10 or earlier asked to stop once idle, with the records its clients start a server by naming
-this version. Nothing else on the computer is changed.
+this version.
+
+Last, setup starts the version's own server, detached, where none runs (``_serve``): setup always runs outside an
+agent's sandbox, since it installs, and a sandboxed shell cannot start a server, so every later session -- an agent's
+sandboxed ``cad`` command among them -- finds it running (a server never stops on a timer). Waited for only until its
+door answers; a server that cannot start is said, and never fails the setup. Where a server of 0.11.10 or earlier
+still holds the flat door and was just asked to stop once idle (``legacy.hand_over``), none is started: its pages'
+port is still taken, and the next command starts this version's server once it is free, as before. Nothing else on
+the computer is changed.
 
 ``--engine-update`` (hidden, absent from the help) is how releases 0.10.0 to 0.11.10 update themselves: their
 updater makes a flat folder of the newer release and runs its ``cad setup --engine-update``, reading its exit status
 (0: go on and switch the computer's server to it), then starts that release's server through the records and the
-door of their own layout. So this run does the six steps (from the flat folder, the version made present and the
+door of their own layout: so this run starts no server itself. So this run does the six steps (from the flat folder, the version made present and the
 same command run again from the version's own ``cad``; with ``CAD_UPDATE_PREPARE=1``, an automatic update's first
 half, it stops once the version is present), then the hand-over from that layout (the records its switch reads,
 ``installations.mirror``: the installation record naming the version's server and ``installations/current`` naming
@@ -54,6 +62,9 @@ INSTALLER_ENV = "CAD_ENGINE_UPDATE_INSTALLER"
 INSTALLER = ("sh", "-c", "curl -fsSL https://texttocad.dev/install.sh | sh")
 INSTALLER_WINDOWS = ("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
                      "irm https://www.texttocad.dev/install.ps1 | iex")
+# How long setup waits for the server it started to answer at its door (``_serve``): a server answers there within a
+# second or two of starting; its kernel processes start with its first build, never here.
+SERVE_SECONDS = 30.0
 
 
 def build_parser(prog: str = DEFAULT_PROG):
@@ -157,9 +168,33 @@ def setup() -> int:
     failed = _command(name)
     if failed is not None:
         return failed
-    _arrive(name, engine_update=False)
+    handing_over = _arrive(name, engine_update=False)
     sys.stdout.write(f"cad {name} is {'installed' if was else 'installed now'}: {places.version_dir(name)}\n")
+    if not handing_over:  # else said: this version's server starts at the next command (``legacy.hand_over``)
+        _serve(name)
     return 0
+
+
+def _serve(name: str) -> None:
+    """Version ``name``'s own server started, detached, where none runs (see the module), the way its ``cad``
+    starts it (``cad.engine.client.connect``, with this version's name and the environment another program runs
+    in, ``_environment``), waited for only until its door answers: one line, said. Never a failed setup."""
+    from cad.engine import client, places
+
+    saved, environment = dict(os.environ), {**_environment(), places.INSTALLATION_ENV: name}
+    try:
+        os.environ.clear()
+        os.environ.update(environment)
+        connection = client.connect(start=True, timeout=SERVE_SECONDS)
+    except (ConnectionError, OSError, ValueError) as error:
+        _say(f"cad {name}'s server is not running: {error}")
+        return
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
+    if connection is not None:
+        connection.close()
+    sys.stdout.write(f"cad {name}'s server is running\n")
 
 
 # --- --engine-update --------------------------------------------------------------------------------------------
@@ -202,19 +237,21 @@ def engine_update() -> int:
     return 0
 
 
-def _arrive(name: str, *, engine_update: bool) -> None:
+def _arrive(name: str, *, engine_update: bool) -> bool:
     """What earlier releases left running, handed over to version ``name`` (``cad_server._internal.legacy``): the
     servers of 0.8 (and of 0.10.0 on Windows) stopped by their own stop command; and, by the install command's route
     (not an updater's, whose own switch stops its server), the mirror written and a server of 0.11.10 or earlier at
-    the flat door asked to stop once idle. Never a failed setup."""
+    the flat door asked to stop once idle. Whether such a server was asked to stop (it still runs). Never a failed
+    setup."""
     from cad_server._internal import legacy
 
     try:
         legacy.stop_earlier(_say)
         if not engine_update:
-            legacy.hand_over(name, _say)
+            return legacy.hand_over(name, _say)
     except Exception as error:  # noqa: BLE001 - what an earlier release left never fails this version's setup
         _say(f"what an earlier release left running was not handed over: {type(error).__name__}: {error}")
+    return False
 
 
 def _environment() -> dict[str, str]:

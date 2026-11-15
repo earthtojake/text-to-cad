@@ -323,11 +323,12 @@ class InstallScriptTests(unittest.TestCase):
         release = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         dev_install.assemble(folder, f"{release}-dev.1", "/venv/bin/python")
         self.assertEqual(json.loads((folder / ".claude-plugin/marketplace.json").read_text(encoding="utf-8"))["name"], "earthtojake-dev")
-        # Every server entry runs the checkout's interpreter under a bare command: Codex reads the Agent Plugins
-        # standard's mcp.json first and drops, with no error, a server whose command is a path.
-        for config in ("mcp.json", "codex.mcp.json", "cursor.mcp.json"):
-            server = json.loads((folder / config).read_text(encoding="utf-8"))["mcpServers"]["cad"]
-            self.assertEqual((server["command"], server["args"][-3:]), ("uv", ["/venv/bin/python", "--module", "cad_mcp"]))
+        # Codex's server, the one there is, runs the checkout's interpreter under a bare command (Codex has dropped,
+        # with no error, a server whose command is a path), and keeps its start allowance.
+        self.assertEqual(sorted(path.name for path in folder.glob("*mcp*.json")), ["codex.mcp.json"])
+        server = json.loads((folder / "codex.mcp.json").read_text(encoding="utf-8"))["mcpServers"]["cad"]
+        self.assertEqual((server["command"], server["args"][-3:]), ("uv", ["/venv/bin/python", "--module", "cad_mcp"]))
+        self.assertEqual(server["startup_timeout_sec"], 300)
         skill = (folder / "skills/cad/SKILL.md").read_text(encoding="utf-8")
         self.assertNotRegex(skill, rf"cad \+{release}(?!-dev)")
         # The published copy goes; the folder's catalog comes in.

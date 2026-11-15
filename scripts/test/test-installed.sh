@@ -208,7 +208,10 @@ step "Serve the CAD app over MCP through the shim, as an agent host starts it"
 import json, os, subprocess, sys, threading
 import cad_server
 
-server = subprocess.Popen([sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+# Served cards through the development switch (CAD_MCP_PRESENTATION): a host that is not the Codex app is
+# offered no tools, and cards show the page and its launch with no tab to wait for.
+server = subprocess.Popen([sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+                          env={**os.environ, "CAD_MCP_PRESENTATION": "inline"})
 # Bounds a hang, not the work: the first start installs the version, its kernel's environment among it.
 watchdog = threading.Timer(900, server.kill)
 watchdog.daemon = True
@@ -231,7 +234,7 @@ def call(request_id, method, params):
     sys.exit(f"FAIL: {os.path.basename(sys.argv[1])} exited during {method}")
 
 
-# As an MCP Apps host: one that advertises the UI extension is served the page.
+# As an MCP Apps host shown cards: it is served the page.
 ui = {"extensions": {"io.modelcontextprotocol/ui": {"mimeTypes": ["text/html;profile=mcp-app"]}}}
 call(1, "initialize", {"protocolVersion": "2025-06-18", "capabilities": ui, "clientInfo": {"name": "test-installed", "version": "0"}})
 send({"method": "notifications/initialized"})

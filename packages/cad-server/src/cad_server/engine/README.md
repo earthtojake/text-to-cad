@@ -339,6 +339,13 @@ one's -- starts this version's server, which takes the page token and port it im
 0.8's own `cadgen stop`, run from the installation record 0.8 keeps, with its telemetry off: 0.8 has no updater, and
 its server stops on no timer.
 
+Every plain `cad setup` then starts its version's server, detached, where none runs (`cad_server.cli.setup`'s
+`_serve`, through `client.connect` as that version's own client), so a later session whose shell a sandbox keeps
+from starting one finds it running; it binds its HTTP port only at the first request that serves, as any server a
+client starts. Where it just asked a server of 0.11.10 or earlier to stop once idle it starts none: that server
+still holds the pages' port, and the next command starts this version's once it is free. `cad setup
+--engine-update` starts none: the updater's own switch does.
+
 An engine asks no other process anything, another engine no more than any program: 0.8's server on
 the port is rolled from as above, or refused where the port is named, as below.
 
@@ -1722,8 +1729,10 @@ those releases' clients, of the server of the version `installations/current` na
 door. Inside one, a daemon could make its door but never bind its HTTP port, and every build
 serves its document: so it starts none. A shell that says it is sandboxed without network (a
 variable the distribution names, `client.SANDBOXES`) and finds no door is refused at once, in one line:
-no engine runs and this shell's sandbox cannot start one; open a CAD card (the plugin's server
-starts the engine) or run `cad server` outside the sandbox (`client.SANDBOXED`). A daemon
+no engine runs and this shell's sandbox cannot start one; run the command again outside the sandbox,
+or run `cad server` outside it (`client.SANDBOXED`). `cad setup`, which runs outside any sandbox, leaves
+its version's server running, so this is met only once that server is gone: the computer restarted,
+or `cad stop` stopped it. A daemon
 started where it may not bind a loopback port (`daemon._can_listen`, before it makes its door) or
 take its lock writes why beside its lock (`engine.failed`, `places.failure_path`) and exits 1;
 the client that started it says that reason at once, never after a timeout.

@@ -98,7 +98,7 @@ if [ "$fallback" != "$version" ]; then
   stale=1
 fi
 # Every plugin manifest says the release it is (each `"version"` field, a catalog's plugin entries
-# too), and every server config starts that release's server (`cad-mcp==<version>`).
+# too), and the one server config, Codex's, starts that release's server (`cad-mcp==<version>`).
 for manifest in .claude-plugin/plugin.json .claude-plugin/marketplace.json .codex-plugin/plugin.json \
     .cursor-plugin/plugin.json .grok-plugin/plugin.json .antigravity-plugin/plugin.json \
     .kimi-plugin/plugin.json .devin-plugin/plugin.json .muse-plugin/plugin.json .muse-plugin/marketplace.json \
@@ -109,8 +109,7 @@ for manifest in .claude-plugin/plugin.json .claude-plugin/marketplace.json .code
     stale=1
   fi
 done
-for config in codex.mcp.json grok.mcp.json cursor.mcp.json mcp.json gemini-extension.json \
-    .kimi-plugin/plugin.json .devin-plugin/plugin.json; do
+for config in codex.mcp.json; do
   configured="$(pins "$config")"
   if [ -z "$configured" ]; then
     echo "$config starts no pinned server (cad-mcp==$version)" >&2

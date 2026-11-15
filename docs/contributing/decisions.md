@@ -157,19 +157,27 @@ forever.
 A model's Python imports and a person's data are not covered by this: they keep law 15's tiers 2
 and 3 (`packages/cad/README.md`).
 
-## The MCP server, offered optimistically, with a sure fallback
+## Browser first: the MCP server only where its view is verified
 
-**Decision.** The MCP server offers its tools only to an app that says, when it connects, that it
-can show MCP app views, and to Codex. Until a view has called back in a chat, every answer that
-shows a model also carries a link to open it in the browser. An app whose views never call back is
-remembered and offered no tools for a while. An app that says nothing gets no tools, and its skills
-open the browser.
+**Decision.** The CAD MCP server ships to, and offers tools to, one app: Codex, where the CAD tab is
+verified as solid. Only Codex's manifest names the server. Every other app gets the skills alone, and
+its agent shows a model in the app's own browser or by a link, as the skills say. A server someone adds
+to another app by hand is offered no tools either, whatever the app says it supports. `cad setup`, which
+always runs outside a sandbox, leaves its version's server running, so a later session's sandboxed
+`cad` command finds it.
 
-**Why.** Apps claim support they do not have, and their support changes between versions. A model
-the person cannot see is the worst outcome; a link they did not need is a small one.
+**Why.** Inline cards are small and scroll away with the chat; only Codex's tab is a proper view. Of the
+other apps, Cursor shows cards inline only, Claude Code's cards are broken, and nothing else is verified.
+Apps claim support they do not have, and their support changes between versions, so the server trusts
+what was checked in the real app rather than what an app declares.
 
-**What it costs.** Some answers carry a link that turns out not to be needed, and an app that gains
-support waits for the retry period to be tried again.
+**What it costs.** Cursor loses its working card and shows a model in its browser instead. With no CAD
+program in most apps, nothing starts cad's server for an agent: after the computer restarts, the first
+`cad` command in an app that sandboxes the agent's shell needs one approval to start the server, unless
+the app has the CAD program (Codex), which starts it.
+
+**Adding an app back.** Verify its CAD view in the real app first. Then add its manifest's server entry
+and its name to the server's rule (`cad_server/mcp/host.py`), in one change.
 
 ## No Skills CLI route
 

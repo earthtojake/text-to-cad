@@ -74,8 +74,8 @@ PER_PROCESS = ("DO_NOT_TRACK", "CAD_TELEMETRY")
 # The sandboxes known to refuse the loopback port the server's HTTP listener needs, each by a variable and
 # the value it sets in the shells it runs: Codex's Seatbelt, in its default workspace-write mode.
 SANDBOXES: tuple[tuple[str, str], ...] = (("CODEX_SANDBOX_NETWORK_DISABLED", "1"),)
-SANDBOXED = ("no engine server is running, and this shell's sandbox cannot start one: open a CAD card "
-             "(its server starts the engine) or run `cad server` outside the sandbox")
+SANDBOXED = ("no engine server is running, and this shell's sandbox cannot start one: run this command again "
+             "outside the sandbox, or run `cad server` outside it, and every later command finds it running")
 # How long a reader waits on a port file Windows refuses while it is renamed into place: the writer's ladder.
 RETRY_DELAYS_SECONDS = (0.05, 0.1, 0.2, 0.4)
 

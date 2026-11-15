@@ -36,8 +36,8 @@ src/cad_server/
   mcp/                   # the engine's MCP endpoint: its JSON-RPC vocabulary (protocol),
                          #   engine sessions (http), tools and launches (server: the tools
                          #   0.11.10 removed answer by name with the `cad` command that replaced
-                         #   them), which apps are offered tools and how (host), the apps whose
-                         #   views never called back (outcomes), open views (views), sidebar views
+                         #   them), which apps are offered tools and how (host: the Codex app
+                         #   alone), open views (views), sidebar views
                          #   shared in memory (sidebar), the viewer routes in-process (tunnel), the
                          #   page (ui), and the CAD Viewer link for a call that shows no view
                          #   (browser)
@@ -164,12 +164,16 @@ its settings and store in once, from the newest older version installed, or from
 what 0.7 and 0.8 kept in their own state folder taken into it first (`_internal/imports.py`); and on a computer an
 earlier release ran on it hands over what that release left running, its own processes and records alone
 (`_internal/legacy.py`): 0.8's server stopped by 0.8's own `cadgen stop`, and a server of 0.11.10 or earlier asked to
-stop once idle, with the records its clients start a server by naming this version. Run again it is quick and changes
-nothing. It is run as `uvx --no-config --managed-python --python 3.14 --from cad-server==<version> cad
+stop once idle, with the records its clients start a server by naming this version. Last, it starts the version's own
+server, detached, where none runs, and says in a line that it is running (or why not, which never fails the setup):
+setup always runs outside a sandbox, where an agent's sandboxed shell cannot start one, so every later session finds
+it running. It starts none where a server of 0.11.10 or earlier was just asked to stop once idle: that server still
+holds its pages' port, and the next command starts this version's. Run again it is quick and changes nothing. It is
+run as `uvx --no-config --managed-python --python 3.14 --from cad-server==<version> cad
 setup`. It has one hidden option, `--engine-update`, which no person runs: the updaters of 0.10.0 to 0.11.10, frozen
 on computers, update by running a newer release's `cad setup --engine-update` from a flat folder they made, so it
-does the same, then the hand-over from their layout (the records their switch reads written: `installations/current`
-and the installation record naming the version's server),
+does the same, but for starting the server (their switch starts it), then the hand-over from their layout (the
+records their switch reads written: `installations/current` and the installation record naming the version's server),
 then starts the hosted install script once, detached and never waited on (`CAD_ENGINE_UPDATE_INSTALLER` names a
 command to run instead, for a test). cad has no updater: the version check (`updates.py`) only knows the
 latest release, and says so (**The update notice**). `cad uninstall` removes cad from this computer: every version,

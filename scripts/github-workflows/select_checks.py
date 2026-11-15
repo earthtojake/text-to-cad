@@ -256,7 +256,7 @@ RULES: tuple[Rule, ...] = (
         ".github/dependabot.yml", ".github/release.yml", ".github/FUNDING.yml", ".githooks/**",
         ".claude-plugin/**", ".codex-plugin/**", ".cursor-plugin/**", ".grok-plugin/**", "gemini-extension.json",
         ".antigravity-plugin/**", ".kimi-plugin/**", ".devin-plugin/**", ".muse-plugin/**",
-        "*.mcp.json", "plugin.json", "mcp.json",
+        "*.mcp.json", "plugin.json",
         "README.md", "AGENTS.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE", "docs/**",
         ".gitignore",
         "models/**",

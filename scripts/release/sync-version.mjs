@@ -39,23 +39,16 @@ export const tomlTargets = [
 // alone: `cad` at the end of another name (`my-cad==`) pins no distribution of the release.
 export const pinPattern = /(?<![\w.-])(cad(?:-server|-mcp)?(?:\[[a-z0-9_,.-]+\])?==)([^"'`\s]+)/g;
 
-// Files that pin a release by a requirement string rather than a version field: the commands the
-// agent apps run to start the CAD app's transport (`cad-mcp==`), the install page's Claude Desktop
-// config and the command it says the installer runs, and the distributions that pin the library at
-// their own release (the server, the alias). The skills pin theirs a different way, in their
-// commands (`skillPinPatterns`, below). A file may
-// also be a JSON or TOML target (the Gemini extension, those pyprojects); its pin is stamped on top of that
-// change, not over it.
+// Files that pin a release by a requirement string rather than a version field: the command Codex,
+// the one app given the CAD server, runs to start its transport (`cad-mcp==`), the command the install
+// guide says the installer runs, and the distributions that pin the library at their own release (the
+// server, the alias). The skills pin theirs a different way, in their commands (`skillPinPatterns`,
+// below). A file may also be a TOML target (those pyprojects); its pin is stamped on top of that change,
+// not over it.
 export const pinTargets = [
   "packages/cad-server/pyproject.toml",
   "packages/aliases/cadgen/pyproject.toml",
   "codex.mcp.json",
-  "grok.mcp.json",
-  "cursor.mcp.json",
-  "mcp.json",
-  "gemini-extension.json",
-  ".kimi-plugin/plugin.json",
-  ".devin-plugin/plugin.json",
   "docs/install.md",
   // The README, the docs site's homepage and its policy pages pin nothing (the privacy policy's
   // telemetry commands run `cad`, the installed command): a target without a pin is refused.

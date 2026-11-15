@@ -6,14 +6,14 @@ monorepo: thousands of files, a workspace npm installs, workflows and binaries t
 directory holds for a reviewer -- and a release's pins from the merge on, before PyPI has the
 wheel. So installers follow branches that only Publish Release writes, once the wheel is on
 PyPI: one commit per release whose tree is only the plugin -- the manifests and the icon, the
-MCP configs they name, `skills/`, `LICENSE`, and the README, with each link to a file outside
+MCP config Codex's names (the one app given the CAD server), `skills/`, `LICENSE`, and the README, with each link to a file outside
 that tree pointed at the release commit on GitHub (CONTRIBUTING.md, "The install branches").
 Three copies, differing in what they carry:
 
 - `latest`: the newest release, which every documented install command names. Every app's
-  manifest and MCP config, the marketplace catalogs, which list the plugin at the root of the
-  branch they are read from, and the Agent Plugins standard's manifest and config. Claude's
-  manifest names no server, so Claude Code gets the skills alone.
+  manifest, Codex's MCP config, the marketplace catalogs, which list the plugin at the root of the
+  branch they are read from, and the Agent Plugins standard's manifest. Only Codex's manifest names
+  a server: every other app gets the skills alone.
 - `directory` (pushed to `claude-plugin`): claude.ai's plugin directory. Claude's manifest and
   icon, `skills/`, `LICENSE` and the README: the skills alone, no MCP server and no hooks, and
   only the file types the directory accepts from an organization it has not verified
@@ -69,16 +69,16 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ".claude-plugin/plugin.json"
 ICON = ".claude-plugin/icon.png"
 CATALOG = ".claude-plugin/marketplace.json"
-FILES = (MANIFEST, ICON, ".cursor-plugin/plugin.json", "gemini-extension.json", "cursor.mcp.json", "LICENSE")
+FILES = (MANIFEST, ICON, ".cursor-plugin/plugin.json", "gemini-extension.json", "LICENSE")
 # claude.ai's directory: Claude's manifest and icon beside the skills, and nothing another host reads.
 DIRECTORY_FILES = (MANIFEST, ICON, "LICENSE")
 # What Claude Code's and Codex's marketplaces read besides: the catalog, and Codex's manifest and config.
 MARKETPLACE_FILES = (CATALOG, ".codex-plugin/plugin.json", ".codex-plugin/logo.png", "codex.mcp.json")
-# The Agent Plugins standard's manifest and server config (agent-plugins.org), which VS Code reads before
-# Claude's manifest.
-STANDARD_FILES = ("plugin.json", "mcp.json")
-# Grok Build's manifest, which it reads before Claude's: Claude's names no server, Grok's names grok.mcp.json.
-GROK_FILES = (".grok-plugin/plugin.json", "grok.mcp.json")
+# The Agent Plugins standard's manifest (agent-plugins.org), which VS Code reads before Claude's manifest. No
+# server config beside it: Cursor, Hermes and VS Code would start the CAD server from one.
+STANDARD_FILES = ("plugin.json",)
+# Grok Build's manifest, which it reads before Claude's: the skills alone, as Claude's.
+GROK_FILES = (".grok-plugin/plugin.json",)
 # The manifests of the apps that read their own: Antigravity, Kimi Code, Devin, and Muse's with its catalog.
 # Hermes and Pi read the Agent Plugins standard's and the skills/ folder (STANDARD_FILES).
 OTHER_APP_FILES = (".antigravity-plugin/plugin.json", ".kimi-plugin/plugin.json", ".devin-plugin/plugin.json",

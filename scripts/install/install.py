@@ -1049,8 +1049,8 @@ APPS: Tuple[App, ...] = (
         update=[["extensions", "update", "{plugin}"]],
         local=[["extensions", "install", "{folder}", "--consent"]], installed=_qwen_installed),
     # Hermes Agent (``hermes``, above): `latest` by its commit. Docs
-    # https://hermes-agent.nousresearch.com/docs/developer-guide/plugins. It takes the root plugin.json, skills/ and
-    # mcp.json.
+    # https://hermes-agent.nousresearch.com/docs/developer-guide/plugins. It takes the root plugin.json and skills/ (no
+    # mcp.json: only Codex is given the CAD server).
     App("hermes", "Hermes Agent", command="hermes", handler=hermes, installed=_hermes_plugin),
     # Factory Droid. Docs https://docs.factory.com/cli/configuration/plugins: it reads .claude-plugin/marketplace.json;
     # the catalog's name comes from the source (`owner/repo` -> the repo's name; a `#ref` is appended to it), so this

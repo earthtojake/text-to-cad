@@ -1,11 +1,11 @@
 """Which host launched this process, read from its parent processes: what only this process can see.
 
-A host's greeting does not always say whether it shows CAD cards: Codex greets the server as
-``codex-mcp-client`` and declares no MCP Apps extension from its desktop app (which shows them as tabs), from
-``codex exec`` or from its terminal UI (which show none), and Claude Code's terminal declares none either. The
-process that started this one does say: the first ancestor that is not a launcher (uv, a Python, a shell) is
-the host, and its program and subcommand name it. This process reads it once as it starts (``launcher``) and
-hands it to the server with the host's initialize, which weighs it (the server's ``host.presentation``).
+A host's greeting does not say whether it shows CAD views: Codex greets the server as ``codex-mcp-client`` from
+its desktop app (which shows them as tabs), from ``codex exec`` and from its terminal UI (which show none), and
+what it declares no longer tells them apart. The process that started this one does say: the first ancestor
+that is not a launcher (uv, a Python, a shell) is the host, and its program and subcommand name it. This process
+reads it once as it starts (``launcher``) and hands it to the server with the host's initialize, which weighs it
+(the server's ``host.presentation``).
 """
 from __future__ import annotations
 
@@ -13,10 +13,6 @@ import os
 import subprocess
 import sys
 from typing import Any
-
-UI_EXTENSION = "io.modelcontextprotocol/ui"
-TABS_EXTENSION = "dev.texttocad/tabs"
-MIME = "text/html;profile=mcp-app"  # an MCP App's page, which the ui extension lists
 
 # The processes between a host and this server that are not the host: what runs a command for it
 # (Claude Desktop's ``disclaimer`` helper among them, which starts Claude Code's sessions), and the

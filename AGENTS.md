@@ -109,11 +109,10 @@ with its `build123d` extra: its own base) and test in agent apps with `scripts/i
 ## Repo Map
 
 - `skills/`: agent skills and their references. They ship in the plugin alone, never in a wheel.
-- `.claude-plugin/` (the skills alone: Claude gets no CAD server, on any route),
-  `.codex-plugin/`, `.cursor-plugin/`, `.grok-plugin/`, `.antigravity-plugin/`, `.kimi-plugin/`,
-  `.devin-plugin/`, `.muse-plugin/`, `gemini-extension.json`, and the
-  [Agent Plugins](https://agent-plugins.org) standard's `plugin.json` and `mcp.json`:
-  agent plugin manifests. The repository root is the plugin package; its skills are
+- `.claude-plugin/`, `.codex-plugin/` (the one naming a CAD server, `codex.mcp.json`: browser
+  first, every other app gets the skills alone), `.cursor-plugin/`, `.grok-plugin/`,
+  `.antigravity-plugin/`, `.kimi-plugin/`, `.devin-plugin/`, `.muse-plugin/`, `gemini-extension.json`,
+  and the [Agent Plugins](https://agent-plugins.org) standard's `plugin.json`: agent plugin manifests. The repository root is the plugin package; its skills are
   `skills/` directly. Installers take it from the `latest` branch, claude.ai's directory
   from `claude-plugin` (the skills alone, pinned `@claude`) and Codex's from `codex-plugin`
   (pinned `@codex`), which `scripts/release/plugin_branch.py` builds at each release.
@@ -131,8 +130,8 @@ with its `build123d` extra: its own base) and test in agent apps with `scripts/i
   [0.7 to 0.8](docs/migrations/migrating-0.7-to-0.8.md), 0.4 to 0.5).
 - `apps/web/` ([README](apps/web/README.md)): the CAD Viewer's React client (the server
   hosts `cad_server.viewer`'s HTTP app).
-- `apps/mcp/` ([README](apps/mcp/README.md)): the CAD app agent hosts render: tabs in
-  Codex, cards in Cursor (its server is `cad-mcp`; Claude gets none).
+- `apps/mcp/` ([README](apps/mcp/README.md)): the CAD app the Codex app renders as tabs, the one
+  host given it (its server is `cad-mcp`); its cards are reached only by a development switch.
 - `packages/` ([README](packages/README.md)): the published distributions and the shared JS
   packages. `packages/cad` ([README](packages/cad/README.md)) is the library: the
   engine's library half (`cad/engine`: models built into documents, and the XBF, STEP, GLB, STL,
@@ -162,8 +161,9 @@ with its `build123d` extra: its own base) and test in agent apps with `scripts/i
 
 - Claude Code, Codex and Cursor are the first-class integrations, and supporting them comes first:
   a change that touches the plugin, the skills, CAD's server or the CAD app keeps all three
-  working, and is tested in each before it ships (the host table in
-  [`apps/mcp/README.md`](apps/mcp/README.md) says what each gets). Other hosts are best effort.
+  working, and is tested in each before it ships. Browser first: only Codex gets the CAD server
+  (its tab is the one verified view); the others show models in their browser (the host table in
+  [`apps/mcp/README.md`](apps/mcp/README.md)). Other hosts are best effort.
 - Boundaries and design laws live in each package's README: read
   [`packages/cad/README.md`](packages/cad/README.md) (the laws),
   [`packages/core/README.md`](packages/core/README.md),

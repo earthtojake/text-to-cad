@@ -37,8 +37,8 @@ SANDBOXES: tuple[tuple[str, str], ...] = (("CODEX_SANDBOX_NETWORK_DISABLED", "1"
 # no observer's facts carry (``api._error``), even when a startup failure or a broken pipe has no exit
 # status to tell it from a Python traceback.
 WORKER_STDERR = "\nWorker stderr (last 16384 characters):\n"
-SANDBOXED = ("no engine server is running, and this shell's sandbox cannot start one: open a CAD card "
-             f"(its server starts the engine) or run `{COMMAND} server` outside the sandbox")
+SANDBOXED = ("no engine server is running, and this shell's sandbox cannot start one: run this command again "
+             f"outside the sandbox, or run `{COMMAND} server` outside it, and every later command finds it running")
 # What a client says, starting nothing, where no installation of the server is registered on the device
 # and it runs in no base an installation made (``_start``): the library is plainly here, the script
 # imported it; a registered installation of the server is not. The remedy the ``cad`` command's own line

@@ -15,45 +15,33 @@ Reveal, the person's analytics answer and language, the update check -- it reach
 through ``cad_http``, the viewer's own HTTP routes. No call is held open
 (``views.py``). Agents name models by absolute path only.
 
-Which apps are offered tools is decided at initialize (``host.py``), optimistic with a sure fallback:
+Which apps are offered tools is decided at initialize (``host.py``): the Codex app alone, the one app whose
+CAD view is verified. Every other app is offered none, and shows a model the way it shows any web page.
 
-- *Tabs* (the Codex app, and any host that declares the ``dev.texttocad/tabs`` client
-  extension with the ``global``, ``thread`` and ``file`` entrypoints). The host
-  presents CAD as a sidebar page, a tab per thread and a file handler. The agent
-  opens a tab once (``cad_open``) and then drives it (``cad_show``). A host that
-  declares tabs takes on what Codex does: it starts one shim and MCP session per thread,
-  since a call that names no view reaches the thread's own tab.
-- *Inline* (every host that declares the ``io.modelcontextprotocol/ui`` extension with CAD's page
-  type: Cursor, Claude Desktop, VS Code, ...). Each call to a tool with a UI mounts a new view in the
-  chat, and the old ones stay. So ``cad_show`` is that tool, each launch is stamped with an order for
-  the views to retire their elders by, and a view the agent reads is named by the token its
-  ``cad_show`` returned: one session may serve many chats, and no host says which.
-- *No tools* (``text``): an app that declares neither (Gemini CLI, Grok, Zed, ...), one on the
-  tested-as-broken list (``host.BROKEN``: Claude Code), Codex launched by a program that shows no
-  views (``codex exec``, its terminal UI), and an app whose views never called back
-  (``outcomes.py``) until its retry period passes. Such an app shows a model the way it shows any
-  web page: the ``cad viewer`` link.
+- *Tabs* (the Codex app). The host presents CAD as a sidebar page, a tab per thread and a file handler. The
+  agent opens a tab once (``cad_open``) and then drives it (``cad_show``). Codex starts one shim and MCP
+  session per thread, so a call that names no view reaches the thread's own tab.
+- *No tools* (``text``): every other app, whatever it declares (Cursor, the Claude apps, Gemini CLI, ...), and
+  Codex launched by a program that shows no views (``codex exec``, its terminal UI). Such an app shows a model
+  with the link ``cad viewer`` prints.
+- *Inline*, each call to ``cad_show`` mounting a new view in the chat: no app is served it. The development
+  switch below reaches it, for testing the page's cards: each launch is stamped with an order for the views to
+  retire their elders by, and a view the agent reads is named by the token its ``cad_show`` returned.
 
-Until a view has called back in a session (``_contact``), every answer that shows a model (``cad_show``,
-``cad_open``) gives the model's web page too, for the agent to hand the person in case no view appears; once
-one has, the view alone. The server never waits for a view to show a model. A session that showed a model
-and had no call back counts as a miss for its app (``outcomes.py``), decided with no timer.
+The server never waits for a view to show a model.
 
-Codex declares nothing at initialize, headless or not: ``codex exec`` and its terminal UI greet the
-server as the Codex app does (``codex-mcp-client``) and render no app. The shim reads which program
+Codex greets the server alike from its app, ``codex exec`` and its terminal UI. The shim reads which program
 launched it (``host.presentation``); where that is unknown (Windows, a wrapper), a call whose turn says
-``exec`` is served as an app with no views: ``cad_open`` and ``cad_show`` open the model's page in the
-person's browser (``browser.py``) -- unless a browser page reads that document already -- and answer with
-its URL. The engine never opens it: the host's stdio peer does, in the agent's own environment, from
-the request the answer carries (``browser.OPEN``), and says whether it opened (``browser.OPENED``), which
-alone counts the page as open there; a client with no peer gets the URL alone. Where nothing says yet,
-``cad_open`` claims no tab: it says the tab opens with its answer where the host shows CAD tabs, and gives
-the page's URL for the user otherwise.
+``exec`` is served as an app with no views, before anything the host declared: ``cad_open`` and ``cad_show``
+open the model's page in the person's browser (``browser.py``) -- unless a browser page reads that document
+already -- and answer with its URL. The engine never opens it: the host's stdio peer does, in the agent's own
+environment, from the request the answer carries (``browser.OPEN``), and says whether it opened
+(``browser.OPENED``), which alone counts the page as open there; a client with no peer gets the URL alone.
+Where nothing says yet, ``cad_open`` claims no tab: it says the tab opens with its answer where the host shows
+CAD tabs, and until a view calls back its answers give the model's web page too (``UNPROVEN``).
 
-``CAD_MCP_PRESENTATION=inline|text`` settles a non-Codex client that renders MCP
-Apps without advertising them (the reference host, ``basic-host``, is one).
-``CAD_MCP_CARDS=1`` in the transport's environment keeps the tools for an app on the tested-as-broken list,
-for testing.
+``CAD_MCP_PRESENTATION=inline|tabs|text`` in the shim's environment forces a presentation on any client: a
+development switch, for testing.
 """
 
 from __future__ import annotations
@@ -78,7 +66,6 @@ from cad.registry import DOCUMENT_TYPES
 from cad_server.viewer.scanner import VIEWER_EXTENSIONS
 
 from . import host
-from .outcomes import GRACE_SECONDS, Outcomes
 from .protocol import INVALID_PARAMS, METHOD_NOT_FOUND, RequestContext, RpcError
 from .ui import MIME, RESOURCE_META, AppPage
 from .sidebar import SidebarView
@@ -148,8 +135,9 @@ NO_TOOLS_INSTRUCTIONS = (
     "browser."
 )
 
-# What an answer that shows a model adds until a view has called back in the session (``_call``).
-UNPROVEN = "Until a CAD view appears in this chat, give the user this link too, to open the model in their browser: {link}"
+# What an answer that shows a model adds where nothing says the host shows CAD tabs (a Codex whose launcher is
+# unknown), until a view has called back in the session (``_call``).
+UNPROVEN = "Until a CAD tab opens in this thread, give the user this link too, to open the model in their browser: {link}"
 
 _ICON_SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.86 -1.2 5.56 5.56" fill="currentColor">'
@@ -203,8 +191,6 @@ _SOURCE = {"type": "string", "description": "A CAD file's absolute path, or a do
 # The tools the agent calls with a model or a view, whose arguments are checked against what they take
 # (``_arguments``): the host's own surfaces (``cad_file``, ...) are called with what the host sends.
 _AGENT_TOOLS = ("cad_open", "cad_show", "cad_view", "cad_screenshot")
-# The tools only the page calls (``_page_tools``): a call of theirs is a view calling back, never the agent's.
-_PAGE_TOOLS = ("cad_sync", "cad_capture_reply", "cad_http")
 _VIEW = {"type": "string", "description": "A view id from cad_view; defaults to the most recently used viewer."}
 # What a view watches: its model's catalog entry.
 _WATCH = _object({"file": {"type": ["string", "null"]}})
@@ -359,17 +345,12 @@ class Server:
     def __init__(self, *, page: AppPage | None = None, recents=None, tunnel=None, viewer_url=None, browser_opener=None,
                  sidebar_views=None, analytics=None, sync_document=lambda path: None, warm=lambda: None,
                  in_browser=lambda model: False, browser_opened=lambda model: None, engine_origin: str | None = None,
-                 app_token: str | None = None, outcomes: Outcomes | None = None) -> None:
+                 app_token: str | None = None) -> None:
         self.page = page or AppPage()
-        # Which apps' views never called back (``outcomes.py``): the engine's record, else this session's alone. Its
-        # clock is this session's too: when a model was shown, and whether a later moment is past the grace.
-        self._outcomes = outcomes or Outcomes()
         self._app: str | None = None  # the connecting app, by the name its MCP client gives
         # Whether a store's launcher opened this session (its ``--channel``, the transport's ``pin``): its launches
         # carry no update notice (``_stamped``), since the store updates that copy.
         self.store = False
-        self._shown_at: float | None = None  # when this session first showed a model no view has called back for
-        self._judged = False  # whether this session's miss is counted (once a session)
         # The engine's own origin (``http://127.0.0.1:<port>``), which an inline host is asked to let
         # the card reach (``_resource_meta``): where the host carries no tool call back, the card
         # reads the engine directly with its launch's link (``_reach``).
@@ -386,10 +367,8 @@ class Server:
         self.text = False  # offered no tools
         self._capability_in_catalog = False  # Cursor's: the launching tool carries the capability (``host.carries_capability``)
         # Whether this host shows CAD views (``host.presentation``): True, False, or None while nothing
-        # says; ``_declared`` where the host said so itself, which nothing after overrules; and
-        # ``_contacted`` once a view called back, which only a host that draws them does.
+        # says; and ``_contacted`` once a view called back, which only a host that draws them does.
         self.renders: bool | None = None
-        self._declared = False
         self._contacted = False
         self._viewer_url = viewer_url
         self._browser_opener = browser_opener  # what opens a page's redirect file: ``webbrowser.open``
@@ -513,10 +492,10 @@ class Server:
         raise RpcError(METHOD_NOT_FOUND, f"{method} is not supported")
 
     def _resource_meta(self) -> dict[str, Any]:
-        """The page's sandbox: ``RESOURCE_META``, and for a host that mounts cards inline, the engine's
-        own origin among the origins the card may fetch, so a card whose host carries no tool call
-        back can read the engine directly (``apps/mcp``'s direct transport). A host that shows tabs is
-        served exactly what it was (``test_codex_contract``): its card always has its channel."""
+        """The page's sandbox: ``RESOURCE_META``, and for cards mounted inline (the development switch), the
+        engine's own origin among the origins the card may fetch, so a card whose host carries no tool call
+        back can read the engine directly (``apps/mcp``'s direct transport). A host that shows tabs is served
+        exactly what it was (``test_codex_contract``): its card always has its channel."""
         if self.tabs or self.text or not self._engine_origin:
             return RESOURCE_META
         csp = RESOURCE_META["ui"]["csp"]
@@ -529,17 +508,12 @@ class Server:
         offered = params.get("capabilities") if isinstance(params.get("capabilities"), dict) else {}
         meta = params.get("_meta") if isinstance(params.get("_meta"), dict) else {}
         transport = meta.get("dev.texttocad/transport") if isinstance(meta.get("dev.texttocad/transport"), dict) else {}
-        presentation, self.renders, why = host.presentation(client, offered, transport.get("launcher"))
+        presentation, self.renders, why = host.presentation(client, offered, transport.get("launcher"),
+                                                            transport.get("presentation"))
         self._app = client.get("name") if isinstance(client.get("name"), str) else None
-        broken = host.broken(client, transport)
-        if broken is not None:
-            presentation, self.renders, why = "text", False, f"{broken} is tested to show no CAD views"
-        elif presentation != "text" and self._outcomes.failing(self._app):
-            presentation, self.renders, why = "text", False, "its views never called back (tried again after a while)"
         self._peer_browser = transport.get("browser") if isinstance(transport.get("browser"), dict) else None
         pin = transport.get("pin") if isinstance(transport.get("pin"), dict) else {}
         self.store = isinstance(pin.get("channel"), str) and bool(pin["channel"])
-        self._declared = why.startswith("declared")
         self.tabs, self.text = presentation == "tabs", presentation == "text"
         if presentation == "inline":
             self.page = self.page.presenting("inline")
@@ -559,24 +533,6 @@ class Server:
             "serverInfo": {"name": NAME, "title": TITLE, "version": __version__, "icons": [ICON]},
             "instructions": NO_TOOLS_INSTRUCTIONS if self.text else INSTRUCTIONS if self.tabs else INLINE_INSTRUCTIONS,
         }
-
-    def ended(self) -> None:
-        """This session ended (its transport closed, or its idle hour passed): a model it showed that no view called
-        back for is its app's miss (``_judge``)."""
-        try:
-            self._judge()
-        except Exception:  # noqa: BLE001 - a record, never a reason a session cannot end
-            LOG.exception("could not judge the session's views")
-
-    def _judge(self) -> None:
-        """At a moment after a show with no call back -- an agent's call, the session's end -- count this session as a
-        miss for its app, once, where that moment is ``GRACE_SECONDS`` past the first such show (``outcomes.py``)."""
-        if self._contacted or self._judged or self._shown_at is None:
-            return
-        if self._outcomes.clock() - self._shown_at < GRACE_SECONDS:
-            return
-        self._judged = True
-        self._outcomes.missed(self._app)
 
     # -- the catalog -----------------------------------------------------------
 
@@ -696,8 +652,6 @@ class Server:
             self._refused(name, "no_view")  # a tool of cadgen's this host was not listed: a view it does not show
             raise RpcError(INVALID_PARAMS, f"unknown tool {name!r}")
         started = time.monotonic()
-        if name not in _PAGE_TOOLS:
-            self._judge()  # a later call: a show before it that no view called back for may be a miss
         ok, reason = False, "bug"  # anything a handler raises but ToolFailed is cadgen's own (``handle`` reports it)
         try:
             if name in _AGENT_TOOLS:
@@ -708,7 +662,7 @@ class Server:
                 # MCP result metadata is delivered to the app, never put in the model's context.
                 result.setdefault("_meta", {})[_APP_TOKEN_META] = self._app_token
                 self._reach(launch)
-                if name in _AGENT_TOOLS and not self._contacted:
+                if name in _AGENT_TOOLS and self._cards(context) is None:
                     self._unproven(result, launch)
             ok = not (isinstance(result, dict) and result.get("isError"))
             return result
@@ -733,13 +687,9 @@ class Server:
                 LOG.info("%s %.0fms", name, (time.monotonic() - started) * 1000)
 
     def _unproven(self, result: dict[str, Any], launch: dict[str, Any]) -> None:
-        """A model shown as a view before any view of this session called back: the answer given the model's web page
-        too (``UNPROVEN``), where the engine gave one and the answer does not say it already; and the time noted for
-        ``_judge``, where the app claimed to show views (``renders``: it declared them, or Codex's app launched it).
-        A Codex nothing speaks for is never judged: on Windows its app and its terminal UI greet the server alike,
-        and the terminal's tabs that never come must not cost the app its tools."""
-        if self._shown_at is None and self.renders is True:
-            self._shown_at = self._outcomes.clock()
+        """A model shown where nothing says the host shows CAD tabs (a Codex whose launcher is unknown, before any
+        view called back): the answer given the model's web page too (``UNPROVEN``), where the engine gave one and
+        the answer does not say it already."""
         link = launch.get("browser")
         content = result.get("content")
         if isinstance(link, str) and isinstance(content, list) and not any(link in str(part.get("text")) for part in content):
@@ -893,11 +843,11 @@ class Server:
 
     def _cards(self, context: RequestContext) -> bool | None:
         """Whether this call's host shows CAD views: True, False, or None where nothing says yet. The
-        evidence, strongest first (``host.py``): the host's own declaration; a view that called back; the
-        call's turn (``codex exec``); the host that launched the shim."""
+        evidence, strongest first (``host.py``): a view that called back; the call's turn (``codex exec``), which
+        comes before anything the host declared; the host that launched the shim, and its declaration."""
         if self.text:
             return False
-        if self._declared or self._contacted:
+        if self._contacted:
             return True
         if self.tabs and host.headless(context.meta):
             return False
@@ -909,11 +859,10 @@ class Server:
 
     def _contact(self) -> None:
         """A view called back: its host draws them, whatever it said at initialize. From now on this session's answers
-        show a model as a view alone, and nothing kept of its app's views missing stands (``outcomes.py``)."""
+        show a model as a view alone."""
         if not self._contacted:
             self._contacted = True
             LOG.info("a view called back: %s shows CAD views", self._app or "this app")
-            self._outcomes.answered(self._app)
 
     def _tool_cad_open(self, arguments, context):
         model = self._model_path(arguments.get("source"))
@@ -973,7 +922,7 @@ class Server:
             # it shows the model as it first syncs (``_register``).
             self._pending = model
             said = f"The CAD tab cad_open opened is still opening; it shows {model} once it opens."
-            if not self._contacted and self._viewer_url is not None:
+            if self._cards(context) is None and self._viewer_url is not None:
                 from .browser import ViewerUnavailable
 
                 try:

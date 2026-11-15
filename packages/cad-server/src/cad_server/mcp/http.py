@@ -16,7 +16,6 @@ from urllib.parse import urlsplit
 from cad_server.viewer.engine_app import ViewerApp
 from .protocol import INVALID_REQUEST, INVALID_PARAMS, PARSE_ERROR, INTERNAL_ERROR, RequestContext, RpcError
 from .server import Server, _PROTOCOL_VERSIONS
-from .outcomes import Outcomes, default_path
 from .sidebar import SidebarViews
 from .tunnel import ViewerTunnel
 from .ui import AppPage
@@ -42,7 +41,6 @@ class Session:
     channel: str | None = None
 
     def close(self):
-        self.server.ended()  # a model it showed that no view called back for is its app's miss
         self.server.sidebar_views.close()
 
 
@@ -52,8 +50,6 @@ class Sessions:
         self.lock = threading.RLock()
         self.sessions: dict[str, Session] = {}
         self.sidebar = ViewRegistry()
-        # Which apps' views never called back, in this version's data folder (``outcomes.py``).
-        self.outcomes = Outcomes(default_path())
 
     def close(self):
         with self.lock:
@@ -129,7 +125,7 @@ class Sessions:
                         sidebar_views=SidebarViews(self.sidebar), viewer_url=viewer_url,
                         sync_document=self.engine.server.sync, warm=self.engine.server.warm,
                         in_browser=self.engine.server.in_page, browser_opened=self.engine.server.page_opening,
-                        engine_origin=self.engine.server.url, outcomes=self.outcomes)
+                        engine_origin=self.engine.server.url)
         result = server.handle('initialize', params, RequestContext(None, {}))
         holder = options.get('holder')
         holder = holder if isinstance(holder, str) and 0 < len(holder) <= 64 else None

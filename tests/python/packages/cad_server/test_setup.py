@@ -1,7 +1,8 @@
 """``cad setup``, its hidden ``--engine-update``, and ``cad uninstall`` (``cad_server.cli.setup``, ``uninstall``).
 
 ``cad setup`` sets up the version that runs it -- its folder, its server, the check that it runs, its kernel, its
-marker, and the ``cad`` command -- and knows no app: a home of the test's own holds agent apps' folders and stand-ins
+marker, and the ``cad`` command --, then starts that version's server (a real one in ``Serving``; elsewhere the start
+is recorded), and knows no app: a home of the test's own holds agent apps' folders and stand-ins
 of their commands on PATH, which record any call. ``--engine-update`` is what the updaters of 0.10.0 to 0.11.10 run
 of a newer release, from the flat folder they made (its prepare run first, for an automatic update): it sets the
 version up, hands over from their layout, and starts the install script once, never waiting on it (its stand-in,
@@ -27,10 +28,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from tests.python.packages.cad_server.test_version_servers import Servers
+from tests.python.packages.cad_server.test_version_servers import WAIT, Servers
 from tests.python.packages.cad_server.test_versions import OLD, Device
 
-from cad.engine import places
+from cad.engine import client, places
 from cad_server._internal import imports, installations, legacy, versions
 from cad_server.cli import setup, uninstall
 
@@ -47,10 +48,17 @@ def snapshot(folder: Path) -> dict[str, bytes]:
 
 class Computer(Device):
     """A device with a home of agent apps (their folders, and stand-ins of their commands on PATH, each writing a line
-    to ``called`` when run)."""
+    to ``called`` when run). The server a setup starts is recorded (``served``), never started, unless ``SERVES``."""
+
+    SERVES = False
 
     def setUp(self) -> None:
         super().setUp()
+        self.served = mock.Mock()
+        if not self.SERVES:
+            patch = mock.patch.object(setup, "_serve", self.served)
+            patch.start()
+            self.addCleanup(patch.stop)
         self.home = self.root / "home"
         for folder, name, text in ((".claude", "settings.json", "{}"), (".codex", "config.toml", "[plugins]\n"),
                                    (".cursor/plugins/local", "keep", "x"), (".agents/skills/cad", "SKILL.md", "ours")):
@@ -114,6 +122,7 @@ class Setup(Computer):
             code, out, err = self.main(setup, [])
             self.assertEqual((code, len(self.uv.steps)), (0, steps), "again: quick, and nothing made twice")
             self.assertEqual(out, f"cad {DEV} is installed: {places.version_dir(DEV)}\n")
+        self.assertEqual(self.served.call_args_list, [mock.call(DEV)] * 2, "its server started, where none runs")
         self.no_app_touched()
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             setup.main(["--only", "claude"])
@@ -167,6 +176,7 @@ class Arriving(Computer):
         self.assertEqual(stopped.read_text(encoding="utf-8"), "stop --json telemetry=0\n", "0.8's own stop, quiet")
         self.assertIn("stopped cadgen 0.8.4's server", err)
         self.assertEqual(asked, [{"op": "status"}, {"op": "stop", "drain": True}], "asked to stop once idle")
+        self.served.assert_not_called()  # its pages' port is taken until it is idle: the next command starts Y's
         record = installations.current()
         self.assertEqual((record["version"], record["prefix"]), (Y, str(places.code_dir(Y) / "server")),
                          "its clients start or find this version's server")
@@ -182,6 +192,7 @@ class Arriving(Computer):
                     "ok": True, "prefix": str(places.code_dir(Y) / "server")}):
             self.assertEqual(self.main(setup, [])[0], 0)
         self.assertEqual([message["op"] for message in asked], ["status"])
+        self.served.assert_called_once_with(Y)
 
 
 @unittest.skipIf(os.name == "nt", "the install script's stand-in is a POSIX script")
@@ -220,6 +231,7 @@ class EngineUpdate(Computer):
                 code, out, err = self.main(setup, ["--engine-update"])
             self.assertEqual(code, 0, out + err)
             hand_over.assert_not_called()  # the updater's own switch stops its server: never asked here
+            self.served.assert_not_called()  # and starts Y's: none started here
             self.assertFalse(ran.exists(), "it returned while the installer still waits")
         # What the updater's switch then reads: the records of its layout naming Y's server environment.
         record = installations.current()
@@ -260,6 +272,34 @@ class Installer(unittest.TestCase):
         while not ran.exists():
             self.assertLess(time.monotonic(), deadline, "the installer ran")
             time.sleep(0.02)
+
+
+class Serving(Servers, Computer):
+    """The server plain ``cad setup`` leaves running for every later session, a real one."""
+
+    SERVES = True
+
+    def test_setup_leaves_its_version_s_server_running_and_again_starts_no_other(self) -> None:
+        before = dict(os.environ)
+        with mock.patch.object(setup, "_name", return_value=X):
+            code, out, err = self.main(setup, [])
+            self.assertEqual(code, 0, out + err)
+            self.assertTrue(out.endswith(f"cad {X}'s server is running\n"), out + err)
+            started = versions.ask(X, {"op": "pid"}, seconds=WAIT)
+            self.assertIsNotNone(started, "it answers at its own door")
+            self.assertTrue(dict(os.environ) == before, "this process's environment as it was")
+            code, out, err = self.main(setup, [])
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(versions.ask(X, {"op": "pid"}, seconds=WAIT)["pid"], started["pid"], "no other started")
+        self.no_app_touched()
+
+    def test_a_server_that_cannot_start_is_said_and_the_setup_still_succeeds(self) -> None:
+        with mock.patch.object(setup, "_name", return_value=X), \
+                mock.patch.object(client, "connect", side_effect=ConnectionError("the engine server did not start")):
+            code, out, err = self.main(setup, [])
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(out, f"cad {X} is installed now: {places.version_dir(X)}\n")
+        self.assertIn(f"cad {X}'s server is not running: the engine server did not start", err)
 
 
 class Uninstall(Servers, Computer):

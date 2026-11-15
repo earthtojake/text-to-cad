@@ -34,6 +34,7 @@ It holds no tool, view or document: the server does. What it does on its own, in
 - **Passes the app's requests on** and the server's answers back.
 - **Opens the person's browser** where a `cad_show` in an app that shows no views asks, in the app's own
   environment, never in the server's, and tells the server whether it opened.
-- **Says which app started it**, read from its parent processes, which only it can see, and passes on
-  `CLAUDE_CODE_ENTRYPOINT`, which Claude Code sets for every server it starts: the server offers such a session no
-  tools. `CAD_MCP_CARDS=1` in this process's environment keeps the tools, for testing.
+- **Says which app started it**, read from its parent processes, which only it can see: the server offers its
+  tools to the Codex app alone, told from `codex exec` and the Codex terminal UI by that program, whatever the app
+  declares. `CAD_MCP_PRESENTATION=inline|tabs|text` in this process's environment is a development switch: the
+  server then serves that presentation to any app, for testing.
