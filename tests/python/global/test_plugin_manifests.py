@@ -444,6 +444,19 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertTrue(section.startswith(f"{intro}\n"), "the README's Features open with the site's intro")
         self.assertEqual(re.findall(r"^- \[\*\*([^*]+)\*\*\]\(([^)]+)\): (.+)$", section, re.M), page)
 
+    def test_the_readme_and_the_docs_site_point_to_studio_alike(self) -> None:
+        # The README's Studio and the site's are one copy (apps/docs/README.md): the paragraph, however
+        # the README wraps it, and the same links in the same order.
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        content = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
+        block = content.split("export const studio = {", 1)[1].split("\n};", 1)[0]
+        body = re.search(r'body: "([^"]+)"', block).group(1)
+        links = re.findall(r'\{ text: "([^"]+)", href: "([^"]+)" \}', block)
+        self.assertTrue(links, "no Studio links found in the docs site's copy")
+        section = readme.split("\n## 🖥️ Studio\n\n", 1)[1].split("\n## ", 1)[0]
+        self.assertIn(body, " ".join(section.split()))
+        self.assertEqual(re.findall(r"\[([^\]]+)\]\((https://[^)]+)\)", section), links)
+
     def test_skill_handoffs_name_skills_that_ship(self) -> None:
         # `$cad`, `$sendcutsend`: one skill hands the agent to another by name (shell variables are upper case).
         dangling = []
