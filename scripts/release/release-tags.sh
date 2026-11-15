@@ -91,9 +91,9 @@ breaking_part() {
   if [ "$((10#$major))" -ge 1 ]; then echo major; else echo minor; fi
 }
 
-# Whether a device at the first X.Y.Z installs the second by itself, with automatic updates on: a later
-# release that keeps the breaking part -- a patch below 1.0, a patch or minor from 1.0. The server's
-# auto_updates.takes is the rule; tests/python/global/test_pr_version_guard.py holds this copy to it.
+# Whether the second X.Y.Z breaks nothing for a computer on the first: a later release that keeps the breaking
+# part -- a patch below 1.0, a patch or minor from 1.0 (CONTRIBUTING.md, "Which number a release bumps").
+# tests/python/global/test_pr_version_guard.py holds this to Semantic Versioning's rule.
 version_installs_itself() {
   local bump
   bump="$(version_bump "$1" "$2")" || return 1

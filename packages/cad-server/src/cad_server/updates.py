@@ -179,8 +179,20 @@ def notice(*, path: Path | None = None) -> dict[str, str] | None:
 def offered(*, path: Path | None = None) -> dict[str, str] | None:
     """The notice a page is handed for its update nudge (``GET /api/v1/server``'s and a CAD app launch's ``notice``):
     ``notice`` where the check is not turned off (``CAD_UPDATE_CHECK=0``), the same decision a command's line makes
-    (``cad_server.cli._notice``). Never read from the network here, never waited on."""
+    (``cad_server.cli._notice``), and only where the default channel -- a copy with no store's name -- has used this
+    version (``versions.on_default_channel``): only the default channel gets the nudge. A page cannot tell who opened
+    it, and a store updates its own copy, so a nudge on a computer with store copies alone would only have its agent
+    install a second one. Never read from the network here,
+    never waited on."""
     if str(os.environ.get("CAD_UPDATE_CHECK") or "").strip().lower() in _OFF:
+        return None
+    try:
+        from cad_server._internal.versions import on_default_channel
+
+        if not on_default_channel():
+            return None
+    except Exception:  # noqa: BLE001 - a notice never fails what shows it
+        LOG.debug("could not tell whether the default channel uses this version", exc_info=True)
         return None
     return notice(path=path)
 

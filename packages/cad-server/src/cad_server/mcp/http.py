@@ -229,13 +229,14 @@ class Sessions:
     @staticmethod
     def _used(channel):
         """An agent's tool call (on channel ``channel``, a label): this version's use recorded (``versions.used``),
-        by a version's server alone."""
+        by a version's server alone; a session whose launcher names no ``--channel`` marks it used on the default
+        channel (``default_channel``)."""
         from cad.engine.places import versioned
         if versioned() is None:
             return
         try:
             from cad_server._internal import versions
-            versions.used()
+            versions.used(default_channel=channel is None)
         except Exception:  # noqa: BLE001 - a mark, never a reason a call fails
             pass
 

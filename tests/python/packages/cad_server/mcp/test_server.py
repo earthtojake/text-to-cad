@@ -285,9 +285,15 @@ class TabServerTest(_Session):
 
     def test_a_newer_release_is_the_page_s_notice_while_the_check_is_on_and_never_a_store_session_s(self) -> None:
         """The update nudge's data: ``/api/v1/server`` and each launch carry ``notice`` where the version check knows a
-        newer release and is not turned off; a session a store's launcher opened (``--channel``) is told none."""
+        newer release and is not turned off and the default channel has used this version; a session a store's
+        launcher opened (``--channel``) is told none."""
         import cad_server
         from cad_server import updates
+        from cad_server._internal import versions
+
+        default = mock.patch.object(versions, "on_default_channel", return_value=True)
+        default.start()
+        self.addCleanup(default.stop)
 
         newer = {"latest": "99.0.0", "version": cad_server.__version__}
         with mock.patch.object(updates, "notice", return_value=None):
@@ -310,6 +316,10 @@ class TabServerTest(_Session):
             with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": "0"}):
                 self.assertNotIn("notice", self.http("GET", "/api/v1/server")[1])
                 self.assertNotIn("notice", self.launch("cad_home"))
+            # Only the default channel gets the nudge: a version only store copies have used is told none.
+            with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": ""}), \
+                    mock.patch.object(versions, "on_default_channel", return_value=False):
+                self.assertNotIn("notice", self.http("GET", "/api/v1/server")[1])
 
     def test_an_agent_names_a_model_by_its_absolute_path_and_a_tab_reopens_on_it(self) -> None:
         opened = self.launch("cad_open", {"source": self.bracket})

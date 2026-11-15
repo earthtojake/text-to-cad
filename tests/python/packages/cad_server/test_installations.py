@@ -363,7 +363,7 @@ class WindowsCommandTests(Fixture):
         earlier.write_text("@echo off\r\nrem cad proxy: 9\r\n", encoding="utf-8")
         self.assertEqual(installations.earlier_command(self.bin), str(earlier))
         self.assertEqual(self.write(), installations.MISSING)
-        self.assertTrue(earlier.exists(), "a cad update through cad.cmd still has cmd reading it")
+        self.assertTrue(earlier.exists(), "a cad.cmd that is running still has cmd reading it")
         self.assertEqual(self.write(), installations.OK)
         self.assertFalse(earlier.exists())
         earlier.write_text("@echo off\r\nrem a person's own\r\n", encoding="utf-8")

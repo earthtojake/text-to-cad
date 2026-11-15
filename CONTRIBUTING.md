@@ -629,7 +629,7 @@ computer in one of two ways:
   cad knows nothing of the plugin, and the install command installs the plugin too. The skills of a
   manual install tell the agent to install the new version of the plugin from the repository, whose
   README gives the install command, and to tell the person. A new chat then uses the new release; a chat already open keeps
-  its own.
+  working, since the release its commands name stays installed until no agent has used it for two days.
 
 Releases 0.10.0 to 0.11.10 are the exception: they shipped an updater of their own, which still installs
 newer releases ([No version left behind](#no-version-left-behind)). The reasons are in

@@ -198,7 +198,7 @@ while read -r command; do
 done <"$WORK/commands.txt"
 
 # The shim is a release's: as on a person's device, it installs its own version on this private device at its
-# first start (`uvx --from cad-server==<VERSION> cad setup --add`, the kernel's environment with it) and serves
+# first start (`uvx --from cad-server==<VERSION> cad setup`, the kernel's environment with it) and serves
 # from that version's server. uv reads the wheels under test beside its index (UV_FIND_LINKS for the uvx, the
 # server's own CAD_UPDATE_FIND_LINKS for the environments it makes) and takes them over an index's release of
 # the same number: which wheel was installed is checked below, so a release on PyPI never stands in.

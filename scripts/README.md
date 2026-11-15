@@ -220,9 +220,9 @@ where those files ship, so these scripts are what produces them.
   commit is the manual fallback.
 - `release-tags.sh` — sourced helpers for tag spelling (`v0.5.0`, and the bare
   `0.4.x` releases before 0.5.0) and for comparing versions, Semantic Versioning's
-  among them: the part a release bumps, the breaking part, and whether a device takes a
-  release by itself (`version_installs_itself`, the release check's copy of the server's
-  `auto_updates.takes`, which a test holds equal to it). Sourced by
+  among them: the part a release bumps, the breaking part, and whether a release breaks nothing
+  for a computer on an earlier one (`version_installs_itself`, which a test holds to Semantic
+  Versioning's rule). Sourced by
   `bump-version.sh`, `check-pr-version.sh`, `publish-github-release.sh`,
   `release-publish.yml`.
 - `unavailable-versions.txt` — the versions no release can take (the PyPI project `cad`'s

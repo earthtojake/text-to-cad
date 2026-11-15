@@ -2008,13 +2008,15 @@ class Daemon:
 def _used(request: dict[str, Any]) -> None:
     """A request taken by a version's server from a command or an app (never one another server or an updater asks,
     ``internal``): its version's use recorded (``versions.used``, at most once an hour), which the cleanup reads --
-    the record a command in a sandbox could not write itself. Nothing for a server with no version."""
+    the record a command in a sandbox could not write itself; a request that names no channel (every client says
+    its store's name, a command its pin's and the MCP launcher its ``--channel``) marks it used on the default
+    channel (``default_channel``). Nothing for a server with no version."""
     if request.get("internal") or versioned() is None:
         return
     try:
         from cad_server._internal import versions
 
-        versions.used()
+        versions.used(default_channel=not request.get("channel"))
     except Exception:  # noqa: BLE001 - a mark, never a reason a request fails
         pass
 

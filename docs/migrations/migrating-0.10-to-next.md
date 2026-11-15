@@ -263,7 +263,10 @@ runs the install command once, which brings each app's plugin up to date. What i
 - **text-to-cad no longer updates itself** (tier 1). Automatic updates, the update button, the
   Automatic updates switch and `cad update` are gone. Run the install command again to update
   ([docs/install.md](../install.md)); a plugin store updates its own copy. When a newer release is out,
-  `cad` says so after a command's output, with the command to run.
+  `cad` says so after a command's output, in one line that names no command (`A new version of cad is
+  available: X -> Y`), and the skills tell your agent to install the new version of the plugin from the
+  repository. The CAD Viewer and the CAD app show a small update nudge with a prompt to send your agent;
+  it installs nothing.
 - **The install command installs the plugin with each app's own command** (tier 1). It takes no
   options, installs the newest release and the `cad` command, removes what earlier releases left in
   the apps, and installs or updates the plugin from GitHub's `latest` branch in each app it finds. It

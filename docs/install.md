@@ -233,7 +233,8 @@ text-to-cad does not update itself. When a newer release is out, `cad` says so a
 output, in one line: `A new version of cad is available: X -> Y`. It names no command; the plugin's
 skills tell your agent to install the new version of the plugin from this repository, with the
 install command above. A chat that is
-already open keeps its release; a new chat uses the new one.
+already open keeps working: the release its commands name stays installed until no agent has used it
+for two days. A new chat uses the new one.
 
 ## Removing
 

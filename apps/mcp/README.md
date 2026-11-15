@@ -284,7 +284,8 @@ the launch's `_meta` first (`host/capability.ts`).
 - **A newer release is a nudge for the person, and the agent does the update.** Each launch carries
   `notice` (`{version, latest}`) where the server's version check, as last read, knows a newer release
   (`cad_server/updates.py`'s `offered`: never with `CAD_UPDATE_CHECK=0`, from a development build, or in a
-  session a store's launcher opened, `--channel`, whose copy the store updates). While the launch shown
+  session a store's launcher opened, `--channel`, whose copy the store updates: only the default channel gets
+  the nudge). While the launch shown
   carries one, the shared update nudge (`@cad/ui/update`'s `UpdateButton`) is last among the navbar's
   controls, after Full size; in the file handler, which has no navbar, it is in the corner under Full size.
   Its popover says a new version of the text-to-cad plugin is available, with the prompt for the agent,

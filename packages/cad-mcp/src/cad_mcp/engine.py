@@ -747,10 +747,13 @@ def _exchange(connection: Connection, message: dict[str, Any], where: Path | Non
 
 
 def request(message: dict[str, Any], *, start: bool = True) -> dict[str, Any] | None:
-    """One request and its answer; None when no server runs and ``start`` is false."""
+    """One request and its answer, carrying this copy's delivery label where it has one, as every request a
+    labelled command makes does; None when no server runs and ``start`` is false."""
     connection = connect(start=start)
     if connection is None:
         return None
+    if PIN.channel:
+        message = {**message, "channel": PIN.channel}
     return _exchange(connection, message)
 
 

@@ -103,13 +103,13 @@ export default function PrivacyPolicyPage() {
             Section 5 says when telemetry is on and how to turn it off.
           </li>
           <li>
-            <strong>The version check:</strong> at most once an hour, text-to-cad (the CAD app or the CAD viewer)
+            <strong>The version check:</strong> at most once an hour, text-to-cad’s software on your computer
             asks api.texttocad.dev which text-to-cad release is the
             newest, so it can tell you when there is an update. The request carries no ID and nothing
             about you or your work; like any request, it reaches our host with your IP address, the
-            time and a user agent (“cadgen”). It is not made for a copy a plugin store keeps up to date,
-            nor in CI, and section 5 says how to turn it off. text-to-cad never updates itself: you
-            update it by running our install command again, which asks the same question, then
+            time and a user agent (“cadgen”). It is not made in CI, and section 5 says how to turn it off.
+            A copy a plugin store keeps up to date is never told of an update: the store updates it.
+            text-to-cad never updates itself: you update it by running our install command again, which asks the same question, then
             downloads the release from PyPI.
           </li>
           <li>

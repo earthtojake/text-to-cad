@@ -116,14 +116,15 @@ reference only when asked (`--gz-remote`).
 **The install command.** `curl -fsSL https://texttocad.dev/install.sh | sh` (on
 Windows `irm https://www.texttocad.dev/install.ps1 | iex`) runs the script the docs
 site serves over HTTPS, as you, with no sudo and nothing asked: it installs uv with
-uv's own installer when uv is missing, and runs the newest release of the server, `cad-server`, from PyPI
-through uvx, which installs the plugin in each agent app with that app's own
-command, and takes out of Claude Desktop's config the CAD server earlier releases wrote there
-(keeping a `.bak`). To read the script
-first, or to keep to one release, take the copy attached to that release on GitHub
-and check it against the release's `SHA256SUMS`. The skills of claude.ai's directory
-copy install with no script: `uvx --from cad-server==<release> cad setup --add`
-installs that release from PyPI and writes the `cad` command, and changes nothing else.
+uv's own installer when uv is missing, then runs one Python file served beside it, `install.py`, which
+sets up the newest release of the server, `cad-server`, from PyPI through uvx (`cad setup`), installs the
+plugin in each agent app it finds with that app's own command from this repository's `latest` branch,
+and removes what earlier releases left behind, among them the CAD server they wrote into Claude
+Desktop's config (keeping a `.bak`). To read the script first, or to keep to one release, take the
+copy attached to that release on GitHub and check it against the release's `SHA256SUMS`. A skill
+installs its own release with no script:
+`uvx --no-config --managed-python --python 3.14 --from cad-server==<release> cad setup` installs that
+release from PyPI and writes the `cad` command, and changes nothing else.
 
 ### What we treat as a vulnerability
 

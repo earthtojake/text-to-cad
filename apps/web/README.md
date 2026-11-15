@@ -510,8 +510,10 @@ right as in the CAD app, and nothing at all otherwise: the server's version chec
 `notice`, read with the server's description as the page starts (`main.tsx`) and again whenever the person
 comes back to the tab (`src/host/useUpdateNotice.ts`). A press opens its popover, whose prompt for the
 person's agent is copied (**Copy prompt**, or the copy icon on it): this page cannot reach the agent's chat.
-Nothing here installs anything; the agent updates when the person sends it the prompt. A store's copy of the
-plugin opens this same page, and the server cannot tell it from ours, so it is shown the nudge too.
+Nothing here installs anything; the agent updates when the person sends it the prompt. Only the default channel
+gets the nudge: a store's copy of the plugin opens this same page, which cannot tell who opened it, so the server
+offers `notice` only where a command or a CAD app session on the default channel (no store's name) has used its
+version (`versions.on_default_channel`); a computer with store copies alone, which the stores update, never sees it.
 The browser title is the open file's or model's name alone ("bracket.step", "juno"), and "text-to-cad" on the home.
 Appearance (System, Light, Dark) is the app menu's Theme row, the tab's choice (`colorScheme`,
 over a file and on the home); the page has no light/dark button of its own. The original animated mark remains the shared LoadingIcon

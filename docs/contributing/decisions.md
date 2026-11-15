@@ -23,6 +23,20 @@ from. Two exceptions are allowed: the MCP server reads which app connected, to c
 model, and the viewer's "Open in" menu names apps. Nothing else in cad may name an app, a plugin or
 a skill.
 
+## cad says `cad`; the views may say text-to-cad
+
+**Decision.** text-to-cad is the plugin's and the product's name. The command line, the server's
+messages and the library call the software `cad`, and `cad-server` where a message names the package
+to install. The web viewer and the CAD app may say text-to-cad (their titles, the update nudge):
+they are where the person meets both layers.
+
+**Why.** A message from cad that names text-to-cad points a person who uses cad alone at a plugin
+they never installed, and ties cad's text to the plugin, which the first decision rules out.
+
+**What it costs.** Two names for one project, and a test that holds cad's text to its own
+(`tests/python/global/test_cad_calls_itself_cad.py`). Addresses (`texttocad.dev`, the repository),
+the MCP ids `dev.texttocad/*` and the URDF namespace keep their spelling: they can never change.
+
 ## Versions are self-contained and sit side by side
 
 **Decision.** Each release of cad is installed in its own folder, with its own code, server,
@@ -69,8 +83,10 @@ version of the text-to-cad plugin is available (vY). Update it from
 https://github.com/earthtojake/text-to-cad`. The CAD app sends it to the chat where the host takes
 messages; otherwise, and in the web viewer, the person copies it. The nudge is the one place the
 software tells a person, rather than an agent, that a new version exists, and all it does is hand
-them that prompt: nothing in the page or the server installs, downloads or restarts anything. A CAD
-app session a store's launcher opened is never shown it.
+them that prompt: nothing in the page or the server installs, downloads or restarts anything. Only
+the default channel gets the nudge: a CAD app session a store's launcher opened is never shown it,
+and the web viewer shows it only where the default channel (a command or a session with no store's
+name) has used that version, which the version records once, in a marker file beside its last use.
 
 **Why.** A skill cannot make an agent install without the person's say-so: in blind tests, agents
 told to install "without asking" refused. The person has to agree, and the viewer is where they
@@ -80,10 +96,11 @@ cad packages' text that names the text-to-cad plugin, because the plugin and cad
 together.
 
 **What it costs.** The page reads one more field from its server and carries one more control and
-popover, in five languages. The web viewer cannot tell a store's copy of the plugin from ours (a
-store's `cad viewer` opens the same page), so a person on a store's copy is shown the nudge too,
-and an agent that follows it installs ours beside the store's. The prompt names the repository's
-address, which can never change.
+popover, in five languages. The web viewer cannot tell who opened it, so on a computer where both
+the default channel and a store's copy use a version, a person who opened the page from the store's
+copy is shown the nudge too, and an agent that follows it updates the default channel's copy. A
+computer with store copies alone never sees it. The prompt names the repository's address, which can
+never change.
 
 ## The install script is the one place that knows every app
 

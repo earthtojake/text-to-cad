@@ -42,7 +42,7 @@ class StateFolderTest(unittest.TestCase):
         state.mkdir()
         (state / "versions.json").write_text(json.dumps({"checked": 0, "feed": {"latest": "1.0.0"}, "dismissed": "1.0.0"}),
                                             encoding="utf-8")  # a field nothing reads, kept by an earlier write
-        (state / "install-receipt.json").write_text("{}", encoding="utf-8")  # the install command ran here: it reads the feed
+        (state / "install-receipt.json").write_text("{}", encoding="utf-8")  # an earlier release's, left as it was
         # A release's process (a checkout is a development build unless told the version it runs as).
         with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(state), "CAD_INSTALLATION_VERSION": "0.11.10",
                                           "CAD_UPDATE_CHECK": "", "CI": "",

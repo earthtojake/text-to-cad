@@ -121,8 +121,8 @@ MARKER_SCHEMA = "cad env/2"
 # suffix), and the earlier releases' (named for cadgen, the library's earlier name). What this release
 # keeps of an earlier state folder (``ADOPTED``) it moves into its own (``adopt``): what the person owns
 # -- their settings (the telemetry answer, so a no stays a no, and the language), the documents' records
-# and what the homes show of them (Recents) -- and setup's receipt, which ``cad setup`` reads for the
-# skills and the configs 0.8's setup touched, and ``cad uninstall`` for what it did. Not 0.8's
+# and what the homes show of them (Recents) -- and the receipt 0.8's setup wrote, which no release reads
+# since 0.11.11 and ``cad uninstall`` removes with the rest. Not 0.8's
 # installations' records, its engines' records or its page token, which only 0.8 runs by, nor its
 # install channels, the locks, or the telemetry it noted and did not send. The person's telemetry no
 # stays in the earlier folder too, for the earlier release still installed (``adopt``).

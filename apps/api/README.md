@@ -182,9 +182,10 @@ Retention is PostHog's: events go after the period its plan keeps them (a year o
 free plan), and the privacy policy says so.
 
 The feed moves when PyPI does: no release deploys anything here, and `latest` never
-names a release that cannot be installed yet. Only the default channel's version reads it,
-on a device where the install command ran: a store's copy (channel `claude` or `codex`)
-never checks and is never told, since its store updates it.
+names a release that cannot be installed yet. Every installed version's server reads it
+(never a development build), and only the default channel is told: a command that names a
+store (`cad +X@codex`), a CAD app session a store's launcher opened, and a page only store
+copies have used say nothing of a newer release, since the store updates that copy.
 A Vercel Firewall rate-limit rule on `/v1/*` (answering `429`) is recommended: a
 real client sends at most once every five minutes per running process, and once more
 as it exits, so a per-IP limit well above that turns a flood away at no cost to real

@@ -338,6 +338,14 @@ class ACommandOfAVersion(unittest.TestCase):
         self.main("--version")
         self.assertGreater((folder / versions.USED).stat().st_mtime, 1.0, "an agent's check at a session's start too")
 
+    def test_only_a_command_on_the_default_channel_marks_its_version_used_there(self) -> None:
+        self.installed(DEV)
+        self.main(f"+{DEV}@store", "requirement")
+        self.main(f"+{DEV}@store", "--version")
+        self.assertFalse(versions.on_default_channel(DEV), "a store's commands: never")
+        self.main(f"+{DEV}", "--version")
+        self.assertTrue(versions.on_default_channel(DEV), "a pin that names no store: the default channel")
+
     def notice(self, latest: str | None = "99.0.0") -> None:
         """The feed as the last check read it, for this process (its data folder), and this process told."""
         cache = places.data_dir() / updates.FILE

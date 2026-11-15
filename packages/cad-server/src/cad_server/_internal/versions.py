@@ -43,7 +43,10 @@ finds (``flat``, ``cad_server.engine.daemon.Bridge``).
 
 **Use** (``used``, ``last_used``). Each version records its own last use by an agent: a ``cad`` command run for it,
 a request its server takes from a command, an MCP tool call other than the page's own. The record is a file,
-``versions/<version>/used``, whose modification time is the use, written at most once an hour.
+``versions/<version>/used``, whose modification time is the use, written at most once an hour. The first use on
+the default channel (a command with no ``@name``, an MCP session whose launcher names no ``--channel``) also makes
+``versions/<version>/default-channel``, once (``default_channel``): only the default channel is told of a new
+version on the page (``cad_server.updates.offered``). Nothing else is kept of who used it.
 
 **Cleanup** (``clean``). The server of the newest installed version, as it starts and then every 24 hours
 (``CLEAN_SECONDS``, ``due``), removes every older installed version no agent has used for 2 days
@@ -74,10 +77,11 @@ from typing import Any
 from cad.engine import places
 from cad_server._internal import base
 
-__all__ = ["CANNOT", "CLEAN_SECONDS", "LEGACY_SECONDS", "LOCK", "UNUSED_SECONDS", "USED", "Present", "ask",
+__all__ = ["CANNOT", "CLEAN_SECONDS", "DEFAULT_CHANNEL_USED", "LEGACY_SECONDS", "LOCK", "UNUSED_SECONDS", "USED",
+           "Present", "ask",
            "ask_flat", "clean", "clean_legacy", "connected", "development", "due", "endpoint", "flat",
            "flat_endpoint", "folders", "gone", "install_lock", "last_used", "make_present", "newest", "older",
-           "order", "present", "quiet", "remove", "serves", "serving", "stop_server", "used"]
+           "order", "present", "quiet", "remove", "serves", "serving", "stop_server", "on_default_channel", "used"]
 
 # The computer's install lock, in the state folder: every install and every cleanup holds it (``cad setup``'s too).
 LOCK = "install.lock"
@@ -85,6 +89,8 @@ SERVER = "server"
 TRASH = ".trash-"
 # In a version's folder: its last use by an agent, as the file's modification time (``used``).
 USED = "used"
+# In a version's folder: made the first time the default channel uses it (``used``, ``default_channel``).
+DEFAULT_CHANNEL_USED = "default-channel"
 # How often a use is written again (``used``): the cleanup counts in days.
 USE_SECONDS = 60.0 * 60
 # How often the newest version's server cleans (``due``), and how long an older version may go unused before it does.
@@ -532,11 +538,13 @@ def flat(name: str | None) -> bool:
 # --- use --------------------------------------------------------------------------------------------------
 
 
-def used(name: str | None = None, *, now: float | None = None) -> bool:
+def used(name: str | None = None, *, now: float | None = None, default_channel: bool = False) -> bool:
     """Version ``name`` (this process's own, ``places.versioned``, by default) marked used by an agent at ``now``:
-    its ``USED`` file's time set, where it is installed and that time is older than ``USE_SECONDS``. Quiet: a
-    folder that cannot be written (an agent's sandbox) marks nothing, and its server marks the use as it takes the
-    command's requests. Whether it was marked."""
+    its ``USED`` file's time set, where it is installed and that time is older than ``USE_SECONDS``; and, for a use
+    on the default channel (``default_channel``: a command with no ``@name``, an MCP session whose launcher names no
+    ``--channel``), its ``DEFAULT_CHANNEL_USED`` marker made, once. Quiet: a folder that cannot be written (an
+    agent's sandbox) marks nothing, and its server marks the use as it takes the command's requests. Whether the use
+    was marked."""
     name = name or places.versioned()
     if name is None:
         return False
@@ -545,6 +553,10 @@ def used(name: str | None = None, *, now: float | None = None) -> bool:
         folder = places.version_dir(name)
         if not (folder / places.CODE / places.VERSION_MARKER).is_file():
             return False
+        if default_channel and not (folder / DEFAULT_CHANNEL_USED).exists():
+            with contextlib.suppress(FileExistsError):
+                with open(folder / DEFAULT_CHANNEL_USED, "xb"):
+                    pass
         path = folder / USED
         try:
             if 0 <= now - os.stat(path).st_mtime < USE_SECONDS:
@@ -557,6 +569,19 @@ def used(name: str | None = None, *, now: float | None = None) -> bool:
     except (OSError, ValueError):
         return False
     return True
+
+
+def on_default_channel(name: str | None = None) -> bool:
+    """Whether the default channel -- a copy with no store's name -- ever used version ``name`` (this process's own by
+    default): ``used``'s ``DEFAULT_CHANNEL_USED`` marker. Only then does the page offer its update nudge
+    (``cad_server.updates.offered``). False for a process of no version, and where it cannot be read."""
+    name = name or places.versioned()
+    if name is None:
+        return False
+    try:
+        return (places.version_dir(name) / DEFAULT_CHANNEL_USED).is_file()
+    except (OSError, ValueError):
+        return False
 
 
 def last_used(name: str) -> float:

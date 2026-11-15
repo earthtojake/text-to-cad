@@ -621,8 +621,9 @@ class CadApp:
         what each exports, the release this server runs (``release``), and, where a newer release is known
         (``updates.offered``: the version check as last read, never waited on; none with ``CAD_UPDATE_CHECK=0`` or
         for a development build), ``notice`` (``{version, latest}``): the page's update nudge, which hands the
-        person a prompt for their agent. A page cannot tell a store's copy from ours (a store's ``cad viewer``
-        opens the same page), so only a CAD app session a store's launcher opened (``channel``) is told none."""
+        person a prompt for their agent. Only the default channel gets it: a CAD app session a store's launcher
+        opened (``channel``) is told none, and a page, which cannot tell who opened it, only where the default
+        channel has used this version (``versions.on_default_channel``)."""
         from cad_server import updates
 
         found = updates.offered() if self.channel is None else None

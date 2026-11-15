@@ -419,6 +419,36 @@ class Use(Device):
         with mock.patch.object(places, "versioned", return_value=X):
             self.assertTrue(versions.used(now=now + 2 * versions.USE_SECONDS), "this process's own by default")
 
+    def test_the_default_channel_s_first_use_is_marked_once_and_a_store_s_never(self) -> None:
+        # Only the default channel gets the page's update nudge (``updates.offered``): a computer with store copies
+        # alone never has the marker.
+        self.present(X)
+        marker = places.version_dir(X) / versions.DEFAULT_CHANNEL_USED
+        versions.used(X)
+        self.assertFalse(versions.on_default_channel(X), "a store's use (a labelled command or session) marks nothing")
+        versions.used(X, default_channel=True)
+        self.assertTrue(versions.on_default_channel(X), "marked though the hour's use is written already")
+        written = marker.stat().st_mtime_ns
+        os.utime(places.version_dir(X) / versions.USED, (1.0, 1.0))
+        versions.used(X, default_channel=True)
+        self.assertEqual(marker.stat().st_mtime_ns, written, "written once, never again")
+        self.assertFalse(versions.on_default_channel(Y), "not installed: nothing")
+        with mock.patch.object(places, "versioned", return_value=None):
+            self.assertFalse(versions.on_default_channel(), "a process of no version: nothing")
+
+    def test_a_server_marks_the_default_channel_for_a_request_that_names_no_channel(self) -> None:
+        # The record a command in a sandbox cannot write itself; every client names its store (the MCP launcher too).
+        from cad_server.engine import daemon
+
+        self.present(X)
+        with mock.patch.object(daemon, "versioned", return_value=X), \
+                mock.patch.object(places, "versioned", return_value=X):
+            daemon._used({"op": "http", "channel": "codex"})
+            daemon._used({"op": "status", "internal": True})
+            self.assertFalse(versions.on_default_channel(X), "a store's request, or the servers' own: nothing")
+            daemon._used({"op": "build"})
+            self.assertTrue(versions.on_default_channel(X))
+
 
 class Cleanup(Device):
     """The newest installed version's server removes every older one no agent has used for 2 days."""

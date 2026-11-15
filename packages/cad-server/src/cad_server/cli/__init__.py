@@ -265,7 +265,8 @@ def _main(argv: list[str]) -> int:
 
         sys.stdout.write(f"cad {pins.own() or __version__}\n")
         if _maybe_a_version():
-            _first_run()  # an agent's check at the start of a session: a use
+            # An agent's check at the start of a session: a use.
+            _first_run(default_channel=pin is None or pin.channel is None)
         if pin is None or pin.channel is None:
             _notice(daily=False)
         return 0
@@ -286,7 +287,7 @@ def _main(argv: list[str]) -> int:
 
     helping = _asks_help(command, rest) or (command in _REGISTERS and "--check" in options(rest))
     if not helping and command not in _UNUSED and _maybe_a_version():
-        _first_run()
+        _first_run(default_channel=pin is None or pin.channel is None)
     # `doctor` registers this installation, as `setup` does: on a device an earlier release set up, what
     # this release keeps of its state folder moves into its own first, before the notice below writes there.
     if command in _REGISTERS and not helping:
@@ -363,8 +364,9 @@ def _maybe_a_version() -> bool:
     return len(parts) >= 4 and parts[-1] == "server" and parts[-2] == "code" and parts[-4] == "versions"
 
 
-def _first_run() -> None:
-    """A command run by an installed version: its use recorded (``versions.used``), and, where its settings and
+def _first_run(*, default_channel: bool) -> None:
+    """A command run by an installed version: its use recorded (``versions.used``; ``default_channel``, a command
+    whose pin names no store, marks the version used on the default channel), and, where its settings and
     store are not there yet (a development version, which no ``cad setup`` makes, or a setup cut short), copied in
     first (``imports.ensure``), so nothing is written before them. Never a reason a command fails: a folder it cannot
     write (an agent's sandbox) leaves both to the version's server."""
@@ -378,7 +380,7 @@ def _first_run() -> None:
 
         if not imports.imported(name):
             imports.ensure(name)
-        versions.used(name)
+        versions.used(name, default_channel=default_channel)
     except Exception:  # noqa: BLE001 - a record, never a failure
         return
 

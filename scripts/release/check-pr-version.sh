@@ -64,12 +64,10 @@ if [ -n "$latest_tag" ] && ! version_greater "$version" "$(version_from_release_
   exit 1
 fi
 
-# A release that breaks nothing installs itself on every device with automatic updates on, under agent
-# threads that are running, with no click: as Semantic Versioning numbers releases, one that keeps the
-# breaking part -- a patch below 1.0, a patch or minor from 1.0 (version_installs_itself, the server's
-# auto_updates.takes). So it may not add a migration guide: a new guide is a new migration, a change a
-# person or an agent must make, and belongs to a release that bumps the breaking part -- the minor
-# below 1.0, the major from 1.0 -- and waits for the person's click. An existing guide may be corrected
+# A release that breaks nothing, as Semantic Versioning numbers releases, keeps the breaking part -- a patch
+# below 1.0, a patch or minor from 1.0 (version_installs_itself). So it may not add a migration guide: a new
+# guide is a new migration, a change a person or an agent must make, and belongs to a release that bumps the
+# breaking part -- the minor below 1.0, the major from 1.0. An existing guide may be corrected
 # or extended in any release (modified or renamed), so only a file added or copied under docs/migrations
 # is refused. --find-renames holds whatever git's own diff.renames says, so a renamed guide is a rename.
 if version_installs_itself "$base_version" "$version"; then
