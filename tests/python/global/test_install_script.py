@@ -116,12 +116,6 @@ class InstallScriptTests(unittest.TestCase):
         """Claude Desktop's config, where install.py looks for it on this platform, relative to the home."""
         return str(install.desktop_config(install.Here(self.environ())).relative_to(self.home))
 
-    def backups(self) -> list:
-        """Every file in the backup folders, relative to its run's folder."""
-        base = self.home / install.BACKUP
-        return sorted(str(path.relative_to(run)) for run in (base.iterdir() if base.is_dir() else ())
-                      for path in run.rglob("*") if path.is_file())
-
     def claude_records(self, plugins: dict, catalogs: dict) -> None:
         self.write(".claude/plugins/installed_plugins.json",
                    {"version": 2, "plugins": {key: [{"scope": "user"}] for key in plugins}})
@@ -145,9 +139,8 @@ class InstallScriptTests(unittest.TestCase):
         # Cursor and Grok Build load Claude Code's plugin: none of their own.
         self.assertEqual(self.calls("grok"), [])
         self.assertFalse((self.home / ".cursor/plugins/local/text-to-cad").exists())
-        # An agent with no plugin command gets the skills in its own folder, from `latest`, marked as ours.
+        # An agent with no plugin command gets the skills in its own folder, from `latest`.
         self.assertIn("new", (self.home / ".cline/skills/cad/SKILL.md").read_text(encoding="utf-8"))
-        self.assertTrue((self.home / ".cline/skills/cad" / install.SKILL_MARK).is_file())
         self.assertEqual(self.calls("git")[0][:6], ["clone", "--quiet", "--depth", "1", "--branch", "latest"])
         self.assertEqual(len(self.calls("git")), 1)
         fetched = self.calls("git")[0][-1]
@@ -197,10 +190,9 @@ class InstallScriptTests(unittest.TestCase):
         self.assertEqual(0, second.returncode, second.stderr)
         self.assertIn("Cline: updated: 2 skills in ~/.cline/skills\n", second.stdout)
         self.assertIn("Hermes Agent: updated: 2 skills in ~/.hermes/skills\n", second.stdout)
-        for word in ("removed", "moved", "backup"):
-            self.assertNotIn(word, second.stdout)
-        # What the first run wrote, exactly as it wrote it, was replaced, not kept: the backup holds only the loose copy.
-        self.assertEqual(self.backups(), [".agents/skills/fea/SKILL.md"])
+        self.assertNotIn("removed", second.stdout)
+        self.assertFalse((self.home / ".agents/skills/fea").exists())
+        self.assertEqual(sorted(path.name for path in (self.home / ".cline/skills").iterdir()), ["cad", "pcb"])
 
     def test_a_person_s_own_skill_of_our_name_that_mentions_the_repository_stays(self) -> None:
         mine = ("---\nname: gcode\ndescription: My own G-code notes\n---\n"
@@ -215,25 +207,25 @@ class InstallScriptTests(unittest.TestCase):
         self.assertTrue((self.home / ".claude/skills/gcode/notes.md").is_file())
         self.assertIn("left cad: someone else's skill of that name", done.stdout)
         self.assertNotIn("new", (self.home / ".cline/skills/cad/SKILL.md").read_text(encoding="utf-8"))
-        self.assertEqual(self.backups(), [])
 
-    def test_an_edited_or_unmarked_copy_of_ours_is_moved_to_the_backup_not_deleted(self) -> None:
+    def test_an_edited_copy_of_ours_is_deleted_and_replaced(self) -> None:
         (self.home / ".cline").mkdir()
         self.run_install()
-        # The person edits the copy the first run made; a 0.8 loose copy (its provenance line) sits in a retired name.
+        # The person edits the copy the first run made (its provenance kept) and adds a file; a 0.8 copy (its
+        # provenance line) sits in a retired name.
         edited = self.home / ".cline/skills/cad/SKILL.md"
         edited.write_text(edited.read_text(encoding="utf-8") + "my own change\n", encoding="utf-8")
+        self.write(".cline/skills/cad/extra.md", "added by hand\n")
         self.write(".cline/skills/dxf/SKILL.md", OURS_OLD.format(name="dxf"))
         done = self.run_install()
         self.assertEqual(0, done.returncode, done.stderr)
-        self.assertIn("1 earlier copies moved to the backup", done.stdout)
-        self.assertIn(f"moved, not deleted, to ~/{install.BACKUP}/", done.stdout)
-        self.assertEqual(self.backups(), [".cline/skills/cad/.text-to-cad.json", ".cline/skills/cad/SKILL.md",
-                                          ".cline/skills/dxf/SKILL.md"])
-        kept = next((self.home / install.BACKUP).iterdir()) / ".cline/skills/cad/SKILL.md"
-        self.assertIn("my own change", kept.read_text(encoding="utf-8"))
+        self.assertIn("Cline: updated: 2 skills in ~/.cline/skills\n", done.stdout)
         self.assertNotIn("my own change", edited.read_text(encoding="utf-8"))
+        self.assertFalse((self.home / ".cline/skills/cad/extra.md").exists())
         self.assertFalse((self.home / ".cline/skills/dxf").exists())
+        # Nothing of the old copies is kept anywhere: no folder beside the skills, nothing new in the home.
+        self.assertEqual(sorted(path.name for path in (self.home / ".cline/skills").iterdir()), ["cad", "pcb"])
+        self.assertEqual(sorted(path.name for path in self.home.iterdir() if path.name.startswith(".text-to-cad")), [])
 
     def test_github_failing_leaves_every_app_with_what_it_had(self) -> None:
         self.programs("claude", "codex", "gemini")
@@ -395,7 +387,7 @@ class InstallScriptTests(unittest.TestCase):
                                                 ["extensions", "install", install.URL, "--ref", "latest", "--consent"]])
         self.assertEqual(self.calls("grok"), [["plugin", "uninstall", "cad"]])
         self.assertFalse((self.home / ".cursor/plugins/local/text-to-cad").exists())
-        # Loose skills: ours out (moved to the backup), someone else's kept, the lock likewise; never through
+        # Loose skills: ours deleted (the link unlinked), someone else's kept, the lock likewise; never through
         # `npx skills remove`, which removes by name alone.
         self.assertEqual(self.calls("npx"), [])
         self.assertFalse((self.home / ".agents/skills/cad").exists())
@@ -404,12 +396,12 @@ class InstallScriptTests(unittest.TestCase):
         self.assertTrue((self.home / ".codex/skills/urdf/SKILL.md").is_file())
         self.assertEqual(list(json.loads((self.home / ".agents/.skill-lock.json").read_text(encoding="utf-8"))["skills"]),
                          ["urdf", "pcb"])
-        self.assertEqual(self.backups(), [".agents/skills/cad/SKILL.md", ".claude/skills/dxf/SKILL.md",
-                                          ".cursor/plugins/local/text-to-cad/.text-to-cad-copy"])
+        self.assertFalse(os.path.lexists(self.home / ".cursor/plugins/local/text-to-cad"))
+        self.assertEqual(sorted(path.name for path in self.home.iterdir() if path.name.startswith(".text-to-cad")), [])
         self.assertIn("Loose skills: removed: 3 old copies of our skills", done.stdout)
         self.assertIn("removed old copies: text-to-cad@text-to-cad, cad@earthtojake", done.stdout)
 
-    def test_claude_desktop_s_old_server_goes_through_a_link_and_no_backup_is_overwritten(self) -> None:
+    def test_claude_desktop_s_old_server_goes_through_a_link_and_no_earlier_copy_is_overwritten(self) -> None:
         self.programs("claude")
         dotfiles = self.root / "dotfiles" / "claude_desktop_config.json"
         dotfiles.parent.mkdir()
@@ -420,32 +412,37 @@ class InstallScriptTests(unittest.TestCase):
         config = self.home / self.desktop()
         config.parent.mkdir(parents=True)
         config.symlink_to(dotfiles)
-        earlier = self.write(self.desktop() + ".bak", "an earlier backup\n")
+        earlier = self.write(self.desktop() + ".bak", "an earlier copy\n")
         done = self.run_install()
         self.assertEqual(0, done.returncode, done.stderr)
         # Only our member gone, every other byte as it was, edited where the link points; the link stays a link.
         self.assertTrue(config.is_symlink())
         self.assertEqual(dotfiles.read_text(encoding="utf-8"),
                          '{\n    "mcpServers": {\n        "notes": {"command": "notes-server"}\n    },\n    "theme": "dark"\n}\n')
-        self.assertEqual(earlier.read_text(encoding="utf-8"), "an earlier backup\n")
+        self.assertEqual(earlier.read_text(encoding="utf-8"), "an earlier copy\n")
         kept = [path for path in dotfiles.parent.iterdir() if path.name.endswith(".bak")]
         self.assertEqual([path.read_text(encoding="utf-8") for path in kept], [before])
         self.assertIn(f"Claude Desktop: removed: the old cad server in its settings ({kept[0].name} keeps", done.stdout)
 
-    def test_claude_desktop_alone_installs_with_its_own_claude_code_or_says_what_to_do(self) -> None:
+    def test_claude_desktop_without_the_claude_command_says_what_to_do_and_runs_nothing(self) -> None:
         self.write(self.desktop(), "{}")
-        done = self.run_install()
-        self.assertIn("Claude Desktop: skipped: no Claude Code was found to install the plugin with: open the Code tab "
-                      "in Claude Desktop once", done.stdout)
+        # The Claude Code Claude Desktop keeps for its Code tab is that app's own: never run.
         build = (self.home / self.desktop()).parent / "claude-code" / "2.1.325" / "485fdac4332e"
         executable = build / ("claude.app/Contents/MacOS/claude" if sys.platform == "darwin" else "claude")
         executable.parent.mkdir(parents=True)
         executable.write_text(STAND_IN.format(python=sys.executable, latest=LATEST), encoding="utf-8")
         executable.chmod(0o755)
         done = self.run_install()
+        self.assertEqual(0, done.returncode, done.stderr)
+        self.assertEqual(self.calls("claude"), [])
+        self.assertIn("Claude Desktop: " + install.DESKTOP_NO_CLAUDE + "\n", done.stdout)
+        self.assertIn("claude plugin marketplace add earthtojake/text-to-cad#latest, then claude plugin install "
+                      "text-to-cad@earthtojake", done.stdout)
+        # With the command, Claude Code gets the plugin, and Claude Desktop needs no line.
+        self.programs("claude")
+        done = self.run_install()
         self.assertEqual(self.calls("claude"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"],
                                                 ["plugin", "install", "text-to-cad@earthtojake"]])
-        self.assertIn("Claude Code: installed: with the Claude Code Claude Desktop downloaded", done.stdout)
         self.assertNotIn("Claude Desktop:", done.stdout)
 
     def test_someone_else_s_server_and_folder_of_our_names_are_left(self) -> None:
@@ -501,7 +498,7 @@ class InstallScriptTests(unittest.TestCase):
         self.write(".codex/config.toml", 'plugins = "none"\nmarketplaces = 3\n')
         self.programs("codex")
         outcome = install.codex(install.APPS[2], install.Here(self.environ()),
-                                install.Context(install.Source(), install.Backup(install.Here(self.environ()))))
+                                install.Context(install.Source()))
         self.assertEqual(outcome.status, "installed")
 
     def test_it_takes_no_options_and_does_nothing_when_given_one(self) -> None:

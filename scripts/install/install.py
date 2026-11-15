@@ -22,12 +22,8 @@ It takes no options and does five things, in order:
 What it removes is only what is provably ours: our names AND a sign that it is ours (our catalog, a path in
 cad's state folder, a git origin naming our repository, a SKILL.md whose front matter or provenance line
 names our repository: ``our_skill``). A store's copy (claude.ai's directory, Codex's directory) and every
-plugin or skill of someone else's are never touched. Of what is ours, a copy that is exactly what we wrote
-(``SKILL_MARK``'s digest, a git clone with no change of its own) is deleted; anything else of ours, a copy an
-earlier release or the Skills CLI wrote, or one the person edited, is MOVED into one backup folder per run,
-``~/.text-to-cad-backup/<date-time>/`` (the path below the home kept), never deleted; the run prints where.
-The backup is in the home, outside every app's folders, so no agent loads a copy from it, and outside cad's
-state folder, which ``cad uninstall`` removes whole.
+plugin or skill of someone else's are never touched. What is provably ours is deleted (a link to it unlinked,
+never followed); a git clone of ours only where it has no change of its own.
 
 ``APPS`` is the one table of apps: a row says how the app is found, how ours is installed and updated
 (from GitHub, and from a local folder for ``scripts/install/dev_install.py``), and how our old copies
@@ -44,7 +40,6 @@ Homebrew's or npm's folders or an app's bundle, where a test would find a real C
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -88,10 +83,6 @@ PROVENANCE_LINE = "Provenance: maintained in [earthtojake/text-to-cad](https://g
 # Marks earlier installers wrote: in Cursor's plain copy (0.10.0-0.11.10), in a development install's copy.
 COPY_MARK = ".text-to-cad-copy"
 DEV_MARK = ".text-to-cad-dev"
-# What this installer writes into each skill folder it copies: our repository and the digest of what it copied,
-# so a later run knows a copy is exactly what it wrote (deleted when replaced) or was changed (moved to the backup).
-SKILL_MARK = ".text-to-cad.json"
-BACKUP = ".text-to-cad-backup"
 UVX_ARGS = ("--no-config", "--managed-python", "--python", "3.14")
 # `cad setup`'s exit status for "this version cannot be installed from this shell" (an agent's sandbox).
 SETUP_SANDBOXED = 3
@@ -316,90 +307,10 @@ def discard(path: Path) -> None:
         pass
 
 
-class Backup:
-    """The one folder a run moves our earlier copies into, ``~/.text-to-cad-backup/<date-time>``, made on first use;
-    each copy kept at its path below the home (a path outside the home under ``outside-home``)."""
-
-    def __init__(self, here: Here) -> None:
-        self.here = here
-        self.folder: Optional[Path] = None
-        self.kept: List[Path] = []
-
-    def keep(self, path: Path, place: Optional[Path] = None) -> Path:
-        """``path`` moved into the backup, at ``place``'s path below the home (``place``: where it was, for a copy
-        already moved out of its place)."""
-        path = Path(path)
-        place = Path(place) if place is not None else path
-        if self.folder is None:
-            stamp = time.strftime("%Y-%m-%d-%H%M%S")
-            base = self.here.home / BACKUP
-            folder, number = base / stamp, 1
-            while folder.exists():
-                number += 1
-                folder = base / f"{stamp}-{number}"
-            folder.mkdir(parents=True)
-            self.folder = folder
-        try:
-            relative = place.relative_to(self.here.home)
-        except ValueError:
-            relative = Path("outside-home", *[part.strip("/\\:") or "root" for part in place.parts])
-        target = self.folder / relative
-        while target.exists() or target.is_symlink():  # the same place twice in one run
-            target = target.with_name(target.name + "-again")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(path), str(target))
-        self.kept.append(place)
-        return target
-
-
-def digest(folder: Path) -> str:
-    """The digest of a folder's files as ``copy_tree`` copies them (their paths and bytes; caches, ``.git`` and our
-    own mark left out)."""
-    folder = Path(folder)
-    total = hashlib.sha256()
-    for root, folders, files in os.walk(folder):
-        folders[:] = sorted(name for name in folders if name not in ("__pycache__", ".git"))
-        for name in sorted(files):
-            if name in (SKILL_MARK, COPY_MARK, DEV_MARK, ".DS_Store") or name.endswith(".pyc"):
-                continue
-            path = Path(root) / name
-            total.update(path.relative_to(folder).as_posix().encode("utf-8") + b"\0")
-            try:
-                total.update(os.readlink(path).encode("utf-8") if path.is_symlink() else path.read_bytes())
-            except OSError:
-                total.update(b"\1unreadable")
-            total.update(b"\0")
-    return total.hexdigest()
-
-
-def unchanged(path: Path, source: Optional[Path] = None) -> bool:
-    """Whether a folder of ours is exactly what we wrote: its mark's digest is its own, or it is the very copy
-    ``source`` would make. Only then may it be deleted rather than moved to the backup."""
-    mark = read_json(Path(path) / SKILL_MARK)
-    found = digest(path)
-    return ((isinstance(mark, dict) and mark.get("repository") == REPOSITORY and mark.get("digest") == found)
-            or (source is not None and digest(source) == found))
-
-
-def retire(path: Path, backup: Backup, source: Optional[Path] = None) -> str:
-    """One old copy of ours out of its place: a link unlinked, a copy exactly as we wrote it deleted, anything else
-    moved to the backup. What happened: ``unlinked``, ``deleted`` or ``moved``."""
-    path = Path(path)
-    if path.is_symlink():
-        path.unlink()
-        return "unlinked"
-    if path.is_dir() and unchanged(path, source):
-        discard(path)
-        return "deleted"
-    backup.keep(path)
-    return "moved"
-
-
-def copy_tree(source: Path, target: Path, backup: Backup, mark: bool = False) -> Optional[str]:
-    """``source`` copied to ``target``: real files, links followed, caches left out, our mark written in where
-    ``mark``. Staged in a hidden folder beside the target, then swapped in: the old one (``retire``: deleted where
-    it is exactly ours, else moved to the backup) goes only once the new one is whole, and comes back if the swap
-    fails. What happened to the old one, or None where there was none."""
+def copy_tree(source: Path, target: Path) -> bool:
+    """``source`` copied to ``target``: real files, links followed, caches left out. Staged in a hidden folder
+    beside the target, then swapped in (``swap``): the old one, which the caller has found to be ours, goes only
+    once the new one is whole, and comes back if the swap fails. Whether there was an old one."""
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".text-to-cad-new-", dir=str(target.parent)))
@@ -407,23 +318,18 @@ def copy_tree(source: Path, target: Path, backup: Backup, mark: bool = False) ->
         staged = staging / target.name
         shutil.copytree(str(source), str(staged), symlinks=False,
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store", ".git"))
-        if mark:
-            (staged / SKILL_MARK).write_text(json.dumps({"repository": REPOSITORY, "digest": digest(staged)}) + "\n",
-                                             encoding="utf-8")
-        return swap(staged, target, backup, source)
+        return swap(staged, target)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
 
 
-def swap(staged: Path, target: Path, backup: Backup, source: Optional[Path] = None) -> Optional[str]:
+def swap(staged: Path, target: Path) -> bool:
     """``staged`` put in ``target``'s place in two renames on one disk: the old ``target`` moved out (into a hidden
-    folder beside it), the new one in, the old one put back where that fails. Then the old one is retired: a link
-    unlinked, a copy exactly as we wrote it deleted, anything else moved to the backup. What happened to the old one
-    (``unlinked``, ``deleted``, ``moved``), or None where there was none."""
+    folder beside it), the new one in, the old one put back where that fails. Then the old one, which the caller has
+    found to be ours, is deleted (a link unlinked, never followed). Whether there was an old one."""
     if not (target.exists() or target.is_symlink()):
         os.replace(str(staged), str(target))
-        return None
-    old = "unlinked" if target.is_symlink() else "deleted" if unchanged(target, source) else "moved"
+        return False
     held = Path(tempfile.mkdtemp(prefix=".text-to-cad-old-", dir=str(target.parent)))
     try:
         os.replace(str(target), str(held / target.name))
@@ -432,16 +338,13 @@ def swap(staged: Path, target: Path, backup: Backup, source: Optional[Path] = No
         except OSError:
             os.replace(str(held / target.name), str(target))
             raise
-        if old == "moved":
-            backup.keep(held / target.name, place=target)
-        else:
-            discard(held / target.name)
+        discard(held / target.name)
     finally:
         try:
             held.rmdir()  # only where it is empty: never the old copy, should it still be there
         except OSError:
             pass
-    return old
+    return True
 
 
 def same_path(one: Any, other: Any) -> bool:
@@ -534,13 +437,6 @@ def our_skill(folder: Path) -> Optional[bool]:
         return False
     return (_metadata_repository(header) == REPOSITORY
             or any(line.strip() == PROVENANCE_LINE for line in text.splitlines()))
-
-
-def ours_to_replace(folder: Path) -> bool:
-    """A skill folder of one of our names that we may replace: ours by its SKILL.md, or carrying the mark this
-    installer writes."""
-    mark = read_json(Path(folder) / SKILL_MARK)
-    return bool(our_skill(folder)) or (isinstance(mark, dict) and mark.get("repository") == REPOSITORY)
 
 
 # --- where the plugin comes from ---------------------------------------------------------------------
@@ -640,18 +536,17 @@ class Source:
 
 @dataclass
 class Context:
-    """What one run knows as it goes: the source, the backup, and whether Claude Code now has our plugin (Cursor and
-    Grok Build load Claude Code's plugins, so they then need none of their own)."""
+    """What one run knows as it goes: the source, and whether Claude Code now has our plugin (Cursor and Grok Build
+    load Claude Code's plugins, so they then need none of their own)."""
 
     source: Source
-    backup: Backup
     claude_has_ours: bool = False
     claude_found: bool = False
 
 
 @dataclass
 class Outcome:
-    status: str  # installed, updated, removed, skipped, failed
+    status: str  # installed, updated, removed, skipped, failed; or note: the words alone, nothing done
     words: str = ""
     removed: List[str] = field(default_factory=list)
     has_ours: Optional[bool] = None  # whether the app now has our plugin; by default, installed or updated
@@ -661,6 +556,8 @@ class Outcome:
         return self.has_ours if self.has_ours is not None else self.status in ("installed", "updated")
 
     def line(self, name: str) -> str:
+        if self.status == "note":
+            return f"{name}: {self.words}"
         text = f"{name}: {self.status}" + (f": {self.words}" if self.words else "")
         if self.removed:
             text += f" (removed old copies: {', '.join(self.removed)})"
@@ -863,48 +760,16 @@ def claude_dir(here: Here) -> Path:
     return Path(here.environ.get("CLAUDE_CONFIG_DIR") or here.home / ".claude")
 
 
-def desktop_claude_code(here: Here) -> Optional[str]:
-    """The Claude Code that Claude Desktop downloads for its Code tab, the newest: on macOS
-    ``~/Library/Application Support/Claude/claude-code/<version>/<build>/claude.app/Contents/MacOS/claude`` (seen on
-    a Mac with Claude Desktop, 2.1.321 and 2.1.325). On Windows and Linux the same folder under Claude Desktop's own
-    (``%APPDATA%\\Claude``, the MSIX package's copy of it, ``~/.config/Claude``), with ``claude.exe`` or ``claude``:
-    not seen, so looked for in the same shapes."""
-    roots = []
-    if here.platform == "darwin":
-        roots.append(here.home / "Library" / "Application Support" / "Claude" / "claude-code")
-    elif here.windows:
-        appdata = Path(here.environ.get("APPDATA") or here.home / "AppData" / "Roaming")
-        local = Path(here.environ.get("LOCALAPPDATA") or here.home / "AppData" / "Local")
-        roots.append(appdata / "Claude" / "claude-code")
-        roots += sorted((local / "Packages").glob("Claude_*/LocalCache/Roaming/Claude/claude-code"))
-    else:
-        roots.append(here.config_home() / "Claude" / "claude-code")
-    names = ("claude.exe",) if here.windows else ("claude.app/Contents/MacOS/claude", "claude")
-    for root in roots:
-        try:
-            versions = sorted((path for path in root.iterdir() if path.is_dir()),
-                              key=lambda path: version_key(path.name), reverse=True)
-        except OSError:
-            continue
-        for folder in versions:
-            for name in names:
-                for found in [folder / name, *sorted(folder.glob(f"*/{name}"))]:
-                    if found.is_file() and os.access(found, os.X_OK):
-                        return str(found)
-    return None
-
-
 def claude_code(app: App, here: Here, context: Context) -> Outcome:
     """Claude Code, from its records (``plugins/installed_plugins.json``, ``plugins/known_marketplaces.json``):
     only the user scope's plugins are ours to change; a project's, an administrator's, and claude.ai's synced
-    copies are left. Its command is ``claude``, else the Claude Code Claude Desktop downloaded for its Code tab
-    (``desktop_claude_code``), which reads the same records. Verified: `claude plugin --help` and its subcommands
+    copies are left. Its command is ``claude``, and only that: never the private copy another app (Claude Desktop)
+    keeps for itself. Verified: `claude plugin --help` and its subcommands
     (2.1.316, 2.1.325: `marketplace remove --scope user`); docs https://code.claude.com/docs/en/discover-plugins
     (`owner/repo#ref` pins a branch; `marketplace remove` uninstalls its plugins; `plugin update
     <plugin>@<marketplace>`)."""
     cli = here.which("claude")
-    bundled = None if cli else desktop_claude_code(here)
-    context.claude_found = bool(cli or bundled)
+    context.claude_found = bool(cli)
     folder = claude_dir(here) / "plugins"
     recorded = table(read_json(folder / "installed_plugins.json"))
     plugins = [name for name, entries in table(recorded.get("plugins")).items()
@@ -934,9 +799,7 @@ def claude_code(app: App, here: Here, context: Context) -> Outcome:
         "update": [["plugin", "update", "{plugin}@{catalog}"]],
         "readd": readd,
     }
-    outcome = marketplace_app(app, here, context, cli or bundled, catalogs, plugins, verbs)
-    if bundled and outcome is not NOT_FOUND:
-        outcome.words = "; ".join(filter(None, ["with the Claude Code Claude Desktop downloaded", outcome.words]))
+    outcome = marketplace_app(app, here, context, cli, catalogs, plugins, verbs)
     context.claude_has_ours = outcome.ours
     return outcome
 
@@ -1048,7 +911,7 @@ def cursor(app: App, here: Here, context: Context) -> Outcome:
     """Cursor: a clone of the ``latest`` branch in its local plugins folder (``~/.cursor/plugins/local``). Where
     Claude Code has our plugin, Cursor loads that one (as earlier releases measured), so its own copy of ours goes.
     Earlier copies: 0.10.0-0.11.10's plain copy (marked ``.text-to-cad-copy``), a development copy
-    (``.text-to-cad-dev``), both moved to the backup once ours is in. A clone is updated or removed only when it has
+    (``.text-to-cad-dev``), both deleted once ours is in. A clone is updated or removed only when it has
     nothing of its own (``clone_problem``); a link there is never followed or changed. Verified: docs
     https://cursor.com/docs/plugins (a plugin is a folder in ~/.cursor/plugins/local; a symlink there is skipped).
     That Cursor loads Claude Code's plugins is not in its docs: earlier releases' observation."""
@@ -1081,15 +944,20 @@ def cursor(app: App, here: Here, context: Context) -> Outcome:
             discard(path)
             removed.append(here.shown(path))
         elif what == "copy":
-            context.backup.keep(path)
-            removed.append(f"{here.shown(path)}, moved to the backup")
+            discard(path)
+            removed.append(here.shown(path))
 
     if context.claude_has_ours and not source.local:
         for path in (local / PLUGIN, local / f"{PLUGIN}-dev"):
             clear(path)
         return Outcome("skipped", "; ".join(["it loads Claude Code's plugin", *notes]), removed, has_ours=True)
     if source.local:
-        copy_tree(source.folder, target, context.backup, mark=True)
+        what, why = kind(target)
+        if what in ("link", "kept"):
+            return Outcome("skipped", why)
+        if what == "other":
+            raise Failed(f"{here.shown(target)} holds something else: left alone (move it away, then run this again)")
+        copy_tree(source.folder, target)
         (target / DEV_MARK).write_text(f"{source.folder}\n", encoding="utf-8")
         clear(local / PLUGIN)
         return Outcome("installed", "; ".join([f"a copy of {source.folder}", *notes]), removed)
@@ -1112,8 +980,8 @@ def cursor(app: App, here: Here, context: Context) -> Outcome:
         staging = Path(tempfile.mkdtemp(prefix=".text-to-cad-new-", dir=str(local)))
         try:
             here.must([git, "clone", "--quiet", "--depth", "1", "--branch", BRANCH, URL, staging / PLUGIN])
-            if swap(staging / PLUGIN, target, context.backup) is not None:
-                removed.append(f"{here.shown(target)}, the earlier plain copy, moved to the backup")
+            if swap(staging / PLUGIN, target):
+                removed.append(f"{here.shown(target)}, the earlier plain copy")
         finally:
             shutil.rmtree(staging, ignore_errors=True)
         status = "updated" if what == "copy" else "installed"
@@ -1395,7 +1263,7 @@ def without_member(text: str, path: Sequence[str]) -> str:
     return text
 
 
-def unused_backup_name(path: Path) -> Path:
+def unused_kept_name(path: Path) -> Path:
     """A name beside ``path`` no file has: ``<name>.<date-time>.bak``, numbered where that is taken."""
     stamp = time.strftime("%Y%m%d-%H%M%S")
     candidate, number = path.with_name(f"{path.name}.{stamp}.bak"), 1
@@ -1405,21 +1273,26 @@ def unused_backup_name(path: Path) -> Path:
     return candidate
 
 
+# What the run says for Claude Desktop where no `claude` command is here: its Code tab runs Claude Code, whose plugin
+# manager takes the plugin.
+DESKTOP_NO_CLAUDE = ("install the `claude` command to have the install command add text-to-cad, or add it in Claude "
+                     "Code's plugin manager: claude plugin marketplace add earthtojake/text-to-cad#latest, then claude "
+                     "plugin install text-to-cad@earthtojake")
+
+
 def claude_desktop(app: App, here: Here, context: Context) -> Outcome:
     """Claude Desktop: nothing is installed in it (its Code tab runs Claude Code, which gets the plugin above).
     Releases 0.7.6-0.11.10 wrote our server into its config as ``mcpServers.cad``: that one member is taken out where
     it runs text-to-cad, every other byte of the file kept, the file as it was kept beside it under a name no file
-    has (``unused_backup_name``); a config that is a link is edited where it points. A ``cad`` that is another
-    server's, or a file that is not plain JSON, is left. Where no Claude Code was found to install the plugin with,
-    it says what to do. Verified: docs https://modelcontextprotocol.io/quickstart/user (servers are keys of
+    has (``unused_kept_name``); a config that is a link is edited where it points. A ``cad`` that is another
+    server's, or a file that is not plain JSON, is left. Where no ``claude`` command was found to install the plugin
+    with, it says what to do (``DESKTOP_NO_CLAUDE``); it runs nothing of Claude Desktop's own. Verified: docs https://modelcontextprotocol.io/quickstart/user (servers are keys of
     ``mcpServers`` in claude_desktop_config.json)."""
     path = desktop_config(here)
     if not path.parent.is_dir():
         return QUIET
     ours = context.claude_has_ours  # its Code tab has the plugin where Claude Code does
-    hint = ("" if context.claude_found else
-            "no Claude Code was found to install the plugin with: open the Code tab in Claude Desktop once (it "
-            "downloads Claude Code), then run this again")
+    hint = "" if context.claude_found else DESKTOP_NO_CLAUDE
     try:
         text = path.read_text(encoding="utf-8") if path.exists() else ""
         data = json.loads(text) if text.strip() else {}
@@ -1428,14 +1301,14 @@ def claude_desktop(app: App, here: Here, context: Context) -> Outcome:
                        has_ours=ours)
     servers = data.get("mcpServers") if isinstance(data, dict) else None
     if not isinstance(servers, dict) or not runs_text_to_cad(servers.get("cad")):
-        return Outcome("skipped", hint, has_ours=ours) if hint else QUIET
+        return Outcome("note", hint, has_ours=ours) if hint else QUIET
     edited = without_member(text, ["mcpServers", "cad"])
     expected = dict(data)
     expected["mcpServers"] = {key: value for key, value in servers.items() if key != "cad"}
     if json.loads(edited) != expected:
         raise Failed(f"{path.name} could not be edited safely: remove mcpServers.cad by hand")
     real = Path(os.path.realpath(path))
-    kept = unused_backup_name(real)
+    kept = unused_kept_name(real)
     shutil.copy2(real, kept)
     handle, temporary = tempfile.mkstemp(dir=str(real.parent), prefix=f".{real.name}.")
     with os.fdopen(handle, "w", encoding="utf-8", newline="") as out:
@@ -1456,23 +1329,18 @@ def copy_skills(app: App, here: Here, context: Context) -> Outcome:
 
 def put_skills(target: Path, here: Here, context: Context) -> Outcome:
     """Our skills copied into ``target``, a skills folder, each in place of ours there (``copy_tree``: staged, then
-    swapped in; the old one deleted where it is exactly what we wrote, else moved to the backup); a folder of that
-    name that is someone else's is kept. The skills are fetched before anything is touched."""
+    swapped in, the old one deleted); a folder of that name that is not provably ours (``our_skill``) is kept. The skills are fetched before anything is touched."""
     source = context.source.skills(here)
     target.mkdir(parents=True, exist_ok=True)
-    copied, kept, moved, existed = [], [], 0, False
+    copied, kept, existed = [], [], False
     for skill in sorted(path for path in source.iterdir() if (path / "SKILL.md").is_file()):
         there = target / skill.name
-        if (there.exists() or there.is_symlink()) and not ours_to_replace(there):
+        if (there.exists() or there.is_symlink()) and not our_skill(there):
             kept.append(skill.name)
             continue
-        old = copy_tree(skill, there, context.backup, mark=True)
-        existed = existed or old is not None
-        moved += old == "moved"
+        existed = copy_tree(skill, there) or existed
         copied.append(skill.name)
     words = f"{len(copied)} skills in {here.shown(target)}"
-    if moved:
-        words += f"; {moved} earlier copies moved to the backup"
     if kept:
         words += f"; left {', '.join(kept)}: someone else's skill of that name"
     return Outcome("updated" if existed else "installed", words)
@@ -1533,7 +1401,7 @@ def remove_loose_skills(here: Here, context: Context, outcomes: Dict[str, Outcom
     it), after the apps, so an app loses its loose copies only once it has ours: a folder one app reads only where
     that app now has our plugin; a folder several apps read only where every app found has it; a folder the table
     copies into only its retired names (its current ones were replaced in place). A link to ours is unlinked, never
-    followed; a copy exactly as we wrote it deleted; any other moved to the backup. The Skills CLI's record of a
+    followed; a copy deleted. The Skills CLI's record of a
     skill (``skills_locks``) goes once no copy is left in ``~/.agents/skills``, only an entry whose source is our
     repository or the plugin folder 0.10.0-0.11.10 wrote in cad's state folder. No ``npx skills remove``: it removes
     by name alone, from folders this does not read, and our names are common words."""
@@ -1562,10 +1430,8 @@ def remove_loose_skills(here: Here, context: Context, outcomes: Dict[str, Outcom
                 chosen.append(path)
             else:
                 waiting.append((folder, owner))
-    done = {"unlinked": 0, "deleted": 0, "moved": 0}
-    # Links first: a link to a copy moved just before it would read as nothing.
-    for path in sorted(chosen, key=lambda path: not path.is_symlink()):
-        done[retire(path, context.backup)] += 1
+    for path in chosen:
+        discard(path)  # a link unlinked, never followed
     for lock in skills_locks(here):
         record = read_json(lock)
         entries = record.get("skills") if isinstance(record, dict) else None
@@ -1589,8 +1455,6 @@ def remove_loose_skills(here: Here, context: Context, outcomes: Dict[str, Outcom
         return Outcome("skipped", "; ".join(notes)) if notes else QUIET
     places = sorted({here.shown(path.parent) for path in chosen})
     words = f"{len(chosen)} old copies of our skills, in {', '.join(places)}"
-    if done["moved"]:
-        words += f" ({done['moved']} moved to the backup, not deleted)"
     return Outcome("removed", "; ".join([words, *notes]))
 
 
@@ -1645,7 +1509,7 @@ def _folder_agent(key: str, name: str, folder: Callable[[Here], Path], *marks: C
 
 
 # THE TABLE. Order matters only where it says: Claude Code first (Cursor and Grok Build load its plugin; Claude
-# Desktop says what to do where no Claude Code was found).
+# Desktop says what to do where no `claude` command was found).
 APPS: Tuple[App, ...] = (
     App("claude", "Claude Code", command="claude", handler=claude_code),
     App("claude-desktop", "Claude Desktop", handler=claude_desktop),
@@ -1775,8 +1639,8 @@ class Report:
 def install_apps(here: Here, source: Source, apps: Sequence[App] = APPS,
                  say: Callable[[str], None] = lambda line: print(line, flush=True)) -> Report:
     """Steps 3 and 4 for ``apps``: ours in, then old copies out, each app's line said as it finishes; one line for
-    the loose skills, one for the backup where anything went there, one counting the apps not found."""
-    context = Context(source, Backup(here))
+    the loose skills, one counting the apps not found."""
+    context = Context(source)
     lines: List[str] = []
     outcomes: Dict[str, Outcome] = {}
     missing = []
@@ -1803,8 +1667,6 @@ def install_apps(here: Here, source: Source, apps: Sequence[App] = APPS,
         loose = Outcome("failed", f"{type(error).__name__}: {error}")
     if loose is not QUIET:
         tell(loose.line("Loose skills"))
-    if context.backup.folder is not None:
-        tell(f"Earlier copies of ours were moved, not deleted, to {here.shown(context.backup.folder)}")
     if missing:
         tell(f"{len(missing)} other supported apps were not found here.")
     return Report(lines, outcomes)
