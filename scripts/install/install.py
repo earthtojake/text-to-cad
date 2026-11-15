@@ -58,7 +58,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 # The release this file was published with (stamped by scripts/release/sync-version.mjs): installed when the
 # version feed cannot be read, and never anything older.
-FALLBACK = "0.11.11"
+FALLBACK = "0.11.10"
 FEED = "https://api.texttocad.dev/v1/versions"
 REPOSITORY = "earthtojake/text-to-cad"
 URL = f"https://github.com/{REPOSITORY}"

@@ -22,8 +22,8 @@ drop or a braking load can be estimated as a steady g-load
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| **Check a part under a load** | `cad +0.11.11 step solve part.step` lists its faces; write the study; solve into a folder. | [Workflow](#workflow), [Linear static](references/linear-static.md) |
-| **Check an assembly** | `cad +0.11.11 step solve assembly.step` lists the parts and the pairs that touch. | [Assemblies](#assemblies) |
+| **Check a part under a load** | `cad +0.11.10 step solve part.step` lists its faces; write the study; solve into a folder. | [Workflow](#workflow), [Linear static](references/linear-static.md) |
+| **Check an assembly** | `cad +0.11.10 step solve assembly.step` lists the parts and the pairs that touch. | [Assemblies](#assemblies) |
 | **Write or edit a study** | One JSON object: fixtures and loads, then material, mesh, margin and checks; parts and connections for an assembly. | [Study file](references/study-file.md) |
 | **Choose a material** | The model's own (solve the model or its `.xbf`), or the E, ν and yield the user gives. | [Materials](references/materials.md) |
 | **Judge the answer** | `result.json` and its findings, against a hand estimate. | [Findings](#findings), [Judging the answer](references/linear-static.md#judging-the-answer) |
@@ -31,29 +31,29 @@ drop or a braking load can be estimated as a steady g-load
 | **Compare variants of a design** | The same study on each, faces mapped, mesh size held. | [Compare variants](#compare-variants) |
 
 This skill studies a part; it does not model one. It reads a saved `.step` or `.xbf`, or a model the
-engine holds by its document id (`cad +0.11.11 model solve <id>`), and solves the whole document: to study one
+engine holds by its document id (`cad +0.11.10 model solve <id>`), and solves the whole document: to study one
 part of an assembly alone, export it as a document of its own.
 
 ## Setup
 
-Every command in this skill starts `cad +0.11.11`: it runs cad 0.11.11, the version this skill was written for,
+Every command in this skill starts `cad +0.11.10`: it runs cad 0.11.10, the version this skill was written for,
 and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your PATH; `cad.exe`
 on Windows).
 
-If `cad` is missing, or says 0.11.11 is not installed, install it, outside the sandbox, then run the
+If `cad` is missing, or says 0.11.10 is not installed, install it, outside the sandbox, then run the
 command again:
 
 ```bash
-uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.11 cad setup
+uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.10 cad setup
 ```
 
-It installs cad 0.11.11 and the `cad` command and changes nothing else. If `uvx` is missing, install uv
+It installs cad 0.11.10 and the `cad` command and changes nothing else. If `uvx` is missing, install uv
 first.
 
 <!-- manual-copy-update: start -->
 Keep this install up to date: nothing updates it but you.
 
-1. At the start of a session, run `cad +0.11.11 --version`.
+1. At the start of a session, run `cad +0.11.10 --version`.
 2. If it, or any `cad` command later, says a new version of cad is available, install the new version of
    the plugin from https://github.com/earthtojake/text-to-cad.
 
@@ -64,10 +64,10 @@ this chat: its commands keep working.
 A project written for an earlier text-to-cad may need changes. The migration guides say what, one per
 version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
-The study is the `solve` operation of the document's type: `cad +0.11.11 step solve`, `cad +0.11.11 xbf solve`,
-`cad +0.11.11 model solve`. With no `--study` it lists the study's setup and writes nothing; with `--study`
+The study is the `solve` operation of the document's type: `cad +0.11.10 step solve`, `cad +0.11.10 xbf solve`,
+`cad +0.11.10 model solve`. With no `--study` it lists the study's setup and writes nothing; with `--study`
 and `--out DIR` it solves and writes its results into `DIR`. Its two tools are integrations the
-`cad` command installs the first time a study needs them, nothing for you to install; `cad +0.11.11 run`
+`cad` command installs the first time a study needs them, nothing for you to install; `cad +0.11.10 run`
 gives a script that calls `cad.step.solve` both, with the kernel that reads the part.
 
 - **netgen**, the mesher: the `netgen` integration (`cad[netgen]`, about 11 MB). netgen publishes
@@ -77,7 +77,7 @@ gives a script that calls `cad.step.solve` both, with the kernel that reads the 
   package, CalculiX 2.23 for each platform, about 13 MB). A person's own CalculiX is never run
   unless `CAD_CCX` names the file (2.20 or newer). It runs headless, on one thread, in a private
   folder, so the same study gives the same numbers every run, and every result names the version
-  that solved it. `cad +0.11.11 run ccx ARGS` runs that same `ccx` on a deck of your own.
+  that solved it. `cad +0.11.10 run ccx ARGS` runs that same `ccx` on a deck of your own.
 
 Units are fixed: mm, N, MPa (pressure, modulus and stress), t/mm³ for density (steel 7.85e-9) and
 g (9.81 m/s²) for gravity and acceleration. Restate every load in them before you write it down.
@@ -88,14 +88,14 @@ g (9.81 m/s²) for gravity and acceleration. Restate every load in them before y
    face the user picked there arrives as `/work/bracket.step#bracket/face 17` and needs no lookup.
 
    ```bash
-   cad +0.11.11 step solve part.step
+   cad +0.11.10 step solve part.step
    ```
 
    With no study this is the setup, and writes nothing: the parts, the pairs that touch, then each
    face of the part, one a line: ref, area, centre, surface type and a hint such as `plane, normal
    -Z, largest`. Match the user's words ("the mounting face") to a ref by the hint and the centre;
    a hole is a `cylinder`. A document of several parts lists no faces until one is named:
-   `cad +0.11.11 step solve assembly.step --occurrence post`. A face number is a position in the saved
+   `cad +0.11.10 step solve assembly.step --occurrence post`. A face number is a position in the saved
    document, so a part edited and written again is listed again before its study is re-run.
 
 2. **Write the study** ([study-file.md](references/study-file.md)):
@@ -118,7 +118,7 @@ g (9.81 m/s²) for gravity and acceleration. Restate every load in them before y
 3. **Solve into a folder.**
 
    ```bash
-   cad +0.11.11 step solve part.step --study study.json --out /tmp/bracket-load --json
+   cad +0.11.10 step solve part.step --study study.json --out /tmp/bracket-load --json
    ```
 
    `--out` is any folder, a temporary one included, made when missing; put it in the project when
@@ -129,9 +129,9 @@ g (9.81 m/s²) for gravity and acceleration. Restate every load in them before y
    | --- | --- |
    | `result.json` | the answer, what `--json` prints. Read this first. |
    | `stress.png`, `displacement.png` | the deformed part coloured by each field (blue low, red high), the deformation exaggerated by `deformation_scale`, with a colour bar giving the field, its units and its range. They show whether the load points the way you meant and which faces are held. Show the stress one to the user. |
-   | `result.glb` | the same coloured surface, for any glTF viewer or `cad +0.11.11 viewer` |
+   | `result.glb` | the same coloured surface, for any glTF viewer or `cad +0.11.10 viewer` |
    | `result.vtu` | the volume mesh with `displacement` (mm) and `von_mises` (MPa) at its corner nodes ([Your own questions](#your-own-questions)) |
-   | `ccx.inp` | with `--deck`: the input CalculiX solved (the finer solve's when there were two), for `cad +0.11.11 run ccx -i ccx` in that folder |
+   | `ccx.inp` | with `--deck`: the input CalculiX solved (the finer solve's when there were two), for `cad +0.11.10 run ccx -i ccx` in that folder |
 
    Where the engine cannot draw (Linux with no display) the pictures are left out and a
    `solver_note` says so; everything else is written.
@@ -191,7 +191,7 @@ conforming mesh, each keeps its own material, and each part's stress is judged a
 yield. Every part must reach a fixed part through bonded neighbours. The keys are in
 [study-file.md](references/study-file.md#assemblies).
 
-The setup (`cad +0.11.11 step solve assembly.step`) prints each part (ref, name, volume), then each pair:
+The setup (`cad +0.11.10 step solve assembly.step`) prints each part (ref, name, volume), then each pair:
 `bonded`, with its contact area and gap; `not connected` for a near miss (a gap up to 1 mm, beyond
 `contact_tolerance_mm`); `overlapping · N mm³` where the solids share volume, which is never
 bonded. An overlap no deeper than the tolerance is an interference (a press fit, or a modelling

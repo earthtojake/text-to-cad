@@ -23,24 +23,24 @@ toolpaths, not documents, and a different job.
 
 ## Setup
 
-Every command in this skill starts `cad +0.11.11`: it runs cad 0.11.11, the version this skill was written for,
+Every command in this skill starts `cad +0.11.10`: it runs cad 0.11.10, the version this skill was written for,
 and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your PATH; `cad.exe`
 on Windows).
 
-If `cad` is missing, or says 0.11.11 is not installed, install it, outside the sandbox, then run the
+If `cad` is missing, or says 0.11.10 is not installed, install it, outside the sandbox, then run the
 command again:
 
 ```bash
-uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.11 cad setup
+uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.10 cad setup
 ```
 
-It installs cad 0.11.11 and the `cad` command and changes nothing else. If `uvx` is missing, install uv
+It installs cad 0.11.10 and the `cad` command and changes nothing else. If `uvx` is missing, install uv
 first.
 
 <!-- manual-copy-update: start -->
 Keep this install up to date: nothing updates it but you.
 
-1. At the start of a session, run `cad +0.11.11 --version`.
+1. At the start of a session, run `cad +0.11.10 --version`.
 2. If it, or any `cad` command later, says a new version of cad is available, install the new version of
    the plugin from https://github.com/earthtojake/text-to-cad.
 
@@ -80,7 +80,7 @@ version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
    wider than the sheet's note column is refused, and `notes=` takes a LIST
    (`notes="BREAK EDGES"` is a sequence of eleven characters, so it is refused
    too).
-5. Run `cad +0.11.11 run <name>_drawing.py`. It prints the PDF it wrote, and **anything
+5. Run `cad +0.11.10 run <name>_drawing.py`. It prints the PDF it wrote, and **anything
    it noticed while drawing** — read those first:
    - *"measures blank paper"*: the dimension's model points do not land on the
      view's geometry. Almost always the part was built from a corner and the

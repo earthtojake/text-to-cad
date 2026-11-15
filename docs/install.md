@@ -39,7 +39,7 @@ The plugin's skills run text-to-cad through the `cad` command. The first time a 
 it is missing, the agent installs it with the line in the skill's setup, which needs uv:
 
 ```bash
-uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.11 cad setup
+uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.10 cad setup
 ```
 
 The runtime supports Python 3.13+; the commands use uv-managed Python 3.14.

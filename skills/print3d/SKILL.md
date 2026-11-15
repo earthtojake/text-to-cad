@@ -17,30 +17,30 @@ never starts a print.
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| **Slice it to G-code** | `cad +0.11.11 orcaslicer presets machine --match "<printer>"` | [Slice with OrcaSlicer](#slice-with-orcaslicer) |
+| **Slice it to G-code** | `cad +0.11.10 orcaslicer presets machine --match "<printer>"` | [Slice with OrcaSlicer](#slice-with-orcaslicer) |
 | **Print on a Bambu Lab printer** | The sliced `.gcode.3mf` | [Print on a Bambu Lab printer](#print-on-a-bambu-lab-printer) |
 | **Will this print?** | The cad skill's printing check ($cad) | Its manufacturing references |
 
 ## Setup
 
-Every command in this skill starts `cad +0.11.11`: it runs cad 0.11.11, the version this skill was written for,
+Every command in this skill starts `cad +0.11.10`: it runs cad 0.11.10, the version this skill was written for,
 and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your PATH; `cad.exe`
 on Windows).
 
-If `cad` is missing, or says 0.11.11 is not installed, install it, outside the sandbox, then run the
+If `cad` is missing, or says 0.11.10 is not installed, install it, outside the sandbox, then run the
 command again:
 
 ```bash
-uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.11 cad setup
+uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.10 cad setup
 ```
 
-It installs cad 0.11.11 and the `cad` command and changes nothing else. If `uvx` is missing, install uv
+It installs cad 0.11.10 and the `cad` command and changes nothing else. If `uvx` is missing, install uv
 first.
 
 <!-- manual-copy-update: start -->
 Keep this install up to date: nothing updates it but you.
 
-1. At the start of a session, run `cad +0.11.11 --version`.
+1. At the start of a session, run `cad +0.11.10 --version`.
 2. If it, or any `cad` command later, says a new version of cad is available, install the new version of
    the plugin from https://github.com/earthtojake/text-to-cad.
 
@@ -73,7 +73,7 @@ Below, `<orca>` is that command.
 OrcaSlicer's command line (https://www.orcaslicer.com/wiki/cli/cli_mode) needs
 complete presets: it doesn't fill in a preset's parent settings, and it slices
 only with a process whose compatible printers name the printer.
-`cad +0.11.11 orcaslicer` writes them from OrcaSlicer's presets, searching the person's
+`cad +0.11.10 orcaslicer` writes them from OrcaSlicer's presets, searching the person's
 own first, then OrcaSlicer's built-in profiles. It reads and writes preset
 files alone: it never runs OrcaSlicer, and works offline.
 
@@ -82,15 +82,15 @@ files alone: it never runs OrcaSlicer, and works offline.
    temperature can damage the printer.
 
    ```bash
-   cad +0.11.11 orcaslicer presets machine --match "MK4S"
-   cad +0.11.11 orcaslicer presets process --match "@MK4S 0.4"
-   cad +0.11.11 orcaslicer presets filament --match "PLA @MK4S"
+   cad +0.11.10 orcaslicer presets machine --match "MK4S"
+   cad +0.11.10 orcaslicer presets process --match "@MK4S 0.4"
+   cad +0.11.10 orcaslicer presets filament --match "PLA @MK4S"
    ```
 
 2. Write the complete presets. It prints the files it wrote, as JSON:
 
    ```bash
-   cad +0.11.11 orcaslicer complete --printer "Prusa MK4S 0.4 nozzle" \
+   cad +0.11.10 orcaslicer complete --printer "Prusa MK4S 0.4 nozzle" \
      --process "0.20mm SPEED @MK4S 0.4" --filament "Prusa Generic PLA @MK4S" \
      --out presets
    ```
@@ -111,7 +111,7 @@ files alone: it never runs OrcaSlicer, and works offline.
 
    This writes `plate_1.gcode`, the plain G-code, and `model.gcode.3mf`, the
    sliced 3MF, into that folder. The command line reads `.stl`,
-   `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF first (for a text-to-cad model, `cad +0.11.11 model export <id> part.3mf`, or `cad +0.11.11 step export part.step part.3mf`).
+   `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF first (for a text-to-cad model, `cad +0.11.10 model export <id> part.3mf`, or `cad +0.11.10 step export part.step part.3mf`).
    Override one setting with `--<setting>=<value>`, using the setting's key
    with hyphens for underscores, such as `--layer-height=0.16`.
 
@@ -140,7 +140,7 @@ Connect is still in development, use Bambu Studio.
 | --- | --- |
 | A sliced `.gcode.3mf`, from OrcaSlicer's command line or Bambu Studio's or OrcaSlicer's "Export plate sliced file" | Open it in Bambu Connect |
 | A plain `.gcode` sliced with this printer's Bambu profile | Open it in Bambu Connect; if Bambu Connect refuses it, slice the model in Bambu Studio instead |
-| A model with no slice: `.3mf`, `.stl` or `.step` (from a text-to-cad model: `cad +0.11.11 model export <id> part.3mf`) | Open it in Bambu Studio, which slices it and sends it to the printer itself |
+| A model with no slice: `.3mf`, `.stl` or `.step` (from a text-to-cad model: `cad +0.11.10 model export <id> part.3mf`) | Open it in Bambu Studio, which slices it and sends it to the printer itself |
 
 ### Open a file in Bambu Connect
 
