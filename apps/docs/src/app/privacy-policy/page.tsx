@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="November 14, 2026">
+    <LegalPage title="Privacy Policy" updated="November 15, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -80,6 +80,10 @@ export default function PrivacyPolicyPage() {
                 want of memory);
               </li>
               <li>
+                whether installing or updating text-to-cad finished, and if it did not, which step failed and
+                why, each as one of a few fixed words, with how many tries it took and the version it was updating from;
+              </li>
+              <li>
                 crash reports, when text-to-cad’s own code fails unexpectedly: the error’s type (such as
                 “KeyError”), whether the program carried on, and where in code it failed -- file paths
                 inside text-to-cad, Python’s standard library, text-to-cad’s own open-source dependencies or the
@@ -97,7 +101,8 @@ export default function PrivacyPolicyPage() {
             <code>cad</code> command or model script sends nothing itself: it keeps what it counted (a
             build, an export, a snapshot, a drawing, a crash) on your computer for the next part of text-to-cad
             that sends; when nothing has sent it for five minutes, the next <code>cad</code> command
-            starts a short-lived sender in the background, which sends it and exits. Like any
+            starts a short-lived sender in the background, which sends it and exits; whether installing or
+            updating finished is sent by such a sender started right away. Like any
             request over the internet, each one also reaches our host with your IP address, the time
             and a user agent (just “cadgen”, the software’s name before 0.10); see section 4 for what happens to them.
             Section 5 says when telemetry is on and how to turn it off.

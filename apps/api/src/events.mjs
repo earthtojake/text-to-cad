@@ -34,6 +34,10 @@
  *             request the daemon served, a build, a command, a page), its type, and its innermost frames
  *             in code that may be named -- cadgen's, the standard library's, a dependency's, the page's
  *             assets -- with the person's own code a bare `<user>`. Never a message, a variable or a path.
+ *   arrival   one step of how a computer got to the sending version (schema 11's): its setup, its server serving
+ *             for the first time, or the hand-over that server runs after it (`ARRIVAL_OUTCOMES`), how it ended,
+ *             and where it failed why (`ARRIVAL_FAILURES`), a word cad chose; by which route (`ROUTES`), from
+ *             which version (`from`, `none` for none), and for a hand-over after how many attempts.
  *
  * cadgen 0.7.7 to 0.7.15 (schemas 1 and 2) send `tool`, `view` and `file`: one distinct file, once a day,
  * by a salted code. Its code goes no further: a batch's are read as `files`, one of each format they name.
@@ -65,6 +69,8 @@
  * schema 10 or earlier is translated on arrival (`translated`): its rows carry the new `channel` and `app`, worked
  * out from the old combined channel and the MCP client's name, and the old channel as it was sent
  * (`legacy_channel`). Every schema before it is still checked as it always was, and its rows keep their ids.
+ * Schema 11 adds `arrival`, which no schema before it sends: whether a computer's update or install reached the
+ * version, step by step, so a computer stuck on its way to one is counted.
  */
 
 import { createHash } from 'node:crypto';
@@ -218,6 +224,17 @@ const KERNEL_UNAVAILABLE = 'cad.engine.serve.KernelProcessesUnavailable';
 const SNAPSHOT_PARTS = new Set(['source', 'out', 'display', 'display.mode', 'display.exploded', 'display.clip',
   'display.grid', 'display.visibility', 'camera', 'pose', 'size', 'annotation', 'measurements', 'references', 'job',
   'other']);
+// How a computer got to a version, schema 11's (`cad_server/analytics.py`: `ROUTES`, `ARRIVAL_OUTCOMES`,
+// `ARRIVAL_FAILURES`): an earlier release's updater or `cad setup` itself; each step's endings; why a step failed, a
+// word cad chose where it failed (a step that cannot fail has none); and the version it came from, a version's name
+// or `none`, as short as a batch's `version`.
+const ROUTES = new Set(['updater', 'setup']);
+const ARRIVAL_OUTCOMES = {
+  setup: new Set(['ok', 'failed']), serving: new Set(['ok']), handover: new Set(['done', 'failed', 'gave_up', 'superseded']),
+};
+const ARRIVAL_FAILURES = { setup: new Set(['uv', 'network', 'denied', 'other']), handover: new Set(['no_report', 'setup', 'app', 'other']) };
+const EARLIER = /^(?:none|[0-9][0-9A-Za-z.+_-]{0,31})$/;
+const MAX_ATTEMPTS = 1000;
 // A batch's time, in whole seconds since 1970: any a clock can say (a wrong one included), never a fraction.
 const MAX_AT = 100_000_000_000;
 // Ours: the namespace every row's id is made in (`idOf`).
@@ -237,6 +254,7 @@ export const FIELDS = {
   health: ['workers', 'crashes', 'recycles', 'refusals'],
   control: ['control', 'count', 'seconds'],
   exception: ['where', 'tool', 'type', 'handled', 'status', 'frames', 'count'],
+  arrival: ['step', 'route', 'from', 'outcome', 'reason', 'attempts', 'count'], // `reason`, `attempts` where they apply
 };
 
 export class Invalid extends Error {}
@@ -396,6 +414,24 @@ const READERS = {
     }
     return { key: `exception ${JSON.stringify(crash)}`, fields };
   },
+  // A reason only with `failed`, attempts only for a hand-over: each where it applies and nowhere else.
+  arrival(event, at) {
+    only(event, ['name', ...FIELDS.arrival], at);
+    const step = typeof event.step === 'string' && Object.hasOwn(ARRIVAL_OUTCOMES, event.step)
+      ? event.step : fail(`${at}.step is not one of ${Object.keys(ARRIVAL_OUTCOMES).join(', ')}`);
+    const route = oneOf(event.route, ROUTES, `${at}.route`);
+    const from = matches(event.from, EARLIER, `${at}.from`);
+    const outcome = oneOf(event.outcome, ARRIVAL_OUTCOMES[step], `${at}.outcome`);
+    const reason = outcome === 'failed' ? oneOf(event.reason, ARRIVAL_FAILURES[step], `${at}.reason`)
+      : (event.reason === undefined ? null : fail(`${at}.reason: only a failed step names one`));
+    const attempts = step === 'handover'
+      ? (Number.isInteger(event.attempts) && event.attempts >= 0 && event.attempts <= MAX_ATTEMPTS
+        ? event.attempts : fail(`${at}.attempts is not a hand-over's attempts`))
+      : (event.attempts === undefined ? null : fail(`${at}.attempts: only a hand-over counts them`));
+    const count = some(event.count, `${at}.count`);
+    return { key: `arrival ${JSON.stringify([step, route, from, outcome, reason, attempts])}`,
+      fields: { step, route, from, outcome, reason, attempts, count } };
+  },
 };
 
 // Before schema 3 only the apps sent, and the browser viewer said so by how it shows CAD.
@@ -444,8 +480,8 @@ const SCHEMAS = new Map([
     origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7, parts: true,
     snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_10, toolFailures: FAILURES_10, causes: true }],
   // Schema 10 with the install described by two fields: the delivery channel and the agent app, each checked by its
-  // shape. Every earlier schema's batch is translated to the two (`translated`).
-  [11, { fields: ['channel', 'app', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_8,
+  // shape. Every earlier schema's batch is translated to the two (`translated`). And how a computer got to the version.
+  [11, { fields: ['channel', 'app', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control', 'arrival']), kinds: KINDS_8,
     origin: batch => ({ channel: matches(batch.channel, CHANNEL_11, 'channel'), app: matches(batch.app, APP, 'app'),
       legacy_channel: null, source: null, process: oneOf(batch.process, PROCESSES_6, 'process') }),
     current: true, named: true, maxEvents: MAX_EVENTS_7, parts: true,

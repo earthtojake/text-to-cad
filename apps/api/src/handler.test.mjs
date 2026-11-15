@@ -471,6 +471,58 @@ test('schema 11 names the delivery channel and the agent app, each checked by it
   ]) assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(bad)))).status, 400, JSON.stringify(bad).slice(0, 120));
 });
 
+// Schema 11's arrival: one step of how a computer got to the sending version, from the sender a command starts.
+const ARRIVING = { ...PINNED, process: 'cli', client: undefined, presentation: undefined, channel: 'default', app: 'unknown' };
+const arrival = fields => ({ name: 'arrival', route: 'updater', from: '0.11.10', count: 1, ...fields });
+
+test('schema 11 counts how a computer got to a version: each step, its ending, and why one failed, in words of its own', async () => {
+  const shapes = [
+    { step: 'setup', outcome: 'ok' },
+    ...['uv', 'network', 'denied', 'other'].map(reason => ({ step: 'setup', outcome: 'failed', reason })),
+    { step: 'serving', outcome: 'ok', route: 'setup', from: 'none' },
+    ...['done', 'gave_up', 'superseded'].map(outcome => ({ step: 'handover', outcome, attempts: 3 })),
+    ...['no_report', 'setup', 'app', 'other'].map(reason => ({ step: 'handover', outcome: 'failed', reason, attempts: 1 })),
+    { step: 'handover', outcome: 'done', attempts: 0, from: '0.11.11-dev.20261115120000' },
+    { step: 'handover', outcome: 'done', attempts: 1000 },
+  ];
+  const store = memory();
+  const batch = { ...ARRIVING, events: shapes.map(arrival) };
+  assert.equal((await send(store, 'POST', '/v1/events', JSON.parse(JSON.stringify(batch)))).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf), shapes.map(shape => ({
+    id: idOf(batch.batch, `arrival ${JSON.stringify([shape.step, shape.route ?? 'updater', shape.from ?? '0.11.10', shape.outcome,
+      shape.reason ?? null, shape.attempts ?? null])}`),
+    at: batch.at, event: 'arrival', step: shape.step, route: shape.route ?? 'updater', from: shape.from ?? '0.11.10',
+    outcome: shape.outcome, reason: shape.reason ?? null, attempts: shape.attempts ?? null, count: 1,
+  })));
+  assert.ok(store.rows.every(row => row.process === 'cli' && row.version === ARRIVING.version));
+  for (const bad of [
+    arrival({ step: 'install', outcome: 'ok' }), // an unknown step
+    arrival({ step: 'setup', outcome: 'done' }), // a hand-over's ending on a setup
+    arrival({ step: 'serving', outcome: 'failed', reason: 'other' }), // a first serving only happens
+    arrival({ step: 'setup', outcome: 'ok', reason: 'network' }), // a reason without `failed`
+    arrival({ step: 'setup', outcome: 'failed' }), // `failed` without a reason
+    arrival({ step: 'setup', outcome: 'failed', reason: 'no_report' }), // a hand-over's reason on a setup
+    arrival({ step: 'setup', outcome: 'failed', reason: 'uv could not reach pypi.org' }), // never its words
+    arrival({ step: 'setup', outcome: 'ok', attempts: 1 }), // attempts on a step that has none
+    arrival({ step: 'handover', outcome: 'done' }), // a hand-over's attempts, always
+    ...[-1, 1.5, 1001, '3', true].map(attempts => arrival({ step: 'handover', outcome: 'done', attempts })),
+    ...['/Users/someone/cad', 'latest', 'v0.11.10', '0.11.10 beta', '', '1'.repeat(33), null, 11].map(from =>
+      arrival({ step: 'setup', outcome: 'ok', from })), // a `from` that is no version's name
+    arrival({ step: 'setup', outcome: 'ok', route: 'store' }),
+    { ...arrival({ step: 'setup', outcome: 'ok' }), route: undefined },
+    { ...arrival({ step: 'setup', outcome: 'ok' }), path: '/tmp' }, // nothing else
+    arrival({ step: 'setup', outcome: 'ok', count: 0 }),
+  ]) {
+    const body = JSON.parse(JSON.stringify({ ...ARRIVING, events: [bad] }));
+    assert.equal((await send(memory(), 'POST', '/v1/events', body)).status, 400, JSON.stringify(bad));
+  }
+  // One step once per batch; and no schema before 11 sends one.
+  const twice = { ...ARRIVING, events: [arrival({ step: 'setup', outcome: 'ok' }), arrival({ step: 'setup', outcome: 'ok' })] };
+  assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(twice)))).status, 400);
+  const older = { ...PARTS, schema: 10, process: 'cli', events: [arrival({ step: 'setup', outcome: 'ok' })] };
+  assert.equal((await send(memory(), 'POST', '/v1/events', older)).status, 400);
+});
+
 test('a schema newer than the receiver reads is "try later", never refused: the sender keeps it for when it does', async () => {
   // A release can reach people before the receiver that reads its schema is deployed: its batches wait, not lost.
   const store = memory();

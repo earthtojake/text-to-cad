@@ -68,7 +68,13 @@ exits, each batch under an id of its own and stamped with the time it was made:
   failure it was (``KERNEL_CAUSES``), once per failure however many calls it answers. Never the error's
   message. Each process reports its own (``report``, ``collect_crashes``); a command's and a worker's are kept with its counts,
   and a page's go to the server that served it -- never one in none of the page's scripts, which a script
-  the browser runs in the page threw (an extension's: ``crashOf`` in @cad/core).
+  the browser runs in the page threw (an extension's: ``crashOf`` in @cad/core);
+- ``arrival`` (``arrival``): how a computer got to this version, one event for each step that ended -- its ``cad
+  setup`` (``setup``: ``ok``, or ``failed`` and why, a word of ``ARRIVAL_FAILURES`` -- uv missing, no network, a
+  folder it may not write, or none of these), its server serving for the first time (``serving``), and the
+  hand-over that server runs after it (``handover``: ``done``, ``failed`` and why, ``gave_up`` or ``superseded``,
+  with how many ``attempts`` it took) --, by which route (``ROUTES``: an earlier release's updater, or ``cad setup``
+  itself) and from which version (``from``: the one installed before it, ``none`` where none was).
 
 A command sends nothing itself. What it counts -- a build, a snapshot, a drawing, a crash -- is kept beside
 the settings for the next process that sends (``spool``): only while sharing is on, under the answer in
@@ -79,6 +85,10 @@ daemon answers (a ``python model.py``, a ``Model.build()``) by the daemon, under
 the process ``cli`` with no app named (``Recorder._spooled``): never in the CAD app's or the viewer's
 batch, whose client and presentation say who looked, not who built. With nothing taking it for a
 window, a command or the daemon starts a sender that sends it and exits (``cad_server._internal.telemetry_send``).
+An arrival (``arrival``) waits for no other process: the step that counts it may be the last this version ever runs
+on the computer -- a setup that failed, a server that never served. It is kept in a file of its own (``ARRIVALS``),
+which no earlier release's sender takes, and starts a sender at once, or as the window of the last one started ends
+(``telemetry_send.start_soon``), from whichever Python counted it: a version's own, uvx's, an updater's folder.
 
 Never a path or a file name of the person's, a model, an argument, a message, a prompt or anything
 typed. A batch with nothing in it is never sent: a process the host started and nobody used counts
@@ -177,7 +187,7 @@ PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
 # 11: where a batch comes from is two fields, ``channel`` (the delivery channel of the requests or sessions it
 # counted: a pin's or a launcher's, ``default`` for none, ``dev`` from a development build) and ``app`` (the agent
 # app, detected), one batch per pair; the combined channel values of 10 and earlier (an app's name joined to
-# where its copy came from) are no longer sent;
+# where its copy came from) are no longer sent; and how a computer got to a version (``arrival``);
 # 10: a CAD tool's call the engine could start no kernel process for (``tool_failure``'s ``no_kernel``), and
 # why, on its crash (``exception``'s ``cause``);
 # 9: the part of a snapshot's request a refusal named (``snapshot_failure``'s ``part``);
@@ -205,7 +215,11 @@ SCHEMA = 11
 # where its copy came from), and is now two that say no more -- the delivery channel a pin or a launcher names
 # (``default`` for most, a store's name for a store's copy: what the old value's prefix and suffix said) and the
 # agent app, which the old values named and the MCP handshake's client name sent already -- under the same ids.
-# The notice ("usage stats and crash reports, tagged with a random ID") stays true of it word for word.
+# The notice ("usage stats and crash reports, tagged with a random ID") stays true of it word for word. Nor schema 11's
+# ``arrival``: whether a version's setup, its server's first serving and the hand-over after it went, and where one did
+# not, which, in a word of ours -- cad failing, as a crash report says it fails, never a message or a path -- by which
+# of two routes, and the version it came from, which the same install id's batches said already as their ``version``
+# (a version takes the id with the settings it imports from the one before). No field of the person's, no new identity.
 DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.
@@ -341,6 +355,9 @@ SPOOL_BYTES = 256 * 1024
 # Where an exiting process keeps its last batch (``Recorder.close``), whole, for the next process that
 # sends; a file of its own, which a cadgen from before it never reads, capped as the spool is.
 KEPT = "telemetry-batches.jsonl"
+# Where a process keeps an arrival it counted (``arrival``), beside the settings, for the sender it starts: a file of
+# its own, which no earlier release's sender takes from the folder 0.11.10 and earlier share, capped as the spool is.
+ARRIVALS = "telemetry-arrivals.jsonl"
 HANDED = 16  # the most of each kind one command's counts carry (``Recorder.take``)
 # The page's plumbing: a view's once-a-second sync, its viewer requests (the home's re-reads of its
 # library every couple of seconds among them) and its capture replies say nothing about use and would
@@ -510,6 +527,24 @@ CONTROL_SECONDS = 3_600
 # The engine daemon's warm workers: started (each imports the CAD kernel), crashed (died mid-build), recycled
 # (retired over their memory cap), and builds refused for want of memory (none: the engine refuses nothing).
 HEALTH = ("workers", "crashes", "recycles", "refusals")
+# How a computer got to a version (``arrival``, schema 11's): the route -- an updater of 0.10.0 to 0.11.10 running
+# the version's hidden ``cad setup --engine-update`` (``updater``), or ``cad setup`` itself, which the install script
+# runs (``setup``) -- and each step's endings: its setup, its server serving for the first time, and the hand-over
+# that server runs after it until it is done, fails for good, is given up or is overtaken by a later version's.
+ROUTES = frozenset({"updater", "setup"})
+ARRIVAL_OUTCOMES = {"setup": frozenset({"ok", "failed"}), "serving": frozenset({"ok"}),
+                    "handover": frozenset({"done", "failed", "gave_up", "superseded"})}
+# Why a step failed, a word chosen where it failed, never its message: a setup's -- no uv, or one that would not run
+# (``uv``), no network for what uv's cache lacks (``network``), a folder it may not write (``denied``: the causes
+# ``cad_server._internal.versions.Present.cannot`` names), anything else (``other``) -- and a hand-over's -- the
+# program it ran said nothing of how it went (``no_report``), its setup failed (``setup``), what it updates did not
+# take the update (``app``), anything else (``other``).
+ARRIVAL_FAILURES = {"setup": frozenset({"uv", "network", "denied", "other"}),
+                    "handover": frozenset({"no_report", "setup", "app", "other"})}
+MAX_ATTEMPTS = 1000  # a hand-over's attempts past this many are counted as this many
+# The version a computer came from: a release's or a development build's name (``places.VERSION``'s shape, at most
+# the 32 characters a batch's ``version`` takes), or ``none``.
+_EARLIER = re.compile(r"none|[0-9][0-9A-Za-z.+_-]{0,31}")
 # Each event: the names it is told apart by, and what it counts. A batch holds one event per event and
 # names, its counts added up over the window -- ``longest`` is the longest.
 EVENTS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
@@ -524,6 +559,8 @@ EVENTS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "feature": (("feature",), ("count",)),
     "health": ((), HEALTH),
     "control": (("control",), ("count", "seconds")),
+    # ``reason`` only with ``failed``, ``attempts`` only for a hand-over: a name that is None is not sent.
+    "arrival": (("step", "route", "from", "outcome", "reason", "attempts"), ("count",)),
 }
 MAX_EVENTS = 256  # a batch's most (the receiver's too, from schema 7): any more wait for the next batch
 # A crash (``signature``): where it happened -- a CAD tool's call, a viewer's route, another request a
@@ -1069,9 +1106,9 @@ def _heed_device(path: Path) -> None:
 
 
 def hand_on(source: Path, target: Path) -> int:
-    """What a version leaving the device had kept for sending -- its spool (each row says who counted it:
-    ``spool``'s ``source``) and the whole batches its processes kept as they exited (``KEPT``) -- moved to another
-    version's settings folder, ``target`` (both settings paths), for that version's sender: taken whole from
+    """What a version leaving the device had kept for sending -- its spool and its arrivals (each row says who
+    counted it: ``spool``'s ``source``) and the whole batches its processes kept as they exited (``KEPT``) -- moved to
+    another version's settings folder, ``target`` (both settings paths), for that version's sender: taken whole from
     ``source`` under its lock, so no row is moved twice, then appended under ``target``'s. A row is sent only under
     the answer it was kept under (``_drain``, ``send_kept``), and a batch's id makes a second copy the first. The
     deletions it still owed (``forget``) go to ``target``'s list too, whatever ``target``'s own answer: a deletion
@@ -1080,7 +1117,7 @@ def hand_on(source: Path, target: Path) -> int:
     send. How many rows were moved. Never raises."""
     moved = 0
     try:
-        for name, key in ((SPOOL, "counts"), (KEPT, "batch")):
+        for name, key in ((SPOOL, "counts"), (ARRIVALS, "arrival"), (KEPT, "batch")):
             for entry in _take_spool(source, name, key):
                 if _keep(target, name, entry):
                     moved += 1
@@ -1675,6 +1712,58 @@ def spool(counts: dict[str, Any], *, path: Path | None = None, env: Mapping[str,
         return False
 
 
+def arrival(step: str, *, route: str, earlier: str | None, outcome: str, reason: str | None = None,
+            attempts: int | None = None) -> bool:
+    """Count one step of how this computer got to this version (``ARRIVAL_OUTCOMES``): its setup, its server serving
+    for the first time, the hand-over that server runs after it -- by ``route`` (``ROUTES``), from version ``earlier``
+    (None: no version was installed before it), ended as ``outcome``; a failed one for ``reason``
+    (``ARRIVAL_FAILURES``: anything else is ``other``), a hand-over after ``attempts`` (a whole number, capped at
+    ``MAX_ATTEMPTS``). A word outside these, or an ``earlier`` that is no version's name, is not counted.
+
+    From a command's process or a server's alike: kept beside this process's settings (``ARRIVALS``: a process of no
+    version's are the state folder's, which 0.11.10 and earlier share) under the answer in force,
+    only while sharing is on, as a command's counts are (``spool``), and the sender started at once, or as the window
+    of the last one started ends (``telemetry_send.start_soon``), so it is sent though no process of this version runs
+    again. A local write and a detached start: never the network, never raises. Whether it was kept."""
+    try:
+        found = _arrival(step, route, earlier, outcome, reason, attempts)
+        if found is None or refused():
+            return False
+        path = settings_path()  # the folder the sender started here reads (``telemetry_send.send``)
+        if not status(path=path, probe=False)["sharing"]:
+            return False
+        if not _keep(path, ARRIVALS, {"answer": list(_answer(_read(path) or {})), "at": round(time.time(), 3),
+                                      "source": source(), "arrival": found}):
+            return False
+        from cad_server._internal import telemetry_send
+
+        telemetry_send.start_soon(path)
+        return True
+    except Exception:  # noqa: BLE001 - a step counted or not never fails the step
+        LOG.debug("could not count an arrival", exc_info=True)
+        return False
+
+
+def _arrival(step: Any, route: Any, earlier: Any, outcome: Any, reason: Any = None,
+             attempts: Any = None) -> dict[str, Any] | None:
+    """An arrival as it is kept and sent (``EVENTS``' names): ``reason`` only with ``failed``, ``attempts`` only for a
+    hand-over; or None for one that is not counted."""
+    outcomes = ARRIVAL_OUTCOMES.get(step) if isinstance(step, str) else None
+    if outcomes is None or route not in ROUTES or outcome not in outcomes:
+        return None
+    came = "none" if earlier is None else earlier
+    if not (isinstance(came, str) and _EARLIER.fullmatch(came)):
+        return None
+    found = {"step": step, "route": route, "from": came, "outcome": outcome}
+    if outcome == "failed":
+        found["reason"] = reason if isinstance(reason, str) and reason in ARRIVAL_FAILURES[step] else "other"
+    if step == "handover":
+        if type(attempts) is not int or attempts < 0:
+            return None
+        found["attempts"] = min(attempts, MAX_ATTEMPTS)
+    return found
+
+
 def _take_spool(path: Path, name: str = SPOOL, key: str = "counts") -> list[dict[str, Any]]:
     """What commands kept (``spool``), or exiting processes (``KEPT``, each line a ``batch``), taken whole
     by one process: moved aside under the data folder's one lock, so no line is taken twice or lost to a process
@@ -1719,8 +1808,8 @@ def _keep(path: Path, name: str, entry: dict[str, Any]) -> bool:
 def _drop_spool(path: Path) -> None:
     """A no: what commands and exiting processes kept for sending is deleted, not left to be dropped later."""
     with contextlib.suppress(OSError), state(path.parent):
-        path.with_name(SPOOL).unlink(missing_ok=True)
-        path.with_name(KEPT).unlink(missing_ok=True)
+        for name in (SPOOL, ARRIVALS, KEPT):
+            path.with_name(name).unlink(missing_ok=True)
 
 
 def _outcome(sent: Any) -> str:
@@ -1741,6 +1830,12 @@ def _guarded(default: Callable[[], Any]):
                 return default()
         return guarded
     return decorate
+
+
+def _order(key: tuple[Any, ...]) -> tuple[str, ...]:
+    """An event's key as batches order them: by its names as text, an arrival's unsent name (None) and its
+    attempts (a number) among them."""
+    return tuple("" if part is None else str(part) for part in key)
 
 
 class _Tally:
@@ -1781,7 +1876,7 @@ class _Tally:
     def split(self, limit: int) -> tuple[_Tally, _Tally]:
         """The first ``limit`` events -- counts first, then up to ``CRASHES_PER_BATCH`` crashes -- and the
         rest: what a batch has room for, and the next batch's."""
-        keys = sorted(self.rows)[:limit]
+        keys = sorted(self.rows, key=_order)[:limit]
         crashes = list(self.crashes)[:max(0, min(CRASHES_PER_BATCH, limit - len(keys)))]
         return (_Tally({key: self.rows[key] for key in keys}, {key: self.crashes[key] for key in crashes}),
                 _Tally({key: value for key, value in self.rows.items() if key not in keys},
@@ -1789,9 +1884,9 @@ class _Tally:
 
     def events(self) -> list[dict[str, Any]]:
         events = []
-        for key in sorted(self.rows):
+        for key in sorted(self.rows, key=_order):
             names, counted = EVENTS[key[0]]
-            events.append({"name": key[0], **dict(zip(names, key[1:])),
+            events.append({"name": key[0], **{name: value for name, value in zip(names, key[1:]) if value is not None},
                            **{name: round(value, 1) if name in ("seconds", "longest") and key[0] != "control" else int(value)
                               for name, value in zip(counted, self.rows[key])}})
         return events + [{"name": "exception", **found, "count": count} for found, count in self.crashes.values()]
@@ -2142,22 +2237,31 @@ class Recorder:
                 self.health(name, count)  # checked there: one of ``HEALTH``
 
     @_guarded(lambda: None)
+    def arrived(self, found: Any) -> None:
+        """One step of an arrival (``arrival``), as it was kept: noted only if it is one ``arrival`` would keep."""
+        checked = _arrival(*(found.get(name) for name in EVENTS["arrival"][0])) if isinstance(found, dict) else None
+        if checked is not None:
+            self._note("arrival", tuple(checked.get(name) for name in EVENTS["arrival"][0]), {"count": 1})
+
+    @_guarded(lambda: None)
     def _drain(self) -> None:
-        """Take what commands and scripts kept for a sender (``spool``) into this ``cli`` recorder's tally: only what
-        they counted under the answer in force now -- the rest was noted under another, and is dropped as this
-        process's own would be. An app's or the viewer's recorder takes nothing: its ``cli`` recorder does
-        (``_spooled``), so what was built never rides in a batch that names who looked."""
+        """Take what commands and scripts kept for a sender (``spool``) and the arrivals counted (``ARRIVALS``) into
+        this ``cli`` recorder's tally: only what they counted under the answer in force now -- the rest was noted
+        under another, and is dropped as this process's own would be. An app's or the viewer's recorder takes
+        nothing: its ``cli`` recorder does (``_spooled``), so what was built never rides in a batch that names who
+        looked."""
         if self._context["process"] != "cli":
             return
         settings = self.path or settings_path()
-        kept = _take_spool(settings)
-        if not kept:
-            return
-        answer = list(_answer(_read(settings) or {}))
-        for entry in kept:
-            if entry.get("answer") == answer:
-                with self._counting(_kept_source(entry.get("source"))):
-                    self.take(entry["counts"])
+        answer = None
+        for name, key, take in ((SPOOL, "counts", self.take), (ARRIVALS, "arrival", self.arrived)):
+            kept = _take_spool(settings, name, key)
+            if kept and answer is None:
+                answer = list(_answer(_read(settings) or {}))
+            for entry in kept:
+                if entry.get("answer") == answer:
+                    with self._counting(_kept_source(entry.get("source"))):
+                        take(entry[key])
 
     @_guarded(lambda: False)
     def flush(self) -> bool:
