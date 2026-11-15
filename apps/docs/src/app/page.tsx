@@ -4,7 +4,7 @@ import { FeatureGrid } from "@/components/feature-grid";
 import { HeroSection } from "@/components/hero-section";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
-import { contributing, featuresIntro } from "@/lib/content";
+import { contributing, featuresIntro, studio } from "@/lib/content";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 import { withCode } from "@/lib/with-code";
 
@@ -22,6 +22,26 @@ function TitleLink({ anchor, children }: { anchor: string; children: ReactNode }
   );
 }
 
+// A row of links, each opening in a new tab.
+function ExternalLinks({ links }: { links: { text: string; href: string }[] }) {
+  return (
+    <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+      {links.map(({ text, href }) => (
+        <a
+          key={text}
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 text-foreground underline underline-offset-4"
+        >
+          {text}
+          <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
+        </a>
+      ))}
+    </p>
+  );
+}
+
 // The ways to take part (`contributing`, the README's Contributing): each one's title, what it is,
 // and its links, each opening in a new tab.
 function Contributing() {
@@ -31,20 +51,7 @@ function Contributing() {
         <li key={title} className="space-y-1">
           <h3 className="text-sm font-medium text-foreground">{title}</h3>
           <p className="text-sm leading-6 text-muted-foreground">{withCode(body)}</p>
-          <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-            {links.map(({ text, href }) => (
-              <a
-                key={text}
-                href={href}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-foreground underline underline-offset-4"
-              >
-                {text}
-                <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
-              </a>
-            ))}
-          </p>
+          <ExternalLinks links={links} />
         </li>
       ))}
     </ul>
@@ -124,6 +131,11 @@ export default function Home() {
           <section id="features" aria-labelledby="features-title" className="scroll-mt-20 space-y-4 py-6">
             <SectionIntro section="features" title="Features" description={featuresIntro} />
             <FeatureGrid />
+          </section>
+
+          <section id="studio" aria-labelledby="studio-title" className="scroll-mt-20 space-y-3 py-6">
+            <SectionIntro section="studio" title={studio.title} description={studio.body} />
+            <ExternalLinks links={studio.links} />
           </section>
 
           <section id="contributing" aria-labelledby="contributing-title" className="scroll-mt-20 space-y-3 py-6">

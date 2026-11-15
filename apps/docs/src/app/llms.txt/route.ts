@@ -8,6 +8,7 @@ import {
   installSummary,
   manualInstall,
   pluginDescription,
+  studio,
 } from "@/lib/content";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 
@@ -33,6 +34,10 @@ export function GET() {
     featuresIntro,
     "",
     ...features.map((feature) => `- [${feature.name}](${onGitHub(feature.path)}): ${feature.summary.replace(/\]\((skills\/[^)]+)\)/g, (_, path) => `](${onGitHub(path)})`)}`),
+    "",
+    `## ${studio.title}`,
+    "",
+    `${studio.body} ${studio.links.map(({ text, href }) => `[${text}](${href})`).join(" ")}`,
     "",
     "## Contributing",
     "",
