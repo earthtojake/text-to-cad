@@ -13,7 +13,9 @@ A layer name holding a character DXF reserves is refused by name.
 
 **Planar or refused.** A document holding a solid is refused before anything is written
 (``tom.xbf is 3D``), and so is an edge with a point off z=0, by its element name: exporting either
-would write its XY shadow, silently wrong.
+would write its XY shadow, silently wrong. The drawing is made, and checked, before any file of the
+export is written (``rendered``, the kind's ``render``), so an export that names a DXF beside other
+files writes none of them when the DXF is refused.
 
 **The bytes are a function of the geometry.** Layers are written in name order and each layer's
 edges in an order of their content -- curve kind, then points sampled along it and its length,
@@ -54,7 +56,7 @@ from cad.engine.export import ExportRefused
 
 __all__ = ["DEFAULT_LAYER", "DrawingFinding", "DrawingValidationError", "DxfDeterminismError", "document_is_drawing",
            "drawing_apparatus", "dxf_bytes", "layer_allows_open_geometry", "layer_intent", "layer_table_intents",
-           "raise_on_error_findings", "validate_drawing_document", "validate_dxf_file", "write"]
+           "raise_on_error_findings", "rendered", "validate_drawing_document", "validate_dxf_file", "write"]
 
 # The layer of a document of one part. Layers are CAM operations (CUT, ENGRAVE, SCORE); a
 # drawing of one need not name it.
@@ -82,8 +84,16 @@ class DxfDeterminismError(RuntimeError):
 def write(view: Any, path: Path) -> None:
     """The view's drawing at ``path``: written beside it and moved over it, or, when the file
     holds these bytes already, left as it is."""
+    rendered(view)(path)
+
+
+def rendered(view: Any) -> Any:
+    """The view's drawing made and checked, nothing written (``Kind.render``): what writes it at a path."""
     data = dxf_bytes(view)
-    path = Path(path)
+    return lambda path: _land(data, Path(path))
+
+
+def _land(data: bytes, path: Path) -> None:
     try:
         if path.stat().st_size == len(data) and path.read_bytes() == data:
             return

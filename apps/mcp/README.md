@@ -78,21 +78,12 @@ settles how a client that does not say so presents CAD: `inline`, a client that 
 without advertising them, as the reference host `basic-host` does; `text`, one that renders
 nothing.
 
-The agent also has `cad_export`, `cad_snapshot` and `cad_inspect` in
-all presentations, including text-only hosts. They use the Python operations,
-not page state. Each tool starts work with a request ID and polls or cancels its
-own operation; there is no `cad_job` tool. `cad_inspect` also takes
-`query: "structure"`, the summary without bounds, volume or mass. See the
-[operation contract](../../packages/cad/README.md#agent-operations) for progress,
-retry, cancellation and explicit server-host destinations. An operation's status carries where the
-engine is as the engine's own progress event -- `progress`, `{kind, stage, job, outputs, detail, done,
-total, elapsedMs}`, the latest it said (an export's `read` and `write`, a snapshot's `scene`, `draw`
-and `write`, an inspection's `measure`, counted where the stage has units) -- and the stage's words
-as `stage`; a status asked with `afterSequence` wakes with each event, as it wakes with the result.
-The same event is what a view's status line says of a build behind the model it shows
-(`@cad/ui`'s `kit/status`, in the view's language), so a card and an agent read one shape. No tool builds source
-text: to build a shape, wrap the shape in a decorated function and run its script.
-Inspection never builds. The web viewer's Export is a browser download; this page has no Export, having no HTTP origin to download from.
+No tool exports, inspects or draws a picture for the agent: those are the `cad` command's, which the
+agent runs in its shell (`cad model export <id> <file>`, `cad model inspect <id>`, `cad model snapshot
+<id> out.png`; a file's, `cad <type> ...` with its path), and every presentation's instructions say so
+at initialize, Claude Code's among them, for an agent that has not loaded the cad skill. No tool builds
+source text: to build a shape, wrap the shape in a decorated function and run its script. The web
+viewer's Export is a browser download; this page has no Export, having no HTTP origin to download from.
 
 ## Claude: where the card comes from
 
@@ -360,7 +351,7 @@ the launch's `_meta` first (`host/capability.ts`).
     `tools/call` the card makes with its own error, "IPC not available for MCP tool call";
     the server never sees the view open, so `cad_view` and `cad_screenshot` answer that it has
     not reached CAD's server: not drawn yet, or drawn by a chat that carries none of its calls,
-    with the page the card links for the person and `cad_snapshot` for the agent's own look. The card knows its channel: at `ui/initialize` a host that declares
+    with the page the card links for the person and `cad <type> snapshot` for the agent's own look. The card knows its channel: at `ui/initialize` a host that declares
     `serverTools` carries calls (a tab host is trusted as before, whatever it declares), one
     that says nothing gets a single `GET /api/v1/server` before anything is drawn, and a call
     the host itself refuses (a JSON-RPC error: not a timeout, not the engine's answer) before
@@ -507,7 +498,7 @@ no SSE stream, so GET returns 405. Missing sessions return 400; expired sessions
 When the engine restarts or a session's idle hour passes, the shim opens a new session
 with the host's own initialize and sends again only the request the engine refused
 unseen (404, a 403 from an engine whose token is not this shim's, or a refused connection);
-the host never reconnects. Views and operations start over with the new session, and
+the host never reconnects. Views start over with the new session, and
 mutations are never replayed. The app capability does not: the shim makes one for its host
 and gives it to every session it opens, so the views the host shows sync again with the new
 session at their next call. Only a view from before the host restarted the shim carries one

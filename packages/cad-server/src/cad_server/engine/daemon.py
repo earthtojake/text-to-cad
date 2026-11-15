@@ -845,6 +845,18 @@ class Daemon:
                                  settled=lambda: (self.supervisor.free_for(worker) or 0.0) >= MEASURE_IDLE)
 
     @staticmethod
+    def _counted(request: dict[str, Any], told: dict[str, Any], began: float) -> None:
+        """A build this daemon answered, counted for telemetry once its answer is sent -- never before it, and
+        never on the network: one line kept in the spool, by the consent of the person who asked
+        (``request["env"]``, ``engine_telemetry.answered``). A request it answered nothing to counts nothing."""
+        if "answer" not in told:
+            return
+        from cad_server._internal import engine_telemetry
+
+        engine_telemetry.answered(told["answer"], told.get("seconds", time.monotonic() - began), request.get("env"),
+                                  fresh=told.get("fresh"), died=told.get("died"), unavailable=told.get("unavailable"))
+
+    @staticmethod
     def _where(error: Exception, worker: Process | None) -> str:
         """A worker's failure, and where its build was when it failed: said on its first line, before
         any stderr tail (``Process._gone``)."""
@@ -1394,12 +1406,16 @@ class Daemon:
                 send(refused(error))
             return
         if op == "build":
+            # What the build's answer was, for telemetry once it is sent (``engine_telemetry.answered``).
+            began, told = time.monotonic(), {}
             try:
                 # The Python the script is built in (its caller's, else the server's own), its worker
                 # contract checked before any worker starts.
                 python, python_key = self.caller(request)
             except ValueError as error:
-                send({"failed": str(error)})
+                told.update(answer={"failed": str(error)}, seconds=time.monotonic() - began)
+                send(told["answer"])
+                self._counted(request, told, began)
                 return
             with self.busy_lock:
                 self.busy += 1
@@ -1408,6 +1424,7 @@ class Daemon:
                 key, cwd, _python = self._routed(request)  # a build's Python is ``caller``'s
                 for attempt in (1, 2):
                     worker = None
+                    fresh = None
                     ahead = self.behind(key, send, python_key) if attempt == 1 else None
                     waited = time.monotonic()
                     try:
@@ -1460,6 +1477,7 @@ class Daemon:
                         # The program that asked: what a document it built names to build it again.
                         answer["program"] = request.get("program")
                         self._built(worker, answer)
+                        told.update(answer=answer, fresh=fresh, seconds=time.monotonic() - began)
                         send(answer)
                         return
                     except Gone as error:
@@ -1469,13 +1487,19 @@ class Daemon:
                             failed = {"failed": self._where(error, worker), **_unstarted(error)}
                             if worker is not None:
                                 self._built(worker, failed)
+                            # A worker that died under the build: its exit status, where the system said one.
+                            told.update(answer=failed, fresh=fresh, seconds=time.monotonic() - began,
+                                        died=(error.code if error.code is not None else True) if error.during
+                                        else None)
                             send(failed)
                             return
                     except RuntimeError as error:
                         if not _no_kernel(error):
                             raise
                         # No kernel environment to start the worker in: its line, and its type.
-                        send({"failed": str(error), **failed_type(error)})
+                        told.update(answer={"failed": str(error), **failed_type(error)}, unavailable=error,
+                                    seconds=time.monotonic() - began)
+                        send(told["answer"])
                         return
                     finally:
                         if worker is not None:
@@ -1485,6 +1509,7 @@ class Daemon:
                     self.busy -= 1
                     self.worked = time.monotonic()
                 self.touch()
+                self._counted(request, told, began)
         elif op == "serve":
             server = self.serve(request)
             named = str(request["path"])
@@ -1653,7 +1678,8 @@ class Daemon:
         long anything has been idle. A killed client's pipes are swept, and the processes' memory is
         held to its cap and the system's pressure (``Supervisor.shed``: a worker's documents drained
         first, so they stay held); the memory budget sends unwatched documents out of memory, least recently used
-        first, to the cache, as they are loaded (``serve.Server.trim``). The engine stops on ``stop``, a terminate, another installation's
+        first, to the cache, as they are loaded (``serve.Server.trim``); telemetry's spool is handed to a sender
+        once it has waited a window (``_send_counts``). The engine stops on ``stop``, a terminate, another installation's
         retiring it (``bind``), and here when its door is gone (its folder removed, a temporary
         folder cleaned up) or another's: no one can reach it, so it stops as ``stop`` does, saving
         what it holds to the cache."""
@@ -1665,6 +1691,7 @@ class Daemon:
         self.supervisor.shed(self.pressure.under())
         self.models.prune()
         _automatic(self)
+        _send_counts()
 
     def working(self) -> bool:
         """Whether anything an update's drain waits for is in flight: a build, a draw, an export, a
@@ -1724,6 +1751,16 @@ class Daemon:
         display.stop()  # the Xvfb it started for their stills, if it did
         if self.server is not None:
             self.server.stop()
+
+
+def _send_counts() -> None:
+    """What this daemon's builds and every command counted, sent once the spool has waited a window and no
+    sender has started within one, as a command starts it (``telemetry_send.start_if_due``: one read of the
+    spool's first line, a sender started detached, never waited on): where nothing else runs -- no CAD app, no
+    viewer page, no ``cad`` command, only ``python model.py`` -- nothing else would."""
+    from cad_server._internal import telemetry_send
+
+    telemetry_send.start_if_due()
 
 
 def _same_place(one: str, other: str) -> bool:

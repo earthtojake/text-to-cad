@@ -115,6 +115,7 @@ class BaseTest(unittest.TestCase):
             base.ensure(self.installation, told=self.said.append)
         self.assertEqual(str(refused.exception), "the CAD kernel environment needs the network once: Failed to fetch: "
                                                  "`https://pypi.org/simple/build123d/` (dns error: failed to lookup address)")
+        self.assertEqual(refused.exception.cause, "network", "a word of ours for telemetry, never read from the line")
         self.assertIsNone(base.complete(base.where(self.installation)), "no marker: the next use makes it again")
 
     def test_an_installation_that_carries_the_kernel_is_its_own_base(self) -> None:
@@ -182,6 +183,103 @@ class BaseTest(unittest.TestCase):
                     self.assertEqual(base.ensure(self.installation, told=self.said.append, engine=True).prefix,
                                      str(folder))
         self.assertEqual(own_uv.asked(), ["venv", "pip --offline"] * 3)
+
+    def kernel(self, making: base.Making, uv) -> contextlib.ExitStack:
+        """``base.kernel`` as the engine asks it, its making ``making`` and uv ``uv``, the engine's log
+        swallowed."""
+        stack = self.made(uv)
+        stack.enter_context(mock.patch.object(base, "MAKING", making))
+        stack.enter_context(mock.patch.object(base.Installation, "here", return_value=self.installation))
+        stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+        return stack
+
+    def refused(self) -> base.Refused:
+        with self.assertRaises(base.Refused) as refused:
+            base.kernel()
+        return refused.exception
+
+    def test_a_failed_making_that_cannot_clear_by_itself_is_told_at_once_until_asked_again(self) -> None:
+        # 0.11.9: every cad_show made the base again -- uv's venv and install, offline then online -- and failed
+        # the same way: one install 29 times in 50 minutes. A failure that cannot clear by itself is now told at
+        # once, uv not run, however long after, until something that could change it happens.
+        now = [1000.0]
+        making = base.Making(clock=lambda: now[0])
+
+        def uv(step: list[str], folder: Path, settings=None) -> subprocess.CompletedProcess:
+            asked.append(step[1])
+            return subprocess.CompletedProcess(step, 2, "", "error: Failed to inspect Python interpreter")
+        asked: list[str] = []
+        with self.kernel(making, uv):
+            first = self.refused()
+            self.assertEqual(first.cause, "python")
+            self.assertTrue(str(first).startswith(f"uv cannot make the CAD kernel environment on "
+                                                  f"{self.installation.executable}: Failed to inspect Python interpreter; "
+                                                  "that Python must run here: install cad-server again: run `"), str(first))
+            self.assertTrue(str(first).endswith(". The engine does not try again until it restarts; "
+                                                '`cad run -c "import build123d"` tries again, saying each step.'))
+            now[0] += 3600
+            for _ in range(3):
+                later = self.refused()
+            self.assertEqual(asked, ["venv"], "made once: the later requests are told the failure, uv not run")
+            self.assertEqual(later.cause, "python")
+            self.assertIn(": Failed to inspect Python interpreter", str(later))
+            self.assertIn(" (its try 60 min ago; nothing made since). The engine does not try again until it restarts; "
+                          '`cad run -c "import build123d"` tries again', str(later))
+            # Telemetry is told it once, however many requests are.
+            self.assertEqual([making.claim(), making.claim()], [True, False])
+            # A `cad run` asks the engine's making over its door, which makes it again.
+            self.assertIsNotNone(making.follow(lambda _line: None))
+            self.assertEqual(asked, ["venv", "venv"])
+            self.assertTrue(making.claim(), "a making that failed again is reported again")
+            # A base another process made is taken: nothing remembered stands in its way.
+            env = base.where(self.installation)
+            with self.made(Fake()):
+                base.ensure(self.installation, told=lambda _line: None)
+            self.assertIsNone(making.remembered())
+            self.assertEqual(base.kernel()["prefix"], str(env))
+
+    def test_a_failed_making_that_can_clear_by_itself_is_made_again_after_a_pause(self) -> None:
+        offline = "error: Failed to fetch: `https://pypi.org/simple/build123d/`\n  Caused by: dns error: failed to lookup address"
+        now = [0.0]
+        making = base.Making(clock=lambda: now[0])
+        fake = Fake(*[(2, offline)] * 4)
+        with self.kernel(making, fake):
+            first = self.refused()
+            self.assertEqual(first.cause, "network")
+            self.assertTrue(str(first).endswith(". The engine tries again on a request 5 min from now; "
+                                                '`cad run -c "import build123d"` tries now, saying each step.'), str(first))
+            now[0] = base.RETRY_SECONDS - 40
+            waiting = self.refused()
+            self.assertIn("(its try 4 min ago; nothing made since). The engine tries again on a request 40 s from now",
+                          str(waiting))
+            self.assertEqual(fake.asked(), ["venv", "pip --offline", "pip"], "told, not made again, within the pause")
+            now[0] = base.RETRY_SECONDS
+            self.assertEqual(self.refused().cause, "network")
+            self.assertEqual(fake.asked(), ["venv", "pip --offline", "pip"] * 2, "made again once the pause is over")
+
+    def test_each_failure_names_its_cause_where_it_is_classified(self) -> None:
+        recipe = base.recipe(self.installation)
+        install = ["uv", "pip", "install", "--python", "py", f"cad[build123d]=={RELEASE}"]
+        unlisted = ("error: No solution found when resolving dependencies\n"
+                    f"  ╰─▶ Because there is no version of cad[build123d]=={RELEASE} and you require "
+                    f"cad[build123d]=={RELEASE}, we can conclude that your requirements are unsatisfiable.\n")
+        for said, code, cause in (("Resolved 41 packages\n", -9, "killed"),
+                                  ("error: failed to create directory: Permission denied (os error 13)", 2, "denied"),
+                                  ("error: dns error: failed to lookup address", 2, "network"),
+                                  (unlisted, 1, "resolve"),
+                                  ("error: Failed to download `numpy==2.3.0`\n  Caused by: checksum mismatch", 2, "install")):
+            with self.subTest(cause=cause):
+                text, found = base._failure(install, said, recipe, code)
+                self.assertEqual(found, cause)
+                self.assertEqual(text, base.failure(install, said, recipe, code))
+        text, _cause = base._failure(install, "error: Failed to download `numpy==2.3.0`\n  Caused by: checksum mismatch",
+                                     recipe, 2)
+        self.assertEqual(text, "uv could not make the CAD kernel environment, from its cache, then from the network: "
+                               "Failed to download `numpy==2.3.0` (checksum mismatch) (the last of what uv said; the rest "
+                               "is kept nowhere)")
+        text, _cause = base._failure(install, unlisted, recipe, 1)
+        self.assertTrue(text.startswith(f"release {RELEASE} is on no package index uv reads: Because there is no version"))
+        self.assertTrue(text.endswith("; one of the indexes uv's settings name (UV_INDEX_URL, UV_DEFAULT_INDEX) must hold it"))
 
     def test_where_the_installation_installs_from(self) -> None:
         tree = self.root / "checkout"

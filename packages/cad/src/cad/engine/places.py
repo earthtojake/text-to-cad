@@ -717,7 +717,8 @@ def kernel(make: bool = True) -> dict[str, Any] | None:
     server's ``Daemon.caller``); ``own``: this interpreter's environment, whose engine folder a process
     started there is given and whose import path a spawned process is handed as it is -- or None when it
     is not made and ``make`` is false. ``serve.KernelProcessesUnavailable`` when it cannot be made, saying
-    why: no kernel process starts without it, and nothing remembers the failure."""
+    why and with the cause the server gave its refusal (its ``cause``, else ``other``): no kernel process starts
+    without it. What the server remembers of a failed making is the server's (``KERNEL``)."""
     if KERNEL is None:
         return {"python": sys.executable, "prefix": sys.prefix, "path": None, "own": True}
     try:
@@ -725,4 +726,6 @@ def kernel(make: bool = True) -> dict[str, Any] | None:
     except Exception as error:  # noqa: BLE001 - the server's refusal, carried in one line
         from cad.engine.serve import KernelProcessesUnavailable
 
-        raise KernelProcessesUnavailable(f"the server has no CAD kernel environment: {error}") from error
+        cause = getattr(error, "cause", None)
+        raise KernelProcessesUnavailable(f"the server has no CAD kernel environment: {error}",
+                                         cause if isinstance(cause, str) else "other") from error

@@ -387,12 +387,13 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
     it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot
     reach the network says so in a line, and nothing else waits on it.
-    A command sends nothing itself: what it counted -- an engine verb's build, export or
-    snapshot (`_internal/engine_telemetry.py`, the server's observer of the engine), a drawing, a
-    crash; a model's own process, where only the library is installed, counts nothing -- is kept
+    A command sends nothing itself: what it counted -- an engine verb's export or snapshot
+    (`_internal/engine_telemetry.py`, the server's observer of the engine), a drawing, a crash --
+    and each model build the daemon answered, counted there after its answer, for the person who
+    asked it (a model's own process, where only the library is installed, counts nothing), are kept
     in a small file beside the settings (`analytics.spool`), which the CAD app's
-    and the viewer's background sends take, and a command that finds it has waited more than a
-    window, with no other process sending, starts a sender detached that sends it and exits
+    and the viewer's background sends take, and a command or the daemon that finds it has waited more
+    than a window, with no other process sending, starts a sender detached that sends it and exits
     (the server's `_internal/telemetry_send.py`). A process that exits sends nothing either: its last batch is
     kept beside the settings, and the next process that sends sends it, in the background. One
     wait remains, bounded: `cad telemetry off`, which waits for the deletion it asks for.
@@ -581,44 +582,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     type has a decorator or an edit, never both; the registry says which (`Producer`, `Edit`).
 
 
-## Agent operations
+## Inspection
 
-Every MCP presentation exposes `cad_export`, `cad_snapshot` and `cad_inspect`,
-independently of the viewer. They call the Python operations through the engine's
-workers. No tool builds or imports a script: a model is built by its script, run by Python
-(laws 11, 12). A source is an absolute CAD file path or a document id; a document id is read as
-the engine holds it. Export names absolute server-host destinations; snapshot names a PNG or a
-Quick Edit packet.
-
-Start with a unique `requestId` (16–100 letters, digits, underscores or hyphens).
-A start is checked whole before anything is queued: a refusal names every argument
-missing and every one the tool does not take, and the shape it takes, in one line.
-The result carries `id`, `epoch`, `state`, `sequence`, `stage` and `progress` -- the engine's
-latest progress event for the operation, the one shape every job the engine runs says where it is
-in (the engine's **Progress**: `{kind, stage, job, outputs, detail, done, total, elapsedMs}`), and
-its stage's words -- and, when done, `result` or `error`. Use the same tool with `action: "status"`, `operationId` and
-`epoch`; `waitMs` (up to 25000) waits for the result, on a start or a status, or with
-`afterSequence` for the next change. A retry
-with the same request ID joins the identical operation; changed arguments are
-refused. `action: "cancel"` cancels queued work. Running operations can write
-explicit destinations and are not cancellable. Disconnecting does not cancel. File outputs are not a multi-file transaction: a
-failed operation may have written earlier outputs or a called model's declarations.
-Failure results state this explicitly (`outputsMayHaveBeenWritten`, false when it failed before
-anything was asked to write); reports over 2 MiB are explicitly marked
-truncated and can be obtained through the Python API or CLI.
-There is no separate job tool or generic HTTP jobs API.
-
-Status is in session memory for up to 24 hours: the 64 most recent finished operations
-(32 MiB of reports at most) and the 2048 most recent request identities, the oldest
-dropped rather than new work refused; a restart loses it. A remembered identity whose
-operation was dropped answers 410 and never replays writes.
-The server's `jobs.py` owns admission, progress, waiting and cancellation for both agent
-operations and viewer exports. Viewer exports additionally own temporary artifact
-expiry, revision checks and download delivery; running cancellation discards that
-temporary artifact. Browser downloads choose the viewer user's local destination
-before starting. An agent's explicit host path is a different destination contract.
-
-`cad <type> inspect`, `cad.<type>.inspect()` and `cad_inspect` read existing files or the
+`cad <type> inspect` and `cad.<type>.inspect()` read existing files or the
 documents the engine holds by id (`cad model inspect <id>`, `cad.model.inspect(handle)`). They never execute source to obtain a missing model or write
 its declared outputs. An unbuilt or unsaved model requires an explicit build: one
 the engine built before names the command (`cad run` and the script that defines it). With no reference,

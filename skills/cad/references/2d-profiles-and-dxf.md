@@ -75,7 +75,8 @@ Running the script is the only way to build a drawing, and exporting it the only
 DXF. `cad run <drawing>.py` writes nothing; it prints each model's report (`built
 src/gasket.py::gasket cold in 2.29s: ...`), its `id:` and its page, and exits 1 when a body raises.
 Run each drawing script directly; do not sweep directories. `cad model export` exits 2 when it refuses
-the drawing (3D, off the plane, a failed drawing check), naming which. An existing `.dxf` needs
+the drawing (3D, off the plane, a layer name, a failed drawing check), naming which, and writes none
+of the export's files, the STEP or the STL beside the DXF included. An existing `.dxf` needs
 neither: hand it straight to a snapshot or the viewer.
 
 Drawings delivered after every change go in an `exports.py` beside them that imports each drawing

@@ -115,13 +115,18 @@ _MOUNTING_KEPT = 64
 # came (its process gone mid-open) is ever let go, oldest first.
 _ASKED_KEPT = 16
 
+# What no tool does: the `cad` command's, which every host's agent runs in its shell (the cad skill's).
+COMMANDS = ("To export a model, inspect it or snapshot it for yourself, run `cad model export <id> <file>`, "
+            "`cad model inspect <id>` or `cad model snapshot <id> out.png` in a shell (a file: `cad <type> ...` with "
+            "its path, as `cad step inspect part.step`).")
+
 INSTRUCTIONS = (
     f"CAD shows local CAD models ({FORMATS}) in a viewer tab beside the chat. "
     "To show a model, call cad_show with its document id (running its script prints it) or a CAD file's absolute "
     "path: it switches an open viewer and never opens a tab. "
     "Only when cad_show reports no open viewer, call cad_open, once. "
     "Viewers follow every rebuild of a model and every save of a file, so never reopen after a rebuild. "
-    "cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see."
+    "cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see. " + COMMANDS
 )
 
 INLINE_INSTRUCTIONS = (
@@ -130,7 +135,7 @@ INLINE_INSTRUCTIONS = (
     "show it: each call adds a viewer and pauses the earlier ones. "
     "Viewers follow every rebuild of a model and every save of a file, so never show a model again after a rebuild. "
     "cad_view reports what the user is looking at and has selected in a viewer, and cad_screenshot returns "
-    "what they see; both take the view that cad_show returned."
+    "what they see; both take the view that cad_show returned. " + COMMANDS
 )
 
 # What a text client's page does after it opens, true of a document and of a file alike.
@@ -141,15 +146,16 @@ TEXT_INSTRUCTIONS = (
     f"CAD opens models and local CAD files ({FORMATS}) in the user's browser: "
     "this app cannot show CAD views itself. Call cad_show with source set to a model's document id (running its "
     "script prints it) or a file's absolute path: it opens the page in the user's browser, or says it is open "
-    "already, and answers with its URL; give the user that URL. " + FOLLOWS
+    "already, and answers with its URL; give the user that URL. " + FOLLOWS + " " + COMMANDS
 )
 
 # A session Claude Code started (``host.claude_code``): CAD lists no tools there and says how to use CAD instead.
 CLAUDE_CODE_INSTRUCTIONS = (
-    "This CAD server offers no tools in Claude Code: use the cad skill and the `cad` command. In the Claude desktop "
-    "app's Code tab, CAD's inline card comes from Claude Desktop's own config: show models with its cad_show where "
-    "it is listed; where it is not, run `cad setup` and ask the user to quit and reopen Claude Desktop. Elsewhere, "
-    "and meanwhile, give the user the `cad viewer` link, which opens in the app's browser pane or their browser."
+    "This CAD server offers no tools in Claude Code: use the cad skill and the `cad` command. " + COMMANDS
+    + " In the Claude desktop app's Code tab, CAD's inline card comes from Claude Desktop's own config: show models "
+    "with its cad_show where it is listed; where it is not, run `cad setup` and ask the user to quit and reopen "
+    "Claude Desktop. Elsewhere, and meanwhile, give the user the `cad viewer` link, which opens in the app's browser "
+    "pane or their browser."
 )
 
 _ICON_SVG = (
@@ -199,8 +205,7 @@ def _object(properties: dict[str, Any] | None = None, required: list[str] | None
     return schema
 
 
-# What names a model, the one argument name every tool gives it: cad_show and cad_open as cad_export,
-# cad_snapshot and cad_inspect do.
+# What names a model, the one argument name every tool that takes one gives it (cad_show, cad_open).
 _SOURCE = {"type": "string", "description": "A CAD file's absolute path, or a document id (a model's, which running its script prints)."}
 # The tools the agent calls with a model or a view, whose arguments are checked against what they take
 # (``_arguments``): the host's own surfaces (``cad_file``, ...) are called with what the host sends.
@@ -218,9 +223,6 @@ _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": F
 _APP_TOKEN_META = "dev.texttocad/httpToken"
 _APP_TOKEN_HEADER = "x-cad-app"
 _APP_TOKEN_ARGUMENT = "app"
-# Where an operation's answer carries why it failed (``analytics.FAILURES``) to ``_call``, which takes it
-# out before the host sees the answer.
-_FAILED_FOR = "_failedFor"
 _APP_TOKEN_SCHEMA = {"type": "string", "description": "The view's capability, from its launch's metadata."}
 # The card's Browser (its file menu's Open in): this process opens the web viewer's page of the document the card
 # shows (``_open_in_browser``), a route of the app's alone -- an agent's request never reaches it.
@@ -262,7 +264,7 @@ def _unreached(page: str | None) -> str:
             "person to allow it, or be collapsed or scrolled away), or the chat drew it but carries none of its calls back "
             "to CAD (the Claude app's Code tab draws cards so), and CAD can neither read nor capture it. Ask the person "
             f"whether they see the model; if the card says this chat can't connect, {instead}. To see the model yourself, "
-            "use cad_snapshot.")
+            "render it headless with `cad <type> snapshot`.")
 
 
 def _unavailable(error: BaseException) -> str:
@@ -273,11 +275,6 @@ def _unavailable(error: BaseException) -> str:
 
     hint = native_load_hint(error.__cause__ or str(error))
     return f"{error}\n{' '.join(hint)}" if hint else str(error)
-
-
-def _data(structured: dict[str, Any]) -> dict[str, Any]:
-    """A result only the page reads."""
-    return {"content": [], "structuredContent": structured}
 
 
 def file_uri_path(value: Any) -> str | None:
@@ -299,6 +296,49 @@ def local_path(value: str, *, windows: bool = os.name == "nt") -> str:
     return path
 
 
+def no_drive(value: Any, *, windows: bool = os.name == "nt") -> str:
+    """What a refusal of a relative path adds on Windows, for one that starts with a slash and names no drive (a
+    POSIX shell's ``/c/Users/...``, a sandbox's ``/mnt/...``): that a path there starts with its drive. An agent told
+    only that a path must be absolute, of one it wrote as absolute, sends it again as it was. '' elsewhere. Nothing
+    guesses which drive such a path meant."""
+    if windows and isinstance(value, str) and value[:1] in ("/", "\\") and value[1:2] not in ("/", "\\"):
+        return "; on Windows an absolute path starts with its drive (C:\\Users\\...)"
+    return ""
+
+
+def _refusal(tool: str, missing: list[str], unknown: list[str], takes: str) -> str:
+    """A call's arguments refused in words: what is missing, what the tool does not take, and what it takes."""
+    said = ([f"missing {', '.join(missing)}"] if missing else []) + ([f"unknown {', '.join(unknown)}"] if unknown else [])
+    return f"{tool}: {'; '.join(said)}. {takes}".strip()
+
+
+def _first_report(error: BaseException) -> bool:
+    """Whether a call's ``KernelProcessesUnavailable`` is reported as a crash: a pool the system refused, each
+    time (each call tried it); a kernel environment that could not be made, once per making that failed,
+    whether a call or a build the daemon answered met it first (``engine_telemetry.first_report``). A check's
+    is told by type (``no_kernel``), never sent as a crash."""
+    from cad_server._internal.engine_telemetry import first_report
+
+    return first_report(error)
+
+
+def _reads_with_kernel(model: str) -> bool:
+    """Whether the view of ``model`` (an absolute path, or a document id) is read by the engine's kernel
+    processes -- a model's document, an xbf, a STEP, a robot's -- whose pool a launch warms (``Server.warm``). A
+    mesh (STL, GLB, 3MF), which the page parses itself, a DXF or a KiCad file is read by none: its launch starts
+    no pool, and so neither waits for the kernel environment to be made nor fails where the machine cannot start
+    one (``KernelProcessesUnavailable``, which once failed the launch of a view that needed no kernel)."""
+    from cad_server.viewer.kinds import ENGINE_KINDS, ROBOT_KINDS, file_kind
+
+    kind = file_kind(model)
+    return kind is None or kind in ENGINE_KINDS or kind in ROBOT_KINDS
+
+
+def _data(structured: dict[str, Any]) -> dict[str, Any]:
+    """A result only the page reads."""
+    return {"content": [], "structuredContent": structured}
+
+
 class Server:
     def __init__(self, *, page: AppPage | None = None, recents=None, tunnel=None, viewer_url=None, browser_opener=None,
                  sidebar_views=None, analytics=None, sync_document=lambda path: None, warm=lambda: None,
@@ -317,10 +357,6 @@ class Server:
         self._sidebar_views = sidebar_views
         self._model: str | None = None  # what this thread last opened or showed
         self._tools: list[dict[str, Any]] | None = None
-        from .operations import Operations
-        # A mistake in cadgen's code an operation failed for is a crash of the tool's, counted as ``_call``
-        # counts one a handler raised.
-        self.operations = Operations(crashed=lambda error, tool: self.analytics.crashed(error, "tool", tool=tool))
         self.tabs = False  # decided at initialize: see the module docstring
         self.text = False
         # A session Claude Code started (``host.claude_code``), decided at initialize: it lists no tools.
@@ -508,8 +544,6 @@ class Server:
             return []  # Claude Code's session: CAD is its skill and the `cad` command there (``host.claude_code``)
         if self._tools is None:
             self._tools = self._tab_catalog() if self.tabs else self._text_catalog() if self.text else self._inline_catalog()
-            from .operations import catalog
-            self._tools += catalog()
         return self._tools
 
     def _tab_catalog(self) -> list[dict[str, Any]]:
@@ -624,9 +658,7 @@ class Server:
         # Only a tool this client was listed: text clients have no page tools.
         # Shared HTTP calls enforce their own route and consent authorization.
         listed = any(tool["name"] == name for tool in self.tools())
-        from .operations import START
-        handler = ((lambda arguments, context: self._operation(name, arguments)) if name in START else
-                   getattr(self, f"_tool_{name}", None)) if listed else None
+        handler = getattr(self, f"_tool_{name}", None) if listed else None
         if handler is None:
             self._refused(name, "no_view")  # a tool of cadgen's this host was not listed: a view it does not show
             raise RpcError(INVALID_PARAMS, f"unknown tool {name!r}")
@@ -636,14 +668,11 @@ class Server:
             if name in _AGENT_TOOLS:
                 self._arguments(name, arguments)
             result = handler(arguments, context)
-            # An operation's answer that says it failed says why too (``_operation``), never to the host.
-            failed_for = result.pop(_FAILED_FOR, None) if isinstance(result, dict) else None
             if not self.text and isinstance(result.get("structuredContent", {}).get("launch"), dict):
                 # MCP result metadata is delivered to the app, never put in the model's context.
                 result.setdefault("_meta", {})[_APP_TOKEN_META] = self._app_token
                 self._reach(result["structuredContent"]["launch"])
             ok = not (isinstance(result, dict) and result.get("isError"))
-            reason = failed_for or reason
             return result
         except ToolFailed as failure:
             reason = failure.reason
@@ -653,10 +682,12 @@ class Server:
 
             if not isinstance(error, KernelProcessesUnavailable):
                 raise  # cadgen's own bug: ``handle`` reports it, and the host gets an internal error
-            # The machine refused the engine's kernel processes. The agent reads that and its cause as
-            # the tool's result; the crash is still counted (its type and frames, as ``handle`` would).
-            reason = "other"
-            self.analytics.crashed(error, "tool", tool=name)
+            # The machine refused the engine's kernel processes (no kernel environment, or a pool it would not
+            # start). The agent reads that and its cause as the tool's result; the call is counted as failed for
+            # it (``no_kernel``), and the failure reported once, with its frames and cause (``_first_report``).
+            reason = "no_kernel"
+            if _first_report(error):
+                self.analytics.crashed(error, "tool", tool=name)
             return _text(_unavailable(error), error=True)
         finally:
             self.analytics.called(name, ok, reason)
@@ -670,17 +701,13 @@ class Server:
         (``bad_request``): never by the name the host sent."""
         from cad_server.analytics import UNKNOWN_TOOL
 
-        from .operations import START
-
-        own = isinstance(name, str) and (name in START or callable(getattr(type(self), f"_tool_{name}", None)))
+        own = isinstance(name, str) and callable(getattr(type(self), f"_tool_{name}", None))
         self.analytics.called(name if own else UNKNOWN_TOOL, False, reason if own else "bad_request")
 
     def _arguments(self, name: str, arguments: dict[str, Any]) -> None:
         """An agent tool's arguments against the schema this client was listed: one it does not take is
-        refused in words, with every one missing and what the tool takes (``operations.refusal``). One
+        refused in words, with every one missing and what the tool takes (``_refusal``). One
         only missing is the handler's to refuse, in its own words."""
-        from .operations import refusal
-
         schema = next(tool["inputSchema"] for tool in self.tools() if tool["name"] == name)
         unknown = sorted(key for key in arguments if key not in schema["properties"])
         if not unknown:
@@ -692,22 +719,12 @@ class Server:
                  + (f", optionally {' and '.join(optional)}" if optional else "")
                  + ("; source is a document id (running a model's script prints it) or a CAD file's absolute path"
                     if "source" in schema["properties"] else "") + ".")
-        said = refusal(name, missing, unknown, takes)
+        said = _refusal(name, missing, unknown, takes)
         if "source" in missing:
             raise ToolFailed(said, "no_path")
         if "view" in missing:
             raise ToolFailed(said, "no_view")
         raise ToolFailed(said, "bad_request")
-
-    def _operation(self, name, arguments):
-        """An operation's start, status or cancel (``operations.Operations``): its answer, and -- where it
-        says the operation failed or the start was refused -- why, for the call's telemetry (``_call``):
-        the engine refusing what the call asked is the caller's, never cadgen's bug."""
-        result, reason = self.operations.answered(name, arguments)
-        answer = _text(json.dumps(result), result, error=result["state"] in ("failed", "rejected"))
-        if reason is not None:
-            answer[_FAILED_FOR] = reason
-        return answer
 
     # launches -----------------------------------------------------------------
 
@@ -718,7 +735,8 @@ class Server:
         if surface:
             launch["surface"] = surface
         self._model = model
-        self.warm()  # the view's first document meshes on a pool already starting
+        if _reads_with_kernel(model):
+            self.warm()  # the view's first document meshes on a pool already starting
         return _stamped(launch)
 
     def _home(self, *, surface: str | None = None) -> dict[str, Any]:
@@ -789,7 +807,8 @@ class Server:
             return answer["document"].get("path") or value
         path = local_path(value)
         if not os.path.isabs(path):
-            raise ToolFailed(f"{value} is not an absolute path: name the model by its absolute path.", "relative_path")
+            raise ToolFailed(f"{value} is not an absolute path: name the model by its absolute path{no_drive(path)}.",
+                             "relative_path")
         path = os.path.abspath(path)
         if not os.path.isfile(path):
             raise ToolFailed(f"No file at {path}.", "no_file")
@@ -1008,7 +1027,8 @@ class Server:
             raise ToolFailed(f"This app cannot show CAD views, and CAD's server gave no browser page ({failure}). Run "
                              f"`cad viewer --host 127.0.0.1 --json {model}` and open the url it prints.",
                              "no_viewer") from failure
-        self.warm()  # the browser page's first document meshes on a pool already starting
+        if _reads_with_kernel(model):
+            self.warm()  # the browser page's first document meshes on a pool already starting
         name = os.path.basename(model)
         cannot = f"No browser can be opened from here ({{reason}}); {name}'s page is {link}."
         peer = self._peer_browser

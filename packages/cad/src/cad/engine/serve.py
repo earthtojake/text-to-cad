@@ -467,13 +467,23 @@ class NotHeld(ValueError):
 
 
 class KernelProcessesUnavailable(RuntimeError):
-    """The engine could not start the processes its kernel work runs in. Python refused what a
-    process pool needs: on Windows, most often the loader refusing ``_multiprocessing.pyd``
-    (``DLL load failed while importing ...``). It is a ``RuntimeError``, as ``api.EngineError`` is,
-    and not the ``ImportError`` it wraps: no model is missing a module. Its message carries the
-    original error's type and words, and ``__cause__`` the error itself. There is no in-process
-    fallback, because kernel work never runs in the engine's threads (law 20). Nothing remembers
-    the failure: the next request tries again."""
+    """The engine could not start the processes its kernel work runs in: the environment they run in
+    could not be made (``places.kernel``), or Python refused what a process pool needs -- on Windows,
+    most often the loader refusing ``_multiprocessing.pyd`` (``DLL load failed while importing ...``).
+    It is a ``RuntimeError``, as ``api.EngineError`` is, and not the ``ImportError`` it wraps: no model
+    is missing a module. Its message carries the original error's type and words, and ``__cause__`` the
+    error itself; ``cause`` is a word saying which failure it was, never read from the words (``pool``:
+    the pool refused; else the word the server gave the environment's failure). There is no in-process
+    fallback, because kernel work never runs in the engine's threads (law 20). A refused pool is tried
+    again by the next request; a failed making of the environment is remembered by the server that made
+    it, which says what clears it."""
+
+    def __init__(self, message: str = "", cause: str = "other") -> None:
+        super().__init__(message)
+        self.cause = cause
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        return type(self), (str(self), self.cause)
 
 
 def _process_pool(workers: int, **options: Any) -> concurrent.futures.ProcessPoolExecutor:
@@ -496,7 +506,8 @@ def _process_pool(workers: int, **options: Any) -> concurrent.futures.ProcessPoo
     except (ImportError, OSError, NotImplementedError, ValueError) as error:
         where = "" if found["own"] else f" in {found['python']}"
         raise KernelProcessesUnavailable(
-            f"The CAD engine could not start its kernel processes{where} ({type(error).__name__}: {error})") from error
+            f"The CAD engine could not start its kernel processes{where} ({type(error).__name__}: {error})",
+            "pool") from error
 
 
 # The import path the pool's processes start with when they run another environment's Python than this
