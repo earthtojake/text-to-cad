@@ -117,13 +117,23 @@ where those files ship, so these scripts are what produces them.
 - `rehearse-update.py [ROUTE ...] [--old RELEASE]` — rehearses, on private computers (each its own home,
   state, engine, cache and `cad` command folders), a computer on a shipped release arriving at this build by
   each route: `updater`, 0.11.10's (or `--old`'s) own update button running this build's hidden
-  `cad setup --engine-update` (the install script it starts is a stand-in that notes it ran);
-  `install-script`, `scripts/install/install.py` on a computer of 0.11.10 whose server serves pages; and
-  `from-0.8`, 0.8.4 installed by its own `cadgen setup` with telemetry off, then `install.py`. It installs the
-  real releases from PyPI, publishes this tree as one later release, and never names a port: servers take
-  3245 where it is free, else a port of the computer's own as their default. It checks this build's server
-  on the pages' port with their token, Recents and a document opening, the telemetry answer and What's new,
-  the `cad` command with and without a pin, the install script started once, and one server: the old
+  `cad setup --engine-update`, then this build's server running the install script it owes (a stand-in that
+  writes the script's report; from 0.10.0 on Windows, this build's setup taking the computer over, since that
+  release keeps its state apart); `automatic`, the same by 0.11.10's automatic update, nothing pressed;
+  `handover` (POSIX), the button on a computer with stand-ins of Claude Code's and Codex's commands holding
+  0.11.10's plugin, the real `install.sh` and `install.py` run by the hand-over, failing once and holding at
+  the next server start, every stand-in ending with the new plugin and without the old; `rollback`, the
+  automatic update to a variant of this build whose server cannot start, gone back from, and its retry a day
+  later: 0.11.10 serving again on the pages' port with their token, `current` and the `cad` command its own,
+  the install script never run; `install-script`, `scripts/install/install.py` on a computer of 0.11.10 whose
+  server serves pages; and `from-0.8`, 0.8.4 installed by its own `cadgen setup` with telemetry off, then
+  `install.py`. It installs the real releases from PyPI, publishes this tree as one later release (and the
+  variant as another), and never names a port: servers take 3245 where it is free, else a port of the
+  computer's own as their default. No real agent app runs: `CODEX_CLI` names the computer's own (old
+  releases otherwise find the Codex app's bundled command) and `install.py` looks on PATH alone. It checks
+  this build's server on the pages' port with their token, Recents and a document opening, the telemetry
+  answer and What's new, the `cad` command with and without a pin, the switch's record, the install script
+  run by this build's server once it served and the hand-over recorded done, and one server: the old
   release's stopped and its layout removed by this build's cleanup. Needs uv and the network. Called by
   `test.yml`'s `update-rehearsal` job on Linux, macOS and Windows.
 - `real-install.py --wheels DIR [--require claude,codex,gemini] [--keep] [--work DIR]` — the install script

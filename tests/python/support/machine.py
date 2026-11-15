@@ -49,10 +49,12 @@ TAKEN = range(3245, 3251)
 WINDOWS = os.name == "nt"
 
 
-def wheel(distribution: str, version: str, folder: Path) -> Path:
+def wheel(distribution: str, version: str, folder: Path, replace: dict[str, bytes] | None = None) -> Path:
     """This source tree's ``distribution`` as a wheel of release ``version``: its packages and package data
     but the built runtime (``_runtime``: nothing here serves a page), what it carries at its root, its dependencies -- the library pinned at ``version``
-    -- and command as ``pyproject.toml`` declares them, and a ``build123d`` extra that names nothing."""
+    -- and command as ``pyproject.toml`` declares them, and a ``build123d`` extra that names nothing. ``replace``: files
+    of its packages, by their path in the wheel, given other bytes in the wheel alone (a variant of the release a
+    rehearsal publishes: the source tree is never written)."""
     source, packages, roots = DISTRIBUTIONS[distribution]
     project = tomllib.loads((source / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     stem = distribution.replace("-", "_")
@@ -65,7 +67,12 @@ def wheel(distribution: str, version: str, folder: Path) -> Path:
             if (path.is_file() and parts[0] != "_runtime" and "__pycache__" not in parts and path.suffix != ".pyc"
                     and not path.name.startswith(".")):
                 files["/".join((top, *parts))] = path.read_bytes()
-    requirements = [f"cad=={version}" if requirement.startswith("cad==") else requirement
+    for name, data in (replace or {}).items():
+        if name.split("/", 1)[0] in packages:
+            if name not in files:
+                raise FileNotFoundError(f"{distribution} {version} has no {name} to replace")
+            files[name] = data
+    requirements =[f"cad=={version}" if requirement.startswith("cad==") else requirement
                     for requirement in project["dependencies"]]
     metadata = ["Metadata-Version: 2.4", f"Name: {distribution}", f"Version: {version}",
                 f"Requires-Python: {project['requires-python']}",
@@ -84,10 +91,11 @@ def wheel(distribution: str, version: str, folder: Path) -> Path:
     return out
 
 
-def release(version: str, folder: Path) -> None:
-    """Release ``version`` published to ``folder``: the library's wheel and the server's."""
+def release(version: str, folder: Path, replace: dict[str, bytes] | None = None) -> None:
+    """Release ``version`` published to ``folder``: the library's wheel and the server's (``replace``: as ``wheel``
+    takes it)."""
     for distribution in DISTRIBUTIONS:
-        wheel(distribution, version, folder)
+        wheel(distribution, version, folder, replace)
 
 
 class Feed(http.server.ThreadingHTTPServer):

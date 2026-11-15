@@ -31,8 +31,11 @@ cache folder of 0.11.10 and earlier the kernel and ``cad run`` environments (``b
 
 Arriving from an earlier release (``cad setup``): the servers of 0.8 (and of 0.10.0 on Windows) stopped by their own
 stop command (``stop_earlier``); and, on the install command's route rather than an updater's, the mirror written for
-the version and a server of 0.11.10 or earlier at the flat door asked to stop once idle (``hand_over``). These are
-cad's own past processes and records, found the way each release recorded them; nothing of an app's is touched.
+the version and a server of 0.11.10 or earlier at the flat door asked to stop once idle (``hand_over``). The updater of
+0.10.0 on Windows, whose switch cannot start this version, has its server stopped the same way before anything of
+it is taken in (``stop_appdata``, which says whether it held), and the version's setup then takes over as the install
+command's route does (``cad_server.cli.setup``). These are cad's own past processes and records, found the way each
+release recorded them; nothing of an app's is touched.
 
 What it keeps, because a client of 0.11.10 or earlier may still read it and it is small, or it is the computer's: the
 shared ``settings.json`` (a telemetry no is written there too; a version with nothing older to import from imports
@@ -52,7 +55,7 @@ from typing import Callable
 from cad.engine import places
 
 __all__ = ["CACHES", "REMOVED", "SETTINGS", "cache_root", "hand_over", "importable", "present", "remove", "removable",
-           "root", "stop_earlier", "unsafe"]
+           "root", "stop_appdata", "stop_earlier", "unsafe"]
 
 # The settings it keeps, which a version with nothing older to import from imports alone once its bulk is gone.
 SETTINGS = "settings.json"
@@ -253,6 +256,24 @@ def stop_earlier(told: Callable[[str], None] | None = None) -> list[str]:
     releases have no updater, and their servers stop on no timer: one left running would serve beside this version's
     for as long as the computer runs. A stop that fails fails nothing; what one did is said to ``told``. The versions
     whose stop ran."""
+    from cad_server._internal import installations
+
+    return _stop((("cadgen", installations.earlier(), installations.EARLIER_CONSOLE),
+                  ("cad-server", installations.appdata(), "cad")), told)[0]
+
+
+def stop_appdata(told: Callable[[str], None] | None = None) -> bool:
+    """0.10.0's servers on Windows (``installations.appdata``) stopped by its own stop command, as ``stop_earlier``
+    stops them: whether every one held -- its stop ran and exited 0, which for 0.10.0 means its server is gone (its
+    ``cad stop`` waits until it is, and fails where it is not) --, or there was none to stop."""
+    from cad_server._internal import installations
+
+    return _stop((("cad-server", installations.appdata(), "cad"),), told)[1]
+
+
+def _stop(kinds: tuple[tuple[str, list[dict], str], ...], told: Callable[[str], None] | None) -> tuple[list[str], bool]:
+    """Each record's server of ``kinds`` (its name, its records, the key naming its console script) stopped by its own
+    ``stop --json`` (``stop_earlier``): the versions whose stop ran, and whether every one ran and exited 0."""
     import json
     import subprocess
 
@@ -262,8 +283,8 @@ def stop_earlier(told: Callable[[str], None] | None = None) -> list[str]:
     environment = {key: value for key, value in os.environ.items() if key not in ("PYTHONPATH", "PYTHONHOME")}
     environment.update(NO_TELEMETRY)
     ran: list[str] = []
-    for name, records, key in (("cadgen", installations.earlier(), installations.EARLIER_CONSOLE),
-                               ("cad-server", installations.appdata(), "cad")):
+    held = True
+    for name, records, key in kinds:
         for record in records:
             console = record.get(key)
             if not (isinstance(console, str) and os.path.isfile(record["python"]) and os.path.isfile(console)):
@@ -275,6 +296,7 @@ def stop_earlier(told: Callable[[str], None] | None = None) -> list[str]:
                                       timeout=STOP_SECONDS)
             except (OSError, subprocess.SubprocessError) as error:
                 say(f"{name} {record['version']}'s `{verb}` could not run ({error}): its server may still run")
+                held = False
                 continue
             ran.append(record["version"])
             try:
@@ -284,9 +306,10 @@ def stop_earlier(told: Callable[[str], None] | None = None) -> list[str]:
             if done.returncode != 0:
                 say(f"{name} {record['version']}'s `{verb}` failed (exit status {done.returncode}): its server may "
                     "still run")
+                held = False
             elif stopped:
                 say(f"stopped {name} {record['version']}'s server (its own `{verb}`)")
-    return ran
+    return ran, held
 
 
 def _flat_legacy(status: dict | None) -> bool:
@@ -301,8 +324,8 @@ def _flat_legacy(status: dict | None) -> bool:
 
 def hand_over(version: str, told: Callable[[str], None] | None = None) -> bool:
     """``cad setup`` of version ``version``, reached by the install command rather than by the updater of the layout of
-    0.11.10 and earlier (whose ``cad setup --engine-update`` writes the mirror, and whose
-    switch stops its own server):
+    0.11.10 and earlier (whose ``cad setup --engine-update`` writes the version's record, and whose switch points
+    ``installations/current`` and stops its own server):
 
     - the records clients of those releases start a server by written for ``version`` (``installations.mirror``)
       where ``installations/current`` names nothing (a new computer, one coming from 0.8), a release of that layout,

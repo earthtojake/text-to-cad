@@ -724,6 +724,10 @@ class Daemon:
         self.cleaning: threading.Thread | None = None
         self.cleaned: float | None = None
         self.legacy_tried: float | None = None
+        # The hand-over its version owes the computer a shipped updater brought it to (``install_script.Carrier``).
+        from cad_server._internal.install_script import Carrier
+
+        self.handover = Carrier(time.monotonic())
         from cad_server.engine.models import Models
 
         self.models = Models(self)
@@ -1915,7 +1919,10 @@ class Daemon:
         as it starts and then every ``versions.CLEAN_SECONDS`` (``versions.due``, at ``now``, monotonic), the
         cleanup in the background (``versions.clean``: nothing unless its version is the newest installed); between
         those, while the layout of 0.11.10 and earlier is there, its removal tried again every
-        ``versions.LEGACY_SECONDS`` (``versions.clean_legacy``)."""
+        ``versions.LEGACY_SECONDS`` (``versions.clean_legacy``). Then, the first time it serves since its version was
+        set up, that said once (``arrival.first_serve``); and the hand-over its version owes the computer a shipped
+        updater brought it to, carried out (``install_script.Carrier``: the hosted install script, run by a detached
+        program of its own while ``installations/current`` names its version, until it has worked)."""
         name = versioned()
         if name is None or self.draining or self.stopping.is_set():
             return
@@ -1944,7 +1951,15 @@ class Daemon:
         except Exception as error:  # noqa: BLE001 - the engine's tending never fails for a folder
             print(f"cad: the versions could not be looked after: {type(error).__name__}: {error}", file=sys.stderr,
                   flush=True)
+        say = lambda line: print(f"cad: {line}", file=sys.stderr, flush=True)  # noqa: E731
+        try:
+            from cad_server._internal import arrival
 
+            arrival.first_serve(name, say)
+            self.handover.tend(name, say, mono=now)
+        except Exception as error:  # noqa: BLE001 - the engine's tending never fails for the hand-over
+            print(f"cad: the hand-over could not be looked after: {type(error).__name__}: {error}", file=sys.stderr,
+                  flush=True)
 
     def working(self) -> bool:
         """Whether anything an update's drain waits for is in flight: a build, a draw, an export, a

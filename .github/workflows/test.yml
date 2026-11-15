@@ -433,13 +433,16 @@ jobs:
   # computer of its own (scripts/test/rehearse-update.py): this tree published as one later release (wheels uv reads
   # beside the index, a local version feed), and no port named for any process: the servers take the true default
   # port, 3245 (free on a runner), and roll from it. The routes: 0.11.10's and 0.10.4's own updater (their update
-  # button running this build's hidden `cad setup --engine-update`; the install script it starts is a stand-in), the
-  # install script (install.py) on a computer of 0.11.10 whose server serves pages, and the install script on a
-  # computer of 0.8.4, which has no updater. Each checks this build's server on the pages' port with their token,
-  # Recents and a document opening, the telemetry answer and What's new, the `cad` command with and without a pin,
-  # and one server left: the old release's stopped and its layout removed by this build's cleanup. About 6 minutes
-  # of rehearsal (measured on macOS), plus the job's setup; Windows is slower (uv copies). Before a release ships (a
-  # full run), nightly, and on a change to the installers or the rehearsal.
+  # button running this build's hidden `cad setup --engine-update`, then this build's server running the install
+  # script it owes, a stand-in), 0.11.10's automatic update (Linux), the hand-over running the real install script on
+  # stand-ins of two apps and trying again after a failure (POSIX), 0.11.10 going back from a build whose server cannot
+  # start, 0.10.0's updater on Windows, which this build's setup takes over from (Windows), the install script
+  # (install.py) on a computer of 0.11.10 whose server serves pages, and the install script on a computer of 0.8.4,
+  # which has no updater. Each checks this build's server on the pages' port with their token, Recents and a document
+  # opening, the telemetry answer and What's new, the `cad` command with and without a pin, and one server left: the
+  # old release's stopped and its layout removed by this build's cleanup. About 8 minutes of rehearsal on macOS (10 on
+  # Linux, with the automatic update), plus the job's setup; Windows is slower (uv copies). Before a release ships (a
+  # full run), nightly, and on a change to the installers, the rehearsal or the code of this build it runs.
   update-rehearsal:
     name: update rehearsal (${{ matrix.os }})
     needs: changes
@@ -449,7 +452,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 55
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -471,13 +474,27 @@ jobs:
         timeout-minutes: 10
         run: python -m pip install --editable ./packages/cad --editable ./packages/cad-server
 
-      - name: From 0.11.10, by its updater and by the install script; from 0.8.4, by the install script
-        timeout-minutes: 20
-        run: python scripts/test/rehearse-update.py updater install-script from-0.8
+      # The automatic update is the button's switch, which every system rehearses, reached by the old release's own
+      # timers: Linux alone. The hand-over's stand-ins of the apps are POSIX scripts: not on Windows.
+      - name: From 0.11.10, by its updater (pressed, by itself, the hand-over, gone back from) and by the install script; from 0.8.4, by the install script
+        if: runner.os == 'Linux'
+        timeout-minutes: 30
+        run: python scripts/test/rehearse-update.py
+
+      - name: From 0.11.10, by its updater (pressed, the hand-over, gone back from) and by the install script; from 0.8.4, by the install script
+        if: runner.os != 'Linux'
+        timeout-minutes: 30
+        run: python scripts/test/rehearse-update.py updater handover rollback install-script from-0.8
 
       - name: From 0.10.4, the newest 0.10, by its updater
         timeout-minutes: 10
         run: python scripts/test/rehearse-update.py updater --old 0.10.4
+
+      # 0.10.0 on Windows keeps its state apart from every later release's: this build's setup takes the computer over.
+      - name: From 0.10.0 on Windows, by its updater
+        if: runner.os == 'Windows'
+        timeout-minutes: 10
+        run: python scripts/test/rehearse-update.py updater --old 0.10.0
 
   # ---- integration: each with what it drives installed -------------------------------------------
 

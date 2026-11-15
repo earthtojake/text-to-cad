@@ -22,10 +22,11 @@ command runs them:
   ``python`` and of its console script (``cad``), its environment (``prefix``) and when it registered
   (``registered``); and ``<state>/installations/current``, the version whose server every client of 0.11.10 and
   earlier starts or attaches to. Only those clients, and a process with no version (a checkout's, a test's), read
-  them. ``cad setup --engine-update`` writes both for its version (``mirror``: the hand-over from a shipped
-  release, whose switch reads them), and a registration where no installation is current (``cad doctor``, the CAD
-  app's server as it starts: ``setup``, ``startup``) points ``current`` at itself once (``bootstrap``). The server of
-  the version ``current`` names holds the flat door those clients find (``versions.flat``).
+  them. ``cad setup --engine-update`` writes its version's record (``register``: the hand-over from a shipped
+  release, whose switch then points ``current`` at the version, and back where its server does not answer), a plain
+  ``cad setup`` writes both (``mirror``), and a registration where no installation is current (``cad doctor``, the
+  CAD app's server as it starts: ``setup``, ``startup``) points ``current`` at itself once (``bootstrap``). The server
+  of the version ``current`` names holds the flat door those clients find (``versions.flat``).
 
 An editable install (a checkout's environment) registers nothing by itself: it reports the release's
 version, and its record would take a user's place. A development install names its own
@@ -497,10 +498,10 @@ def bootstrap(version: str, folder=None) -> bool:
 def mirror(version: str, folder=None) -> bool:
     """The records a client of 0.11.10 or earlier starts a server by, written for installed version ``version``: its
     record naming its server environment (its code marker's interpreter, console script and environment), and
-    ``current`` naming it, so such a client -- the switch of a shipped updater handing over to it among them -- starts
-    or finds that version's server (``versions.flat``), as does a process with no version (the library in a person's
-    own Python). Written by ``cad setup --engine-update``, and by ``cad setup`` where ``current`` names nothing, a
-    version not installed or an older one (``legacy.hand_over``). Whether it was written (False: ``version`` is not
+    ``current`` naming it, so such a client starts or finds that version's server (``versions.flat``), as does a
+    process with no version (the library in a person's own Python). Written by ``cad setup`` where ``current`` names
+    nothing, a version not installed or an older one (``legacy.hand_over``). Never by ``--engine-update``, which
+    writes the record alone: the shipped updater's switch reads ``current`` after it as the release to go back to. Whether it was written (False: ``version`` is not
     installed). ``OSError`` when it cannot be."""
     from cad.engine.places import version_record
 

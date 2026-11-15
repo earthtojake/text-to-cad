@@ -669,12 +669,17 @@ the agents running them depend on them:
 As many past releases as reasonable can reach the latest one:
 
 - **0.10.0 to 0.11.10** update through their own updater, which installs the newest release and runs its
-  `cad setup --engine-update`. That option, hidden from help and documents, sets the release up, hands
-  over from the layout those releases kept, and starts the hosted install script once, in the
-  background, which brings each app's plugin up to date. It starts it only once the site's `install.py`
-  names the release (it waits up to about an hour), and `Publish Release` purges the version feed only
-  once the install branches are written and `Deploy Docs` has run: those updaters run the release once, and the release before's script would leave
-  the apps as they were.
+  `cad setup --engine-update`. That option, hidden from help and documents, sets the release up, writes
+  the record their switch starts its server by, and owes the computer a run of the hosted install
+  script, which brings each app's plugin up to date. The release's own server runs it once it has run
+  five minutes (longer than their switch can still go back from it), while their switch has left it
+  current: each attempt waits until the site's `install.py` names the
+  release (up to about an hour), and a failed one is tried again (an hour later at the next start, then
+  daily, for at most 30 attempts or 30 days); a release whose server cannot start, which their switch
+  goes back from, never runs it. 0.10.0's updater on Windows, whose switch cannot find a later release
+  (it keeps its state apart), is taken over from by the release's own setup. `Publish Release` purges the version feed only once the install
+  branches are written and `Deploy Docs` has run: the release before's script would leave the apps as
+  they were.
 - **Older releases** reach the latest when a person or an agent runs the install command. The script
   removes what each past layout left in the agent apps (`scripts/install/install.py`, the `cleanup` of
   each row of `APPS` and `remove_loose_skills`).
@@ -835,9 +840,10 @@ green: that is the release. `Publish Release`, on the merge commit:
    feed's answer an hour (`api.texttocad.dev`), five minutes after them, when no
    instance of the feed's function still holds what it read from PyPI before: best
    effort, and nothing waits on it. It waits for the docs because an updater of 0.10.0 to
-   0.11.10 that reads the feed runs the release's `cad setup --engine-update` once, which
-   starts the hosted install script; that script (`cad_server._internal.install_script`)
-   also waits, up to about an hour, until the site's `install.py` names the release.
+   0.11.10 that reads the feed runs the release's `cad setup --engine-update`, after which
+   the release's own server runs the hosted install script; each of its attempts
+   (`cad_server._internal.install_script`) also waits, up to about an hour, until the site's
+   `install.py` names the release, and a failed one is tried again later.
 
 `main` has the new pins from the merge on, a few minutes before PyPI has the
 wheels. Only an install of `main` itself sees that: a command that names no

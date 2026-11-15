@@ -532,9 +532,9 @@ def flat(name: str | None) -> bool:
     """Whether version ``name``'s server holds the flat door of 0.11.10 and earlier (``places.engines_dir``'s own
     ``engine.door``, on Windows ``engine.port``, and ``engine.lock``) beside its own, and answers every client of
     those releases there: it is the version ``installations/current`` names, the record those clients start a server
-    by. Only ``cad setup`` (``installations.mirror``: its hand-over from a shipped release, ``--engine-update``, and a
-    setup where ``current`` names nothing, a version not installed or an older one) and a registration where none is
-    current (``installations.bootstrap``) write that file."""
+    by. Only a plain ``cad setup`` (``installations.mirror``: where ``current`` names nothing, a version not installed
+    or an older one), a shipped updater's switch after ``--engine-update`` wrote the version's record, and a
+    registration where none is current (``installations.bootstrap``) write that file."""
     from cad_server._internal import installations
 
     return name is not None and installations.current_version() == name

@@ -121,16 +121,29 @@ run here. A row that is wrong fails for that app alone.
 
 ## The one exception: `cad setup --engine-update`
 
-**Decision.** `cad setup` takes one hidden option, `--engine-update`. It sets up the release, hands
-over from the layout of earlier releases, and starts the hosted install script once, in the
-background, once the site's script is this release's or later (it waits up to about an hour).
+**Decision.** `cad setup` takes one hidden option, `--engine-update`. It sets up the release, writes
+the record the old updater's switch starts its server by, and owes the computer a run of the hosted
+install script: a record in the version's data, and nothing started. The version's own server
+carries that out once it has run five minutes (longer than the old switch can still go back from
+it), and only while it is the version the old layout's
+`installations/current` names: it waits until the site's script is this release's or later, runs
+it, and tries again (an hour later at its next start, then daily, for at most 30 attempts or 30
+days) until the script reports that it worked.
 
 **Why.** Releases 0.10.0 to 0.11.10 shipped an updater that installs a newer release and runs its
 `cad setup --engine-update`. That call is the only way those computers reach the new install model
-without a person doing anything. It is kept for as long as those releases are in use, and is left
-out of help and documents.
+without a person doing anything. Their switch goes back to the release before when the new server
+does not answer, so `--engine-update` leaves `installations/current`, the `cad` command and the
+server to it, and only a server that really runs ever runs the script: a release that cannot start
+leaves those computers as they were. 0.10.0 on Windows keeps its state apart from every later
+release's, so its switch can never find one and has no way back to keep: there `--engine-update`
+stops 0.10.0's server by its own stop command and takes the computer over itself, and takes nothing
+of 0.10.0's where that server would not stop. One attempt would lose the apps to a slow site deploy, a
+sleeping laptop or a network outage, so the server keeps trying. It is kept for as long as those
+releases are in use, and is left out of help and documents.
 
 **What it costs.** One place where cad starts the script that knows the apps. It is the only one.
+cad reads one thing of the report the script writes: whether its setup and every step held.
 
 ## No version left behind
 

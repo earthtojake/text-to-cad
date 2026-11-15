@@ -5,9 +5,10 @@ marker, and the ``cad`` command --, then starts that version's server (a real on
 is recorded), and knows no app: a home of the test's own holds agent apps' folders and stand-ins
 of their commands on PATH, which record any call. ``--engine-update`` is what the updaters of 0.10.0 to 0.11.10 run
 of a newer release, from the flat folder they made (its prepare run first, for an automatic update): it sets the
-version up, hands over from their layout, and starts the install script once, never waiting on it (its stand-in,
-``CAD_ENGINE_UPDATE_INSTALLER``). ``cad uninstall`` removes every version (a real server running, stopped first),
-the state and cache folders and the ``cad`` command, and nothing else.
+version up, writes the record their switch starts its server by, leaves ``installations/current`` and the ``cad``
+command to them, and owes the install script's run, which the version's server carries out (``test_handover``).
+``cad uninstall`` removes every version (a real server running, stopped first), the state and cache folders and the
+``cad`` command, and nothing else.
 
 The device is ``test_versions``'s (uv stood in for: each version a real virtual environment of this Python naming
 this checkout's sources); the real servers are ``test_version_servers``'s. A real 0.11.10 updating into this build
@@ -19,12 +20,7 @@ from __future__ import annotations
 import contextlib
 import io
 import os
-import shutil
-import subprocess
 import sys
-import tempfile
-import threading
-import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -33,7 +29,7 @@ from tests.python.packages.cad_server.test_version_servers import WAIT, Servers
 from tests.python.packages.cad_server.test_versions import OLD, Device
 
 from cad.engine import client, places
-from cad_server._internal import imports, installations, legacy, versions
+from cad_server._internal import arrival, imports, install_script, installations, legacy, versions
 from cad_server.cli import setup, uninstall
 
 X, Y = "0.12.0", "0.12.1"
@@ -74,7 +70,7 @@ class Computer(Device):
             stand_in.chmod(0o755)
         self.before = snapshot(self.home)
         environment = {"HOME": str(self.home), "USERPROFILE": str(self.home),
-                       "PATH": os.pathsep.join([str(tools), os.environ.get("PATH", "")]), setup.INSTALLER_ENV: ""}
+                       "PATH": os.pathsep.join([str(tools), os.environ.get("PATH", "")])}
         for patch in (mock.patch.dict(os.environ, environment),
                       mock.patch.object(installations, "_make_interpreter", side_effect=self.interpreter)):
             patch.start()
@@ -152,7 +148,7 @@ class Setup(Computer):
         self.assertEqual(installations.current_version(), DEV)
 
     @unittest.skipIf(os.name == "nt", "a foreign cad.exe is the Windows command's own test")
-    def test_a_command_of_another_s_fails_setup_but_never_the_updater_s_run(self) -> None:
+    def test_a_command_of_another_s_fails_setup_and_the_updater_s_run_never_touches_the_command(self) -> None:
         command = Path(installations.proxy_path())
         command.parent.mkdir()
         command.write_text("#!/bin/sh\necho someone else's cad\n", encoding="utf-8")
@@ -160,13 +156,11 @@ class Setup(Computer):
             code, out, err = self.main(setup, [])
             self.assertEqual(code, 1, out + err)
             self.assertIn("is not cad's, and is left alone", err)
-            with mock.patch.object(places, "versioned", return_value=DEV), \
-                    mock.patch.object(setup, "start_installer") as started:
+            with mock.patch.object(places, "versioned", return_value=DEV):
                 code, out, err = self.main(setup, ["--engine-update"])
         self.assertEqual(code, 0, out + err)
-        self.assertIn("is not cad's, and is left alone", err)
-        started.assert_called_once_with(DEV)
-        self.assertEqual(installations.current_version(), DEV, "the hand-over done all the same")
+        self.assertNotIn("cad command", err, "the updater's run writes no command, and says nothing of one")
+        self.assertEqual(install_script.read(DEV)["state"], "owed", "the hand-over owed all the same")
         self.assertEqual(command.read_text(encoding="utf-8"), "#!/bin/sh\necho someone else's cad\n")
 
     def test_the_first_setup_copies_settings_and_store_once_from_the_newest_older_version(self) -> None:
@@ -236,23 +230,21 @@ class Arriving(Computer):
         self.served.assert_called_once_with(Y)
 
 
-@unittest.skipIf(os.name == "nt", "the install script's stand-in is a POSIX script")
+@unittest.skipIf(os.name == "nt", "a command of 0.11.10's is a POSIX script here")
 class EngineUpdate(Computer):
     """What an updater of 0.11.10 runs of a newer release Y, and what its switch then needs."""
 
-    def test_prepare_then_the_whole_run_hands_over_and_starts_the_installer_once_without_waiting(self) -> None:
-        self.legacy()  # 0.11.10 installed: its data, its flat release, its records
-        released, ran = self.root / "released", self.root / "ran"
-        installer = self.root / "installer.py"
-        installer.write_text("import sys, time, pathlib\n"
-                             "released, ran = map(pathlib.Path, sys.argv[1:])\n"
-                             "while not released.exists():\n    time.sleep(0.02)\n"
-                             "with ran.open('a') as out:\n    out.write('ran\\n')\n", encoding="utf-8")
-        hook = f"{sys.executable} {installer} {released} {ran}"
+    def test_prepare_then_the_whole_run_hands_over_owes_the_install_script_and_changes_nothing_else(self) -> None:
+        self.legacy()  # 0.11.10 installed: its data, its flat release, its records (current names it)
+        command = Path(installations.proxy_path())
+        command.parent.mkdir()
+        command.write_text(f"#!/bin/sh\n# {installations.MARK}11\n", encoding="utf-8")  # 0.11.10's, which runs current
+        before = command.read_bytes()
         again: list[str] = []
+        ended: list[tuple] = []
         with mock.patch.object(setup, "_name", return_value=Y), \
-                mock.patch.object(setup, "_again", side_effect=lambda cad: again.append(cad) or 0), \
-                mock.patch.dict(os.environ, {setup.INSTALLER_ENV: hook}):
+                mock.patch.object(setup, "_again", side_effect=lambda cad, alone=False: again.append(cad) or 0), \
+                mock.patch.object(arrival, "setup_ended", side_effect=lambda *args, **kwargs: ended.append((*args, kwargs))):
             # The first run, from the flat folder (CAD_UPDATE_PREPARE=1): Y present, and nothing else.
             with mock.patch.dict(os.environ, {setup.PREPARE_ENV: "1"}):
                 code, out, err = self.main(setup, ["--engine-update"])
@@ -264,138 +256,113 @@ class EngineUpdate(Computer):
             # The second, from the flat folder: Y's own cad runs it again.
             code, out, err = self.main(setup, ["--engine-update"])
             self.assertEqual((code, again), (0, [places.version_record(Y)["cad"]]), out + err)
-            self.assertFalse(ran.exists(), "nothing started by a run that hands on")
-            # Y's own run: set up, handed over, the installer started and not waited for.
-            began = time.monotonic()
+            self.assertEqual(ended, [], "a prepare run that held, and a run that hands on, tell no end")
+            # Y's own run: set up, handed over, the install script's run owed, nothing started.
             with mock.patch.object(places, "versioned", return_value=Y), \
                     mock.patch.object(legacy, "hand_over") as hand_over:
                 code, out, err = self.main(setup, ["--engine-update"])
             self.assertEqual(code, 0, out + err)
             hand_over.assert_not_called()  # the updater's own switch stops its server: never asked here
             self.served.assert_not_called()  # and starts Y's: none started here
-            self.assertFalse(ran.exists(), "it returned while the installer still waits")
-        # What the updater's switch then reads: the records of its layout naming Y's server environment.
-        record = installations.current()
+        self.assertEqual(ended, [(Y, "updater", OLD, "ok", None, {"first": True})],
+                         "its end told once, from the version it came from, by the run that kept its arrival")
+        # What the updater's switch then reads: the release to go back to, still its own (current, read after this
+        # run), and the record of Y's server environment, which it starts once it has pointed current at Y.
+        self.assertEqual(installations.current_version(), OLD)
+        record = installations.installation_record(installations.state().read(f"installations/{Y}.json"))
         self.assertEqual((record["version"], record["prefix"]), (Y, str(places.code_dir(Y) / "server")))
-        self.assertEqual(installations.proxy_status(), installations.OK)
-        released.write_text("", encoding="utf-8")
-        deadline = began + 60
-        while not ran.exists():
-            self.assertLess(time.monotonic(), deadline, "the installer ran")
-            time.sleep(0.02)
-        self.assertEqual(ran.read_text(encoding="utf-8"), "ran\n", "started once")
+        self.assertEqual(command.read_bytes(), before, "0.11.10's cad command, which runs what current names, kept")
+        owed = install_script.read(Y)
+        self.assertEqual((owed["state"], owed["attempts"]), ("owed", 0), "the install script's run owed, not started")
+        self.assertEqual({key: arrival.read(Y)[key] for key in ("route", "from", "served")},
+                         {"route": "updater", "from": OLD, "served": None})
         self.no_app_touched()
 
-    def test_an_empty_installer_starts_nothing(self) -> None:
-        with mock.patch.object(subprocess, "Popen") as started:
-            self.assertIsNone(setup.start_installer())
-        started.assert_not_called()
-        with mock.patch.dict(os.environ, {setup.INSTALLER_ENV: "printf ok"}), \
-                mock.patch.object(subprocess, "Popen") as started:
-            setup.start_installer()
-        self.assertEqual(started.call_args.args[0], ["printf", "ok"])
-        self.assertIs(started.call_args.kwargs["stdout"], subprocess.DEVNULL, "its output read by no one")
-        os.environ.pop(setup.INSTALLER_ENV)
-        self.assertEqual(setup.installer(), ["sh", "-c", "curl -fsSL https://texttocad.dev/install.sh | sh"])
+    def test_a_run_that_fails_tells_its_end_and_why(self) -> None:
+        ended: list[tuple] = []
+        failing = versions.Present(Y, None, cannot="network", error="no network for what uv's cache lacks")
+        with mock.patch.object(setup, "_name", return_value=Y), \
+                mock.patch.object(versions, "make_present", return_value=failing), \
+                mock.patch.object(arrival, "setup_ended", side_effect=lambda *args, **kwargs: ended.append((*args, kwargs))):
+            for argv, environment in ((["--engine-update"], {setup.PREPARE_ENV: "1"}), ([], {})):
+                with mock.patch.dict(os.environ, environment):
+                    self.assertEqual(self.main(setup, argv)[0], 3)
+        self.assertEqual(ended, [(Y, "updater", None, "failed", "network", {"first": False}),
+                                 (Y, "setup", None, "failed", "network", {"first": False})])
+        self.assertIsNone(install_script.read(Y), "nothing owed by a run that failed")
 
 
-class Installer(unittest.TestCase):
-    def test_a_command_of_quoted_paths_with_spaces_starts_on_every_platform(self) -> None:
-        # Windows's rehearsal named its stand-in this way and it never started: the quotes were kept in each word.
-        folder = Path(tempfile.mkdtemp(prefix="cad installer "))
-        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
-        stand_in, ran = folder / "stand in.py", folder / "it ran"
-        stand_in.write_text("import pathlib, sys\npathlib.Path(sys.argv[1]).write_text('ran', encoding='utf-8')\n",
-                            encoding="utf-8")
-        with mock.patch.dict(os.environ, {setup.INSTALLER_ENV: f'"{sys.executable}" "{stand_in}" "{ran}"'}):
-            self.assertIsNotNone(setup.start_installer())
-        deadline = time.monotonic() + 60
-        while not ran.exists():
-            self.assertLess(time.monotonic(), deadline, "the installer ran")
-            time.sleep(0.02)
+@unittest.skipIf(os.name == "nt", "0.10.0's stand-in stop is a POSIX script")
+class TakeOver(Computer):
+    """``--engine-update`` run by 0.10.0's updater on Windows, which keeps its state -- the records its switch reads --
+    in the local application data (``places.appdata_state_dir``, here a folder of the test's), apart from this
+    version's: its switch could only go back, so the run takes the computer over itself, 0.10.0's server stopped by
+    its own stop command before anything of it is taken in."""
 
+    def setUp(self) -> None:
+        import json
 
-class Site:
-    """A stand-in for the docs site: ``install.py`` served from a local port, its text what ``pages`` holds next (each
-    ask takes the next; the last stays), or not found while that is None."""
+        super().setUp()
+        self.appdata = self.root / "AppData" / "Local" / "cad-state"
+        (self.appdata / "installations").mkdir(parents=True)
+        self.stopped = self.root / "stopped"
+        console = self.root / "ten" / "bin" / "cad"
+        console.parent.mkdir(parents=True)
+        console.write_text(f"#!/bin/sh\necho \"$*\" >> '{self.stopped}'\n"
+                           "echo '{\"ok\": true, \"stopped\": [\"engine\"]}'\nexit ${TEN_EXIT:-0}\n", encoding="utf-8")
+        console.chmod(0o755)
+        (self.appdata / "installations" / "0.10.0.json").write_text(json.dumps(
+            {"version": "0.10.0", "python": sys.executable, "cad": str(console), "prefix": str(console.parent.parent)}),
+            encoding="utf-8")
+        (self.appdata / "installations" / "current").write_text("0.10.0", encoding="utf-8")
+        patch = mock.patch.object(places, "appdata_state_dir", return_value=self.appdata)
+        patch.start()
+        self.addCleanup(patch.stop)
 
-    def __init__(self, test: unittest.TestCase, *pages: str | None) -> None:
-        import http.server
+    def test_it_is_told_by_where_0_10_0_made_its_flat_folder(self) -> None:
+        with mock.patch.object(sys, "prefix", str(self.appdata / "releases" / Y)):
+            self.assertTrue(setup._alone())
+        self.assertFalse(setup._alone(), "a flat folder of 0.11.10's layout: its switch starts this version")
+        with mock.patch.object(places, "appdata_state_dir", return_value=None):
+            self.assertFalse(setup._alone(), "not Windows, or a state folder named")
 
-        self.pages, self.asked = list(pages), 0
-        site = self
+    def test_0_10_0_stops_before_anything_of_it_is_taken_in_or_nothing_is(self) -> None:
+        order: list[int] = []  # at each taking in, how many of 0.10.0's stops had run
+        real = places.adopt_earlier
+        again: list[tuple] = []
+        stops = lambda: self.stopped.read_text(encoding="utf-8").count("stop") if self.stopped.exists() else 0  # noqa: E731
+        with mock.patch.object(setup, "_name", return_value=Y), mock.patch.object(setup, "_alone", return_value=True), \
+                mock.patch.object(places, "adopt_earlier", side_effect=lambda: order.append(stops()) or real()), \
+                mock.patch.object(setup, "_again", side_effect=lambda cad, alone=False: again.append((cad, alone)) or 0):
+            with mock.patch.dict(os.environ, {"TEN_EXIT": "1"}):
+                code, out, err = self.main(setup, ["--engine-update"])
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("the server of cad-server 0.10.0 did not stop, and keeps what it has", err)
+            self.assertEqual((order, again, places.version_record(Y)), ([], [], None), "nothing made, nothing taken in")
+            code, out, err = self.main(setup, ["--engine-update"])
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.stopped.read_text(encoding="utf-8"), "stop --json\nstop --json\n", "its own stop, each run")
+        self.assertEqual(order, [2], "taken in once, after this run's stop")
+        self.assertEqual(again, [(places.version_record(Y)["cad"], True)], "the version's own run told to take over")
 
-        class Handler(http.server.BaseHTTPRequestHandler):
-            def do_GET(self) -> None:  # noqa: N802 - the standard library's name
-                site.asked += 1
-                page = site.pages.pop(0) if len(site.pages) > 1 else site.pages[0]
-                if page is None:
-                    self.send_error(404)
-                    return
-                body = page.encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
+    def test_the_version_s_own_run_takes_the_computer_over_and_points_0_10_0_s_records_at_it(self) -> None:
+        self.present(Y)  # the run from the flat folder: the version present, 0.10.0's server stopped
+        with mock.patch.object(setup, "_name", return_value=Y), mock.patch.object(places, "versioned", return_value=Y), \
+                mock.patch.dict(os.environ, {setup.ALONE_ENV: "1"}):
+            code, out, err = self.main(setup, ["--engine-update"])
+        self.assertEqual(code, 0, out + err)
+        self.assertNotIn(setup.ALONE_ENV, os.environ, "taken off: nothing started from here inherits it")
+        server = str(places.code_dir(Y) / "server")
+        self.assertEqual((installations.current()["version"], installations.current()["prefix"]), (Y, server))
+        from cad_server.engine.registry import Folder
 
-            def log_message(self, *_args) -> None:
-                pass
-
-        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
-        test.addCleanup(self.server.server_close)
-        test.addCleanup(self.server.shutdown)
-        self.url = f"http://127.0.0.1:{self.server.server_address[1]}/install.py"
-
-
-def install_py(fallback: str) -> str:
-    return f'#!/usr/bin/env python3\n"""The installer."""\nFALLBACK = "{fallback}"\n'
-
-
-class InstallerWaits(unittest.TestCase):
-    """The install script ``--engine-update`` starts waits until the site's install.py names this release: the site
-    is deployed after the version feed names it (``cad_server._internal.install_script``)."""
-
-    def test_it_waits_for_the_site_to_name_this_release_and_gives_up_once_its_delays_are_spent(self) -> None:
-        from cad_server._internal import install_script
-
-        slept: list[float] = []
-        site = Site(self, None, install_py("0.11.10"), install_py(Y))
-        self.assertTrue(install_script.wait(site.url, Y, delays=(1.0, 2.0, 4.0, 8.0), sleep=slept.append))
-        self.assertEqual((site.asked, slept), (3, [1.0, 2.0]), "not found, then the release before, then this one")
-        for named, version, ready in ((Y, f"{Y}-dev.20261115000000", True), ("0.13.0", Y, True),
-                                      ("0.12.0", Y, False), ("0.12", "0.12.0", True)):
-            with self.subTest(named=named, version=version):
-                self.assertEqual(install_script.serves(Site(self, install_py(named)).url, version), ready)
-        slept.clear()
-        site = Site(self, install_py("0.11.10"))
-        self.assertFalse(install_script.wait(site.url, Y, delays=(1.0, 2.0), sleep=slept.append))
-        self.assertEqual((site.asked, slept), (3, [1.0, 2.0]), "asked at once and after each delay, then no more")
-        self.assertFalse(install_script.serves("http://127.0.0.1:9/install.py", Y), "an address that does not answer")
-        self.assertEqual(install_script.main([Y, "http://127.0.0.1:9/install.py"]), 0, "no command: nothing run")
-
-    def test_the_updater_s_installer_starts_detached_once_the_site_names_this_release(self) -> None:
-        folder = Path(tempfile.mkdtemp(prefix="cad installer "))
-        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
-        stand_in, ran = folder / "stand in.py", folder / "it ran"
-        stand_in.write_text("import pathlib, sys\npathlib.Path(sys.argv[1]).write_text('ran', encoding='utf-8')\n",
-                            encoding="utf-8")
-        site = Site(self, install_py(Y))
-        with mock.patch.dict(os.environ, {setup.INSTALLER_ENV: f'"{sys.executable}" "{stand_in}" "{ran}"',
-                                          setup.INSTALL_PY_ENV: site.url}):
-            self.assertIsNotNone(setup.start_installer(Y))
-        deadline = time.monotonic() + 60
-        while not ran.exists():
-            self.assertLess(time.monotonic(), deadline, "the installer ran")
-            time.sleep(0.02)
-        self.assertGreaterEqual(site.asked, 1, "the site was asked first")
-        # The hosted script waits for the site's install.py; a test's stand-in waits for none unless told one.
-        with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop(setup.INSTALLER_ENV, None)
-            os.environ.pop(setup.INSTALL_PY_ENV, None)
-            self.assertEqual(setup.install_py(), "https://www.texttocad.dev/install.py")
-            os.environ[setup.INSTALLER_ENV] = "printf ok"
-            self.assertIsNone(setup.install_py())
+        theirs = installations.current(Folder(self.appdata))
+        self.assertEqual((theirs["version"], theirs["prefix"]), (Y, server), "0.10.0's clients start this version")
+        self.assertEqual(installations.proxy_status(), installations.OK, "the cad command, this revision's")
+        self.served.assert_called_once_with(Y, pages=True)
+        self.assertEqual(install_script.read(Y)["state"], "owed", "the install script's run owed, for its server")
+        self.assertEqual({key: arrival.read(Y)[key] for key in ("route", "from")}, {"route": "updater", "from": "0.10.0"})
+        self.no_app_touched()
 
 
 class Serving(Servers, Computer):

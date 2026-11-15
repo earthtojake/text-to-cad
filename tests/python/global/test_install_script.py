@@ -554,6 +554,29 @@ class InstallScriptTests(unittest.TestCase):
         self.assertEqual([call for call in self.calls() if call[:1] != list(install.UVX_ARGS[:1])], [])
         self.assertIn("nothing was changed in them", done.stdout)
 
+    def test_the_report_cad_s_hand_over_reads_changes_nothing_the_run_says(self) -> None:
+        # CAD_INSTALL_REPORT (set by cad's own hand-over, cad_server._internal.install_script): what the run did, each
+        # app by its key, written whole; the run's output and exit status as without it, and a report that cannot be
+        # written fails nothing.
+        self.programs("codex", "gemini")
+        plain = self.run_install(FAKE_FAIL="codex")
+        report = self.root / "report.json"
+        done = self.run_install(FAKE_FAIL="codex", CAD_INSTALL_REPORT=str(report))
+        self.assertEqual((done.returncode, done.stdout, done.stderr), (plain.returncode, plain.stdout, plain.stderr))
+        found = json.loads(report.read_text(encoding="utf-8"))
+        self.assertEqual({key: found[key] for key in ("schema", "release", "setup")},
+                         {"schema": "text-to-cad install report/1", "release": install.FALLBACK, "setup": 0})
+        self.assertEqual(set(found["apps"]), {app.key for app in install.APPS})
+        self.assertEqual((found["apps"]["codex"], found["apps"]["gemini"], found["apps"]["claude"]),
+                         ("failed", "installed", "not found"))
+        self.assertEqual(sorted(path.name for path in self.root.iterdir() if "report" in path.name), ["report.json"])
+        done = self.run_install(FAKE_FAIL="uvx", FAKE_EXIT="3", CAD_INSTALL_REPORT=str(report))
+        self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["setup"], 3)
+        self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["apps"], {}, "the apps were left alone")
+        nowhere = self.run_install(FAKE_FAIL="codex", CAD_INSTALL_REPORT=str(self.root / "no folder" / "report.json"))
+        self.assertEqual((nowhere.returncode, nowhere.stdout, nowhere.stderr),
+                         (plain.returncode, plain.stdout, plain.stderr))
+
     def test_an_error_no_row_foresaw_is_that_app_s_failure_and_every_other_app_runs(self) -> None:
         def broken(app, here, context):
             raise KeyError("plugins")

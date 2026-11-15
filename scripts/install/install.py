@@ -36,6 +36,13 @@ Test hooks, never documented to people: ``CAD_INSTALL_FEED`` (the version feed's
 installer rehearsals), ``CODEX_CLI`` (the codex command, as earlier installers took it),
 ``CAD_INSTALL_PATH_ONLY`` (look for the apps' commands on PATH and in ``~/.local/bin`` alone: never in
 Homebrew's or npm's folders or an app's bundle, where a test would find a real CLI).
+
+``CAD_INSTALL_REPORT`` names a file where the run says what it did (``write_report``), for cad's own hand-over after a
+shipped release's updater brought a computer cad alone (``cad_server._internal.install_script``, which sets it):
+``{"schema": "text-to-cad install report/1", "release": <the release it installed>, "setup": <cad setup's exit
+status>, "apps": {<APPS key>: "installed" | "updated" | "removed" | "skipped" | "failed" | "not found"}}``, written
+whole (a file beside it, renamed into place) as the run ends. Writing it never fails the run, and nothing is printed
+about it. A hosted script without it writes none, and that hand-over counts the run as failed.
 """
 
 from __future__ import annotations
@@ -1689,6 +1696,38 @@ def install_apps(here: Here, source: Source, apps: Sequence[App] = APPS,
     return Report(lines, outcomes)
 
 
+REPORT_SCHEMA = "text-to-cad install report/1"
+
+
+def write_report(here: Here, release: str, setup: int, outcomes: Dict[str, Outcome]) -> None:
+    """What the run did, written to the file ``CAD_INSTALL_REPORT`` names, where it names one (see the module): each
+    app's status by its key (``NOT_FOUND`` as ``not found``, a note or nothing to say as ``skipped``). Never a failure
+    of the run, and never said."""
+    target = here.environ.get("CAD_INSTALL_REPORT")
+    if not target:
+        return
+    temporary = None
+    try:
+        apps = {key: "not found" if outcome is NOT_FOUND else "skipped" if outcome.status == "note" else outcome.status
+                for key, outcome in outcomes.items()}
+        text = json.dumps({"schema": REPORT_SCHEMA, "release": release, "setup": setup, "apps": apps}, indent=1,
+                          sort_keys=True) + "\n"
+        folder = os.path.dirname(os.path.abspath(target))
+        handle, temporary = tempfile.mkstemp(prefix=".install-report-", dir=folder)
+        with os.fdopen(handle, "w", encoding="utf-8") as out:
+            out.write(text)
+        os.replace(temporary, target)
+        temporary = None
+    except Exception:  # noqa: BLE001 - the report is cad's to read; the run is the person's
+        pass
+    finally:
+        if temporary is not None:
+            try:
+                os.remove(temporary)
+            except OSError:
+                pass
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     # A character the output's encoding has not (an app's own mark, on Windows' code page) is printed as `?`, never
     # raised: the encoding itself stays as it is.
@@ -1710,6 +1749,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print("cad setup could not install from this shell (an agent's sandbox, no network, or a folder it may not "
               "write), and the agent apps' commands would fail here too: nothing was changed in them. Run this again "
               "in a terminal of your own, outside the sandbox.", flush=True)
+        write_report(here, release, code, {})
         return 1
     print("", flush=True)
     print("Setting up the plugin in each agent app found here:", flush=True)
@@ -1726,6 +1766,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print("No app got the plugin: see each app's line above, then run this again.", flush=True)
     if report.changed:
         print("Start a new session in each app to use it.", flush=True)
+    write_report(here, release, code, report.outcomes)
     return 1 if code or report.all_failed else 0
 
 

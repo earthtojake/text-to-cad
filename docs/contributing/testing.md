@@ -52,9 +52,15 @@ enough. Every other job runs on the changes that reach it. The two there now:
   so no release ships unrehearsed. They also run on a change to the installers themselves.
 - The update rehearsal (`update-rehearsal`, `scripts/test/rehearse-update.py`) installs real releases
   from PyPI on private computers and brings each to this tree's build by the route it takes, on Linux,
-  macOS and Windows: 0.11.10's and 0.10.4's own updater (`cad setup --engine-update`), the install script
-  on a computer of 0.11.10, and the install script on a computer of 0.8.4, which has no updater. About 6
-  minutes a system on macOS (the four routes measured at 49 to 128 seconds each). It is the one test of the migration every computer makes, unattended or by the install command. It runs
+  macOS and Windows: 0.11.10's and 0.10.4's own updater (`cad setup --engine-update`, then the install
+  script the new server owes run by it), 0.11.10's automatic update, the hand-over running the real install
+  script on stand-ins of two apps and trying again after a failure (POSIX alone), 0.11.10 going back from a
+  build whose server cannot start, the install script on a computer of 0.11.10, and the install script on a
+  computer of 0.8.4, which has no updater; and on Windows 0.10.0's updater, which this build's setup takes
+  over from. The automatic update runs on Linux alone (the button's switch, reached by the old release's
+  own timers), the hand-over on Linux and macOS (its stand-ins of the apps are POSIX scripts). About 8
+  minutes on macOS and 10 on Linux (measured on macOS on 2026-11-15: `updater` 40 s, `automatic` 130 s,
+  `handover` 73 s, `rollback` 226 s, `install-script` 42 s, `from-0.8` 48 s, `updater --old 0.10.4` 47 s). It is the one test of the migration every computer makes, unattended or by the install command. It runs
   with the installer rehearsals, and on a change to the rehearsal itself. A route runs alone too, as
   `scripts/test/rehearse-update.py from-0.8`.
 - The real install (`real install`, `real-install.yml`, `scripts/test/real-install.py`) runs the install script

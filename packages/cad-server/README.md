@@ -172,13 +172,21 @@ holds its pages' port, and the next command starts this version's. Run again it 
 run as `uvx --no-config --managed-python --python 3.14 --from cad-server==<version> cad
 setup`. It has one hidden option, `--engine-update`, which no person runs: the updaters of 0.10.0 to 0.11.10, frozen
 on computers, update by running a newer release's `cad setup --engine-update` from a flat folder they made, so it
-does the same, but for starting the server (their switch starts it), then the hand-over from their layout (the
-records their switch reads written: `installations/current` and the installation record naming the version's server),
-then starts the hosted install script once, detached and never waited on, by a program that first waits, up to
-about an hour, until the site's `install.py` names this release (`_internal/install_script.py`; the site is deployed
-after the version feed names a release); a command file of another's at `~/.local/bin/cad` is said and the run goes
-on (`CAD_ENGINE_UPDATE_INSTALLER` names a command to run instead, for a test, and `CAD_ENGINE_UPDATE_INSTALL_PY` the
-`install.py` to wait for). cad has no updater: the version check (`updates.py`) only knows the
+makes the version present, then hands over from their layout -- the installation record naming the version's server,
+which their switch starts once it has pointed `installations/current` at it, and points back at their own release,
+and starts that release's server again, where it does not answer -- and leaves `installations/current`, the `cad`
+command and the server to their switch. Last it owes the computer the hosted install script's run, a record in the
+version's data (`_internal/install_script.py`): the version's own server, once it has run five minutes (longer than
+their switch can still be deciding to go back) and while `current` names its version, runs the script, one attempt
+at a time, after the site's `install.py` names this release, and again,
+an hour after a failure at the next start and then daily, until a report the script writes says it worked, for at
+most 30 attempts or 30 days (`CAD_ENGINE_UPDATE_INSTALLER` names a command to run instead, for a test, and
+`CAD_ENGINE_UPDATE_INSTALL_PY` the `install.py` to wait for). So a release whose server cannot start, which their switch
+goes back from, never runs it. 0.10.0's updater on Windows keeps its state, the records its switch reads among it,
+apart from every later release's, so its switch could only go back: there the run stops 0.10.0's server by its own stop
+command before it takes anything of 0.10.0's in (and takes nothing in where it would not stop), then takes the
+computer over as the install command's route does, 0.10.0's own records pointed at the version too. cad has no
+updater: the version check (`updates.py`) only knows the
 latest release, and says so (**The update notice**). `cad uninstall` removes cad from this computer: every version,
 each one's server stopped first (and, on Windows, waited for until its processes have ended), the state folder and
 the cache folder of 0.11.10 and earlier where they hold a mark only cad writes, what its servers kept in the engines'
@@ -243,9 +251,9 @@ installed version, or, on a computer coming from 0.11.10 and earlier, from that 
 that nothing moves between versions, and no version refuses another's commands.
 
 Each version in use runs its own server, reached through its own door alone, `<version>` in the engine folder, and
-only the one `installations/current` names (written by the hand-over from a shipped release, `cad setup
---engine-update`, by a plain `cad setup` where it names nothing, a version not installed or an older one, and by a
-registration where none is current) also answers the flat door every client of 0.11.10
+only the one `installations/current` names (pointed by a shipped release's switch, after `cad setup
+--engine-update` wrote the record it starts the version's server by, by a plain `cad setup` where it names nothing, a
+version not installed or an older one, and by a registration where none is current) also answers the flat door every client of 0.11.10
 and earlier and every process with no version finds (`engine/daemon.py`'s `Bridge`, the only code for earlier
 releases). Each version records its own last use by an agent: a `cad` command run for it, a request its server takes,
 an MCP tool call other than the page's own. **The cleanup**: the server of the newest installed version, as it starts

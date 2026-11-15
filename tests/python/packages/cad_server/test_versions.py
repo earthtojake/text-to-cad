@@ -611,7 +611,8 @@ class Cleanup(Device):
         self.assertTrue(versions.due(5.0, 5.0 + versions.CLEAN_SECONDS))
         cleaned: list[float] = []
         engine = SimpleNamespace(draining=False, stopping=threading.Event(), cleaning=None, cleaned=None,
-                                 legacy_tried=None, bridge=SimpleNamespace(reconcile=lambda: False))
+                                 legacy_tried=None, bridge=SimpleNamespace(reconcile=lambda: False),
+                                 handover=SimpleNamespace(tend=lambda *_args, **_kwargs: None))
         with mock.patch.object(daemon, "versioned", return_value=Y), mock.patch.object(updates, "refresh"), \
                 mock.patch.object(legacy, "removable", return_value=False), \
                 mock.patch.object(versions, "clean", side_effect=lambda **_kwargs: cleaned.append(engine.cleaned)):
@@ -628,7 +629,8 @@ class Cleanup(Device):
 
         cleaned, tried = [], []
         engine = SimpleNamespace(draining=False, stopping=threading.Event(), cleaning=None, cleaned=None,
-                                 legacy_tried=None, bridge=SimpleNamespace(reconcile=lambda: False))
+                                 legacy_tried=None, bridge=SimpleNamespace(reconcile=lambda: False),
+                                 handover=SimpleNamespace(tend=lambda *_args, **_kwargs: None))
         with mock.patch.object(daemon, "versioned", return_value=Y), mock.patch.object(updates, "refresh"), \
                 mock.patch.object(legacy, "removable", return_value=True), \
                 mock.patch.object(versions, "clean", side_effect=lambda **_kwargs: cleaned.append(True)), \
