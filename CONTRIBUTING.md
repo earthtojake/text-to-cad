@@ -237,8 +237,9 @@ It registers the checkout's `.venv` as a version of its own, `<VERSION>-dev.<tim
 (`versions/<name>` in the state folder, whose code marker names the `.venv`: nothing is copied),
 and writes the `cad` command. It writes the plugin into `tmp/dev-plugin/text-to-cad`: every
 command in its skills pins that version (`cad +<VERSION>-dev.<time> ...`), its CAD server runs
-`python -m cad_mcp` with the `.venv` (`CAD_PYTHON` overrides it), and its catalog is
-`earthtojake-dev`. Then it replaces our copy in each app with that folder. Run it again after a
+`cad_mcp` with the `.venv` (`CAD_PYTHON` overrides it) through `uv run`, since the Agent Plugins
+`mcp.json`, which Codex reads first, takes no path as a command (Codex drops such a server with no
+error), and its catalog is `earthtojake-dev`. Then it replaces our copy in each app with that folder. Run it again after a
 change, and start a new session in the app. Run `npm ci` and `scripts/bundle/bundle.sh` once
 first: the viewer's page and the CAD app's page come from the bundle (without it a model's link
 answers 404). An app that cannot install from a folder is skipped and says so; Claude Code's copy

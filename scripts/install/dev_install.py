@@ -11,8 +11,9 @@ checkout as the source instead of GitHub:
 1. registers the checkout's .venv as a text-to-cad version of its own, ``<VERSION>-dev.<time>``, and writes the
    ``cad`` command (cad_server's own code, run by that interpreter);
 2. writes the plugin from this checkout into ``tmp/dev-plugin/text-to-cad``: every command in its skills pins that
-   version (``cad +<VERSION>-dev.<time>``), its CAD server runs the .venv (``python -m cad_mcp``), and its catalog is
-   ``earthtojake-dev``;
+   version (``cad +<VERSION>-dev.<time>``), its CAD server runs the .venv (``uv run ... --python <.venv's python>
+   --module cad_mcp``: the Agent Plugins standard's ``mcp.json``, which Codex reads first, refuses a command that is
+   a path, and drops the server without a word), and its catalog is ``earthtojake-dev``;
 3. removes the published copy of ours from each app and installs that folder instead, with the app's own command
    (install.py's ``local`` commands; an app that cannot install from a folder is skipped and says so).
 
@@ -116,7 +117,7 @@ def plugin_files(root: Path = REPO_ROOT) -> list:
 
 def assemble(target: Path, version: str, python: str, root: Path = REPO_ROOT) -> None:
     """The development plugin written into ``target``: ``version`` in every pin and manifest, every CAD server
-    entry running ``python -m cad_mcp`` as that version, and the catalog named ``earthtojake-dev``."""
+    entry running ``cad_mcp`` on ``python`` as that version, and the catalog named ``earthtojake-dev``."""
     release = (root / "VERSION").read_text(encoding="utf-8").strip()
     if target.exists():
         shutil.rmtree(target)
@@ -148,8 +149,14 @@ def _json(data, name: str, release: str, version: str, python: str):
             plugin["version"] = version
     servers = data.get("mcpServers")
     if isinstance(servers, dict) and isinstance(servers.get("cad"), dict):
+        # A bare command in every entry: the Agent Plugins standard allows only a program's name or a `./` path
+        # inside the plugin, and Codex, which reads the standard's mcp.json before its own manifest's file, drops
+        # a server whose command is a path with no error. uv, which the published entries' uvx comes with, runs
+        # the interpreter in place, and the shim takes it for a launcher when it looks for its host.
         entry = {key: value for key, value in servers["cad"].items() if key not in ("command", "args", "env")}
-        servers["cad"] = {**entry, "command": python, "args": ["-m", "cad_mcp"], "env": {VERSION_ENV: version}}
+        servers["cad"] = {**entry, "command": "uv",
+                          "args": ["run", "--no-config", "--no-project", "--python", python, "--module", "cad_mcp"],
+                          "env": {VERSION_ENV: version}}
     return data
 
 
