@@ -39,8 +39,8 @@ A project written for an earlier text-to-cad may need changes. The migration gui
 version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
 text-to-cad reads a board or schematic itself, so inspecting either, and viewing a schematic or taking
-its snapshot, need no KiCad. DRC (`cad +0.11.11 kicad_pcb drc`), ERC (`cad
-kicad_sch erc`), every export (`cad +0.11.11 kicad_pcb export`, `cad +0.11.11 kicad_sch export`) and an edit
+its snapshot, need no KiCad. DRC (`cad +0.11.11 kicad_pcb drc`), ERC
+(`cad +0.11.11 kicad_sch erc`), every export (`cad +0.11.11 kicad_pcb export`, `cad +0.11.11 kicad_sch export`) and an edit
 (`kicad_pcb.edit`, `kicad_sch.edit`) run KiCad's command line, `kicad-cli`,
 and its IPC API from kicode, the `kicad` extra (`cad[kicad]`): the `cad` command installs it the first
 time a board command needs it (about 100 MB to download and 340 MB on disk, once; nothing for you to install), and `cad +0.11.11 run` gives a
