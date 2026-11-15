@@ -40,7 +40,8 @@ KiPy's open board, saved at the block's end only when the block changed it, and 
 raises. Write the block to state the board it wants, so a second run changes nothing: set a footprint's
 position, a track's width or a net to its value, and create an item only when the board does not hold
 it yet. Read the board in the block (`b.get_footprints()`, `b.get_tracks()`, `b.get_nets()`), or with
-`kicad_pcb.read` after it.
+`kicad_pcb.read` after it. The calls that make an outline, a track, a via, a zone and a text, and set the
+rules and the layer count, are in [KiCad's API, by example](kicad-api.md#a-board).
 
 A new item needs every field KiCad needs to keep it: a track with no layer (`track.layer =
 BoardLayer.BL_F_Cu`, `from kicode.proto.board.board_types_pb2 import BoardLayer`) or width is dropped
@@ -62,6 +63,14 @@ KiPy's traps on this nightly:
 - A new `Zone()` has no outline to read (`zone.outline` raises `IndexError`): build one and assign it,
   `outline = PolygonWithHoles(); outline.outline = line; zone.outline = outline`, `line` a `PolyLine` of
   `PolyLineNode.from_point(Vector2.from_xy_mm(x, y))` (from `kicode.geometry`).
+- A new `Zone()` has no pad connection either: it is saved as `(connect_pads (clearance 0))` with
+  `(thermal_gap 0)` and `(thermal_bridge_width 0)`, a thermal relief with no gap, so its fill joins every
+  pad of its net solid, through-hole pins included, which are then hard to solder. DRC says nothing of
+  most such pads (`starved_thermal` for a few, or none). Set it on every zone made, then refill:
+  `zone.connection.zone_connection = ZoneConnectionStyle.ZCS_PTH_THERMAL` (reliefs on through-hole pads,
+  surface-mount pads solid; `ZCS_THERMAL` relieves both) and `zone.connection.thermal_spokes.gap =
+  from_mm(0.3); zone.connection.thermal_spokes.width = from_mm(0.4)`, which save as `(connect_pads
+  thru_hole_only ...)`, `(thermal_gap 0.3)` and `(thermal_bridge_width 0.4)`.
 - A text's angle set over the API (a footprint field's `text.attributes.angle`, a board text's) reads
   back changed in the block and is saved as it was. A field turns with its footprint; any other angle
   is set in the saved file, as text, after the block.
