@@ -68,7 +68,7 @@ the install script, installs the plugin into every agent app too: printing it wo
 who uses cad alone into the plugin. What installs a newer version is for whatever installed this one
 to say, and for a manual install that is the skill. The skill links the repository rather than
 quoting the command, so no copy of the plugin carries a download piped to a shell, which stores'
-and Hermes Agent's install scans flag.
+install scans flag.
 
 **What it costs.** A computer whose agent never acts on the notice stays on its release, and a person
 who uses cad alone learns that a version exists but not how to install it from cad. Besides the

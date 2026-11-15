@@ -30,7 +30,6 @@ CODEX_MCP_PATH = REPO_ROOT / "codex.mcp.json"
 CODEX_PLUGIN_PATH = REPO_ROOT / ".codex-plugin" / "plugin.json"
 CURSOR_PLUGIN_PATH = REPO_ROOT / ".cursor-plugin" / "plugin.json"
 GROK_PLUGIN_PATH = REPO_ROOT / ".grok-plugin" / "plugin.json"
-PLUGIN_PATH = REPO_ROOT / "plugin.json"
 GEMINI_EXTENSION_PATH = REPO_ROOT / "gemini-extension.json"
 ANTIGRAVITY_PLUGIN_PATH = REPO_ROOT / ".antigravity-plugin" / "plugin.json"
 KIMI_PLUGIN_PATH = REPO_ROOT / ".kimi-plugin" / "plugin.json"
@@ -38,7 +37,7 @@ DEVIN_PLUGIN_PATH = REPO_ROOT / ".devin-plugin" / "plugin.json"
 MUSE_PLUGIN_PATH = REPO_ROOT / ".muse-plugin" / "plugin.json"
 MUSE_MARKETPLACE_PATH = REPO_ROOT / ".muse-plugin" / "marketplace.json"
 # Every app's manifest named `text-to-cad`.
-MANIFESTS = (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH, GROK_PLUGIN_PATH, PLUGIN_PATH,
+MANIFESTS = (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH, GROK_PLUGIN_PATH,
              ANTIGRAVITY_PLUGIN_PATH, KIMI_PLUGIN_PATH, DEVIN_PLUGIN_PATH, MUSE_PLUGIN_PATH)
 MARKETPLACE_PATH = REPO_ROOT / ".claude-plugin" / "marketplace.json"
 SKILLS_ROOT = REPO_ROOT / "skills"
@@ -84,7 +83,6 @@ class PluginManifestPolicyTest(unittest.TestCase):
             "codex interface": codex["interface"].get("longDescription"),
             "cursor": load_json(CURSOR_PLUGIN_PATH).get("description"),
             "grok": load_json(GROK_PLUGIN_PATH).get("description"),
-            "agent plugins": load_json(PLUGIN_PATH).get("description"),
             "gemini": load_json(GEMINI_EXTENSION_PATH).get("description"),
             "marketplace": next(e for e in marketplace["plugins"] if e.get("name") == PLUGIN_NAME).get("description"),
             "antigravity": load_json(ANTIGRAVITY_PLUGIN_PATH).get("description"),
@@ -144,10 +142,6 @@ class PluginManifestPolicyTest(unittest.TestCase):
         for key in ("documentationUrl", "repository", "author", "license"):
             with self.subTest(key):
                 self.assertEqual(cursor.get(key), claude.get(key))
-        standard = load_json(PLUGIN_PATH)
-        for key in ("homepage", "repository", "author", "license"):
-            with self.subTest(f"agent plugins {key}"):
-                self.assertEqual(standard.get(key), claude.get(key))
 
     def test_plugin_short_descriptions_match(self) -> None:
         # The one-line tagline a host shows beside the name: Codex's shortDescription and the
@@ -282,9 +276,10 @@ class PluginManifestPolicyTest(unittest.TestCase):
     def test_only_codex_s_manifest_starts_a_server(self) -> None:
         # Browser first: the CAD server ships to the one app whose CAD view is verified, the Codex app (a tab beside
         # the thread). Every other app gets the skills alone and shows a model in its own browser or by a link. No
-        # server config but Codex's own: not the Agent Plugins standard's root mcp.json, which Cursor, Hermes and
-        # VS Code read too, and not a root .mcp.json, which Claude Code would offer to anyone who opens this
-        # repository as a project.
+        # server config but Codex's own: not the Agent Plugins standard's root mcp.json, which Cursor and VS Code
+        # read too, and not a root .mcp.json, which Claude Code would offer to anyone who opens this repository as a
+        # project. No root plugin.json either: Codex takes a folder with the Agent Plugins standard's manifest for
+        # an Agent Plugin, whose server it reads from ./mcp.json alone, and ignores codex.mcp.json.
         for path in (*MANIFESTS, GEMINI_EXTENSION_PATH):
             with self.subTest(path=str(path.relative_to(REPO_ROOT))):
                 manifest = load_json(path)
@@ -294,6 +289,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
                     self.assertFalse(manifest.get("mcpServers") or manifest.get("capabilities", {}).get("mcpServers"))
         self.assertEqual(sorted(path.name for path in REPO_ROOT.glob("*mcp*.json")), ["codex.mcp.json"])
         self.assertFalse((REPO_ROOT / ".mcp.json").exists())
+        self.assertFalse((REPO_ROOT / "plugin.json").exists())
 
     def test_grok_build_reads_its_own_manifest_with_claude_s_fields(self) -> None:
         # Grok Build reads .grok-plugin/plugin.json before Claude's manifest, from its own install of latest and
@@ -307,16 +303,6 @@ class PluginManifestPolicyTest(unittest.TestCase):
         logo = load_json(CURSOR_PLUGIN_PATH).get("logo", "")
         self.assertFalse(logo.startswith(("/", "..")) or "://" in logo, logo)
         self.assertEqual(logo, ".claude-plugin/icon.png")
-
-    def test_the_agent_plugins_manifest_takes_only_the_standard_s_fields(self) -> None:
-        # plugin.json is the Agent Plugins standard's (agent-plugins.org), whose schema is closed. VS Code reads it
-        # before Claude's manifest; Hermes and Pi read it with the skills/ folder.
-        manifest = load_json(PLUGIN_PATH)
-        self.assertEqual(manifest["$schema"], "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json")
-        self.assertLessEqual(set(manifest), {"$schema", "name", "version", "description", "author", "homepage",
-                                             "repository", "license", "keywords", "extensions"})
-        self.assertLessEqual(set(manifest["author"]), {"name", "email", "url"})
-        self.assertEqual(manifest["keywords"], load_json(CURSOR_PLUGIN_PATH)["keywords"])
 
     def test_gemini_extension_names_the_plugin(self) -> None:
         # Gemini CLI reads gemini-extension.json at the root, and its skills/.
@@ -375,8 +361,8 @@ class PluginManifestPolicyTest(unittest.TestCase):
 
     def test_the_other_apps_manifests(self) -> None:
         # Each app's own manifest, in its own documented fields, the skills alone (only Codex is given the CAD
-        # server). Hermes and Pi read the Agent Plugins standard's manifest and the skills/ folder: no file of
-        # their own.
+        # server). Pi reads the skills/ folder by convention, and Hermes is given the skills in its own folder:
+        # no file of their own.
         claude = load_json(CLAUDE_PLUGIN_PATH)
         antigravity = load_json(ANTIGRAVITY_PLUGIN_PATH)
         # Antigravity's schema is closed (additionalProperties: false): only its documented fields.

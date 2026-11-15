@@ -377,7 +377,8 @@ class App:
     its commands for a GitHub copy, ``local`` for a checkout's folder (dev_install.py), with ``{repo}``, ``{url}``,
     ``{branch}``, ``{plugin}``, ``{catalog}`` and ``{folder}`` filled in. ``installed``: whether ours is there
     already; without it, ``update`` runs first and ``install`` where that fails. ``handler``: an app whose old
-    copies need more than its commands (Claude Code, Codex, Cursor, Gemini CLI, Grok Build, Claude Desktop).
+    copies need more than its commands (Claude Code, Codex, Cursor, Gemini CLI, Grok Build, Claude Desktop,
+    Hermes Agent).
     ``folder``: an agent with no plugin command, given the skills in its own folder; ``marks`` find it."""
 
     key: str
@@ -881,7 +882,11 @@ def copy_skills(app: App, here: Here, context: Context) -> Outcome:
     folder of that name that is someone else's stays)."""
     if not any(path.exists() for path in (app.marks(here) if app.marks else [])):
         return NOT_FOUND
-    target = app.folder(here)
+    return put_skills(app.folder(here), here, context)
+
+
+def put_skills(target: Path, here: Here, context: Context) -> Outcome:
+    """Our skills copied into ``target``, a skills folder: each of ours there replaced, someone else's kept."""
     source = context.source.skills(here)
     target.mkdir(parents=True, exist_ok=True)
     copied, kept = [], []
@@ -903,7 +908,7 @@ def copy_skills(app: App, here: Here, context: Context) -> Outcome:
 # agents the Skills CLI served since.
 def loose_skill_folders(here: Here) -> List[Path]:
     home, config = here.home, here.config_home()
-    hermes = Path(here.environ.get("HERMES_HOME") or home / ".hermes")
+    hermes = hermes_home(here)
     folders = [
         home / ".agents" / "skills",
         claude_dir(here) / "skills",
@@ -976,46 +981,37 @@ def remove_loose_skills(here: Here) -> Outcome:
     return Outcome("removed", f"{len(ours)} old copies of our skills, in {', '.join(places)}")
 
 
-def _hermes_plugins(here: Here) -> Path:
-    return Path(here.environ.get("HERMES_HOME") or here.home / ".hermes") / "plugins"
-
-
-def _hermes_plugin(here: Here) -> bool:
-    return (_hermes_plugins(here) / PLUGIN).is_dir()
+def hermes_home(here: Here) -> Path:
+    return Path(here.environ.get("HERMES_HOME") or here.home / ".hermes")
 
 
 def hermes(app: App, here: Here, context: Context) -> Outcome:
-    """Hermes Agent: ``hermes plugins install earthtojake/text-to-cad --no-enable --ref <commit of latest>``, then
-    ``hermes plugins enable text-to-cad --no-allow-tool-override``. Hermes's ``--ref`` takes a 40-character commit
-    alone, and its default branch is main, which its install scan refuses, so the commit of ``latest`` is looked up
-    (``git ls-remote``). No ``--force``: ``latest`` holds no download piped to a shell, and Hermes's scan passes it.
-    Updated by removing the copy and installing the new commit where the installed one (Hermes's record,
-    ``plugins/.install-metadata.json``) is another: ``hermes plugins update`` follows the default branch. Verified:
-    ``hermes plugins install --help`` and its source (``hermes_cli/plugins_cmd.py``); the install, enable and
-    ``plugins doctor`` run from a local copy of ``latest`` with HERMES_HOME in a scratch folder."""
+    """Hermes Agent: our skills copied into its own skills folder, ``$HERMES_HOME/skills`` (default
+    ``~/.hermes/skills``), where Hermes reads a user's skills, each a folder with its SKILL.md; copied again to
+    update. Found by the ``hermes`` command or its home folder. Removed first: the plugin of ours 0.11.x's installer
+    installed with ``hermes plugins install`` (``plugins/text-to-cad``, ours by Hermes's install record or our
+    repository in its manifests), with ``hermes plugins remove``. No plugin: Hermes takes a plugin only by the
+    Agent Plugins standard's root ``plugin.json``, which Codex would read in place of its own manifest. Verified:
+    docs https://hermes-agent.nousresearch.com/docs/user-guide/features/skills (``~/.hermes/skills`` is the
+    skills folder); its source (``tools/skills_tool.py``: ``HERMES_HOME/skills``, every SKILL.md beneath it);
+    ``hermes skills list`` listing the copied skills with HERMES_HOME in a scratch folder."""
     cli = here.which("hermes")
-    if not cli:
+    home = hermes_home(here)
+    if not cli and not home.is_dir():
         return NOT_FOUND
-    if context.source.local:
-        return plugin_command(app, here, context)
-    git = here.which("git")
-    if not git:
-        return Outcome("skipped", "needs git, to find the commit of the latest release")
-    listed = here.run([git, "ls-remote", URL, f"refs/heads/{BRANCH}"])
-    commit = listed.out.split()[0] if listed.ok and listed.out.split() else ""
-    if not re.fullmatch(r"[0-9a-f]{40}", commit):
-        raise Failed(f"could not find the commit of {BRANCH}: {listed.last()}")
-    record = read_json(_hermes_plugins(here) / ".install-metadata.json")
-    entry = record.get(PLUGIN) if isinstance(record, dict) else None
-    installed = (entry or {}).get("revision") if isinstance(entry, dict) else None
-    present = _hermes_plugin(here)
-    if present and installed == commit:
-        return Outcome("updated", "already the latest release")
-    if present:
-        here.must([cli, "plugins", "remove", PLUGIN])
-    here.must([cli, "plugins", "install", REPOSITORY, "--no-enable", "--ref", commit])
-    here.must([cli, "plugins", "enable", PLUGIN, "--no-allow-tool-override"])
-    return Outcome("updated" if present else "installed")
+    removed = []
+    plugin = home / "plugins" / PLUGIN
+    if plugin.is_dir():
+        record = read_json(home / "plugins" / ".install-metadata.json")
+        entry = record.get(PLUGIN) if isinstance(record, dict) else None
+        if our_repository((entry or {}).get("source") if isinstance(entry, dict) else None) or our_folder(here, plugin):
+            if not cli:
+                raise Failed(f"the hermes command is needed to remove the old plugin of ours in {plugin}")
+            here.must([cli, "plugins", "remove", PLUGIN])
+            removed.append(f"the {PLUGIN} plugin")
+    outcome = put_skills(home / "skills", here, context)
+    outcome.removed = removed
+    return outcome
 
 
 def _pi_installed(here: Here) -> bool:
@@ -1048,10 +1044,8 @@ APPS: Tuple[App, ...] = (
         install=[["extensions", "install", "{url}", "--ref", "{branch}", "--consent"]],
         update=[["extensions", "update", "{plugin}"]],
         local=[["extensions", "install", "{folder}", "--consent"]], installed=_qwen_installed),
-    # Hermes Agent (``hermes``, above): `latest` by its commit. Docs
-    # https://hermes-agent.nousresearch.com/docs/developer-guide/plugins. It takes the root plugin.json and skills/ (no
-    # mcp.json: only Codex is given the CAD server).
-    App("hermes", "Hermes Agent", command="hermes", handler=hermes, installed=_hermes_plugin),
+    # Hermes Agent (``hermes``, above): the skills in its own folder, and the plugin of ours 0.11.x installed removed.
+    App("hermes", "Hermes Agent", command="hermes", handler=hermes),
     # Factory Droid. Docs https://docs.factory.com/cli/configuration/plugins: it reads .claude-plugin/marketplace.json;
     # the catalog's name comes from the source (`owner/repo` -> the repo's name; a `#ref` is appended to it), so this
     # adds no ref (main) to keep the name text-to-cad, as superpowers does. Not run.

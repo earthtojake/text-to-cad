@@ -102,7 +102,7 @@ fi
 for manifest in .claude-plugin/plugin.json .claude-plugin/marketplace.json .codex-plugin/plugin.json \
     .cursor-plugin/plugin.json .grok-plugin/plugin.json .antigravity-plugin/plugin.json \
     .kimi-plugin/plugin.json .devin-plugin/plugin.json .muse-plugin/plugin.json .muse-plugin/marketplace.json \
-    gemini-extension.json plugin.json; do
+    gemini-extension.json; do
   declared="$(grep -oE '"version": *"[^"]*"' "$manifest" | sed -E 's/.*"([^"]*)"$/\1/' | sort -u)"
   if [ "$declared" != "$version" ]; then
     echo "$manifest names version ${declared:-(none)}; expected $version" >&2

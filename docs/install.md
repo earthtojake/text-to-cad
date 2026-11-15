@@ -68,7 +68,7 @@ claude plugin update text-to-cad@earthtojake
 
 #### Codex app
 
-text-to-cad is in the [official Codex plugin directory](https://learn.chatgpt.com/docs/plugins).
+text-to-cad is in the [official Codex plugin directory](https://chatgpt.com/plugins/plugins_6ac32e7e1a74819193e1edd581a99966?open_in_app).
 
 - In the Codex app, click **Plugins** in the sidebar.
 - Find **text-to-cad**.
@@ -76,7 +76,7 @@ text-to-cad is in the [official Codex plugin directory](https://learn.chatgpt.co
 
 #### Codex CLI
 
-text-to-cad is in the [official Codex plugin directory](https://learn.chatgpt.com/docs/plugins).
+text-to-cad is in the [official Codex plugin directory](https://chatgpt.com/plugins/plugins_6ac32e7e1a74819193e1edd581a99966?open_in_app).
 
 - Open the plugin search:
 
@@ -152,23 +152,6 @@ To update:
 
 ```bash
 grok plugin update text-to-cad
-```
-
-### Hermes Agent
-
-```bash
-hermes plugins install earthtojake/text-to-cad --no-enable \
-  --ref "$(git ls-remote https://github.com/earthtojake/text-to-cad latest | cut -f1)"
-hermes plugins enable text-to-cad --no-allow-tool-override
-```
-
-Hermes takes a branch only as its commit, which `git ls-remote` looks up.
-
-To update, remove it and run the commands above again (`hermes plugins update` follows the
-repository's default branch):
-
-```bash
-hermes plugins remove text-to-cad
 ```
 
 ### Antigravity
@@ -266,6 +249,7 @@ it for each one it finds.
 | Amp | `~/.config/amp/skills` |
 | Cline | `~/.cline/skills` |
 | Goose | `~/.config/goose/skills` |
+| Hermes Agent | `~/.hermes/skills` (`$HERMES_HOME/skills` where that is set) |
 | Kilo Code | `~/.kilo/skills` |
 | Kiro CLI | `~/.kiro/skills` |
 | OpenClaw | `~/.openclaw/skills` |
@@ -284,6 +268,9 @@ cp -R text-to-cad/skills/* ~/.cline/skills/
 ```
 
 To update, copy them again, or run the install command.
+
+Earlier releases installed a Hermes Agent plugin instead. The install command removes it; by hand,
+run `hermes plugins remove text-to-cad`.
 
 Zed and GitHub Copilot in VS Code are not supported yet. No route for your agent?
 [Request one](https://github.com/earthtojake/text-to-cad/issues/new?title=Plugin%20request%3A%20).
@@ -312,7 +299,6 @@ Remove the plugin from each app with that app's own command:
 | Cursor | `rm -rf ~/.cursor/plugins/local/text-to-cad` |
 | Gemini CLI | `gemini extensions uninstall text-to-cad` |
 | Grok Build | `grok plugin uninstall text-to-cad` |
-| Hermes Agent | `hermes plugins remove text-to-cad` |
 | Antigravity | `agy plugin uninstall text-to-cad` |
 | Devin CLI | `devin plugins remove text-to-cad` |
 | Factory Droid | `droid plugin uninstall text-to-cad@text-to-cad`, then `droid plugin marketplace remove text-to-cad` |

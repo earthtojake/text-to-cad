@@ -61,7 +61,7 @@ skills/<name>/
   the install up to date: check `cad +<VERSION> --version` at a session's start and, when `cad` says a
   new version of cad is available, install the new version of the plugin from the repository.
   `cad` names no command, and the skill quotes none: it links the repository, so the skill carries no
-  download piped to a shell (a store's and Hermes Agent's install scans flag one). The store builders
+  download piped to a shell (a store's install scan flags one). The store builders
   give each pin the store's name and leave that paragraph out, and a marker the builder does not find
   exactly once fails the release
   ([The install branches](../../CONTRIBUTING.md#the-install-branches)).

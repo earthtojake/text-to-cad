@@ -143,8 +143,10 @@ cad --json` in a private `CODEX_HOME`): a folder with the Agent Plugins standard
 read as an Agent Plugin, ahead of `.codex-plugin/plugin.json`, whose interface it still takes, and its MCP
 servers come from the root `mcp.json` alone (Codex refuses a Codex-only key there, so no start allowance).
 A folder without the root `plugin.json` is read by `.codex-plugin/plugin.json`: `codex.mcp.json`, with
-its 300 s. The store's ZIP has no root `plugin.json` and registers `cad` with 300 s. With the root
-`plugin.json` and no root `mcp.json`, a copy of `latest` or `main` registers no `cad` server in Codex.
+its 300 s. So the repository carries no root `plugin.json` (nor a root `mcp.json`): with the first and not
+the second, a copy of `latest` or `main` registered no `cad` server in Codex. Without either, `latest`,
+`main`, a development install's copy and the store's ZIP each register `cad` with 300 s (measured
+2026-11-15 with both CLIs).
 
 ## Claude: no CAD server
 

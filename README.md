@@ -39,9 +39,9 @@ app's own command. Run it again to update.
 Then ask your agent for a part or an assembly: it writes the model as a Python
 script, runs it to build the model and shows it in the CAD viewer.
 
-It works in Claude Code, Codex, Cursor, Gemini CLI, Grok Build, Hermes Agent,
-Antigravity, Devin CLI, Factory Droid, GitHub Copilot CLI, Kimi Code, Muse, Pi,
-Qwen Code, Amp, Cline, Goose, Kilo Code, Kiro CLI, OpenClaw, OpenCode, Roo Code,
+It works in Claude Code, Codex, Cursor, Gemini CLI, Grok Build, Antigravity,
+Devin CLI, Factory Droid, GitHub Copilot CLI, Kimi Code, Muse, Pi, Qwen Code, Amp,
+Cline, Goose, Hermes Agent, Kilo Code, Kiro CLI, OpenClaw, OpenCode, Roo Code,
 Trae and Windsurf.
 
 Installing by hand, app by app, updating and removing: [docs/install.md](docs/install.md)

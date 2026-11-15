@@ -11,9 +11,10 @@ that tree pointed at the release commit on GitHub (CONTRIBUTING.md, "The install
 Three copies, differing in what they carry:
 
 - `latest`: the newest release, which every documented install command names. Every app's
-  manifest, Codex's MCP config, the marketplace catalogs, which list the plugin at the root of the
-  branch they are read from, and the Agent Plugins standard's manifest. Only Codex's manifest names
-  a server: every other app gets the skills alone.
+  manifest, Codex's MCP config, and the marketplace catalogs, which list the plugin at the root of the
+  branch they are read from. Only Codex's manifest names a server: every other app gets the skills
+  alone. No root `plugin.json` (the Agent Plugins standard's): Codex takes a folder that has one for
+  an Agent Plugin and reads its server from `./mcp.json` alone, so the copy would give Codex none.
 - `directory` (pushed to `claude-plugin`): claude.ai's plugin directory. Claude's manifest and
   icon, `skills/`, `LICENSE` and the README: the skills alone, no MCP server and no hooks, and
   only the file types the directory accepts from an organization it has not verified
@@ -30,8 +31,7 @@ main or `latest` names a store: Codex's launcher is told its store as an argumen
 (`cad-mcp --channel codex`), and the directory's copy carries no server at all.
 
 No copy holds a download piped to a shell (`PIPE_TO_SHELL`, checked in every copy): claude.ai's directory
-flags one as an install-time risk, and Hermes Agent's install scan rates one high and refuses a scripted
-install for it. The skills carry none (their update paragraph links the repository), so the one on main is
+flags one as an install-time risk. The skills carry none (their update paragraph links the repository), so the one on main is
 the README's Quickstart: in `latest` and the directory's copy the README installs by the skills' own `uvx`
 line (`UVX_INSTALL`) in place of the Quickstart's two one-liners and the paragraph after them (`by_uvx`, a
 strict substitution that fails the build when what it replaces is not there exactly once). main's README
@@ -74,13 +74,11 @@ FILES = (MANIFEST, ICON, ".cursor-plugin/plugin.json", "gemini-extension.json", 
 DIRECTORY_FILES = (MANIFEST, ICON, "LICENSE")
 # What Claude Code's and Codex's marketplaces read besides: the catalog, and Codex's manifest and config.
 MARKETPLACE_FILES = (CATALOG, ".codex-plugin/plugin.json", ".codex-plugin/logo.png", "codex.mcp.json")
-# The Agent Plugins standard's manifest (agent-plugins.org), which VS Code reads before Claude's manifest. No
-# server config beside it: Cursor, Hermes and VS Code would start the CAD server from one.
-STANDARD_FILES = ("plugin.json",)
 # Grok Build's manifest, which it reads before Claude's: the skills alone, as Claude's.
 GROK_FILES = (".grok-plugin/plugin.json",)
 # The manifests of the apps that read their own: Antigravity, Kimi Code, Devin, and Muse's with its catalog.
-# Hermes and Pi read the Agent Plugins standard's and the skills/ folder (STANDARD_FILES).
+# Pi reads the skills/ folder by convention; Qwen Code converts gemini-extension.json; GitHub Copilot CLI reads
+# Claude's manifest and catalog.
 OTHER_APP_FILES = (".antigravity-plugin/plugin.json", ".kimi-plugin/plugin.json", ".devin-plugin/plugin.json",
                    ".muse-plugin/plugin.json", ".muse-plugin/marketplace.json")
 
@@ -104,7 +102,7 @@ class Copy(NamedTuple):
 # manifests keep them.
 UNLISTED = ("documentationUrl", "privacyPolicyUrl", "supportUrl", "termsOfServiceUrl")
 COPIES = {
-    "latest": Copy(FILES + MARKETPLACE_FILES + STANDARD_FILES + GROK_FILES + OTHER_APP_FILES, None, uvx=True),
+    "latest": Copy(FILES + MARKETPLACE_FILES + GROK_FILES + OTHER_APP_FILES, None, uvx=True),
     "directory": Copy(DIRECTORY_FILES, "claude", skills_only=True, uvx=True, unlisted=UNLISTED),
     "codex": Copy((), plugin_zip.CHANNEL, codex_zip=True),
 }

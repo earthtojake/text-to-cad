@@ -472,8 +472,8 @@ debugging; normal iteration goes through `bundle.sh`. The wheel carries no plugi
 from. There is no development symlink layout and no generated publish tree:
 every path is the real file, and the repository root is itself the agent plugin
 package (`.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `gemini-extension.json`
-and the Agent Plugins `plugin.json` hold the manifests; the plugin's skills are `skills/`
-directly), so whatever is on `main` is what agent installers copy.
+and the other apps' `.<app>-plugin/` folders hold the manifests; the plugin's skills are
+`skills/` directly), so whatever is on `main` is what agent installers copy.
 
 Four consequences are enforced by `scripts/github-workflows/check-builds.sh`
 on every push:
@@ -859,15 +859,16 @@ no commit. There are three copies:
   `codex.mcp.json`, the one MCP config: browser first, only Codex gets the CAD
   server, `.antigravity-plugin/`, `.kimi-plugin/`, `.devin-plugin/`,
   `.muse-plugin/`), the marketplace catalogs (Claude's, which Codex reads too,
-  and Muse's), each listing the plugin at the branch's root, the Agent Plugins
-  standard's `plugin.json` (what Hermes reads; no root `mcp.json`: see
-  [apps/mcp/README.md](apps/mcp/README.md), "Which config Codex reads"), `skills/`,
+  and Muse's), each listing the plugin at the branch's root, `skills/`,
   `LICENSE` and `README.md`, each README link to a file outside the tree pointed
-  at the release commit on GitHub. It is our own text, as `main` has it, but for
-  the README's install section, which installs by the skills' own `uvx` line in
-  place of the Quickstart's one-liners, as `claude-plugin`'s does: Hermes Agent's
-  install scan rates a download piped to a shell high and refuses a scripted
-  install for it, so no copy holds one (`plugin_branch.py` checks every copy).
+  at the release commit on GitHub. No root `plugin.json` (the Agent Plugins
+  standard's) and no root `mcp.json`: Codex reads a folder with the first as an
+  Agent Plugin, whose server comes from the second alone, and never reads
+  `codex.mcp.json` ([apps/mcp/README.md](apps/mcp/README.md), "Which config Codex
+  reads"). It is our own text, as `main` has it, but for the README's install
+  section, which installs by the skills' own `uvx` line in place of the
+  Quickstart's one-liners, as `claude-plugin`'s does, so no copy holds a
+  download piped to a shell (`plugin_branch.py` checks every copy).
 - `claude-plugin`, which claude.ai's directory listing tracks: the skills alone.
   `.claude-plugin/plugin.json` (main's less four listing links, naming no MCP
   server and no hooks) and `icon.png`, `skills/`, `LICENSE` and `README.md`, and
@@ -908,8 +909,7 @@ manifest, MCP config and the marketplace catalogs at its root, its catalogs list
 the plugin at `./`, and nothing on `main` points an installer at another branch.
 Development installs (`scripts/install/dev_install.py`) rely on that too. The
 documented commands name `latest` where the app can name a branch, because it is
-the plugin alone and never ahead of PyPI; Hermes takes a branch only as its
-commit, so its command names the commit of `latest`; Devin and Antigravity find no
+the plugin alone and never ahead of PyPI; Devin and Antigravity find no
 branch syntax and install `main`. `test_plugin_manifests.py` holds both halves
 of the rule. Every copy is built and checked by
 `tests/python/global/test_plugin_branch.py` and `test_plugin_zip.py` on every

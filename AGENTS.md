@@ -111,8 +111,9 @@ with its `build123d` extra: its own base) and test in agent apps with `scripts/i
 - `skills/`: agent skills and their references. They ship in the plugin alone, never in a wheel.
 - `.claude-plugin/`, `.codex-plugin/` (the one naming a CAD server, `codex.mcp.json`: browser
   first, every other app gets the skills alone), `.cursor-plugin/`, `.grok-plugin/`,
-  `.antigravity-plugin/`, `.kimi-plugin/`, `.devin-plugin/`, `.muse-plugin/`, `gemini-extension.json`,
-  and the [Agent Plugins](https://agent-plugins.org) standard's `plugin.json`: agent plugin manifests. The repository root is the plugin package; its skills are
+  `.antigravity-plugin/`, `.kimi-plugin/`, `.devin-plugin/`, `.muse-plugin/` and `gemini-extension.json`:
+  agent plugin manifests (no root `plugin.json`: Codex would read it in place of its own). The repository root
+  is the plugin package; its skills are
   `skills/` directly. Installers take it from the `latest` branch, claude.ai's directory
   from `claude-plugin` (the skills alone, pinned `@claude`) and Codex's from `codex-plugin`
   (pinned `@codex`), which `scripts/release/plugin_branch.py` builds at each release.

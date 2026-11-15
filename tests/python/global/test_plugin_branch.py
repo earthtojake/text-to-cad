@@ -33,12 +33,14 @@ class PluginTreeTests(unittest.TestCase):
         on_main = branch.tracked(REPO_ROOT)
         skills = {path for path in on_main if path.startswith("skills/")}
         blobs = branch.read_blobs(REPO_ROOT, sorted({blob for _mode, blob in on_main.values()}))
-        # latest: every app's manifest, Codex's config, the marketplace catalogs, Grok Build's, the other apps' and
-        # the Agent Plugins standard's manifests, and every skill; each file main's but the README: our own text.
+        # latest: every app's manifest, Codex's config, the marketplace catalogs, Grok Build's and the other apps'
+        # manifests, and every skill; each file main's but the README: our own text. No root plugin.json: Codex
+        # would take the copy for an Agent Plugin and read no server from codex.mcp.json.
         install, errors, _manifest = branch.build(REPO_ROOT, "latest")
         self.assertEqual(errors, [])
-        self.assertEqual(set(install), {*branch.FILES, *branch.MARKETPLACE_FILES, *branch.STANDARD_FILES,
-                                        *branch.GROK_FILES, *branch.OTHER_APP_FILES, "README.md", *skills})
+        self.assertEqual(set(install), {*branch.FILES, *branch.MARKETPLACE_FILES, *branch.GROK_FILES,
+                                        *branch.OTHER_APP_FILES, "README.md", *skills})
+        self.assertNotIn("plugin.json", install)
         self.assertEqual([path for path, (_mode, data) in sorted(install.items()) if data != blobs[on_main[path][1]]],
                          ["README.md"])
         # Codex alone is given the CAD server: every other app gets the skills alone from latest.

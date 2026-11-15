@@ -162,31 +162,32 @@ class InstallScriptTests(unittest.TestCase):
         for name in ("Claude Code", "Codex", "Gemini CLI"):
             self.assertIn(f"{name}: updated\n", done.stdout)
 
-    def test_hermes_installs_latest_by_its_commit_with_no_override_and_moves_it_only_when_it_changed(self) -> None:
-        # Hermes's --ref takes a commit alone, and its default branch is main: the commit of `latest`, no --force.
+    def test_hermes_gets_the_skills_in_its_own_folder_and_our_old_plugin_goes(self) -> None:
+        # Hermes Agent is a skills-folder agent: our skills in $HERMES_HOME/skills, no plugin command of its own.
         self.programs("hermes")
-        install_it = [["plugins", "install", "earthtojake/text-to-cad", "--no-enable", "--ref", LATEST],
-                      ["plugins", "enable", "text-to-cad", "--no-allow-tool-override"]]
-        done = self.run_install()
+        hermes = self.root / "hermes-home"
+        done = self.run_install(HERMES_HOME=str(hermes))
         self.assertEqual(0, done.returncode, done.stderr)
-        self.assertIn(["ls-remote", install.URL, "refs/heads/latest"], self.calls("git"))
-        self.assertEqual(self.calls("hermes"), install_it)
-        self.assertIn("Hermes Agent: installed", done.stdout)
-        # Installed at that commit (Hermes's record): nothing to do. At another: removed, then that commit installed.
+        self.assertIn("new", (hermes / "skills/cad/SKILL.md").read_text(encoding="utf-8"))
+        self.assertEqual(self.calls("hermes"), [])
+        self.assertIn(f"Hermes Agent: installed: 2 skills in {hermes / 'skills'}", done.stdout)
+        # Found by its folder alone too. The plugin 0.11.x installed from our repository goes, by Hermes's own
+        # command; someone else's plugin of that name stays.
+        (self.bin / "hermes").unlink()
         self.write(".hermes/plugins/text-to-cad/plugin.json", {"name": "text-to-cad"})
-        self.write(".hermes/plugins/.install-metadata.json", {"text-to-cad": {"revision": LATEST, "pinned": True}})
+        self.write(".hermes/plugins/.install-metadata.json", {"text-to-cad": {"source": "someone/text-to-cad"}})
         self.log.unlink()
-        self.assertIn("Hermes Agent: updated: already the latest release", self.run_install().stdout)
-        self.assertEqual(self.calls("hermes"), [])
-        self.write(".hermes/plugins/.install-metadata.json", {"text-to-cad": {"revision": "b" * 40, "pinned": True}})
+        done = self.run_install()
+        self.assertIn("Hermes Agent: installed: 2 skills in ~/.hermes/skills\n", done.stdout)
+        self.assertTrue((self.home / ".hermes/skills/pcb/SKILL.md").is_file())
+        self.programs("hermes")
+        self.write(".hermes/plugins/.install-metadata.json",
+                   {"text-to-cad": {"source": "https://github.com/earthtojake/text-to-cad.git", "pinned": True}})
         self.log.unlink()
-        self.assertIn("Hermes Agent: updated\n", self.run_install().stdout)
-        self.assertEqual(self.calls("hermes"), [["plugins", "remove", "text-to-cad"], *install_it])
-        # No git, no commit: said, and nothing run.
-        (self.bin / "git").unlink()
-        self.log.unlink()
-        self.assertIn("Hermes Agent: skipped: needs git", self.run_install().stdout)
-        self.assertEqual(self.calls("hermes"), [])
+        done = self.run_install()
+        self.assertEqual(self.calls("hermes"), [["plugins", "remove", "text-to-cad"]])
+        self.assertIn("Hermes Agent: installed: 2 skills in ~/.hermes/skills (removed old copies: the text-to-cad plugin)",
+                      done.stdout)
 
     def test_without_claude_code_cursor_s_clone_and_grok_s_plugin_are_updated(self) -> None:
         self.programs("grok")

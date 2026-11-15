@@ -21,7 +21,6 @@ export const jsonTargets = [
   { path: ".kimi-plugin/plugin.json", fields: [["version"]] },
   { path: ".devin-plugin/plugin.json", fields: [["version"]] },
   { path: ".muse-plugin/plugin.json", fields: [["version"]] },
-  { path: "plugin.json", fields: [["version"]] },
   { path: ".claude-plugin/marketplace.json", fields: [["version"]], pluginEntries: ["text-to-cad"] },
   { path: ".muse-plugin/marketplace.json", fields: [], pluginEntries: ["text-to-cad"] },
 ];
