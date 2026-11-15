@@ -165,8 +165,8 @@ skills' `cad viewer` link, in the browser pane or the browser.
 
 | Host | CAD's server | Cards |
 | --- | --- | --- |
-| Claude Desktop (Chat and Code tabs) | none: `cad setup` writes no entry in `claude_desktop_config.json`, and takes out the `mcpServers.cad` releases through 0.11.10 wrote there (the rest of the file kept, a `.bak` beside it) | none |
-| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone, and `cad setup` removes a `claude mcp add` CAD server, the user's or a project's. claude.ai's directory's copy (`claude-plugin`) carries the skills alone too; its copies through 0.11.10 name one, which lists no tools when Claude Code starts it | none |
+| Claude Desktop (Chat and Code tabs) | none: nothing writes an entry in `claude_desktop_config.json`, and the install script (`scripts/install/install.py`'s `claude_desktop`) takes out the `mcpServers.cad` releases 0.7.6 through 0.11.10 wrote there (the rest of the file kept, a copy of the file as it was beside it) | none |
+| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone (the install script removes no `claude mcp add` server). claude.ai's directory's copy (`claude-plugin`) carries the skills alone too; its copies through 0.11.10 name one, which lists no tools when Claude Code starts it | none |
 | Claude Code in a terminal | none | it draws none |
 
 The server offers no tools to a Claude host that starts it (a config someone wrote by hand, or an
@@ -193,15 +193,17 @@ fails a server in it), and `host.presentation` would name its client. The instal
 old `cad` entry out (`scripts/install/install.py`'s `claude_desktop`); a server there and in the plugin would
 list CAD twice in the Code tab.
 
-## Cursor: where the card's capability comes from
+## Cards: where the page's capability comes from
 
-Cursor is offered no tools (browser first); what follows holds for its cards served through the development
-switch, and for the day they are verified.
+Only the Codex app is offered tools (browser first), and its cards are tabs: every other host gets the skills alone.
+The page's card code is kept behind the development switch `CAD_MCP_PRESENTATION`, for the day a host's cards are
+verified. What follows holds for a card served through that switch.
 
-| Host | The page's capability | Cards |
-| --- | --- | --- |
-| Codex, Claude Desktop | the launch's result `_meta["dev.texttocad/httpToken"]`, as before | yes |
-| Cursor (`cursor-vscode`, declares MCP Apps) | the launching tool's own `_meta["dev.texttocad/httpToken"]` (`cad_show`'s, in `tools/list`), which Cursor hands the card at `ui/initialize` as `hostContext.toolInfo.tool.meta` | yes, inline |
+| Host | The page's capability |
+| --- | --- |
+| Codex (tabs) | the launch's result `_meta["dev.texttocad/httpToken"]` |
+| Cursor (`cursor-vscode`, declares MCP Apps), behind the switch | the launching tool's own `_meta["dev.texttocad/httpToken"]` (`cad_show`'s, in `tools/list`), which Cursor hands the card at `ui/initialize` as `hostContext.toolInfo.tool.meta` |
+| Every other host | no CAD server |
 
 Cursor drops a result's `_meta` before its card sees it. Read from Cursor 3.25.6's bundle
 (`out/vs/workbench/workbench.glass.main.js`): the card's tool result is `JSON.parse` of the string the
@@ -355,7 +357,7 @@ the launch's `_meta` first (`host/capability.ts`).
   page launch includes the host connection's capability in result `_meta["dev.texttocad/httpToken"]`,
   which [MCP Apps hosts deliver to the UI](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx#2-tool-results), outside model context; content and structured content never
   carry it. Cursor delivers no result `_meta` to its card, so there it rides `cad_show`'s own `_meta`
-  instead ([Cursor](#cursor-where-the-cards-capability-comes-from)). A call refused for it answers
+  instead ([Cards](#cards-where-the-pages-capability-comes-from)). A call refused for it answers
   `structuredContent: {"refused": "capability" | "stale"}` beside the words, and the card says it
   cannot connect (`Unreachable`), with Open in browser. The page sends `x-cad-app` with HTTP calls, and the same capability
   as the `app` argument of `cad_sync` and `cad_capture_reply`; all three refuse a call

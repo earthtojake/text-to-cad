@@ -673,7 +673,7 @@ As many past releases as reasonable can reach the latest one:
   over from the layout those releases kept, and starts the hosted install script once, in the
   background, which brings each app's plugin up to date. It starts it only once the site's `install.py`
   names the release (it waits up to about an hour), and `Publish Release` purges the version feed only
-  after `Deploy Docs`: those updaters run the release once, and the release before's script would leave
+  once the install branches are written and `Deploy Docs` has run: those updaters run the release once, and the release before's script would leave
   the apps as they were.
 - **Older releases** reach the latest when a person or an agent runs the install command. The script
   removes what each past layout left in the agent apps (`scripts/install/install.py`, the `cleanup` of
@@ -917,8 +917,8 @@ manifest, MCP config and the marketplace catalogs at its root, its catalogs list
 the plugin at `./`, and nothing on `main` points an installer at another branch.
 Development installs (`scripts/install/dev_install.py`) rely on that too. The
 documented commands name `latest` where the app can name a branch, because it is
-the plugin alone and never ahead of PyPI; Devin and Antigravity find no
-branch syntax and install `main`. `test_plugin_manifests.py` holds both halves
+the plugin alone and never ahead of PyPI; Devin, Antigravity and Factory Droid find no
+branch syntax and install `main` (Droid's `#ref` changes the plugin's name). `test_plugin_manifests.py` holds both halves
 of the rule. Every copy is built and checked by
 `tests/python/global/test_plugin_branch.py` and `test_plugin_zip.py` on every
 pull request and again before each release (`plugin_branch.py --check`), the
@@ -975,6 +975,11 @@ For each release, a person with the access below:
    the policy attestations.
 4. After approval, selects **Publish plugin**.
 
+OpenAI's directory lists text-to-cad twice: an old listing still at 0.7.10, and the
+[current one](https://chatgpt.com/plugins/plugins_6ac32e7e1a74819193e1edd581a99966?open_in_app).
+Until OpenAI merges them, upload each release's ZIP to both, so the old listing's users
+move to the current release too.
+
 One-time setup, in the OpenAI Platform organization that owns the plugin:
 complete individual or business verification under
 <https://platform.openai.com/settings/organization/general>. Submitting needs an
@@ -997,7 +1002,7 @@ The version check (at most once an hour) reads `api.texttocad.dev/v1/versions`
 (`apps/api/src/versions.mjs`): `latest` is the newest release PyPI's simple
 index lists, the index uv resolves every pin through, so the feed names a
 release the moment it can be installed (Vercel's edge keeps a reply an hour, which
-`Publish Release` purges once the install branches carry the release), and no release
+`Publish Release`'s `feed` job purges once the install branches are written and `Deploy Docs` has run, on `main` only), and no release
 deploys it. The install command reads it too, for the release to install. cad reads it
 only to say that a newer release is out, after a command's output, with the install command
 to run; a command that names a store (`cad +X@codex`) is never told, since its store
