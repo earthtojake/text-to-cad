@@ -549,6 +549,32 @@ class Cleanup(Device):
             self.assertEqual(releases.processes("/v", asking=30), [20, 21, 31])
             self.assertEqual(releases.processes("/v", asking=31), [20, 21])
 
+    @unittest.skipIf(os.name == "nt", "Windows' own paths: the test below runs a real launcher there")
+    def test_running_on_windows_spares_the_launchers_that_started_the_server_and_no_other(self) -> None:
+        # Windows says each process's program, not its command line: a version's processes are its environments'
+        # launchers (python.exe, cad.exe), and the pid a server names is the interpreter its launcher started, whose
+        # program is the base Python, outside the folder. The server's launcher is the server, as on POSIX, where
+        # there is none; the cad command that started it is another process, as on POSIX.
+        rows = [(10, 1, "/sys/shell.exe"),
+                (30, 10, "/v/code/server/Scripts/cad.exe"), (31, 30, "/v/code/server/Scripts/python.exe"),
+                (32, 31, "/base/python.exe"),  # the cad command, which started the server
+                (20, 32, "/v/code/server/Scripts/python.exe"), (21, 20, "/base/python.exe"),  # the server: pid 21
+                (22, 21, "/v/code/base/k/Scripts/python.exe"), (23, 22, "/base/python.exe")]  # its worker
+
+        class Windows:
+            name = "nt"
+
+            def __getattr__(self, attribute):
+                return getattr(os, attribute)
+
+        with mock.patch.object(releases, "os", Windows()), mock.patch.object(releases, "_windows_rows",
+                                                                             return_value=rows):
+            self.assertEqual(releases.processes("/v"), [20, 22, 30, 31])
+            self.assertEqual(releases.processes("/v", besides=21), [30, 31],
+                             "the server, its launcher and its worker spared; the command that started it is another")
+            self.assertEqual(releases.processes("/v", besides=23), [20, 30, 31], "the worker alone")
+            self.assertEqual(releases.processes("/v", asking=32), [20, 22], "a server the asker started still counts")
+
     @unittest.skipIf(os.name != "nt", "Windows' answer; POSIX lists processes, the test above")
     def test_running_on_windows_sees_a_process_whose_program_is_in_the_folder_until_it_ends(self) -> None:
         # Windows cannot be asked a process's command line, but it says each process's program: a virtual
@@ -556,13 +582,18 @@ class Cleanup(Device):
         # as long as its interpreter does. Seen, spared as the asker or as besides, and gone once it has ended.
         folder = self.root / "env"
         subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(folder)], check=True)
-        child = subprocess.Popen([str(folder / "Scripts" / "python.exe"), "-c", "import sys; sys.stdin.read()"],
-                                 stdin=subprocess.PIPE)
+        child = subprocess.Popen([str(folder / "Scripts" / "python.exe"), "-c",
+                                  "import os, sys; print(os.getpid(), flush=True); sys.stdin.read()"],
+                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        self.addCleanup(child.stdout.close)
         self.addCleanup(child.kill)
         ended = releases.exits(child.pid)
+        interpreter = int(child.stdout.readline())  # what a server started so names as its pid
+        self.assertNotEqual(interpreter, child.pid, "the environment's python.exe is a launcher")
         self.assertIn(child.pid, releases.processes(folder))
         self.assertTrue(releases.running(folder))
         self.assertNotIn(child.pid, releases.processes(folder, besides=child.pid))
+        self.assertNotIn(child.pid, releases.processes(folder, besides=interpreter), "its launcher is the process")
         self.assertNotIn(child.pid, releases.processes(folder, asking=child.pid))
         self.assertEqual(releases.processes(self.root / "elsewhere"), [])
         child.stdin.close()

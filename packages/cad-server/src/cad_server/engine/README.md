@@ -287,8 +287,8 @@ server, each on its own port (the second rolls from the first's, below); nothing
   hold or an open page) its server is asked to stop over its own door (the drain), and its folder is renamed aside
   and removed, its data with it: Recents entries and cached records written to that version after the newer one's
   one-time copy go with it (files in a person's own project are never touched). With work in flight, a process
-  running from its folder (`releases.running`, the server's own processes aside: on POSIX by its command line, on
-  Windows by its program's path), or a folder the system will not move (Windows: a file in use), it stays for the
+  running from its folder (`releases.running`, the server's own processes aside, on Windows with the environment's
+  `python.exe` launcher that started it: on POSIX by its command line, on Windows by its program's path), or a folder the system will not move (Windows: a file in use), it stays for the
   next cleanup, which looks once and never waits. The 2 days are counted by the wall clock: a clock set days
   forward removes the older versions at the next cleanup, a cost accepted (a guard by the boot's start would keep a
   version used weeks ago on a computer never restarted). A version that is not the newest cleans nothing. The same cleanup

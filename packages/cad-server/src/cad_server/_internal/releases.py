@@ -102,14 +102,24 @@ def processes(folder: Path | str, *, besides: int | None = None, asking: int | N
     Python counts. On Windows, one whose program is in it (``_windows_rows``): a virtual environment's
     ``python.exe`` is a launcher that waits for the interpreter it starts, so an environment's process is seen
     for as long as it runs. ``besides``: a process that does not count, nor its descendants (a version's server and
-    its workers, asked before the server is stopped). ``asking``: a process that does not count, nor its ancestors
-    (the one asking, which may run from the folder it removes, and the launchers that started it: ``cad uninstall``
-    typed in a terminal runs from the version it removes). None when that cannot be asked on POSIX; on Windows,
-    where the system will not list its processes, none: there a folder is renamed aside before it is removed, which
-    the system refuses for a file in use (``versions.clean``, ``legacy.remove``)."""
-    rows = _windows_rows() if os.name == "nt" else _ps_rows()
+    its workers, asked before the server is stopped), nor, on Windows, the launchers in ``folder`` that started it and
+    wait for it (the process a server names is the interpreter its environment's ``python.exe`` started: on POSIX
+    there is no such process, the environment's Python is the interpreter). ``asking``: a process that does not
+    count, nor its ancestors (the one asking, which may run from the folder it removes, and the launchers that started
+    it: ``cad uninstall`` typed in a terminal runs from the version it removes). None when that cannot be asked on
+    POSIX; on Windows, where the system will not list its processes, none: there a folder is renamed aside before it
+    is removed, which the system refuses for a file in use (``versions.clean``, ``legacy.remove``)."""
+    windows = os.name == "nt"
+    rows = _windows_rows() if windows else _ps_rows()
     if rows is None:
-        return [] if os.name == "nt" else None
+        return [] if windows else None
+    inside = {os.path.normcase(os.path.abspath(folder)).rstrip("\\/") + os.sep,
+              os.path.normcase(os.path.realpath(folder)).rstrip("\\/") + os.sep}
+
+    def in_folder(image: str) -> bool:  # Windows: a program's full path
+        return bool(image) and any(os.path.normcase(image).startswith(each) for each in inside)
+
+    parents = {pid: parent for pid, parent, _command in rows}
     spared: set[int] = set()
     if besides is not None:
         spared.add(besides)
@@ -120,17 +130,19 @@ def processes(folder: Path | str, *, besides: int | None = None, asking: int | N
                 if parent in spared and pid not in spared:
                     spared.add(pid)
                     grew = True
+        if windows:
+            images = {pid: image for pid, _parent, image in rows}
+            launcher = parents.get(besides)
+            while launcher is not None and launcher not in spared and in_folder(images.get(launcher, "")):
+                spared.add(launcher)
+                launcher = parents.get(launcher)
     if asking is not None:
-        parents = {pid: parent for pid, parent, _command in rows}
         pid: int | None = asking
         while pid is not None and pid not in spared:
             spared.add(pid)
             pid = parents.get(pid)
-    if os.name == "nt":
-        inside = {os.path.normcase(os.path.abspath(folder)).rstrip("\\/") + os.sep,
-                  os.path.normcase(os.path.realpath(folder)).rstrip("\\/") + os.sep}
-        return sorted(pid for pid, _parent, image in rows if pid not in spared and image
-                      and any(os.path.normcase(image).startswith(each) for each in inside))
+    if windows:
+        return sorted(pid for pid, _parent, image in rows if pid not in spared and in_folder(image))
     named = os.path.realpath(folder).rstrip(os.sep) + os.sep
     plain = os.path.abspath(folder).rstrip(os.sep) + os.sep
     resolved: dict[str, str] = {}

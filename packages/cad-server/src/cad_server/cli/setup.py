@@ -359,7 +359,7 @@ def start_installer(name: str | None = None) -> int | None:
         return None
     version, url = name or _name(), install_py()
     if url and version:
-        command = [sys.executable, "-I", "-m", "cad_server._internal.install_script", version, url, "--",
+        command = [sys.executable, "-P", "-m", "cad_server._internal.install_script", version, url, "--",
                    *([command] if isinstance(command, str) else command)]
     try:
         started = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
