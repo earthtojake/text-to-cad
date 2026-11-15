@@ -338,7 +338,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, then Projection, Display and Preview |
 | DXF | Select (in hand: a tap picks an entity, a plain drag draws [the box](#box-selection); a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
 | KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a plain drag draws [the box](#box-selection), naming the area on the view's working layer where it takes nothing; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom, a double-click fits: the board whole, 6% of the pane’s smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; then Flip, 2D/3D and Display; the zoom pill in the corner |
-| KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a plain drag draws [the box](#box-selection), taking what it touches; the rest are a board's drags; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Pencil, Shapes, Measure; no view controls (no layers, and its colours are the theme's). |
+| KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a plain drag draws [the box](#box-selection), taking what it touches; the rest are a board's drags; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, as KiCad's Zoom to Fit, or, where what the sheet draws is under four fifths of its page both ways, that with 10 mm round it, as KiCad's Zoom to Objects, the drawing sheet still drawn (`plot2d`'s `schematicFitBounds`: a small circuit on an A4 sheet opened too small to read); with a board's margin and clear of the strip; a file opens so too, unless its view was left elsewhere), Pencil, Shapes, Measure; no view controls (no layers, and its colours are the theme's). |
 
 There is no activity dot. A thin rule parts the tools from the view's controls, which
 are no tools (see [Ownership and layout](#ownership-and-layout)). Position is no tool:
@@ -674,7 +674,7 @@ width out of the canvas, and the picture is drawn in what it leaves, nothing of 
 The strip stays at the view's centre,
 panel open or not, and stands over the panel where a narrow view makes them meet, as Figma's toolbar
 stands over its layers; its reach is written before the frame is painted, so opening or shutting the
-panel never moves it, `kit/shell/useStageReach.js`. Its tabs: a board's Parts, Nets and Layers, a schematic's Parts, Nets and Hierarchy,
+panel never moves it, `kit/shell/useStageReach.js`. Its tabs: a board's Parts, Nets, Layers and Checks, a schematic's Parts, Nets and Hierarchy,
 a drawing's Layers (handed in); a 3D view's its renderer's sections in their order (`ToolPanel`s, each a tab by its
 name: a STEP assembly's **Model** — a part file, whose tree would be its one row, has none —
 then **Position**, where the file has joints to move; a robot's **Links**, an `.sdf`'s **SDF**, then
@@ -697,8 +697,12 @@ file.
   hits, and no rule: the rule goes with the tab row, so its list starts 6px under the search box. The
   list is labelled by the tab's name for assistive technology.
 - **Its tabs**, under the head, buttons as Figma's: 24px, the open one on the accent in medium
-  weight, the others muted, each as wide as its name in medium weight, so choosing one moves nothing; a board's **Parts**, **Nets** then **Layers**, a schematic's **Parts**, **Nets** then, for more than one
-  sheet, **Hierarchy**. Arrow keys move between them. The tab shown is the person's, the file's
+  weight, the others muted, each as wide as its name in medium weight, so choosing one moves nothing; a board's **Parts**, **Nets**, **Layers** then **Checks**, a schematic's **Parts**, **Nets** then, for more than one
+  sheet, **Hierarchy**. Four tabs or more stand closer (2px apart, their names 6px inside their boxes), so a
+  board's four fit the panel at the width it opens at; a row that still does not fit wraps, and cuts nothing. A
+  tab that has something wrong to say says how many after its name, a plain number in the error's colour
+  (`count`: the Checks', the findings that fail the board; none while it passes): it comes and goes with the
+  answer, so that tab is the last and no tab after it is moved. Arrow keys move between them. The tab shown is the person's, the file's
   (its view's `panel.tab`, below), the first at first. Every tab stays mounted, and each keeps its own scroll.
 - **Two lines, the same on both sides** (Figma's). Every box in the head and the lists — the search
   field, the collapse button, a tab's button, a row's background, a full-width control (Position's
@@ -818,6 +822,29 @@ file.
   display. The board's **Parts** end, once its models table is in, with a shut block **No 3D model**:
   every part the 3D view stands no model on, each row saying why, a block as any other (Select all
   parts, Isolate) — the list of what is missing, reachable in 2D and 3D alike.
+- **The Checks** (`board/ChecksSection.jsx`, `board/useBoardChecks.js`), a board's last tab: KiCad's design
+  rule check of the saved board, which the server runs and keeps (`GET .../drc`), read-only as the viewer
+  is — no setting, no filter, no button that runs it: it is asked again on every revision of the board.
+  First the **verdict**, one line in words a person with no electronics reads, behind a glyph in its colour:
+  "Design rule check: failed — 3 errors, 1 unrouted connection", "passed, 13 warnings", "checking…", or
+  "not checked — <why>" (no KiCad on the computer, a board KiCad refused), which is no verdict and raises
+  no alert: the board is still the board. Under it, muted, what the check said beside its findings (no
+  project, no schematic beside the board). Then the findings, each the panel's one row — its glyph (how it
+  counts), KiCad's description and, in the room that leaves, KiCad's rule name, the whole description its
+  hint where it is clipped — under what they are: **Errors** (what fails the board: an error, a missing
+  connection, a difference from the schematic), **Warnings**, then **Excluded** (what the board's project
+  excludes, which fails nothing), each heading with its count. A press on a row selects what the finding
+  is between, as a press on the picture does (Shift, Ctrl or Cmd adds; a press on the lit row lets go), so
+  they are Quick Edit's references with no grammar of their own, shown as ONE chip named by the finding
+  ("Clearance violation · 2 items") while they stay selected; the chip's click and the row menu's **Copy
+  Reference** copy the finding as `cad kicad_pcb drc` says it, on a line over its items' reference. A
+  **double-click** frames the finding where it is (its place and the small things it is between, never the
+  pour it touches), and its menu has **Zoom to** it. A finding KiCad gave no item and no place (a part the
+  board lacks) is listed and does neither. Searching, the findings that match, by their words, their rule or
+  what they are between. **On the picture**, each failing finding's place is a pin of one size on screen
+  (`board2d/boardCheckMarks.js`), drawn whenever the board fails, whatever tab is shown and with the panel
+  shut: a short is otherwise the same picture as a good board. Warnings have none; a face of the board in 3D
+  has none; and they are no part of the board's Display, so a snapshot and a Quick Edit's packet draw none.
 - **A drawing's Layers** (`dxf/LayersSection.jsx`): each layer drawn on, in the drawing's order, its
   pen, name, entity count and eye (hidden: not drawn, picked or snapped to), and under a layer the
   block references placed on it, open, a press on one picking it as a tap on the drawing does
@@ -1041,7 +1068,7 @@ which), and so does every snapshot. A board that saved no stack-up colours looks
 | --- | --- |
 | Select: a click, Shift, a click on nothing | the same pick where the pointer's ray meets the face it enters, from that side, with the same filter and the layers that side draws |
 | Select: a drag | turns the view, as in every 3D view; naming an area is the 2D view's, and an area named stays selected and drawn |
-| Pencil, Shapes | the same ink, laid on the face the camera sees; ink drawn in either mode shows in the other; over the board, in 2D and 3D alike, each opaque mark is edged with a thin keyline in the canvas's contrast (dark on the dark canvas, white on the light: `boardOverlay.js`'s `inkKeyline`), so neon red reads on red copper |
+| Pencil, Shapes | the same ink, laid on the face the camera sees; ink drawn in either mode shows in the other; over the board, in 2D and 3D alike, each opaque mark is edged with a thin keyline in the canvas's contrast (dark on the dark canvas, white on the light: `boardOverlay.js`'s `inkKeyline`), so ink of a copper's own hue still reads on it. A board's pen and Shapes open in the palette's neon green, not every other view's neon red (`board/tools.js`'s `BOARD_ANNOTATION_DEFAULTS`): a board is mostly red front copper, where red ink read by its keyline alone, a hairline at the fit; green is the palette's one hue far from both outer coppers |
 | Measure | the same snaps and measurements, on the board's plane, drawn through the camera |
 | Hover tip, the context menu, double-click | the same; the menu's groups are every view's; a double-click on nothing fits, under Select as in every view |
 | Display, the Layers tab | the same Display: both faces redraw; the Layers' 3D models eye shows or hides the parts' bodies |
@@ -1087,13 +1114,19 @@ It follows the theme as every view does: the app's own canvas
 (white, or the neutral dark grey) and a palette for it (`plot2d/theme.js`: KiCad's default colours
 on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
 net dim with it (`board2d/boardOverlay.js`), and its layer swatches; a switch of theme draws it
-again in the browser, from the payload it holds. A net in focus (selected, or lit by a reference)
+again in the browser, from the payload it holds. **The highlight has no hue**: white on the dark canvas,
+near-black on the light one, as KiCad brightens what is selected toward white on its dark theme. On a
+board a colour is a layer, and every hue is some layer's; the CAD views' highlight blue, which this was,
+sits beside KiCad's back copper, so a selected front track read as one on the back. What is lit is told
+by lightness alone, and each lit piece of copper (a track, a via, a pad, a pour's outline, a net's every
+piece) is edged, 1.5 px round it in the opposite tone under it, so it reads on copper as light as the
+highlight or as dark: every copper colour stands 3:1 or more from the highlight or from its edge. A
+part's body in 3D keeps the CAD views' blue: a body is a 3D model, and no layer. A net in focus
+(selected, or lit by a reference)
 steps the rest of the board back lightly, more than half its contrast kept, so the board still reads
-as a board round the lit net; what is isolated steps it back further. The lit net's copper (its tracks,
-pads, vias and pour outlines) is edged, 1.5 px round each piece in a dark tone of the highlight under it
-(KiCad lights a net by brightening it over the rest dimmed; the edge adds what a light wash takes away): the net then stands out by its edge at 3:1 or more against
-the washed board in light (7.6:1 measured on a routed board, where its fill alone reads 2.8:1), and the
-edge parts the light net from the copper round it in dark. In 3D the step back is laid on the board alone,
+as a board round the lit net; what is isolated steps it back further (KiCad lights a net by brightening
+it over the rest dimmed; the edge adds what a light wash takes away): the net stands 3:1 or more against
+the washed board, by its fill in light and by its fill and its dark edge in dark. In 3D the step back is laid on the board alone,
 never on the see-through plane round the slab, and the edge is drawn on the face as in 2D.
 
 A 3D view's Display is a choice of mode and the Grid switch, and nothing else: a mode has no settings
@@ -1583,7 +1616,8 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   then the drawing surface's canvas (Pencil's or Shapes') spends its own Escape; then the selected ink; then an unfinished
   measurement; then the tool in hand, any but Select, which goes down and takes Select up, what
   it set kept; then the renderer's own (STEP: the selection, then isolation; robots: the
-  selection). The view's panel and the tool stack's panels are
+  selection; a board or a schematic, whose selection goes before the tool does: isolation, all of it
+  at one press, as the menu's Exit isolate over bare board). The view's panel and the tool stack's panels are
   never Escape's to close.
 - **The view's panel's grip** (its right edge), and a resizable panel's (its bottom-right corner),
   is a separator in the tab order: Left/Right nudge its width by 16px (and a resizable panel's

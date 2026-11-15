@@ -48,7 +48,9 @@
  * a symbol body's background fill the device background), its page edge (`page`, kind `sheet`) left off
  * unless a view asks for its `border`. Its drawing sheet (`drawing_sheet`: KiCad's default frame, with its
  * zone numbers and letters, and title block, which the route always sends) is drawn as KiCad's schematic
- * editor shows it, always, a layer like the others. The fit frames the page, the frame 10 mm inside it.
+ * editor shows it, always, a layer like the others. The fit frames the page, the frame 10 mm inside it,
+ * as KiCad's Zoom to Fit does — unless what the sheet draws is much smaller than its page, when it frames
+ * that, the drawing sheet still drawn round it (`schematicFitBounds`).
  */
 import { DRAWING_FIT_MARGIN, fitTransform, modelToScreen, screenToModel } from "../drawing2d/transform.js";
 import { textStrokes } from "./strokeFont.js";
@@ -68,6 +70,8 @@ export const PLOT_ITEM_TYPES = Object.freeze(["poly", "path", "circle", "text", 
 export const OPTIONAL_LAYER_KINDS = Object.freeze([]);
 /** Layer kinds drawn under the stack from either side: the drawing sheet and the board's area. */
 const UNDERLAY_KINDS = new Set(["area"]);
+/** A schematic page's own layer kinds, which are not what its sheet draws: the page's edge and KiCad's drawing sheet. */
+const PAGE_LAYER_KINDS = new Set(["sheet", "drawing_sheet"]);
 /** Layer kinds drawn over the stack from either side: what goes through the board. */
 const OVERLAY_KINDS = new Set(["drill", "via", "ratsnest", "names"]);
 /** A path of width 0 is drawn this many CSS pixels wide at every zoom: a hairline. */
@@ -133,6 +137,8 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
  * @property {readonly [number, number, number, number]} bounds The sheet's page box, `[minX, minY, maxX, maxY]`, y down: what the fit frames.
  * @property {readonly [number, number, number, number]} modelBounds The same box in drawing2d's model space, y up.
  * @property {readonly [number, number, number, number]} extent The page box of everything drawn: the sheet and every item, items past the sheet's edge included.
+ * @property {readonly [number, number, number, number] | null} content The page box of what the sheet draws itself (every item but its page's edge and
+ *   its drawing sheet's), or null where it draws nothing.
  *
  * @typedef {object} PlacedImage A raster of a view, placed in page space.
  * @property {CanvasImageSource|null} image
@@ -287,10 +293,17 @@ export function layoutPlot(payload) {
   const schematic = payload.schematic && typeof payload.schematic === "object" && !Array.isArray(payload.schematic) ? payload.schematic : null;
   const bounds = [0, 0, sheet.width, sheet.height];
   const extent = [...bounds];
+  // What the sheet draws itself: everything but its page's edge and its drawing sheet (the frame, the title block).
+  let content = null;
   for (const layer of sheet.layers) {
+    const own = !PAGE_LAYER_KINDS.has(layer.kind);
     for (const { box } of layer.items) {
       if (box[0] < extent[0]) extent[0] = box[0]; if (box[1] < extent[1]) extent[1] = box[1];
       if (box[2] > extent[2]) extent[2] = box[2]; if (box[3] > extent[3]) extent[3] = box[3];
+      if (!own) continue;
+      if (!content) { content = [...box]; continue; }
+      if (box[0] < content[0]) content[0] = box[0]; if (box[1] < content[1]) content[1] = box[1];
+      if (box[2] > content[2]) content[2] = box[2]; if (box[3] > content[3]) content[3] = box[3];
     }
   }
   return Object.freeze({
@@ -303,7 +316,8 @@ export function layoutPlot(payload) {
     schematic,
     bounds: Object.freeze(bounds),
     modelBounds: Object.freeze([0, -sheet.height, sheet.width, 0]),
-    extent: Object.freeze(extent)
+    extent: Object.freeze(extent),
+    content: content ? Object.freeze(content) : null
   });
 }
 
@@ -342,6 +356,33 @@ export function fitPlotTransform(layout, width, height, { top = 0 } = {}) {
 /** `fitPlotTransform` for a box of the board's (its outline, model space, y up). */
 export function fitBoardBounds(bounds, width, height, { top = 0 } = {}) {
   return fitTransform(bounds, width, height, { margin: boardFitMargin(width, height), top });
+}
+
+/** The room round a schematic sheet's content when the fit frames it, in page millimetres: the drawing sheet's own margin. */
+export const SCHEMATIC_CONTENT_MARGIN_MM = 10;
+/** How many times larger than on its whole page a sheet's content must come out for the fit to frame it instead. */
+export const SCHEMATIC_CONTENT_FIT_GAIN = 1.25;
+
+/**
+ * What a schematic's fit frames (model space, y up, as `modelBounds`): the page, as KiCad's Zoom to Fit
+ * and its schematic editor's first view — unless what the sheet draws (`layout.content`, with
+ * `SCHEMATIC_CONTENT_MARGIN_MM` round it) is much smaller than the page: under four fifths of it both ways,
+ * so framed it comes out `SCHEMATIC_CONTENT_FIT_GAIN` times larger or more. Then the fit frames that, as
+ * KiCad's Zoom to Objects does and as `cad kicad_sch snapshot` frames what the page draws: a small circuit
+ * on an A4 sheet opened too small to read. The drawing sheet is drawn either way, round what is framed,
+ * and the whole page is a zoom out away.
+ *
+ * @param {PlotLayout} layout
+ * @returns {readonly [number, number, number, number]}
+ */
+export function schematicFitBounds(layout) {
+  const content = layout.content;
+  if (!content) return layout.modelBounds;
+  const margin = SCHEMATIC_CONTENT_MARGIN_MM;
+  const [x0, y0, x1, y1] = [content[0] - margin, content[1] - margin, content[2] + margin, content[3] + margin];
+  const [left, top, right, bottom] = layout.bounds;
+  const gain = Math.min((right - left) / (x1 - x0), (bottom - top) / (y1 - y0));
+  return gain >= SCHEMATIC_CONTENT_FIT_GAIN ? Object.freeze([x0, -y1, x1, -y0]) : layout.modelBounds;
 }
 
 /**

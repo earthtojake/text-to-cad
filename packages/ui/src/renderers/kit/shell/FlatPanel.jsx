@@ -17,8 +17,8 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
 /**
  * A flat view's panel (a board's, a schematic's: `FlatViewFrame.jsx`), docked at the view's left
  * edge the way KiCad's Appearance panel is: one search box over everything, its collapse button
- * after it, then a row of tabs, buttons as Figma's (a board's Parts, Nets and Layers, a schematic's
- * Parts, Nets and Hierarchy), and the open tab's list under them, scrolling as one; under that, when the
+ * after it, then a row of tabs, buttons as Figma's (a board's Parts, Nets, Layers and Checks, a schematic's
+ * Parts, Nets and Hierarchy; four or more stand closer, and one may say a count after its name), and the open tab's list under them, scrolling as one; under that, when the
  * view hands one in, what is picked in detail (`detail`: the Selected pane, `kit/inspector/ItemDetail.jsx`),
  * 40% of the panel's height whatever is picked, until the person sizes it, and scrolling on its own, whatever tab is open. It keeps two lines,
  * the same on both sides: its boxes 8px in, what is read in them 16px in.
@@ -186,7 +186,7 @@ export function FlatPanelPill({ onOpen, touch = false }) {
 
 /**
  * @param {{ mode: "docked" | "page", open: boolean, onClose(): void, label: string,
- *   searchLabel: string, tabs: { id: string, label: string, content: import("react").ReactNode, searchLast?: boolean }[],
+ *   searchLabel: string, tabs: { id: string, label: string, content: import("react").ReactNode, searchLast?: boolean, count?: string }[],
  *   tab: string, onTabChange(id: string): void, width: number, maxWidth: number, onWidthChange(width: number): void,
  *   focusSearch: number, detail?: import("react").ReactNode }} props
  *   `focusSearch`: a count; each new value puts the keyboard in the search box (/). `detail`: what is picked, under the lists.
@@ -348,6 +348,8 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   activeRef.current = active;
   // One tab is no choice: no row of tabs, and no name over its hits; its list says what it is by its own label.
   const single = tabs.length <= 1;
+  // Four tabs or more stand closer, so they fit the panel at the width it opens at (a board's, with its Checks' count).
+  const snug = tabs.length > 3;
   const tabbed = useMemo(() => ({ tabbed: true, single, activeSection: active, searching, register }), [single, active, searching, register]);
   const ids = id => ({ tab: `flat-panel-tab-${id}`, panel: `flat-panel-body-${id}` });
   const aside = <aside ref={asideRef} aria-label={label} data-flat-panel={mode} data-open={open ? "" : undefined} hidden={!open || hidden}
@@ -369,11 +371,12 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
     {/* The tabs, buttons as Figma's: the open one raised on the accent, their rule under them. While a
         search is up they step aside; a panel of one tab has none, and no rule: its list starts under the
         head's 6px. */}
-    <div role="tablist" aria-label={label} hidden={searching || single} className="flex shrink-0 items-center gap-1 border-b border-border" style={{ padding: `0 ${SURFACE_PX}px ${SURFACE_PX}px` }}>
+    <div role="tablist" aria-label={label} hidden={searching || single} className={cn("flex shrink-0 flex-wrap items-center border-b border-border", snug ? "gap-0.5" : "gap-1")}
+      style={{ padding: `0 ${SURFACE_PX}px ${SURFACE_PX}px` }}>
       {tabs.map(entry => {
         const on = entry.id === active;
         return <button key={entry.id} type="button" role="tab" id={ids(entry.id).tab} aria-controls={ids(entry.id).panel} aria-selected={on} tabIndex={on ? 0 : -1}
-          onClick={() => onTabChange(entry.id)} data-flat-panel-tab={entry.id}
+          onClick={() => onTabChange(entry.id)} data-flat-panel-tab={entry.id} aria-label={entry.count ? `${entry.label} ${entry.count}` : undefined}
           onKeyDown={event => {
             const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
             if (!step) return;
@@ -382,13 +385,15 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
             onTabChange(next.id);
             event.currentTarget.parentElement?.querySelector(`[data-flat-panel-tab="${CSS.escape(next.id)}"]`)?.focus();
           }}
-          className={cn("h-6 rounded-md px-2 text-tiny transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
+          className={cn("h-6 rounded-md text-tiny transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45", snug ? "px-1.5" : "px-2",
             on ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground")}>
           {/* The open tab's name is medium weight; every tab is as wide as its name in that weight (an
-              unseen copy holds it), so choosing one moves nothing. */}
+              unseen copy holds it), so choosing one moves nothing. A tab that has something wrong to say
+              says how many after its name (`count`: a board's Checks, the findings that fail it). */}
           <span className="grid justify-items-center">
             <span aria-hidden="true" className="invisible col-start-1 row-start-1 font-medium">{entry.label}</span>
             <span className={cn("col-start-1 row-start-1", on && "font-medium")} data-flat-panel-tab-name="">{entry.label}</span>
+            {entry.count ? <span className="col-start-2 row-start-1 pl-0.5 tabular-nums text-destructive" data-flat-panel-tab-count="">{entry.count}</span> : null}
           </span>
         </button>;
       })}

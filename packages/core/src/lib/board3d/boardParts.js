@@ -18,7 +18,8 @@
  * A hover is a pick a frame: each baked geometry gets its accelerator (`viewer/raycastBvh.js`, as the 3D
  * views' scenes do) in idle time, the first time a ray reaches its box.
  *
- * The highlight is the 3D views' (the overlay's colours, `board2d/boardOverlay.js`: selected, hovered);
+ * The highlight is the 3D views' blue (the overlay's `body`, `board2d/boardOverlay.js`: selected, hovered;
+ * the copper's own highlight on the faces has no hue, a body is no layer and keeps the 3D views');
  * while something is isolated the bodies that are not it fade. A block is the theme's muted ink, a
  * millimetre tall on the part's outline (its courtyard), see-through and edged: plainly no model.
  *
@@ -155,7 +156,7 @@ export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme 
     let found = model.materials[key];
     if (found) return found;
     const colors = boardOverlayColors(scheme);
-    const tint = new THREE.Color(colors.selection);
+    const tint = new THREE.Color(colors.body);
     found = model.colors.map(rgba => {
       const material = surface(rgba);
       if (state === "selected" || state === "hovered") {

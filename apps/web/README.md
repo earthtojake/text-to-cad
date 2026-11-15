@@ -329,7 +329,7 @@ explorer: the file's folder (a model's, the folder the explorer was last in this
 person's home folder), one folder at a
 time, with "Filter files..." to find a file anywhere under it. It opens on Models over a model
 and on Files over a file. Below 600px of
-FileViewer width (a phone) the chrome is touch-sized and the panel's pill leads the tool strip. Preview is the shared shell's button after Display on the strip: it takes the whole page,
+FileViewer width (a phone) the chrome is touch-sized and there is no panel, in any renderer (no pill; what its lists offer is reached from the canvas and the strip's More: the [design system](../../packages/ui/docs/settings-ui.md#the-views-panel-and-the-tool-stack) says so). Preview is the shared shell's button after Display on the strip: it takes the whole page,
 hiding the navbar, the tool strip and Quick Edit, opens still (Orbit, in its settings, is
 off at every entry), draws the model in Render — the one place it is drawn — and draws its
 own bar in the navbar's place, over the view's top edge on no surface: the file's name at

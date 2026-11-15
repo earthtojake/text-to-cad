@@ -36,13 +36,17 @@ download or the refill fails. A KiCad you installed yourself is never run. `CAD_
 another `kicad-cli` (the command line itself, named `kicad-cli`; KiCad 9 or newer, a nightly's for an
 edit). It runs headless, with private settings, and never opens KiCad's app; never open a
 board in KiCad's app to check it. Its library variables name KiCad's own libraries, never your
-variables or KiCad settings: a project's `sym-lib-table` or `fp-lib-table` row that names a stock
-library as KiCad's own tables do (`${KICAD10_SYMBOL_DIR}/Device.kicad_sym`,
-`${KICAD10_FOOTPRINT_DIR}/Resistor_SMD.pretty`, any major's spelling) reads it in the libraries of the
-KiCad you installed (the newest, if several; or the installation whose `3dmodels` folder
-`CAD_KICAD_3DMODELS` names): nothing to set. With no KiCad installed, ERC warns `lib_symbol_issues` that
-each such library was not found and DRC `lib_footprint_issues` that it is not enabled; a project that
-carries its libraries (`${KIPRJMOD}`) needs no KiCad.
+variables or KiCad settings (a `KICAD10_SYMBOL_DIR` you export is not passed on): a project's
+`sym-lib-table` or `fp-lib-table` row that names a stock library in place
+(`${KICAD10_SYMBOL_DIR}/Device.kicad_sym`, `${KICAD10_FOOTPRINT_DIR}/Resistor_SMD.pretty`, any major's
+spelling) reads it in the `symbols` and `footprints` folders of the KiCad you installed (the newest, if
+several): nothing to set. With no KiCad installed, set `CAD_KICAD_3DMODELS=<folder>/3dmodels` in the
+environment of the command or script that runs KiCad: the `symbols` and `footprints` folders beside a
+folder it names are read, before an installed KiCad's, when that folder is there and named `3dmodels`
+(it may be empty). Where neither is found, ERC warns `lib_symbol_issues` that each such library was not
+found, DRC `lib_footprint_issues` that it is not enabled, and a netlist import reports every such
+footprint as not found. A project that carries its libraries (`${KIPRJMOD}`) needs none of this:
+[parts](references/parts.md) says where KiCad's libraries come from and what to copy.
 
 kicode's KiCad is a nightly (10.99), so a board or schematic it saves is in the nightly's format, which a
 stable KiCad app refuses; viewing and snapshots still work, and the CAD Viewer's Open in says which KiCad on
@@ -103,7 +107,9 @@ reference, net or place). A script stopped halfway and run again then ends where
 
 A board's design starts at its schematic, which says what connects to what: read it, check it with
 ERC and look at each sheet ([schematic](references/schematic.md)) before laying out, and hold the board
-to it after. For creation or structured edits read [native files](references/board-api.md). For parts and
+to it after. For creation or structured edits read [native files](references/board-api.md), and
+[KiCad's API, by example](references/kicad-api.md) for the call that makes each item (a label, a junction,
+an outline, a track, a via, a zone, the rules and netclasses). For parts and
 footprints read [parts](references/parts.md). To place and route a board, read
 [layout](references/layout.md): start from the schematic's netlist, place one part or functional
 group at a time ([placement](references/placement.md) says in what order and where), route the nets
@@ -139,8 +145,9 @@ cannot represent the board.
    changing it. [Checks](references/checks.md) documents this read-only API and clickable references.
 2. Edit the board in a `kicad_pcb.edit` block (or, as a fallback, the native file). Keep net assignments,
    layer stack, track widths, clearances and custom rules consistent with the chosen fab and electrical
-   requirements. Refill changed copper zones with KiCad (`b.refill_zones()` in the block) before relying
-   on their saved fill.
+   requirements. Refill changed copper zones with KiCad (`b.refill_zones()` in the block) so the board
+   is saved with its fill current: an export plots the fill as saved. DRC does not rely on it: it refills
+   in memory and never writes the board.
 
 ## Check each change
 
@@ -149,8 +156,8 @@ Check the saved board after every step, from the same revision you will hand ove
 | The change | Check it with |
 | --- | --- |
 | The schematic | `cad kicad_sch erc board.kicad_sch` (KiCad's ERC: errors fail it) and `cad kicad_sch snapshot board.kicad_sch tmp/sheet.png --sheet /Power/` for each sheet changed ([schematic](references/schematic.md)) |
-| Board against schematic | the pin-by-pin comparison in [schematic](references/schematic.md#into-the-board-and-back): every pad on its schematic pin's net |
-| Anything: parts, copper, zones, rules | `cad kicad_pcb drc board.kicad_pcb` (or `--json`): KiCad's DRC against the board's own rules (its `.kicad_pro`'s; without one, KiCad's defaults, which it warns about as `no_project`). It exits 1 on error-severity violations or unconnected items. Unconnected items are the routing still to do |
+| Board against schematic | `cad kicad_pcb drc board.kicad_pcb`, which holds the board to `board.kicad_sch` beside it and fails on any difference: `net_conflict` (a pad on another net than its pin's), `extra_footprint`, `missing_footprint`, `footprint_symbol_mismatch` (a footprint or a value that is not the symbol's). With no schematic beside the board it says `no_schematic` and checks none of this ([schematic](references/schematic.md#into-the-board-and-back)) |
+| Anything: parts, copper, zones, rules | `cad kicad_pcb drc board.kicad_pcb` (or `--json`): KiCad's DRC against the board's own rules (its `.kicad_pro`'s; without one, KiCad's defaults, which it warns about as `no_project`), the zones refilled in memory first, so a stale pour neither hides a finding nor makes one. It exits 1 on error-severity violations, unconnected items or a difference from the schematic; a violation excluded in the project is listed as excluded and fails nothing. Unconnected items are the routing still to do |
 | Placement | `cad kicad_pcb snapshot board.kicad_pcb tmp/placement.png --display placement`: short, uncrossed ratsnest lines mean a group is placed well; measure decoupling distance and connector access with `kicad_pcb.read` |
 | Routing | The layout's property script ([layout](references/layout.md#a-property-check)): segments off 45 degrees, detours, width for current |
 | How copper and silkscreen look | `cad kicad_pcb snapshot board.kicad_pcb tmp/copper.png --display copper` (and `--display '{"mode":"copper","side":"bottom"}'`) |
@@ -210,7 +217,11 @@ person's behalf.
 Export only the requested deliverables from the saved revision you checked; see
 [manufacturing and STEP](references/manufacturing.md). A DRC or ERC error blocks writing fabrication
 files (Gerbers, drill, placement, BOM, ODB++, IPC-2581) unless the person explicitly says to go ahead;
-the report then names every error they went ahead with.
+the report then names every error they went ahead with. `export` itself refuses none of them: writing one
+of those kinds, it runs the board's DRC too (some seconds; once a script for a board as saved) and, for
+a board that fails it, writes the files with one warning (`board.kicad_pcb fails its design rule check
+(3 errors, 1 unconnected): ...`, in its `warnings` and on stderr). Read that warning as the same stop,
+not as leave to send the files; the schematic's ERC it does not run.
 
 ## Show the model
 
@@ -229,7 +240,7 @@ Select works as KiCad's: a click picks a part, pad, track, via, zone, rule area,
 graphic, as its Selection Filter ticks them (locked items only when the person ticks them), and a
 drag draws a box that takes anything it touches. A box that takes nothing names an area, a box on the layer the person works on
 (`#F.Cu@x10y5..x20y15`). The panel at the left (⌘\ or Ctrl+\
-hides and shows it, / searches it) has one search over three tabs. **Parts** lists the parts in the
+hides and shows it, / searches it) has one search over four tabs. **Parts** lists the parts in the
 schematic blocks their footprints record (by kind on a board that records none): a block picks every
 part in it. **Nets** lists the nets: a net picks the whole net. Each arrives as a reference
 ([checks](references/checks.md#references) says what each names and how to resolve it). **Layers**
@@ -237,7 +248,12 @@ lists the layers: each layer's eye, and a press for the active layer (drawn on t
 the board is drawn: Other layers (KiCad's high-contrast modes: the layers but the active one
 **Shown**, **Dimmed** or **Hidden**, Ctrl+H cycling them; the outline, and the drills and vias
 through an active copper layer, always stay at full strength), the copper pours and the zones' and
-tracks' opacity; last, **3D models**, how many parts stand on a model in 3D, with its eye. Under the
+tracks' opacity; last, **3D models**, how many parts stand on a model in 3D, with its eye. **Checks**
+is KiCad's DRC of the saved board, the one `cad kicad_pcb drc` prints: whether it passes, in words, then
+each finding, the tab's name followed by how many fail the board and a pin on the picture where each of
+those is. A finding the person picks there arrives as the references of the items it is between (a
+finding with no item, as the point it is at), the ones `cad kicad_pcb drc --json` lists as
+`measurements.drc[].items[].ref`; one copied from its row or its chip leads with the finding's own `drc` line. Under the
 tabs, the picked part's or net's pads. The tool strip ends, after its rule, with **Flip** (the side
 seen: the board as two stacked layers, the side facing you solid; ⇧F), **2D/3D** (reading **2D** while the
 board is flat, **3D** in 3D) and **Display** (the preset: the mode); the zoom is the pill at the

@@ -309,6 +309,20 @@ test('a board KiCad is still refilling and plotting is asked for again after the
   client.dispose();
 });
 
+test('a board\'s DRC is its document\'s `drc`, asked for again while KiCad is still checking', async () => {
+  const replies = [{ state: 'checking', retryMs: 0 }, { ok: true, measurements: { drc: [] } }];
+  const paths = [];
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options) => {
+    if (options.method === 'POST') return opened('kicad_pcb');
+    paths.push(new URL(url).pathname);
+    return Response.json(replies.shift(), { status: replies.length ? 202 : 200 });
+  } });
+  assert.deepEqual(await client.boardDrc('/b/blinky.kicad_pcb'), { ok: true, measurements: { drc: [] } });
+  assert.deepEqual(paths, ['/api/v1/documents/kicad_pcb/d1/drc', '/api/v1/documents/kicad_pcb/d1/drc']);
+  await assert.rejects(client.boardDrc(''), /Missing file/);
+  client.dispose();
+});
+
 test('an engine document is read through this server, with the client\'s fetch, once the engine holds it, its import heard meanwhile', async () => {
   // The engine's progress event of the import (`cad/engine/progress.py`), handed on as it came.
   const importing = { kind: 'import', stage: 'collect', job: 'a.step', outputs: [], detail: '', done: 120, total: 628, elapsedMs: 3100 };

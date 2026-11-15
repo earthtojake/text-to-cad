@@ -99,6 +99,9 @@ test("a point in a polygon", () => {
   assert.ok(pointInPolygon([1, 1], [[0, 0], [2, 0], [2, 2], [0, 2]]));
 });
 
+// The overlay's colours as it draws without a theme: the dark theme's.
+const LIT = BOARD_OVERLAY_THEMES.dark;
+
 // A context that keeps what was filled and stroked, in device pixels, through the transforms set.
 export function recordingContext() {
   let matrix = [1, 0, 0, 1, 0, 0];
@@ -125,7 +128,7 @@ test("the overlay draws the selection where it is, and from the bottom where the
   const selected = (mirrorX = null) => {
     const { ctx, filled } = recordingContext();
     drawBoardOverlay(ctx, index, { ...frame, mirrorX, selection: [index.resolve("#R1.1")] });
-    return filled("#8dc5ff");
+    return filled(LIT.selection);
   };
   // R1.1 spans x 13.775..14.575, y 19.525..20.475 mm: at 10 px/mm and a pixel ratio of 2, x 275.5..291.5.
   const [top] = selected();
@@ -155,7 +158,7 @@ test("Placement draws the pads, the holes and airwires under the highlight; a po
   drawBoardOverlay(ctx, index, { ...frame, placement: true, dim: true, selection: [index.resolve("#net:GND")] });
   const dimmed = marks.findIndex((mark) => mark.op === "fillRect");
   assert.ok(dimmed > 0, "the board steps back behind the net in focus");
-  assert.ok(marks.slice(dimmed).some((mark) => mark.op === "stroke" && mark.style === "#8dc5ff" && mark.points.length === 2),
+  assert.ok(marks.slice(dimmed).some((mark) => mark.op === "stroke" && mark.style === LIT.selection && mark.points.length === 2),
     "GND's airwire drawn in the selection's colour");
 });
 
@@ -178,7 +181,49 @@ test("a net in focus steps the rest back lightly, at least half its contrast kep
   assert.deepEqual(face.marks[0], { op: "fill", style: BOARD_OVERLAY_THEMES.dark.dim, points: [[0, 0], [300, 0], [300, 200], [0, 200]] });
 });
 
-test("a lit net is edged under its copper, the edge 3:1 or more by lightness against the washed board in light, dark in dark", () => {
+// WCAG's contrast between two colours, each a `#rrggbb`, an `rgb()`/`rgba()` or an `[r, g, b]`.
+const rgb = (css) => {
+  if (Array.isArray(css)) return css;
+  const hex = /^#([0-9a-f]{6})$/i.exec(css);
+  if (hex) return [0, 2, 4].map((at) => Number.parseInt(hex[1].slice(at, at + 2), 16));
+  return /rgba?\(([^)]+)\)/.exec(css)[1].split(",").map(Number);
+};
+const luminance = (css) => rgb(css).slice(0, 3).map((c) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; })
+  .reduce((sum, v, k) => sum + v * [0.2126, 0.7152, 0.0722][k], 0);
+const contrast = (one, other) => { const [low, high] = [luminance(one), luminance(other)].sort((a, b) => a - b); return (high + 0.05) / (low + 0.05); };
+const over = (top, under) => { const [r, g, b, a = 1] = rgb(top); return rgb(under).slice(0, 3).map((c, k) => [r, g, b][k] * a + c * (1 - a)); };
+const INNER_COPPER = Array.from({ length: 30 }, (_, at) => `In${at + 1}.Cu`);
+
+test("the highlight is no layer's colour: it has no hue, and every copper colour stands 3:1 from it or from its edge", () => {
+  const index = createBoardIndex(SAVED, SHEET);
+  for (const [scheme, colors] of Object.entries(BOARD_OVERLAY_THEMES)) {
+    const palette = boardPalette(scheme);
+    // Hueless: a selected front track cannot read as back copper (KiCad's B.Cu blue, which the highlight once sat beside), nor as any inner layer.
+    for (const tone of [colors.selection, colors.netEdge.color]) {
+      const [r, g, b] = rgb(tone);
+      assert.ok(r === g && g === b, `${scheme}: ${tone} has no hue`);
+    }
+    assert.ok(contrast(colors.selection, colors.netEdge.color) >= 7, `${scheme}: the edge is the highlight's opposite tone`);
+    assert.ok(contrast(colors.selection, palette.background) >= 7, `${scheme}: the highlight reads on the canvas`);
+    for (const layer of ["F.Cu", "B.Cu", ...INNER_COPPER]) {
+      const copper = palette.layer(layer);
+      const read = Math.max(contrast(colors.selection, copper), contrast(colors.netEdge.color, copper));
+      assert.ok(read >= 3, `${scheme}: ${layer} ${copper} stands ${read.toFixed(2)}:1 from the highlight and its edge`);
+    }
+    // A selected track, via, pour and pad are each edged under themselves, as a net's copper is.
+    for (const selector of [`#track:${T(1)}`, `#via:${T(2)}`, `#zone:${T(3)}`, "#R1.1"]) {
+      const resolved = index.resolve(selector);
+      assert.ok(resolved, selector);
+      const { ctx, marks } = recordingContext();
+      drawBoardOverlay(ctx, index, { transform: { scale: 10, offsetX: 0, offsetY: 0 }, width: 400, height: 300, colors, selection: [resolved] });
+      const edge = marks.findIndex((mark) => mark.style === colors.netEdge.color);
+      const lit = marks.findIndex((mark) => mark.style === colors.selection);
+      assert.ok(edge >= 0 && lit > edge, `${scheme}: ${selector} is edged under its highlight`);
+    }
+  }
+});
+
+test("a lit net is edged under its copper, and reads 3:1 or more by lightness against the washed board, by its fill or its edge", () => {
   const index = createBoardIndex(BOARD);
   for (const [scheme, colors] of Object.entries(BOARD_OVERLAY_THEMES)) {
     const { ctx, marks } = recordingContext();
@@ -189,24 +234,14 @@ test("a lit net is edged under its copper, the edge 3:1 or more by lightness aga
     assert.equal(edges.length, 5, scheme);
     const firstLit = marks.findIndex((mark) => mark.style === colors.selection || mark.style === colors.zone);
     assert.ok(marks.indexOf(edges.at(-1)) < firstLit, `${scheme}: the edge lies under the net`);
-  }
-  // Against every board colour washed by the light theme's dim (its canvas, each layer, each inner copper), the edge reads at 3:1.
-  const rgb = (css) => {
-    if (Array.isArray(css)) return css;
-    const hex = /^#([0-9a-f]{6})$/i.exec(css);
-    if (hex) return [0, 2, 4].map((at) => Number.parseInt(hex[1].slice(at, at + 2), 16));
-    const parts = /rgba?\(([^)]+)\)/.exec(css)[1].split(",").map(Number);
-    return parts;
-  };
-  const luminance = ([r, g, b]) => [r, g, b].map((c) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; })
-    .reduce((sum, v, k) => sum + v * [0.2126, 0.7152, 0.0722][k], 0);
-  const over = (top, under) => { const [r, g, b, a = 1] = rgb(top); return rgb(under).slice(0, 3).map((c, k) => [r, g, b][k] * a + c * (1 - a)); };
-  const light = BOARD_OVERLAY_THEMES.light, palette = boardPalette("light");
-  const edge = luminance(rgb(light.netEdge.color));
-  const surfaces = [palette.background, palette.layer("F.Cu"), palette.layer("B.Cu"), palette.layer("F.SilkS"), palette.layer("In1.Cu"), palette.layer("Edge.Cuts")];
-  for (const surface of surfaces) {
-    const washed = luminance(over(light.dim, over(surface, palette.background)));
-    assert.ok((washed + 0.05) / (edge + 0.05) >= 3, `${surface}: ${((washed + 0.05) / (edge + 0.05)).toFixed(2)}:1`);
+    // Against every board colour washed by the theme's dim (its canvas, each layer, each inner copper), the net reads at 3:1.
+    const palette = boardPalette(scheme);
+    const surfaces = [palette.background, palette.layer("F.Cu"), palette.layer("B.Cu"), palette.layer("F.SilkS"), palette.layer("In1.Cu"), palette.layer("Edge.Cuts")];
+    for (const surface of surfaces) {
+      const washed = over(colors.dim, over(surface, palette.background));
+      const read = Math.max(contrast(colors.selection, washed), contrast(colors.netEdge.color, washed));
+      assert.ok(read >= 3, `${scheme}: ${surface}: ${read.toFixed(2)}:1`);
+    }
   }
 });
 
@@ -219,13 +254,13 @@ test("a net is highlighted whole, and what is off screen left out", () => {
   });
   assert.equal(marks[0].op, "fillRect", "the rest of the board steps back first");
   // R1.2 and both pads of U1.3, and the via: GND's copper.
-  assert.equal(filled("#8dc5ff").length, 4);
-  assert.equal(filled("rgba(141, 197, 255, 0.55)").length, 1, "the hovered pad");
+  assert.equal(filled(LIT.selection).length, 4);
+  assert.equal(filled(LIT.hover).length, 1, "the hovered pad");
   // Zoomed in on the top-left corner, at 100 px/mm, R1 and U1 lie off screen: only the pour is drawn.
   const zoomed = recordingContext();
   drawBoardOverlay(zoomed.ctx, index, { transform: { scale: 100, offsetX: 0, offsetY: 0 }, width: 400, height: 300, selection: [index.resolve("#net:GND")] });
-  assert.equal(zoomed.filled("#8dc5ff").length, 0);
-  assert.equal(zoomed.filled("rgba(141, 197, 255, 0.12)").length, 1, "the pour reaches the corner");
+  assert.equal(zoomed.filled(LIT.selection).length, 0);
+  assert.equal(zoomed.filled(LIT.zone).length, 1, "the pour reaches the corner");
 });
 
 // What a pick must answer, worked out the slow way: every item tested, none skipped.
@@ -418,8 +453,8 @@ test("the overlay lights a text's box, a graphic's ink and an area", () => {
   drawBoardOverlay(ctx, index, { ...frame, selection: [index.resolve(`#text:${T(5)}`), index.resolve("#@x0y-10..x10y0")],
     hover: index.resolve(`#shape:${T(8)}`) });
   // The text's box (27..33 x 24.1..25.9 mm at 10 px/mm) and the area (KiCad's 0..10 x -10..0 is page 5..15 x 15..25).
-  assert.deepEqual(filled("rgba(141, 197, 255, 0.16)").map((box) => box.map((v) => Math.round(v))), [[270, 241, 330, 259], [50, 150, 150, 250]]);
-  assert.ok(marks.some((mark) => mark.op === "stroke" && mark.style === "rgba(141, 197, 255, 0.55)"), "the hovered graphic's stroke");
+  assert.deepEqual(filled(LIT.box).map((box) => box.map((v) => Math.round(v))), [[270, 241, 330, 259], [50, 150, 150, 250]]);
+  assert.ok(marks.some((mark) => mark.op === "stroke" && mark.style === LIT.hover), "the hovered graphic's stroke");
 });
 
 test("a rule area is a zone of its own kind, and what KiCad saved locked is taken only when the pick takes locked items", () => {

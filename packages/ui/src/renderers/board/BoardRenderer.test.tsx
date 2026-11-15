@@ -69,6 +69,13 @@ vi.mock('@cad/core/lib/drawing2d/index.js', async (importOriginal) => {
   const actual = await importOriginal<Record<string, any>>();
   return { ...actual, clearSurface: (ctx: unknown, options: { background?: string }) => { canvases.push(options.background ?? null); return actual.clearSurface(ctx, options); } };
 });
+// Where a board fails its design rule check is drawn as pins in the overlay's pass (`board2d/boardCheckMarks.js`):
+// jsdom draws none, so the places each frame was handed are kept.
+const marked = vi.hoisted(() => [] as Array<Array<[number, number]>>);
+vi.mock('@cad/core/lib/board2d/boardCheckMarks.js', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return { ...actual, drawBoardCheckMarks: (_ctx: unknown, marks: Array<[number, number]>) => { marked.push(marks); return marks.length; } };
+});
 
 const noop = () => {};
 const FILE = '/models/blinky.kicad_pcb';
@@ -87,6 +94,7 @@ beforeEach(() => {
   drawn.length = 0;
   themes.length = 0;
   canvases.length = 0;
+  marked.length = 0;
   Object.assign(viewport3d, { camera: null, controls: null, hands: 0 });
   copied = [];
   readPlot = () => json(BOARD);
@@ -110,7 +118,8 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); while (restores.length) restores.pop()!(); });
 
 /** One pane: a host, a workspace with one board, a live binding, and the tab. */
-async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = undefined as any, locale = "en", state = { renderers: {} } as any, models = null as any } = {}) {
+async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = undefined as any, locale = "en", state = { renderers: {} } as any, models = null as any,
+  drc = null as (() => Response) | null } = {}) {
   const file = `/models/${name}`;
   let revision = 'one';
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -128,6 +137,8 @@ async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = u
     if (url.pathname.endsWith('/api/v1/server')) return json({ backend: 'cadgen' });
     if (url.pathname.endsWith('/api/v1/documents/kicad_pcb/board/plot')) return readPlot();
     if (models && url.pathname.endsWith('/api/v1/documents/kicad_pcb/board/models')) return json({ models });
+    // KiCad's DRC of the board, as the route answers it (a server without the route: 404, as here by default).
+    if (drc && url.pathname.endsWith('/api/v1/documents/kicad_pcb/board/drc')) return drc();
     return new Response('', { status: 404 });
   });
   const client = createCadClient({ origin: 'http://viewer.test/one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
@@ -286,7 +297,7 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
   // The search field and the collapse button on the boxes' line, 8px in, as the tabs' buttons below them.
   expect(head.style.padding).toBe('8px 8px 6px');
   expect(searchBox(pane).placeholder).toBe('Search');
-  expect(within(aside).getAllByRole('tab').map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')])).toEqual([['Parts', 'true'], ['Nets', 'false'], ['Layers', 'false']]);
+  expect(within(aside).getAllByRole('tab').map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')])).toEqual([['Parts', 'true'], ['Nets', 'false'], ['Layers', 'false'], ['Checks', 'false']]);
   expect(aside.querySelector('[role=tab] svg')).toBeNull();
   expect(tabBody(pane, 'parts').hidden).toBe(false);
   expect(tabBody(pane, 'nets').hidden).toBe(true);
@@ -955,6 +966,44 @@ it("Other layers: Hidden from the Layers tab; Ctrl+H cycles the three while the 
   dispose();
 });
 
+it("Escape lets go of what is picked, then leaves isolation, as a STEP's does; the pen and Shapes open green, clear of the copper", async () => {
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  const controller = await controllerOf(view);
+  const parts = await waitFor(() => { const found = tabBody(pane, 'parts'); expect(found).not.toBeNull(); return found!; });
+  // J1 isolated by its row's eye, then picked.
+  fireEvent.click(await within(parts).findByRole('button', { name: 'Isolate J1' }));
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.isolated?.value).toEqual({ selectors: ['#J1'] }));
+  await act(async () => { await controller.select('#J1'); });
+  expect(selected(controller)).toEqual(['#J1']);
+  const canvas = pane.querySelector<HTMLCanvasElement>('canvas[data-board-tool]')!;
+  canvas.focus();
+  // One layer a press: the selection first, the view still isolated (its row's eye says so).
+  fireEvent.keyDown(canvas, { key: 'Escape' });
+  await waitFor(() => expect(selected(controller)).toEqual([]));
+  expect(within(parts).getByRole('button', { name: 'Exit isolate J1' }).getAttribute('aria-pressed')).toBe('true');
+  // Then out of isolation, and kept so with the file's view.
+  fireEvent.keyDown(canvas, { key: 'Escape' });
+  await waitFor(() => expect(within(parts).queryByRole('button', { name: 'Exit isolate J1' })).toBeNull());
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.isolated?.value).toEqual({ selectors: [] }));
+  // With a tool in hand, Escape puts it down before it leaves isolation.
+  fireEvent.click(within(parts).getByRole('button', { name: 'Isolate J1' }));
+  fireEvent.click(within(strip(pane)).getByRole('button', { name: 'Pencil' }));
+  // A board's ink opens in the palette's neon green: red ink on red copper read by its keyline alone.
+  const colour = () => within(screen.getByRole('toolbar', { name: 'Annotation controls' })).getByRole('button', { name: 'Colour' }).querySelector('span')!.style.backgroundColor;
+  expect(colour()).toBe('rgb(57, 255, 20)');
+  fireEvent.click(within(strip(pane)).getByRole('button', { name: 'Shapes' }));
+  expect(colour()).toBe('rgb(57, 255, 20)');
+  canvas.focus();
+  fireEvent.keyDown(canvas, { key: 'Escape' });
+  await waitFor(() => expect(canvas.getAttribute('data-board-tool')).toBe('select'));
+  expect(within(parts).getByRole('button', { name: 'Exit isolate J1' }).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.keyDown(canvas, { key: 'Escape' });
+  await waitFor(() => expect(within(parts).queryByRole('button', { name: 'Exit isolate J1' })).toBeNull());
+  dispose();
+});
+
 it("a view saved with the earlier Dim switch opens Dimmed", async () => {
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const saved = { version: 2, camera: null, display: null, preview: null, playback: null,
@@ -1373,4 +1422,73 @@ it("in 3D each part's model is opened once by its document id, and a revision of
   await waitFor(() => expect(pane.querySelector('[data-board-3d][data-board-models="1"][data-board-models-waiting="0"]')).not.toBeNull());
   expect(reads(`/step/${id}/structure`)).toBe(1);
   dispose();
+});
+
+it("the Checks tab is KiCad's DRC of the board: how many findings fail it on the tab, the verdict in words, the failing places marked, a row's press selecting what the finding is between; a check that could not be made says so, with no card", async () => {
+  const VIA = '#via:7a1c0000-0000-4000-8000-000000000003', TRACK = '#track:7a1c0000-0000-4000-8000-000000000002';
+  const CLEARANCE = 'Clearance violation (netclass clearance 0.2000 mm; actual 0.0500 mm)';
+  // The route's answer (`cad kicad_pcb drc --json`): a warning, an error between the via and the GND track, the LED net's
+  // missing connection, an exclusion of the project's, a difference from the schematic with no item and no place, and a note.
+  const found = { ok: false, path: FILE, summary: '', findings: [{ severity: 'info', code: 'no_schematic', message: 'no blinky.kicad_sch beside the board' }],
+    measurements: { drc: [
+      { check: 'violation', severity: 'warning', type: 'track_dangling', description: 'Track has unconnected end', at: [20, 24.825], items: [{ description: 'Track [GND] on F.Cu', pos: [20, 24.825], ref: TRACK }] },
+      { check: 'violation', severity: 'error', type: 'clearance', description: CLEARANCE, at: [18, 27],
+        items: [{ description: 'Via [GND] on F.Cu - B.Cu', pos: [18, 27], ref: VIA }, { description: 'Track [GND] on F.Cu', pos: [20, 24.825], ref: TRACK }] },
+      { check: 'unconnected', severity: 'error', type: 'unconnected_items', description: 'Missing connection between items', at: [20, 23.175],
+        items: [{ description: 'Pad 2 [LED] of D1 on F.Cu', pos: [20, 23.175], ref: '#D1.2' }, { description: 'Pad 2 [LED] of R1 on F.Cu', pos: [35.825, 15], ref: '#R1.2' }] },
+      { check: 'violation', severity: 'error', type: 'copper_sliver', description: 'Copper sliver (B.Cu)', at: [10, 20], items: [], excluded: true, comment: 'accepted' },
+      { check: 'parity', severity: 'error', type: 'missing_footprint', description: 'Missing footprint C3 (100nF)', at: null, items: [] },
+    ] } };
+  // KiCad is still checking the first time it is asked.
+  let asked = 0;
+  const view = await open('blinky.kicad_pcb', { drc: () => (asked++ ? json(found) : json({ state: 'checking', retryMs: 0 }, 202)) });
+  const { pane, dispose } = view;
+  await opened(pane);
+  const controller = await controllerOf(view);
+  // The tab says how many findings fail the board (the error, the missing connection, the difference), after its name.
+  const tab = await within(panel(pane)).findByRole('tab', { name: 'Checks 3' });
+  expect([tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.querySelector('[data-flat-panel-tab-count]')!.textContent]).toEqual(['Checks', '3']);
+  fireEvent.click(tab);
+  const body = tabBody(pane, 'checks');
+  expect(body.querySelector('[data-checks-verdict]')!.textContent).toBe('Design rule check: failed — 2 errors, 1 unrouted connection');
+  expect(body.querySelector('[data-checks-note="no_schematic"]')!.textContent).toBe('no blinky.kicad_sch beside the board');
+  // What fails first, then the warnings, then what the project excludes; each row KiCad's description and its rule.
+  expect([...body.querySelectorAll('[data-check-heading]')].map(heading => heading.textContent)).toEqual(['Errors3', 'Warnings1', 'Excluded1']);
+  expect([...body.querySelectorAll('[data-board-check]')].map(row => [row.getAttribute('data-check-group'), row.textContent])).toEqual([
+    ['error', `${CLEARANCE}clearance`], ['error', 'Missing connection between itemsunconnected_items'], ['error', 'Missing footprint C3 (100nF)missing_footprint'],
+    ['warning', 'Track has unconnected endtrack_dangling'], ['excluded', 'Copper sliver (B.Cu)copper_sliver']]);
+  // The failing findings that have a place are marked on the picture, whatever tab is shown; the warning and the exclusion are not.
+  expect(marked.at(-1)).toEqual([[18, 27], [20, 23.175]]);
+  // A press selects what the finding is between, as a press on the picture does: Quick Edit's references, one chip named by the finding.
+  const row = within(body).getByRole('button', { name: `Select ${CLEARANCE}` });
+  fireEvent.click(row);
+  expect(selected(controller)).toEqual([VIA, TRACK]);
+  expect([row.getAttribute('aria-pressed'), row.closest('[data-board-check]')!.className.includes('bg-accent')]).toEqual(['true', true]);
+  const chip = await waitFor(() => within(box(pane)!).getByRole('button', { name: 'Clearance violation · 2 items' }));
+  // The chip copies the finding as `cad kicad_pcb drc` says it, over its items' reference.
+  fireEvent.click(chip);
+  await waitFor(() => expect(copied).toEqual([`DRC error: clearance at (18, 27) mm: ${CLEARANCE}: Via [GND] on F.Cu - B.Cu; Track [GND] on F.Cu\n${FILE}${VIA},${TRACK.slice(1)}`]));
+  // A double-click frames the finding where it is; a press on the lit row lets go; one with no item and no place is no button.
+  const fitted = frames.at(-1)!.scale;
+  fireEvent.doubleClick(row);
+  await waitFor(() => expect(frames.at(-1)!.scale).toBeGreaterThan(fitted));
+  fireEvent.click(row);
+  expect(selected(controller)).toEqual([]);
+  expect(within(body).queryByRole('button', { name: /Missing footprint/ })).toBeNull();
+  // The panel's search finds a finding by what it is between.
+  fireEvent.change(searchBox(pane), { target: { value: 'D1.2' } });
+  await waitFor(() => expect([...tabBody(pane, 'checks').querySelectorAll('[data-board-check]')].map(found => found.textContent)).toEqual(['Missing connection between itemsunconnected_items']));
+  dispose();
+  cleanup();
+
+  // No KiCad on this computer: the check says so in the tab, in words; the board is still the board, with no card over it and no mark on it.
+  marked.length = 0;
+  const unchecked = await open('blinky.kicad_pcb', { drc: () => json({ ok: false, findings: [{ severity: 'error', code: 'kicad_missing', message: 'KiCad is not installed' }], measurements: {} }) });
+  await opened(unchecked.pane);
+  fireEvent.click(within(panel(unchecked.pane)).getByRole('tab', { name: 'Checks' }));
+  await waitFor(() => expect(tabBody(unchecked.pane, 'checks').querySelector('[data-checks-verdict]')!.textContent).toBe('Design rule check: not checked — KiCad is not installed'));
+  expect(within(panel(unchecked.pane)).getByRole('tab', { name: 'Checks' }).querySelector('[data-flat-panel-tab-count]')).toBeNull();
+  expect(within(unchecked.pane).queryByRole('alert')).toBeNull();
+  expect(marked.every(marks => marks.length === 0)).toBe(true);
+  unchecked.dispose();
 });

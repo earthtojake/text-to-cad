@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createCadClient } from '@cad/core/client';
-import { pageToScreen } from '@cad/core/lib/plot2d/plot.js';
+import { layoutPlot, pageToScreen, schematicFitBounds } from '@cad/core/lib/plot2d/plot.js';
 import { exportChoices } from '../../export/formats.js';
 import { FileViewer } from '../../../dist/file-viewer/index.js';
 import { createSchematicRenderer } from '../../../dist/renderers/schematic/index.js';
@@ -210,6 +210,33 @@ it('a double-click on bare paper fits under Select, and under Measure leaves the
   expect(frames.at(-1)!.scale).toBe(zoomed.scale);
   await user.click(within(pane.querySelector<HTMLElement>('[data-cad-toolbar]')!).getAllByRole('button', { name: /^Select/ })[0]);
   fireEvent.dblClick(canvasOf(pane), point([20, 20]));
+  await waitFor(() => expect(frames.at(-1)!.scale).toBe(fitted.scale));
+  view.dispose();
+});
+
+it("a sheet whose circuit is much smaller than its page opens framed on the circuit, as Zoom to fit frames it again; the page whole is a zoom out away", async () => {
+  const view = await open();
+  const { pane } = view;
+  await onSheet(pane, '/');
+  // The divider is a corner of its A4 page: its fit is its content with 10 mm round it, not the page.
+  const layout = layoutPlot({ ...SCHEMATIC, sheets: [SCHEMATIC.sheets.find(one => one.path === '/')] } as any);
+  const [left, bottom, right, top] = schematicFitBounds(layout);
+  expect([left, bottom, right, top]).not.toEqual([...layout.modelBounds]);
+  const fitted = { ...frames.at(-1)! };
+  // What it frames is the content's box, whole and centred across the pane; the page (297 mm across), still
+  // drawn round it, runs off the pane at this scale, where the page's own fit would hold it whole.
+  const [x0, y0] = pageToScreen(fitted, left, -top), [x1, y1] = pageToScreen(fitted, right, -bottom);
+  expect(x0).toBeGreaterThanOrEqual(0);
+  expect(x1).toBeLessThanOrEqual(1200);
+  expect(y0).toBeGreaterThanOrEqual(0);
+  expect(y1).toBeLessThanOrEqual(700);
+  expect((x0 + x1) / 2).toBeCloseTo(600, 0);
+  expect(layout.sheets[0].width * fitted.scale).toBeGreaterThan(1200);
+  // Zoomed out, then F: the content again.
+  fireEvent.wheel(canvasOf(pane), { deltaY: 900, clientX: 600, clientY: 350 });
+  await waitFor(() => expect(frames.at(-1)!.scale).toBeLessThan(fitted.scale / 2));
+  canvasOf(pane).focus();
+  fireEvent.keyDown(canvasOf(pane), { key: 'f' });
   await waitFor(() => expect(frames.at(-1)!.scale).toBe(fitted.scale));
   view.dispose();
 });

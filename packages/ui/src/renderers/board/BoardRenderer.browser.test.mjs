@@ -7,6 +7,7 @@ import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
 import { fitPlotTransform, layoutPlot, pageToScreen } from '@cad/core/lib/plot2d/plot.js';
 import { boardPalette } from '@cad/core/lib/plot2d/theme.js';
+import { BOARD_OVERLAY_THEMES } from '@cad/core/lib/board2d/boardOverlay.js';
 
 // A board's one load path, in a real browser: the COMMITTED payload (`__fixtures__/README.md`: the
 // test board as the engine draws it from its file), served as `GET /api/v1/documents/kicad_pcb/<id>/plot` serves it, painted from
@@ -98,6 +99,8 @@ const pixel = (image, x, y) => {
 const near = (left, right, tolerance = 40) => Math.abs(left[0] - right[0]) + Math.abs(left[1] - right[1]) + Math.abs(left[2] - right[2]) <= tolerance;
 const hex = value => [1, 3, 5].map(index => Number.parseInt(value.slice(index, index + 2), 16));
 const red = ([r, g, b]) => r > 150 && g < 90 && b < 90;
+// What is picked is lit in the overlay's highlight: the dark theme's (the harness's), white (`boardOverlay.js`).
+const HIGHLIGHT = hex(BOARD_OVERLAY_THEMES.dark.selection);
 
 test('a board opens fitted on its own background, its track in KiCad’s red, and a press on a pad picks it and lights it', async (t) => {
   const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
@@ -125,7 +128,7 @@ test('a board opens fitted on its own background, its track in KiCad’s red, an
   const [trackX, trackY] = at([30, 15]);
   assert.ok(red(pixel(fitted, trackX, trackY)), `the track: ${pixel(fitted, trackX, trackY)}`);
   // R1 pad 2 (35.825, 15): drawn as the board draws it, until a press selects it and lights it.
-  const highlight = [141, 197, 255];
+  const highlight = HIGHLIGHT;
   const [x, y] = at([35.825, 15]);
   assert.ok(!near(pixel(fitted, x, y), highlight), `the pad as drawn first: ${pixel(fitted, x, y)}`);
   await page.mouse.click(canvas.x + x, canvas.y + y);
@@ -209,7 +212,7 @@ const litAt = image => {
   let [x, y, count] = [0, 0, 0];
   for (let row = 0; row < image.height; row += 1) {
     for (let column = 0; column < image.width; column += 1) {
-      if (near(pixel(image, column, row), [141, 197, 255], 30)) { x += column; y += row; count += 1; }
+      if (near(pixel(image, column, row), HIGHLIGHT, 30)) { x += column; y += row; count += 1; }
     }
   }
   return count ? [x / count, y / count, count] : null;

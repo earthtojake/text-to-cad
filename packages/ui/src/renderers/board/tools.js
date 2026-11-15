@@ -19,6 +19,20 @@ export const BOARD_TOOL_MODES = createToolModes({
   modes: Object.fromEntries(Object.values(BOARD_TOOL).map(mode => [mode, {}]))
 });
 
+/**
+ * What a board's drawing tools open with: the pen and Shapes in the palette's neon green
+ * (`annotation/toolbar.jsx`'s `ANNOTATION_COLORS`), where every other view opens them in its neon red
+ * (`CAD_ANNOTATION_DEFAULTS`). A board is mostly KiCad's red front copper, often a pour edge to edge: red
+ * ink on it read by its keyline alone, a hairline at the fit. Of the palette, green is the one hue far from
+ * both outer coppers (red, blue), the courtyards' magenta and the silkscreen's yellow, and it is not the
+ * highlight's white or black; its keyline still edges it. The highlighter keeps its yellow, and a colour
+ * the person picks is theirs, as in every view.
+ */
+const BOARD_INK = "#39ff14";
+export const BOARD_ANNOTATION_DEFAULTS = Object.freeze({
+  styles: Object.freeze({ pen: Object.freeze({ color: BOARD_INK }), shapes: Object.freeze({ color: BOARD_INK }) })
+});
+
 export {
   BOARD_DEFAULT_FILTER, BOARD_LOCKED, BOARD_SELECT_KINDS, boardFilterAll, boardPickKinds, boardWorkingLayer, readBoardFilter
 } from "./boardPick.js";

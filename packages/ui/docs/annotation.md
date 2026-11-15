@@ -10,7 +10,7 @@ were drawn from every angle, lying on the surface they were drawn on. The engine
 - `annotation/session.js` — `useAnnotationSession`: the annotation's ink, what the tools
   put down next (the tool of the strip tool in hand, `pencil` — the pen, the highlighter or the eraser — and `shape` — the rectangle first, the line, arrow, ellipse or text — each kept while the other is up; `style`, the colour, stroke width and
   placement — `surface`, the default, or `plane` — of the tool in hand, kept per drawing kind in `styles`: `pen`, `highlighter` (yellow
-  `#ffe600`; the others neon red) and `shapes`, which all five shapes share; the eraser has none) and the selection. Each add, erase, restyle of the selection
+  `#ffe600`; the others neon red, but where the view hands another: a board's open neon green, `renderers/board/tools.js`, clear of its red copper) and `shapes`, which all five shapes share; the eraser has none) and the selection. Each add, erase, restyle of the selection
   (`restyle`) or fill of a closed shape (`fill`, joining its group) is one step
   in the file view's history (`renderers/kit/shell/useViewerHistory.js`, 200
   steps, shared with the renderer's own tools; without one the session keeps its

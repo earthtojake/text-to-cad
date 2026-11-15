@@ -131,13 +131,13 @@ class BoardJobReplayTest(unittest.TestCase):
 
     def test_what_the_prompt_named_is_lit_and_what_names_nothing_said(self) -> None:
         lit, top = self.images["lit"], self.images["top"]
-        blue = (68, 122, 176)  # the light theme's highlight: the viewer's blue darkened to read on white
+        ink = (22, 22, 22)  # the light theme's highlight: near-black, no layer's hue (the viewer's ``boardOverlay.js``)
         for x, y in ((20, 15), (35.825, 15)):  # the VBUS track, R1's pad 2
             point = on_screen(x, y)
-            self.assertTrue(near(lit.getpixel(point), blue, 40), f"lit at ({x}, {y}): {lit.getpixel(point)}")
-            self.assertFalse(near(top.getpixel(point), blue, 40), f"and only where named: {top.getpixel(point)}")
-        # The area's box, an edge of it: (14, 5) on its left side.
-        self.assertTrue(near(lit.getpixel(on_screen(14, 5)), blue, 60), lit.getpixel(on_screen(14, 5)))
+            self.assertTrue(near(lit.getpixel(point), ink, 40), f"lit at ({x}, {y}): {lit.getpixel(point)}")
+            self.assertFalse(near(top.getpixel(point), ink, 40), f"and only where named: {top.getpixel(point)}")
+        # The area's box, an edge of it: (14, 5) on its left side (a thin dark line the resample takes to black).
+        self.assertTrue(near(lit.getpixel(on_screen(14, 5)), ink, 70), lit.getpixel(on_screen(14, 5)))
         [report] = [drawn.report for drawn in self.result if Path(drawn.path).stem == "lit"]
         self.assertTrue(any("is not lit: blinky.kicad_pcb has no via" in warning for warning in report["warnings"]), report["warnings"])
 

@@ -32,6 +32,8 @@ import { createPlotRasters } from "./plotRasters.js";
  * @param {string} options.noun  What a capture's or a card's error names ("board").
  * @param {(transform: object|null) => void} options.onViewMoved
  * @param {object|null} [options.drawView]  `drawPlot`'s `view`; a new one draws the plot afresh.
+ * @param {readonly [number, number, number, number]|null} [options.fitBounds]  What the fit frames (model space, y up), where it
+ *   is not the plot's whole sheet: a schematic's content when its page is mostly empty (`plot2d`'s `schematicFitBounds`).
  * @param {(ctx: CanvasRenderingContext2D, frame: { transform: object, pixelRatio: number, width: number, height: number }) => void} [options.overlay]
  * @param {(point: { x: number, y: number }, event: PointerEvent) => void} [options.onTap]
  * @param {(point: { x: number, y: number } | null, event: PointerEvent | null) => void} [options.onHover]
@@ -39,7 +41,7 @@ import { createPlotRasters } from "./plotRasters.js";
  * @param {boolean} [options.paused]  The pane is covered (its picture shown another way meanwhile): its rasters
  *   are let go and nothing is painted, until it is uncovered; the view, the capture and the card's picture stay.
  */
-export function usePlotView({ plot, restored = null, colorScheme = "light", surround, noun = "board", onViewMoved, drawView = null, overlay = null,
+export function usePlotView({ plot, restored = null, colorScheme = "light", surround, noun = "board", onViewMoved, drawView = null, fitBounds = null, overlay = null,
   onTap = null, onHover = null, onDoubleTap = null, paused = false }) {
   const plotRef = useRef(plot);
   plotRef.current = plot;
@@ -60,7 +62,7 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
     if (element) element.dataset.boardSettled = final ? "true" : "false";
   }, []);
   // The fit, as its first view and a double-click take it: a board's margin, clear of the tool strip.
-  const view = useFlatCanvasView({ content: plot, bounds: plot?.layout.modelBounds ?? null, restored, colorScheme, onViewMoved, paint, onTap, onHover,
+  const view = useFlatCanvasView({ content: plot, bounds: plot ? fitBounds ?? plot.layout.modelBounds : null, restored, colorScheme, onViewMoved, paint, onTap, onHover,
     fitBox: fitBoardBounds, clearStrip: true, onDoubleTap, middlePan: true, orbitPan: true });
   const { requestPaint, paintNow, encode } = view;
 

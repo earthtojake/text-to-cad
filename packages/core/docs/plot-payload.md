@@ -41,18 +41,32 @@ block) is drawn: the board is the board alone, which the fit frames.
 
 ## The DRC beside it
 
-`GET /api/v1/documents/kicad_pcb/<id>/drc` is KiCad's design rule check of the saved board, kept by the
-same key and made off the request the same way (202 `{"state": "checking", "retryMs"}` while it runs):
-the `CheckResult` `cad kicad_pcb drc --json` prints, as data.
+`GET /api/v1/documents/kicad_pcb/<id>/drc` is KiCad's design rule check of the saved board, made off the
+request the same way (202 `{"state": "checking", "retryMs"}` while it runs): the `CheckResult` `cad
+kicad_pcb drc --json` prints, as data. The check refills the zones in memory, as the plot's pours are, and
+holds the board to the schematic beside it (`<board>.kicad_sch`), so it is kept by a key of its own, its
+`etag`: the plot's with the bytes of every sheet file of that schematic (`poured.drc_key`). An edit to a
+sheet is a new DRC and the same plot.
+
+`ok` is false when any finding fails the board: an error, an unconnected item or a difference from the
+schematic (`check: "parity"`), each an `error` among `findings` whatever severity KiCad gave it. A finding
+the project excludes fails nothing: an `info` among `findings`, `excluded` under `measurements.drc`. With
+no schematic beside the board, `findings` ends with an `info` `no_schematic`: parity was not checked.
+
+The board view's Checks tab reads it (`client.boardDrc`, `lib/board2d/boardChecks.js`: the verdict, the
+counts, and each finding's place in the index's page frame with the references of its items), and marks
+where the board fails on its picture (`lib/board2d/boardCheckMarks.js`).
 
 ```jsonc
 {
   "ok": false, "path": "/boards/blinky.kicad_pcb", "summary": "",
   "findings": [ { "severity": "error", "code": "unconnected_items", "message": "...", "location": "(20, 23.175) mm", "hint": null } ],
   "measurements": { "drc": [ {
-    "check": "unconnected",          // violation, unconnected or parity
-    "severity": "error", "type": "unconnected_items", "description": "Missing connection between items",
-    "at": [20.0, 23.175],            // the first item's position: millimetres in KiCad's frame, y down
+    "check": "unconnected",          // violation, unconnected or parity (a parity finding may name no item)
+    "severity": "error",             // KiCad's own: error or warning
+    "type": "unconnected_items", "description": "Missing connection between items",
+    "excluded": false, "comment": null,  // true and the exclusion's comment for one the project excludes
+    "at": [20.0, 23.175],            // the first item's position: millimetres in KiCad's frame, y down; null for none
     "items": [ { "uuid": "...", "description": "Pad 2 [LED] of D1 on F.Cu", "pos": [20.0, 23.175],
                  "ref": "#D1.2" } ]   // the board reference it names, where the index has one
   } ] }

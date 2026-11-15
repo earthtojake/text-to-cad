@@ -459,6 +459,20 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       const reply = await request(`${api}/models`, { signal, timeoutMs: 10_000, operation: 'board-models' });
       return reply?.models && typeof reply.models === 'object' ? reply.models : {};
     },
+    async boardDrc(file, { signal } = {}) {
+      // A `.kicad_pcb`'s design rule check (`GET <board>/drc`): KiCad's DRC of the saved board, run on the SERVER
+      // and kept by the board's bytes -- the `CheckResult` `cad kicad_pcb drc --json` prints, as data
+      // (`lib/board2d/boardChecks.js` reads it). It is made off the request, as the plot is: 202
+      // { state: 'checking', retryMs } until it is, and the client asks again after `retryMs`.
+      if (!file) throw new Error('Missing file');
+      const api = await documentApi(file, { signal, operation: 'board-drc' });
+      for (;;) {
+        const reply = await request(`${api}/drc`, { signal, timeoutMs: 10_000, operation: 'board-drc' });
+        if (reply?.state !== 'checking') return reply;
+        await pause(Math.min(Math.max(Number(reply.retryMs) || 0, 0), DRAWING_RETRY_MAX_MS), signal);
+        if (disposed) throw abortError();
+      }
+    },
     async drawing(file, { signal } = {}) {
       // A `.dxf` flattened to 2D render primitives on the SERVER: ezdxf does the
       // reading, the client only paints. A plain GET of the document's `drawing`, derived data

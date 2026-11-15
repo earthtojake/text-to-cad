@@ -280,6 +280,11 @@ export interface CadWorkspaceService {
    * serves by `document` (`engineDocument`), or the reason it has none (`missing`). The page names no path.
    */
   boardModels?(file: string, options?: CadRequestOptions): Promise<Record<string, CadBoardModel>>;
+  /**
+   * A board's design rule check (`GET <board>/drc`): KiCad's DRC of the saved board, as `cad kicad_pcb drc --json`
+   * prints it, asked again while the server is still checking (202). `lib/board2d/boardChecks.js` reads it.
+   */
+  boardDrc?(file: string, options?: CadRequestOptions): Promise<CadBoardDrc>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
   /** A robot description resolved for the page (`cad_server.robot_payload`): its document's `structure`. */
@@ -358,6 +363,35 @@ export interface ExportService {
 export type CadBoardModel =
   | { file: string; document: string; api: string; stamp: string; missing?: undefined }
   | { file: string; missing: "not-found" | "vrml-only" | "outside" | "too-large" | "not-step" | "embedded" | "too-many" | string };
+
+/** One finding of a board's DRC, as KiCad reported it (`docs/plot-payload.md`, "The DRC beside it"). */
+export interface CadBoardDrcEntry {
+  /** `violation`, `unconnected` or `parity`. */
+  check: string;
+  /** `error`, `warning` or `exclusion`. */
+  severity: string;
+  /** KiCad's rule name (`clearance`, `shorting_items`, `unconnected_items`). */
+  type: string;
+  description: string;
+  /** Where it is: millimetres in KiCad's frame, y down; absent or null where KiCad gave no position. */
+  at?: [number, number] | null;
+  /** What it is between: each item's words, its position and, where the board's index names it, its reference. */
+  items?: { description?: string; pos?: [number, number] | null; ref?: string | null }[];
+  /** An exclusion the board's project records, with the reason written beside it. */
+  excluded?: boolean;
+  comment?: string | null;
+}
+
+/** A board's DRC (`GET <board>/drc`): a `CheckResult`, its `measurements.drc` every finding. */
+export interface CadBoardDrc {
+  ok: boolean;
+  path?: string;
+  summary?: string;
+  status?: string;
+  reason?: string | null;
+  findings?: { severity: string; code?: string; message: string; location?: string | null }[];
+  measurements?: { drc?: CadBoardDrcEntry[] };
+}
 
 export interface CadPlotPayload {
   schemaVersion: number;

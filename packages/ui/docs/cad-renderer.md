@@ -1484,7 +1484,7 @@ Before the press, the pointer resting on a mark lights it as a part is lit, a fa
 halo, and the part under it is not lit (`RendererShell.jsx`'s `hoverSelectable`).
 The colour, Stroke width and Placement set what the tool in hand draws
 next, never ink already down. Placement is **On surface** (the default) or **On plane**.
-Pencil opens on the pen and Shapes on the rectangle, each in neon red, 2px, On surface; the Highlighter opens in
+Pencil opens on the pen and Shapes on the rectangle, each in neon red (on a KiCad board, neon green: red is its front copper), 2px, On surface; the Highlighter opens in
 neon yellow (`#ffe600`, on the palette in both schemes), 2px, On surface.
 
 The ink Select has picked has a bar of its own (`kit/tools/annotate/AnnotationSelectionBar.jsx`):

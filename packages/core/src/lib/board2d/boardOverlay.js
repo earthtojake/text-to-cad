@@ -23,28 +23,42 @@ import { pageToScreen } from "../plot2d/plot.js";
 import { boardAirwires } from "./airwires.js";
 
 /**
- * The overlay's colours in each theme: the highlight (the CAD views' ink highlight; on the light
- * canvas the same blue darkened to 4.5:1, as `plot2d/theme.js` darkens a layer), what a lit item is
- * filled with, how the rest of the board steps back — darkened on the dark canvas, washed toward white
- * on the light one — and Placement's pads (KiCad's F.Cu and B.Cu; a through-hole pad is the side
- * looked at), its holes and its airwires: thin, under everything a person points at.
+ * The overlay's colours in each theme: the highlight, what a lit item is filled with, how the rest of
+ * the board steps back — darkened on the dark canvas, washed toward white on the light one — and
+ * Placement's pads (KiCad's F.Cu and B.Cu; a through-hole pad is the side looked at), its holes and its
+ * airwires: thin, under everything a person points at.
+ *
+ * The highlight has no hue: white on the dark canvas, near-black on the light one. It was the CAD views'
+ * highlight blue (`#8dc5ff`, darkened to `#447ab0` in light), one highlight in every view; on a board a
+ * colour is a layer, and that blue sits beside KiCad's B.Cu (`#4D7FC4`), so a selected front track read as
+ * a track on the back. Every hue is some layer's (red, blue, the inner coppers' greens, oranges, cyans and
+ * pinks, the silkscreen's yellow, the courtyards' magenta), so what is lit is told by lightness alone, as
+ * KiCad brightens what is selected toward white — there on its one dark theme; on the light canvas the
+ * same step away from the board is toward black. A lit piece of copper is edged in the opposite tone
+ * (`netEdge`), so it reads on copper as light as itself (an inner layer's yellow under white) or as dark:
+ * every copper colour stands 3:1 from the highlight or from its edge (`boardIndex.test.js`). The parts' bodies in 3D
+ * keep the CAD views' blue (`body`): a body is a 3D model, lit as every 3D view lights one, and no layer.
  *
  * Two steps back. `dim`, for a net in focus (selected, or lit by a prompt's reference), is light: the
- * board stays a board round it, and the net stands out by its colour and its weight. Measured in 2D on
+ * board stays a board round it, and the net stands out by its tone and its weight. Measured in 2D on
  * a routed two-layer board with a 30-pad net lit, the wash this replaced (0.7 white, 0.6 black) left
  * the rest of the board 36% (light) and 48% (dark) of its L* contrast, pale and murky; these keep 58%
  * and 67%. The net's luminance contrast with the board beside it falls (3.2:1 to 2.5:1 light, 5.6:1 to
- * 3.6:1 dark), its colour difference hardly (ΔE76 54 to 52, 68 to 62). So a lit net is edged (`netEdge`): its
- * copper outlined in a dark tone of the highlight beneath it, which stands 7.6:1 against the washed board in
- * light (the fill alone 2.8:1) and parts the light net from the copper round it in dark (the fill 3.6:1).
+ * 3.6:1 dark), its colour difference hardly (ΔE76 54 to 52, 68 to 62), measured with the blue highlight
+ * this had. So a lit net is edged (`netEdge`), as every lit piece of copper is: outlined in the opposite tone
+ * beneath it, which parts the white net from the copper round it in dark; in light the near-black net stands
+ * 3:1 or more against the washed board by itself, and its white edge parts it from dark copper beside it.
  * `isolatedDim`, for what is isolated, is the heavier wash as it was: isolating asks for the rest to go.
  */
-const overlayTheme = (selection, rgb, { dim, isolatedDim, airwire, inkEdge, netEdge }) => Object.freeze({
+const overlayTheme = (selection, rgb, { dim, isolatedDim, airwire, inkEdge, netEdge, body }) => Object.freeze({
   selection,
-  // A lit net's edge: every piece of its copper outlined `width` screen pixels round, under it (the item
-  // drawn wider beneath itself, a keyline as the ink's): KiCad lights a net by brightening it over the rest
-  // dimmed, and here the net reads against the stepped-back board by its edge as well as its colour.
+  // Lit copper's edge (a net's, a track's, a via's, a pad's): each piece outlined `width` screen pixels round,
+  // under it (the item drawn wider beneath itself, a keyline as the ink's), in the tone opposite the
+  // highlight: KiCad lights a net by brightening it over the rest dimmed, and here what is lit reads against
+  // the board by its edge as well as its lightness, whatever colour the copper under it is.
   netEdge: Object.freeze({ color: netEdge, width: 1.5 }),
+  // A part's body in 3D, lit (`board3d/boardParts.js`): the CAD views' highlight, as every 3D view's.
+  body,
   // The ink's keyline (`drawing2d/marks.js`'s `keyline`): ink in a neon over copper of its own hue
   // reads by its edge, as the canvas's contrast, dark on the dark canvas and light on the light one.
   inkKeyline: Object.freeze({ color: inkEdge, width: 1.25 }),
@@ -63,10 +77,10 @@ const overlayTheme = (selection, rgb, { dim, isolatedDim, airwire, inkEdge, netE
   airwire
 });
 export const BOARD_OVERLAY_THEMES = Object.freeze({
-  dark: overlayTheme("#8dc5ff", "141, 197, 255", { dim: "rgba(0, 0, 0, 0.4)", isolatedDim: "rgba(0, 0, 0, 0.6)", airwire: "rgba(232, 238, 245, 0.8)",
-    inkEdge: "rgba(0, 0, 0, 0.85)", netEdge: "#0b1a2a" }),
-  light: overlayTheme("#447ab0", "68, 122, 176", { dim: "rgba(255, 255, 255, 0.5)", isolatedDim: "rgba(255, 255, 255, 0.7)", airwire: "rgba(80, 86, 94, 0.8)",
-    inkEdge: "rgba(255, 255, 255, 0.95)", netEdge: "#16304d" })
+  dark: overlayTheme("#ffffff", "255, 255, 255", { dim: "rgba(0, 0, 0, 0.4)", isolatedDim: "rgba(0, 0, 0, 0.6)", airwire: "rgba(232, 238, 245, 0.8)",
+    inkEdge: "rgba(0, 0, 0, 0.85)", netEdge: "#111111", body: "#8dc5ff" }),
+  light: overlayTheme("#161616", "22, 22, 22", { dim: "rgba(255, 255, 255, 0.5)", isolatedDim: "rgba(255, 255, 255, 0.7)", airwire: "rgba(80, 86, 94, 0.8)",
+    inkEdge: "rgba(255, 255, 255, 0.95)", netEdge: "#ffffff", body: "#447ab0" })
 });
 /** The overlay's colours for a colour scheme: `"light"`, or anything else for dark. */
 export function boardOverlayColors(scheme) {
@@ -227,6 +241,7 @@ export function drawResolved(ctx, view, resolved, { color, toPage, weight = 1, s
     polygons(ctx, view, [{ polygon: part.outline, box: part.box }], { color, width: 2 * weight, fill: fills.part });
     polygons(ctx, view, part.pads, { color, width: 1, fill: fills.partPad });
   } else if (kind === "pad") {
+    if (edge) polygons(ctx, view, pinPads(resolved.pad), { color: edge.color, width: 1.5 * weight + 2 * edge.width });
     polygons(ctx, view, pinPads(resolved.pad), { color, width: 1.5 * weight, fill: color });
   } else if (kind === "net") {
     const net = resolved.net;
@@ -245,10 +260,20 @@ export function drawResolved(ctx, view, resolved, { color, toPage, weight = 1, s
     polygons(ctx, view, net.pads.flatMap(pinPads), { color, width: 1, fill: color });
   } else if (kind === "copper" || kind === "point" || kind === "track" || kind === "via" || kind === "zone") {
     const item = kind === "point" ? null : resolved.item;
-    if (item?.kind === "track") strokes(ctx, view, [item], color, trackWidth(view, 3));
-    else if (item?.kind === "via") dots(ctx, view, [item], color, viaRadius(view, 3));
+    // The edge first, as a net's: `edge.width` pixels past the piece's own outline, under it.
+    const out = edge ? edge.width * view.px : 0;
+    if (item?.kind === "track") {
+      if (edge) strokes(ctx, view, [item], edge.color, (track) => trackWidth(view, 3)(track) + 2 * out);
+      strokes(ctx, view, [item], color, trackWidth(view, 3));
+    } else if (item?.kind === "via") {
+      if (edge) dots(ctx, view, [item], edge.color, (via) => viaRadius(view, 3)(via) + out);
+      dots(ctx, view, [item], color, viaRadius(view, 3));
     // A zone named by its uuid is the zone on each of its layers: one outline.
-    else if (item?.kind === "zone") polygons(ctx, view, [{ polygon: item.outline, box: item.box }], { color, width: 2, fill: fills.copperZone });
+    } else if (item?.kind === "zone") {
+      const outline = [{ polygon: item.outline, box: item.box }];
+      if (edge) polygons(ctx, view, outline, { color: edge.color, width: 2 + 2 * edge.width });
+      polygons(ctx, view, outline, { color, width: 2, fill: fills.copperZone });
+    }
     // Copper and a point are a place: its crosshair; an item named by its uuid is the item alone.
     if (kind === "copper" || kind === "point") crosshairs?.push({ at: resolved.page || toPage(resolved.at), color });
   } else if (kind === "text") {
@@ -308,7 +333,7 @@ export function drawBoardOverlay(ctx, index, { transform, pixelRatio = 1, width,
     } else ctx.fillRect(0, 0, width, height);
   }
   pageSpace(ctx, view, pixelRatio);
-  // What is selected is outlined (a net's copper: `colors.netEdge`), so it reads against the stepped-back board.
+  // What is selected is edged where it is copper (`colors.netEdge`), so it reads on the board, stepped back or not.
   for (const resolved of selection) highlight(resolved, { color: colors.selection, weight: 1.25, edge: colors.netEdge });
   if (placement) {
     const nets = new Set(selection.filter((resolved) => resolved.kind === "net").map((resolved) => resolved.net.name));

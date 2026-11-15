@@ -37,7 +37,7 @@ import BoardSection, { useBoardTrees } from "./BoardSection.jsx";
 import BoardSelectFilter from "./BoardSelectFilter.jsx";
 import LayersSection from "./LayersSection.jsx";
 import {
-  BOARD_DEFAULT_FILTER, BOARD_NO_CAMERA, BOARD_NO_DISPLAY, BOARD_TOOL, BOARD_TOOL_MODES, boardPickKinds, boardWorkingLayer, readBoardFilter
+  BOARD_ANNOTATION_DEFAULTS, BOARD_DEFAULT_FILTER, BOARD_NO_CAMERA, BOARD_NO_DISPLAY, BOARD_TOOL, BOARD_TOOL_MODES, boardPickKinds, boardWorkingLayer, readBoardFilter
 } from "./tools.js";
 import { useBoardDocument } from "./useBoardDocument.js";
 import { readIsolation, useIsolation } from "../kit/tools/select/useIsolation.js";
@@ -47,6 +47,11 @@ import { viewportZoom } from "../kit/shell/ZoomControl.jsx";
 import { useBoardView } from "./useBoardView.js";
 import { board3dAnnotationSurface } from "./board3dAnnotation.js";
 import { useBoardModels } from "./useBoardModels.js";
+import { boardCheckMarks, boardCheckText, boardCheckTitle } from "@cad/core/lib/board2d/boardChecks.js";
+import { drawBoardCheckMarks } from "@cad/core/lib/board2d/boardCheckMarks.js";
+import { sceneCopyText } from "../kit/tools/select/sceneReferences.jsx";
+import ChecksSection from "./ChecksSection.jsx";
+import { useBoardChecks } from "./useBoardChecks.js";
 
 // The board in 3D, its own chunk: a board shown in 2D loads no three.js.
 const Board3dView = lazy(() => import("./Board3dView.jsx"));
@@ -75,14 +80,18 @@ const Board3dView = lazy(() => import("./Board3dView.jsx"));
  * and outline corners, in millimetres. What is picked, drawn and measured is Quick Edit's, in board
  * references (`#R1`, `#R1.2`, `#net:VBUS`, `#track:<uuid>`, `#F.Cu@x10y5..x20y15`), whose views are the window on screen as a plan-view camera with the
  * board's Display, which `cad <type> snapshot --job` draws again, the references lit. Its panel
- * (`kit/shell/FlatPanel.jsx`) is a search over three tabs, the Parts (in their schematic blocks), the
- * Nets and the Layers (each layer's eye, a row's press for the active layer), and under them the
+ * (`kit/shell/FlatPanel.jsx`) is a search over four tabs, the Parts (in their schematic blocks), the
+ * Nets, the Layers (each layer's eye, a row's press for the active layer) and the Checks (KiCad's design
+ * rule check of the saved board, `useBoardChecks.js` over `GET .../drc`: the verdict in words, then its
+ * findings, a row's press selecting what the finding is between and a double-click framing it,
+ * `ChecksSection.jsx`; its tab says how many findings fail the board, and each failing one's place is a
+ * pin on the picture, `board2d/boardCheckMarks.js`, whatever tab is shown), and under them the
  * picked part's or net's pads (`BoardSection.jsx`'s detail); its view
  * controls end the strip, after its rule (`BoardDisplay.jsx`): Flip (the side, top or bottom; ⇧F), 2D/3D
  * and Display (the preset), the first two each a button whose icon is the state on screen; the corner
  * holds the zoom pill alone; the Layers tab has the
  * layers, the other layers, the pours and the opacities: one contract with `cad <type> snapshot --display`. A payload without its
- * index (an older server's) is the picture alone: no tools, no Parts or Nets, no Quick Edit.
+ * index (an older server's) is the picture alone: no tools, no Parts, Nets or Checks, no Quick Edit.
  *
  * The same view, drawn in 3D (2D/3D, or the key 3): the board as a slab with its two faces, each the
  * 2D drawer's picture of that side (`Board3dView.jsx`, a lazy chunk, over `@cad/core/lib/board3d/`). It
@@ -151,6 +160,20 @@ function BoardSurface({ view, data }) {
   const outlineRef = useRef(null);
   outlineRef.current = plot?.board?.outline ?? null;
   const models = useBoardModels({ client: workspace.client, file, revision: workspace.resource.revision, enabled: Boolean(index) });
+  // KiCad's design rule check of the saved board (`useBoardChecks.js`), and where it fails, marked on the
+  // picture (`board2d/boardCheckMarks.js`). The marks are drawn whenever the board fails, not only while the
+  // Checks tab is shown: a short or a missing track is otherwise the same picture as a good board, and a
+  // view with no panel on screen (collapsed, as it opens under 1024px; a phone, which has none) has nothing
+  // else to say so. Only what fails is marked, so a passing board carries none: its warnings are the tab's.
+  // They are the viewer's, drawn in the overlay's pass in 2D, and no part of the board's Display: a snapshot
+  // (`cad <type> snapshot --display`) and a Quick Edit's packet draw none.
+  const checks = useBoardChecks({ client: workspace.client, file, revision: workspace.resource.revision, index });
+  const checkMarks = useMemo(() => boardCheckMarks(checks), [checks]);
+  const checkMarksRef = useRef(checkMarks);
+  checkMarksRef.current = checkMarks;
+  // The finding whose row was pressed last in the Checks tab (`ChecksSection.jsx`), let go of with the answer it was in.
+  const [heldCheck, setHeldCheck] = useState("");
+  useEffect(() => { setHeldCheck(""); }, [checks]);
 
   // ---- the file's view: the transform, the board's Display, what is isolated ----
   const [stored] = useState(() => readFileView(view.state, SLICES));
@@ -196,7 +219,8 @@ function BoardSurface({ view, data }) {
   useEffect(() => () => window.clearTimeout(saveTimer.current), []);
 
   // ---- tools ----------------------------------------------------------------
-  const tools = useFlatTools({ toolModes: BOARD_TOOL_MODES, file, revision: workspace.resource.revision, ready: Boolean(index) });
+  const tools = useFlatTools({ toolModes: BOARD_TOOL_MODES, file, revision: workspace.resource.revision, ready: Boolean(index),
+    annotationDefaults: BOARD_ANNOTATION_DEFAULTS });
   const { toolMode, selectTool, annotating, measuring, annotation, measure } = tools;
   // Select's filter: every kind ticked and no locked items as a board opens (KiCad's), and held while it
   // is open, across its rebuilds; a filter of another shape (the earlier Nets or Point or area) drops what it named.
@@ -256,10 +280,26 @@ function BoardSurface({ view, data }) {
   const { references, chips: pickChips } = useBoardReferences({ scene, selection, resource: workspace.resource, describe });
   // A block picked whole (its row menu's Select all parts) is one chip, not a chip a part.
   const trees = useBoardTrees(index, models);
-  const chips = useMemo(() => groupChips({ selected: selection.selected, chips: pickChips, resource: workspace.resource, select: selection.select,
-    groups: [...(trees?.parts.nodesById.values() || [])].filter(node => node.picks?.length > 1).sort((a, b) => b.picks.length - a.picks.length)
-      .map(node => ({ id: node.id, label: node.label, picks: node.picks })),
-    label: group => t("chip.blockParts", { name: group.label, count: group.picks.length }) }), [selection.selected, selection.select, pickChips, workspace.resource, trees, t]);
+  // A finding picked in the Checks tab, while everything it picked is still selected, is one chip too, named
+  // by the finding ("Clearance violation · 2 items"; a finding of one item, that item's chip with the
+  // finding's name before its own), and what it copies says the finding as `cad kicad_pcb drc` does, on a line
+  // of words over the reference: the references themselves, which the prompt carries, are its items' as ever.
+  const heldFinding = useMemo(() => {
+    const finding = checks?.findings.find(candidate => candidate.id === heldCheck);
+    return finding?.picks.length && finding.picks.every(id => selection.selected.includes(id)) ? finding : null;
+  }, [checks, heldCheck, selection.selected]);
+  const copyFinding = useCallback(finding => [boardCheckText(finding), sceneCopyText(workspace.resource, finding.picks)].filter(Boolean).join("\n"), [workspace.resource]);
+  const chips = useMemo(() => {
+    const held = heldFinding, name = held ? boardCheckTitle(held) : "", copy = held ? copyFinding(held) : "";
+    const picks = held?.picks.length === 1 ? pickChips.map((chip, at) => (selection.selected[at] === held.picks[0]
+      ? { ...chip, label: t("board.checks.chip_one", { name, item: chip.label }), copy } : chip)) : pickChips;
+    const blocks = [...(trees?.parts.nodesById.values() || [])].filter(node => node.picks?.length > 1).sort((a, b) => b.picks.length - a.picks.length)
+      .map(node => ({ id: node.id, label: node.label, picks: node.picks }));
+    const grouped = groupChips({ selected: selection.selected, chips: picks, resource: workspace.resource, select: selection.select,
+      groups: held?.picks.length > 1 ? [{ id: held.id, label: name, picks: held.picks, finding: true }, ...blocks] : blocks,
+      label: group => t(group.finding ? "board.checks.chip" : "chip.blockParts", { name: group.label, count: group.picks.length }) });
+    return held?.picks.length > 1 ? grouped.map(chip => (chip.key === `group:${held.id}` ? { ...chip, copy } : chip)) : grouped;
+  }, [selection.selected, selection.select, pickChips, workspace.resource, trees, t, heldFinding, copyFinding]);
   // The overlay's colours are the theme's (`board2d/boardOverlay.js`): a highlight that reads on the canvas under it.
   const schemeRef = useRef(colorScheme);
   schemeRef.current = colorScheme;
@@ -284,7 +324,11 @@ function BoardSurface({ view, data }) {
     }
     const net = selected.some(item => item.kind === "net");
     drawBoardOverlay(ctx, board, { ...base, hover: hovered[0] || null, selection: selected, dim: net && !isolated.length, placement: placementRef.current });
-    // The ink over the board, in 2D and on a face in 3D alike: edged, so red ink reads on red copper.
+    // Where the board fails its design rule check: a pin each, of one size on screen, over the highlights and
+    // under the ink. The flat view's alone: a face in 3D is a picture of the board, with no pixels of its own.
+    if (!face) drawBoardCheckMarks(ctx, checkMarksRef.current, { transform, pixelRatio, width, height, mirrorX, scheme: schemeRef.current });
+    // The ink over the board, in 2D and on a face in 3D alike: edged, so ink of a copper's own hue (a red the
+    // person picks, on red copper) still reads; it opens green, far from both outer coppers (`tools.js`).
     drawAnnotationMarks(ctx, marksInPlan(session.items, mirrorX), { transform, pixelRatio, selected: session.selected, hovered: hoveredInkRef.current,
       keyline: colors.inkKeyline });
     return true;
@@ -485,17 +529,20 @@ function BoardSurface({ view, data }) {
   const capture = useCallback(() => (dimensionRef.current === "3d" && view3dRef.current ? view3dRef.current.capture() : viewRef.current.capture()), []);
   // A row of the Parts, the Nets or the detail double-clicked: what it picked, framed, from the side looked at (a page box to the
   // plan's model space; in 3D, the camera's direction kept).
-  const frameSelectors = useCallback(selectors => {
-    const board = indexRef.current;
-    if (!board) return;
-    const boxes = selectors.map(id => board.extent(board.resolve(id))).filter(Boolean);
-    if (!boxes.length) return;
-    let [x0, y0, x1, y1] = [Math.min(...boxes.map(b => b[0])), Math.min(...boxes.map(b => b[1])), Math.max(...boxes.map(b => b[2])), Math.max(...boxes.map(b => b[3]))];
+  // `frameBox`: a page box framed the same way (a finding of the Checks tab, where it is: `boardChecks.js`'s `box`).
+  const frameBox = useCallback(([x0, y0, x1, y1]) => {
     if (dimensionRef.current === "3d") { view3dRef.current?.frameSheet([x0, y0, x1, y1]); return; }
     const mirror = mirrorRef.current;
     if (mirror != null) [x0, x1] = [2 * mirror - x1, 2 * mirror - x0];
     viewRef.current?.frame([x0, -y1, x1, -y0]);
   }, []);
+  const frameSelectors = useCallback(selectors => {
+    const board = indexRef.current;
+    if (!board) return;
+    const boxes = selectors.map(id => board.extent(board.resolve(id))).filter(Boolean);
+    if (!boxes.length) return;
+    frameBox([Math.min(...boxes.map(b => b[0])), Math.min(...boxes.map(b => b[1])), Math.max(...boxes.map(b => b[2])), Math.max(...boxes.map(b => b[3]))]);
+  }, [frameBox]);
 
   // ---- 2D/3D: one view, its other canvas -------------------------------------------------
   // Entering 3D opens head on, on the window the 2D view shows, from its side, then eases to the camera
@@ -552,6 +599,8 @@ function BoardSurface({ view, data }) {
   }, [remember3d]);
   // Ink put down, picked or let go, a side or an isolation changed: the same view, painted again.
   useEffect(() => { requestPaint(); }, [annotation.items, annotation.selected, display, isolation.resolved, requestPaint]);
+  // The design rule check's answer in, or gone with a new revision: its marks painted, or wiped.
+  useEffect(() => { requestPaint(); }, [checkMarks, requestPaint]);
   // A tool put down lets go of what it lit under the pointer.
   useEffect(() => { handlers.hover(null, null); }, [toolMode, handlers]);
 
@@ -653,6 +702,8 @@ function BoardSurface({ view, data }) {
     view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
     capture, currentView, annotationDocument: plotAnnotationDocument, runtime, live: BOARD_LIVE, onChord: cycleOthers,
     copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed"), packetReferences: boardPacketReferences,
+    // Escape's last step, once nothing is picked and Select is in hand: out of isolation, as a STEP's.
+    isolation,
     // 3, as KiCad's Alt+3 opens its 3D viewer: the board in 3D, and back. ⇧F, Flip's: the board seen from
     // its other side (in 3D the camera turned over), as Flip's tile on the strip does.
     onViewKey: event => {
@@ -703,11 +754,13 @@ function BoardSurface({ view, data }) {
   const chromeHidden = document.loading || failed;
   const selectMenu = <BoardSelectFilter value={filter} onChange={changeFilter} disabled={!shown} />;
   const { strip, row } = flatViewTools(tools, { colorScheme, shown, selectMenu, selectBadge: filterBadge(filter, BOARD_SELECT_KINDS), t });
-  // The panel (`kit/shell/FlatPanel.jsx`): the Parts, the Nets, then the Layers with the board's view
-  // settings; under them, what is picked in detail.
+  // The panel (`kit/shell/FlatPanel.jsx`): the Parts, the Nets, the Layers with the board's view
+  // settings, then the Checks; under them, what is picked in detail.
   // A list row's Copy Reference: what it names, with what is selected, as one reference into the file.
   const copyReferences = ids => { void Promise.resolve(host.clipboard.writeText(buildBoardRefToken({ path, selectors: ids }))).catch(() => {}); };
   const takeSelect = useCallback(() => selectTool(BOARD_TOOL.SELECT), [selectTool]);
+  // A finding's Copy Reference (the Checks tab's row menu): the finding in words, then its items' reference.
+  const copyText = text => { void Promise.resolve(host.clipboard.writeText(text)).catch(() => {}); };
   const list = id => <BoardSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated}
     onIsolate={isolation.toggle} onCopyReference={path ? copyReferences : null} onFrame={frameSelectors} onSelect={takeSelect} />;
   const copySelectors = useCallback(ids => (path ? buildBoardRefToken({ path, selectors: ids }) : ""), [path]);
@@ -720,7 +773,12 @@ function BoardSurface({ view, data }) {
     ...(index ? [{ id: "parts", label: t("board.text.parts"), searchLast: true, content: list("parts") },
       { id: "nets", label: t("board.text.nets"), searchLast: true, content: list("nets") }] : []),
     ...(layered ? [{ id: "layers", label: t("layers.title"), content: <LayersSection sheet={sheet} display={display} onDisplayChange={setDisplay} colorScheme={colorScheme}
-      models={index ? { shown: showModels, onChange: setShowModels, count: modelCount } : null} /> }] : [])
+      models={index ? { shown: showModels, onChange: setShowModels, count: modelCount } : null} /> }] : []),
+    // The Checks, last: its name is followed by how many findings fail the board, which comes and goes with
+    // the check's answer, so no tab stands after it to be moved.
+    ...(checks ? [{ id: "checks", label: t("board.checks.tab"), count: checks.verdict === "fail" && checks.failing ? String(checks.failing) : "", searchLast: true,
+      content: <ChecksSection checks={checks} selection={selection} held={heldCheck} onHold={setHeldCheck} onSelect={takeSelect} onFrame={frameBox}
+        copyOf={copyFinding} onCopy={path ? copyText : null} /> }] : [])
   ];
   const panel = panelTabs.length ? { kind: "board", label: t("board.text.board_panel"), searchLabel: t("board.text.search_board"),
     tabs: panelTabs } : null;

@@ -24,7 +24,8 @@ import { useWhenSettled } from "./useWhenSettled.js";
  *
  * `useFlatHandover` is what goes out of the view: Quick Edit's props (its references and chips, the
  * annotation, and the prompt's views and files: the views with ink, the one on screen and the
- * annotation file, as `host.promptFiles` writes them), the keys (Escape lets go, Delete deletes what
+ * annotation file, as `host.promptFiles` writes them), the keys (Escape lets go, innermost first, then
+ * puts the tool in hand down, then leaves isolation, as a 3D view's does; Delete deletes what
  * Select picked, ⌘Z walks the history, a tool's letter takes it up and F fits, ⌘\ shows or hides the
  * view's panel and / opens it on its search (`panelControl`, which the frame fills in), the copy key copies
  * the annotated view while a drawing tool is up, else what `copySelection` copies), a host's capture
@@ -36,9 +37,11 @@ export const FLAT_TOOL = Object.freeze({ SELECT: "select", PENCIL: "pencil", SHA
 
 /**
  * @param {{ toolModes: ReturnType<typeof import("../tools/toolModes.js").createToolModes>, file: string, revision: string,
- *   ready: boolean }} options  `ready`: the picture is in, so Measure can pick.
+ *   ready: boolean, annotationDefaults?: object }} options  `ready`: the picture is in, so Measure can pick.
+ *   `annotationDefaults`: what the drawing tools open with (`useAnnotationSession`'s `initial`), where the view's
+ *   picture asks for another ink than every view's neon red (a board, mostly red copper).
  */
-export function useFlatTools({ toolModes, file, revision, ready }) {
+export function useFlatTools({ toolModes, file, revision, ready, annotationDefaults = CAD_ANNOTATION_DEFAULTS }) {
   // The tool in hand is never saved: a file opens in Select.
   const [toolMode, setToolMode] = useState(toolModes.defaultMode);
   const modesRef = useRef(toolModes);
@@ -49,7 +52,7 @@ export function useFlatTools({ toolModes, file, revision, ready }) {
   const measuring = toolMode === FLAT_TOOL.MEASURE;
   const selecting = toolMode === FLAT_TOOL.SELECT;
   const history = useViewerHistory();
-  const annotation = useAnnotationSession(drawingFamily, CAD_ANNOTATION_DEFAULTS, history);
+  const annotation = useAnnotationSession(drawingFamily, annotationDefaults, history);
   const measure = useMeasureSession({ fileKey: file, revision, picking: measuring && ready });
   // A measurement taken, deleted or cleared is a step of the view's one history, with the ink's.
   measure.history.current = history;
@@ -88,9 +91,12 @@ export function useFlatTools({ toolModes, file, revision, ready }) {
  * @param {((event: KeyboardEvent) => boolean) | null} [options.onViewKey]  A single key of the view's own (a
  *   view drawn flat or in 3D switching between them, or one seen from two sides turning over: its state
  *   buttons' keys, `StateButton.jsx`), tried before the tools' letters; true when it took it.
+ * @param {{ isolated: readonly string[], clear(): void } | null} [options.isolation]  What is isolated in the view
+ *   (`kit/tools/select/useIsolation.js`: a board's, a schematic's), where it isolates: Escape's last step leaves it.
  */
 export function useFlatHandover({ view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
-  capture, currentView, annotationDocument, runtime, live, copySelection = null, fit, captureFailed, packetReferences = null, onChord = null, onViewKey = null }) {
+  capture, currentView, annotationDocument, runtime, live, copySelection = null, fit, captureFailed, packetReferences = null, onChord = null, onViewKey = null,
+  isolation = null }) {
   const host = useViewerHost();
   const destination = usePromptDestination();
   const viewerElement = useContext(ViewerElementContext);
@@ -182,6 +188,8 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
     if (selectionRef.current.active) { selectionRef.current.clear(); return true; }
     return false;
   };
+  const isolationRef = useRef(isolation);
+  isolationRef.current = isolation;
   const chordRef = useRef(onChord);
   chordRef.current = onChord;
   const viewKeyRef = useRef(onViewKey);
@@ -211,14 +219,18 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
     onKey: event => (event.key === "/" && !event.shiftKey && panelControl.current ? panelControl.current.search() : shown && (viewKeyRef.current?.(event) === true
       || pressToolKey(event, { tools: toolKeys.current, selectDrawing: tool => annotationRef.current.selectTool(tool), fit }))),
     zoom: () => (shown ? zoomKeys.current : null),
-    escapeActive: Boolean(selection.active || measure.drafting || measure.selected.length || annotation.selected.length || !selecting),
+    escapeActive: Boolean(selection.active || measure.drafting || measure.selected.length || annotation.selected.length || !selecting
+      || isolation?.isolated.length),
     onEscape(event) {
       if (hasOpenPopup(viewerElement?.current)) return;
       // The drawing tools' layer spends its own Escape (its editor, the stroke in hand).
       if (annotating && event.target instanceof Element && event.target.closest("[data-cad-annotation-overlay]")) return;
       if (letGo()) return;
       // Nothing to let go of: the tool in hand goes down, back to Select.
-      if (!selecting) selectTool(FLAT_TOOL.SELECT);
+      if (!selecting) { selectTool(FLAT_TOOL.SELECT); return; }
+      // Last, as a 3D view's Escape ends (the selection, then isolation: `settings-ui.md`'s Keyboard): the view
+      // comes out of isolation, one press for all of it, as the menu's Exit isolate over empty space.
+      if (isolationRef.current?.isolated.length) isolationRef.current.clear();
     }
   });
 

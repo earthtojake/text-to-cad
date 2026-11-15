@@ -6,7 +6,7 @@ import { harnessBundle } from '../harness/bundle.mjs';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
 import { APP_THEME_COLORS } from '@cad/core/lib/appTheme.js';
-import { SCHEMATIC_COLORS, SCHEMATIC_DARK_COLORS, fitPlotTransform, layoutPlot, pageToScreen } from '@cad/core/lib/plot2d/index.js';
+import { SCHEMATIC_COLORS, SCHEMATIC_DARK_COLORS, fitBoardBounds, layoutPlot, pageToScreen, schematicFitBounds } from '@cad/core/lib/plot2d/index.js';
 
 // A schematic's one load path, in a real browser: the COMMITTED payload (`__fixtures__/schematic.plot.json`,
 // the Python suite's divider), served a sheet at a time as `GET /api/v1/documents/kicad_sch/<id>/plot?sheet=`
@@ -86,10 +86,15 @@ for (const [scheme, paper, surround, lit] of [
     const top = await pane.evaluate(element => Number.parseFloat(getComputedStyle(element.querySelector('[data-slot=cad-file-view]'))
       .getPropertyValue('--cad-tools-bottom')) || 0);
     const layout = layoutPlot({ ...SCHEMATIC, sheets: [SCHEMATIC.sheets[0]] });
-    const transform = fitPlotTransform(layout, Math.round(canvas.width), Math.round(canvas.height), { top });
+    // The fit: the divider is a corner of its A4 page, so what the sheet draws with 10 mm round it (`schematicFitBounds`),
+    // the paper past the pane's edges; the page whole, on the canvas round it, is a zoom out away (below).
+    const [left, bottom, right, upper] = schematicFitBounds(layout);
+    assert.notDeepEqual([left, bottom, right, upper], [...layout.modelBounds]);
+    const transform = fitBoardBounds([left, bottom, right, upper], Math.round(canvas.width), Math.round(canvas.height), { top });
     const at = ([x, y]) => pageToScreen(transform, x, y);
-    assert.ok(near(pixel(fitted, 2, canvas.height - 2), hex(surround), 12), `the canvas round the sheet: ${pixel(fitted, 2, canvas.height - 2)}`);
-    const [inX, inY] = at([20, 20]);
+    assert.ok(near(pixel(fitted, 2, canvas.height - 2), hex(paper), 12), `the paper, past the pane's corner: ${pixel(fitted, 2, canvas.height - 2)}`);
+    // Inside the margin round the content, where the sheet draws nothing: the paper.
+    const [inX, inY] = at([left + 3, -upper + 3]);
     assert.ok(near(pixel(fitted, inX, inY), hex(paper), 12), `the paper: ${pixel(fitted, inX, inY)}`);
     // The MID wire to the sheet Load (y = 64.77, x 101.6..127): drawn as the sheet draws it, until a press lights it.
     const [x, y] = at([120, 64.77]);
@@ -98,7 +103,15 @@ for (const [scheme, paper, surround, lit] of [
     await page.mouse.move(canvas.x + 2, canvas.y + 2);
     await page.waitForFunction(() => window.cadHarness.a.controller?.readState().selection[0]?.target.selectors[0]?.startsWith('#wire:'));
     const shown = await frame(pane, fitted);
-    assert.ok(near(pixel(shown, x, y), lit, 60), `the wire is lit where it is: ${pixel(shown, x, y)}`);
+    // The wire is a pixel or so wide at this fit and lies across two rows of pixels, each covered in part: the
+    // highlight blended with the sheet under it (the wire as drawn first is its green, 280 away).
+    const across = [-1, 0, 1].map(row => pixel(shown, x, y + row));
+    assert.ok(across.some(found => near(found, lit, 80)), `the wire is lit where it is: ${across.join(' | ')}`);
+    // Zoomed out, the page whole: the app's canvas round the sheet.
+    await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+    await page.mouse.wheel(0, 1200);
+    const whole = await frame(pane, shown);
+    assert.ok(near(pixel(whole, 2, canvas.height - 2), hex(surround), 12), `the canvas round the sheet: ${pixel(whole, 2, canvas.height - 2)}`);
     assert.deepEqual(errors, []);
   });
 }

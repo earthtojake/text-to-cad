@@ -5,7 +5,7 @@ import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
 import { planCamera } from "@cad/core/lib/drawing2d/planView.js";
 import { appThemeColors } from "@cad/core/lib/appTheme.js";
 import { screenToModel } from "@cad/core/lib/drawing2d/index.js";
-import { boardPlanProjection, planToSheet } from "@cad/core/lib/plot2d/index.js";
+import { boardPlanProjection, planToSheet, schematicFitBounds } from "@cad/core/lib/plot2d/index.js";
 import { drawSchematicOverlay } from "@cad/core/lib/schematic2d/schematicOverlay.js";
 import { buildSchematicRefToken, canonicalSheetPath, parseSchematicRefSelector, splitSchematicRefSelectors } from "@cad/core/lib/schematicRefs.js";
 import { useViewerHost } from "../../host/context.js";
@@ -52,8 +52,11 @@ import { useSchematicDocument } from "./useSchematicDocument.js";
  *
  * It follows the viewer's theme, live: KiCad's light paper and dark ink in light, a dark sheet and light
  * ink of the same hues in dark (`plot2d/theme.js`'s `schematicColors`: a switch redraws, it reads nothing
- * again), on the app's neutral grey round the sheet. No drawing sheet (KiCad's frame and title block) is
- * drawn, as a board draws none. Its panel (`kit/shell/FlatPanel.jsx`) is the Parts and the Nets
+ * again), on the app's neutral grey round the sheet, each sheet on KiCad's default drawing sheet (its frame
+ * and title block), as its schematic editor shows it. The fit (the first view, Zoom to fit, a double-click)
+ * frames the page, as KiCad's does, unless what the sheet draws is much smaller than its page: then it
+ * frames that, the drawing sheet still round it (`plot2d`'s `schematicFitBounds`: a small circuit on an A4
+ * sheet opened too small to read); a view the file was left at still wins. Its panel (`kit/shell/FlatPanel.jsx`) is the Parts and the Nets
  * (`SchematicSection.jsx`, a board's list rules, the picked part's or net's pins under them) and, for a
  * schematic of more than one sheet, the Hierarchy (`SheetsSection.jsx`, KiCad's Hierarchy
  * Navigator: a press shows that sheet, the way back up from one entered); a double-click on a sheet
@@ -137,6 +140,8 @@ function SchematicSurface({ view, data }) {
   const changeFilter = useCallback(next => { setFilter(readSchematicFilter(next)); selectTool(SCHEMATIC_TOOL.SELECT); }, [selectTool]);
   // The sheet as KiCad draws it: no page edge, in the theme (`usePlotView`'s `colorScheme`).
   const drawView = null;
+  // What the fit frames: the page, or the sheet's content where the page is mostly empty.
+  const fitBounds = useMemo(() => (plot ? schematicFitBounds(plot.layout) : null), [plot]);
 
   const indexRef = useRef(index);
   indexRef.current = index;
@@ -366,7 +371,7 @@ function SchematicSurface({ view, data }) {
   }, [annotationSurface, requestPaint, showSheet]);
 
   const plotView = usePlotView({
-    plot, restored, colorScheme, surround: surroundOf, noun: "schematic", onViewMoved: rememberView, drawView, overlay,
+    plot, restored, colorScheme, surround: surroundOf, noun: "schematic", onViewMoved: rememberView, drawView, fitBounds, overlay,
     onTap: handlers.tap, onHover: handlers.hover, onDoubleTap: handlers.doubleTap
   });
   viewRef.current = plotView;
@@ -466,7 +471,9 @@ function SchematicSurface({ view, data }) {
   const handover = useFlatHandover({
     view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
     capture, currentView, annotationDocument: plotAnnotationDocument, runtime, live: SCHEMATIC_LIVE,
-    copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed")
+    copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed"),
+    // Escape's last step, once nothing is picked and Select is in hand: out of isolation, as a STEP's.
+    isolation
   });
 
   // ---- the menu: a secondary tap on the sheet, under Select (`kit/shell/viewMenu.js`'s groups) ----

@@ -1,0 +1,66 @@
+{
+  "board": {
+    "origin": [5, 25],
+    "nets": [{ "name": "VIN", "class": "Power" }, { "name": "GND", "class": "Default" }, { "name": "OUT", "class": "Default" }],
+    "parts": [
+      { "ref": "R1", "value": "10k", "footprint": "Resistor_SMD:R_0603_1608Metric", "side": "top", "at": [15, 20], "rotation": 0, "fields": {},
+        "outline": [[13.5, 19.3], [16.5, 19.3], [16.5, 20.7], [13.5, 20.7]] }
+    ],
+    "pads": [
+      { "part": "R1", "number": "1", "name": "~", "net": "VIN", "type": "passive", "side": "top", "at": [14.175, 20],
+        "polygon": [[13.775, 19.525], [14.575, 19.525], [14.575, 20.475], [13.775, 20.475]] },
+      { "part": "R1", "number": "2", "name": "~", "net": "OUT", "type": "passive", "side": "top", "at": [15.825, 20],
+        "polygon": [[15.425, 19.525], [16.225, 19.525], [16.225, 20.475], [15.425, 20.475]] }
+    ],
+    "tracks": [
+      { "id": "7a1c0000-0000-4000-8000-000000000001", "net": "VIN", "layer": "F.Cu", "width": 0.5, "points": [[14.175, 20], [14.175, 12]] },
+      { "id": "7a1c0000-0000-4000-8000-000000000002", "net": "OUT", "layer": "F.Cu", "width": 0.25, "points": [[30, 10], [36, 10]] }
+    ],
+    "vias": [{ "id": "7a1c0000-0000-4000-8000-000000000003", "net": "GND", "at": [20, 15], "diameter": 0.6, "drill": 0.3, "layers": ["F.Cu", "B.Cu"], "type": "through" }],
+    "zones": [{ "id": "7a1c0000-0000-4000-8000-000000000004", "net": "GND", "layer": "B.Cu", "outline": [[0, 0], [40, 0], [40, 30], [0, 30]] }],
+    "holes": [],
+    "outline": [[[0, 0], [40, 0], [40, 30], [0, 30], [0, 0]]]
+  },
+  "drc": {
+    "ok": false,
+    "path": "/boards/amp.kicad_pcb",
+    "summary": "",
+    "status": "failed",
+    "reason": null,
+    "findings": [
+      { "severity": "error", "code": "clearance", "message": "Clearance violation (netclass 'Default' clearance 0.2000 mm; actual 0.0500 mm): Via [GND] on F.Cu - B.Cu; Track [VIN] on F.Cu, length 8.0000 mm", "location": "(15, -10) mm" },
+      { "severity": "error", "code": "unconnected_items", "message": "Missing connection between items: Pad 2 [OUT] of R1 on F.Cu; Track [OUT] on F.Cu, length 6.0000 mm", "location": "(10.825, -5) mm" },
+      { "severity": "info", "code": "no_schematic", "message": "no amp.kicad_sch beside the board: not checked against a schematic (its parts, footprints, values and nets)" }
+    ],
+    "measurements": {
+      "drc": [
+        { "check": "violation", "severity": "warning", "type": "track_dangling", "description": "Track has unconnected end",
+          "at": [25, -15],
+          "items": [{ "uuid": "7a1c0000-0000-4000-8000-000000000002", "description": "Track [OUT] on F.Cu, length 6.0000 mm", "pos": [25, -15],
+            "kind": "track", "net": "OUT", "ref": "#track:7a1c0000-0000-4000-8000-000000000002" }] },
+        { "check": "violation", "severity": "error", "type": "clearance",
+          "description": "Clearance violation (netclass 'Default' clearance 0.2000 mm; actual 0.0500 mm)", "at": [15, -10],
+          "items": [
+            { "uuid": "7a1c0000-0000-4000-8000-000000000003", "description": "Via [GND] on F.Cu - B.Cu", "pos": [15, -10], "kind": "via", "net": "GND",
+              "ref": "#via:7A1C0000-0000-4000-8000-000000000003" },
+            { "uuid": "7a1c0000-0000-4000-8000-000000000001", "description": "Track [VIN] on F.Cu, length 8.0000 mm", "pos": [9.175, -5], "kind": "track",
+              "net": "VIN", "ref": "#track:7a1c0000-0000-4000-8000-000000000001" },
+            { "uuid": "0000dead-0000-4000-8000-000000000000", "description": "Zone [GND] on In1.Cu", "pos": [0, 0], "kind": "zone", "net": "GND",
+              "ref": "#zone:0000dead-0000-4000-8000-000000000000" }
+          ] },
+        { "check": "violation", "severity": "error", "type": "copper_sliver", "description": "Copper sliver (B.Cu)", "at": [20, -20], "items": [],
+          "excluded": true, "comment": "accepted: the fab removes slivers" },
+        { "check": "violation", "severity": "exclusion", "type": "silk_over_copper", "description": "Silkscreen clipped by solder mask", "at": null, "items": [] },
+        { "check": "unconnected", "severity": "error", "type": "unconnected_items", "description": "Missing connection between items", "at": [10.825, -5],
+          "items": [
+            { "uuid": "f00d0000-0000-4000-8000-000000000002", "description": "Pad 2 [OUT] of R1 on F.Cu", "pos": [10.825, -5], "kind": "pad", "net": "OUT", "ref": "#R1.2" },
+            { "uuid": "7a1c0000-0000-4000-8000-000000000002", "description": "Track [OUT] on F.Cu, length 6.0000 mm", "pos": [25, -15], "kind": "track",
+              "net": "OUT", "ref": "#track:7a1c0000-0000-4000-8000-000000000002" }
+          ] },
+        { "check": "parity", "severity": "error", "type": "missing_footprint", "description": "Missing footprint C3 (100nF)", "items": [] },
+        { "check": "parity", "severity": "warning", "type": "net_conflict", "description": "Pad net (OUT) doesn't match net given by schematic (SENSE)",
+          "items": [{ "uuid": "f00d0000-0000-4000-8000-000000000002", "description": "Pad 2 [OUT] of R1 on F.Cu", "pos": null, "ref": "#R1.2" }] }
+      ]
+    }
+  }
+}

@@ -14,6 +14,7 @@ import {
   layoutPlot,
   mirrorPageX,
   pageToScreen,
+  schematicFitBounds,
   screenToPage,
   viewedLayers,
   visiblePageRect
@@ -470,6 +471,28 @@ test("a schematic's sheet is drawn on its paper alone, on KiCad's drawing sheet,
   const bordered = recorder(800, 600);
   drawPlot(bordered.ctx, layout, { transform: fitPlotTransform(layout, 800, 600), Path2D: bordered.Path2D, view: { border: true } });
   assert.equal(painted(bordered.calls).length, inks.length + 1);
+});
+
+test("a schematic's fit frames what the sheet draws where that is much smaller than its page, the drawing sheet apart; else the page", () => {
+  // The resistor, its pin, wire, junction and reference: a few millimetres of an A4 page.
+  const layout = layoutPlot(SCHEMATIC);
+  const [x0, y0, x1, y1] = layout.content;
+  assert.ok(x0 >= 98 && x1 <= 105 && y0 >= 49 && y1 <= 63, `what the sheet draws, not its frame or title block: ${layout.content}`);
+  // Framed with 10 mm round it, in model space (y up), well inside the page.
+  assert.deepEqual(schematicFitBounds(layout), [x0 - 10, -(y1 + 10), x1 + 10, -(y0 - 10)]);
+  const page = fitPlotTransform(layout, 800, 600), [left, bottom, right, top] = schematicFitBounds(layout);
+  assert.ok(Math.min(800 / (right - left), 600 / (top - bottom)) > 4 * page.scale, "the circuit comes out several times larger than on the whole page");
+  // A sheet drawn across its page fits the page, as KiCad's Zoom to Fit: under 1.25 times larger, the page whole is the better view.
+  const wide = (to) => layoutPlot({ ...SCHEMATIC, sheets: [{ ...SCHEMATIC.sheets[0], layers: [...SCHEMATIC.sheets[0].layers,
+    layer("more", "wire", "both", [{ t: "path", pts: [[30, 50], to], w: 0.1524, net: "X", id: "w2" }])] }] });
+  assert.deepEqual(schematicFitBounds(wide([270, 180])), [0, -210, 297, 0]);
+  // Four fifths of the page both ways with its margin is the line: 237.6 mm of 297 across.
+  assert.deepEqual(schematicFitBounds(wide([249, 60])), [0, -210, 297, 0], "wider than four fifths of the page: the page");
+  assert.notEqual(schematicFitBounds(wide([240, 60]))[2], 297, "under four fifths both ways: the content");
+  // A sheet that draws nothing, and a board (which has no drawing sheet): the sheet whole.
+  const empty = layoutPlot({ ...SCHEMATIC, sheets: [{ ...SCHEMATIC.sheets[0], layers: SCHEMATIC.sheets[0].layers.slice(0, 2) }] });
+  assert.equal(empty.content, null);
+  assert.equal(schematicFitBounds(empty), empty.modelBounds);
 });
 
 test("a board drawn as it is made: substrate, the finish's copper, the mask laid on with its openings cut, uncut silk off the pads, holes seen through", () => {

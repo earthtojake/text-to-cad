@@ -14,8 +14,9 @@ from pathlib import Path
 from typing import Callable, Sequence
 
 #: The viewer's selection colour on the light canvas every snapshot draws (``BOARD_OVERLAY_THEMES.light.selection``:
-#: the dark theme's light blue darkened to 4.5:1 on white) and the light fill of what it boxes.
-SELECTION, FILL = (68, 122, 176, 255), (68, 122, 176, 48)
+#: near-black, with no hue, since on a board every hue is some layer's and the blue this was read as back
+#: copper) and the light fill of what it boxes.
+SELECTION, FILL = (22, 22, 22, 255), (22, 22, 22, 48)
 #: At most this many references are lit in one still.
 MAX_REFERENCES = 256
 

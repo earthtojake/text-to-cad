@@ -265,13 +265,13 @@ the drawing tools' colour, stroke width, placement and history; Measure's chips.
 Clip's slider rows open in a popover from their tiles, taking up no tool.
 What there is to read of the file is the view's panel, docked at the left, whatever the tool
 (`kit/shell/FlatPanel.jsx`): one search, then a tab per section — an assembly's Model, a
-robot's Links, Position, an SDF's metadata; a board's Parts, Nets and Layers, a schematic's Parts,
+robot's Links, Position, an SDF's metadata; a board's Parts, Nets, Layers and Checks, a schematic's Parts,
 Nets and Hierarchy, a drawing's Layers — and, under the lists, the Selected pane: what is picked and
 what it is connected to, the same component as its Quick Edit chip's card (`kit/inspector/ItemDetail.jsx`,
 from the view's one description of a pick, `kit/inspector/inspect.js`), with the hover tip over the
 canvas, both the frame's (`kit/shell/ViewFrame.jsx`). A file's routines play from the playbar under the model. The panel
-is sized from the grip on its right edge and collapses to a pill at the canvas's top-left; on a
-phone the pill opens it as the whole view. Its tabs stay mounted, so a tree keeps its scroll and expansion;
+is sized from the grip on its right edge and collapses to a pill at the canvas's top-left; a
+phone has no panel, for now ([the view's panel](docs/settings-ui.md#the-views-panel-and-the-tool-stack)). Its tabs stay mounted, so a tree keeps its scroll and expansion;
 only what is on screen does background work. What is picked is Quick Edit's chips. Links is
 the description's link tree, with the Model's rows and search box; see
 [robot links](docs/cad-renderer.md#robot-links).
@@ -341,7 +341,9 @@ copies all of them through the host's clipboard.
 
 The native `.kicad_pcb` renderer lives in `src/renderers/board/`, using the same file service,
 selection, Measure, annotation and Quick Edit host capabilities as the other renderers.
-It consumes the core plot payload; authoring and DRC belong to KiCad and the `cad` command.
+It consumes the core plot payload; authoring and DRC belong to KiCad and the `cad` command: the
+board's **Checks** tab shows the DRC the server made of the saved board (the verdict, the findings,
+a pin where it fails), and runs none.
 The `.kicad_sch` renderer, `src/renderers/schematic/`, is the same flat plot view from the kit
 (`kit/viewport/usePlotView.js`, `kit/inspector/CircuitTree.jsx`, `kit/tools/select/SelectFilterMenu.jsx`),
 read a sheet at a time (`GET .../kicad_sch/<id>/plot?sheet=<path>`, the hierarchy's index with the
