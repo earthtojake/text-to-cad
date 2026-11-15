@@ -941,6 +941,8 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   no arc (its end where it meets the next break at a corner of the outline: an ellipse's arc between two
   rounds, a conic between a chamfer along a line and one along an arc) is laid as chords within `CHORD_MM`
   of it, as an arc's are, so none is shorter than the tolerance the breaks are fused with.
+  A countersink sunk into the unfolded side is laid in the same way: that skin's hole is the countersink's
+  rim, the flat's the hole under it (a plate countersunk from both sides has one whichever side unfolds).
   `cad.build123d.unfold(shape, thickness=, k_factor=, material=, bend_lines=False)` returns it
   (`bend_lines=True`: a Compound of `CUT` and `BEND` children, one DXF layer each, `BEND` empty for a flat
   plate), and raises `ValueError`
@@ -948,7 +950,9 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   the flat pattern in the plane (`cad._internal.sheet_plane`, numpy), each place mapped back onto the
   part for its ref. At K = 0.5 the flat area equals volume / t exactly (`neutral_area_ratio`); the flat's area
   with each strip widened to K = 0.5, over volume / t, is `flat_material_fraction`: 1 where the flat holds
-  all of the part's material.
+  all of the part's material. The volume is the sheet's as cut and bent: the part's, and what its
+  countersinks and edge breaks cut from it afterwards (under each one's face, up to the skin it faces, on
+  the face's triangulation), which the blank has and the flat's area counts.
 
 ### Families (each `{"items": [...], "count": n}`, items sorted worst first, capped at 300)
 
