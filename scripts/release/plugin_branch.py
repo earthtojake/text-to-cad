@@ -18,7 +18,9 @@ Three copies, differing in what they carry:
 - `directory` (pushed to `claude-plugin`): claude.ai's plugin directory. Claude's manifest and
   icon, `skills/`, `LICENSE` and the README: the skills alone, no MCP server and no hooks, and
   only the file types the directory accepts from an organization it has not verified
-  (`type_errors`): another file type anywhere in it fails the build. It holds every skill.
+  (`type_errors`): another file type anywhere in it fails the build. It holds every skill, each
+  without the `allowed-tools` line of its front matter, which the directory accepts only from a
+  verified organization (`without_pre_approval`).
 - `codex` (pushed to `codex-plugin`): exactly what the ZIP for OpenAI's Codex directory holds,
   built by the one function that builds the ZIP (`plugin_zip.build`), each file's git mode its
   ZIP entry's.
@@ -133,6 +135,11 @@ PACKAGE_CONFIGS = {"package.json", "package-lock.json", "npm-shrinkwrap.json", "
                    "requirements.txt", "constraints.txt", "uv.lock", "pyproject.toml", "Pipfile"}
 # What the directory's copy of Claude's manifest must not name: it carries the skills alone.
 NOT_SKILLS = ("mcpServers", "hooks", "lspServers")
+# A SKILL.md's front matter, and in it the tools a skill pre-approves, which claude.ai's directory accepts beyond
+# Read, Grep, Glob and LS only from a verified organization (LOCAL_CODE_TOOL_GRANT).
+FRONT_MATTER = re.compile(r"\A---\n.*?^---[ \t]*$", re.S | re.M)
+PRE_APPROVAL = re.compile(r"^allowed-tools:[^\n]*\n", re.M)
+PRE_APPROVAL_KEY = re.compile(r"^(?:allowed-tools|allowedTools)[ \t]*:", re.M)
 # The install script, as main's README runs it, and the uv line the copies' READMEs install by in its place: a
 # store's copy's own install line (`plugin_zip.STORE_LINES`; test_plugin_branch.py holds the two equal).
 INSTALL_SCRIPT = "curl -fsSL https://texttocad.dev/install.sh | sh"
@@ -251,6 +258,23 @@ def unlisted(tree: dict[str, tuple[str, bytes]], keys: tuple[str, ...]) -> tuple
     return {**tree, MANIFEST: (mode, text.encode("utf-8"))}, errors
 
 
+def without_pre_approval(tree: dict[str, tuple[str, bytes]]) -> tuple[dict[str, tuple[str, bytes]], list[str]]:
+    """The tree with the `allowed-tools` line taken out of each skill's front matter, and what fails the build: a
+    SKILL.md whose front matter does not hold that line exactly once."""
+    out, errors = dict(tree), []
+    for path, (mode, data) in tree.items():
+        if not re.fullmatch(r"skills/[^/]+/SKILL\.md", path):
+            continue
+        text = data.decode("utf-8")
+        head = FRONT_MATTER.match(text)
+        cut, found = PRE_APPROVAL.subn("", head[0]) if head else ("", 0)
+        if found != 1:
+            errors.append(f"{path}: its front matter holds an `allowed-tools` line {found} times, not once")
+            continue
+        out[path] = (mode, (cut + text[head.end():]).encode("utf-8"))
+    return out, errors
+
+
 def pipes_to_shell(tree: dict[str, tuple[str, bytes]]) -> list[str]:
     """Each download piped to a shell in the tree's text (`PIPE_TO_SHELL`)."""
     found = []
@@ -275,6 +299,9 @@ def type_error(path: str, data: bytes) -> str | None:
         return "a .claude-plugin or .claude/skills folder that is not the plugin's own"
     if parts[0] == ".claude-plugin" and name != "plugin.json" and suffix not in IMAGES:
         return "only plugin.json and images go in .claude-plugin/"
+    if name == "SKILL.md" and (head := FRONT_MATTER.match(data.decode("utf-8", errors="replace"))) \
+            and PRE_APPROVAL_KEY.search(head[0]):
+        return "pre-approves tools (allowed-tools), which the directory accepts only from a verified organization"
     if "egress" in parts[:-1] and suffix in (".json", ".yaml", ".yml"):
         return "JSON or YAML in an egress/ folder"
     if suffix in IMAGES:
@@ -355,6 +382,9 @@ def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str
     if store:
         tree, substituting = store_copy(tree, version)
         errors += substituting
+    if skills_only:
+        tree, cutting = without_pre_approval(tree)
+        errors += cutting
     tree, leaving = unlisted(tree, leaves_out)
     errors += leaving + (pipes_to_shell(tree) if store else [])
     return tree, errors + rule_errors(tree) + (type_errors(tree) if skills_only else []), manifest

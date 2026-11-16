@@ -69,16 +69,25 @@ class PluginTreeTests(unittest.TestCase):
         self.assertEqual(len(branch.UNLISTED), 4)
         self.assertNotIn("mcpServers", json.loads(copied))
         # Main's but for the store: each setup block installs cad by uv's line and leaves the plugin's updates to
-        # the store (`plugin_zip.store_copy`); nothing else changed, and nothing names our install script.
+        # the store (`plugin_zip.store_copy`), and no skill pre-approves a tool (the directory takes that from a
+        # verified organization alone); nothing else changed, and nothing names our install script.
         version = _manifest["version"]
         command = branch.UV_INSTALL.format(version=version)
         store = branch.plugin_zip.STORE_LINES.format(version=version)
         blocks = 0
+        codex = branch.build(REPO_ROOT, "codex")[0]
         for path in sorted(skills):
             main, copy = blobs[on_main[path][1]].decode("utf-8"), directory[path][1].decode("utf-8")
             blocks += branch.plugin_zip.OUR_LINES in main
-            self.assertEqual(copy, main.replace(branch.plugin_zip.OUR_LINES, store)
-                             .replace(branch.plugin_zip.OUR_NEWER, branch.plugin_zip.STORE_NEWER), path)
+            stored = main.replace(branch.plugin_zip.OUR_LINES, store).replace(branch.plugin_zip.OUR_NEWER,
+                                                                               branch.plugin_zip.STORE_NEWER)
+            if path.endswith("/SKILL.md"):
+                self.assertEqual(stored.count("\nallowed-tools: "), 1, path)
+                self.assertIn("\nallowed-tools: ", install[path][1].decode("utf-8"), path)
+                self.assertEqual(codex[path][1].decode("utf-8"), stored, path)
+                stored = stored.replace(branch.PRE_APPROVAL.search(stored)[0], "", 1)
+                self.assertNotIn("allowed-tools", copy, path)
+            self.assertEqual(copy, stored, path)
             self.assertNotIn("texttocad.dev/install", copy, path)
             if path.endswith("/SKILL.md"):
                 self.assertIn(store, copy, path)
@@ -114,8 +123,6 @@ class PluginTreeTests(unittest.TestCase):
                 zipped = {info.filename: (archive.read(info), info.external_attr >> 16 & 0o111 != 0)
                           for info in archive.infolist() if not info.is_dir()}
         self.assertEqual(zipped, {path: (data, mode == "100755") for path, (mode, data) in codex.items()})
-        for path in sorted(path for path in codex if path.endswith("/SKILL.md")):
-            self.assertEqual(codex[path][1], directory[path][1], path)
 
     def test_the_readme_installs_by_the_store_copies_line(self) -> None:
         # The copies' README installs cad by the line a store's copy of each skill gives.
@@ -215,7 +222,9 @@ class PluginTreeTests(unittest.TestCase):
         refused = {"skills/a/run.py": b"print(1)\n", "skills/a/run.md": b"#!/bin/sh\necho\n", ".mcp.json": b"{}",
                    ".claude-plugin/marketplace.json": b"{}", "skills/a/package.json": b"{}", "skills/a/x.json": b"{\0}",
                    "skills/a/latin.md": "café".encode("latin-1"), "skills/a/fake.png": b"not a png",
-                   "skills/a/hooks/hooks.json": b"{}"}
+                   "skills/a/hooks/hooks.json": b"{}",
+                   "skills/b/SKILL.md": b"---\nname: b\nallowedTools: [Bash]\n---\n# B\n",
+                   "skills/c/SKILL.md": b"---\nname: c\nallowed-tools: Read\n---\n# C\n"}
         errors = branch.type_errors({path: ("100644", data) for path, data in {**allowed, **refused}.items()})
         self.assertEqual([error.split(": ")[0] for error in errors], sorted(refused))
 
@@ -227,13 +236,15 @@ class PluginTreeTests(unittest.TestCase):
             git(root, "config", "user.email", "test@example.com")
             manifest = {"name": "demo", "version": "1.0.0", **{key: f"https://x.dev/{key}" for key in branch.UNLISTED},
                         "repository": "https://github.com/o/demo"}
+            # Every skill pre-approves its commands; the directory's copy takes that line out of each, exactly once.
+            head, bare = "---\nname: s\nallowed-tools: Bash(cad *)\n---\n", "---\nname: s\n---\n"
             readme = ("# demo\n\nmacOS and Linux:\n\n```bash\n" + branch.INSTALL_SCRIPT + "\n```\n\n"
                       "Windows, in PowerShell:\n\n```powershell\nirm " + branch.INSTALL_SCRIPT_WINDOWS + " | iex\n```\n\n"
                       "It installs it,\nall of it.\n\nThen ask.\n\n[s](skills/s/SKILL.md) [c](CONTRIBUTING.md)\n")
             files = {".claude-plugin/plugin.json": json.dumps(manifest, indent=2) + "\n", ".claude-plugin/icon.png": PNG,
                      ".claude-plugin/marketplace.json": "{}", ".cursor-plugin/plugin.json": "{}",
                      "gemini-extension.json": "{}", "LICENSE": "MIT\n",
-                     "skills/s/SKILL.md": "one\n", "skills/p/SKILL.md": "prints\n", "README.md": readme,
+                     "skills/s/SKILL.md": head + "one\n", "skills/p/SKILL.md": head + "prints\n", "README.md": readme,
                      "CONTRIBUTING.md": "x\n", "apps/web.js": "x\n"}
             for path, content in files.items():
                 (root / path).parent.mkdir(parents=True, exist_ok=True)
@@ -261,25 +272,26 @@ class PluginTreeTests(unittest.TestCase):
                              git(root, "show", f"{first}:README.md").split("\n\n[s]")[0])
             self.assertEqual(json.loads(branch.build(root, "latest")[0][".claude-plugin/plugin.json"][1]), manifest)
 
-            (root / "skills/s/SKILL.md").write_text("two\n", encoding="utf-8")
+            (root / "skills/s/SKILL.md").write_text(head + "two\n", encoding="utf-8")
             git(root, "commit", "-q", "-am", "two")
             second = branch.commit(root, branch.build(root, "directory")[0], first, "demo 1.0.1")
             self.assertEqual(git(root, "rev-parse", f"{second}^"), first)
-            self.assertEqual(git(root, "show", f"{second}:skills/s/SKILL.md"), "two")
+            self.assertEqual(git(root, "show", f"{second}:skills/s/SKILL.md"), bare + "two")
+            self.assertEqual(branch.build(root, "latest")[0]["skills/s/SKILL.md"][1].decode("utf-8"), head + "two\n")
 
             # A setup block's install and update lines and its newer-version line are our own text's: the store's
             # copy has its own in their place, and latest keeps ours. Each must be there once in a setup block, the
             # README's install section once, each listing link once, and no download run by a shell is left anywhere
             # in the store's copy.
             zipped = branch.plugin_zip
-            block = ("This skill was written for `cad==1.0.0`.\n\n" + zipped.OUR_LINES + "\nWhen it says so:\n\n"
+            block = (head + "This skill was written for `cad==1.0.0`.\n\n" + zipped.OUR_LINES + "\nWhen it says so:\n\n"
                      + zipped.OUR_NEWER + "\nMigrations.\n")
             (root / "skills/s/SKILL.md").write_text(block, encoding="utf-8")
             git(root, "commit", "-q", "-am", "a setup block")
             tree, errors = branch.build(root, "directory")[:2]
             self.assertEqual(errors, [])
             self.assertEqual(tree["skills/s/SKILL.md"][1].decode("utf-8"),
-                             "This skill was written for `cad==1.0.0`.\n\n" + zipped.STORE_LINES.format(version="1.0.0")
+                             bare + "This skill was written for `cad==1.0.0`.\n\n" + zipped.STORE_LINES.format(version="1.0.0")
                              + "\nWhen it says so:\n\n" + zipped.STORE_NEWER + "\nMigrations.\n")
             self.assertEqual(branch.build(root, "latest")[0]["skills/s/SKILL.md"][1].decode("utf-8"), block)
             broken = {
@@ -288,10 +300,12 @@ class PluginTreeTests(unittest.TestCase):
                 "README.md": readme.replace("Windows, in PowerShell:", "On Windows:"),
                 ".claude-plugin/plugin.json": json.dumps({**manifest, "supportUrl": None}, indent=2) + "\n",
                 "skills/p/notes.md": "Or: wget -qO- https://x.dev/i.sh | bash\n",
+                "skills/q/SKILL.md": bare + "three\n",
             }
             for path, text in broken.items():
                 with self.subTest(broken=path):
                     before = (root / path).read_text(encoding="utf-8") if (root / path).exists() else None
+                    (root / path).parent.mkdir(parents=True, exist_ok=True)
                     (root / path).write_text(text, encoding="utf-8")
                     git(root, "add", path)
                     git(root, "commit", "-q", "-m", f"break {path}")
@@ -308,7 +322,7 @@ class PluginTreeTests(unittest.TestCase):
                         (root / path).write_text(before, encoding="utf-8")
                         git(root, "add", path)
                     git(root, "commit", "-q", "-m", f"mend {path}")
-            (root / "skills/s/SKILL.md").write_text("two\n", encoding="utf-8")
+            (root / "skills/s/SKILL.md").write_text(head + "two\n", encoding="utf-8")
             git(root, "commit", "-q", "-am", "no setup block")
 
             # A file the directory refuses, in a skill, fails the build: no skill is left out to make it pass.
