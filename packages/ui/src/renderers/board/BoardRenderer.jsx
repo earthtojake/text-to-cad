@@ -20,6 +20,8 @@ import { readFileView, writeFileView } from "../kit/shell/fileView.js";
 import { exitIsolateEntry, menuEntry, menuGroups, pickGroup, referenceGroup, zoomGroup } from "../kit/shell/viewMenu.js";
 import AnnotationOverlay from "../kit/tools/annotate/AnnotationOverlay.jsx";
 import { measureSelectHandlers } from "../kit/tools/measure/measureSelection.js";
+import { filterBadge } from "../kit/tools/select/selectFilter.js";
+import { BOARD_SELECT_KINDS } from "./boardPick.js";
 import { useMeasureOverlay } from "../kit/tools/measure/useMeasureOverlay.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
 import { groupChips } from "../kit/tools/select/groupChips.js";
@@ -39,6 +41,8 @@ import {
 } from "./tools.js";
 import { useBoardDocument } from "./useBoardDocument.js";
 import { readIsolation, useIsolation } from "../kit/tools/select/useIsolation.js";
+import { useFlatBoxSelect } from "../kit/tools/select/useBoxSelectGesture.js";
+import { takeFlatBox } from "../kit/tools/select/boxTake.js";
 import { viewportZoom } from "../kit/shell/ZoomControl.jsx";
 import { useBoardView } from "./useBoardView.js";
 import { board3dAnnotationSurface } from "./board3dAnnotation.js";
@@ -59,8 +63,10 @@ const Board3dView = lazy(() => import("./Board3dView.jsx"));
  * kit (`kit/shell/FlatViewFrame.jsx`, `useFlatView.js`): Select, as KiCad's — a click picks the most
  * specific thing under the pointer that its filter (KiCad's Selection Filter, `BoardSelectFilter.jsx`)
  * ticks, on a layer the Display draws (a pad, a via, a track, a text, a dimension, a graphic, a pour
- * or a rule area by its outline, then a part), Shift adds, and a click on nothing clears; a drag
- * draws a box and names the area, on the view's working layer (`tools.js`); the rest are the 3D
+ * or a rule area by its outline, then a part), Shift adds, and a click on nothing clears; a plain
+ * drag draws a box (every viewer's, `kit/tools/select/useBoxSelectGesture.js`'s `useFlatBoxSelect`):
+ * it takes what it touches, as the filter does, or naming its area on the view's working layer when it takes
+ * nothing (`tools.js`); the rest are the 3D
  * views' drags (a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's
  * two-finger scroll does; a mouse's wheel or a pinch zooms), a double-click fits, a right-click opens
  * the view's menu (every view's, `kit/shell/viewMenu.js`: the reference, Select, Isolate and the
@@ -85,7 +91,7 @@ const Board3dView = lazy(() => import("./Board3dView.jsx"));
  * pill zooms the 3D camera (the 3D views' zoom, `viewportZoom`), and Display's menu ends with the
  * camera's projection; there is no cube (Zoom to fit frames the board). A press
  * picks what the 2D view picks where the pointer's ray meets the face it enters; a drag turns the view
- * (naming an area by a drag is the 2D view's); Flip turns the camera over, and its icon follows the camera to
+ * (a box is the 2D view's); Flip turns the camera over, and its icon follows the camera to
  * whichever side of the board it is on, turned by hand too.
  * Entering 3D opens head on, on the window the 2D view shows (the flat canvas on screen until the board in
  * 3D has drawn that same picture), and eases, on the side the 2D view showed, to the 3D views' Home tilt,
@@ -208,14 +214,12 @@ function BoardSurface({ view, data }) {
   filterRef.current = filter;
   const sideRef = useRef(display.side);
   sideRef.current = display.side;
-  // What a press may take is on a layer the Display draws; a dragged area is on its working layer.
+  // What a press or a box may take is on a layer the Display draws; an empty box's area is on its working layer.
   const drawnLayers = useMemo(() => new Set(drawView?.layers || []), [drawView]);
   const drawnRef = useRef(drawnLayers);
   drawnRef.current = drawnLayers;
   const workingRef = useRef(null);
   workingRef.current = drawView ? boardWorkingLayer(sheet, drawView.layers, display.side) : null;
-  // The box an area is being dragged over (page millimetres), painted over the board: never React state.
-  const draftRef = useRef(null);
   const placementRef = useRef(false);
   placementRef.current = boardDisplayAirwires(display);
   const isolationRef = useRef(isolation);
@@ -279,8 +283,7 @@ function BoardSurface({ view, data }) {
       drawBoardOverlay(ctx, board, { ...base, dim: true, selection: isolated, colors: { ...colors, selection: colors.hover, dim: colors.isolatedDim } });
     }
     const net = selected.some(item => item.kind === "net");
-    drawBoardOverlay(ctx, board, { ...base, hover: hovered[0] || null, selection: selected, dim: net && !isolated.length, placement: placementRef.current,
-      draft: face ? null : draftRef.current });
+    drawBoardOverlay(ctx, board, { ...base, hover: hovered[0] || null, selection: selected, dim: net && !isolated.length, placement: placementRef.current });
     // The ink over the board, in 2D and on a face in 3D alike: edged, so red ink reads on red copper.
     drawAnnotationMarks(ctx, marksInPlan(session.items, mirrorX), { transform, pixelRatio, selected: session.selected, hovered: hoveredInkRef.current,
       keyline: colors.inkKeyline });
@@ -440,25 +443,28 @@ function BoardSurface({ view, data }) {
       setHovered(hit && point ? hit.selector : "");
       setOverPick(current => (current === over ? current : over));
     };
-    // Select's drag is the box between its ends, KiCad's window selection: drawn as it goes, an area
-    // on the working layer once it lets go (Shift adds it); a drag cancelled (a second finger) is nothing.
-    const drag = (phase, { start, point, event }) => {
+    // Select's box (every view's, `useFlatBoxSelect`): on a layer the Display draws, as the filter takes it,
+    // what it touches, even in part, with the ink and the measurements it takes (`takeFlatBox`); a box
+    // that takes nothing names its area on the working layer (Shift at its release adds it).
+    const box = (drawn) => {
       const board = indexRef.current;
-      if (toolRef.current !== BOARD_TOOL.SELECT || !board) return false;
-      const from = atPoint(start, "mouse")?.page, to = atPoint(point, "mouse")?.page;
-      if (!from || !to) return false;
-      draftRef.current = phase === "start" || phase === "move"
-        ? [Math.min(from[0], to[0]), Math.min(from[1], to[1]), Math.max(from[0], to[0]), Math.max(from[1], to[1])] : null;
-      requestPaint();
-      if (phase === "end") selectionRef.current.pick({ id: board.areaSelector(from, to, workingRef.current) }, { multiSelect: Boolean(event?.shiftKey) });
-      return true;
+      if (toolRef.current !== BOARD_TOOL.SELECT || !board) return;
+      const a = atPoint({ x: drawn.local.left, y: drawn.local.top }, "mouse")?.page, b = atPoint({ x: drawn.local.right, y: drawn.local.bottom }, "mouse")?.page;
+      if (!a || !b) return;
+      const bounds = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
+      const kinds = boardPickKinds(filterRef.current);
+      const picked = kinds ? board.pickBox(bounds, { kinds, layers: drawnRef.current }).map(hit => hit.selector) : [];
+      const session = annotationRef.current;
+      const taken = takeFlatBox(drawn, { annotation: session, inks: session.items.length ? annotationSurfaceRef.current.onScreen(session.items) : [],
+        measure: measured(() => {}), selection: selectionRef.current, picked });
+      if (!taken) selectionRef.current.take([board.areaSelector([bounds[0], bounds[1]], [bounds[2], bounds[3]], workingRef.current)], { additive: drawn.additive });
     };
     // What the board in 3D picks where a ray meets it (`boardStage.js`'s `pick`: a double-click's, the kit's tap-or-drag's).
     const pickLocated = located => {
       const board = indexRef.current, kinds = boardPickKinds(filterRef.current);
       return board && kinds ? board.pick(located.page, { kinds, view: located.side, tolerance: 0.1, layers: sideLayersRef.current?.[located.side] }) : null;
     };
-    return { tap, hover, drag, pickAt, pickLocated, pickPart };
+    return { tap, hover, box, pickAt, pickLocated, pickPart };
   }, [requestPaint]);
 
   // The flat canvas lets go of its rasters while the board is up in 3D (it is covered); it keeps its view.
@@ -467,10 +473,11 @@ function BoardSurface({ view, data }) {
   const [shown3d, setShown3d] = useState(false);
   const [closing3d, setClosing3d] = useState(false);
   const boardView = useBoardView({
-    plot, restored, colorScheme, onViewMoved: rememberView, drawView, overlay, onTap: handlers.tap, onHover: handlers.hover, onDrag: handlers.drag,
+    plot, restored, colorScheme, onViewMoved: rememberView, drawView, overlay, onTap: handlers.tap, onHover: handlers.hover,
     paused: dimension === "3d" && shown3d
   });
   viewRef.current = boardView;
+  useFlatBoxSelect(boardView, { enabled: toolMode === BOARD_TOOL.SELECT && dimension === "2d" && Boolean(index), onBox: handlers.box });
   paintRef.current = dimension === "3d" ? () => view3dRef.current?.requestPaint() : boardView.requestPaint;
   const { canvasRef, containerRef, dragging, thumbnail } = boardView;
   // The view on screen fits, frames and captures: the flat canvas, or the board in 3D.
@@ -695,7 +702,7 @@ function BoardSurface({ view, data }) {
   const compact = Boolean(view.appearance?.compact);
   const chromeHidden = document.loading || failed;
   const selectMenu = <BoardSelectFilter value={filter} onChange={changeFilter} disabled={!shown} />;
-  const { strip, row } = flatViewTools(tools, { colorScheme, shown, selectMenu, t });
+  const { strip, row } = flatViewTools(tools, { colorScheme, shown, selectMenu, selectBadge: filterBadge(filter, BOARD_SELECT_KINDS), t });
   // The panel (`kit/shell/FlatPanel.jsx`): the Parts, the Nets, then the Layers with the board's view
   // settings; under them, what is picked in detail.
   // A list row's Copy Reference: what it names, with what is selected, as one reference into the file.

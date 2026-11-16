@@ -14,6 +14,9 @@ and a ``5`` with no file at the target, surfaces at once. Off Windows this is ``
 It is cadgen's own policy (``cad._internal.atomic_replace``, whose docstring has the
 measurements) kept in the engine because the engine imports nothing of cadgen outside itself.
 
+A writer that is killed leaves its staging folder behind (nothing runs its ``finally``): the next
+writer of that target removes it once it is an hour old (``_sweep``).
+
 A declared or exported file is written through ``put``: moved into place only when the file there
 does not hold its bytes already, so writing the same translation twice writes it once and an
 unchanged file keeps its bytes and its time.
@@ -24,6 +27,7 @@ from __future__ import annotations
 import contextlib
 import errno
 import os
+import re
 import shutil
 import stat
 import tempfile
@@ -59,6 +63,40 @@ def _ladder(source: Path | str, target: Path | str) -> OSError | None:
     return None
 
 
+# How long a staging folder is left alone: no writer holds one this long, so an older one is a
+# killed writer's (a snapshot job holds its folders while it draws, minutes at most).
+STALE_SECONDS = 3600.0
+
+
+def _stage(target: Path) -> Path:
+    """A staging folder for ``target``, made beside it (``staging``), the ones a killed writer of
+    that target left removed first (``_sweep``)."""
+    _sweep(target)
+    return Path(tempfile.mkdtemp(prefix=f".{target.stem}.", suffix=".tmp", dir=target.parent))
+
+
+def _sweep(target: Path) -> None:
+    """Remove the staging folders of ``target`` that a killed writer left: the folders beside it of
+    the name ``_stage`` gives, this user's own, untouched for ``STALE_SECONDS``. A link is never
+    followed, and a folder that cannot be read or removed is left: sweeping fails no write."""
+    left = re.compile(rf"\.{re.escape(target.stem)}\.[a-z0-9_]{{8}}\.tmp")
+    try:
+        with os.scandir(target.parent) as entries:
+            found = [entry for entry in entries if left.fullmatch(entry.name)]
+    except OSError:
+        return
+    for entry in found:
+        try:
+            status = entry.stat(follow_symlinks=False)
+        except OSError:
+            continue
+        if not stat.S_ISDIR(status.st_mode) or time.time() - status.st_mtime < STALE_SECONDS:
+            continue
+        if hasattr(os, "getuid") and status.st_uid != os.getuid():
+            continue
+        shutil.rmtree(entry.path, ignore_errors=True)
+
+
 @contextlib.contextmanager
 def staging(target: Path | str) -> Iterator[Path]:
     """Where to write ``target`` before it is moved over it (``replace_atomic``): a path of the same
@@ -66,7 +104,7 @@ def staging(target: Path | str) -> Iterator[Path]:
     name, mode 0700, ``*.tmp`` so a checkout ignores it). Whatever is left in it goes with the
     folder when the block ends."""
     target = Path(target)
-    folder = Path(tempfile.mkdtemp(prefix=f".{target.stem}.", suffix=".tmp", dir=target.parent))
+    folder = _stage(target)
     try:
         yield folder / target.name
     finally:
@@ -88,7 +126,7 @@ def put(target: Path | str, write: Callable[[Path], None], *, compare: bool = Tr
     target = Path(target)
     name = staged or target.name
     try:
-        stage: Path | None = Path(tempfile.mkdtemp(prefix=f".{target.stem}.", suffix=".tmp", dir=target.parent))
+        stage: Path | None = _stage(target)
     except OSError as error:
         if error.errno not in _REFUSED:
             raise

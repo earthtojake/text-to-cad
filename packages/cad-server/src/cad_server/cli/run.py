@@ -28,6 +28,18 @@ cad adds two things:
   integration declares runs through the library's module for it (``cad.kicad._command``), in that
   environment's Python, headless in private homes, its arguments, stdio and exit code the tool's.
 
+An integration whose tool is built for one Python alone (the registry's ``python``: ``import bpy``, the blender
+integration's, 3.13) has its environment made on that line (``extras.on``: a Python uv manages, where the
+engine's own is another), cad pinned in it beside any other integration the program uses, and the program run
+as any other is. A ``--python`` or a header's ``requires-python`` that leaves that line out, and a platform the
+tool has no build for, are refused in one line before anything is made (``_line``, ``extras.supported``); a
+``--python`` that admits the line is narrowed to it (``extras.narrowed``): ``--python 3.13`` and ``--python
+'>=3.12'`` make the one environment no ``--python`` makes, never another, nor one on a Python of another line.
+Such a tool's own settings folders (the registry's ``homes``: ``BLENDER_USER_CONFIG`` and the rest) are folders
+of cad's in the cache folder unless the caller set them (``_homes``): every run of cad's shares them, so what
+one run writes there (an extension it installs, preferences it saves) is there for the next, and a person's own
+preferences and add-ons never load into a run.
+
 The ``cad`` command (``cad_server._internal.proxy``) runs this verb with the installation it picks.
 """
 
@@ -261,23 +273,27 @@ def _env_file(paths: list[str]) -> None:
 @dataclass
 class Prepared:
     """What a plan's environment is made of (``prepare``): its spec, the words that build it again
-    (``given``, ``extras.tell``), the script whose header named packages and those it named, and the
-    header's ``requires-python``."""
+    (``given``, ``extras.tell``), the script whose header named packages and those it named, the
+    header's ``requires-python``, and the Python line one of its integrations is built for alone, with that
+    integration's name (``extras.python_line``; None for none)."""
 
     spec: object
     given: list[str]
     script: str | None
     declared: list[str]
     wanted: str | None
+    line: tuple[str, str] | None = None
 
 
-def prepare(plan: Plan, release: str) -> Prepared:
+def prepare(plan: Plan, release: str, engine: str | None = None) -> Prepared:
     """The environment a plan runs in, as a spec (``extras.Spec``): its integrations (``extras.integrations``:
     a header's ``cad[...]``, else the program's imports, a project's and ``--with``'s), the header's packages
     -- or, with none, the uv project's --, ``--with``'s and the files and folders it names, uv's options and
-    the Python. ``extras.Refused`` in one line for a header that does not read, cad pinned to another release
-    than ``release``, or a ``requires-python`` the engine's Python does not meet (with ``--python``, checked
-    once the environment is made: ``run``)."""
+    the Python: ``--python``'s, else the engine's own (its version ``engine``; this process's by default), else
+    the line an integration is built for alone (``extras.on``). ``extras.Refused`` in one line for a header
+    that does not read, cad pinned to another release than ``release``, a ``--python`` or a ``requires-python``
+    that leaves out the line an integration is built for (``_line``), or a ``requires-python`` the engine's
+    Python does not meet (with ``--python``, checked once the environment is made: ``run``)."""
     from cad._internal.integrations import for_command
 
     from cad_server._internal import extras, scan
@@ -357,15 +373,18 @@ def prepare(plan: Plan, release: str) -> Prepared:
         declared = for_command(plan.target)  # a command an integration declares: ``kicad-cli``
         return {declared} if declared is not None else set()
 
+    chosen = extras.integrations(header_cad=header_cad, given_cad=given_cad, project_cad=project_cad,
+                                 scanned=scanned, requirements=[*with_, *declared,
+                                                                *(project.dependencies if project else ())])
+    given = (extras.absolute(plan.python, here) if plan.python and ("/" in plan.python or os.sep in plan.python)
+             else plan.python)
+    line = _line(named, chosen, plan.python, found.get("requires-python"))
+    python, python_options = extras.on(chosen, engine or platform.python_version(), given, plan.python_options)
     spec = extras.Spec(
-        integrations=extras.integrations(header_cad=header_cad, given_cad=given_cad, project_cad=project_cad,
-                                         scanned=scanned, requirements=[*with_, *declared,
-                                                                        *(project.dependencies if project else ())]),
+        integrations=chosen,
         requirements=tuple(sorted(set(with_ + declared))), editable=tuple(dict.fromkeys(editable)),
-        files=tuple(dict.fromkeys(files)), options=tuple(options),
-        python=(extras.absolute(plan.python, here) if plan.python and ("/" in plan.python or os.sep in plan.python)
-                else plan.python),
-        python_options=tuple(plan.python_options), environment=extras.uv_settings(),
+        files=tuple(dict.fromkeys(files)), options=tuple(options), python=python,
+        python_options=python_options, environment=extras.uv_settings(),
         config=extras.uv_config(folder), lock=lock, lock_options=tuple(lock_options),
         transient=_words(plan.transient, here), folder=folder)
     # What builds a document of its run again, from any folder: its command line's options, one word each, and
@@ -377,9 +396,37 @@ def prepare(plan: Plan, release: str) -> Prepared:
              *(f"--extra={extra}" for extra in sorted(set(plan.extras)) if project is not None),
              *(dict.fromkeys(plan.lock_mode) if lock else []),
              *(project_options if lock else []),
-             *([f"--python={spec.python}"] if spec.python else []), *plan.python_options, *options,
+             *([f"--python={given}"] if given else []), *plan.python_options, *options,
              *([f"cad[{','.join(sorted(given_cad))}]"] if given_cad else []), *sorted(set(with_))]
-    return Prepared(spec, again, str(script) if declared else None, sorted(set(declared)), found.get("requires-python"))
+    return Prepared(spec, again, str(script) if declared else None, sorted(set(declared)), found.get("requires-python"),
+                    line)
+
+
+def _line(named: str, chosen: tuple[str, ...], python: str | None, wanted: str | None) -> tuple[str, str] | None:
+    """The Python line one of the integrations ``chosen`` is built for alone, and that integration's name
+    (``extras.python_line``: 3.13, blender's); None for none. ``extras.Refused`` in one line for a header's
+    ``requires-python`` (``wanted``) no release of that line meets, or a ``--python`` that names another line
+    (a version, as uv reads one, or a specifier; a path's is read once its environment is made: ``main``)."""
+    from cad_server._internal import extras
+
+    found = extras.python_line(chosen)
+    if found is None:
+        return None
+    line, name = found
+    if wanted:
+        admitted = extras.admits_line(wanted, line)
+        if admitted is None:
+            raise extras.Refused(f"{named}'s requires-python, {wanted!r}, is no version specifier")
+        if not admitted:
+            raise extras.Refused(f"{named} requires Python {wanted}, and cad's {name} integration, which it uses, "
+                                 f"runs on Python {line} alone")
+    given = (python or "").strip()
+    version = re.match(r"(?:c?python)?[-@]?(\d+\.\d+)(?:\.\d+)?(?:$|[-+])", given.lower())
+    if given and (version is not None and version[1] != line
+                  or version is None and given[0] in "<>=!~" and extras.admits_line(given, line) is False):
+        raise extras.Refused(f"{named} uses cad's {name} integration, which runs on Python {line} alone: --python "
+                             f"{given} is another; drop --python")
+    return found
 
 
 def _admitted(wanted: str | None, version: str, script: str, whose: str) -> None:
@@ -415,15 +462,48 @@ def _command(plan: Plan, python: str) -> list[str] | None:
     return [str(found), *plan.args] if found is not None else None
 
 
+def _homes(names: tuple[str, ...], environ: dict[str, str]) -> dict[str, str]:
+    """The private settings folders of the tools of the integrations ``names`` (the registry's ``homes``:
+    Blender's ``BLENDER_USER_CONFIG`` and the rest), by the variable that names each, but one ``environ`` (the
+    caller's) sets already: folders in the cache folder (``homes/<integration>``), else in the system's
+    temporary folder where the cache cannot be written (an agent's sandbox). A run's program, and the worker
+    that builds its models, start with them."""
+    import tempfile
+
+    from cad.engine.places import cache_dir
+    from cad.registry import INTEGRATIONS as REGISTERED
+
+    found: dict[str, str] = {}
+    for name in names:
+        variables = [variable for variable in (REGISTERED[name].homes if name in REGISTERED else ())
+                     if not environ.get(variable)]
+        prefix = f"{name.upper()}_"
+        for root in (cache_dir() / "homes" / name, Path(tempfile.gettempdir()) / f"cad-homes-{name}"):
+            folders = {variable: root / variable.removeprefix(prefix).lower() for variable in variables}
+            try:
+                for folder in folders.values():
+                    folder.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                continue
+            found.update({variable: str(folder) for variable, folder in folders.items()})
+            break
+    return found
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if args[:1] in (["-h"], ["--help"]):
+        from cad.registry import INTEGRATIONS
+
+        lines = "".join(f" A script that imports {integration.modules[0]} gets the {name} integration, on Python "
+                        f"{integration.python}, the one its tool is built for."
+                        for name, integration in INTEGRATIONS.items() if integration.python and integration.modules)
         sys.stdout.write(USAGE + "\nRun a program as `uv run` does, with cad pinned at this device's release: a "
                                  "script's `# /// script` header names its own packages, and cad's integrations "
                                  "are worked out from its imports (a header naming `cad[...]` decides them); a "
                                  "command an integration declares (`kicad-cli`) gets that integration and runs "
-                                 "headless. The environment is made once, by the device's engine, and used again. "
-                                 "uv run's options are taken as uv takes them.\n")
+                                 f"headless.{lines} The environment is made once, by the device's engine, and "
+                                 "used again. uv run's options are taken as uv takes them.\n")
         return 0
     from cad_server._internal import base, extras
 
@@ -449,7 +529,7 @@ def main(argv: list[str] | None = None) -> int:
             os.chdir(plan.directory)
         _env_file(plan.env_file)
         installation = base.Installation.here()
-        prepared = prepare(plan, installation.release)
+        prepared = prepare(plan, installation.release, installation.python or platform.python_version())
         spec = prepared.spec
         script = Path(plan.target).name if plan.kind == "script" else "the program"
         assert isinstance(spec, extras.Spec)
@@ -462,8 +542,15 @@ def main(argv: list[str] | None = None) -> int:
         assert env is not None  # made, or refused
         if spec.python is not None:
             version = str(extras.marker(env).get("python_version") or "")
+            line = prepared.line
+            whose = (f"the environment's (--python {spec.python})" if plan.python or line is None
+                     else f"cad's {line[1]} integration's")
             if version:
-                _admitted(prepared.wanted, version, script, f"the environment's (--python {spec.python})")
+                _admitted(prepared.wanted, version, script, whose)
+                if line is not None and not extras.admits(f"=={line[0]}.*", version):
+                    raise base.Refused(f"{script} uses cad's {line[1]} integration, which runs on Python {line[0]} "
+                                       f"alone, and {whose} is {version}")
+        os.environ.update(_homes(spec.integrations, dict(os.environ)))
     except (base.Refused, OSError) as refused:
         said(str(refused) if isinstance(refused, base.Refused) else f"{refused.strerror or refused}")
         return 1

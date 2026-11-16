@@ -121,6 +121,18 @@ function buildGeometryBvh(geometry, maxTriangles) {
   }
 }
 
+/**
+ * Builds `geometry`'s BVH now, on this thread, where it has none yet (none built, none skipped): for
+ * a caller about to cast thousands of rays at once (a box select), for whom waiting for the idle build
+ * would mean testing every triangle with every ray. A build queued for it finds it built and drops
+ * its own. Whether the geometry has one now.
+ */
+export function ensureGeometryBvh(geometry, maxTriangles = DEFAULT_MAX_BVH_TRIANGLES) {
+  if (!geometry) return false;
+  buildGeometryBvh(geometry, maxTriangles);
+  return Boolean(geometry.boundsTree);
+}
+
 function captureGeometry(geometry) {
   const position = geometry.attributes.position;
   const index = geometry.index;

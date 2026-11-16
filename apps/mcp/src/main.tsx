@@ -5,6 +5,7 @@ import { version } from '../package.json';
 import Connection from './Connection';
 import Notice, { noticeTranslator } from './Notice';
 import { createBridge, type HostContext, type ToolResult } from './host/bridge';
+import { appCapability } from './host/capability';
 import { createChannel, declaresServerTools } from './host/channel';
 import { readPresentation } from './host/presentation';
 import { createServer, PROTOCOL, readLaunch, toolText, type Launch } from './host/server';
@@ -77,12 +78,14 @@ async function start() {
       root.render(<Notice title={say('cad.updated.title')} message={say('cad.updated.message')} t={say} details={`view ${PROTOCOL} · launch ${launch.protocol}${launch.version ? ` (${launch.version})` : ''}`} />);
       return;
     }
-    const token = result._meta?.['dev.texttocad/httpToken'];
-    if (typeof token !== 'string' || !token) throw new Error(say('cad.noCapability'));
     // Whether the host carries this page's calls to CAD's server: what it declared, until a call says
     // (`host/channel.ts`). A host that refuses them all gets the CAD Viewer's page instead.
     const channel = createChannel(declaresServerTools(bridge.hostCapabilities));
-    const server = createServer(bridge, token, channel);
+    // The page's capability, from the launch or the tool that launched it (`host/capability.ts`). With none,
+    // nothing it asks CAD's server can be answered: the card says it cannot connect, and links the page.
+    const token = appCapability(result, bridge.hostContext);
+    if (!token) channel.refusedCapability('capability');
+    const server = createServer(bridge, token ?? '', channel);
     const reporting = createTunnelClient(createTunnelFetch(server), { pollIntervalMs: 0 });
     sendCrash = crash => reporting.reportActivity({ crash });
     waiting.splice(0).forEach(sendCrash);

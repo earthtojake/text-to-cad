@@ -336,8 +336,7 @@ class DrainTest(unittest.TestCase):
         from cad_server.mcp.http import PAGE_TOOLS, Session, Sessions
 
         sessions = Sessions(engine=None)
-        server = SimpleNamespace(operations=SimpleNamespace(keeps_alive=lambda: False),
-                                 sidebar_views=SimpleNamespace(close=lambda: None))
+        server = SimpleNamespace(sidebar_views=SimpleNamespace(close=lambda: None))
         sessions.sessions["held"] = Session(server=server, protocol="2025-11-25", client="some-host")  # type: ignore[arg-type]
         self.assertFalse(sessions.working(), "an open session with nothing in flight")
         sessions.sessions["held"].calls = 1  # an agent's cad_show, running

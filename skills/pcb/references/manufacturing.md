@@ -17,7 +17,7 @@ KiCad exports the same saved source, with `cad kicad_pcb export BOARD --to KIND 
 | `drill` | Excellon drill files, mm |
 | `pos` | `<board>-pos.csv`: placement of both sides, mm, from KiCad's page origin, every placed part (DNP ones too): KiCad's columns `Ref`, `Val`, `Package`, `PosX`, `PosY`, `Rot`, `Side` |
 | `bom` | `<board>-bom.csv` from the schematic beside the board (`<board>.kicad_sch`), grouped by value and footprint, DNP parts left out: `Reference` (every designator, no ranges), `Value`, `Footprint`, `Quantity`, then `MPN` and `LCSC` where any part carries one (read from fields named `MPN`, `Manufacturer_Part_Number`, `LCSC`, `LCSC Part`, ...) |
-| `step`, `glb` | `<board>.step` / `<board>.glb`: the board and its parts, each part's STEP model read where the board view reads it (the board's folder, KiCad's installed 3D library, `CAD_KICAD_3DMODELS`; a `.wrl` name as the STEP beside it); parts without a model are named |
+| `step`, `glb` | `<board>.step` / `<board>.glb`: the board and its parts, each part's STEP model read where the board view reads it (the board's folder, KiCad's installed 3D library, `CAD_KICAD_3DMODELS`; a `.wrl` name as the STEP beside it); parts without a model are named. The GLB holds the board's copper, mask and silkscreen too, each KiCad's own mesh named by its layer (`<board>_copper`, `_pad`, `_via`, `_silkscreen`, `_soldermask`, `_PCB`), so it is the larger and slower of the two (tens of MB on a four-layer board) |
 | `odb` | `<board>-odb.zip`: ODB++, mm |
 | `ipc2581` | `<board>-ipc2581.xml`: IPC-2581 rev C, mm |
 | `pdf` | `<board>-front.pdf` and `<board>-back.pdf` (mirrored): copper, silkscreen and fab layers over the outline |

@@ -1,9 +1,11 @@
 """The ``cad`` console script -- a subcommand dispatcher over the distribution's CLIs.
 
-Two kinds of command. A document type's: ``cad <document_type> <operation> <file>``, one per type in
+Three kinds of command. A document type's: ``cad <document_type> <operation> <file>``, one per type in
 the registry (``cad.registry``), each its own module, ``cad_server.cli.<type>``
-(``cad_server.cli.document_types``: ``cad xbf export``, ``cad stl snapshot``, ``cad urdf validate``). And the
-commands that are no document's: the engine's process control (``serve``, ``status``, ``stop``,
+(``cad_server.cli.document_types``: ``cad xbf export``, ``cad stl snapshot``, ``cad urdf validate``). An
+integration's, for a file of its tool's own that is no document type, which cad checks and never shows:
+``cad <integration> <operation> <file>`` (``cad_server.cli.integrations``: ``cad mujoco check``), only for
+the integrations the registry gives operations. And the commands that are no file's: the engine's process control (``serve``, ``status``, ``stop``,
 ``delete``, ``server``), ``run``, and the installation's (``setup``, ``update``, ``uninstall``,
 ``doctor``, ``plugin``, ``viewer``, ``telemetry``).
 
@@ -24,7 +26,7 @@ import importlib
 import os
 import sys
 
-from cad.registry import DOCUMENT_TYPES
+from cad.registry import DOCUMENT_TYPES, INTEGRATIONS
 
 # name -> (module, "one-line help"). The module must expose ``main(argv)`` returning an
 # exit code. Keep this list grouped as below and the help text under ~60 chars so
@@ -63,10 +65,17 @@ _COMMANDS: dict[str, tuple[str, str]] = {
 # Each document type's command, by its id: ``cad <type> <operation>`` (``cad_server.cli.document_types``).
 TYPE_COMMANDS: dict[str, str] = {document_type: f"cad_server.cli.{document_type}" for document_type in DOCUMENT_TYPES}
 
-_USAGE_HEAD = "usage: cad <document_type> <operation> FILE [args...] | cad <command> [args...]\n\n"
+# Each integration's command, by its name, for those with operations of their own on their tool's files:
+# ``cad <integration> <operation>`` (``cad_server.cli.integrations``). A name is a type's or an integration's,
+# never both (``tests/python/packages/cad/test_registry.py``).
+INTEGRATION_COMMANDS: dict[str, str] = {name: f"cad_server.cli.{name}" for name, entry in INTEGRATIONS.items()
+                                        if entry.operations}
+
+_USAGE_HEAD = ("usage: cad <document_type> <operation> FILE [args...] | cad <integration> <operation> FILE [args...]\n"
+               "       | cad <command> [args...]\n\n")
 _USAGE_TAIL = (
-    "\nRun 'cad <document_type> --help' for a type's operations, 'cad <document_type> <operation> --help'\n"
-    "or 'cad <command> --help' for its options.\n"
+    "\nRun 'cad <document_type> --help' for a type's operations ('cad <integration> --help' for an\n"
+    "integration's), 'cad <document_type> <operation> --help' or 'cad <command> --help' for its options.\n"
     "Each command is also available as 'python -m <module>'.\n"
 )
 
@@ -88,8 +97,18 @@ def _type_lines() -> str:
                      for name, entry in DOCUMENT_TYPES.items()) + "\n"
 
 
+def _integration_lines() -> str:
+    """The integrations with operations of their own, each with them and the files they take (``cad.registry``)."""
+    width = max(len(name) for name in INTEGRATION_COMMANDS)
+    return "\n".join(f"  {name.ljust(width)}  {', '.join(INTEGRATIONS[name].operation_names)}  "
+                     f"{INTEGRATIONS[name].operations[0].summary.split(':')[0]}: {', '.join(INTEGRATIONS[name].files)}"
+                     for name in INTEGRATION_COMMANDS) + "\n"
+
+
 def _usage() -> str:
-    return (_USAGE_HEAD + "document types (cad <type> <operation> FILE):\n" + _type_lines()
+    return (_USAGE_HEAD + "document types, the files cad shows (cad <type> <operation> FILE):\n" + _type_lines()
+            + "\nintegrations, for a tool's own file cad checks and does not show (cad <integration> <operation> "
+              "FILE):\n" + _integration_lines()
             + "\ncommands:\n" + _command_lines(_COMMANDS) + _USAGE_TAIL)
 
 
@@ -102,6 +121,12 @@ def resolve(argv: list[str]) -> tuple[str, list[str]] | None:
         if len(argv) > 1 and (argv[0], argv[1]) in OPERATIONS:
             return f"{argv[0]} {argv[1]}", argv[2:]
         return None
+    if argv[:1] and argv[0] in INTEGRATION_COMMANDS:
+        from cad_server.cli.integrations import OPERATIONS as INTEGRATION_OPERATIONS
+
+        if len(argv) > 1 and (argv[0], argv[1]) in INTEGRATION_OPERATIONS:
+            return f"{argv[0]} {argv[1]}", argv[2:]
+        return None
     if " ".join(argv[:2]) in _COMMANDS:  # a two-word command (``update auto``) before its first word
         return " ".join(argv[:2]), argv[2:]
     if argv[:1] and argv[0] in _COMMANDS:
@@ -111,10 +136,14 @@ def resolve(argv: list[str]) -> tuple[str, list[str]] | None:
 
 def build_parser_for(name: str):
     """The parser a resolved command (``resolve``) parses with, or None for one that builds its own."""
-    if name not in _COMMANDS:  # a document type's operation (``xbf export``)
+    if name not in _COMMANDS:  # a document type's operation (``xbf export``), or an integration's (``mujoco check``)
+        document_type, operation = name.split(" ", 1)
+        if document_type in INTEGRATION_COMMANDS:
+            from cad_server.cli.integrations import build_parser as integration_parser
+
+            return integration_parser(document_type, operation)
         from cad_server.cli.document_types import build_parser
 
-        document_type, operation = name.split(" ", 1)
         return build_parser(document_type, operation)
     builder = getattr(importlib.import_module(_COMMANDS[name][0]), "build_parser", None)
     return builder() if builder is not None else None
@@ -217,6 +246,8 @@ def _main(argv: list[str]) -> int:
         command, rest = " ".join(argv[:2]), argv[2:]
     if command in TYPE_COMMANDS:
         entry: tuple[str, str] | None = (TYPE_COMMANDS[command], "")
+    elif command in INTEGRATION_COMMANDS:
+        entry = (INTEGRATION_COMMANDS[command], "")
     else:
         entry = _COMMANDS.get(command)
     if entry is None:
@@ -261,7 +292,7 @@ def _unknown(word: str, rest: list[str]) -> int:
     from cad_server._internal.cli_errors import Failure, wants_json, write
     from cad_server._internal.cli_parser import suggest
 
-    close = suggest(word, [*(name.split()[0] for name in _COMMANDS), *TYPE_COMMANDS])
+    close = suggest(word, [*(name.split()[0] for name in _COMMANDS), *TYPE_COMMANDS, *INTEGRATION_COMMANDS])
     words = (f"unknown command {word!r}" + (f" (did you mean {close!r}?)" if close else "")
              + "; 'cad --help' lists the commands")
     return write(Failure(words, "usage"), prog="cad", as_json=wants_json(rest))
@@ -308,7 +339,7 @@ def _asks_help(command: str, rest: list[str]) -> bool:
 
     if command == "run":
         return rest[:1] in (["-h"], ["--help"])
-    if command in TYPE_COMMANDS and rest[:1] == ["help"]:
+    if (command in TYPE_COMMANDS or command in INTEGRATION_COMMANDS) and rest[:1] == ["help"]:
         return True
     return bool({"-h", "--help"} & set(options(rest)))
 

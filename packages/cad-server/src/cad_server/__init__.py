@@ -4,8 +4,9 @@ processes run in, the installations and the one that is current, and telemetry.
 
 It imports the library's (``cad``) kernel-free modules and never the CAD kernel: the kernel lives in the
 environment models run in (``_internal/base.py``). Importing it installs what the server attaches to the
-library: the engine's verbs a server process runs are counted (``_internal/engine_telemetry.py``); a
-model's own process, where the server is not installed, counts nothing. Each is attached as the engine's
+library: the engine's verbs a server process runs are counted (``_internal/engine_telemetry.py``), and a
+model's build by the daemon that answers it; a model's own process, where the server is not installed,
+counts nothing. Each is attached as the engine's
 module is imported, never sooner (``_internal/attach.py``): importing the server imports no engine.
 """
 

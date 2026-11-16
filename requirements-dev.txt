@@ -6,11 +6,17 @@
 # last published release from PyPI instead of the checkout -- this file is the development door.
 # The library with its build123d extra: this environment runs models itself, so it is its own base
 # environment and the server makes none (packages/cad-server/src/cad_server/_internal/base.py). And with
-# its trimesh extra, so `cad <type> check --process` measures in this environment and the server makes no
-# environment of cad[trimesh] for it (packages/cad-server/src/cad_server/_internal/integration_env.py). The
-# netgen and calculix extras are not here: a stress study (`cad <type> solve`) is the fea job's, which installs
-# them (scripts/test/test-fea.sh); without them, here, the command makes cad[build123d,calculix,netgen].
---editable ./packages/cad[build123d,trimesh]
+# its trimesh extra, so `cad <type> dfm` measures a mesh in this environment and the server makes no
+# environment of cad[trimesh] for it (packages/cad-server/src/cad_server/_internal/integration_env.py); and with
+# its mujoco extra (mujoco-core and mujoco-studio, about 20 MB), so `cad mujoco check` compiles here
+# the same way and `cad run mujoco-studio` serves Studio's web viewer from here; and with its coacd extra (one
+# wheel, about 3 MB), so a MuJoCo function's `decompose` cuts a part into convex hulls here.
+# The netgen and calculix extras are not here: a stress study (`cad <type> solve`) is the fea job's, which
+# installs them (scripts/test/test-fea.sh); without them, here, the command makes cad[build123d,calculix,netgen].
+# Nor is the blender extra: bpy has builds for Python 3.13 alone, and `cad run` makes the environment of a script
+# that imports it on that Python (scripts/test/test-blender.sh). This file installs on Python 3.13 too, the
+# packages' floor, for the library's suite there (scripts/test/test-floor.sh).
+--editable ./packages/cad[build123d,trimesh,mujoco,coacd]
 --editable ./packages/cad-server
 --editable ./packages/cad-mcp
 

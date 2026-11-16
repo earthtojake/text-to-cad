@@ -52,6 +52,12 @@ class Commands(unittest.TestCase):
             self.assertIn("--subst-models", command)
             self.assertEqual(command[command.index("-o") + 1], str(self.out / f"uart.{to}"))
 
+    def test_a_boards_glb_carries_its_layers_and_its_step_does_not(self) -> None:
+        layers = ["--include-tracks", "--include-pads", "--include-zones", "--include-inner-copper",
+                  "--include-silkscreen", "--include-soldermask"]
+        self.assertEqual([flag for flag in self.command("glb") if flag.startswith("--include")], layers)
+        self.assertEqual([flag for flag in self.command("step") if flag.startswith("--include")], [])
+
     def test_odb_ipc2581_and_the_outline_are_millimetres(self) -> None:
         self.assertEqual(self.command("odb")[4:-1], ["--units", "mm", "--compression", "zip",
                                                      "-o", str(self.out / "uart-odb.zip")])

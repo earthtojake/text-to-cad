@@ -1,9 +1,10 @@
 """Git holds code, never CAD or mesh assets.
 
-A STEP, a mesh or a drawing is made on the spot -- by a test into a temporary folder, by a sample on
-request into its project's gitignored output folder -- and never committed: every installer clones the
-whole repository, so a heavy binary costs every user on every install, and a generated file only drifts
-from the code that makes it. The few that stay are listed below, each with the most bytes it may grow to
+A STEP, a mesh, a drawing or a Blender scene (a `.blend` and its `.blend1` backup, made by the bpy script
+that renders it) is made on the spot -- by a test into a temporary folder, by a sample on request into its
+project's gitignored output folder -- and never committed: every installer clones the whole repository, so
+a heavy binary costs every user on every install, and a generated file only drifts from the code that
+makes it. The few that stay are listed below, each with the most bytes it may grow to
 and the reason no test or script can make it on the spot.
 """
 
@@ -16,7 +17,8 @@ from collections.abc import Iterable, Mapping
 
 from tests.python.support.paths import REPO_ROOT
 
-CAD_ASSET = re.compile(r"\.(?:step|stp|stl|glb|gltf|3mf|xbf|obj|ply|brep|iges|igs|dae|fbx|usdz?|dxf)$", re.IGNORECASE)
+CAD_ASSET = re.compile(r"\.(?:step|stp|stl|glb|gltf|3mf|xbf|obj|ply|brep|iges|igs|dae|fbx|usdz?|dxf|blend1?)$",
+                       re.IGNORECASE)
 
 KIB = 1024
 TINY = 64 * KIB

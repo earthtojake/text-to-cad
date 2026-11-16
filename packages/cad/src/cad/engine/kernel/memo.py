@@ -425,6 +425,11 @@ def install() -> bool:
             elif not getattr(static, "__kernel_memo__", False):
                 setattr(cls, attr, _query(f"{cls_name}.{attr}", static))
         kernel_history.install()
+        # What each connect_to does to the part it moves, for the harvest's check that a child stands where it
+        # was built at its joint's zero (``mechanism.watch``): installed, as the memo is, before a body runs.
+        from cad.engine import mechanism
+
+        mechanism.watch()
         # build123d's booleans and ``clean`` unify through the class its topology module imported:
         # the one-place class (``_one_place``), as a model's own unify is.
         from build123d.topology import shape_core
@@ -789,6 +794,9 @@ def uninstall() -> bool:
         if getattr(unify, "__kernel_one_place__", False):
             shape_core.ShapeUpgrade_UnifySameDomain = unify.__mro__[1]
         kernel_history.uninstall()
+        from cad.engine import mechanism
+
+        mechanism.unwatch()
         _installed = False
         return True
 
@@ -3796,9 +3804,62 @@ def _identity_key() -> bytes:
 _IDENTITY_KEY = _identity_key()
 
 
+# The fields the engine keeps on a shape itself (the ``xbf_`` ones the key names below, each as it must).
+_ENGINE_FIELDS = ("xbf_", "_cadgen_", "_kernel_")
+
+
+@functools.cache
+def _own_fields(kind: type) -> frozenset[str]:
+    """The fields build123d and its tree keep on a shape of class ``kind``: every name a function of
+    one of their classes among its bases stores on an object (``self.length = ...``, a property's
+    setter, a private name as it is mangled), read once a class from their bytecode, a function this
+    module wraps (``install``) through its wrapper. What a shape
+    holds beside them is its model's own (``_fields_key``). A model's subclass of a build123d class
+    is the model's: what its code stores is not among these."""
+    import dis
+    import types
+
+    found: set[str] = set()
+
+    def stored(code: types.CodeType) -> None:
+        found.update(step.argval for step in dis.get_instructions(code) if step.opname == "STORE_ATTR")
+        for held in code.co_consts:
+            if isinstance(held, types.CodeType):
+                stored(held)
+
+    for base in kind.__mro__:
+        if not (base.__module__ or "").startswith(("build123d", "anytree")):
+            continue
+        for value in vars(base).values():
+            for function in (value, getattr(value, "__func__", None), getattr(value, "fget", None),
+                             getattr(value, "fset", None), getattr(value, "fdel", None)):
+                seen = 0
+                while function is not None and seen < 8:  # through this module's own wrappers of it, to the class's
+                    code = getattr(function, "__code__", None)
+                    if isinstance(code, types.CodeType):
+                        stored(code)
+                    function, seen = getattr(function, "__wrapped__", None), seen + 1
+    return frozenset(found)
+
+
+def _fields_key(shape: Any, state: _Run) -> tuple:
+    """A shape's own fields as a key part: each attribute its model set on it that build123d and the
+    engine do not keep there (``part._stood = location``), by name and value. A hit hands back the
+    result the first run made, whose fields are that run's (the copy an operation makes of a shape
+    carries every field): an attribute outside the key would come back as it was before the code
+    that sets it changed, or not at all. One whose value is no parameter (``_normalize``) leaves the
+    call unkeyed, which its build says. Nearly every shape has none: one pass over its fields."""
+    own = _own_fields(type(shape))
+    extra = [name for name in shape.__dict__ if name not in own and not name.startswith(_ENGINE_FIELDS)]
+    if not extra:
+        return ()
+    held = shape.__dict__
+    return tuple((name, _normalize(held[name], state)) for name in sorted(extra))
+
+
 def _shape_key(shape: Any, state: _Run) -> int:
     """The interned key of a shape input: its placed geometry, its attributes,
-    its children."""
+    its children, and the fields its model set on it (``_fields_key``)."""
     placed = _placed_key(shape, state)
     state_dict = shape.__dict__
     label = state_dict.get("label")
@@ -3822,9 +3883,20 @@ def _shape_key(shape: Any, state: _Run) -> int:
         _normalize(state_dict.get(CONFIGURATIONS) or {}, state),
         _normalize(state_dict.get(COUPLINGS) or {}, state),
         _normalize(state_dict.get(ANIMATIONS) or {}, state),
+        # What a part declares for a robot description (``declarations``): a hit hands back the attributes
+        # the first run's result held, so they are its input, as its material is.
+        _normalize(state_dict.get("_frames") or {}, state),
+        state_dict.get("_body"),
+        _normalize(state_dict.get("_drives") or {}, state),
+        _normalize(state_dict.get("_mass"), state),
+        _normalize(state_dict.get("_points") or {}, state),
+        bool(state_dict.get("_free")),
+        state_dict.get("_link"),
     )
     children = tuple(_shape_key(child, state) for child in state_dict.get("_NodeMixin__children") or ())
-    return _intern((placed, attrs, children))
+    # A compound's constructor runs on its children as given (``_build_key``): their fields are theirs still.
+    fields = () if getattr(_LOCAL, "bare", False) else _fields_key(shape, state)
+    return _intern((placed, attrs, children, fields) if fields else (placed, attrs, children))
 
 
 def _placed_key(shape: Any, state: _Run) -> tuple:

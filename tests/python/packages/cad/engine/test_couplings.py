@@ -5,7 +5,7 @@ does not relate refused; its range derived from its joints' limits; kept in the 
 mechanism as AP242's couplers (``:6 "couplings"``: gear and rack-and-pinion couplers, a screw pair)
 and read back identically; served in the structure's ``kinematics.couplings``; forward kinematics
 at a coupling's value the joints set by hand, in the sampler, a snapshot's ``--pose`` and a
-``posed`` model; a door's
+``posed`` model; two slides coupled through a pinion that holds no part, a link of its own; a door's
 turn and travel from one screw pair; mechanism states and configuration sequences naming a coupling
 resolved to pair values at document time; a warm edit patched to the cold build's bytes, the
 elements' names unchanged."""
@@ -196,6 +196,32 @@ def _couplers(loaded: document.Loaded) -> dict[str, list[tuple]]:
     return found
 
 
+# A parallel gripper: two fingers on slides out of the palm, one pinion between their racks that the CAD
+# does not draw -- a reference axis on the palm, connected to nothing -- coupling them.
+GRIPPER = """
+import build123d as bd
+from cad.build123d import mechanism_state, rack_and_pinion_pair
+from cad.engine import xbf
+
+
+@xbf("XBF/gripper.xbf")
+def gripper():
+    palm = bd.Box(80, 20, 20)
+    palm.label = "palm"
+    fingers = []
+    for side, x, out in (("left", -30, -1), ("right", 30, 1)):
+        finger = bd.Pos(x, 0, 25) * bd.Box(8, 16, 30)
+        finger.label = side
+        slide = bd.LinearJoint(side, palm, axis=bd.Axis((x, 0, 10), (out, 0, 0)), linear_range=(0, 30))
+        bd.RigidJoint(side, finger, bd.Location((x, 0, 10)))
+        slide.connect_to(finger.joints[side], position=0)
+        fingers.append(finger)
+    bd.RevoluteJoint("pinion", palm, axis=bd.Axis((0, 0, 10), (0, 1, 0)), angular_range=(-360, 360))
+    gripper = bd.Compound(children=[palm, *fingers], label="gripper")
+    rack_and_pinion_pair(gripper, "grip", pinion=1, left=0.15, right=0.3)
+    return mechanism_state(gripper, "open", grip=100)
+"""
+
 # The finger posed by a model of its own: a posed file is a function, never an export's option.
 POSED = """
 from cad.build123d import posed
@@ -337,6 +363,30 @@ class FingerTest(_Folder):
         self.build("index_finger", BARE)
         np.testing.assert_allclose(coupled, _vertices(document.Loaded(path), "distal", BY_HAND), atol=1e-6)
         self.assertGreater(np.abs(coupled - _vertices(document.Loaded(path), "distal")).max(), 10.0)
+
+    def test_a_posed_copy_s_states_and_sequences_name_the_poses_they_named(self) -> None:
+        # A coupling's value counts from as built and a posed copy is built at its pose: what a state, a
+        # sweep or a function of time gives the coupling is said again from there, so each is the pose it was.
+        self.finger(extra='mechanism_state(finger, "half", index_curl=0.5); mechanism_state(finger, "full", '
+                          'index_curl=1); configuration_sequence(finger, "ease", lambda t: {"index_curl": t}, '
+                          'duration=1.0)')
+        straight = document.Loaded(self.folder / self.XBF).mechanism
+        report = self.build("posed_finger", POSED.format(pose='{"index_curl": 0.6}'))
+        self.assertEqual((report.get("kinematics") or {}).get("warnings") or [], [])
+        curled = document.Loaded(self.folder / "XBF/posed_finger.xbf").mechanism
+        self.assertEqual(curled.warnings, [])
+        self.assertEqual({label: round(value[0], 9) for label, value in curled.as_built.items()}, BY_HAND)
+        self.assertEqual(sorted(curled.configurations), ["full", "half"])
+        self.assertEqual(sorted(curled.motions), ["ease", "grip"])
+        for name, values in straight.configurations.items():
+            for label, value in values.items():
+                self.assertAlmostEqual(curled.configurations[name][label][0], value[0], places=9, msg=(name, label))
+        for name, motion in straight.motions.items():
+            self.assertEqual(len(curled.motions[name].keys), len(motion.keys), name)
+            for (t, state, values), (t2, state2, values2) in zip(motion.keys, curled.motions[name].keys):
+                self.assertEqual((t, state, sorted(values)), (t2, state2, sorted(values2)), name)
+                for label, value in values.items():
+                    self.assertAlmostEqual(values2[label][0], value[0], places=9, msg=(name, t, label))
 
     def test_what_a_coupling_pose_names_wrong_is_refused_by_name_before_anything_is_written(self) -> None:
         self.finger()
@@ -516,6 +566,33 @@ class HarvestTest(_Folder):
                                                          'gear_pair(car, "left", door_left=1, door_right=1)'), ok=False)
         self.assertIn("gear pair 'left' of hypercar drives the cylindrical joint 'door_left': a gear pair turns "
                       "revolute joints", report["error"])
+
+    def test_a_pinion_that_holds_no_part_couples_two_slides_as_a_link_of_its_own(self) -> None:
+        report = self.build("gripper", GRIPPER)
+        self.assertNotIn("kinematics", report, "no warning")
+        path = self.folder / "XBF/gripper.xbf"
+        loaded = document.Loaded(path)
+        found = loaded.mechanism
+        # The pinion is a revolute pair from the palm's link to a link of no part, at 0.
+        self.assertEqual([(link.name, link.members) for link in found.links],
+                         [("palm", [(0,)]), ("left", [(1,)]), ("right", [(2,)]), ("pinion", [])])
+        self.assertEqual([(pair.label, pair.kind, pair.links) for pair in found.pairs],
+                         [("left", "prismatic", (0, 1)), ("right", "prismatic", (0, 2)), ("pinion", "revolute", (0, 3))])
+        self.assertEqual(found.as_built, {"left": (0.0,), "right": (0.0,), "pinion": (0.0,)})
+        # AP242's rack and pinion couplers from the pinion to each rack, read back as written.
+        self.assertEqual(_couplers(loaded), {"grip": [
+            ("KinematicPairWithMotionCoupling", "rack_and_pinion_pair", (0.15, -1.0), "rotation,translation",
+             ["pinion", "left"]),
+            ("KinematicPairWithMotionCoupling", "rack_and_pinion_pair", (0.3, -1.0), "rotation,translation",
+             ["pinion", "right"])]})
+        # Its name poses the slides wherever a joint's does: a state, a pose.
+        self.assertEqual(found.configurations["open"], {"left": (15.0,), "right": (30.0,), "pinion": (100.0,)})
+        kinematics = loaded.structure()["kinematics"]
+        self.assertEqual(kinematics["couplings"]["grip"]["range"], [0.0, 100.0])
+        values, _named = mechanism.resolve(kinematics, {"grip": 40})
+        self.assertEqual({label: values[label] for label in ("left", "right")}, {"left": (6.0,), "right": (12.0,)})
+        np.testing.assert_allclose(_vertices(loaded, "right", {"grip": 40}).min(axis=0),
+                                   _vertices(loaded, "right").min(axis=0) + [12, 0, 0], atol=1e-9)
 
     def test_each_placement_s_coupling_is_kept_by_its_path_and_a_configuration_sets_them_all(self) -> None:
         self.build("hand", HAND)

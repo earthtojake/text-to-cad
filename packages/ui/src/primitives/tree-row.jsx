@@ -113,18 +113,19 @@ export function TreeRowToggle({ open, label, onToggle, locked = false, mark = fa
  * generates only class names it finds written whole.
  */
 export const ROW_NAME_UNDER_ACTIONS = {
-  hover: 'group-hover/row:[mask-image:linear-gradient(to_right,#000_calc(100%-var(--row-actions)-0.5rem),transparent_calc(100%-var(--row-actions)))] group-focus-within/row:[mask-image:linear-gradient(to_right,#000_calc(100%-var(--row-actions)-0.5rem),transparent_calc(100%-var(--row-actions)))]',
+  hover: 'group-hover/row:[mask-image:linear-gradient(to_right,#000_calc(100%-var(--row-actions)-0.5rem),transparent_calc(100%-var(--row-actions)))] group-focus-within/row:[mask-image:linear-gradient(to_right,#000_calc(100%-var(--row-actions)-0.5rem),transparent_calc(100%-var(--row-actions)))] [@media(hover:none)]:[mask-image:linear-gradient(to_right,#000_calc(100%-var(--row-actions)-0.5rem),transparent_calc(100%-var(--row-actions)))]',
   shown: '[mask-image:linear-gradient(to_right,#000_calc(100%-var(--row-actions)-0.5rem),transparent_calc(100%-var(--row-actions)))]',
 };
 
 /**
  * The actions' box over the row's right end: each a 16x20 button with a 12px glyph, 2px apart, the
  * last one's glyph `--tree-row-actions-pad` and its button's 2px from the row's right end. Shown on
- * the row's hover or keyboard focus, and kept while one is on (`persistent`).
+ * the row's hover or keyboard focus (always on a touch screen, which cannot hover), and kept while one
+ * is on (`persistent`).
  */
 export function TreeRowActions({ persistent = false, className, children }) {
   return <div data-row-actions='' className={cn('absolute inset-y-0 right-0 flex items-center gap-0.5 pl-0.5 transition-opacity',
-    persistent ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100 focus-within:opacity-100', className)}
+    persistent ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100', className)}
   style={{ paddingRight: 'var(--tree-row-actions-pad, 3px)' }}>{children}</div>;
 }
 

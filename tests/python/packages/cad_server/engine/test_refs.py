@@ -216,3 +216,50 @@ class NearestTest(unittest.TestCase):
         # Not `standoff_3, standoff_2, standoff_1, standoff_0, kit/standoff_3`: one part, one name.
         self.assertEqual(refs._nearest(root, "standoff"), "standoff_0, standoff_1, standoff_2, standoff_3")
         self.assertEqual(refs._nearest(root, "kit/plat").split(", ")[0], "plate", "matched by its path, named as its owner")
+
+
+class SharedNameAndGlobTest(unittest.TestCase):
+    """An assembly named after a part inside it, and the globs a picture hides and isolates by."""
+
+    STRUCTURE = {"name": "bot", "prototypes": [{}, {}, {}], "instances": [{}, {}, {}, {}, {}], "tree": {
+        "name": "bot", "children": [
+            {"name": "base", "prototype": 0, "instance": 0},
+            {"name": "stem", "children": [{"name": "stem", "prototype": 1, "instance": 1},
+                                          {"name": "screw", "prototype": 2, "instance": 2},
+                                          {"name": "screw", "prototype": 2, "instance": 3}]},
+            {"name": "skin_front", "prototype": 0, "instance": 4}]}}
+
+    def test_a_name_an_assembly_and_a_part_inside_it_share_is_the_assembly(self) -> None:
+        from cad.engine import refs
+
+        def owner(ref: str) -> list[str]:
+            return [hit.ref for hit in refs.resolve_structure(self.STRUCTURE, ref)]
+
+        self.assertEqual(owner("stem"), ["bot/stem"], "the one that holds the other, as a glob's outermost match")
+        self.assertEqual(owner("stem/stem"), ["bot/stem/stem"])
+        self.assertEqual(owner("bot/stem/stem"), ["bot/stem/stem"])
+        # Siblings of one label hold one another in nothing: still refused, each by its path.
+        with self.assertRaisesRegex(refs.RefError, r"screw names 2 occurrences in bot: bot/stem/screw.1, bot/stem/screw.2"):
+            owner("screw")
+        # An element is a part's: the name does not say which part's, so it is still refused.
+        with self.assertRaisesRegex(refs.RefError, "stem names 2 occurrences in bot"):
+            owner("stem/face 1")
+
+    def test_hidden_and_isolated_take_globs_over_labels_segments_and_paths(self) -> None:
+        from cad.engine.snapshot import SnapshotRefused, hidden_instances
+
+        def hidden(**display) -> list[int]:
+            return sorted(hidden_instances(self.STRUCTURE, display, "bot"))
+
+        self.assertEqual(hidden(hidden=["screw*"]), [2, 3])
+        self.assertEqual(hidden(hidden=["*/screw"]), [2, 3], "a path in labels: every screw one level down")
+        self.assertEqual(hidden(hidden=["stem/screw.?"]), [2, 3], "a path in segments")
+        self.assertEqual(hidden(hidden=["skin_*, screw.1"]), [2, 4], "several in one string, a plain ref among them")
+        self.assertEqual(hidden(hidden=["ste[m]"]), [1, 2, 3], "the outermost match, taken whole")
+        self.assertEqual(hidden(isolated=["s*"]), [0], "the assembly and the skin: all but the base")
+        self.assertEqual(hidden(isolated=["stem"]), [0, 4], "the assembly, not the part of its name")
+        with self.assertRaisesRegex(SnapshotRefused, r"display.hidden: the glob 'lid\*' matches no part or assembly of bot"):
+            hidden(hidden=["lid*"])
+        with self.assertRaisesRegex(SnapshotRefused, "leave nothing of bot to draw"):
+            hidden(hidden=["*"])
+

@@ -48,6 +48,11 @@ is its own.
   Each worker ends with its reservation; only serialized BVH nodes and the
   indirect triangle permutation return. Byte accounting includes both the
   packed BVH nodes and that indirect permutation.
+- One caller does not wait: a box select (`lib/xbf/xbfScene.js`'s `pickBox`) casts
+  thousands of rays at once, so it builds, on the main thread and at once, the BVH of each
+  geometry its first ray reaches that has none yet (`ensureGeometryBvh`, under the same
+  triangle cap); a queued build finds it built and drops its own. Its rays meet what
+  stock picking meets, ties included.
 - Failed or pending builds keep stock picking. A result must match the
   geometry's attributes, arrays, versions, groups, draw range and live
   ownership; the last geometry release cancels queued or active work.

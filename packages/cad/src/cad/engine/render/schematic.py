@@ -57,8 +57,9 @@ def refusals(still: Any, name: str) -> None:
     from cad.engine.snapshot import SnapshotRefused
 
     display_options(still.display)
-    if still.preview or still.pose is not None or still.transparent:
-        raise SnapshotRefused(f"{name} is a flat schematic: Preview, pose and transparent output are not supported")
+    if still.preview or still.pose is not None or still.transparent or still.background:
+        raise SnapshotRefused(f"{name} is a flat schematic: Preview, pose and a transparent or coloured backdrop are "
+                              "not supported")
     if still.references:
         raise SnapshotRefused(f"{name} is a schematic: lighting references is a board's for now")
     if still.camera is not None:

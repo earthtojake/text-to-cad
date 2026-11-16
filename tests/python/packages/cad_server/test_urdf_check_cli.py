@@ -123,7 +123,7 @@ class UrdfValidateCliTests(unittest.TestCase):
         self.assertIn("no such file", output)
 
     def test_non_urdf_suffix_fails(self) -> None:
-        path = self._write("robot.xml", VALID_URDF)
+        path = self._write("robot.txt", VALID_URDF)
         exit_code, output = self._run(str(path))
         self.assertEqual(exit_code, 2)
         self.assertIn("is not a urdf file: cad urdf takes .urdf", output)

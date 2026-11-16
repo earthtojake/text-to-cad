@@ -90,7 +90,11 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   itself where nothing in it can open (the web viewer's), else each such entry — the card's Browser
   needs no source and stays enabled, its Finder disabled. The source's apps and Default app are
   disabled the same way; an export on disk still opens. Open in's entries are one list, each with
-  whether it opens now and why not (`openInMenu`). No ⋯ where there is nothing. The home has no file and no ⋯. The name has
+  whether it opens now and why not (`openInMenu`). Each Open in row leads with its mark, 14px in the
+  row's muted icon colour, so every row reads alike (`OpenInMark`, `navigation/appMarks.jsx`): an app's
+  own single-colour mark where one is published under a licence the package can ship (provenance:
+  `src/assets/README.md`), else Lucide's `AppWindow`, never a mark drawn by hand; **Browser** `Globe`,
+  the file manager `Folder`, **Default app** `ExternalLink`. No ⋯ where there is nothing. The home has no file and no ⋯. The name has
   no right-click menu and there are no crumbs. The left's controls sit edge to edge, spaced
   by their own padding alone: the logo's 24px button, Back, Forward and the ⋯ in 20px ones,
   and the name 4px in from its edges, so about 7px separate one glyph from the next. Right,
@@ -332,9 +336,9 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | GLB | Select, Pencil, Shapes, Measure; Explode (several rigid nodes that draw), Clip, then Projection, Display and Preview |
 | 3MF | Select, Pencil, Shapes, Measure; Clip, then Projection, Display and Preview |
 | STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, then Projection, Display and Preview |
-| DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
-| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom, a double-click fits: the board whole, 6% of the pane’s smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; then Flip, 2D/3D and Display; the zoom pill in the corner |
-| KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a drag picks what lies wholly inside the box, KiCad's window selection; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Pencil, Shapes, Measure; no view controls (no layers, and its colours are the theme's). |
+| DXF | Select (in hand: a tap picks an entity, a plain drag draws [the box](#box-selection); a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
+| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a plain drag draws [the box](#box-selection), naming the area on the view's working layer where it takes nothing; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom, a double-click fits: the board whole, 6% of the pane’s smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; then Flip, 2D/3D and Display; the zoom pill in the corner |
+| KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a plain drag draws [the box](#box-selection), taking what it touches; the rest are a board's drags; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Pencil, Shapes, Measure; no view controls (no layers, and its colours are the theme's). |
 
 There is no activity dot. A thin rule parts the tools from the view's controls, which
 are no tools (see [Ownership and layout](#ownership-and-layout)). Position is no tool:
@@ -406,70 +410,127 @@ the sub-toolbars' (Clip's axis and settings, the drawing tools' colour, stroke w
 context menu, and the playbar's routine and Playback settings (`PlaybackMenu.jsx`, on
 `ToolPopover`). Preview's settings are a panel, not a dropdown (see [Preview](#camera-animation-and-preview)).
 
-**Select's menu** (`kit/tools/select/SelectFilterMenu.jsx`) is a CAD tool's selection
-priority (Fusion's Select > Face Priority, Blender's vertex, edge and face modes), not a
-checklist: the chevron's dropdown, headed "Pick", lists ONE choice of what a click on the model
-takes, each with its glyph — **All** first, the default, then each kind alone. Choosing
-one puts the menu away and takes Select up. An `.xbf`'s and a STEP's (`XbfSelectionModes.jsx`'s `xbfSelectModes`):
-**All** (the pointer: a face or an edge where a part's are loaded, the part elsewhere,
-Position's knobs, the annotations and the measurements), **Parts** (a whole cube; an assembly's
-only — in a part file a press that reaches no face or edge picks the whole part), **Faces** (a
-faint cube, its top face filled), **Edges** (a faint cube, one edge heavy) and **Position**
-(where the file has joints to move: its knobs alone, the model picking nothing). A robot's:
-**All**, **Links** and **Position** (where a joint can be driven; a robot with nothing to
-drive has no menu). The annotations and measurements are no choice of their own: they are drawn
-over the model, so a click on one is never taken for the face under it, and a kind alone (Faces)
-picks that kind only. All is chosen when a file opens; the choice holds while the file is
-open, across updates of it, and another file starts on All. The chevron's name says what
-is chosen ("Selection filter: everything", "Selection filter: Faces"), and Select's button wears
-it as a badge on the pointer (`modeGlyphs.jsx`'s `ToolModeIcon`; none for All), so what a
-click takes is on the strip, not only in the menu. After a rule, an `.xbf`'s menu ends in how a face
-or edge pick grows, each with its glyph and independent of each other: **Group edges** (the
-connected edges with a picked edge), shown while edges are picked, and **Group faces** (the
-smoothly joined faces with a picked face), shown while faces are; a hidden one keeps its choice
-for when it shows again.
+**A picking tool's chevron menu has one anatomy, every file's** (`kit/tools/select/SelectionSettings.jsx`,
+after Fusion's Select menu and KiCad's Selection Filter): an optional **Selection tool** section, then
+**one row, Filter**, never its boxes laid in the menu itself. The row is a stock submenu
+(`DropdownMenuSub`): its name, what is ticked muted at its right against the chevron (as the app menu's
+Language), and its boxes in the submenu, which is named after it. It is one shared component, `FilterRow`,
+under one shared menu, `kit/tools/select/SelectFilterMenu.jsx`, that no renderer rebuilds. A menu holds
+its one row even where it holds nothing else (a board's). The menus built on it: Select's on an `.xbf` and
+a STEP (`xbf/XbfSelectionModes.jsx`'s `SelectMenu`), Measure's (`kit/tools/measure/MeasureFilterMenu.jsx`),
+a robot's Select (`robot/RobotRenderer.jsx`), a board's and a schematic's Select
+(`board/BoardSelectFilter.jsx`, `schematic/SchematicSelectFilter.jsx`). Labels are sentence case ("Rule
+areas"). A phone has no room beside the menu for a submenu (a stock one ran off the screen's edge at
+390px, either side): there the row opens its boxes under it, in the menu itself (`DropdownMenuInlineSub`,
+below).
 
-**A board's filter is KiCad's Selection Filter** (`board/BoardSelectFilter.jsx`), the one
-Select filter that is a checklist, because KiCad's is: the chevron's dropdown, headed "Pick",
-holds a grid of stock checkbox items in KiCad's two columns, row by row — **All items** and
-**Locked items**, **Footprints** and **Text**, **Tracks** and **Vias**, **Pads** and **Graphics**,
-**Zones** and **Rule Areas**, then **Dimensions** — each its name alone, with no glyph (KiCad's
-boxes have none), and its check at the row's right end. Ticking a box leaves the menu up (a press on the board puts it away) and takes
-Select up. All items ticks or unticks every kind, and shows a dash while some are ticked; Locked
-items is no kind: ticked, a click takes what KiCad saved locked as well (a pad is taken whatever
-its part, as KiCad's single click), and it is unticked as a board opens, as KiCad's. Every kind is
-ticked as a board opens; the filter holds while the file is open. A click takes the most specific
-thing the boxes tick (`board/boardPick.js`): with Footprints ticked a footprint's graphics are its
-part's; with the zones alone a zone is taken anywhere inside it. KiCad's Grid Items, Points and
-Other items have no box: the board's index holds none of them. A whole net is picked from the panel's
-Nets, not by the filter. The chevron's name says what is ticked ("Selection filter:
-everything", "Selection filter: Pads, Vias"). Select on a board has no modes: a click picks and a
-drag draws a box, the area it names (KiCad's window selection, a translucent rectangle as it is
-dragged); every other drag is the 3D views' (`useViewerRuntime.js`'s OrbitControls, the left
-button's orbit being the box): the right button's drag pans (a Mac trackpad's two-finger click and
+**Filter** is KiCad's Selection Filter, every picking tool's: what a click may take, as a list of kinds,
+each ticked on its own (`kit/tools/select/selectFilter.js`); a kind left out is not pickable. Its submenu
+holds **All** (ticked when every kind is, a dash while some are; it ticks or unticks every kind), a rule,
+then the kinds in ONE column, each a stock checkbox item, its name alone, its check at the row's right
+end; then, after another rule, the **extras** that are no kind, which All leaves as they are: a board's
+**Locked items**, a posable model's **Position**. Ticking a box leaves the submenu up (a press on the
+view puts the menu away) and takes the tool up. **Glyphs**: the boxes are names alone in every file,
+as KiCad's are, because most kinds (a board's nine, a schematic's six, the annotations and
+measurements) have no drawing of their own and a column that mixed glyphs with bare names would not
+line up; the glyphs live on the strip's button instead (below). The row sums up the kinds ticked —
+**All** when every kind is, the kind's name when one is, **None** when none is, else how many of how many
+("3 of 9"). The chevron's name says what is ticked: "Filter: everything" while every kind and every
+extra that is a thing of its own (Position) is, with a ticked modifier after it ("Filter: everything,
+Locked items"); else the kinds and extras ticked ("Filter: Pads, Vias", "Filter: Faces, Position"); else
+"Filter: nothing" (Measure's "Measure filter: …"). Every box is `data-<tool>-filter` (its id, "all" for
+All), the row `data-<tool>-filter-row`, the chevron `data-<tool>-filter-trigger` ("all", the ticked ids,
+or "none"). Each press on a box is counted (`selectFilter.js`'s `filterControl`: `select_filter_faces`,
+`measure_filter_vertices`, `select_filter_rule_areas`, `select_filter_all`). Every box is ticked when a
+file opens (but a board's Locked items); the filter holds while the file is open, across updates of it,
+and another file starts with every box ticked.
+
+**The strip's badge.** The tool's button wears what its Filter ticks as a badge on its glyph
+(`modeGlyphs.jsx`'s `ToolModeIcon`, `selectFilter.js`'s `filterBadge`), so what a click takes is on
+the strip, not only in the menu: none while every kind is ticked; the kind's glyph when exactly one is
+(Parts a whole cube, Faces a faint cube with its top face filled, Edges one with an edge heavy,
+Vertices a dot in a ring); Position's knobs where no kind is and Position is; otherwise — several kinds,
+none, or one with no glyph of its own (a board's Pads) — a funnel, "filtered".
+
+**An `.xbf`'s and a STEP's Select** (`xbfSelectKinds`, `xbfSelectExtras`): **Parts** (an assembly's
+only — in a part file a press that reaches no face or edge picks the whole part), **Faces**, **Edges**,
+**Annotations** and **Measurements** (drawn over the model, so a click on one is never taken for the
+face under it), then **Position** (where the file has joints to move: its knobs show while it is ticked,
+beside whatever the kinds pick, as they always did with every box ticked; Position alone is the knobs
+with the model picking nothing). Any mix of kinds picks through the scene's one pick (below). With no
+kind ticked the model offers nothing: the pointer lights nothing and the hover tip names nothing, a
+click lets the selection go as a click on empty space does, and a box takes nothing. **Measure's**:
+**Vertices**, **Edges** and **Faces** (`measureFilter.js`): the vertex near the pointer, else the edge,
+else the face, each where it is ticked, a kind unticked falling to the next the filter allows; with none
+ticked a press takes the free point on the model. **A robot's**: **Links**, then **Position** (where a
+joint can be driven; a robot with nothing to drive has no menu). How a face or edge pick grows is no
+setting: a face's or an edge's tangent chain is an action of the view's menu (Select tangent faces,
+Select tangent edges, below).
+
+**A board's** (`board/BoardSelectFilter.jsx`): **Footprints**, **Text**, **Tracks**, **Vias**,
+**Pads**, **Graphics**, **Zones**, **Rule areas**, **Dimensions**, in KiCad's order, then **Locked
+items**: ticked, a click takes what KiCad saved locked as well (a pad is taken whatever its part, as
+KiCad's single click), and it is unticked as a board opens, as KiCad's. Every kind is ticked as a board
+opens; the filter holds while the file is open. A click takes the most specific thing the boxes tick
+(`board/boardPick.js`): with Footprints ticked a footprint's graphics are its part's; with the zones
+alone a zone is taken anywhere inside it. KiCad's Grid Items, Points and Other items have no box: the
+board's index holds none of them. A whole net is picked from the panel's Nets, not by the filter. Select
+on a board has no modes: a click picks and a
+plain drag draws [the box](#box-selection), which takes what it touches as the filter does, and names
+its area on the view's working layer where it takes nothing; every other drag
+is the 3D views' (`useViewerRuntime.js`'s OrbitControls, the left button's orbit being the box): the right button's drag pans (a Mac trackpad's two-finger click and
 drag), as does the middle button's and a left drag with Ctrl, Cmd or Shift held (a Shift click still
 adds), and so does a trackpad's two-finger scroll, as Figma's does; a mouse's wheel, a wheel with
 Cmd or Ctrl and a pinch zoom (`kit/viewport/wheelGesture.js`); the browser's menu is kept off
 the board, as off a 3D view.
 
-**A schematic's filter is KiCad's too** (`schematic/SchematicSelectFilter.jsx`, over the kit's checklist the
-`kit/tools/select/SelectFilterChecklist.jsx`, a board's too): **All items**, then **Symbols** and **Pins**, **Wires** and
-**Labels**, **Sheets** and **Other items** (junctions, no-connects), each its name alone. A click takes
+**A schematic's** (`schematic/SchematicSelectFilter.jsx`): **Symbols**, **Pins**, **Wires**, **Labels**,
+**Sheets** and **Other items** (junctions, no-connects), and no Locked items. A click takes
 the nearest ink, and of what is about as near the most specific — a pin, a junction or a no-connect, a
 label (a sheet pin, its net), a wire, a field (its symbol) — then the symbol body or sheet symbol it is
 inside. A whole net is picked from the panel's Nets.
 
-The geometry chosen is picked as one mode (`xbf/xbfSelectionFilter.js`'s
-`selectGeometryMode`): All, a press takes the face or edge it lands on where the part's
-topology can be picked, and the part elsewhere; Parts, the part; Faces or Edges, that topology
-alone. The mode sets the model tree's shape: under All, or Position (no geometry at all),
-it is the person's own (put back as it
+**Select tangent faces and Select tangent edges** are the 3D view's menu's (`kit/shell/viewMenu.js`'s
+`tangentGroup`, `xbf/xbfMenuItems.js`), in its pick group after Select or Deselect: actions, not
+settings that stay on, as Fusion's and SolidWorks' tangent chain. Each shows only where it applies:
+tangent faces over a face, or while faces are selected; tangent edges likewise for edges
+(`xbf/xbfMenus.js`'s `xbfTangentSources`); over empty space they open the menu while faces or edges are
+selected. Running one adds to the selection the tangent chain (`xbf/xbfSelectionFilter.js`'s
+`tangentChain`, from the engine's groups of the part) of the face or edge pressed and of every one of
+its kind selected: the faces joined across tangent edges, the edges that continue one another. A click
+and a box take what they land on, never a chain.
+
+The geometry ticked, whatever its mix, is picked as one mode (`xbf/xbfSelectionFilter.js`'s
+`selectGeometryMode` and `xbfGeometryPicks`, the booleans the scene's `pickElement` and `pickBox`
+take): Parts with Faces, Edges or both, a press takes the face or edge it lands on (of those ticked)
+where the part's topology can be picked, and the part elsewhere; Parts alone, the part; Faces, Edges,
+or both, that topology alone; none, nothing. The mode sets the model tree's shape: with Parts and
+topology ticked, or no geometry at all, it is the person's own (put back as it
 was when they left it, with the owners of what is still selected kept open); Parts alone
-opens every assembly and shuts every part; Faces or Edges open every assembly. A
+opens every assembly and shuts every part; Faces, Edges or both open every assembly. A
 part is a leaf in every shape: nothing opens under it, and a face or edge picked in the
 viewport is revealed at its part's row. Outside the person's own shape the disclosure is
 locked (chevrons shown, not pressable) and Expand/Collapse leave the row menus. Every face and
 edge is to hand from the start: nothing waits on a part's topology.
+
+Above the Filter row, in its own section headed "Selection tool", an `.xbf`'s and a STEP's Select menu
+chooses how a pick is made, apart from what it takes: **Select** (the pointer, the default) or
+**Box select** (lucide's square mouse pointer). Choosing one puts the menu away, takes Select up,
+and puts its glyph on Select's button (named "Box select" while it is chosen), still badged with
+what the Filter ticks. Under Select a drag turns the camera. Under Box select a drag that starts on empty space
+draws [the box](#box-selection); one that starts on the model's visible geometry, on ink or on a
+measurement turns the camera as Select's does (Shift with it too), so the camera is never lost.
+What the box takes of the model is what is *visible*: hidden faces, parts behind others, an
+isolation's dimmed neighbours and clipped geometry never join, and a face or a part partly behind
+another part counts by the part of it that shows. It takes
+what a click would under the Filter: with Parts and topology ticked, the faces and edges ticked of the
+parts that are open (expanded or isolated in the Model tree; a part file's always) and every other part
+whole, as the node a click takes; Parts alone, the parts; Faces or Edges, those alone, never their tangent
+chains. With the model it takes the measurements and the annotation's
+ink by the same rule (a dimension's lines, arrowheads or label; a mark's ink at its drawn width,
+with what was drawn with it), while Measurements and Annotations are ticked. Ctrl/Cmd/Alt drags and other buttons
+still turn the camera, a second finger or Escape lets the box go, and Quick Edit, Copy Reference
+and `cad_view` see the selection as any other.
 
 **Sub-toolbars** (`kit/tools/SubToolbar.jsx`): the tool in hand's controls, one row hung
 under the strip, centred, 8px below it, on the strip's surface, its buttons the strip's
@@ -586,6 +647,19 @@ edit leaves the plane where it was and the slider reads 0% or 100% if the plane 
 outside the new box. Explode is offered only where there are parts to separate: a STEP
 assembly and a GLB of several rigid nodes. A STEP part file has no Explode tile, as it has no
 Model (`STEP_PART_VIEW_FEATURES`).
+
+### Box selection
+
+One box in every viewer that has one (`kit/tools/select/useBoxSelectGesture.js`): a 3D view's Box
+select, and a board's, a schematic's and a drawing's Select, where a plain left drag draws it
+wherever it starts, on an item too. It has one rule and one look, whichever way it is drawn: it
+takes anything it touches, even in part (in 3D, only what is visible), and it is a solid outline in
+the selection's blue (`#2979ff`) over a light blue fill. It takes what Select's filter would with a
+click, the annotation's ink and the measurements with it, and all it takes stays selected together.
+Shift adds to the selection (on a flat view, Shift held at the release: a Shift drag pans there);
+otherwise the box replaces all of it, measurements and ink too. A tap still picks. A board's box that
+takes nothing names its area on the view's working layer (`#F.Cu@x10y5..x20y15`, what an
+agent places, pours or keeps out over), Shift adding it.
 
 ## The view's panel and the tool stack
 
@@ -930,7 +1004,7 @@ the app menu or the strip's More for a submenu (one placed beside More, which a 
 ran off the screen's edge): there a submenu opens in place, its row showing the choices under it, in the
 menu itself and indented, the chevron turning down while they show; a press on the row, or Left, hides
 them again, and each opening of the menu starts them hidden (`primitives/dropdown-menu.jsx`'s
-`DropdownMenuInlineSub`: the app menu's Language, More's Display and Zoom). There is no view
+`DropdownMenuInlineSub`: the app menu's Language, More's Display and Zoom, a picking tool's chevron menu's Filter row). There is no view
 cube and no view's panel; and
 Quick Edit is a bottom sheet (see
 [Quick Edit](#quick-edit)). The explorer is the same popover, never wider than the window less
@@ -1624,9 +1698,10 @@ icon.
 after an update to a release with notes, never on a new person's first run, over the home or a
 file's view once its renderer is up (never a loading page, nor while the host's own notice covers
 the view). It is the stock shadcn Dialog (`primitives/dialog.jsx`, on the `text-ui` scale, no corner
-X): the release's title, its items as a list, each a bold title and a sentence or two in the
-muted text, and one primary button, **Got it**, which has the focus. The button, Escape and a press
-outside each close it and keep it seen for every view of the person's; nothing else is offered.
+X): the release's title, its items as a list, each a bold title and, in the muted text, a few words on
+what the feature is for, then one short example prompt in quotation marks (never a command), and
+one primary button, **Got it**, which has the focus. The button, Escape and a press outside each
+close it and keep it seen for every view of the person's; nothing else is offered.
 
 ## Naming the page
 

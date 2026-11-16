@@ -33,10 +33,12 @@ import re
 import sys
 from typing import Any
 
+from cad.engine._measuring import MEASURING, measure, measuring
 from cad.engine.previous import FORMAT, version
 from cad.engine.said import COMMAND, SERVER
 
-__all__ = ["CONTRACT", "KERNEL", "PROTOCOL", "interpreter", "notice", "refusal", "release", "spelled"]
+__all__ = ["CONTRACT", "KERNEL", "MEASURING", "PROTOCOL", "interpreter", "measure", "measures_for", "measuring",
+           "notice", "refusal", "release", "spelled"]
 
 # The number of what a script's worker and the server say to each other. Bumped by a release that
 # changes a request a worker answers, a frame it answers in, or the reports a build answers with.
@@ -73,6 +75,17 @@ def interpreter() -> dict[str, Any] | None:
         if run["script"] and run["header"]:
             named["header"] = {"script": run["script"], "with": run["header"]}
     return named
+
+
+def measures_for(asked: Any, mine: Any) -> bool:
+    """Whether a process whose measuring side is ``mine`` (``measuring``'s) measures a check its caller asks
+    with ``asked``: the same code, and the same version of every library the caller names (a caller with no
+    kernel names none: any process of its code measures for it)."""
+    if not (isinstance(asked, dict) and isinstance(mine, dict) and isinstance(asked.get("libraries"), dict)
+            and isinstance(mine.get("libraries"), dict)):
+        return False
+    return asked.get("code") == mine.get("code") and all(
+        version is None or mine["libraries"].get(name) == version for name, version in asked["libraries"].items())
 
 
 def spelled(contract: Any) -> str:

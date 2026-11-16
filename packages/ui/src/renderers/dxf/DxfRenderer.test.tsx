@@ -140,8 +140,9 @@ async function openDrawing(destinationKind = 'composer', notice: ReactNode = nul
   return { pane, canvas, commands, request, delivered, refresh, tap, get controller() { return controller; }, dispose: () => client.dispose() };
 }
 
-it('Select is the hand, with the 3D views\' cursor: a drag pans under the arrow, a tap does not move the view', async () => {
-  const { canvas, dispose } = await openDrawing();
+it('Select draws the shared box on a plain drag, one solid blue box taking what it touches whichever way it is drawn, and a Shift drag pans, with the 3D views\' cursor; a tap does not move the view', async () => {
+  const drawing = await openDrawing();
+  const { canvas, dispose } = drawing;
   const cursor = () => ['cursor-default', 'cursor-grab', 'cursor-grabbing', 'cursor-pointer'].filter(name => canvas.classList.contains(name));
   expect(cursor()).toEqual(['cursor-default']);
   // A secondary press that lets go where it went down is no drag: it opens the view's menu, the framing over bare paper.
@@ -153,14 +154,39 @@ it('Select is the hand, with the 3D views\' cursor: a drag pans under the arrow,
   fireEvent.keyDown(menu, { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
   const fitted = painted.at(-1)!;
-  fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'mouse', button: 0, clientX: 600, clientY: 350 });
-  fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'mouse', clientX: 602, clientY: 350 });
+  const at = (x: number, y: number) => ({ clientX: x * fitted.scale + fitted.offsetX, clientY: fitted.offsetY - y * fitted.scale });
+  // A plain drag right to left across the red circle's rim (handle 33): the box, every viewer's, a solid
+  // blue outline while it is drawn, takes the circle it touches; the view stays.
+  const press = { pointerId: 1, pointerType: 'mouse', button: 0 };
+  const drag = (from: [number, number], to: [number, number]) => {
+    fireEvent.pointerDown(canvas, { ...press, ...at(...from) });
+    fireEvent.pointerMove(canvas, { ...press, ...at((from[0] + to[0]) / 2, (from[1] + to[1]) / 2) });
+    fireEvent.pointerMove(canvas, { ...press, ...at(...to) });
+    const { style } = canvas.parentElement!.querySelector<HTMLElement>('[data-box-select]')!;
+    const drawn = `${style.borderStyle} ${style.borderColor}`;
+    fireEvent.pointerUp(canvas, { ...press, ...at(...to) });
+    return drawn;
+  };
+  expect(drag([36, 42], [33, 39])).toBe('solid rgb(41, 121, 255)');
+  const controller = await waitFor(() => { expect(drawing.controller).not.toBeNull(); return drawing.controller; });
+  await waitFor(() => expect(controller.readState().selectedEntities).toEqual(['33']));
   expect(painted.at(-1)).toEqual(fitted);
-  fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'mouse', clientX: 630, clientY: 350 });
+  // The same box left to right looks the same and takes the same circle, after a tap on nothing lets go of it.
+  drawing.tap(80, 10);
+  await waitFor(() => expect(controller.readState().selectedEntities).toEqual([]));
+  expect(drag([33, 39], [36, 42])).toBe('solid rgb(41, 121, 255)');
+  await waitFor(() => expect(controller.readState().selectedEntities).toEqual(['33']));
+  // A Shift drag pans, as a right, middle, Ctrl or Cmd drag does: a press that wavers no further than a tap moves nothing.
+  const shift = { ...press, shiftKey: true };
+  fireEvent.pointerDown(canvas, { ...shift, clientX: 600, clientY: 350 });
+  fireEvent.pointerMove(canvas, { ...shift, clientX: 602, clientY: 350 });
+  expect(painted.at(-1)).toEqual(fitted);
+  fireEvent.pointerMove(canvas, { ...shift, clientX: 630, clientY: 350 });
   expect(cursor()).toEqual(['cursor-default']);
-  fireEvent.pointerUp(canvas, { pointerId: 1, pointerType: 'mouse', button: 0, clientX: 630, clientY: 350 });
+  fireEvent.pointerUp(canvas, { ...shift, clientX: 630, clientY: 350 });
   expect(cursor()).toEqual(['cursor-default']);
   await waitFor(() => expect(painted.at(-1)!.offsetX).toBeCloseTo(fitted.offsetX + 30, 6));
+  expect(controller.readState().selectedEntities).toContain('33');
   // Resting on what a press would pick (the red circle's rim): the pointing hand, as over a part.
   const { scale, offsetX, offsetY } = painted.at(-1)!;
   fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'mouse', clientX: 34 * scale + offsetX, clientY: offsetY - 40 * scale });
