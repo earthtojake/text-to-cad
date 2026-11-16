@@ -44,7 +44,7 @@ __all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "INTEGRATION_OPERATIONS", "OPERATIO
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
 #: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
 OPERATIONS = ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges", "drc", "erc", "validate",
-              "mesh")
+              "mesh", "fit", "bake")
 #: What an integration does to a file of its tool's own that is no document type (a file we check and never
 #: show): a closed set too. ``check`` answers findings, as a type's check does (``cad.results.CheckResult``).
 INTEGRATION_OPERATIONS = ("check",)
@@ -376,7 +376,12 @@ _TYPES = (
                                "the field's", "omega"),
          Operation("mesh", "write it as a GLB, with values for its names, once a mesh is wanted: the mesh is checked "
                            "against the field as validate does before it is written, and kept, so the same model and "
-                           "values are meshed once", "omega"))),
+                           "values are meshed once", "omega"),
+         Operation("fit", "check exact parts against this concept through its field, with no mesh of it: each "
+                          "part's clearance, where one runs into its material, and the contacts the design means",
+                   "omega"),
+         Operation("bake", "check an exact part baked from this concept against its field, both ways, and keep the "
+                           "concept as baked; --stale says where the concept has moved since", "omega"))),
 )
 
 #: Every document type, by id, in the table's order.

@@ -46,6 +46,9 @@ MIRRORS: dict[str, tuple[str, str]] = {
     # run here or in cad[omega]'s environment (``cad_server.cli.document_types``).
     "gsl validate": ("cad.gsl", "validate"),
     "gsl mesh": ("cad.gsl", "mesh"),
+    # Exact parts held to a GSL concept's field, the omega integration's too: fitted around it, and baked from it.
+    "gsl fit": ("cad.gsl", "fit"),
+    "gsl bake": ("cad.gsl", "bake"),
     "srdf validate": ("cad.srdf", "validate"),
     # KiCad's design rule check of a saved board: the document type's, run by the kicad integration's kicad-cli.
     "kicad_pcb drc": ("cad.kicad_pcb", "drc"),

@@ -6,7 +6,7 @@ fields. No decorator: a model is authored as text, not made by a script. It is s
 the field itself, and it is asked about through the field while it is written (``cad run gsl eval``, ``cad run gsl
 render``: omega's own ``gsl``, the omega integration's, ``cad.omega``).
 
-Its two operations are for the mesh, which is a translation of the field for something that needs triangles and
+Two of its operations are for the mesh, which is a translation of the field for something that needs triangles and
 is made when one is wanted, not on every edit. ``gsl`` writes a mesh it got wrong as readily as a right one, so
 both hold the mesh to the field:
 
@@ -14,6 +14,13 @@ both hold the mesh to the field:
   given, and judges it (``cad.omega._check``).
 - ``mesh`` (``cad gsl mesh part.gsl part.glb``) meshes it, with values for its names, into a GLB that is written
   only once it has passed the same judgement, and keeps it by what made it (``cad.omega._mesh``).
+
+The other two hold exact parts to the concept's field, with no mesh of the concept (``cad.omega._fit``):
+
+- ``fit`` (``cad gsl fit enclosure.gsl ID``): exact parts fitted around a concept part, each part's clearance,
+  where one runs into its material, and the contacts the design means.
+- ``bake`` (``cad gsl bake part.gsl ID``): an exact part baked from the concept, checked against its field both
+  ways, the concept kept as baked; ``--stale`` says where the concept has moved since.
 
 Each command is a generated MIRROR of its function. Everything loads on first use: ``import cad.gsl`` imports no
 omega_core. A function called where the integration's extra is missing says so by name (``cad[omega]``).
@@ -26,7 +33,7 @@ from pathlib import Path
 from cad._internal.document_type import bind as _bind
 from cad.results import CheckResult
 
-__all__ = ["mesh", "validate"]
+__all__ = ["bake", "fit", "mesh", "validate"]
 
 SUFFIX = ".gsl"
 
@@ -74,6 +81,68 @@ def _mesh(path: Path, out: Path | None = None, *, define: tuple[str, ...] = (), 
     from cad.omega._mesh import mesh as made
 
     return made(path, out, define=define, depth=depth, strict=strict, verbose=verbose)
+
+
+def fit(path: Path, exact: str, *, contact: tuple[str, ...] = (), define: tuple[str, ...] = (),
+        tolerance: float = 0.01, contact_radius: float = 3.0, density: float = 4.0, chord: float = 0.01,
+        strict: bool = False, verbose: bool = False) -> CheckResult:
+    """Check exact parts against a GSL concept part they must fit with, through its field, with no mesh of it.
+
+    The exact parts' surfaces are sampled by area (every vertex and about ``density`` points a square
+    millimetre) and each point is scored by the concept's field: each part's clearance is the least value over
+    its surface, and a part whose surface goes below ``-tolerance`` runs into the concept's material, an error.
+    A ``contact`` is a point where the design means a part to touch the concept (a board on a standoff): the
+    exact surface within ``contact_radius`` of it must lie on the concept's surface, within ``tolerance``.
+    Clearance alone never shows a contact is missing. The concept is written in the exact parts' frame. Its own
+    features that no exact part comes near are not judged: look at its picture.
+
+    path: the .gsl concept.
+    exact: the exact parts: a document id (cad run prints it), an .xbf, a .step, or a .glb.
+    contact: a point x,y,z (mm) where an exact part should touch the concept; repeat it for several.
+    define: a value for one of the concept's top-level names, as name=number (r=6.5); repeat it for several.
+    tolerance: mm within which a field value is the concept's surface.
+    contact_radius: mm about a contact's point in which the exact surface is looked for.
+    density: points sampled a square millimetre of exact surface, besides its vertices.
+    chord: mm chord tolerance an id, .xbf or .step is meshed at to be sampled.
+    strict: treat warnings as blocking.
+    verbose: narrate the target on stderr.
+    """
+    from cad.omega._fit import fit as fitted
+
+    return fitted(path, exact, contact=contact, define=define, tolerance=tolerance, contact_radius=contact_radius,
+                  density=density, chord=chord, strict=strict, verbose=verbose)
+
+
+def bake(path: Path, exact: str, *, stale: bool = False, define: tuple[str, ...] = (), max_deviation: float = 0.0,
+         tolerance: float = 0.01, density: float = 4.0, chord: float = 0.01, strict: bool = False,
+         verbose: bool = False) -> CheckResult:
+    """Check an exact part baked from a GSL concept against the concept's field, both ways, and keep the concept
+    as baked; with ``stale``, say where the concept has moved since.
+
+    One way, the exact surface sampled by area is scored by the concept's field: signed, so below zero the
+    concept carries material the exact part does not (a blend's nominal departure is the usual one) and above it
+    the exact part carries more. The other, points on the concept's surface (omega's ``surface``, over both
+    shapes' box) are measured to the exact triangles. Each part's largest departure is said, and where; none
+    fails the bake unless it passes ``max_deviation``. A bake that passes keeps a copy of the concept, with the
+    values given, as ``<stem>.baked.gsl`` beside it. ``stale`` instead scores the exact surface with the concept
+    as it is now and as it was kept, and fails where the two differ by more than ``tolerance``, saying by how
+    much and over what region of which part, so the change can be baked. A file the concept imports is not kept.
+
+    path: the .gsl concept.
+    exact: the exact part: a document id (cad run prints it), an .xbf, a .step, or a .glb.
+    stale: hold the concept as it is now to the copy kept at its last bake, instead of baking.
+    define: a value for one of the concept's top-level names, as name=number (r=6.5); repeat it for several.
+    max_deviation: mm the exact part may depart from the concept, either way, before the bake fails (0: no limit).
+    tolerance: mm within which a field value is the concept's surface, and a change is no change.
+    density: points sampled a square millimetre of exact surface, besides its vertices.
+    chord: mm chord tolerance an id, .xbf or .step is meshed at to be sampled.
+    strict: treat warnings as blocking.
+    verbose: narrate the target on stderr.
+    """
+    from cad.omega._fit import bake as baked
+
+    return baked(path, exact, stale=stale, define=define, max_deviation=max_deviation, tolerance=tolerance,
+                 density=density, chord=chord, strict=strict, verbose=verbose)
 
 
 # ``validate`` takes an option named ``mesh`` (the STL to judge), so the operation is defined under another name

@@ -47,6 +47,8 @@ build). `cad run gsl ...` installs it on first use and runs it as it is:
 | Mesh it, checked, when a file is wanted | `cad gsl mesh part.gsl part.glb` (a value for one of its names: `--define r=6.5`) |
 | The mesh as STL or 3MF | `cad glb export part.glb part.stl` |
 | An STL as gsl writes it, and that mesh judged | `cad run gsl compile -t stl -o part.stl part.gsl`, then `cad gsl validate part.gsl --mesh part.stl` |
+| Exact parts around a concept part: clearance, interference, contacts | `cad gsl fit enclosure.gsl "$ID"` (`--contact x,y,z` where a part should touch it), [below](#a-concept-among-exact-parts) |
+| A bake checked against its concept, and the concept kept as baked | `cad gsl bake part.gsl "$ID"`; after the concept changes, `--stale` ([below](#from-concept-to-exact-geometry)) |
 
 `gsl compile`'s defaults are the right ones: dual contouring (`--algo mdc`, flat faces flat and sharp edges sharp),
 octree depth 9 (`--subdivision`), in the `@scene` box. Do not pass `--bbox auto`: its box is a fit by sampling,
@@ -157,6 +159,12 @@ Patterns are `remap(shape, map.patternPolarXY(n))` and `map.patternRepeatXY([dx,
 and joints
 are `fastener.*`, `thread.*`, `gears.*` and `joint.*`; `gsl compile` names a function's arguments when a call is
 wrong.
+
+- `map.patternRepeatXY([dx, dy])` repeats about the origin: one copy sits at (0, 0), the rest `dx` and `dy` apart.
+  Four posts at (±a, ±b) are one post at (a, b) mirrored: `remap(post, [abs(p.x), abs(p.y), p.z])`.
+- A `drill` hole is open above its mouth, by design, so a hole whose mouth is on a face inside the part (a post's
+  top inside a closed shell) cuts on through every wall above it. Stop it in the air between the mouth and the
+  next wall, never at the mouth itself: `max(hole, p.z - zStop)`.
 
 | Need | Call |
 | --- | --- |
@@ -301,18 +309,38 @@ the concept. A lattice or an infill, which has no exact form, stays a mesh.
    positions, orientations and the choices it made: a web, a buried start, where a pattern begins.
 2. **Make each round blend a true fillet** at the radius the file names. Where one cannot be built as written
    (a fillet "between lobe and disc" whose neighbours overlap), build the nearest true fillet and say so.
-3. **Check the part against the concept's field, both ways.**
-   - Points spread by area over every face of the build123d part, put to `eval` of the concept's return: the
-     value is the concept's distance there.
-   - Points on the concept's surface (`surface` from a grid near it), measured to the solid
-     (`closest_points` in `cad.build123d`).
+3. **Check the part against the concept's field, both ways:** `cad gsl bake part.gsl "$ID"`, the concept
+   written in the part's frame (the same `--define` values the part was built from). One way, points spread by
+   area over the part's surface are scored by the concept's field: below zero the concept carries material the
+   part does not, above it the part carries more. The other, points on the concept's surface are measured to the
+   part. Each part's largest departure is said, and where.
    - Exact features agree within 0.01 mm: flat faces, bores, holes, slots, and fillets where faces meet at
      90 degrees. A larger gap belongs where the concept's blend was nominal; report where, how large and why
      (for a blend at a known angle the expected gap can be worked out from the geometry, and should match).
-   - Inside a nominal blend the concept's value is not a true distance: measure the gap there by moving the point
-     onto the concept's surface with `surface`.
-4. **Expect the concept to carry more material at its blends**, never less: a round blend fills past a true
-   fillet. Its volume bracket holds the exact part's volume.
+   - Inside a nominal blend the concept's value is not a true distance: read the gap there from the other
+     direction, the concept's surface measured to the part.
+   - `--max-deviation MM` fails the bake past that departure, either way.
+4. **Expect the concept to carry more material at its round blends** (below zero, one way): a round blend fills
+   past a true fillet. Where the true fillet cannot follow the blend as written, the part can carry more instead
+   (above zero): on a knob, an R6 fillet between two lobes bridges them and buries the disc the concept's blend
+   dipped to, 1.3 mm proud of the concept there. The bake's sign says which; name each such place.
+5. **The concept as baked is kept**, beside it as `part.baked.gsl`: not a model to edit. When the concept changes
+   later, `cad gsl bake part.gsl "$ID" --stale` fails where the part no longer follows it and says, region by
+   region, how far it moved and whether it grew or shrank. Bake that change into the part, then run `cad gsl bake`
+   again to keep the new concept. A file the concept imports is not kept.
 
-A bake took about 6 minutes a part in tests, a model that built first time and a check script of a few hundred
-lines. The check is what tells a faithful bake from a guess: it names every place the two differ.
+The check is what tells a faithful bake from a guess: it names every place the two differ.
+
+## A concept among exact parts
+
+A concept part is fitted to exact ones (a board, a motor, a bought part's STEP) through its field, with no mesh:
+`cad gsl fit enclosure.gsl "$ID"`, where `$ID` is the exact parts' document (an assembly of them, an `.xbf` or a
+`.step` will do). Write the concept in that document's frame, so its numbers are the assembly's.
+
+- Each exact part's clearance is the least field over its surface, with where it is; a part that runs into the
+  concept's material is an error, by its depth.
+- **Clearance never shows a missing contact.** A board that should rest on four posts is "clear" when the posts
+  are somewhere else. Name each contact the design means: `--contact 31.5,21.5,0`, a point on the exact part
+  where it should touch the concept. A contact the part does not make is an error, with its gap.
+- It judges the exact parts, not the concept's own features where no part comes near (a hole cut through a lid
+  above nothing): look at the concept's picture as well.

@@ -583,10 +583,15 @@ def _kicad_rules(document_type: str, operation: str) -> Callable[[list[str], str
     return run
 
 
+#: A GSL model's operations whose second argument is exact parts (a document id, an .xbf, a .step, a mesh).
+_AGAINST_EXACT = ("fit", "bake")
+
+
 def _omega_checked(operation: str) -> Callable[[list[str], str], int]:
-    """A GSL model's operation (``validate``, ``mesh``), the omega integration's: its options its function's
-    signature, run here where this environment holds omega-core (a checkout's), else in the environment of
-    ``cad[omega]``, made on first need, its file refused here first."""
+    """A GSL model's operation (``validate``, ``mesh``, ``fit``, ``bake``), the omega integration's: its options
+    its function's signature, run here where this environment holds omega-core (a checkout's), else in the
+    environment of ``cad[omega]``, made on first need, its file refused here first. The exact parts ``fit`` and
+    ``bake`` take are meshed into a GLB here first (``cad.omega._fit.as_glb``), where the engine is."""
 
     def run(argv: list[str], prog: str) -> int:
         from cad.results import CheckFinding, CheckResult
@@ -613,8 +618,21 @@ def _omega_checked(operation: str) -> Callable[[list[str], str], int]:
         def here() -> object:
             return verb(*positional, **keywords)
 
-        return emit(here if integration_env.carries("omega") else elsewhere, prog=prog,
-                    as_json=bool(getattr(parsed, JSON_FLAG_DEST)), verbose=bool(getattr(parsed, "verbose", False)))
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="cad-gsl-exact-", ignore_cleanup_errors=True) as scratch:
+            if operation in _AGAINST_EXACT and len(positional) > 1:
+                # The exact parts are meshed here, where the engine is, so the omega environment reads a GLB.
+                from cad.engine.export import ExportRefused
+                from cad.omega._fit import CHORD_MM, as_glb
+
+                try:
+                    positional[1] = str(as_glb(positional[1], Path(scratch), keywords.get("chord", CHORD_MM)))
+                except (ExportRefused, OSError, ValueError) as error:
+                    print(f"{prog}: the exact parts were not read from {positional[1]}: {error}", file=sys.stderr)
+                    return 2
+            return emit(here if integration_env.carries("omega") else elsewhere, prog=prog,
+                        as_json=bool(getattr(parsed, JSON_FLAG_DEST)), verbose=bool(getattr(parsed, "verbose", False)))
 
     return run
 
@@ -931,6 +949,8 @@ _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
     ("kicad_sch", "snapshot"): _schematic_snapshot,
     ("gsl", "validate"): _omega_checked("validate"),
     ("gsl", "mesh"): _omega_checked("mesh"),
+    ("gsl", "fit"): _omega_checked("fit"),
+    ("gsl", "bake"): _omega_checked("bake"),
 }
 
 

@@ -13,7 +13,9 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
     "drc",
     "erc",
     "validate",
-    "mesh"
+    "mesh",
+    "fit",
+    "bake"
   ],
   "views": [
     "document",
@@ -237,7 +239,9 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "view": "field",
       "operations": [
         "validate",
-        "mesh"
+        "mesh",
+        "fit",
+        "bake"
       ],
       "decorator": false
     }
