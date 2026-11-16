@@ -75,7 +75,8 @@ Running the script is the only way to build a drawing, and exporting it the only
 DXF. `cad run <drawing>.py` writes nothing; it prints each model's report (`built
 src/gasket.py::gasket cold in 2.29s: ...`), its `id:` and its page, and exits 1 when a body raises.
 Run each drawing script directly; do not sweep directories. `cad model export` exits 2 when it refuses
-the drawing (3D, off the plane, a failed drawing check), naming which. An existing `.dxf` needs
+the drawing (3D, off the plane, a layer name, a failed drawing check), naming which, and writes none
+of the export's files, the STEP or the STL beside the DXF included. An existing `.dxf` needs
 neither: hand it straight to a snapshot or the viewer.
 
 Drawings delivered after every change go in an `exports.py` beside them that imports each drawing
@@ -331,8 +332,9 @@ cad dxf snapshot DXF/panel.dxf tmp/view.png --annotation tmp/panel.snapshot.json
 A drawing script's model has a page, but it shows a flat face in the 3D viewer, with no pens, layers
 or entity refs. The drawing a person wants is the exported `.dxf`, which the viewer opens as a
 read-only 2D drawing with its layers (it never runs drawing scripts): show the `.dxf` when they ask
-to see the drawing, and give its path otherwise. Drag pans, the wheel or a pinch zooms, and a
-double-click fits. Its Select, Pencil, Shapes and Measure feed Quick Edit, whose prompt names what
+to see the drawing, and give its path otherwise. Under Select a drag draws a box that picks the
+entities it touches; a right, middle or Shift
+drag pans, the wheel or a pinch zooms, and a double-click fits. Its Select, Pencil, Shapes and Measure feed Quick Edit, whose prompt names what
 the person picked by entity HANDLE: `panel.dxf#h2F` is the modelspace entity whose handle is `2F`
 (`doc.entitydb["2F"]` in ezdxf); anything a block reference draws is named by its INSERT, and a
 dimension is one entity. The prompt's chip reads it as the entity's type and layer ("Circle on

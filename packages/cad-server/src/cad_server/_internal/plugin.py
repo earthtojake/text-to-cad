@@ -3,15 +3,17 @@ written where every agent app on the device is pointed at it.
 
 ``<state>/plugin`` (``folder``) is the repository root's plugin layout, as the ``latest`` branch
 carries it but its README: the catalog (``.claude-plugin/marketplace.json``, listing the plugin at
-``./``), each host's manifest (``.claude-plugin``, ``.codex-plugin``, ``.cursor-plugin``,
+``./``), each host's manifest (``.claude-plugin``, ``.codex-plugin``, ``.cursor-plugin``, ``.grok-plugin``,
 ``gemini-extension.json``, and the Agent Plugins standard's ``plugin.json`` and ``mcp.json``), the
 server configs they name, the icons, the licence, and ``skills/`` -- written from the server's own copy
 of them (``source``: ``_runtime/plugin`` in its wheel, which ``scripts/bundle`` builds; a checkout's
 root in a source tree). Three things change on the way (``tree``): every version is this
 distribution's, the catalog is a local one of its own (``MARKETPLACE``), and each host's CAD server
 is the line the installer gives that host: ``uvx ... --from cad-mcp==<version> cad-mcp``, told
-the install channel of the install command (``CHANNELS``). There is no root ``.mcp.json``: Claude Code reads
-one in place of the server config its manifest names.
+the install channel of the install command (``CHANNELS``). Claude Code's manifest names no server: Claude
+Code gets the skills, and the Code tab of the desktop app gets CAD's server from Claude Desktop's own config
+(``providers``). ``claude.mcp.json`` stays for Grok Build's manifest, which names it, and for the store's
+copy (``scripts/release/plugin_branch.py``). There is no root ``.mcp.json``: Claude Code would read it.
 
 It is a stable path, regenerated in place (``write``): a file that differs is written to a hidden
 temporary file beside it and renamed over it, a file the plugin no longer holds is removed, and
@@ -57,6 +59,7 @@ FILES = (
     ".codex-plugin/plugin.json",
     ".codex-plugin/logo.png",
     ".cursor-plugin/plugin.json",
+    ".grok-plugin/plugin.json",
     "gemini-extension.json",
     "plugin.json",
     "mcp.json",
@@ -67,7 +70,7 @@ FILES = (
 )
 # The manifests that carry the plugin's version.
 MANIFESTS = (".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".cursor-plugin/plugin.json",
-             "gemini-extension.json", "plugin.json")
+             ".grok-plugin/plugin.json", "gemini-extension.json", "plugin.json")
 # Each file that starts CAD's server, and the install channel the server is told there
 # (``cad_server._internal.channel``): what happened, the install command, for each host it points at this
 # folder, never the `latest` branch's `-github` (an install by hand from GitHub). The standard's has no host of

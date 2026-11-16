@@ -264,7 +264,9 @@ canonical release versions during normal development.
 runtime validation and canonical text serialization: `formatPromptContextText`, the
 parts as lines, and `formatPromptMessage`, the one message a Quick Edit is — what the
 person wrote, then `File:`, `References:` and, for a picture that travels as a file,
-its label and path. Text, typed resource
+its label and path. A context's `folders` (`{ start, home }`, which the host says) name every file in that
+message as `displayPath` does: relative to the workspace, else `~/`, so the person's home is never in it;
+its parts, and Copy References, keep the absolute path. Text, typed resource
 references and attachments travel in one ordered, immutable snapshot with an
 operation ID; attachment relationships name reference parts, and an attachment's
 optional `label` ("Annotation") names it in that message. Text ranges use

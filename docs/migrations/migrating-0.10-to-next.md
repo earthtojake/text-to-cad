@@ -184,19 +184,20 @@ newest or the feed cannot be reached; under `--json` the plan's document carries
 ## The manufacturing measurements (tier 1)
 
 The dfm skill's `scripts/mold_tool.py` and the dfam-check skill's `scripts/dfam_tool.py`, and the
-`requirements.txt` each installed beside them, are gone: their measurements are the library's trimesh
-integration now (`cad[trimesh]`), reached by a 3D type's `dfm`. The report each printed is the
-result's `measurements` (`--json`), its families and figures as they were; a family that could not be
-measured fails the check (exit 1, where the scripts exited 2), and what the figures show are findings.
+`requirements.txt` each installed beside them, are gone: their measurements are the library's now,
+reached by a 3D type's `dfm`: printing's on a mesh (`cad[trimesh]`), molding's on exact geometry
+(a STEP or a model), which no mesh is checked for. The report each printed is the result's
+`measurements` (`--json`), its families and figures as they were; a check that could not measure or
+read ends `NOT CHECKED` with exit 3 (the scripts exited 2), and what the figures show are findings.
 
 | 0.10 | Now |
 | --- | --- |
-| `python scripts/mold_tool.py measure part.stl --pull z [--units mm] [--wall-limit 45] [--zero-tol 0.05]` | `cad stl dfm part.stl --process molding --pull z [--units mm] [--wall-limit 45] [--zero-tol 0.05]` |
-| `python scripts/mold_tool.py pulls part.stl` | `cad stl dfm part.stl --process molding --candidates` |
+| `python scripts/mold_tool.py measure part.stl --pull z [--units mm] [--wall-limit 45] [--zero-tol 0.05]` | `cad step dfm part.step --process molding --pull z [--wall-limit 45] [--zero-tol 0.05]`; a mesh is refused (exit 2), so check the part's STEP or model |
+| `python scripts/mold_tool.py pulls part.stl` | `cad step dfm part.step --process molding --candidates` |
 | `python scripts/dfam_tool.py measure part.stl [--samples 2000] [--angle-limit 45]` | `cad stl dfm part.stl --process printing [--samples 2000] [--angle-limit 45]` |
 | `python scripts/dfam_tool.py orientations part.stl [--angle-limit 45]` | `cad stl dfm part.stl --process printing --candidates [--angle-limit 45]` |
 | a `.3mf` | `cad threemf dfm part.3mf ...` (its declared unit, read as millimetres) |
-| an `.obj` or a `.ply` | no document type: `cad.trimesh.molding(trimesh.load(path))`, `cad.trimesh.printing(...)` |
+| an `.obj` or a `.ply` | no document type: `cad.trimesh.printing(trimesh.load(path))`; no molding check, a mesh has none |
 | a STEP or a model, exported to an STL first | `cad step dfm part.step ...`, `cad model dfm <id> ...`, `cad.model.dfm(handle, process=...)` |
 
 ## `cad run` (tier 1)

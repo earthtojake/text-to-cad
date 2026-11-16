@@ -34,8 +34,10 @@ Push the branch to `origin` and open the pull request against
 
 ### Development environment
 
-Choose the setup for the environment where the tools and tests will run. Every
-environment needs Python 3.14 or newer, the packages' floor. Install Node.js 22 for the
+Choose the setup for the environment where the tools and tests will run. Use
+Python 3.14, the Python the server's installations run on; the packages' floor is 3.13
+(`requires-python`), which CI holds with the library's, the server's and the shim's suites on
+it before a release ships ([CI](docs/contributing/testing.md#ci), the release tier). Install Node.js 22 for the
 packaged runtime, Viewer, `@cad/core`, or documentation site; Python-only work
 can defer Node until a selected test needs a generated runtime stage.
 
@@ -183,7 +185,11 @@ build runs the new code. Never stop one you did not start.
 The engine's switches are environment variables, never script options (the
 engine's README, **The engine server and its workers** and **Body retention**):
 `CAD_ENGINE_WORKERS`, `CAD_ENGINE_WORKER_RSS_MB` (the workers' memory cap, together; no timer
-retires a worker), `CAD_ENGINE_MEMORY_MB` (the daemon's one memory budget,
+retires a worker), `CAD_ENGINE_CHECKS` (how many checks processes measure manufacturing checks at once:
+by default half the cores, one to four; a value is held to one to the cores, and the engine says so in `cad
+status`), `CAD_ENGINE_CHECK_SECONDS` and `CAD_ENGINE_CHECK_RSS_MB` (what one check may take before the engine
+stops it: half an hour, and the workers' memory cap, by default; `0` for no limit),
+`CAD_ENGINE_MEMORY_MB` (the daemon's one memory budget,
 **Document lifetime**), `CAD_ENGINE_CACHE_IDLE` (the document cache's idle seconds, the
 tests' seam), `CAD_ENGINE_PORT` (its HTTP port,
 `0` for any free one, refused when held; unset, 3245, else the next free port, kept per installation), `CAD_ENGINE_MEMO=0` (no memo
@@ -195,9 +201,10 @@ opened file (`documents/<uuid>/document.json`: the script and function that buil
 the file's path; never geometry). In the cache folder (`CAD_CACHE_DIR`, else the platform's:
 `~/.cache/cad`) it keeps each model document's bytes as last built,
 `documents/<uuid>/document.xbf`, regenerable and wiped at no loss, so a restart reopens
-every document without a build, and under `pycache/` the bytecode the daemon and its
-workers compile of the libraries they load (`PYTHONPYCACHEPREFIX`); it touches nothing else in
-that folder. Releases before 0.10 kept theirs in `~/.cache/cadgen`, which no build reads. Tests point both folders at temporary ones
+every document without a build, under `pycache/` the bytecode the daemon and its
+workers compile of the libraries they load (`PYTHONPYCACHEPREFIX`), and under `homes/` the private
+settings folders `cad run` hands Blender's module in place of a person's own; it touches nothing else in
+that folder but the environments it makes (`base/`). Releases before 0.10 kept theirs in `~/.cache/cadgen`, which no build reads. Tests point both folders at temporary ones
 (`scripts/test/unittest_files.py` does).
 
 The skills ship no launcher scripts: every operational verb is a `cad`
@@ -292,222 +299,25 @@ so the standard path is also checked in the MCP Apps reference host
 so a local bridge to the stdio server is needed, and it does not advertise the UI
 extension, so start the server with `CAD_MCP_PRESENTATION=inline`.
 
-## Test From This Repository
+## Testing
 
-Automated tests are self-contained. They must not read, enumerate, build, or
-import sample models from this repository's `models/` directory. Generate the
-smallest fixture needed in a fresh temporary directory, or use a tiny fixture
-committed with the tests (a CAD or mesh one only when no test can make it, and then
-listed in `tests/python/global/test_no_cad_assets_tracked.py`); do not rely on existing outputs.
-Repo `tmp/` and system temporary directories are both fine. Give builds an
-engine daemon of their own (`CAD_ENGINE_DIR`) and clean up their processes and
-files. The runner gives every test file its own state, cache and `cad` command
-folders, its state folder registering the file's interpreter as its current installation
-(`tests/python/support/engine_daemon.py`'s `register`, as `isolate` and `watched` do for the folders a
-test makes: a client with no installation starts no engine), and fails the run, naming the test,
-when the run's server writes a
-document, engine or installation record in your own state folder, or your `cad`
-command. The shared
-temporary-directory helper retains the Windows cleanup retries used by the suite.
-
-Keep regression tests focused on observable behavior. Reuse setup within a test
-when several assertions concern the same result; do not repeatedly build the
-same geometry to test unrelated metadata or duplicate an existing integration
-case. Each new test should protect a distinct contract or credible failure not
-already covered. Test a shared validator's cases once; callers need wiring
-checks, not copies of its full matrix. Avoid pinning private helpers, source
-spelling or UI copy when observable behavior already covers the requirement.
-Real kernel and browser tests remain necessary for geometry fidelity,
-cache reuse, rendering, and process-lifecycle behavior.
-
-The UI's browser specs (`packages/ui/**/*.browser.test.mjs`) run as their own
-pass, `UI_BROWSER_TEST_CONCURRENCY` files at a time (4 by default; the CI
-`web` job sets 1, because Linux renders their WebGL in software and several
-at once saturate the runner). `CAD_TEST_SWIFTSHADER=1` makes a macOS run use that same
-software renderer, to reproduce a CI-only browser failure locally.
-
-A test's COST is part of its design. Model runs go through the engine's daemon,
-as every build does: the runner gives each test file an engine directory of its
-own (`CAD_ENGINE_DIR`), so a build the file asks for runs on a daemon of that
-file's alone, and stops the daemon the file left there when it ends; a test that
-needs a daemon to itself -- a cold start, its workers -- names a directory of its
-own (the run's files share one bytecode folder, so the kernel's libraries compile once a run).
-A worker's first build pays ~2.6 s importing the CAD kernel, and every
-subprocess a test starts pays an interpreter's start: build a fixture the tests
-only READ once for the class and copy it in, build in-process (`daemon=False`)
-where the subject is not the daemon, and add a subprocess only where the subject
-IS the process. Repeating a non-deterministic case N times is not coverage — if
-the underlying property can be pinned directly, pin it and run the case once.
-
-`scripts/test/test-python.sh --print-weights` prints what the slow files cost,
-the first thing to read when a run is slow.
-
-With the development environment active, check the three distributions' Python sources with:
-
-```sh
-for project in cad cad-server cad-mcp; do
-  python -m pyrefly check --config "packages/$project/pyproject.toml"
-done
-```
-
-Pyrefly is pinned in `requirements-dev.txt`. Each package's `[tool.pyrefly]`
-configuration uses the [basic preset](https://pyrefly.org/en/docs/configuration/#preset-basic)
-over its own `src`. It checks a limited set of diagnostics, including
-undefined names in annotations, and skips unannotated function bodies and broader
-argument and assignment checks. Tests, scripts and skill helpers are outside this
-check's scope. Both cadgen CI jobs run it before the package suite.
-
-### CI
-
-`test.yml` runs one job per concern, and a change runs only what can break.
-Its first job, `Changed paths`, puts every path the change touches — added,
-modified or deleted, against the target branch as it is now — through
-`scripts/github-workflows/select_checks.py`: a table of the tests that READ each
-path (open it, scan it, import it, build it or run it). A path selects the union
-of every rule it matches; the jobs run on the result, and the Python jobs run
-only the test files it names. A path the table does not know runs everything,
-as do `VERSION` (a release is tested whole), the test machinery (`test.yml`,
-`setup-deps`, `select_checks.py`, the runners' shared parts) and the dependency
-manifests. A manual dispatch runs every job. Selection is by path, never by
-diff content: a comment in a module selects what the module's code would.
-
-| Check | Runs when a change reaches | What it runs |
-| --- | --- | --- |
-| Version Check | every change | canonical version, derived metadata, the release's pins, the shipping contract's tree rules; on a pull request, what merging it releases (see [Shipping a release](#shipping-a-release)) |
-| cadgen (Linux/Windows) | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `scripts/bundle`, a package test, prose a package test reads | the package suites -- the library's (the trimesh integration's manufacturing measurements among them), the server's (the engine's and the CAD Viewer backend's included) and the shim's (on Linux under Xvfb, the display the engine's OCCT stills draw on); for a change confined to the Viewer's backend or the CAD app's server (`cad_server/viewer`, `cad_server/mcp` and the commands that start them), only the tests that name them or read all of the server; for a test file, that file |
-| core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it) | `@cad/core`'s units, the dependency and kit-boundary checks |
-| web | `packages/ui`, `apps/web` and the files its Markdown links to | the UI's and the client's type checks (`tsc`), the UI's units and browser specs (ui changes only) and the client's units: Node and npm Playwright's Chromium, no Python |
-| mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's type check, its host-adapter units (jsdom) and its one-file build |
-| skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the print3d and sendcutsend suites); then, after the full install, the policy tests that load the packages or the server's runtime (`packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `scripts/bundle`) |
-| api | `apps/api`, `test-api.sh` | `npm --prefix apps/api test`: the version feed's and the telemetry receiver's tests (no install) |
-| docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (lint, Next build, icon verification) and the animated brand marks |
-| packaging | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts, `tests/browser`, the viewer scripts | clean bundle, layout, wheel contents, installed CLI behavior; then, for anything the served client or the backend reads, the launch smoke test and the format/camera gates on that bundle through the real backend |
-| KiCad boards | KiCad's code (the library's `engine/formats/kicad`, `engine/render/board.py`, `kicad/` and `kicad_pcb/`; the server's `cli/kicad_pcb.py`), `tests/python/packages/kicad`, `test-kicad.sh` | `test-kicad.sh`: kicode in the environment of `cad[kicad]`, made as the server makes it: DRC, every export, a STEP and mesh round trip and the board's and schematic's edits (viewing and drawing a board need no KiCad and are the package suites') |
-| fea | The stress study's code (the library's `_internal/fea`, `calculix/` and `netgen/`, `results.py`, the type's binding and the runner of one operation; the server's `cli/document_types.py` and `_internal/integration_env.py`), the library's `pyproject.toml`, the engine and shared modules a study reads a document, finds CalculiX and writes its result through (`engine/document.py`, `refs.py`, `kernel/bounds.py`, `executables.py`, `export/glb.py`, `build.py`, the stills of a GLB its pictures are (`formats/glb.py`, `snapshot.py`), `_internal/atomic_replace.py`, `programs.py`, the server's `cli_from_function.py`), `tests/python/packages/fea`, `test-fea.sh` | `tests/python/packages/fea` (`test-fea.sh`), Linux only, with the netgen and calculix integrations installed (`cad[netgen,calculix]`, netgen pinned to 6.2.2608, the version the accuracy margins were measured with, and cad-ccx 2.23.0 from PyPI): the study's parse, checks and materials, the solves against hand calculations, assemblies, the results folder and its pictures (under Xvfb), and the command through the runner of one operation; about 2 minutes (230 tests in 76 s locally), under a 15-minute timeout. No package job collects the suite |
-
-Everything runs for `VERSION`, `package.json`, `package-lock.json`,
-`requirements-dev.txt`, `packages/core`, `scripts/build`, `tests/python/support`,
-the workflow, `setup-deps`, the selector and the runners' shared parts, and any
-path the table does not name. Prose inside a code tree (`packages/**/*.md`,
-`apps/**/*.md`) is read by the light contracts alone — except the packages' READMEs,
-the wheels' descriptions, and `apps/web`'s Markdown, whose links its tests
-resolve. Root prose, the plugin manifests and configs, the release scripts and
-`models/` run the light contracts and nothing else.
-
-Adding a test that reads a new path means adding the path to the test's rule in
-`select_checks.py`; `tests/python/global/test_ci_workspace_selection.py` holds
-the table to the tree: every policy test that is not a light contract is
-selected by some rule, every test path a rule names exists, every rule matches a
-tracked file, and the routing of each kind of change is pinned. Each job installs only what its selected tests
-need: npm workspaces by job, Python and the two Playwright browsers on request,
-and nothing beyond Python and Node for the light contracts (every policy test
-but the selector's `HEAVY_POLICY`, and its `LIGHT_SKILL_TESTS`).
-
-Every run records the tree it tested as an artifact, `tested-<tree>-<scope>`
-(`scope` is `full` or a digest of the selection). A push to `main` whose tree
-its pull request's run already tested with the same selection runs nothing
-again — `main` merges only up-to-date branches, so that is every ordinary merge
-— and `Publish Release` ships a release commit without re-testing it when a run
-here tested its tree in full (`scripts/github-workflows/tested_tree.py`: a
-successful run of this repository, never a fork's).
-
-A skipped job satisfies its required check. Renaming a job renames its required
-check, so it lands together with a matching branch-protection update.
-
-Every job has a timeout of about twice its slowest recent run, so a hang fails
-in minutes. Within a Python suite, a test file still running after 15 minutes
-prints every thread's stack and fails by name.
-
-The CAD Viewer's backend and the CAD app's server are leaves of the server:
-outside them and the commands that start them, nothing in the server imports either
-but `cad_server.viewer.recents`. `test_viewer_and_mcp_boundary.py` holds that, so a
-change confined to one of them can run the package tests that reach it instead of
-the whole suite. Windows runs the Python package suite because paths, locks,
-subprocesses, file URLs and daemon behavior are platform-sensitive.
-
-Viewer browser failures upload bounded renderer-state JSON for three days.
-CI sets `VIEWER_TEST_DIAGNOSTICS_DIR` for this evidence; it does not enable the
-optional review screenshots produced by `--out`. Capture timing stays in the
-job log, so a stalled screenshot still leaves useful state diagnostics.
-
-**The packaged runtime is built per job** that reads it (the packaging job), not
-built once and passed between them: an artifact would serialise every test job
-behind a bundle job for longer than the bundle takes.
-
-**Flakes are fixed by mechanism or deleted — never skipped, retried, or tuned.**
-Classify first: a real bug, a retired behaviour, or a platform problem. Then fix
-the mechanism — wait on the event that says the thing happened, not on a clock;
-give a test its own engine daemon and folder; assert a condition rather than an
-elapsed time. A negative assertion behind a sleep ("it did not exit") is worse
-than useless, because a slow runner only ever makes it pass. If a deterministic
-unit test already pins the property, delete the racy end-to-end copy instead of
-stabilising it.
-
-Keep reusable manual edge-case and debugging models in `models/tests/`, with
-reproduction instructions. Despite its name, that folder is never CI input;
-see [its manual-validation policy](models/tests/README.md).
-
-For manual skill prompts and model review, work inside this repository and keep
-samples and CAD/robot-description artifacts under `models/`
-([its README](models/README.md) maps the corpus and says where a new model goes). Create a scratch
-project in the fixture bucket it belongs in: a standalone part
-goes in the `models/examples/` cad-project, an assembly gets its own group in
-`models/assemblies/` (`src/<assembly>/`), a drawing goes in `models/drawings/` —
-each a `@model` script in `src/`; a run writes nothing, and files are exported on
-request into the project's gitignored `STEP/`, `STL/`, `GLB/`, `3MF/` or `DXF/`.
-For example:
-
-```bash
-$EDITOR models/examples/src/my_test.py     # @model def my_test(): ...
-python models/examples/src/my_test.py      # prints its id: and view:
-```
-
-Then start your agent with `/path/to/text-to-cad` as the working directory and
-ask it to write files under that scratch path. This keeps manual model sources,
-generated artifacts, and Viewer links together, independently of the automated
-test suite.
-
-Review media such as snapshot PNGs are not model artifacts:
-render them under `/tmp` and attach them to the pull request instead. `.gitignore`
-keeps them out of `models/`.
-
-### Performance changes
-
-A change to the engine's memo, body retention, build closure, meshing or serving
-opens its PR description with a before/after timing table for `main` and the
-branch, on representative models, covering at least a leaf edit, a parent-only
-edit, a revert and a no-op. The table names any slowdown as a regression, and a
-regression merges only with the repository owner's explicit approval. A change
-that removes a cache or a performance mechanism first lists what it made faster.
-#478 removed a kernel-op memo for correctness and slowed re-runs (f1's
-`power_unit` forced rebuild went from 24 s to 102 s); that cost sat deep in a long
-PR body instead of being approved as a trade-off. The engine's memo
-(`packages/cad-server/src/cad_server/engine/README.md`, **Body retention**) is keyed by
-each operation's parameters and the keys of the shapes it was given, and answers
-a hit with the live object the first run made; its pressure tests are
-`tests/python/packages/cad/engine/test_memo.py` and `test_bodies.py`, and a
-change to it runs them first.
-
-Those numbers come from one batch, measured once every change that moves them is
-in the branch: on one machine with nothing else building, `main` and the branch side
-by side on the same models, each on a daemon of its own (`CAD_ENGINE_DIR`), cold
-and warm. The benchmarks are manual and write under `tmp/` (`scripts/bench/`); their
-output is never committed.
-
-A part is meshed at one tolerance, 0.25 % of its size and 28.5 degrees, by
-`BRepMesh_IncrementalMesh` as it is (`engine/mesh.py`): no check before it, no
-second pass, no repair. A change
-to that opens its PR with what it does to the faces left unmeshed and the triangle
-counts across the sample corpus, `main` against the branch; the engine's mesh tests
-(`tests/python/packages/cad/engine/test_mesh.py`) assert the contract on small
-fixtures.
+The rules, what runs where, how to add a test or a CI job, what to do when a run is red, and the
+other ways this repository is tested (by hand in agent apps, the manual models, the benchmarks and
+the timing table a performance change opens its pull request with) are
+[docs/contributing/testing.md](docs/contributing/testing.md). The commands are
+[Common Dev Checks](#common-dev-checks).
 
 ## Document Types And Integrations
 
-A new file format is a document type, a new third-party tool our code calls is an integration; the
-words and laws are `packages/cad/README.md`'s. Follow
-[Adding a document type](docs/contributing/adding-a-document-type.md) and
-[Adding an integration](docs/contributing/adding-an-integration.md), each a checklist.
+A file cad shows is a document type, and a third-party tool our code calls is an integration; a file
+cad only writes or checks is its tool's integration's, with no type (an MJCF, MuJoCo's). The words and
+laws are `packages/cad/README.md`'s. Start from
+[Adding an integration](docs/contributing/adding-an-integration.md#start-from-the-tool), which asks what
+the tool already does and what is missing, then
+[Adding a document type](docs/contributing/adding-a-document-type.md) where the tool's file is one. Each
+is a record of what the tools so far needed and a checklist for the ones like them, not a template: a
+tool that does not fit is thought through on its own terms: the change says where it departs and why,
+and the guide and the laws are amended with it where they should read differently.
 
 ## Source Boundaries
 
@@ -716,17 +526,17 @@ on every push:
 Every pin of the release's own in the tree — the four `pyproject.toml`s, the plugin server
 configs and each skill's launch command — names `VERSION`. `scripts/release/bump-version.sh` stamps them with the
 bump (`sync-version.mjs`), and `scripts/release/check-version.sh` asserts every
-skill pin equals `VERSION` — so a stale pin fails the `Version Check` job.
+skill pin equals `VERSION` — so a stale pin fails the `static` job's version check.
 
 The `Test` workflow runs on PRs against `main` and pushes to it, selecting
-the jobs each change can break ([CI](#ci)); a push whose tree its pull request
+the jobs each change can break ([CI](docs/contributing/testing.md#ci)); a push whose tree its pull request
 already tested runs nothing again, and the `packaging` job builds the runtime
 from clean with `scripts/bundle/bundle.sh --clean` and checks the layout and the
 wheel. `main` commits no generated runtime at all —
 the Viewer client and the CAD app page are built from `packages/core`,
 `packages/ui`, `apps/web` and `apps/mcp` on demand, and ship only inside the wheel. What IS
 committed and therefore checked for freshness is the version
-metadata derived from `VERSION`, asserted by the separate `Version Check` job
+metadata derived from `VERSION`, asserted by the `static` job's version check
 (`scripts/release/check-version.sh` and `sync-version.mjs --check`).
 
 ## Releases
@@ -736,7 +546,7 @@ Release`, which uploads the release's four projects to PyPI and only then moves 
 installers follow, so the canonical repo version, the skill pins, the Git tag,
 the PyPI wheels and the GitHub Release all describe one commit. Normal
 development PRs leave `VERSION` alone. A PR that touches release state must keep
-`VERSION`, the derived metadata and the pins valid; `Test`'s Version Check job
+`VERSION`, the derived metadata and the pins valid; `Test`'s `static` job
 checks all three, apart from the code tests, so those still run when they are
 wrong.
 
@@ -809,7 +619,7 @@ setting that comes to mean something else, anything a skill or a person's script
 edited for. A breaking change always comes with a migration guide under `docs/migrations/`, which says
 what to change. An addition that renames nothing (a new command, a new document type, a new option)
 breaks nothing, and neither does a Python name renamed with its earlier spelling kept as its alias
-(tier 2, below). Version Check refuses a release that installs itself and adds or changes a migration
+(tier 2, below). The version check refuses a release that installs itself and adds or changes a migration
 guide; the rest is the release's author's to judge, and when in doubt it is the breaking slot.
 
 **What breaks, by tier.** [Law 15](packages/cad/README.md#the-design-laws) ("Compatibility, by who
@@ -893,7 +703,7 @@ release. It works from `main`'s version, not the branch's, so running it twice
 changes nothing and running it again after `main` moves moves the bump with it;
 it refuses a branch that does not contain `main` yet, whose stamps would conflict.
 
-The pull request's Version Check says what merging it releases, and refuses:
+The pull request's version check (`static`) says what merging it releases, and refuses:
 
 - a bump from a fork — releases come from branches of this repository only, so
   a contributor's pull request can never start one;
@@ -908,7 +718,7 @@ The pull request's Version Check says what merging it releases, and refuses:
 - stamps out of step with `VERSION` (`check-version.sh`,
   `sync-version.mjs --check`).
 
-A `VERSION` change runs every `Test` job (see [CI](#ci)), so the release is
+A `VERSION` change runs every `Test` job (see [CI](docs/contributing/testing.md#ci)), so the release is
 tested whole, Windows included, before it can merge. Merge it once everything is
 green: that is the release. `Publish Release`, on the merge commit:
 
@@ -991,7 +801,7 @@ branch, and the Cursor Marketplace, which takes the repository.
 When two pull requests bump at once, the first merged wins. The other then
 conflicts on the stamps if it bumped differently (take `main`'s side and run
 `bump-version.sh` again) or quietly stops changing `VERSION` if it bumped the
-same way — its Version Check then says it releases nothing; bump again to
+same way — its version check then says it releases nothing; bump again to
 release it.
 
 ### The install branches
@@ -1212,7 +1022,7 @@ with identical bytes, with no obsolete assets left in the wheel. It leaves the
 checkout's build scratch untouched. Set `CAD_WHEEL_OUT_DIR` and
 `CAD_KEEP_WHEEL=1` to retain that checked wheel for an installed smoke test.
 
-To check a bump locally the way the gate and Version Check will:
+To check a bump locally the way the gate and the version check will:
 
 ```bash
 git fetch --tags origin
@@ -1226,16 +1036,20 @@ draft release unless `--publish` is passed.
 
 ### Repository settings
 
-`main` requires a PR with nine stable status checks — `Version
-Check`, `cadgen (Linux)`, `cadgen (Windows)`, `core-js`, `web`, `skills`,
-`docs`, `packaging`, `api` — strict (up to date with `main`), squash merges only, a
-linear history, no force pushes and no deletions. A job its selection skips
-satisfies its check, so a prose pull request merges on Version Check and the
-light contracts. Changing required check names also requires updating GitHub
-branch protection. Strict up-to-date is what makes a merged tree the tree its
-pull request's run tested, so the push run and `Publish Release` find that run's
-record and test nothing again; a merge that is not up to date is still tested,
-by both.
+`main` requires a PR with one status check, `CI` ([the gate](docs/contributing/testing.md#ci): every `Test`
+job that ran passed) — strict (up to date with `main`), squash merges only, a
+linear history, no force pushes and no deletions. No other check is required, so
+a job is added, renamed, split or sharded in `test.yml` without a
+branch-protection change; a job its selection skips passes the gate, so a prose
+pull request merges on `static` and `CI`. The other side of one required check:
+a pull request that removes a job from `test.yml`, or from `CI`'s `needs`, still
+merges green, where a removed required job used to block. Review a change to
+`test.yml`, `ci_gate.py` or the selector as a change to what protects `main`
+(`test_ci_workspace_selection.py` holds that `CI` needs every job), and require
+`CI` from GitHub Actions as its source. Strict up-to-date is what makes a
+merged tree the tree its pull request's run tested, so the push run and
+`Publish Release` find that run's record and test nothing again; a merge that is
+not up to date is still tested, by both.
 `PREPARE_RELEASE_TOKEN` is a personal access token, so that the release pull
 requests `Prepare Release` opens start their checks. It needs Contents and Pull
 requests write on this repository; nothing merges with it, so it need not be an
@@ -1353,7 +1167,11 @@ never CAD or mesh assets: a test makes the STEP, GLB or mesh it needs in a tempo
 folder, a sample exports on request into its project's gitignored `STEP/`, `STL/`,
 `GLB/`, `3MF/`, `DXF/` or `XBF/`, and `tests/python/global/test_no_cad_assets_tracked.py`
 fails on any tracked CAD or mesh file but the few tiny fixtures it lists, each with the
-reason no test can make it.
+reason no test can make it. The KiCad files an electronics sample's scripts write (its board,
+schematic, project and libraries) are build output in the same way: gitignored, made again by
+the sample's `cad run build.py`, and held untracked by
+`tests/python/global/test_generated_kicad_files_untracked.py`, which lists what each build writes
+and the few KiCad files beside it that no script makes. A board no script makes is source.
 
 A security problem is reported privately, as [SECURITY.md](SECURITY.md) says, never as an
 issue or a pull request.

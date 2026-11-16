@@ -128,6 +128,14 @@ def closest_points(a: Shape, b: Shape) -> ClosestPoints:
     Solid interiors count: contact, overlap and containment have distance
     zero. Witnesses need not be on both boundaries or unique. This is not
     penetration depth. Pass faces/shells to ask about their boundaries.
+
+    Its cost grows with both shapes' faces (OCCT's exact extrema): two
+    solids of thousands of faces each (a vendor STEP's printed parts) take
+    seconds a pair, so a hundred pairs take minutes. Compounds are measured
+    member by member, a member whose bounding box is farther than the best
+    distance so far skipped. Over many pairs, rule out first those whose
+    ``bounding_box(optimal=False)`` envelopes do not meet, and measure from a
+    point (``bd.Vertex``) where a point answers the question.
     """
     from build123d import Vector
     from OCP.BRepExtrema import BRepExtrema_DistShapeShape
@@ -192,8 +200,14 @@ def overlap_volume(a: Solid | Compound, b: Solid | Compound) -> float:
     belong to the caller. Inputs are never fused or modified; a failed boolean
     is an error, never a zero-volume answer.
     """
+    return _overlap_volume(a, b)
+
+
+def _overlap_volume(a, b, *, parallel: bool = False) -> float:
+    """``overlap_volume``; ``parallel`` lets the kernel run each Boolean on every core (the interference
+    check's, whose slowest pairs are measured last, with cores to spare): the same volume, sooner."""
     lefts, rights = _solids(a), _solids(b)
-    return sum((_overlap(left, right) for left in lefts for right in rights), 0.0)
+    return sum((_overlap(left, right, parallel) for left in lefts for right in rights), 0.0)
 
 
 def _solids(shape) -> list:
@@ -217,7 +231,7 @@ def _solids(shape) -> list:
     return found
 
 
-def _overlap(left, right) -> float:
+def _overlap(left, right, parallel: bool = False) -> float:
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
     from OCP.BRepBndLib import BRepBndLib
     from OCP.BRepCheck import BRepCheck_Analyzer
@@ -231,7 +245,19 @@ def _overlap(left, right) -> float:
             BRepBndLib.Add_s(shape, bounds, False)
         if boxes[0].IsOut(boxes[1]):
             return 0.0
-        boolean = BRepAlgoAPI_Common(_copy(left), _copy(right))
+        if parallel:
+            from OCP.collections import List_TopoDS_Shape
+
+            boolean = BRepAlgoAPI_Common()
+            arguments, tools = List_TopoDS_Shape(), List_TopoDS_Shape()
+            arguments.Append(_copy(left))
+            tools.Append(_copy(right))
+            boolean.SetArguments(arguments)
+            boolean.SetTools(tools)
+            boolean.SetRunParallel(True)
+            boolean.Build()
+        else:
+            boolean = BRepAlgoAPI_Common(_copy(left), _copy(right))
         if not boolean.IsDone():
             raise GeometryError("intersection boolean did not complete")
         common = boolean.Shape()

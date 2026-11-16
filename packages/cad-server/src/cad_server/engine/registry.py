@@ -56,7 +56,7 @@ from cad.engine.atomic_replace import replace_atomic
 from cad.engine.ids import is_id
 from cad.engine.records import (DOCUMENTS, RECORD, SCHEMA, command, detached, home, parse, program, relative, rerun)
 
-__all__ = ["DOCUMENTS", "ENGINES", "ENGINE_FIELDS", "ENGINE_SCHEMA", "FACTORY", "Folder", "OBSERVERS", "PICTURES", "RECORD", "Registry", "SCHEMA", "TOKEN",
+__all__ = ["DOCUMENTS", "ENGINES", "ENGINE_FIELDS", "ENGINE_SCHEMA", "FACTORY", "FORGOTTEN", "Folder", "OBSERVERS", "PICTURES", "RECORD", "Registry", "SCHEMA", "TOKEN",
            "command", "current", "detached", "home", "pictures", "program", "relative"]
 
 ENGINES = "engines"
@@ -84,6 +84,9 @@ def pictures(record: dict[str, Any] | None) -> set[str]:
 
 # Told of every record written (one that changed), after it is on disk; never waited on for more.
 OBSERVERS: list[Callable[[dict[str, Any]], None]] = []
+# Told of every document id deleted (``Registry.delete``), under its lock, its folders gone: what the engine
+# keeps of it elsewhere goes too (``checks.Checks.deleted``).
+FORGOTTEN: list[Callable[[str], None]] = []
 # Makes the registry another way than of the user's state and cache folders (``current``): a test's seam.
 FACTORY: Callable[[], "Registry"] | None = None
 
@@ -251,6 +254,11 @@ class Registry:
             self.state.remove(f"{DOCUMENTS}/{ident}")
             if self.cache is not None:
                 self.cache.remove(f"{DOCUMENTS}/{ident}")
+            for forget in list(FORGOTTEN):
+                try:
+                    forget(ident)
+                except Exception:  # noqa: BLE001 - what holds it elsewhere never fails the deletion
+                    pass
         self.forget_pictures(named)
         return there
 
@@ -332,6 +340,11 @@ class Registry:
     def root(self, record: dict[str, Any]) -> Path:
         """The folder a record's paths are relative to: its ``root``."""
         return Path(record["root"])
+
+    def lock(self, ident: str) -> threading.RLock:
+        """Document ``ident``'s lock, which its writes and its deletion hold: what is written into its folder
+        elsewhere (its kept checks, ``checks.Disk``) holds it too, so no write lands in a folder deleted under it."""
+        return self._lock(ident)
 
     def _lock(self, ident: str) -> threading.RLock:
         with _LOCKS_LOCK:

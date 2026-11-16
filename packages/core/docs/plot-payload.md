@@ -19,8 +19,10 @@ a mismatch is refused by name on both sides.
 The picture is KiCad's PCB editor's with the display it opens a board with: every layer shown, the
 front copper the active layer, KiCad's drawing order for that (`pcbnew/pcb_draw_panel_gal.cpp`), its
 colours, zones at its 60% opacity, a plated hole seen through to the board's background, a pad's
-number and net name over it. No drawing sheet (KiCad's page border and title block) is drawn: the
-board is the board alone, which the fit frames.
+number and net name over it, every text in the stroke font with KiCad's markup drawn as KiCad draws it
+(`~{RESET}` overbarred, `IO_{3}` and `x^{2}` sub- and superscripts, the markers never drawn; one reading
+of it on both sides, `plot2d/strokeFont.parity.json`). No drawing sheet (KiCad's page border and title
+block) is drawn: the board is the board alone, which the fit frames.
 
 ```jsonc
 {
@@ -120,7 +122,7 @@ Each item has `t`, its type; every point is sheet millimetres.
 | `path` | `pts` (2+ points), `w`, optional `closed`, optional `pairs` | a stroked polyline, round caps and joins; with `pairs`, separate segments, the points taken two by two; `w` 0 is a hairline (one CSS pixel at any zoom) |
 | `circle` | `at`, `r`, `w` | a filled disc (`w` 0) or a ring `w` wide centred on `r` |
 | `text` | `text`, `w`, `strokes` (polylines of 2+ points), optional `knockout` | the string's strokes, `w` wide; knocked out (`knockout`: the four corners of its box), the box filled and the letters cut from it |
-| `label` | `kind` (`pad`, `via`), `text`, `at`, `size` (height, width), `angle`, `w`, `lod` | a name the renderer lays out in the stroke font (`plot2d/strokeFont.js`, the engine's `stroke_font` point for point), centred on `at`, `angle` degrees counter-clockwise, its strokes `w` wide; drawn once the view shows `lod` CSS pixels per millimetre, and from below laid out to read the right way round |
+| `label` | `kind` (`pad`, `via`), `text`, `at`, `size` (height, width), `angle`, `w`, `lod` | a name the renderer lays out in the stroke font (`plot2d/strokeFont.js`, the engine's `stroke_font` point for point, KiCad's markup drawn), centred on `at`, `angle` degrees counter-clockwise, its strokes `w` wide; drawn once the view shows `lod` CSS pixels per millimetre, and from below laid out to read the right way round |
 
 Flags any item may carry: `ref`, the board reference of what drew it (`#R1` for a footprint's
 graphics and text, `#R1.2` for a pad and its mask and paste); `net`, the net of a piece of copper;
@@ -137,11 +139,15 @@ locked: what the board index would otherwise repeat of every graphic is drawn he
 What each thing becomes:
 
 - **Pads** are their padstack's outline (rect, roundrect, oval, circle, trapezoid, chamfered,
-  custom: the hull of its primitives) as a `poly` on every copper layer they flash on, with `ref`
-  and `net`: a pad through the board whose unused copper is removed keeps it on the outer layers
+  custom: its anchor and every primitive -- filled polygons, circles and rectangles, and outlines,
+  lines, arcs and curves drawn with their pen's width -- united, as KiCad makes its copper, a `poly`
+  per piece with its `holes`: a comb is a comb, not the hull round it) as a `poly` on every copper
+  layer they flash on, with `ref` and `net`: a pad through the board whose unused copper is removed keeps it on the outer layers
   (when it keeps its end layers), where a zone connects it (`zone_layer_connections`) and where a
   track ends on it, as KiCad's `FlashLayer` decides. A front-copper pad carries its `clearance` (its
-  own, its footprint's, else its net class's): KiCad outlines it there, a hairline that far out. A
+  own, its footprint's, else its net class's): KiCad outlines it there, a hairline that far out; a
+  custom pad, which need not be convex, carries that outline as `grown` (rings: the pad grown by its
+  clearance, or its hull grown where it keeps its clearance from its hull, `(clearance convexhull)`). A
   pad's number and net name are `label`s fitted to it as KiCad fits them (`pcb_painter.cpp`): the
   number above the net, centred, turned to read upwards on a pad taller than wide, `x` for a
   no-connect pin and `*` for a free one; a surface pad's on its copper (in that copper's name
@@ -192,7 +198,7 @@ clearance outlines of tracks.
 
 `board` is `cad.engine.formats.kicad.board_index.BoardIndex.as_json()` in sheet millimetres: `parts` (ref,
 value, footprint, side, `at`, `rotation`, `fields`, `dnp`, `outline`), `pads` (part, number, name,
-net, type, side, `at`, `polygon`, `drill`), `tracks` (net, layer, width, `points`, `arc` for an arc),
+net, type, side, `at`, `polygon`: a custom pad's the outline of its largest piece, `drill`), `tracks` (net, layer, width, `points`, `arc` for an arc),
 `vias` (net, `at`, diameter, drill, the two `layers` it joins, `type`: `through`, `blind`, `buried`,
 `micro`), `zones` (net, layer, `outline`, `name`, `priority`, `filled`: the mm² of copper KiCad filled
 that layer with; a zone on several layers is one entry per layer, alike but for its layer; a rule
@@ -212,7 +218,11 @@ KiCad's own frame, millimetres, y down: a point the viewer copies pastes straigh
 `Vector2.from_xy_mm`.
 
 What a 3D view of the board reads: `thickness`, the board's (its stack-up's `(general (thickness ..))`,
-millimetres; absent when the file says none), and a part's `models`, each of its footprint's 3D models as
+millimetres; absent when the file says none), `stackup`, the physical stack-up the file saved, as it names
+it (`{"layers": [{"name": "F.Mask", "type": "Top Solder Mask", "color": "Black", "thickness": 0.01}, ...],
+"finish": "ENIG"}`: each layer's `type`, `color`, `thickness` and `material` where the file gives them; absent
+for a board that saved none), which a 3D face draws the board as made in (`plot2d/stackup.js`: KiCad's 3D
+viewer's colours for those names; the 2D view and snapshots keep the layers' colours), and a part's `models`, each of its footprint's 3D models as
 the file writes them: `name` (as written: `${KICAD9_3DMODEL_DIR}/…/R_0603.wrl`, `${KIPRJMOD}/…`, a
 relative or absolute path, `kicad-embed://…`), and where it differs from KiCad's default `offset`
 (millimetres), `rotate` (degrees about x, y, z), `scale`, `hidden: true` and `opacity`. Which file on the
@@ -235,7 +245,9 @@ schematic's frame is KiCad's own: millimetres, y down, the page's top-left corne
 point the viewer reads off a page is the one the file holds; `width` and `height` are the page's
 (`page` its box, as a board's), and `background` KiCad's schematic canvas. A page adds `path` (the
 sheet's, `/` the root, `/Power/`), `number` (its page number), `file` and `title` (its title block's
-fields, as data: the drawing sheet itself is not drawn).
+fields, as data). Every page the route answers is on KiCad's drawing sheet (`drawing_sheet`, below), which
+the viewer draws always, as KiCad's schematic editor shows it; `cad kicad_sch snapshot` asks for it too
+and draws the title block (the frame with `border`). `build_schematic_plot` leaves it out unless asked.
 
 ```jsonc
 {
@@ -253,7 +265,13 @@ fields, as data: the drawing sheet itself is not drawn).
 ```
 
 The layers, bottom to top, each present only where it draws something but `page`: `page` (kind
-`sheet`: the page's edge, a hairline flagged `page`; a view leaves it off unless asked), `notes`
+`sheet`: the page's edge, a hairline flagged `page`; a view leaves it off unless asked),
+`drawing_sheet` (`drawing_sheet`, on every page the route answers: KiCad's default drawing sheet, its built-in
+`.kicad_wks`, at its positions -- the frame, two rectangles at the 10 mm margin and 2 mm inside it with
+the column numbers and row letters every 50 mm, each item flagged `frame`, and the title block in the
+bottom-right corner, its box, rows and texts with their `${...}` filled from the sheet's own title
+block, path, file, paper, page and page count; a project that names a drawing sheet of its own gets the
+default and a warning), `notes`
 (`notes`: free text, text boxes and graphics), `sheets` (`sheet_box`: the hierarchical sheets' boxes,
 their names, files and pins, `role` `name`, `file`, `field` or `pin`), `symbols` (`symbol`: each body
 from the drawing the file embeds, its fills first), `pins` (`pin`), `wires` (`wire`), `buses` (`bus`,
@@ -266,7 +284,9 @@ pin, `#sheet:/Load/` a sheet's box), `net`, `id` (the uuid KiCad saved it with) 
 schematic's own: `fill: "background"` on a symbol body KiCad fills with its device background, and
 `color` (`#rrggbb`, with `opacity`) where the file gives an item a colour of its own. What colour a
 layer is drawn in is the renderer's, KiCad's default schematic theme (`render/schematic.py` on the
-server's side). Text is Hershey Simplex at KiCad's positions, a field centred in the box KiCad gives
+server's side). Text is Hershey Simplex at KiCad's positions, its markup drawn as KiCad draws it
+(`~{RESET}` overbarred, `IO_{3}` a subscript, `^{...}` a superscript, the markers never drawn and
+the width measured on what is), a field centred in the box KiCad gives
 it and read horizontally or vertically as KiCad turns it; a pin's name and number sit as the
 symbol's `pin_names` offset places them.
 
@@ -278,5 +298,5 @@ net, id), `junctions`, `labels` (kind, text, sheet, `at`, angle, shape, net, id;
 as kind `power`), `no_connects`, `bus_entries` and `nets` (name, pins as `R1.2`, the sheets it reaches),
 every net named as KiCad names it, the board's names.
 
-Not drawn: images, tables, KiCad's drawing sheet (frame and title block), and line styles (a dashed
+Not drawn: images, tables, a project's own drawing sheet (KiCad's default stands in), and line styles (a dashed
 stroke is drawn solid).

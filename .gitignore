@@ -84,6 +84,10 @@ models/**/XBF/
 models/*/unported/STEP/
 models/*/unported/validation/
 
+# A Blender scene and its backup are made by the bpy script that renders them; never committed.
+*.blend
+*.blend1
+
 # Component-GLB render packages are regenerated on demand; never committed.
 .*.step.glb/
 .*.step.glb

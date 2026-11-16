@@ -28,6 +28,9 @@ The nets are resolved as KiCad's connection graph resolves them (``eeschema/conn
    strong one (a label) over a weak one (pins), the higher priority, the shorter sheet path, then
    the lower name. A local name carries its sheet's path (``/Power/VBUS``), a global one none.
 
+:func:`span_joins` lists what step 1 joins that a person seldom means: a pin, or a wire's end, on another
+wire's run with no junction there (``cad kicad_sch erc`` warns of each).
+
 A reference names a schematic's things as a board's names the board's (:mod:`.refs`, the same
 grammar where they mean the same: ``#U3`` the symbol, every unit of it; ``#U3.7`` its pin 7;
 ``#net:VBUS`` the net, by KiCad's name, which is the board's), plus ``#sheet:/Power/`` a sheet and an
@@ -44,7 +47,7 @@ from __future__ import annotations
 import difflib
 import math
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -67,6 +70,7 @@ __all__ = [
     "SchematicView",
     "Sheet",
     "SheetPin",
+    "SpanJoin",
     "Symbol",
     "Wire",
     "bus_members",
@@ -75,6 +79,7 @@ __all__ = [
     "read_schematic_index",
     "root_of",
     "screen_transform",
+    "span_joins",
     "symbol_transform",
 ]
 
@@ -1000,6 +1005,90 @@ def resolve_nets(index: _Reader) -> tuple[dict[int, str], list[Net], list[str]]:
         if item_net.get(id(junction)) is None:
             item_net[id(junction)] = net_of_node.get(union.find(("junction", "bus", id(junction))))
     return item_net, built, warnings
+
+
+@dataclass(frozen=True)
+class SpanJoin:
+    """A pin, or a wire's end, that joins a wire on its span -- not at one of its ends -- with no junction
+    there. KiCad joins them (its connection graph puts a point item on a wire's run on that wire, junction or
+    none), and ERC says nothing, though a wire drawn across a pin's end on its way elsewhere is usually a
+    mistake. ``pin`` is the pin (``None`` for a wire's end), ``end`` the wire whose end it is (``None`` for a
+    pin), ``wire`` the wire it lies on; ``at`` where, on ``sheet``'s page."""
+
+    sheet: str
+    at: XY
+    wire: Wire
+    pin: Pin | None = None
+    end: Wire | None = None
+
+
+def span_joins(index: SchematicIndex) -> list[SpanJoin]:
+    """Every pin of a placed symbol (a power symbol's and a hidden pin aside: a power symbol names a net
+    where it is, as a label does) and every wire's end that lies on another wire's span, not at one of its
+    ends, on the same sheet, where no junction marks the join: KiCad's own way to draw one (its editor puts a
+    junction at every T it draws, and a wire ending on a pin is a join it means). Wires alone: a bus and a bus
+    entry are not checked. A grid of the wires keeps it from being quadratic.
+
+    A pin whose one connection is the span of one wire is KiCad's own drawing, not a finding: a straight run
+    through a row of pins (a rail of decoupling capacitors) drawn as wires ending on each pin, with junctions,
+    is saved by KiCad as one wire across the pins, the junctions removed (its cleanup merges two collinear
+    wires that meet at a pin). A pin on a span that is also joined some other way -- a wire ending on it,
+    another pin, a label, a sheet pin, a no-connect, or a second wire's span -- is one: there the span adds
+    a second connection, which a wire drawn past a pin on its way elsewhere makes."""
+    cell = 25.4 / _UNIT
+    found: list[SpanJoin] = []
+    by_sheet: dict[str, list[Wire]] = defaultdict(list)
+    for wire in index.wires:
+        if wire.kind == "wire":
+            by_sheet[wire.sheet].append(wire)
+    junctions = {(junction.sheet, _key(junction.at)) for junction in index.junctions}
+    pins: dict[str, list[Pin]] = defaultdict(list)
+    # What joins a point besides a wire's span: a wire's end, a pin (a power symbol's too), a label, a sheet
+    # pin, a no-connect. A pin counts itself once, so a point holding two is joined otherwise.
+    joined: Counter[tuple[str | None, tuple[int, int]]] = Counter()
+    for wire in index.wires:
+        if wire.kind == "wire":
+            for point in wire.points:
+                joined[(wire.sheet, _key(point))] += 1
+    for symbol in index.symbols:
+        for pin in symbol.pins:
+            if not pin.hidden:
+                joined[(pin.sheet, _key(pin.at))] += 1
+                if not symbol.power:
+                    pins[pin.sheet].append(pin)
+    for item in (*index.labels, *index.no_connects):
+        joined[(item.sheet, _key(item.at))] += 1
+    for sheet in index.sheets:
+        for sheet_pin in sheet.pins:
+            joined[(sheet.parent, _key(sheet_pin.at))] += 1
+    for sheet, wires in by_sheet.items():
+        grid: dict[tuple[int, int], list[Wire]] = defaultdict(list)
+        for wire in wires:
+            a, b = _key(wire.points[0]), _key(wire.points[1])
+            for gx in range(int(min(a[0], b[0]) // cell), int(max(a[0], b[0]) // cell) + 1):
+                for gy in range(int(min(a[1], b[1]) // cell), int(max(a[1], b[1]) // cell) + 1):
+                    grid[(gx, gy)].append(wire)
+
+        def spanned(point: XY, besides: Wire | None = None) -> list[Wire]:
+            key = _key(point)
+            if (sheet, key) in junctions:
+                return []
+            return [wire for wire in grid.get((int(key[0] // cell), int(key[1] // cell)), ())
+                    if wire is not besides and _on_segment(key, _key(wire.points[0]), _key(wire.points[1]))]
+
+        said: set[tuple[tuple[int, int], int]] = set()  # a pin at a wire's end on another's span: the pin says it
+        for pin in pins.get(sheet, ()):
+            spans = spanned(pin.at)
+            if len(spans) == 1 and joined[(sheet, _key(pin.at))] == 1:
+                continue  # the span is the pin's one connection: KiCad's own straight run through a pin
+            for wire in spans:
+                said.add((_key(pin.at), id(wire)))
+                found.append(SpanJoin(sheet, pin.at, wire, pin=pin))
+        for end in wires:
+            for point in end.points:
+                found.extend(SpanJoin(sheet, point, wire, end=end) for wire in spanned(point, end)
+                             if (_key(point), id(wire)) not in said)
+    return found
 
 
 def _best_name(members: list[dict]) -> str | None:

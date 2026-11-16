@@ -13,3 +13,12 @@ __pycache__/
 # KiCad's local settings beside a board it opened.
 *.kicad_prl
 fp-info-cache
+# The KiCad project build.py writes (cad run build.py): build output, made again from scripts/. The project
+# file, twin_orbit.kicad_pro, is the source of the rules and netclasses: no script writes it.
+/twin_orbit.kicad_pcb
+/twin_orbit.kicad_sch
+/lfo.kicad_sch
+/power.kicad_sch
+/twin_orbit.pretty/
+/fp-lib-table
+/sym-lib-table

@@ -69,7 +69,7 @@ test("the index resolves every kind of reference to what it names and the sheets
   for (const missing of ["#R9", "#R1.9", "#net:NOPE", "#sheet:/Power/", "#track:a1"]) assert.equal(index.resolve(missing), null, missing);
 });
 
-test("a press picks the most specific thing under it that the filter takes; a box takes what lies inside it", () => {
+test("a press picks the most specific thing under it that the filter takes; a box takes what it touches", () => {
   const layout = layoutPlot(PAGE);
   const index = createSchematicIndex(layout.schematic);
   const page = createSchematicPage(index, layout.sheets[0]);
@@ -86,7 +86,14 @@ test("a press picks the most specific thing under it that the filter takes; a bo
   assert.equal(at(100, 57.7, ["symbols"]), "#R1", "without Pins, the body round it");
   assert.equal(at(100, 52, ["labels"]), null);
   assert.equal(at(200, 150), null);
-  assert.deepEqual(page.within([95, 45, 106, 66], { kinds: SCHEMATIC_PICK_KINDS }).sort(), ["#R1", "#R1.1", "#R1.2", "#junction:a3", "#wire:a1"].sort());
+  // A box takes what it touches.
+  const boxed = (bounds, kinds = SCHEMATIC_PICK_KINDS) => page.pickBox(bounds, { kinds }).sort();
+  // Round R1 and its wires: the wire it only starts is taken too, as everything a box touches is.
+  assert.deepEqual(boxed([95, 45, 106, 66]), ["#R1", "#R1.1", "#R1.2", "#junction:a3", "#wire:a1", "#wire:a2"].sort());
+  assert.deepEqual(boxed([110, 64.9, 111, 65.1]), ["#wire:a2"], "a sliver across a wire's middle");
+  assert.deepEqual(boxed([99.5, 59, 99.8, 59.2]), ["#R1"], "inside the body");
+  assert.deepEqual(boxed([99.5, 59, 99.8, 59.2], ["pins"]), [], "as the filter says");
+  assert.deepEqual(boxed([105, 55, 106, 56]), []);
   assert.equal(page.sheetAt([130, 50]), "/Load/");
   assert.equal(page.sheetAt([10, 10]), null);
   assert.deepEqual(page.snap([100.2, 55.1], { tolerance: 0.5 }), { point: [100, 55], kind: "pin" });

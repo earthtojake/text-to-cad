@@ -215,7 +215,7 @@ const litAt = image => {
   return count ? [x / count, y / count, count] : null;
 };
 
-test('2D to 3D and back with the camera left alone: every frame shows the board, and the 2D view comes back as it was, a pad where it stood', async (t) => {
+test('2D to 3D and back: every frame shows the board, and the 2D view comes back as it was, a pad where it stood, whatever the camera did in 3D', async (t) => {
   const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
   t.after(() => page.close());
   page.setDefaultTimeout(30000);
@@ -256,11 +256,14 @@ test('2D to 3D and back with the camera left alone: every frame shows the board,
   });
   await pane.locator('[data-board-dimension]').click();
   // Up in place of the flat canvas, then eased from head on to where 3D opens (Home, the world's z up);
-  // nothing moves the camera.
+  // then the camera is moved, turned onto R1 pad 2 from the front, right and above, nearer.
   await page.waitForFunction(() => {
     const camera = window.__cadCamera?.();
     return document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible') && camera && !camera.settling && camera.up[2] > 0.9;
   });
+  await page.evaluate(() => window.cadHarness.a.controller.setCamera({ position: [55, -45, 40], target: [35.825, -15, 0], up: [0, 0, 1] }));
+  await page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling && Math.abs(camera.target[0] - 35.825) < 1e-6; });
+  // Back in 2D: its own window, as it was left, not the camera's (each mode keeps its own view).
   await pane.locator('[data-board-dimension="3d"]').click();
   await pane.locator('[data-board-3d]').waitFor({ state: 'detached' });
   const back = litAt(await frame(pane));
@@ -270,7 +273,7 @@ test('2D to 3D and back with the camera left alone: every frame shows the board,
   assert.deepEqual(errors, []);
 });
 
-test('a board reopened in 3D leaves for 2D centred on what its camera centred on, nobody having moved it', async (t) => {
+test('a board reopened in 3D leaves for the 2D window it was left at (here the fit), never its camera\'s', async (t) => {
   const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
   t.after(() => page.close());
   page.setDefaultTimeout(30000);
@@ -280,7 +283,11 @@ test('a board reopened in 3D leaves for 2D centred on what its camera centred on
   // The tab's record in the page's sessionStorage (`?store=session`): a reload of the page is a reload of the tab.
   await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb&store=session`);
   const pane = page.getByTestId('one');
-  await frame(pane);
+  const fitted = await frame(pane);
+  // R1 pad 2 lit in the fitted 2D view: where the 2D view will show it again.
+  await page.evaluate(() => window.cadHarness.a.controller.select('#R1.2'));
+  const pad = litAt(await frame(pane, fitted));
+  assert.ok(pad, 'R1 pad 2 lit in 2D');
   // In 3D, the camera turned onto R1 pad 2 from the front, right and above, and kept with the file's view.
   await pane.locator('[data-board-dimension]').click();
   // Up in place of the flat canvas and eased from head on to Home (the world's z up), as 3D opens: the camera at
@@ -302,9 +309,8 @@ test('a board reopened in 3D leaves for 2D centred on what its camera centred on
   await page.evaluate(() => window.cadHarness.a.controller.select('#R1.2'));
   await pane.locator('[data-board-dimension="3d"]').click();
   await pane.locator('[data-board-3d]').waitFor({ state: 'detached' });
-  const flat = await frame(pane);
-  const pad = litAt(flat);
-  assert.ok(pad && Math.hypot(pad[0] - flat.width / 2, pad[1] - flat.height / 2) <= 1, `R1 pad 2 at the centre: ${pad} in ${flat.width} x ${flat.height}`);
+  const back = litAt(await frame(pane));
+  assert.ok(back && Math.hypot(back[0] - pad[0], back[1] - pad[1]) <= 1, `R1 pad 2 where the fit draws it, not at the camera's centre: ${back} vs ${pad}`);
   assert.equal(await pane.locator('[data-board-side]').getAttribute('data-board-side'), 'top');
   assert.deepEqual(errors, []);
 });
@@ -351,7 +357,7 @@ test('in 3D Flip turns the camera over and its icon is the side the camera is on
   await page.keyboard.press('Shift+F');
   await page.waitForFunction(() => window.__cadCamera?.().position[2] < 0);
   assert.deepEqual(await rest(), bottom, '⇧F turned the camera under the board');
-  // A Flip is a move of the camera: leaving 3D frames the 2D view from the side the camera was on, the bottom.
+  // Leaving 3D, the 2D view comes back from the side the camera was on, the bottom (Flip's icon is one state), its own window kept.
   await pane.locator('[data-board-dimension]').click();
   await pane.locator('[data-board-3d]').waitFor({ state: 'detached' });
   assert.deepEqual(await page.evaluate(() => [window.cadHarness.a.controller.readState().boardDisplay.side,

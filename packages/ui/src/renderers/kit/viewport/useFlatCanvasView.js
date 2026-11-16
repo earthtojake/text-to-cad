@@ -2,12 +2,13 @@
  * A flat picture on a canvas, and the three things a person does to it: drag or a trackpad's
  * two-finger scroll to pan, a mouse's wheel or a pinch to zoom about the pointer, double-click to fit — and, for the tool in hand, a tap (a press
  * that lets go without dragging) and the pointer resting over the picture (`onTap`, `onHover`), in
- * the pane's CSS pixels. A drag that has gone further than a tap may is a pan, unless the tool in
- * hand takes it (`onDrag`, a board's Select drawing its box): then the middle button pans, as
- * KiCad's does (`middlePan`), and the view's other drags are the 3D views' (`orbitPan`, three's
- * OrbitControls as `useViewerRuntime.js` sets them): the right button's drag pans (a Mac
- * trackpad's two-finger click and drag) and a primary drag with Ctrl, Cmd or Shift held pans, the
- * browser's menu kept off the picture; a press of either that does not travel is no tap. A mouse's
+ * the pane's CSS pixels. A drag that has gone further than a tap may is a pan, unless the press is
+ * Select's box (`kit/tools/select/flatBoxSelect.js`, which switches `controls` off for its press, as a
+ * 3D view's Box select switches OrbitControls off): then the middle button pans, as KiCad's does
+ * (`middlePan`), and the view's other drags are the 3D views' (`orbitPan`, three's OrbitControls as
+ * `useViewerRuntime.js` sets them): the right button's drag pans (a Mac trackpad's two-finger click
+ * and drag) and a primary drag with Ctrl, Cmd or Shift held pans, the browser's menu kept off the
+ * picture; a press of either that does not travel is no tap. A mouse's
  * wheel zooms, as a pinch and a wheel with Cmd or Ctrl do; a trackpad's two-finger scroll pans, as
  * Figma's does (`wheelGesture.js`). Every flat view (a 2D drawing, a
  * board) is this one hook under its own paint.
@@ -78,10 +79,6 @@ const wheelZoomFactor = (pixels, pinch) => Math.exp(-pixels * (pinch ? PINCH_WHE
  * @param {(point: { x: number, y: number }, event: PointerEvent) => void} [options.onTap]
  * @param {(point: { x: number, y: number } | null, event: PointerEvent | null) => void} [options.onHover]
  *   A pointer resting over the canvas with nothing pressed (null: it left).
- * @param {(phase: "start" | "move" | "end" | "cancel", drag: { start: { x: number, y: number }, point: { x: number, y: number },
- *   event: PointerEvent | null }) => boolean | void} [options.onDrag]  Asked, as a press with the primary button
- *   travels past a tap, whether the drag is the tool's (`"start"` answering true); if it is, its moves and its
- *   release are the tool's too, and the view does not pan.
  * @param {(point: { x: number, y: number }, event: MouseEvent) => boolean | void} [options.onDoubleTap]  Asked first what a
  *   double-click is (a schematic's sheet symbol entered, answering true); else, under Select, it fits (`doubleClickFits`).
  * @param {boolean} [options.middlePan]  A press of the middle button pans.
@@ -92,7 +89,7 @@ const wheelZoomFactor = (pixels, pinch) => Math.exp(-pixels * (pinch ? PINCH_WHE
  *   drawing's does: the room the frame measures as `--cad-tools-bottom`.
  */
 export function useFlatCanvasView({ content, bounds, restored = null, colorScheme = "light", onViewMoved, paint: paintFrame,
-  onTap = null, onHover = null, onDrag = null, onDoubleTap = null, middlePan = false, orbitPan = false, fitBox = fitTransform, clearStrip = false }) {
+  onTap = null, onHover = null, onDoubleTap = null, middlePan = false, orbitPan = false, fitBox = fitTransform, clearStrip = false }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
@@ -121,8 +118,9 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
   tapRef.current = onTap;
   const hoverRef = useRef(onHover);
   hoverRef.current = onHover;
-  const dragRef = useRef(onDrag);
-  dragRef.current = onDrag;
+  // The pan, as a 3D view's OrbitControls are to its Box select: `enabled` false while a press is
+  // Select's box (`flatBoxSelect.js`), whose drag then moves nothing. A pinch is the view's whatever it says.
+  const controls = useRef({ enabled: true }).current;
   const doubleTapRef = useRef(onDoubleTap);
   doubleTapRef.current = onDoubleTap;
   const middlePanRef = useRef(middlePan);
@@ -338,24 +336,22 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     };
 
     // The press that may still be a tap: where it went down, until it travels or a second finger lands.
-    // `drag`: the tool took it (`onDrag`); `pan`: a middle press, a pan from the start.
+    // `pan`: a middle press, a pan from the start.
     let press = null;
     const onPointerDown = (event) => {
       // Primary press only: a secondary or middle press belongs to whatever the
       // host puts on them, not to panning — but a view whose tool takes its drags pans with the middle.
       const mouse = event.pointerType === "mouse";
       const middle = mouse && event.button === 1 && middlePanRef.current;
-      // The 3D views' pans: the right button's drag, a primary drag with a modifier (a click with one is still a click).
+      // The 3D views' pans: the right button's drag (a primary drag with a modifier is a pan as any
+      // primary drag is: Select's box leaves it to the view).
       const secondary = mouse && event.button === 2 && orbitPanRef.current;
-      const modified = orbitPanRef.current && event.button === 0 && (event.ctrlKey || event.metaKey || event.shiftKey);
       if (mouse && event.button !== 0 && !middle && !secondary) return;
       capturePointer(canvas, event.pointerId);
       const point = local(event);
       pointers.set(event.pointerId, point);
-      // A second finger is a pinch: a drag the tool had taken lets go.
-      if (press?.drag && pointers.size > 1) dragRef.current?.("cancel", { start: press.start, point, event });
       press = pointers.size === 1
-        ? { id: event.pointerId, start: point, moved: middle, drag: false, pan: middle || secondary || modified, tapless: secondary } : null;
+        ? { id: event.pointerId, start: point, moved: middle, tapless: secondary } : null;
       if (pointers.size === 2) measurePinch();
       if (pointers.size === 1) setDragging(true);
       hoverRef.current?.(null, null);
@@ -373,16 +369,15 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
       const transform = transformRef.current;
       if (!transform) return;
       if (pointers.size === 1) {
-        if (press?.drag) { dragRef.current?.("move", { start: press.start, point, event }); return; }
+        let from = previous;
         if (press && !press.moved) {
           if (Math.hypot(point.x - press.start.x, point.y - press.start.y) <= TAP_SLOP_PX) return;
           press.moved = true;
-          // The tool in hand may take the drag (a box drawn), else it pans.
-          if (!press.pan && dragRef.current?.("start", { start: press.start, point, event }) === true) { press.drag = true; return; }
-          moveTo(panTransform(transform, point.x - press.start.x, point.y - press.start.y));
-          return;
+          from = press.start;
         }
-        moveTo(panTransform(transform, point.x - previous.x, point.y - previous.y));
+        // Select's box has this press: the view stays where it is.
+        if (!controls.enabled) return;
+        moveTo(panTransform(transform, point.x - from.x, point.y - from.y));
       } else if (pointers.size === 2 && fitScaleRef.current) {
         const before = { ...pinchState };
         measurePinch();
@@ -400,9 +395,7 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
       if (pointers.size === 2) measurePinch();
       if (pointers.size === 0) setDragging(false);
       const tapped = press && press.id === event.pointerId && !press.moved && !press.tapless && event.type === "pointerup";
-      const dragged = press?.drag && press.id === event.pointerId ? press : null;
       press = null;
-      if (dragged && at) dragRef.current?.(event.type === "pointerup" ? "end" : "cancel", { start: dragged.start, point: at, event });
       if (tapped && at) tapRef.current?.(at, event);
     };
     const onPointerLeave = () => { if (!pointers.size) hoverRef.current?.(null, null); };
@@ -469,5 +462,5 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     fit
   }), [zoomBy, fit]);
 
-  return { containerRef, canvasRef, dragging, fit, frame, zoomBy, zoom, setView, encode, transformRef, sizeRef, schemeRef, requestPaint, paintNow };
+  return { containerRef, canvasRef, controls, dragging, fit, frame, zoomBy, zoom, setView, encode, transformRef, sizeRef, schemeRef, requestPaint, paintNow };
 }

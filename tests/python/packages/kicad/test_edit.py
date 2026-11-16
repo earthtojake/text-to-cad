@@ -7,8 +7,9 @@ runs a script (``tests/python/support/kicode.py``), and the saved files are read
 (``kicad_pcb.read``, ``kicad_sch.read``), which need no KiCad. A changed file is saved and reads back
 changed; a raise saves nothing; a block that changes nothing leaves the file byte for byte; a board and a
 schematic of one project edited in one block share one server; a file not there yet is made; a symbol is
-placed from the project's own library, and one the project lacks is refused in one line. Runs in the KiCad
-job; anywhere the environment cannot be made it says why it skips.
+placed from the project's own library, and one the project lacks is refused in one line; copper KiCad takes
+onto a pad's net as it saves is said, with the pad, and a net the block set is not. Runs in the KiCad job;
+anywhere the environment cannot be made it says why it skips.
 """
 
 from __future__ import annotations
@@ -57,6 +58,33 @@ WIDENED = textwrap.dedent("""
         print(json.dumps({"raised": str(error)}))
 """)
 
+# Copper KiCad takes onto a pad's net: the block widens the VBUS track (so the board is saved) and gives a via clear
+# of every pad the LED net, deliberately, then sends every via back as it reads them; its ground via through R1's
+# VBUS pad, and the polygon joined to it, it does not touch. What the edit found is printed.
+VIA, RING, LONE = ("7a1c0000-0000-4000-8000-0000000000a1", "7a1c0000-0000-4000-8000-0000000000a2",
+                   "7a1c0000-0000-4000-8000-0000000000a3")
+ON_A_PAD = (f'(via (at 34.175 15) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net "GND") (uuid "{VIA}"))'
+            f'(gr_poly (pts (xy 33.5 14) (xy 35.5 14) (xy 35.5 16) (xy 33.5 16)) (stroke (width 0) (type solid))'
+            f' (fill yes) (layer "B.Cu") (net "GND") (uuid "{RING}"))'
+            f'(via (at 30 5) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net "GND") (uuid "{LONE}"))')
+DRIFTED = textwrap.dedent("""
+    import json, sys
+    from cad import kicad_pcb
+    from kicode.util.units import from_mm
+
+    with kicad_pcb.edit(sys.argv[1]) as b:
+        power = [track for track in b.get_tracks() if track.net.name == "VBUS"]
+        for track in power:
+            track.width = from_mm(0.8)
+        b.update_items(power)
+        led = next(net for net in b.get_nets() if net.name == "LED")
+        lone = next(via for via in b.get_vias() if via.id.value == sys.argv[2])
+        lone.net = led
+        b.update_items(lone)
+        b.update_items(list(b.get_vias()))  # every via sent back as read: the moved one's new net is not asked for
+    print(json.dumps([change.as_data() for change in b.net_changes]))
+""")
+
 # Blocks that change nothing: a board's and a schematic's, each only read.
 READS = textwrap.dedent("""
     import json, sys
@@ -69,25 +97,34 @@ READS = textwrap.dedent("""
     print(json.dumps({"parts": parts, "symbols": symbols}))
 """)
 
-# Two resistors from the project's own library, R1's pin 2 wired to R2's pin 1 (a pin's place on the sheet is
-# the symbol's position plus the pin's, unrotated).
+# Four resistors from the project's own library, R1's pin 2 wired to R2's pin 1 (a pin's place on the sheet is
+# the symbol's position plus the pin's, unrotated), and a straight run through the pins 1 of R1, R3 and R4 drawn
+# as wires ending on each pin, with a junction at R3's.
 WIRED = textwrap.dedent("""
     import sys
     from cad import kicad_sch
     from kicode.geometry import Vector2
-    from kicode.schematic_types import SchematicLine, SchematicLineType
+    from kicode.schematic_types import Junction, SchematicLine, SchematicLineType
 
     def pin_at(symbol, number):
         pin = next(pin for pin in symbol.definition.pins if pin.number == number)
         return symbol.position + pin.position
 
+    def wire(start, end):
+        line = SchematicLine()
+        line.type = SchematicLineType.SLT_WIRE
+        line.start, line.end = start, end
+        return line
+
     with kicad_sch.edit(sys.argv[1]) as s:
         r1 = s.place_symbol_from_library("parts:R", Vector2.from_xy_mm(50.8, 50.8), reference="R1")
         r2 = s.place_symbol_from_library("parts:R", Vector2.from_xy_mm(50.8, 63.5), reference="R2")
-        wire = SchematicLine()
-        wire.type = SchematicLineType.SLT_WIRE
-        wire.start, wire.end = pin_at(r1, "2"), pin_at(r2, "1")
-        s.create_items(wire)
+        r3 = s.place_symbol_from_library("parts:R", Vector2.from_xy_mm(63.5, 50.8), reference="R3")
+        r4 = s.place_symbol_from_library("parts:R", Vector2.from_xy_mm(76.2, 50.8), reference="R4")
+        junction = Junction()
+        junction.position = pin_at(r3, "1")
+        s.create_items([wire(pin_at(r1, "2"), pin_at(r2, "1")), wire(pin_at(r1, "1"), pin_at(r3, "1")),
+                        wire(pin_at(r3, "1"), pin_at(r4, "1")), junction])
 """)
 
 # The schematic and the board of one project in one block: one server between them, each saved at its own
@@ -201,6 +238,22 @@ class Edits(unittest.TestCase):
         self.assertIn("KiCad could not save design.kicad_sch: failed to save schematic", ran["said"])
         self.assertEqual(before, _files(self.folder), "the root as it was, no new sheet file, nothing beside them")
 
+    def test_copper_kicad_moves_onto_a_pads_net_is_said_and_what_the_block_set_is_not(self) -> None:
+        from cad import kicad_pcb
+
+        board = write_board(self.folder)
+        board.write_text(board.read_text(encoding="utf-8").rstrip()[:-1] + ON_A_PAD + ")\n", encoding="utf-8")
+        done = self.run_edit(DRIFTED, str(board), LONE)
+        said = [(change["kind"], change["id"], change["was"], change["now"], change["pad"], change["joined"])
+                for change in self.last(done)]
+        self.assertEqual([("via", VIA, "GND", "VBUS", "#R1.1", None),
+                          ("shape", RING, "GND", "VBUS", None, f"#via:{VIA}")], said)
+        warned = [line for line in done.stderr.splitlines() if "KiCad saved" in line]
+        self.assertEqual(2, len(warned), done.stderr)
+        self.assertIn(f"KiCad saved via #via:{VIA} on VBUS, not GND: it overlaps pad #R1.1 of VBUS", warned[0])
+        nets = {via.id: via.net for via in kicad_pcb.read(board).vias}
+        self.assertEqual(("VBUS", "LED"), (nets[VIA], nets[LONE]), "the board as KiCad saved it; the block's net kept")
+
     def test_a_board_and_a_schematic_of_one_project_share_one_server(self) -> None:
         from cad import kicad_pcb, kicad_sch
 
@@ -214,15 +267,26 @@ class Edits(unittest.TestCase):
 
     def test_symbols_placed_from_the_projects_library_and_wired_read_back_on_one_net(self) -> None:
         from cad import kicad_sch
+        from cad.engine.formats.kicad.schematic import read_schematic_index, span_joins
 
         schematic = write_library_project(self.folder)
         self.run_edit(WIRED, str(schematic))
         read = kicad_sch.read(schematic)
-        self.assertEqual(["R1", "R2"], sorted({pin.ref for pin in read.pins}))
+        self.assertEqual(["R1", "R2", "R3", "R4"], sorted({pin.ref for pin in read.pins}))
         self.assertEqual({"1", "2"}, {pin.number for pin in read.pins if pin.ref == "R1"})
         net = read.resolve("#R1.2").net
         self.assertEqual(net, read.resolve("#R2.1").net)
         self.assertEqual({"R1.2", "R2.1"}, {f"{pin.ref}.{pin.number}" for pin in read.net(net).pins})
+        # KiCad saves the run through R3's pin as one wire across it, the junction gone: its own drawing of a
+        # pin on a straight run, which the span check (pin_on_wire_span) does not name.
+        run = {"R1.1", "R3.1", "R4.1"}
+        self.assertEqual(run, {f"{pin.ref}.{pin.number}" for pin in read.net(read.resolve("#R3.1").net).pins})
+        index, _ = read_schematic_index(schematic)
+        y = read.resolve("#R3.1").at[1]
+        self.assertEqual([(50.8, 76.2)], sorted(tuple(sorted(point[0] for point in wire.points))
+                                                 for wire in index.wires if wire.points[0][1] == y == wire.points[1][1]))
+        self.assertEqual((), index.junctions)
+        self.assertEqual([], span_joins(index))
         self.assertIn('(lib_id "parts:R")', schematic.read_text(encoding="utf-8"), "each symbol keeps its library link")
 
     def test_a_library_the_project_lacks_is_one_line_naming_it(self) -> None:
@@ -239,7 +303,7 @@ class Edits(unittest.TestCase):
         done = self.run_edit(WIRED, str(schematic))
         self.assertIn(f"made {schematic}, a new schematic, and its project design.kicad_pro", done.stderr)
         self.assertTrue(schematic.with_suffix(".kicad_pro").is_file())
-        self.assertEqual(["R1", "R2"], sorted(kicad_sch.read(schematic).parts))
+        self.assertEqual(["R1", "R2", "R3", "R4"], sorted(kicad_sch.read(schematic).parts))
         # Both of a new project in one block: one server, each made in it and saved, its project said once.
         board, other = self.folder / "pair" / "pair.kicad_pcb", self.folder / "pair" / "pair.kicad_sch"
         done = self.run_edit(textwrap.dedent("""

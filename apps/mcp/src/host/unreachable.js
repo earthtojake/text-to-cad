@@ -12,19 +12,50 @@ export const OPEN_IN_VIEWER = 'cad.openInViewer';
 
 /** Every key the notice says. */
 export const UNREACHABLE_KEYS = Object.freeze(['cad.unreachable.openModel', 'cad.unreachable.openViewer',
-  'cad.unreachable.askModel', 'cad.unreachable.askViewer', OPEN_IN_VIEWER]);
+  'cad.unreachable.askModel', 'cad.unreachable.askViewer', 'cad.unreachable.staleModel', 'cad.unreachable.staleViewer',
+  OPEN_IN_VIEWER]);
 
-/** A card that only says it cannot connect is as tall as its words, not a viewer's height. */
+/** A card that only says it cannot connect is as tall as its words, not a viewer's height: this, until they are measured. */
 export const NOTICE_HEIGHT = 180;
 
 /**
- * The line's key: the page offered where the launch gave one, else the agent asked to open it.
+ * Why a card cannot reach CAD's server, where the server said (its refusal's `structuredContent.refused`,
+ * `cad_server/mcp/server.py`'s `_app_only`): `capability`, the card's call carried none (or another
+ * session's); `stale`, it carried one from before CAD restarted. Any other refusal says nothing here.
+ * @param {{ isError?: boolean, structuredContent?: Record<string, unknown> } | undefined} result
+ * @returns {'capability' | 'stale' | null}
+ */
+export function refusalOf(result) {
+  const refused = result?.isError ? result.structuredContent?.refused : undefined;
+  return refused === 'capability' || refused === 'stale' ? refused : null;
+}
+
+/**
+ * The line's key: a view opened before CAD restarted is shown again; else the page offered where the
+ * launch gave one, else the agent asked to open it.
  * @param {boolean} page
  * @param {boolean} model
+ * @param {'capability' | 'stale' | null} [refused]
  */
-export function unreachableKey(page, model) {
+export function unreachableKey(page, model, refused = null) {
+  if (refused === 'stale') return model ? 'cad.unreachable.staleModel' : 'cad.unreachable.staleViewer';
   return page ? (model ? 'cad.unreachable.openModel' : 'cad.unreachable.openViewer')
     : (model ? 'cad.unreachable.askModel' : 'cad.unreachable.askViewer');
+}
+
+/**
+ * How tall an inline card showing a notice is (`notice.css`'s `.cad-notice`): its words and its
+ * padding, measured, so no empty frame stands around it at any width; `NOTICE_HEIGHT` where nothing
+ * was laid out (a hidden frame).
+ * @param {HTMLElement} notice
+ * @returns {number}
+ */
+export function noticeHeight(notice) {
+  const body = notice.firstElementChild;
+  const style = getComputedStyle(notice);
+  const height = (body ? body.getBoundingClientRect().height : 0)
+    + (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+  return body && body.getBoundingClientRect().height > 0 ? Math.ceil(height) : NOTICE_HEIGHT;
 }
 
 /**

@@ -46,11 +46,14 @@ NOT_INSTALLED = (f"{SERVER} is not installed on this computer: install {SERVER} 
                  "then run this again")
 
 
-def _connect(address: Path | None = None) -> Connection | None:
+def _connect(address: Path | None = None, *, stopping: bool = False) -> Connection | None:
     """A connection to the daemon at ``address`` (its door, on Windows its port file; by default
     the engine's), or None when none answers there or it greets in a protocol this side does not
     speak. ``ConnectionError`` when the system refuses this process the engine's folder (a sandbox
-    that forbids writing there)."""
+    that forbids writing there); None instead for a daemon told to stop (``stopping``: ``wait_gone``),
+    whose stop a sandbox would have refused already: Windows refuses every open of a file being removed
+    until the last handle on it closes, however long that takes, so its port file refused then is
+    going with it."""
     try:
         if places.WINDOWS:
             port, token = _port_text(address or places.port_path()).split()
@@ -74,6 +77,8 @@ def _connect(address: Path | None = None) -> Connection | None:
             return None
         return dial(door)
     except PermissionError as error:
+        if stopping:
+            return None
         raise _denied(f"opening a pipe in the engine's folder {places.engine_dir()}: {error.strerror or error}") from None
     except (OSError, ValueError):
         return None
@@ -92,12 +97,12 @@ def _port_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _answering(address: Path) -> bool:
+def _answering(address: Path, *, stopping: bool = False) -> bool:
     """Whether a daemon answers at ``address``, asked without a request: its door takes a writer
-    (on Windows, its port takes a connection)."""
+    (on Windows, its port takes a connection). ``stopping``: ``_connect``'s."""
     if not places.WINDOWS:
         return answering(address)
-    connection = _connect(address)
+    connection = _connect(address, stopping=stopping)
     if connection is None:
         return False
     connection.close()
@@ -269,12 +274,13 @@ def _told_started(mine: list[subprocess.Popen]) -> None:
 
 
 def wait_gone(timeout: float = 60.0, endpoint: places.Endpoint | None = None) -> bool:
-    """Wait until the daemon is gone: its door no longer answers and its lock, held until its workers
-    have stopped, is free."""
+    """Wait until the daemon, told to stop, is gone: its door no longer answers -- its port file,
+    refused as it is removed, does not (``_connect``) -- and its lock, held until its workers have
+    stopped, is free."""
     deadline = time.monotonic() + timeout
     lock = endpoint.lock if endpoint else places.lock_path()
     while time.monotonic() < deadline:
-        if not _answering(endpoint.address if endpoint else places.address()):
+        if not _answering(endpoint.address if endpoint else places.address(), stopping=True):
             if not lock.exists():
                 return True  # it removed its lock as it let it go (``daemon.let_go``)
             held = _lock(lock)
@@ -341,13 +347,22 @@ def _exchange(connection: Connection, message: dict[str, Any], on_log: Callable[
                 if on_progress is not None:
                     on_progress(answer["progress"])
                 continue
-            notice = answer.pop("notice", None)
-            # The request that bound the engine's port, when that start moved the port
-            # (``daemon.bind``): a line each.
-            for said in (notice or "").splitlines():
-                print(f"cad: {said}", file=sys.stderr)
+            _notice(answer.pop("notice", None))
             return answer
     raise ConnectionError("the engine server closed the connection")
+
+
+def _notice(notice: str | None) -> None:
+    """The request that bound the engine's port, when that start moved the port (``daemon.bind``): a line each on
+    stderr, after whatever the command has printed on stdout so far (flushed first) and before anything it prints
+    next, so that a terminal reading both, or a pipe of ``2>&1``, never has the note inside a command's output."""
+    lines = (notice or "").splitlines()
+    if not lines:
+        return
+    sys.stdout.flush()
+    for said in lines:
+        print(f"cad: {said}", file=sys.stderr)
+    sys.stderr.flush()
 
 
 def sweep(*, stop: bool) -> dict[str, list[str]]:

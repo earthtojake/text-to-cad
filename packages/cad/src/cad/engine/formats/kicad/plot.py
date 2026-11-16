@@ -24,9 +24,9 @@ path, a circle, a text's strokes or a label the renderer lays out, in sheet
 millimetres:
 
 - a pad is its padstack's outline (rect, roundrect, oval, trapezoid, chamfered,
-  custom) on every copper layer it flashes on, carrying its pad reference (``#R1.2``)
-  and net; its number and net name are labels, a surface pad's on its copper, a
-  through-hole pad's on ``names``;
+  custom: its anchor and primitives united, a polygon per piece with its holes) on every
+  copper layer it flashes on, carrying its pad reference (``#R1.2``) and net; its number and
+  net name are labels, a surface pad's on its copper, a through-hole pad's on ``names``;
 - a via is a ring on each copper layer it flashes on, its annular width wide, and
   its hole on ``vias``; a pad's hole and an unplated hole are on ``drills``; a plated
   hole carries its wall's width;
@@ -67,11 +67,11 @@ from typing import Iterable, Sequence
 from cad.engine.formats.kicad import sexpr
 from cad.engine.formats.kicad.board_index import (
     FootprintFrame, canonical_copper, copper_layers, expand_copper, footprint_property, graphic, item_id, item_layers, layer_of, locked, net_of,
-    net_table, pad_shape, points_of, read_index, zone_outline,
+    net_table, pad_pieces, points_of, read_index, zone_outline,
 )
 from cad.engine.formats.kicad.connectivity import Copper, ratsnest
 from cad.engine.formats.kicad.dimensions import dimension_shapes
-from cad.engine.formats.kicad.geometry import XY, area, box, inside, polygon_distance, rotate
+from cad.engine.formats.kicad.geometry import XY, area, box, hull, inside, pen_outlines, polygon_distance, rotate, union
 from cad.engine.formats.kicad.labels import is_track, pad_labels, via_labels
 from cad.engine.formats.kicad.naming import netclass_of, project_netclasses
 from cad.engine.formats.kicad.sexpr import Sym
@@ -269,6 +269,10 @@ def _slot(width: float, height: float) -> list[XY]:
             angle = start + (math.pi / 2) * step / 6
             out.append((cx + radius * math.cos(angle), cy + radius * math.sin(angle)))
     return out
+
+
+def _custom(pad: list) -> bool:
+    return len(pad) > 3 and isinstance(pad[3], str) and str(pad[3]) == "custom"
 
 
 def _scaled(polygon: Sequence[XY], centre: XY, factor: float) -> list[XY]:
@@ -518,7 +522,8 @@ class _Builder:
 
     def text(self, layer: str, text: str, at: XY, angle: float, node: list, *, selector: str | None = None) -> None:
         size, thickness, justify, italic = _text_style(node)
-        strokes = text_strokes(text, size=size, at=at, angle=angle, justify=justify, mirror="mirror" in justify, italic=italic)
+        strokes = text_strokes(text, size=size, at=at, angle=angle, justify=justify, mirror="mirror" in justify, italic=italic,
+                               markup=True)
         flags = {"ref": selector} if selector else {}
         found = sexpr.find(node, "layer")
         if found is not None and any(isinstance(atom, Sym) and atom == "knockout" for atom in found[2:]) and strokes:
@@ -538,7 +543,8 @@ class _Builder:
         size, _thickness, justify, italic = _text_style(node)
         at = sexpr.pair(sexpr.find(node, "at"), (0.0, 0.0))
         angle = sexpr.number(sexpr.find(node, "at")[3]) if len(sexpr.find(node, "at") or []) > 3 else 0.0
-        flat = [point for stroke in text_strokes(text, size=size, at=at, justify=justify, italic=italic) for point in stroke]
+        flat = [point for stroke in text_strokes(text, size=size, at=at, justify=justify, italic=italic, markup=True)
+                for point in stroke]
         if not flat:
             flat = [at]
         corners = box(flat)
@@ -614,7 +620,17 @@ class _Builder:
         layers = item_layers(node)
         drill = sexpr.find(node, "drill")
         offset = sexpr.pair(sexpr.find(drill, "offset"), (0.0, 0.0)) if drill is not None else (0.0, 0.0)
-        shape = [(centre[0] + dx, centre[1] + dy) for dx, dy in (rotate(x + offset[0], y + offset[1], angle) for x, y in pad_shape(node))]
+        def placed(ring: Sequence[XY]) -> list[XY]:
+            return [(centre[0] + dx, centre[1] + dy) for dx, dy in (rotate(x + offset[0], y + offset[1], angle) for x, y in ring)]
+
+        # A custom pad is its anchor and primitives united: a piece or more, each with its holes.
+        pieces = [(placed(outer), [placed(hole) for hole in holes]) for outer, holes in pad_pieces(node)]
+        shape = pieces[0][0]
+        everywhere = [point for outer, _holes in pieces for point in outer]
+
+        def each(layer: str, outline: Sequence[tuple[list[XY], list[list[XY]]]] = pieces, **extra) -> None:
+            for outer, holes in outline:
+                self.sheet.polygon(layer, outer, **({"holes": holes} if holes else {}), **extra)
         size = sexpr.pair(sexpr.find(node, "size"), (0.0, 0.0))
         selector = f"#{ref}.{number}" if ref and number else None
         flags = {}
@@ -633,26 +649,38 @@ class _Builder:
             if sizes and not (form in ("circle", "oval") and offset == (0.0, 0.0) and sizes[0] >= abs(size[0]) - 1e-9
                               and (form == "circle" or sizes[-1] >= abs(size[1]) - 1e-9)):
                 for layer in copper:
-                    self.sheet.polygon(layer, shape, tier="pad", **({"ref": selector} if selector else {}))
+                    each(layer, tier="pad", **({"ref": selector} if selector else {}))
         else:
             opening = shape
             mode, zones = _unused_layers(node) if kind == "thru_hole" else ("all", [])
-            flashed = _flashed(mode, zones, copper, ("F.Cu", "B.Cu"), lambda layer: self.ends.polygon(layer, shape, net))
+            flashed = _flashed(mode, zones, copper, ("F.Cu", "B.Cu"),
+                               lambda layer: any(self.ends.polygon(layer, outer, net) for outer, _holes in pieces))
             # KiCad outlines a pad's clearance on the layer being edited, the front copper: a hairline
             # around the pad, its own clearance (the pad's or its footprint's, else its net class's) out.
             local = sexpr.value(node, "clearance")
             clearance = sexpr.number(local, sexpr.number(margins[3], self.classes.clearance(net)))
+            extra: dict = {}
+            if "F.Cu" in flashed and clearance > 0:
+                extra["clearance"] = _num(clearance)
+                if _custom(node):
+                    # Not convex: the outline that far out is the pad grown by its clearance, drawn as given; the
+                    # pad's hull grown, where it asks KiCad to keep its clearance from its hull (`(clearance convexhull)`).
+                    options = sexpr.find(node, "options")
+                    rings = ([hull(everywhere)] if options is not None and str(sexpr.value(options, "clearance")) == "convexhull"
+                             else [outer for outer, _holes in pieces])
+                    extra["grown"] = [outer for outer, _holes in union(
+                        [part for ring in rings for part in (ring, *pen_outlines(ring, 2 * clearance, closed=True, tolerance=0.02))])]
             for layer in flashed:
-                extra = {"clearance": _num(clearance)} if layer == "F.Cu" and clearance > 0 else {}
-                self.sheet.polygon(layer, shape, tier="pad", **flags, **extra)
+                each(layer, tier="pad", **flags, **(extra if layer == "F.Cu" else {}))
             if net:
                 anchor = (centre[0] + rotate(*offset, angle)[0], centre[1] + rotate(*offset, angle)[1])
-                self.sheet.copper.append(Copper.polygon(net, copper, shape, anchor=anchor, pad=True))
-            self.pad_names(node, number, net, shape, size, copper, kind)
+                for outer, _holes in pieces:
+                    self.sheet.copper.append(Copper.polygon(net, copper, outer, anchor=anchor, pad=True))
+            self.pad_names(node, number, net, everywhere, size, copper, kind)
         # Mask openings and paste, derived from the pad: KiCad's own margins, applied as one offset.
         mask_margin = sexpr.number(sexpr.value(node, "solder_mask_margin"), sexpr.number(margins[0], self.mask_margin))
         for layer in self._technical(layers, "Mask"):
-            self.sheet.polygon(layer, opening, width=max(0.0, 2 * mask_margin), **flags)
+            each(layer, [(opening, [])] if opening is not shape else pieces, width=max(0.0, 2 * mask_margin), **flags)
         if kind != "np_thru_hole":
             ratio = sexpr.number(sexpr.value(node, "solder_paste_margin_ratio"), sexpr.number(margins[2], self.paste_ratio))
             paste_margin = sexpr.number(sexpr.value(node, "solder_paste_margin"), sexpr.number(margins[1], self.paste_margin))
@@ -661,10 +689,11 @@ class _Builder:
                 if paste_margin < 0 and min(abs(size[0]), abs(size[1])) > 0:
                     factor = max(0.0, 1 + 2 * paste_margin / min(abs(size[0]), abs(size[1])))
                     shifted = rotate(offset[0], offset[1], angle)  # shrunk about the shape's own centre
-                    self.sheet.polygon(layer, _scaled(shape, (centre[0] + shifted[0], centre[1] + shifted[1]), factor),
-                                       **flags)
+                    middle = (centre[0] + shifted[0], centre[1] + shifted[1])
+                    each(layer, [(_scaled(outer, middle, factor), [_scaled(hole, middle, factor) for hole in holes]) for outer, holes in pieces],
+                         **flags)
                 else:
-                    self.sheet.polygon(layer, shape, width=2 * paste_margin, **flags)
+                    each(layer, width=2 * paste_margin, **flags)
 
     def pad_names(self, node: list, number: str, net: str | None, shape: Sequence[XY], size: XY, copper: Sequence[str], kind: str) -> None:
         """A pad's number and net name: on its copper for a surface pad, over everything for one through the board."""
@@ -922,7 +951,7 @@ def _shifted(item: dict, dx: float, dy: float) -> dict:
     for key, value in item.items():
         if key == "pts":
             out[key] = [_xy((x - dx, y - dy)) for x, y in value]
-        elif key in ("holes",):
+        elif key in ("holes", "grown"):
             out[key] = [[_xy((x - dx, y - dy)) for x, y in ring] for ring in value]
         elif key == "knockout":
             out[key] = [_xy((x - dx, y - dy)) for x, y in value]

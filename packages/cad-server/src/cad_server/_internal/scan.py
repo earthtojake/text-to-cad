@@ -10,10 +10,10 @@ it spells (``from cad.step import read``, ``step.read`` with ``step`` imported f
 an earlier spelling is read as the name it is now, by the alias table, and a name needs what the registry
 says it does -- an integration's namespace that integration, a document type's reader its
 ``reader_integration`` (a STEP's: build123d), an operation the calling process runs its integration (a
-``dfm``: trimesh), one the engine runs none, an edit its integration (``kicad_pcb.edit``: kicad;
-``for_name``), and an operation also what its integration's operations need beside it (``cad.step.solve``:
-calculix, with build123d and netgen; ``needs``). A type alone (``from cad import step``) needs
-nothing. Nothing is imported, and a module of no local file is passed over.
+STEP's, an xbf's, a model's and a DXF's ``dfm``: build123d; a mesh's: trimesh), one the engine runs none, an edit its
+integration (``kicad_pcb.edit``: kicad; ``for_name``), and an operation also what its integration's operations need
+beside it (``cad.step.solve``: calculix, with build123d and netgen; ``needs``). A type alone
+(``from cad import step``) needs nothing. Nothing is imported, and a module of no local file is passed over.
 An import made by name at run time (``importlib.import_module``) is not seen: the program's run says which
 extra it lacks, in one line, and its header names it.
 """

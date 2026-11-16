@@ -2,7 +2,7 @@
 
 ``@glb("arm.glb")`` declares a model's GLB file;
 its operations (``glb.export(source, *destinations)``, ...) are the ``cad glb <operation>`` commands'.
-``glb.dfm(source, process="molding")`` (or ``"printing"``) measures it for manufacturing, with
+``glb.dfm(source)`` measures it for 3D printing (molding, CNC and sheet are judged on exact geometry), with
 the trimesh integration (``cad._internal.manufacturing``).
 Everything loads on first use: ``import cad.glb`` imports no CAD kernel (``cad._internal.document_type``).
 """

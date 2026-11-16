@@ -1,9 +1,10 @@
-"""The engine's verbs counted (``cad_server/_internal/engine_telemetry.py``): the server's observer of
-``cad.engine.api``, which its commands append, turns what each build, export and snapshot did into the
-counts the build daemon kept for its builds -- kind ``model``, who asked, how it ended and why, the
-workers' health, cadgen's own crashes -- keeps them in the spool, and a command starts the sender
-(``telemetry_send``, process ``cli``) when nothing has taken the spool for a window. Nothing is counted
-where the environment says no, nor in a model's own process, which runs where only the library is."""
+"""The engine counted (``cad_server/_internal/engine_telemetry.py``): the daemon counts each model build it
+answers -- kind ``model``, how it ended, a failure only where the system or the machine caused it, its workers'
+health, cadgen's own crashes -- for the person who asked it; the server's observer of ``cad.engine.api``, which its
+commands append, counts each export and snapshot, never a build. Each is kept in the spool, and a command or the
+daemon starts the sender (``telemetry_send``, process ``cli``) when nothing has taken the spool for a window.
+Nothing is counted where the asker's environment says no, nor in a model's own process, which runs where only the
+library is."""
 
 from __future__ import annotations
 
@@ -107,11 +108,11 @@ class EngineTelemetryTest(unittest.TestCase):
         stopped = facts(ok=False, error=error("KeyboardInterrupt", here=True))
         self.assertEqual(engine_telemetry.counts(stopped, "script")["builds"][0]["outcome"], "cancelled")
 
-        # Kept as a command's counts are, and sent by the sender as the process ``cli``, in schema 9.
+        # Kept as a command's counts are, and sent by the sender as the process ``cli``, in schema 10.
         for found, via in ((built, "script"), (facts(ok=False, error=model), "script"), (died, "command")):
             self.assertTrue(analytics.spool(engine_telemetry.counts(found, via), path=self.settings))
         [payload] = self.sent()
-        self.assertEqual((payload["schema"], payload["process"]), (9, "cli"))
+        self.assertEqual((payload["schema"], payload["process"]), (10, "cli"))
         self.assertEqual(payload["events"], [
             {"name": "build", "kind": "model", "via": "command", "count": 1, "failed": 0, "crashed": 1, "cancelled": 0,
              "cached": 0, "seconds": 0.5, "longest": 0.5},
@@ -299,19 +300,152 @@ class EngineTelemetryTest(unittest.TestCase):
         self.assertLessEqual({"no_kernel", "no_gl"}, analytics.SNAPSHOT_FAILURES)
         self.assertIn("no_kernel", analytics.BUILD_FAILURES)
 
+    def test_an_older_server_or_no_daemon_is_no_refusal_by_its_class(self) -> None:
+        # Untyped engine errors that are the system's state, not the request: told by their class, whatever
+        # their words; one of no class that says so is a refusal, as ever.
+        from cad.engine import api
+
+        destinations = (self.tmp / "secret.step", self.tmp / "secret.dxf")
+        cases = [(api.Outdated("the CAD server running meshed secret.stl at its own tolerance"), False, "outdated"),
+                 (api.NoDaemon("secret"), False, "export_error"), (api.Stopped("secret"), False, "export_error"),
+                 (api.Unanswered("secret"), False, "export_error"),
+                 (api.EngineError("no engine daemon"), True, "refused"),
+                 (api.EngineError("secret.py: no model named x"), True, "refused")]
+        for raised, refused, reason in cases:
+            with self.subTest(error=type(raised).__name__):
+                told = api._facts("export", (self.tmp / "secret.xbf", *destinations), {}, {}, None, raised, 0.5)
+                self.assertIs(told["error"]["refused"], refused)
+                reasons = {row["reason"] for row in engine_telemetry.counts(told, "command")["builds"]}
+                self.assertEqual(reasons, {reason})
+
     def test_nothing_is_counted_where_the_environment_or_the_asker_says_so(self) -> None:
+        exported = facts("export", source="xbf", outputs=[{"kind": "step", "seconds": 0.5}])
         for switch in ({"DO_NOT_TRACK": "1"}, {"CAD_TELEMETRY": "0"}, {"CAD_ENGINE_WORKER": "1"}):
             with mock.patch.dict(os.environ, switch):
-                engine_telemetry.observe(facts())
+                engine_telemetry.observe(exported)
         with mock.patch.object(engine_telemetry, "command", "viewer"):  # a server's own work: it counts its own
-            engine_telemetry.observe(facts())
+            engine_telemetry.observe(exported)
+        # A build is the daemon's to count, where it is answered: a Python caller that imports the server, whose
+        # ``Model.build()`` its observer sees, counts it no second time; one built in its own process
+        # (``daemon=False``) is counted nowhere.
+        engine_telemetry.observe(facts(program=True, worker={**WORKER, "fresh": True}))
         self.assertEqual(self.spooled(), [])
-        engine_telemetry.observe(facts(program=True))
-        self.assertEqual(self.spooled(), [{"builds": [{"kind": "model", "via": "script", "outcome": "ok", "seconds": 0.5,
-                                                       "cached": False}]}])
+        engine_telemetry.observe({**exported, "program": True, "worker": {**WORKER, "fresh": True}})
+        self.assertEqual(self.spooled(), [{"builds": [{"kind": "step", "via": "script", "outcome": "ok",
+                                                       "seconds": 0.5, "cached": False}]}],
+                         "a worker started is the build's, which the daemon counts")
         analytics.choose(False, by="cli", path=self.settings, forget=lambda _id: True)
-        engine_telemetry.observe(facts())
+        engine_telemetry.observe(exported)
         self.assertEqual(self.spooled(), [], "a no deletes what waits, and keeps nothing more")
+
+    def test_the_daemon_fails_a_model_build_for_the_system_s_reasons_alone(self) -> None:
+        # The owner's rule: telemetry tracks CAD (or the machine) failing, never a script that raises or asks the
+        # kernel for what it refuses. Pinned here, word by word.
+        self.assertEqual(analytics.SYSTEM_FAILURES, {"bug", "no_kernel", "export_error", "outdated", "memory", "io_error"})
+        self.assertLess(analytics.SYSTEM_FAILURES, analytics.BUILD_FAILURES)
+        built = facts(ok=False, error=error(), worker={**WORKER, "fresh": True, "retired": True})
+        for reason in sorted(analytics.BUILD_FAILURES):
+            with self.subTest(reason=reason), mock.patch.object(analytics, "told_failure", return_value=reason):
+                [build] = engine_telemetry.model_build(built)["builds"]
+                if reason in analytics.SYSTEM_FAILURES:
+                    self.assertEqual((build["outcome"], build["reason"]), ("failed", reason))
+                else:  # in ``count`` alone
+                    self.assertEqual(build, {"kind": "model", "via": "script", "outcome": "ok", "seconds": 0.5,
+                                             "cached": False})
+                self.assertEqual(engine_telemetry.model_build(built)["health"], {"workers": 1, "recycles": 1})
+        # A build's features are usage, not CAD failing: not counted.
+        assembly = facts(models=[{"ok": True, "cached": False, "children": 2, "parts": 3, "files": ["stl"]}])
+        self.assertEqual(engine_telemetry.model_build(assembly),
+                         {"builds": [{"kind": "model", "via": "script", "outcome": "ok", "seconds": 0.5, "cached": False}]})
+
+    def test_a_build_the_daemon_answered_is_counted_for_its_asker_as_it_ended(self) -> None:
+        from cad.engine import api
+
+        def report(ok: bool = True, **extra) -> dict:
+            return {"ok": ok, "model": "secret_model", "id": "c9b8b08f-8634-5011-a447-55648e01d810",
+                    "cache": {"used": False}, **extra}
+
+        model = [{"file": str(self.model), "line": 3, "function": "secret_model"}]
+        lines, start = inspect.getsourcelines(api._heard)
+        ours = {"file": api.__file__, "line": start + next(at for at, text in enumerate(lines) if "getattr(" in text),
+                "function": "_heard"}
+        written = ('Traceback (most recent call last):\n  File "/x/cad/engine/document.py", line 9, in write\n'
+                   "PermissionError: [Errno 13] Permission denied: '/secret/plate.stl'")
+        cases = [  # (the answer, fresh, died) -> its build row, and what else the window carries
+            (({"done": [report()]}, True, None),
+             {"outcome": "ok", "cached": False}, {"health": {"workers": 1}}),
+            (({"done": [report(cache={"used": True})]}, False, None), {"outcome": "ok", "cached": True}, {}),
+            # The person's: their code raised, the kernel refused their fillet. ``count`` alone.
+            (({"done": [report(False, raised={"type": "ValueError", "frames": model})]}, False, None),
+             {"outcome": "ok", "cached": False}, {}),
+            (({"done": [report(False, raised={"type": "OCP.Standard.Standard_Failure", "frames": model})]}, False, None),
+             {"outcome": "ok", "cached": False}, {}),
+            # The system's: a mistake in our code a worker answered with, a file the engine could not write.
+            (({"done": [report(False, raised={"type": "KeyError", "frames": [*model, ours]})]}, False, None),
+             {"outcome": "failed", "cached": False, "reason": "bug"},
+             {"crashes": [{"where": "build", "type": "KeyError", "handled": True,
+                           "frames": [{"file": "<user>", "function": "<user>", "line": 0},
+                                      {"file": "cad/engine/api.py", "function": "_heard", "line": ours["line"]}]}]}),
+            (({"done": [report(False, trace=written)]}, False, None),
+             {"outcome": "failed", "cached": False, "reason": "io_error"}, {}),
+            # A worker that died under it: its exit status.
+            (({"failed": "the worker for secret_model.py exited (-11) during the build"}, True, -11),
+             {"outcome": "crashed", "cached": False}, {"health": {"workers": 1, "crashes": 1},
+                                                       "crashes": [analytics.died(-11)]}),
+        ]
+        for (answer, fresh, died), build, extra in cases:
+            with self.subTest(build=build, extra=extra):
+                self.assertTrue(engine_telemetry.answered(answer, 0.5, {}, fresh=fresh, died=died))
+                [counted] = self.spooled()
+                self.assertEqual(counted, {"builds": [{"kind": "model", "via": "script", "seconds": 0.5, **build}],
+                                           **extra})
+                self.settings.with_name(analytics.SPOOL).unlink()
+        # Consent follows the person who asked: their environment, never the daemon's own.
+        for env in ({"DO_NOT_TRACK": "1"}, {"CAD_TELEMETRY": "0"}, None):
+            self.assertFalse(engine_telemetry.answered({"done": [report()]}, 0.5, env))
+        self.assertEqual(self.spooled(), [])
+        with mock.patch.dict(os.environ, {"DO_NOT_TRACK": "1"}):  # whoever started the daemon said no; the asker did not
+            self.assertTrue(engine_telemetry.answered({"done": [report()]}, 0.5, {}))
+        self.assertEqual(len(self.spooled()), 1)
+
+    def test_the_daemon_counts_a_build_with_no_kernel_and_reports_a_failed_making_once(self) -> None:
+        # Builds that met a kernel environment that could not be made: each a system failure (``no_kernel``), the
+        # crash reported once per making that failed, by the claim a CAD tool's call shares (``first_report``).
+        from cad.engine.serve import KernelProcessesUnavailable
+        from cad_server._internal import base
+        from cad_server.engine import daemon
+
+        class Making:
+            claims = [True, False]
+
+            def claim(self) -> bool:
+                return self.claims.pop(0)
+
+        engine = daemon.Daemon(cap=1)
+        script = self.tmp / "secret_model.py"
+        script.write_text("", encoding="utf-8")
+
+        def lease(*_args, **_kwargs):
+            try:
+                raise RuntimeError("uv could not resolve secret")
+            except RuntimeError as error:
+                raise KernelProcessesUnavailable("the server has no CAD kernel environment: secret", "resolve") from error
+
+        sent: list[dict] = []
+        with mock.patch.object(base, "MAKING", Making()), mock.patch.object(engine, "lease", lease), \
+                mock.patch.object(engine, "caller", return_value=(None, None)):
+            for _ in range(2):
+                engine.handle({"op": "build", "script": str(script), "cwd": str(self.tmp), "env": {}}, sent.append)
+        self.assertEqual([answer["type"] for answer in sent], ["cad.engine.serve.KernelProcessesUnavailable"] * 2)
+        first, second = self.spooled()
+        for counted in (first, second):
+            [build] = counted["builds"]
+            self.assertEqual((build["outcome"], build["reason"]), ("failed", "no_kernel"))
+        [crash] = first["crashes"]
+        self.assertEqual((crash["where"], crash["type"], crash["cause"]),
+                         ("build", "cad.engine.serve.KernelProcessesUnavailable", "resolve"))
+        self.assertNotIn("crashes", second, "once per making that failed")
+        self.assertNotIn("secret", json.dumps([first, second]))
 
     def test_a_command_starts_the_sender_once_the_spool_has_waited_a_window(self) -> None:
         self.assertTrue(analytics.spool({"builds": [{"kind": "xbf", "via": "script", "outcome": "ok", "seconds": 1.0}]},
@@ -346,12 +480,13 @@ class EngineTelemetryTest(unittest.TestCase):
         self.assertFalse(self.settings.with_name(analytics.SPOOL).exists())
         [kept] = [json.loads(line) for line in self.settings.with_name(analytics.KEPT).read_text(encoding="utf-8").splitlines()]
         self.assertEqual((kept["batch"]["process"], kept["batch"]["schema"], kept["batch"]["events"][0]["kind"]),
-                         ("cli", 9, "xbf"))
+                         ("cli", 10, "xbf"))
 
 
 class ThroughTheDaemonTest(unittest.TestCase):
-    """``python model.py`` and a ``cadgen`` command through the engine's own daemon: the command counted in
-    its own process, who asked and its worker's part; the model's own process counting nothing."""
+    """``python model.py`` and a ``cadgen`` command through the engine's own daemon: a build counted by the
+    daemon that answered it, a command in its own process, who asked and its worker's part; the model's own
+    process counting nothing."""
 
     def setUp(self) -> None:
         # One folder of the test's own holds the models, the engine's door, its state and its cache.
@@ -362,7 +497,8 @@ class ThroughTheDaemonTest(unittest.TestCase):
         self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_STATE_DIR": str(self.state),
                                           "CAD_ENGINE_DIR": str(self.root / "engine"),
                                           "CAD_CACHE_DIR": str(self.root / "cache"),
-                                          "CAD_ENGINE_MESH": "inline", "DO_NOT_TRACK": "", "CAD_TELEMETRY": ""},
+                                          "CAD_ENGINE_MESH": "inline", "DO_NOT_TRACK": "", "CAD_TELEMETRY": "",
+                                          "CAD_API_URL": "http://127.0.0.1:9"},  # nothing answers there
                                          self.addCleanup)
         self.addCleanup(self._stop)
         analytics.choose(True, by="cli", path=self.state / "settings.json")
@@ -375,45 +511,80 @@ class ThroughTheDaemonTest(unittest.TestCase):
         self.assertEqual(stopped.returncode, 0, stopped.stderr)
         self.assertEqual(left, [], "no engine process of this test's survives it")
 
-    def run_in(self, *args: str) -> subprocess.CompletedProcess:
-        return engine_daemon.run([sys.executable, *args], cwd=self.folder, env=self.env)
+    def run_in(self, *args: str, **env: str) -> subprocess.CompletedProcess:
+        return engine_daemon.run([sys.executable, *args], cwd=self.folder, env={**self.env, **env})
 
-    def test_a_command_is_counted_and_a_model_s_own_process_counts_nothing(self) -> None:
-        (self.folder / "plate.py").write_text(textwrap.dedent("""
-            import build123d as bd
-            from cad.engine import stl, xbf
+    def spooled(self, lines: int) -> list[dict]:
+        """The spool once it holds ``lines`` lines: the daemon keeps a build's count after its answer is sent."""
+        from tests.python.support.cache_fixtures import await_
 
-            @xbf("XBF/plate.xbf")
-            @stl("plate.stl")
-            def plate():
-                base, peg = bd.Box(10, 10, 2), bd.Pos(20, 0, 0) * bd.Cylinder(2, 4)
-                base.label, peg.label = "base", "peg"
-                return bd.Compound(children=[base, peg], label="plate")
+        spool = self.state / analytics.SPOOL
 
-            if __name__ == "__main__":
-                plate()
-        """), encoding="utf-8")
-        (self.folder / "dies.py").write_text(textwrap.dedent("""
-            import os
-            from cad.engine import xbf
+        def found() -> list[dict]:
+            return ([json.loads(line)["counts"] for line in spool.read_text(encoding="utf-8").splitlines()]
+                    if spool.exists() else [])
 
-            @xbf("XBF/dies.xbf")
-            def dies():
-                os._exit(3)
+        await_(lambda: len(found()) >= lines, f"{lines} counts in the spool")
+        counted = found()
+        self.assertEqual(len(counted), lines, counted)
+        return counted
 
-            if __name__ == "__main__":
-                dies()
-        """), encoding="utf-8")
+    def test_the_daemon_counts_the_builds_it_answers_and_a_model_s_own_process_counts_nothing(self) -> None:
+        for name, body in (("quiet", "return bd.Box(1, 1, 1)"), ("raises", "raise ValueError('secret')"),
+                           ("dies", "os._exit(3)"),
+                           ("plate", "base, peg = bd.Box(10, 10, 2), bd.Pos(20, 0, 0) * bd.Cylinder(2, 4)\n"
+                                     "    base.label, peg.label = 'base', 'peg'\n"
+                                     "    return bd.Compound(children=[base, peg], label='plate')")):
+            (self.folder / f"{name}.py").write_text(textwrap.dedent(f"""
+                import os
+                import build123d as bd
+                from cad.engine import stl, xbf
+
+                @xbf("XBF/{name}.xbf")
+                @stl("{name}.stl")
+                def {name}():
+                    {{body}}
+
+                if __name__ == "__main__":
+                    {name}()
+            """).replace("{body}", body), encoding="utf-8")
+        # Asked by a person whose environment says no: nothing, whatever started the daemon.
+        self.assertEqual(self.run_in("quiet.py", DO_NOT_TRACK="1").returncode, 0)
         script = self.run_in("plate.py")
         self.assertEqual(script.returncode, 0, script.stderr)
-        # A command exports the xbf the script built: the worker that built it holds it.
+        self.assertEqual(self.run_in("plate.py").returncode, 0)  # unchanged: its xbf taken whole
+        # A command exports the xbf the script built: counted by the command, its warm worker no health of its.
         command = self.run_in("-m", "cad_server.cli", "xbf", "export", "XBF/plate.xbf", "plate.step")
         self.assertEqual(command.returncode, 0, command.stderr)
-        self.assertEqual(self.run_in("dies.py").returncode, 1)
-        spool = self.state / analytics.SPOOL
-        [counted] = [json.loads(line)["counts"] for line in spool.read_text(encoding="utf-8").splitlines()]
-        self.assertEqual((counted["builds"][0]["kind"], counted["builds"][0]["via"], counted["builds"][0]["outcome"],
-                          counted.get("health")), ("step", "command", "ok", None), "its worker was warm")
+        self.assertEqual(self.run_in("raises.py").returncode, 1)  # the person's script: count alone
+        self.assertEqual(self.run_in("dies.py").returncode, 1)  # its worker died under it: crashed
+        # A Python caller that imports the server, its observer attached: the daemon counts its build, once.
+        caller = self.run_in("-c", "import cad_server, plate; print(plate.plate.build().ok)")
+        self.assertEqual(caller.stdout.split(), ["True"], caller.stderr)
+        counted = self.spooled(6)
+        builds = [(row["kind"], row["via"], row["outcome"], row["cached"]) for counts in counted
+                  for row in counts.get("builds", [])]
+        self.assertEqual(builds, [("model", "script", "ok", False), ("model", "script", "ok", True),
+                                  ("step", "command", "ok", False), ("model", "script", "ok", False),
+                                  ("model", "script", "crashed", False), ("model", "script", "ok", True)])
+        self.assertEqual([counts.get("health") for counts in counted],
+                         [{"workers": 1}, None, None, {"workers": 1}, {"workers": 1, "crashes": 1}, None])
+        [died] = counted[4]["crashes"]
+        self.assertEqual(died, analytics.died(3), "its exit status")
+        self.assertNotIn("features", json.dumps(counted), "a build's features are usage: not counted")
+        # The window, sent as the process ``cli``: no failure of the person's, no reason, no exception but the death.
+        env = {**self.env, "CAD_API_URL": "http://127.0.0.1:9"}
+        sent = subprocess.run([sys.executable, "-P", "-m", "cad_server._internal.telemetry_send"], env=env,
+                              capture_output=True, text=True, timeout=120)
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        [kept] = [json.loads(line) for line in (self.state / analytics.KEPT).read_text(encoding="utf-8").splitlines()]
+        events = kept["batch"]["events"]
+        [model] = [event for event in events if event["name"] == "build" and event["kind"] == "model"]
+        self.assertEqual({key: model[key] for key in ("via", "count", "failed", "crashed", "cancelled", "cached")},
+                         {"via": "script", "count": 5, "failed": 0, "crashed": 1, "cancelled": 0, "cached": 2})
+        self.assertEqual([event["name"] for event in events if event["name"] in ("build_failure", "exception")],
+                         ["exception"])
+        self.assertNotIn("secret", json.dumps(kept))
 
     def test_a_telemetry_batch_holds_no_id_and_no_path(self) -> None:
         """Verbs by document id -- a pointer model's and a shape's handed over, one refused, one whose body
@@ -458,7 +629,8 @@ class ThroughTheDaemonTest(unittest.TestCase):
         spooled = spool.read_text(encoding="utf-8")
         counted = [json.loads(line)["counts"] for line in spooled.splitlines()]
         outcomes = [(build["kind"], build["outcome"]) for counts in counted for build in counts.get("builds", [])]
-        self.assertNotIn("model", {kind for kind, _outcome in outcomes}, "the script's own builds counted nothing")
+        # The daemon counts the model's builds, the one whose body raised in ``count`` alone (the person's).
+        self.assertEqual([outcome for outcome in outcomes if outcome[0] == "model"], [("model", "ok")] * 2)
         self.assertEqual(outcomes.count(("stl", "ok")), 2, "both exports by id were counted")
         if drawn:
             self.assertTrue(any(counts.get("snapshots") for counts in counted), "the snapshot by id was counted")

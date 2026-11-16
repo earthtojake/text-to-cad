@@ -8,13 +8,14 @@
  * The budget: a face's picture is at most `FACE_PIXELS` and the GPU's largest texture on a side; its
  * overlay at most `OVERLAY_PIXELS`. Every draw goes through ONE scratch canvas per kind, which the
  * stage uploads into its face's texture at once (`boardStage.js`), so the page holds two canvases
- * however many faces and redraws there are, and the GPU two pictures and two overlays: overwritten in
+ * (three for a board drawn as it is made: its mask and silkscreen are laid on from a third) however many
+ * faces and redraws there are, and the GPU two pictures and two overlays: overwritten in
  * place, never kept by revision or by Display.
  *
  * Importing this module has no environmental effects.
  */
 import { drawPlot } from "../plot2d/plot.js";
-import { boardDrawView } from "../plot2d/boardDisplay.js";
+import { boardDisplayAsMade, boardDrawView } from "../plot2d/boardDisplay.js";
 import { boardMirrorX } from "../plot2d/boardView.js";
 
 /** The most pixels a face's picture takes: about 15 px a millimetre across a 312 mm board. */
@@ -82,7 +83,8 @@ export function createFaceRasters({ layout, sheet, box = faceBox(layout, sheet),
   maxPixels = FACE_PIXELS }) {
   const base = faceRaster(box, { maxPixels, maxSize });
   const overlay = faceRaster(box, { maxPixels: OVERLAY_PIXELS, maxSize });
-  let pictureCanvas = null, overlayCanvas = null;
+  // The made board's mask and silkscreen are drawn here first and laid on the picture (`drawPlot`'s `finish`).
+  let pictureCanvas = null, overlayCanvas = null, layerCanvas = null;
   const canvasOf = (current, size) => {
     const canvas = current || createCanvas();
     if (canvas.width !== size.width) canvas.width = size.width;
@@ -96,16 +98,20 @@ export function createFaceRasters({ layout, sheet, box = faceBox(layout, sheet),
      * drawn as the 2D view draws the board at `lineScale` pixels a millimetre (the screen's, as the 3D view
      * shows the whole board): its hairlines a pixel there and its labels at that level of detail, in the
      * raster's finer pixels. Drawn at the raster's own scale, a hairline would be a quarter of a pixel on
-     * screen, and the picture paler than the 2D view's.
+     * screen, and the picture paler than the 2D view's. With `finish` (the colours the board is made in,
+     * `plot2d/stackup.js`) and a display that shows the whole board (`boardDisplayAsMade`), the side is
+     * drawn as it is made: substrate, copper finish, mask and silkscreen, as KiCad's 3D viewer draws a
+     * board in its stack-up's colours; else in the layers' colours, as the 2D view draws it.
      */
-    drawFace(side, { display, theme, lineScale = base.scale }) {
+    drawFace(side, { display, theme, lineScale = base.scale, finish = null }) {
       pictureCanvas = canvasOf(pictureCanvas, base);
       const ctx = pictureCanvas.getContext("2d");
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, base.width, base.height);
       const nominal = Math.min(base.scale, Math.max(lineScale || 0, base.scale / 8));
+      const made = finish && boardDisplayAsMade(display) ? finish : null;
       drawPlot(ctx, layout, { transform: faceTransform(box, nominal), pixelRatio: base.scale / nominal, view: faceView(display, sheet, side), detail: nominal,
-        backdrop: "board", theme });
+        backdrop: "board", theme, finish: made, createCanvas: made ? () => (layerCanvas = canvasOf(layerCanvas, base)) : null });
       return pictureCanvas;
     },
     /**
@@ -124,10 +130,10 @@ export function createFaceRasters({ layout, sheet, box = faceBox(layout, sheet),
       return drew === false ? null : overlayCanvas;
     },
     /** The pixels the scratch canvases hold now. */
-    pixels: () => [pictureCanvas, overlayCanvas].reduce((sum, canvas) => sum + (canvas ? canvas.width * canvas.height : 0), 0),
+    pixels: () => [pictureCanvas, overlayCanvas, layerCanvas].reduce((sum, canvas) => sum + (canvas ? canvas.width * canvas.height : 0), 0),
     dispose() {
-      for (const canvas of [pictureCanvas, overlayCanvas]) if (canvas) { canvas.width = 0; canvas.height = 0; }
-      pictureCanvas = overlayCanvas = null;
+      for (const canvas of [pictureCanvas, overlayCanvas, layerCanvas]) if (canvas) { canvas.width = 0; canvas.height = 0; }
+      pictureCanvas = overlayCanvas = layerCanvas = null;
     }
   };
 }
