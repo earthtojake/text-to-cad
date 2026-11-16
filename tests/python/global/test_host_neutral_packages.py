@@ -32,8 +32,8 @@ SHARED_PACKAGE_MANIFESTS = (
     repo_path("packages/ui/package.json"),
 )
 
-# The library's and the server's packages, by their source trees.
-CAD_SOURCES = (repo_path("packages/cad/src"), repo_path("packages/cad-server/src"))
+# The library's and the server's packages, by their source tree.
+CAD_SOURCES = (repo_path("packages/cad/src"),)
 CAD_PACKAGES = ("cad", "cad_server")
 # The adapter: the only code of theirs allowed to know the host.
 CAD_ADAPTER = ("cad_server/mcp/", "cad_server/_internal/engine_host.py")

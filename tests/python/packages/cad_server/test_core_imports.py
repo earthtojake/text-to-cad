@@ -1,16 +1,16 @@
-"""The three distributions, by where their code runs, and what each may import.
+"""The three layers of the one distribution, cad, by where their code runs, and what each may import.
 
 - **The library** (``cad``, imported as ``cad``, and ``cadgen``, its earlier name): what a model imports and
   what runs in a worker -- the model API, the kernel-side engine, the document model and the protocol
   a client speaks. It runs in the CAD kernel environment, where the server is not installed, so it
   imports no module of the server's or the shim's, not even lazily: every import a library module
   makes, at its top or in a function, is of the library.
-- **The server** (``cad-server``: ``cad_server``): what runs in the daemon or a command -- the
+- **The server** (``cad_server``): what runs in the daemon or a command -- the
   daemon, the registry, the HTTP API, the CAD Viewer's and the CAD app's servers, every verb, the
   environment makers, telemetry. It runs in the core, where the CAD kernel is not installed, so
   importing every module of it loads no kernel module, not even bound lazily (the build123d extra lives in
   the base: ``cad_server._internal.base``). Of the library it imports the modules that need no kernel.
-- **The shim** (``cad-mcp``: ``cad_mcp``): the stdio transport an agent app starts, the standard
+- **The shim** (``cad_mcp``): the stdio transport an agent app starts, the standard
   library alone.
 
 Inside the library, each integration's package (``cad/<integration>/``, ``cad.registry.INTEGRATIONS``)
@@ -29,12 +29,12 @@ import sys
 import unittest
 from pathlib import Path
 
-from tests.python.support.paths import LIBRARY, REPO_ROOT, SERVER, SHIM, SOURCE_PATH, add_sources
+from tests.python.support.paths import LIBRARY, REPO_ROOT, SOURCE_PATH, add_sources
 
 add_sources()
 
-# Each distribution's source tree and the top-level packages it holds.
-TREES = {LIBRARY / "src": ("cad", "cadgen"), SERVER / "src": ("cad_server",), SHIM / "src": ("cad_mcp",)}
+# The source tree and the top-level packages it holds.
+TREES = {LIBRARY / "src": ("cad", "cadgen", "cad_server", "cad_mcp")}
 SERVER_PACKAGE, SHIM_PACKAGE = "cad_server", "cad_mcp"
 # The build123d extra's distributions, as their modules are named, and what build123d brings.
 KERNEL = ("OCP", "build123d", "bd_materials", "threejs_materials", "matplotlib", "shapely", "lib3mf", "scipy",

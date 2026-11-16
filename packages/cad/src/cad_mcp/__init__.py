@@ -15,7 +15,7 @@ from functools import cache as _cache
 from pathlib import Path as _Path
 
 # The distribution this package ships in, whose release it is (``__version__``).
-DISTRIBUTION = "cad-mcp"
+DISTRIBUTION = "cad"
 
 __all__ = ["DISTRIBUTION", "__version__"]
 

@@ -260,10 +260,9 @@ def _counts(output: str) -> dict[str, int]:
     return counts
 
 
-# The three packages' source trees under the checkout, the library's first (common.sh's
-# PACKAGE_SOURCES): what the run's own helpers import.
-SOURCES = (("packages", "cad", "src"), ("packages", "cad-server", "src"),
-           ("packages", "cad-mcp", "src"))
+# The packages' source tree under the checkout (common.sh's PACKAGE_SOURCES): what the run's own
+# helpers import.
+SOURCES = (("packages", "cad", "src"),)
 
 
 def _source_path(top: str) -> str:

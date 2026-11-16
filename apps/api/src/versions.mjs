@@ -1,6 +1,6 @@
 /**
  * GET /v1/versions: the feed text-to-cad's hourly version check reads (`cad_server/updates.py` in
- * packages/cad-server):
+ * packages/cad):
  *
  *   {"latest": "0.9.0"}
  *

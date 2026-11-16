@@ -192,10 +192,11 @@ def _own() -> Installation:
 
 def server_source() -> str | None:
     """Where this installation's server installs from again (``versions.make_present``): its source tree, the wheel
-    it was installed from, or None, its release on the index (``_source``)."""
+    it was installed from, or None, its release on the index (``_source``). The server ships in the library's
+    distribution, so that is the one whose record says where it came from."""
     import cad_server
 
-    return _source(Path(cad_server.__file__).resolve().parent, os.path.abspath(sys.prefix), SERVER)
+    return _source(Path(cad_server.__file__).resolve().parent, os.path.abspath(sys.prefix), LIBRARY)
 
 
 def _machine() -> str:

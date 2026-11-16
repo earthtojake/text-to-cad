@@ -140,11 +140,11 @@ class VersionSyncMirrorTests(unittest.TestCase):
             self.assertEqual(json.loads((root / "gemini-extension.json").read_text(encoding="utf-8"))["version"], "9.9.9")
             codex = json.loads((root / "codex.mcp.json").read_text(encoding="utf-8"))
             self.assertIn("cad-mcp==9.9.9", codex["mcpServers"]["cad"]["args"])
-            # The four distributions are the release, and the server and the alias pin the library at it.
-            for project in ("cad", "cad-server", "cad-mcp", "aliases/cadgen"):
+            # The four projects are the release, and the aliases pin cad at it.
+            for project in ("cad", "aliases/cad-server", "aliases/cad-mcp", "aliases/cadgen"):
                 text = (root / "packages" / project / "pyproject.toml").read_text(encoding="utf-8")
                 self.assertIn('\nversion = "9.9.9"\n', text, project)
-                if project not in ("cad", "cad-mcp"):
+                if project != "cad":
                     self.assertIn('"cad==9.9.9"', text, project)
                     self.assertNotRegex(text, r"cad==(?!9\.9\.9)", project)
             # The one-line installer falls back to the release it ships with.

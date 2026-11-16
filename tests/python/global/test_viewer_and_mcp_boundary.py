@@ -13,7 +13,7 @@ import unittest
 
 from tests.python.support.paths import REPO_ROOT
 
-SERVER = REPO_ROOT / "packages/cad-server/src/cad_server"
+SERVER = REPO_ROOT / "packages/cad/src/cad_server"
 SHELLS = {"cli/viewer.py"}
 ALLOWED = {"cad_server.viewer.recents"}
 

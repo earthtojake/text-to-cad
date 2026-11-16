@@ -34,7 +34,10 @@ from cad_server.engine import registry
 OLD, X, Y, Z = "0.11.10", "0.12.0", "0.12.1", "0.12.2"
 IDENT = "0b0e0a8e-6d0a-4c6e-9a63-1f2d3c4b5a69"
 LATE = "2b0e0a8e-6d0a-4c6e-9a63-1f2d3c4b5a69"
-SOURCES = (str(repo_path("packages/cad/src")), str(repo_path("packages/cad-server/src")))
+SOURCES = (str(repo_path("packages/cad/src")),)
+# The checkout's project: a development version's server installs from it, editable and with no extra (the kernel's
+# environment names the extra).
+PROJECT = str(repo_path("packages/cad"))
 TOKEN = "t" * 43
 DAY = 86400.0
 
@@ -62,13 +65,18 @@ class Uv:
             return subprocess.CompletedProcess(step, answer[0], "", answer[1])
         if step[1] == "venv":
             subprocess.run([sys.executable, "-m", "venv", "--without-pip", step[-1]], check=True)
-        elif any("cad-server" in word for word in step):
+        elif self.installs_server(step):
             if self.hold is not None:
                 self.hold()
             env = Path(step[step.index("--python") + 1]).parent.parent
             (site_packages(env) / "_cad_sources.pth").write_text("\n".join(SOURCES) + "\n", encoding="utf-8")
             releases.console(env).write_text("", encoding="utf-8")
         return subprocess.CompletedProcess(step, 0, "", "")
+
+    @staticmethod
+    def installs_server(step: list[str]) -> bool:
+        """Whether ``step`` installs a server: a release's (``cad-server==``), or this checkout's, editable."""
+        return any("cad-server" in word for word in step) or (step[1] == "pip" and PROJECT in step)
 
     def made(self) -> list[str]:
         """Each environment made, by its folder's name: ``server``, or the kernel's key."""
@@ -202,7 +210,7 @@ class MakingPresent(Device):
 
     def test_interrupted_then_finished_from_where_it_stopped(self) -> None:
         def cut(step):
-            if step[1] == "pip" and not any("cad-server" in word for word in step):
+            if step[1] == "pip" and not Uv.installs_server(step):
                 raise KeyboardInterrupt  # the kernel's install, cut short
         self.uv.fail = cut
         with self.assertRaises(KeyboardInterrupt):

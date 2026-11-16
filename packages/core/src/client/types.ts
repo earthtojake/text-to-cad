@@ -169,7 +169,7 @@ export interface CadEngineDocument {
  * What `GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure` answers: a URDF, SDF or SRDF resolved by the server into the articulation
  * the page plays (`common/articulation.js`), the visuals it draws (each at its rest placement,
  * with its colour and the URL of the mesh it draws), and what the description says about its
- * links and joints, as written. See `packages/cad-server/src/cad_server/robot_payload.py`.
+ * links and joints, as written. See `packages/cad/src/cad_server/robot_payload.py`.
  */
 export interface CadRobotPayload {
   schemaVersion: number;

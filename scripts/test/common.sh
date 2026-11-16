@@ -28,9 +28,9 @@ export PYTHONFAULTHANDLER=1
 # (cad_server/mcp/host.py): the tests that want it set it.
 unset CAD_MCP_PRESENTATION
 
-# The three packages' source trees, the library's first: every suite runs on this checkout's own
-# packages, never on whatever the interpreter has installed (a worktree's venv may point at another).
-PACKAGE_SOURCES=(packages/cad/src packages/cad-server/src packages/cad-mcp/src)
+# The one distribution's source tree (the library, the server and the shim): every suite runs on this
+# checkout's own packages, never on whatever the interpreter has installed (a worktree's venv may point at another).
+PACKAGE_SOURCES=(packages/cad/src)
 
 # The paths a run is narrowed to: test-python.sh and test-global.sh take them as arguments,
 # and only the test files at or under one of them run. Empty, the default, runs every file.

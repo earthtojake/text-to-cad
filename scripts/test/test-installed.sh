@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Exercise the three distributions the way a user gets them: built into wheels, pip-installed
-# together, run from a directory that is not this repo.
+# Exercise cad the way a user gets it: built into wheels (cad, and its aliases cad-server and cad-mcp),
+# pip-installed together, run from a directory that is not this repo.
 #
 # Every other check in this repo runs against the source tree, where the repo root is on
 # sys.path and the apps' builds sit beside the packages. None of that is true after
-# `pip install cad-server`, so the failures this catches are exactly the ones no other
+# `pip install cad`, so the failures this catches are exactly the ones no other
 # check can: an asset left out of package-data, a module that resolves only because a sibling
 # directory happened to be adjacent. Those all pass locally and break for the person who
 # installed it.
@@ -14,8 +14,8 @@
 # editable ones, or this would silently test the source tree again. See _link_repo_deps.
 #
 # Usage: scripts/test/test-installed.sh [--wheels DIR]
-#   DIR holds the library's, the server's and the shim's wheels (cad, cad_server,
-#   cad_mcp), as scripts/release/check-wheel-contents.sh leaves them; without it they are built.
+#   DIR holds cad's wheel and its aliases' (cad, cad_server, cad_mcp), as
+#   scripts/release/check-wheel-contents.sh leaves them; without it they are built.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,7 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/test/common.sh
 source "$SCRIPT_DIR/common.sh"
 
-# The server's command, and the shim's.
+# cad's command, and the one its cad-mcp alias keeps.
 COMMAND=cad
 SHIM_COMMAND=cad-mcp
 USAGE="Usage: scripts/test/test-installed.sh [--wheels DIR]"
@@ -84,6 +84,9 @@ cleanup() {
     "$VENV/bin/python" -m cad_server.engine stop >/dev/null 2>&1 \
       || echo "warning: this run's engine daemon did not stop; it goes once idle" >&2
   fi
+  if [ -x "$WORK/bridge/bin/python" ]; then
+    CAD_STATE_DIR="$WORK/bridge-state" CAD_ENGINE_DIR="$WORK/bridge-engine" "$WORK/bridge/bin/python" -m cad_server.engine stop >/dev/null 2>&1 || true
+  fi
   rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -99,7 +102,7 @@ step() { printf '\n== %s\n' "$*"; }
 if [ -z "$WHEELS" ]; then
   step "Build the wheels"
   "$REPO_ROOT/scripts/bundle/bundle.sh" >/dev/null
-  for project in cad cad-server cad-mcp; do
+  for project in cad aliases/cad-server aliases/cad-mcp; do
     "$PYTHON_BIN" -m build --wheel --outdir "$DIST" "$REPO_ROOT/packages/$project" >"$WORK/build.log" 2>&1 \
       || { cat "$WORK/build.log" >&2; fail "the $project wheel's build"; }
   done
@@ -107,7 +110,7 @@ if [ -z "$WHEELS" ]; then
 else
   step "Use the supplied wheels"
 fi
-# One wheel of each distribution: a wheel's name spells a distribution's hyphens as underscores.
+# cad's wheel and its two aliases': a wheel's name spells a distribution's hyphens as underscores.
 installing=()
 for distribution in cad cad_server cad_mcp; do
   found=("$WHEELS/$distribution"-[0-9]*.whl)
@@ -145,9 +148,11 @@ for package in (cad, cad_server, cad_mcp, cadgen):
 import cad.build123d
 if cadgen.build123d is not cad.build123d or cadgen.model is not cad.model:
     sys.exit("FAIL: the cadgen alias is not the library's own modules and names")
-releases = {cad.__version__, cad_server.__version__, cad_mcp.__version__}
+# One distribution, cad: each package reports its release, never an alias's.
+from importlib.metadata import version
+releases = {cad.__version__, cad_server.__version__, cad_mcp.__version__, version("cad")}
 if len(releases) != 1:
-    sys.exit(f"FAIL: the three wheels are not one release: {sorted(releases)}")
+    sys.exit(f"FAIL: cad, cad_server and cad_mcp are not one release: {sorted(releases)}")
 print(f"   one release: {releases.pop()}")
 PY
 
@@ -179,7 +184,7 @@ for label, resolved in (
     print(f"   {label}: {resolved.name}")
 PY
 
-step "Every subcommand dispatches from an empty directory, and so does the shim's command"
+step "Every subcommand dispatches from an empty directory, and so does the cad-mcp alias's command"
 cd "$EMPTY"
 "$VENV/bin/$COMMAND" --help >/dev/null || fail "$COMMAND --help"
 "$VENV/bin/$SHIM_COMMAND" --help >/dev/null || fail "$SHIM_COMMAND --help"
@@ -196,6 +201,49 @@ while read -r command; do
   "$VENV/bin/$COMMAND" $command --help >/dev/null 2>&1 || fail "$COMMAND $command --help"
   echo "   $COMMAND $command"
 done <"$WORK/commands.txt"
+
+# What the updaters of 0.10.0 to 0.11.10, already on people's computers, do with a release and cannot be changed:
+# they make an environment with uv (`uv venv`, then `uv pip install cad-server==<release>`), take it as complete once
+# its `bin/cad` is there, and start its engine as `python -P -m cad_server._internal.engine_daemon`; a `cad` command
+# of their layout runs `python -m cad_server._internal.proxy`. The alias cad-server must bring all of that through
+# cad. From these wheels (--find-links: uv takes them over an index's release of the same number, which the hashes
+# below check), on private state and engine folders.
+step "A 0.10-0.11 updater's environment: uv pip install cad-server==<release> gives bin/cad and the modules it runs"
+BRIDGE="$WORK/bridge"
+BRIDGE_ENGINE="$WORK/bridge-engine"
+RELEASE="$("$VENV/bin/python" -c 'import cad; print(cad.__version__)')"
+"$PYTHON_BIN" -m uv venv --quiet --no-project --python "$PYTHON_BIN" "$BRIDGE"
+"$PYTHON_BIN" -m uv pip install --quiet --python "$BRIDGE/bin/python" --find-links "$WHEELS" "cad-server==$RELEASE" \
+  || fail "uv pip install cad-server==$RELEASE"
+[ -x "$BRIDGE/bin/cad" ] || fail "uv pip install cad-server==$RELEASE wrote no bin/cad"
+"$BRIDGE/bin/python" - "$WHEELS" <<'PY' || exit 1
+import glob, hashlib, os, sys, sysconfig, zipfile
+site = sysconfig.get_paths()["purelib"]
+wheel = glob.glob(os.path.join(sys.argv[1], "cad-[0-9]*.whl"))[0]
+with zipfile.ZipFile(wheel) as archive:
+    for name in (name for name in archive.namelist() if name.startswith("cad_server/") and name.endswith(".py")):
+        path = os.path.join(site, *name.split("/"))
+        if not os.path.isfile(path) or hashlib.sha256(open(path, "rb").read()).digest() != hashlib.sha256(archive.read(name)).digest():
+            sys.exit(f"FAIL: cad-server's environment is not {os.path.basename(wheel)}: {name} differs")
+PY
+(cd "$EMPTY" && CAD_STATE_DIR="$WORK/bridge-state" "$BRIDGE/bin/python" -m cad_server._internal.proxy --version \
+  >"$WORK/proxy.log" 2>&1) && fail "the proxy ran an installation where none is registered"
+expected="$("$BRIDGE/bin/python" -c 'from cad_server._internal.proxy import NONE_INSTALLED; print(NONE_INSTALLED)')"
+[ "$(cat "$WORK/proxy.log")" = "$expected" ] || { cat "$WORK/proxy.log" >&2; fail "python -m cad_server._internal.proxy"; }
+(cd "$EMPTY" && CAD_STATE_DIR="$WORK/bridge-state" CAD_ENGINE_DIR="$BRIDGE_ENGINE" exec "$BRIDGE/bin/python" -P -m cad_server._internal.engine_daemon \
+  >"$WORK/bridge-daemon.log" 2>&1) &
+answered=0
+for _ in $(seq 300); do
+  if CAD_STATE_DIR="$WORK/bridge-state" CAD_ENGINE_DIR="$BRIDGE_ENGINE" "$BRIDGE/bin/python" -m cad_server.engine status >/dev/null 2>&1; then
+    answered=1
+    break
+  fi
+  kill -0 $! 2>/dev/null || break
+  sleep 0.2
+done
+CAD_STATE_DIR="$WORK/bridge-state" CAD_ENGINE_DIR="$BRIDGE_ENGINE" "$BRIDGE/bin/python" -m cad_server.engine stop >/dev/null 2>&1 || true
+[ "$answered" -eq 1 ] || { cat "$WORK/bridge-daemon.log" >&2; fail "python -P -m cad_server._internal.engine_daemon never answered"; }
+echo "   bin/cad, cad_server._internal.proxy and cad_server._internal.engine_daemon of cad $RELEASE"
 
 # The shim is a release's: as on a person's device, it installs its own version on this private device at its
 # first start (`uvx --from cad-server==<VERSION> cad setup`, the kernel's environment with it) and serves
@@ -270,9 +318,11 @@ import glob, hashlib, json, os, sys, zipfile
 marker = json.load(open(sys.argv[1], encoding="utf-8"))
 site = (glob.glob(os.path.join(marker["prefix"], "lib", "python*", "site-packages"))
         or [os.path.join(marker["prefix"], "Lib", "site-packages")])[0]
-wheel = glob.glob(os.path.join(sys.argv[2], "cad_server-[0-9]*.whl"))[0]
+wheel = glob.glob(os.path.join(sys.argv[2], "cad-[0-9]*.whl"))[0]
 with zipfile.ZipFile(wheel) as archive:
     files = [name for name in archive.namelist() if name.startswith("cad_server/") and name.endswith(".py")]
+    if not files:
+        sys.exit(f"FAIL: {os.path.basename(wheel)} carries no cad_server")
     for name in files:
         want = hashlib.sha256(archive.read(name)).digest()
         path = os.path.join(site, *name.split("/"))

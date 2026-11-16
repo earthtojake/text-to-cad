@@ -1,0 +1,23 @@
+# The distribution named cad-server, an alias of cad, still published at every release: the updaters of
+# 0.10.0 to 0.11.10 install a release by this name (`uv pip install` of cad-server at the release) and
+# cannot be changed. It is cad at this very release and nothing of its own (no module, no command): cad
+# carries the server, `cad_server`, and the `cad` command.
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cad-server"
+version = "0.11.10"
+description = "Alias of cad, still published: installs cad at the same release, which carries the CAD server and the cad command."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.13"
+authors = [{ name = "earthtojake" }]
+dependencies = ["cad==0.11.10"]
+
+[project.urls]
+Homepage = "https://github.com/earthtojake/text-to-cad"
+
+[tool.setuptools]
+packages = []

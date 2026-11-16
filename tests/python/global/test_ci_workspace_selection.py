@@ -461,7 +461,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         # The light contracts read them, and static runs those on every change.
         for path in ("README.md", "CONTRIBUTING.md", "AGENTS.md", "docs/install.md", "docs/contributing/testing.md",
                      "skills/cad/SKILL.md", ".claude-plugin/plugin.json", "models/README.md",
-                     "packages/cad-server/src/cad_server/engine/README.md", "apps/api/package.json",
+                     "packages/cad/src/cad_server/engine/README.md", "apps/api/package.json",
                      ".github/workflows/release-publish.yml", "scripts/release/bump-version.sh"):
             with self.subTest(path=path):
                 self.assertEqual(jobs_for(path), set())
@@ -514,8 +514,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         cases = {
             # The packages: their suites whole on both platforms, and every job that runs them.
             "packages/cad/src/cad/__init__.py": packages,
-            "packages/cad-server/src/cad_server/viewer/__init__.py": packages,
-            "packages/cad-mcp/pyproject.toml": packages,
+            "packages/cad/src/cad_server/viewer/__init__.py": packages,
+            "packages/aliases/cad-mcp/pyproject.toml": packages,
             "scripts/bundle/bundle.sh": packages,
             # A distribution's README is its wheel's description; other prose there is no build's.
             "packages/cad/README.md": jobs_on("packaging"),
@@ -533,7 +533,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             ".github/workflows/real-install.yml": jobs_on("installer"),
             "scripts/test/real-install.py": jobs_on("installer"),
             # ...and the code of this build the update rehearsal runs, beside the packages' suites.
-            **{f"packages/cad-server/src/cad_server/{path}": packages | jobs_on("installer") for path in (
+            **{f"packages/cad/src/cad_server/{path}": packages | jobs_on("installer") for path in (
                 "cli/setup.py", "_internal/install_script.py", "_internal/arrival.py", "_internal/legacy.py",
                 "_internal/versions.py", "_internal/imports.py", "_internal/installations.py", "engine/daemon.py")},
             # A runner runs what it feeds.

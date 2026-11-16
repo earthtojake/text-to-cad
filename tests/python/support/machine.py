@@ -31,15 +31,16 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from tests.python.support.paths import LIBRARY, SERVER, add_sources
+from tests.python.support.paths import LIBRARY, REPO_ROOT, add_sources
 
 add_sources()
 
 from cad_server._internal import base  # noqa: E402
 
-# Each release's wheels, by distribution: its project, its packages, and what its wheel carries at its root.
-DISTRIBUTIONS = {"cad": (LIBRARY, ("cad", "cadgen"), ("cad-lazy-kernel.pth",)),
-                 "cad-server": (SERVER, ("cad_server",), ())}
+# Each release's wheels, by distribution: its project, its packages, and what its wheel carries at its root: cad,
+# and cad-server, its alias, which the updaters of 0.10.0 to 0.11.10 install a release by.
+DISTRIBUTIONS = {"cad": (LIBRARY, ("cad", "cadgen", "cad_server", "cad_mcp"), ("cad-lazy-kernel.pth",)),
+                 "cad-server": (REPO_ROOT / "packages" / "aliases" / "cad-server", (), ())}
 # Releases of this run alone (the process's id in them): what uv keeps of their wheels is this run's
 # to take out again, and a run beside it in another checkout builds others.
 _RUN = os.getpid() % 100_000
@@ -92,7 +93,7 @@ def wheel(distribution: str, version: str, folder: Path, replace: dict[str, byte
 
 
 def release(version: str, folder: Path, replace: dict[str, bytes] | None = None) -> None:
-    """Release ``version`` published to ``folder``: the library's wheel and the server's (``replace``: as ``wheel``
+    """Release ``version`` published to ``folder``: cad's wheel and its alias cad-server's (``replace``: as ``wheel``
     takes it)."""
     for distribution in DISTRIBUTIONS:
         wheel(distribution, version, folder, replace)

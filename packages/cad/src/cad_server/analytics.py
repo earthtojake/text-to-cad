@@ -289,14 +289,14 @@ def _through_proxy(quote: Callable[[str], str]) -> str | None:
 def _installed_from() -> str | None:
     """What uvx installed this environment from, as ``uvx --from`` takes it again: the wheel, folder or URL its
     record of a direct install names (``direct_url.json``, PEP 610) while that is still there, else -- installed
-    from an index -- the release's requirement (``cad-server==<version>``). ``None`` when neither can be read."""
+    from an index -- the release's requirement (``cad==<version>``). ``None`` when neither can be read."""
     import sysconfig
     from urllib.parse import urlparse
     from urllib.request import url2pathname
 
     site = Path(sysconfig.get_path("purelib", vars={"base": sys.prefix, "platbase": sys.prefix}))
     try:
-        found = sorted((info.stat().st_mtime_ns, info) for info in site.glob("cad_server-*.dist-info"))
+        found = sorted((info.stat().st_mtime_ns, info) for info in site.glob("cad-*.dist-info"))
     except OSError:
         return None
     if not found:
@@ -305,7 +305,7 @@ def _installed_from() -> str | None:
     try:
         direct = json.loads((info / "direct_url.json").read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return f"cad-server=={info.name[len('cad_server-'):-len('.dist-info')]}"
+        return f"cad=={info.name[len('cad-'):-len('.dist-info')]}"
     except (OSError, ValueError):
         return None
     url = direct.get("url") if isinstance(direct, dict) else None
@@ -1300,7 +1300,7 @@ def _places() -> tuple[tuple[tuple[str, str], ...], frozenset[str]]:
              *(entry for entry in sys.path if entry.endswith(("site-packages", "dist-packages")))]
     places += [(os.path.realpath(entry), "site") for entry in sites if entry]
     places += [(os.path.realpath(paths[key]), "stdlib") for key in ("stdlib", "platstdlib")]
-    seen, todo = set(), ["cad-server"]
+    seen, todo = set(), ["cad"]
     while todo:
         name = _distribution(todo.pop())
         if name in seen:

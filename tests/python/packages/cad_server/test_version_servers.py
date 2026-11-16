@@ -46,7 +46,7 @@ class ServingUv(Uv):
 
     def __call__(self, step, folder, settings=None):
         done = super().__call__(step, folder, settings)
-        if step[1] != "venv" and any("cad-server" in word for word in step) and done.returncode == 0:
+        if step[1] != "venv" and self.installs_server(step) and done.returncode == 0:
             env = Path(step[step.index("--python") + 1]).parent.parent
             (site_packages(env) / "zz_inherit.pth").write_text(
                 f"import site; site.addsitedir({sysconfig.get_paths()['purelib']!r})\n", encoding="utf-8")

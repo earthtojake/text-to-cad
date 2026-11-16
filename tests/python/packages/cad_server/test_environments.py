@@ -22,7 +22,7 @@ import unittest
 from pathlib import Path
 
 from tests.python.support import engine_daemon
-from tests.python.support.paths import LIBRARY, SERVER, add_sources
+from tests.python.support.paths import LIBRARY, add_sources
 
 add_sources()
 
@@ -73,7 +73,7 @@ class CoreAndBaseTest(unittest.TestCase):
         subprocess.run([real, "venv", "--no-project", "--python", sys.executable, str(cls.core)], check=True,
                        capture_output=True)
         subprocess.run([real, "pip", "install", "--python", str(base.interpreter(cls.core)), "--link-mode",
-                        "hardlink", "-e", str(LIBRARY), "-e", str(SERVER)], check=True, capture_output=True)
+                        "hardlink", "-e", str(LIBRARY)], check=True, capture_output=True)
         # The device's current installation, as setup registers it: the engine every client starts.
         assert engine_daemon.register(os.environ["CAD_STATE_DIR"], str(base.interpreter(cls.core)), str(cls.core))
         # A uv first on PATH that writes a line of what it is asked, then runs the real one.

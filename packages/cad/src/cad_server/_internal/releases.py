@@ -60,17 +60,14 @@ def complete(env: Path) -> dict[str, Any] | None:
 def recipe(version: str, python: str, source: str | None) -> base.Recipe:
     """How release ``version``'s folder is made, on the interpreter ``python``: its server from the index
     -- the library at the same release comes with it --, or from ``source``, the server's source tree
-    (editable) or the wheel it was installed from, beside the library from where this installation's
-    came (``base.Installation.source``: its tree, editable, or its wheel), when that is no release."""
+    (editable) or the wheel it was installed from, when that is no release: one distribution, the library's,
+    which carries the server."""
     if source is None:
         requirement: tuple[str, ...] = (f"{base.SERVER}=={version}",)
+    elif os.path.isdir(source):
+        requirement = ("-e", source)
     else:
-        library = base._own().source
-        if os.path.isdir(source):
-            requirement = (*(("-e", library) if library and os.path.isdir(library) else ()), "-e", source)
-        else:
-            requirement = (*((f"{base.LIBRARY} @ {library}",) if library and not os.path.isdir(library) else ()),
-                           f"{base.SERVER} @ {source}")
+        requirement = (f"{base.LIBRARY} @ {source}",)
     return base.Recipe(what=f"cad-server {version}", python=python, requirement=requirement, release=version,
                        source=source, making=f"installing cad-server {version} on Python {platform.python_version()}",
                        downloading=f"downloading cad-server {version}")

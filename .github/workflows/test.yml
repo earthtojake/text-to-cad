@@ -234,9 +234,7 @@ jobs:
       - name: Check the packages' types (basic)
         if: startsWith(matrix.shard, '1/')
         run: |
-          for project in cad cad-server cad-mcp; do
-            python -m pyrefly check --config "packages/$project/pyproject.toml" --output-format full-text-with-github
-          done
+          python -m pyrefly check --config packages/cad/pyproject.toml --output-format full-text-with-github
 
       - name: Run the tests this change touches first
         if: startsWith(matrix.shard, '1/') && needs.changes.outputs.changed_tests != ''
@@ -297,9 +295,7 @@ jobs:
       - name: Check the packages' types (basic)
         if: startsWith(matrix.shard, '1/')
         run: |
-          for project in cad cad-server cad-mcp; do
-            python -m pyrefly check --config "packages/$project/pyproject.toml" --output-format full-text-with-github
-          done
+          python -m pyrefly check --config packages/cad/pyproject.toml --output-format full-text-with-github
         shell: bash
 
       - name: Run the tests this change touches first
@@ -469,10 +465,10 @@ jobs:
         timeout-minutes: 5
         uses: astral-sh/setup-uv@v10.3.3
 
-      # The rehearsal builds this tree's wheels and reads its own helpers: the library and the server.
-      - name: Install the library and the server
+      # The rehearsal builds this tree's wheels and reads its own helpers: the one distribution, cad.
+      - name: Install cad
         timeout-minutes: 10
-        run: python -m pip install --editable ./packages/cad --editable ./packages/cad-server
+        run: python -m pip install --editable ./packages/cad
 
       # The automatic update is the button's switch, which every system rehearses, reached by the old release's own
       # timers: Linux alone. The hand-over's stand-ins of the apps are POSIX scripts: not on Windows.

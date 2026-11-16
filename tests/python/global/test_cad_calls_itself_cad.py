@@ -1,7 +1,7 @@
 """The cad packages call themselves cad, never text-to-cad.
 
-text-to-cad is the product: the plugin, its skills and its install command. The distributions (``packages/cad``,
-``packages/cad-server``, ``packages/cad-mcp``) are cad, and a person who uses cad alone never meets the product's
+text-to-cad is the product: the plugin, its skills and its install command. The distribution (``packages/cad``: the library,
+the server and the shim) is cad, and a person who uses cad alone never meets the product's
 name in what it prints or returns: "cad 0.11.11 is not installed on this computer.", never "text-to-cad 0.11.11".
 So no string literal in their sources but a docstring contains "text-to-cad", in any case, but in an address or an
 identifier that cannot change: the repository's URL and the XML namespaces earlier files carry.

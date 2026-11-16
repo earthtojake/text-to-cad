@@ -25,11 +25,11 @@ export const jsonTargets = [
   { path: ".muse-plugin/marketplace.json", fields: [], pluginEntries: ["text-to-cad"] },
 ];
 
-// The four distributions released together: the library, the server, the shim and the alias.
+// The four projects released together: cad (the library, the server and the shim) and its three aliases.
 export const tomlTargets = [
   "packages/cad/pyproject.toml",
-  "packages/cad-server/pyproject.toml",
-  "packages/cad-mcp/pyproject.toml",
+  "packages/aliases/cad-server/pyproject.toml",
+  "packages/aliases/cad-mcp/pyproject.toml",
   "packages/aliases/cadgen/pyproject.toml",
 ];
 
@@ -40,12 +40,12 @@ export const pinPattern = /(?<![\w.-])(cad(?:-server|-mcp)?(?:\[[a-z0-9_,.-]+\])
 
 // Files that pin a release by a requirement string rather than a version field: the command Codex,
 // the one app given the CAD server, runs to start its transport (`cad-mcp==`), the command the install
-// guide says the installer runs, and the distributions that pin the library at their own release (the
-// server, the alias). The skills pin theirs a different way, in their commands (`skillPinPatterns`,
+// guide says the installer runs, and the aliases, which pin cad at their own release. The skills pin theirs a different way, in their commands (`skillPinPatterns`,
 // below). A file may also be a TOML target (those pyprojects); its pin is stamped on top of that change,
 // not over it.
 export const pinTargets = [
-  "packages/cad-server/pyproject.toml",
+  "packages/aliases/cad-server/pyproject.toml",
+  "packages/aliases/cad-mcp/pyproject.toml",
   "packages/aliases/cadgen/pyproject.toml",
   "codex.mcp.json",
   "docs/install.md",

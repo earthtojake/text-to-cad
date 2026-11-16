@@ -279,11 +279,12 @@ jobs:
           python -m pip install build
           scripts/release/check-wheel-contents.sh
 
-      # The release's four projects on PyPI, a wheel and an sdist each, into one folder.
+      # The release's four projects on PyPI, a wheel and an sdist each, into one folder: cad, then its
+      # aliases, in the order they are uploaded.
       - name: Build the four distributions
         run: |
           python3 -m pip install --upgrade build
-          for project in cad cad-server cad-mcp aliases/cadgen; do
+          for project in cad aliases/cad-server aliases/cad-mcp aliases/cadgen; do
             python3 -m build --outdir dist "packages/$project"
           done
 
@@ -304,7 +305,7 @@ jobs:
             exit 1
           fi
 
-      # The wheels about to ship, the library's, the server's and the shim's, installed together
+      # The wheels about to ship, cad's and its aliases cad-server and cad-mcp, installed together
       # into a fresh venv with no repo on the path: the front door, the viewer verb, the shim's command
       # and the doctor all answer (0.10's doctor takes no skill folder). test-installed.sh then drives the same wheels through a
       # real build.
@@ -323,10 +324,10 @@ jobs:
       # the wheel that actually ships rather than one rebuilt in scratch: the runtime is
       # built minutes earlier by a step that could fail soft, and a wheel without it
       # installs cleanly and then cannot serve a Viewer or the CAD app.
-      - name: Assert the shipping server wheel carries its built runtime
+      - name: Assert the shipping cad wheel carries its built runtime
         run: |
-          wheel="$(find dist -name 'cad_server-*.whl' -type f | head -n 1)"
-          [ -n "$wheel" ] || { echo "no server wheel under dist" >&2; exit 1; }
+          wheel="$(find dist -name 'cad-[0-9]*.whl' -type f | head -n 1)"
+          [ -n "$wheel" ] || { echo "no cad wheel under dist" >&2; exit 1; }
           listing="$(unzip -l "$wheel")"
           echo "$listing" | grep -E 'cad_server/_runtime/' || true
           for required in \

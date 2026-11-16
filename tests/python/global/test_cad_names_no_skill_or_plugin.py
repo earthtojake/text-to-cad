@@ -1,6 +1,6 @@
 """The cad packages name no skill and no plugin in what they print or return.
 
-text-to-cad's distributions (``packages/cad``, ``packages/cad-server``, ``packages/cad-mcp``) know nothing of the
+text-to-cad's distribution (``packages/cad``: the library, the server and the shim) knows nothing of the
 skills or the plugin that use them: the plugin side knows cad, never the other way. So no string a package can print
 or return -- every string literal in its sources but a docstring -- says "skill" or "plugin". The words a format
 uses for its own elements (SDF's ``<plugin>``) and the folder names earlier releases left in the state folder,

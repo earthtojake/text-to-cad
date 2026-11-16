@@ -101,9 +101,8 @@ LIGHT_SKILL_TESTS = (
     f"{SKILL_SUITES}/sendcutsend",
 )
 
-# The three distributions, the deprecated alias, and the bundle the server's wheel carries.
-PACKAGE_PROJECTS = ("packages/cad", "packages/cad-server", "packages/cad-mcp")
-PACKAGES = (*(f"{project}/**" for project in PACKAGE_PROJECTS), "packages/aliases/**", "scripts/bundle/**")
+# The one distribution, its aliases, and the bundle its wheel carries.
+PACKAGES = ("packages/cad/**", "packages/aliases/**", "scripts/bundle/**")
 # Whatever runs the packages: their suites on both platforms, the policy tests and skill suites
 # that load them, the wheels, the bundled viewer served through them, and the jobs that run them
 # with a tool installed as a person has it (netgen and CalculiX, KiCad, Blender) or on the third
@@ -166,8 +165,8 @@ RULES: tuple[Rule, ...] = (
     # Prose inside a code tree is read by the light contracts alone, never by a build or a test
     # of the code beside it. The exceptions: each distribution's README and LICENSE ship in its
     # wheel, and apps/web's Markdown links are resolved by its client tests.
-    Rule((*(f"{project}/{name}" for project in PACKAGE_PROJECTS for name in ("README.md", "LICENSE")),
-          "packages/aliases/*/README.md"), select(flags=["packaging"]), final=True),
+    Rule(("packages/cad/README.md", "packages/cad/LICENSE", "packages/aliases/*/README.md"),
+         select(flags=["packaging"]), final=True),
     Rule(("apps/web/**/*.md",), select(flags=["web_client"]), final=True),
     Rule(("packages/**/*.md", "apps/**/*.md"), NOTHING, final=True),
 
@@ -210,7 +209,7 @@ RULES: tuple[Rule, ...] = (
     # agent apps, on a private computer of its own.
     Rule((".github/workflows/real-install.yml", "scripts/test/real-install.py", "scripts/test/real_computer.py"),
          select(flags=["installer"]), final=True),
-    Rule(tuple(f"packages/cad-server/src/cad_server/{path}" for path in (
+    Rule(tuple(f"packages/cad/src/cad_server/{path}" for path in (
         "cli/setup.py", "_internal/install_script.py", "_internal/arrival.py", "_internal/legacy.py",
         "_internal/versions.py", "_internal/imports.py", "_internal/installations.py", "engine/daemon.py")),
         select(flags=["installer"])),

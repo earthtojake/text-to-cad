@@ -157,7 +157,7 @@ class PublishGate(unittest.TestCase):
 
     def test_the_release_builds_the_four_projects_and_installs_its_three_wheels_together(self):
         publish = JOBS["publish"]
-        self.assertIn("for project in cad cad-server cad-mcp aliases/cadgen; do\n"
+        self.assertIn("for project in cad aliases/cad-server aliases/cad-mcp aliases/cadgen; do\n"
                       "            python3 -m build --outdir dist \"packages/$project\"", publish)
         # Exactly the four projects' wheels and sdists at the release, nothing else.
         check = publish.split("- name: Check the distributions are the release's\n", 1)[1].split("\n      - name: ", 1)[0]
@@ -169,7 +169,7 @@ class PublishGate(unittest.TestCase):
         self.assertIn("dist/cad_server-*.whl dist/cad_mcp-*.whl", install)
         self.assertIn("scripts/test/test-installed.sh --wheels dist", install)
         self.assertIn('"$RUNNER_TEMP/install-test/bin/cad-mcp" --help', install)
-        self.assertIn("find dist -name 'cad_server-*.whl'", publish)
+        self.assertIn("find dist -name 'cad-[0-9]*.whl'", publish)
 
     def test_installers_get_the_version_only_once_pypi_serves_it(self):
         # Each project uploaded, then PyPI's index -- what uv resolves a pin through -- listing it before the

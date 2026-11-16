@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 PAGE = ROOT / "packages/ui/src/usage/controls.js"
-CADGEN = ROOT / "packages/cad-server/src/cad_server/analytics.py"
+CADGEN = ROOT / "packages/cad/src/cad_server/analytics.py"
 RECEIVER = ROOT / "apps/api/src/events.mjs"
 
 
