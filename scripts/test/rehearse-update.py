@@ -14,7 +14,9 @@ Two ways reach this build, and each is rehearsed from the releases that take it:
   - ``updater``: by the update button (``POST /api/v1/local/update``). From 0.10.0 on Windows (``--old 0.10.0``), which
     keeps its state in the local application data, where its switch reads the records it starts a server by, apart
     from this build's: its computer names no state folder, and this build's setup stops 0.10.0's server by its own
-    stop command and takes the computer over itself, 0.10.0's own records then naming this build;
+    stop command and takes the computer over itself, 0.10.0's own records then naming this build; then this build's
+    real plain `cad setup`, as the hand-over's install script runs it, must leave the server that took over serving
+    its pages (the same process, the same port and token) and run no stop;
   - ``automatic``: by the automatic update, nothing pressed (an hour passes for the version feed: its ``checked``
     stamp set back), as most computers take it;
   - ``handover`` (POSIX: its stand-ins are scripts run by their ``#!`` line): by the button on a computer with
@@ -604,6 +606,19 @@ class Computer:
         if current != self.new:
             raise Failed(f"{self.label}: {self.old}'s own records name {current!r}, not {self.new}")
 
+    def set_up_again(self) -> None:
+        """After 0.10.0's take-over, this build's real plain ``cad setup``, through the ``cad`` command, as the hand-over's
+        install script runs it: the server that took over still serving its pages -- the same process, on the same
+        port with the page token --, and no earlier release's stop run (the record the take-over wrote in 0.10.0's
+        folder is none of 0.10.0's installations)."""
+        serving = self.served()["pid"]
+        done = self.run([self.proxy(), "setup"], check=False)
+        if done.returncode != 0 or "`cad stop`" in done.stderr:
+            raise Failed(f"{self.label}: `cad setup` after the take-over, exit {done.returncode}:\n{done.stdout}"
+                         f"{done.stderr}")
+        if self.served()["pid"] != serving:
+            raise Failed(f"{self.label}: `cad setup` after the take-over restarted {self.new}'s server\n{self.said()}")
+
     def handed_over(self, attempts: int = 1) -> None:
         """The install script run by this build's server once it served -- each run's line naming this build current
         -- the hand-over recorded done after ``attempts`` attempts, and no attempt left running."""
@@ -669,6 +684,8 @@ def updater(computer: Computer) -> None:
     else:
         computer.switched()
     computer.handed_over()
+    if computer.alone:
+        computer.set_up_again()
 
 
 def automatic(computer: Computer) -> None:

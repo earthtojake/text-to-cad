@@ -376,6 +376,66 @@ class TakeOver(Computer):
         self.assertEqual({key: arrival.read(Y)[key] for key in ("route", "from")}, {"route": "updater", "from": "0.10.0"})
         self.no_app_touched()
 
+    def test_after_the_take_over_no_stop_of_0_10_0_s_runs_for_this_version_and_0_10_0_s_own_still_does(self) -> None:
+        # The take-over writes this version's record into 0.10.0's folder, for 0.10.0's clients: it is no installation
+        # of 0.10.0's, even where this version's server answers at 0.10.0's port file, as it does once it serves. So the
+        # plain setup the hand-over's install script runs next stops nothing of it, and 0.10.0's own record still
+        # stops where 0.10.0's own server answers.
+        import json
+
+        self.present(Y)
+        with mock.patch.object(setup, "_name", return_value=Y), mock.patch.object(places, "versioned", return_value=Y), \
+                mock.patch.dict(os.environ, {setup.ALONE_ENV: "1"}):
+            self.assertEqual(self.main(setup, ["--engine-update"])[0], 0)
+        record = places.version_record(Y)
+        written = json.loads((self.appdata / "installations" / f"{Y}.json").read_text(encoding="utf-8"))
+        self.assertEqual((written["cad"], written["prefix"]), (record["cad"], record["prefix"]), "the take-over's record")
+        mine = self.root / "y-stopped"  # this version's own `cad stop`, recorded were it run
+        Path(record["cad"]).write_text(f"#!/bin/sh\necho \"$*\" >> '{mine}'\necho '{{\"ok\": true}}'\n", encoding="utf-8")
+        Path(record["cad"]).chmod(0o755)
+        self.assertEqual([found["version"] for found in installations.appdata()], ["0.10.0"])
+        with mock.patch.object(legacy, "_appdata_serving", return_value=record["prefix"]):
+            self.assertEqual(legacy.stop_earlier(), [])
+            self.assertTrue(legacy.stop_appdata())
+            with mock.patch.object(setup, "_name", return_value=Y):
+                code, out, err = self.main(setup, [])
+        self.assertEqual(code, 0, out + err)
+        self.assertFalse(mine.exists(), "this version's own stop never ran")
+        self.assertFalse(self.stopped.exists(), "nor 0.10.0's: what answers at its port file is this version")
+        self.assertEqual(self.served.call_args_list[-1], mock.call(Y), "its server found where it runs")
+        with mock.patch.object(legacy, "_appdata_serving", return_value=str(self.root / "ten")):
+            self.assertEqual(legacy.stop_earlier(), ["0.10.0"])
+        self.assertEqual(self.stopped.read_text(encoding="utf-8"), "stop --json\n")
+
+
+class AppdataServing(unittest.TestCase):
+    """Where the guard on 0.10.0's own stop asks what answers (``legacy._appdata_serving``): where that stop reaches."""
+
+    def test_it_asks_where_0_10_0_s_stop_reaches_the_flat_door_s_port_file_under_a_named_engine_folder(self) -> None:
+        asked: list[Path] = []
+
+        def ask_at(door, message, seconds):
+            asked.append(door)
+            return {"ok": True, "prefix": "the answering server's"}
+
+        import tempfile
+
+        # A computer that names its folders (nothing is started here): the engines' one, and its state and cache.
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(os.path.realpath(folder))
+            named = {"CAD_ENGINE_DIR": str(root / "engines"), "CAD_STATE_DIR": str(root / "state"),
+                     "CAD_CACHE_DIR": str(root / "cache")}
+            with mock.patch.object(versions, "_ask_at", ask_at), mock.patch.dict(os.environ, named):
+                flat = places.engines_dir() / "engine.port"  # 0.10.0's port file there: `engine_dir() / "engine.port"`
+                with mock.patch.object(places, "WINDOWS", True):
+                    self.assertEqual(legacy._appdata_serving(), "the answering server's")
+                with mock.patch.object(places, "WINDOWS", False):
+                    self.assertIsNone(legacy._appdata_serving(), "no 0.10.0 of Windows' to guard")
+                temporary = root / "cad-engine"  # nothing named: the temporary folder's, where 0.10.0 looks
+                with mock.patch.object(places, "appdata_engine_dir", return_value=temporary):
+                    legacy._appdata_serving()
+        self.assertEqual(asked, [flat, temporary / "engine.port"])
+
 
 class Serving(Servers, Computer):
     """The server plain ``cad setup`` leaves running for every later session, a real one."""

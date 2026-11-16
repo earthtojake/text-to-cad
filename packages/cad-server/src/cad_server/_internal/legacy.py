@@ -326,11 +326,15 @@ def _stop(kinds: tuple[tuple[str, list[dict], str], ...], told: Callable[[str], 
 
 def _appdata_serving() -> str | None:
     """The environment of the server that answers where 0.10.0's clients look for one on Windows (the port file in
-    ``places.appdata_engine_dir``: 0.10.0's own, or a copy a later server writes of its own), as its ``status`` says it
-    (``prefix``); None where none answers, or there is no such folder."""
+    ``places.appdata_engine_dir``: 0.10.0's own, or a copy a later server writes of its own; where ``CAD_ENGINE_DIR``
+    names the engines' folder, 0.10.0's stop reaches the port file in it directly, the flat door's,
+    ``places.engines_dir``), as its ``status`` says it (``prefix``); None where none answers, or there is no such
+    folder."""
     from cad_server._internal import versions
 
     folder = places.appdata_engine_dir()
+    if folder is None and places.WINDOWS and os.environ.get("CAD_ENGINE_DIR"):
+        folder = places.engines_dir()
     if folder is None:
         return None
     answer = versions._ask_at(folder / f"{places.NAME}.port", {"op": "status"}, ASK_SECONDS)

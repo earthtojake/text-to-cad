@@ -307,20 +307,38 @@ EARLIER_CONSOLE = "cadgen"
 
 def appdata() -> list[dict]:
     """0.10.0's installations on Windows, each by its record in the state folder it kept in the local
-    application data (``cad.engine.places.appdata_state_dir``), as ``earlier`` reads 0.8's: read only for its
-    releases' What's new (``whats_new``)."""
+    application data (``cad.engine.places.appdata_state_dir``), as ``earlier`` reads 0.8's -- never the record of a
+    version of this layout that a take-over wrote there for 0.10.0's clients (``cli.setup._take_over``). Read to stop
+    0.10.0's servers by their own stop command (``legacy.stop_earlier``, ``stop_appdata``) and for its releases' What's
+    new (``whats_new``)."""
     from cad.engine.places import appdata_state_dir
 
     folder = appdata_state_dir()
     return earlier(folder, console="cad") if folder is not None else []
 
 
+def _this_layout(record: dict) -> bool:
+    """Whether ``record`` names a version of this layout: its environment in the versions' folder
+    (``places.versions_dir``), or the one that version's code marker names (``places.version_record``: a development
+    version runs from its checkout). A record 0.8 or 0.10.0 wrote never is: their environments are their own folders'
+    (``releases/`` in their state folder, or uv's tools), and neither installs a version of this layout."""
+    from cad.engine.places import version_record, versions_dir
+
+    inside = os.path.normcase(os.path.realpath(versions_dir())).rstrip(os.sep) + os.sep
+    if os.path.normcase(os.path.realpath(record["prefix"])).startswith(inside):
+        return True
+    marker = version_record(record["version"])
+    return marker is not None and _same_place(marker["prefix"], record["prefix"])
+
+
 def earlier(folder: Path | None = None, console: str = EARLIER_CONSOLE) -> list[dict]:
     """0.8's installations, each by its record where 0.8 left it: ``installations/<version>.json`` in 0.8's
     state folder (``folder``; by default where what 0.8 left is looked for,
     ``cad.engine.places.earlier_state_dir``), its ``version``, ``python``, console script
-    (``EARLIER_CONSOLE``) and environment (``prefix``), with its file (``path``). No record of this
-    release's is one. Read only to tell what 0.8 left: the launchers it published (``legacy_launchers``), and its
+    (``EARLIER_CONSOLE``) and environment (``prefix``), with its file (``path``). No record of a version of this
+    layout is one (``_this_layout``), though one be there: 0.10.0's folder holds the record a take-over wrote for its
+    clients (``mirror``). Read only to tell what 0.8 and 0.10.0 left: the launchers 0.8 published
+    (``legacy_launchers``), the servers to stop by their own stop command (``legacy.stop_earlier``), and their
     releases' What's new (``whats_new``)."""
     from cad.engine.places import earlier_state_dir
 
@@ -338,7 +356,7 @@ def earlier(folder: Path | None = None, console: str = EARLIER_CONSOLE) -> list[
         except (OSError, ValueError):
             continue
         if isinstance(record, dict) and record.get("version") == name[:-5] and all(
-                isinstance(record.get(key), str) for key in ("python", console, "prefix")):
+                isinstance(record.get(key), str) for key in ("python", console, "prefix")) and not _this_layout(record):
             found.append({**record, "path": str(where / name)})
     return found
 
