@@ -911,6 +911,65 @@ class ModellingMistakeTest(unittest.TestCase):
                 self.assertAlmostEqual(found["flat_material_fraction"], 1.0, places=2)
                 self.assertAlmostEqual(sheet.unfold(part).area, area, delta=0.01)
 
+    def test_a_full_round_edge_is_laid_into_the_flat(self) -> None:
+        # a cut edge rounded from skin to skin (r = t/2) leaves no face of the cut square to the skins: it was
+        # read as the cut edge itself, so the flat stopped at the skins, t/2 short of the round at each such
+        # edge and with no finding (an 80 x 40 plate with full-round ends: 78 x 40, ok), and a hole's round
+        # left the hole a thickness too wide. A full round is a break of both skins, laid into the flat as one
+        t, width = 2.0, 40.0
+
+        def rounded_ends(part: bd.Part) -> bd.Part:
+            """Each end of the sheet (its t-wide cut faces across ``width``) rounded whole, a t/2 further out."""
+            ends = [face for face in part.faces().filter_by(bd.GeomType.PLANE)
+                    if abs(face.area - t * width) < 1e-6 and abs(face.normal_at().Y) < 1e-6]
+            for face in ends:
+                part = part + bd.Pos(*face.center()) * bd.Rot(90, 0, 0) * bd.Cylinder(t / 2, width)
+            return part
+
+        def rounded_all(sketch: bd.Sketch) -> bd.Part:
+            """The sketch cut from a t sheet, every outline and hole rounded whole: a t/2 tube along each wire."""
+            (face,) = sketch.faces()
+            part = bd.extrude(bd.Pos(0, 0, -t / 2) * face, amount=t)
+            for wire in face.wires():
+                edge = wire.edges()[0]
+                ring = bd.Face(bd.Wire(bd.Edge.make_circle(t / 2, bd.Plane(edge @ 0, z_dir=edge % 0))))
+                part = part + bd.sweep(ring, path=wire, transition=bd.Transition.ROUND)
+            return part
+
+        def square(sketch: bd.Sketch) -> bd.Part:
+            """The same blank cut square: the outline a t/2 out, each hole a t/2 in."""
+            (face,) = sketch.faces()
+            blank = bd.offset(bd.Face(face.outer_wire()), t / 2, kind=bd.Kind.ARC)
+            for wire in face.inner_wires():
+                blank = blank - bd.offset(bd.Face(wire), -t / 2, kind=bd.Kind.ARC)
+            return bd.extrude(bd.Pos(0, 0, -t / 2) * blank, amount=t)
+
+        holed = bd.Sketch() + bd.RectangleRounded(76, 36, 4) - bd.Circle(5)
+        sharp = bd.Sketch() + bd.Rectangle(76, 36)  # its corners turned by the tubes' rounds of revolution
+        l_steps = [("line", 30), ("bend", 90, 2.0), ("line", 40)]
+        u_steps = [("line", 30), ("bend", 90, 2.0), ("line", 40), ("bend", 90, 2.0), ("line", 30)]
+        cases = (("plate, ends", rounded_ends(bd.Box(78, width, t)), bd.Box(80, width, t)),
+                 ("L bracket, ends", rounded_ends(bent(l_steps, t, width)),
+                  bent([("line", 31), *l_steps[1:2], ("line", 41)], t, width)),
+                 ("U bracket, ends", rounded_ends(bent(u_steps, t, width)),
+                  bent([("line", 31), *u_steps[1:4], ("line", 31)], t, width)),
+                 ("plate with a hole, all round", rounded_all(holed), square(holed)),
+                 ("plate with sharp corners, all round", rounded_all(sharp), square(sharp)))
+        for name, part, blank in cases:
+            with self.subTest(part=name):
+                result, want = checked(part), checked(blank)
+                self.assertTrue(result.ok, [f.message for f in result.findings if f.severity in ("error", "warning")
+                                            and f.code != "sheet.edge_break"])
+                found, square_part = result.measurements["parts"]["items"][0], want.measurements["parts"]["items"][0]
+                for key in ("flat_length_mm", "flat_width_mm"):
+                    self.assertAlmostEqual(found[key], square_part[key], places=3)
+                self.assertAlmostEqual(found["flat_area_mm2"], square_part["flat_area_mm2"], delta=0.05)
+                self.assertAlmostEqual(found["flat_material_fraction"], 1.0, places=2)
+                self.assertEqual([hole["size_mm"] for hole in result.measurements["holes"]["items"]],
+                                 [hole["size_mm"] for hole in want.measurements["holes"]["items"]])
+                self.assertEqual([f.code for f in result.findings if f.severity == "warning"], ["sheet.edge_break"])
+                self.assertEqual(len(sheet.unfold(part).faces()), 1)
+
     def test_an_s_jog_of_two_tangent_bends_unrolls_whole(self) -> None:
         # two bends meeting with no flat between them: a joggle, unrolled one strip after the other
         jog = bent([("line", 40), ("bend", 90, 1.5), ("bend", -90, 1.5), ("line", 40)], 1.5, 40, "jog")
