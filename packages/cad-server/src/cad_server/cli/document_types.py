@@ -510,6 +510,10 @@ def _ranges(document_type: str) -> Callable[[list[str], str], int]:
 
         return emit(swept, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)),
                     verbose=bool(getattr(parsed, "verbose", False)), verbose_hint=False)
+
+    return run
+
+
 # --- a B-rep type's CAM job: read with the kernel, planned by the person's FreeCAD ------------------------
 
 
