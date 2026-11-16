@@ -2,6 +2,7 @@
 name: engineering-drawing
 description: Make an engineering drawing of a part as a PDF - orthographic views with hidden lines and centre marks, real dimensions, hole callouts, notes and a title block on ISO sheets, all projected from the part's geometry so the drawing follows the model. Use when the user asks for a drawing, a dimensioned sheet, shop or manufacturing drawings, a print, or "2D views of this part". Not for DXF cut layouts or flat patterns.
 license: MIT
+allowed-tools: Bash(cad *) Bash(uv tool install --managed-python --python 3.14 cad==*) Bash(uv --version)
 metadata:
   repository: earthtojake/text-to-cad
 ---
@@ -23,19 +24,41 @@ toolpaths, not documents, and a different job.
 
 ## Setup
 
-Every command in this skill starts `cad +0.11.11@claude`: it runs cad 0.11.11, the version this skill was written for,
-and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your PATH; `cad.exe`
-on Windows).
+This skill was written for `cad==0.11.10`. The first time you use it in a chat, run `cad --version` in
+the shell. Then:
 
-If `cad` is missing, or says 0.11.11 is not installed, install it, outside the sandbox, then run the
-command again:
+- `cad` is not found: run the install line below, then carry on.
+- It prints a version older than the one above: run the update line below, then carry on.
+- It prints a version newer than the one above: carry on. This skill is older than cad.
+
+Install line:
 
 ```bash
-uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.11 cad setup
+uv tool install --managed-python --python 3.14 cad==0.11.10
 ```
 
-It installs cad 0.11.11 and the `cad` command and changes nothing else. If `uvx` is missing, install uv
-first.
+Update line, on macOS and Linux:
+
+```bash
+cad server stop && uv tool install --managed-python --python 3.14 cad==0.11.10 && cad server start
+```
+
+On Windows, in PowerShell:
+
+```powershell
+cad server stop; uv tool install --managed-python --python 3.14 cad==0.11.10; cad server start
+```
+
+If `uv` is not found, install it as uv's install page says,
+https://docs.astral.sh/uv/getting-started/installation/, then run the line again.
+
+When a `cad` command prints that:
+
+- the cad server is not running: run `cad server start`, then run the command again.
+- the command and the server are different versions: do what that line says.
+- a newer version of cad is available: carry on. The store that installed this plugin updates it.
+
+Run models with `cad run`.
 
 A project written for an earlier text-to-cad may need changes. The migration guides say what, one per
 version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
@@ -69,7 +92,7 @@ version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
    wider than the sheet's note column is refused, and `notes=` takes a LIST
    (`notes="BREAK EDGES"` is a sequence of eleven characters, so it is refused
    too).
-5. Run `cad +0.11.11@claude run <name>_drawing.py`. It prints the PDF it wrote, and **anything
+5. Run `cad run <name>_drawing.py`. It prints the PDF it wrote, and **anything
    it noticed while drawing** — read those first:
    - *"measures blank paper"*: the dimension's model points do not land on the
      view's geometry. Almost always the part was built from a corner and the
