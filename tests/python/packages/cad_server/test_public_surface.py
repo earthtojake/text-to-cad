@@ -103,7 +103,8 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "stop": frozenset({"json"}),
     # A command that destroys asks first, or takes --yes (cad_server._internal.consent); a delete says its plan alone.
     "delete": frozenset({"documents", "dry_run", "yes", "json"}),
-    "server": frozenset({"port", "rotate_token", "yes"}),
+    # The server's commands (start, stop, status), and the page token replaced, asking first.
+    "server": frozenset({"command", "start", "stop", "status", "port", "rotate_token", "yes"}),
     # This version installed on this computer (and the hidden flag the updaters of 0.10.0 to 0.11.10 run); and
     # `uninstall`, which removes it all, asking first.
     "setup": frozenset({"engine_update"}),

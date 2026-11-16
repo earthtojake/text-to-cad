@@ -254,7 +254,7 @@ def _serve(name: str, *, pages: bool = False) -> None:
     try:
         os.environ.clear()
         os.environ.update(environment)
-        connection = client.connect(start=True, timeout=SERVE_SECONDS)
+        connection = client.connect()  # starts none: `cad server start` alone does (`client.start`)
         if connection is not None:
             connection.close()
         if pages:

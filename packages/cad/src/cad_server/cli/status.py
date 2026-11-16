@@ -1,5 +1,5 @@
-"""``cad status``: the engine server's workers, what each builds, and what it serves
-(``cad_server.engine.cli``).
+"""``cad status``: ``cad server status`` (``cad_server.cli.server``): the server's workers, what each builds, and
+what it serves (``cad_server.engine.cli``).
 
 The parser and the run are the engine's (``cad_server.engine.cli.parser_for``, ``run``), the same
 verb ``python -m cad_server.engine status`` takes.
@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
+# Only for the skill text of releases 0.10.0 to 0.11.10, which says `cad status`: unlisted, and gone with the bridge.
 DEFAULT_PROG = "cad status"
 ENGINE_VERB = "status"
 

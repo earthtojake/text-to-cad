@@ -6,7 +6,7 @@ engine's daemon runs the core.
 
 uv is reached through a wrapper first on PATH that logs what it is asked. The engine is this file's
 own (the runner's ``CAD_ENGINE_DIR``), the core registered as its state folder's current installation,
-started by ``cad run`` with the core's Python and stopped by the core's ``cad stop``. The fake-uv
+started by the core's ``cad server start`` -- with the core's Python -- and stopped by its ``cad stop``. The fake-uv
 contracts (keys, commands, refusals) are test_base.py's.
 """
 
@@ -88,8 +88,13 @@ class CoreAndBaseTest(unittest.TestCase):
             wrapper.chmod(0o755)
         environ = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
         cls.env = engine_daemon.watched({**environ, "PATH": os.pathsep.join((str(folder), os.environ["PATH"])),
-                                         "CAD_VIEWER_WARM": "0"}, cls.addClassCleanup)
+                                         "CAD_VIEWER_WARM": "0"}, cls.addClassCleanup, started=False)
         cls.cadgen = str(cls.core / ("Scripts/cad.exe" if os.name == "nt" else "bin/cad"))
+        # The core's server in place of the file's, which this interpreter's start started.
+        from cad.engine import api
+
+        api.stop()
+        subprocess.run([cls.cadgen, "server", "start"], env=cls.env, check=True, capture_output=True)
         cls.addClassCleanup(lambda: subprocess.run([cls.cadgen, "stop"], env=cls.env, capture_output=True))
 
     def run_cadgen(self, *args: str, cwd: Path) -> subprocess.CompletedProcess:

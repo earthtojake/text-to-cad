@@ -462,7 +462,7 @@ class LoadTest(unittest.TestCase):
             extras.supported(("blender",), base.Installation.here().arch)
         except extras.Refused as refused:
             raise unittest.SkipTest(str(refused)) from None
-        engine_daemon.isolate(cls.addClassCleanup)
+        engine_daemon.isolate(cls.addClassCleanup, started=False)  # its server is the one below, meshing inline
         cls.project = Path(tempfile.mkdtemp(prefix="blender-load-")).resolve()
         cls.addClassCleanup(shutil.rmtree, cls.project, True)
         cls.env = engine_daemon.watched({**os.environ, "CAD_ENGINE_MESH": "inline"}, cls.addClassCleanup)

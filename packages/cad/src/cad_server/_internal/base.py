@@ -318,7 +318,7 @@ def ensure(installation: Installation | None = None, *, make: bool = True,
     """The installation's base (see the module): the installation's own environment when it carries the
     kernel; else ``base/<key>`` in the cache folder, made first when it is not complete and ``make``
     (None when it is not, and ``make`` is false), each line of the making said to ``told`` -- with
-    ``engine`` (``cad run``), made by the device's engine when one runs (``_by_the_engine``), else here.
+    ``engine`` (``cad run``), made by the server (``_by_the_engine``: none running, its one line), else here.
     ``Refused`` in one line when it cannot be made."""
     installation = installation or Installation.here()
     if installation.kernel:
@@ -337,16 +337,18 @@ def ensure(installation: Installation | None = None, *, make: bool = True,
 
 
 def _by_the_engine(env: Path, told: Callable[[str], None]) -> dict[str, Any] | None:
-    """The base at ``env`` made by the device's engine, when one runs and it is this installation's
+    """The base at ``env`` made by the device's engine, when it is this installation's
     (``{"op": "base"}``, ``Making``): its making followed, each line said to ``told``, and the base's
-    marker once made. None when no engine answers, or one makes no base of this installation's (another
+    marker once made. None when the engine makes no base of this installation's (another
     installation's, a release before this one): the caller makes the base itself. ``Refused`` in the
-    engine's words when it could not make it."""
+    engine's words when it could not make it; no server running, or one of another release, its one line
+    (``client.NotRunning``, ``client.OtherRelease``)."""
     from cad.engine import client
 
     try:
-        answer = client.request({"op": "base", "key": env.name}, start=False,
-                                on_log=lambda frame: told(str(frame.get("log", ""))))
+        answer = client.request({"op": "base", "key": env.name}, on_log=lambda frame: told(str(frame.get("log", ""))))
+    except (client.NotRunning, client.OtherRelease):
+        raise
     except (ConnectionError, OSError, ValueError):
         return None
     if not answer or answer.get("base") is not True:

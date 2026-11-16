@@ -9,14 +9,13 @@ import json
 import os
 import shutil
 import stat
-import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from cad.engine import client, places
+from cad.engine import places
 
 X = "0.12.0"
 
@@ -145,47 +144,6 @@ class PathTableTest(Device):
                 self.assertEqual(stat.S_IMODE(folder.stat().st_mode), 0o700, folder)
         self.assertTrue((self.engines / X / "engine.lock").is_file())
         self.assertFalse((self.engines / "engine.lock").exists(), "the flat lock is not this version's")
-
-
-class StartTest(Device):
-    """A client starts its own version's server, never the current installation's."""
-
-    def current(self) -> dict:
-        """Another installation current, as in 0.11.10 and earlier: what a process with no version starts."""
-        prefix = self.root / "current"
-        (prefix / "bin").mkdir(parents=True)
-        for script in ("python", "cad"):
-            (prefix / "bin" / script).write_text("", encoding="utf-8")
-        record = {"version": "0.11.10", "python": str(prefix / "bin" / "python"), "cad": str(prefix / "bin" / "cad"),
-                  "prefix": str(prefix)}
-        (self.state / "installations").mkdir(parents=True, exist_ok=True)
-        (self.state / "installations" / "0.11.10.json").write_text(json.dumps(record), encoding="utf-8")
-        (self.state / "installations" / "current").write_text("0.11.10", encoding="utf-8")
-        return record
-
-    def started(self) -> list[str]:
-        with mock.patch.object(subprocess, "Popen", side_effect=RuntimeError("started")) as popen, \
-                self.assertRaisesRegex(RuntimeError, "started"):
-            client._start()
-        return popen.call_args.args[0]
-
-    def test_a_version_starts_its_own_server_and_no_version_the_current_one(self) -> None:
-        current = self.current()
-        self.assertEqual(self.started()[0], current["python"], "no version: the current installation's")
-        mine = self.installed()
-        with self.running_in(self.root / "a model's own environment"), \
-                mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": X}):
-            self.assertEqual(self.started()[0], mine["python"], "its own version's, never the current one")
-
-    def test_a_version_whose_server_is_gone_starts_nothing_else(self) -> None:
-        self.current()
-        mine = self.installed()
-        os.unlink(mine["python"])
-        with mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": X}), \
-                mock.patch.object(subprocess, "Popen", side_effect=AssertionError("a server was started")):
-            self.assertIsNone(places.engine())
-            with self.assertRaises(ConnectionError):
-                client._start()
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from tests.python.support import engine_daemon
 from tests.python.support.paths import add_sources
 
 SRC = add_sources()
@@ -95,6 +96,7 @@ class CommandTest(unittest.TestCase):
                                         encoding="utf-8")
         self.addCleanup(subprocess.run, [sys.executable, "-m", "cad_server.engine", "stop"], env=self.env,
                         capture_output=True, timeout=120)
+        engine_daemon.start(self.env)  # which makes the program's environment
         code, out, err = self.cad("run", "say.py", cwd=project)
         self.assertEqual(code, 0, out + err)
         self.assertEqual(out.splitlines(), [SAID])

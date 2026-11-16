@@ -255,11 +255,11 @@ class DoctorTests(unittest.TestCase):
         self.assertRegex(out, r"sharing  on: by default, since cad said so on \d{4}-\d{2}-\d{2}\n")
 
     def test_the_report_starts_the_engine_when_none_runs(self) -> None:
-        # In a sandbox that cannot start one, the client's own line, and nothing started.
+        # None running: the client's own line (a client starts none: `cad server start` does), and nothing started.
         with TemporaryDirectory() as tmp:
             code, out, _ = _run([])
         self.assertEqual(code, 0)
-        self.assertRegex(out, r"server   not running \(.+\): no engine server is running, and this shell's sandbox cannot start one")
+        self.assertRegex(out, r"server   not running \(.+\): the cad server is not running: run `cad server start`")
         self.assertFalse((self.state / "engine").exists(), "nothing started")
         # Running: said. None running: started, by the client's start (a request that may start one).
         # The workers counted as `cad status` counts them: the standby with them, against the cap.

@@ -1,4 +1,5 @@
-"""Ensure this installation's engine and open its viewer page: the home, or each file named.
+"""Open the running server's viewer page: the home, or each file named (no server running: its one line, which
+says to run ``cad server start``).
 
 The page is the engine's one page, whose explorer opens where it was last, else your home folder.
 Each FILE (an on-disk CAD file, a relative one read from this folder, or a document id the engine
@@ -88,11 +89,8 @@ def parse_args(argv=None, *, prog=DEFAULT_PROG):
 
 
 def main(argv=None, *, prog=DEFAULT_PROG):
-    from cad.engine import client
     from cad.engine.client import request
     options = parse_args(argv, prog=prog)
-    # The engine started for this page says so, as every verb's does (``cad_server.engine.cli.answered``).
-    client.on_started = lambda: print('engine started', file=sys.stderr, flush=True)
     options['start'] = os.getcwd()
     if not options['api_only']:
         options['dist'] = resolve_dist_dir(options['dist'])

@@ -7,8 +7,8 @@ already, else as it is -- by a ``sys.meta_path`` finder for those modules alone 
 them where Python finds them, by the path finder (asked itself, never the rest of ``sys.meta_path``, so no
 two finders hand one lookup back and forth), and runs each one's own loader, then what is attached to it
 (``_Then``) -- a reload's too. Every other import passes it by at one lookup. What the server attaches: the
-engine telemetry's observer to the engine's verbs (``engine_telemetry.install``), and its words where no
-installation is registered to the engine's (``cad_server``: ``cad.engine.said.UNREGISTERED``).
+engine telemetry's observer to the engine's verbs (``engine_telemetry.install``), and a ``cad`` command's release
+to the client it reaches the server by (``cad_server.cli``: ``cad.engine.client.RELEASE``).
 """
 
 from __future__ import annotations

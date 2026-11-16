@@ -49,6 +49,8 @@ REASONS: dict[str, int] = {
     "bad_pin": 2,                # a first word `+...` that is no pin: no version after the +, or no channel after the @
     # The work.
     "declined": 1,               # the person answered no to a destructive command's question: nothing was changed
+    "not_running": 1,            # no server runs: `cad server start` starts it (``next``)
+    "other_release": 1,          # the server that runs is another release's than this command's
     "engine_unavailable": 1,     # the engine server could not be reached or started
     "failed": 1,                 # the work failed: a build, a render, an export, a tool it ran
     "internal_error": 1,         # a mistake in cad's own code
@@ -89,9 +91,11 @@ def _is(error: BaseException, module: str, name: str) -> bool:
 
 
 def classify(error: BaseException) -> Failure:
-    """The failure an exception is, by its class: a ``Failure`` as it is; an interrupt ``canceled``; the
-    engine out of reach (``ConnectionError``) ``engine_unavailable``; a document the engine does not hold
-    (``cad.engine.serve.NotHeld``), and a file a snapshot's flag names that is not there
+    """The failure an exception is, by its class: a ``Failure`` as it is; an interrupt ``canceled``; no
+    server running (``cad.engine.client.NotRunning``) ``not_running``, and one of another release
+    (``OtherRelease``) ``other_release``, each with the command that starts this release's (``next``); the
+    engine out of reach otherwise (``ConnectionError``) ``engine_unavailable``; a document the engine does not
+    hold (``cad.engine.serve.NotHeld``), and a file a snapshot's flag names that is not there
     (``cad.engine.snapshot.NoSuchFile``: ``--annotation notes.json``), ``not_found``; an argument the library
     refused by name (``cad._internal.refused.ArgumentRefused``) ``invalid_argument``; anything else
     ``failed``."""
@@ -99,6 +103,11 @@ def classify(error: BaseException) -> Failure:
         return error
     if isinstance(error, KeyboardInterrupt):
         return Failure("canceled", "canceled")
+    for name, reason in (("NotRunning", "not_running"), ("OtherRelease", "other_release")):
+        if _is(error, "cad.engine.client", name):
+            from cad.engine.client import START
+
+            return Failure(failure_text(error), reason, next=(START,))
     if isinstance(error, ConnectionError):
         return Failure(failure_text(error), "engine_unavailable")
     if _is(error, "cad.engine.serve", "NotHeld") or _is(error, "cad.engine.snapshot", "NoSuchFile"):

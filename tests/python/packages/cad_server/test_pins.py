@@ -28,7 +28,7 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cad/src")
 
 import cad_server  # noqa: E402
-from cad.engine import client, places  # noqa: E402
+from cad.engine import places  # noqa: E402
 from cad_server import cli, updates  # noqa: E402
 from cad_server._internal import extras, imports, installations, pins, proxy, versions  # noqa: E402
 from cad_server._internal.cli_errors import REASONS, Failure  # noqa: E402
@@ -423,11 +423,9 @@ class TheChannel(unittest.TestCase):
 
     def test_default_unless_a_pin_or_cad_run_names_one(self) -> None:
         self.assertEqual(places.channel(), "default")
-        self.assertEqual(client.with_channel({"op": "status"}), {"op": "status"}, "the default's requests name none")
         extras.tell([])
         self.assertNotIn(places.RUN_WITH, os.environ)
         places.set_channel("store")
-        self.assertEqual(client.with_channel({"op": "status"}), {"op": "status", "channel": "store"})
         extras.tell([])  # cad run hands it to its program, whose requests name it too
         places._channel = None
         self.assertEqual(places.channel(), "store")

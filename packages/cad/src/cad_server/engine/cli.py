@@ -8,7 +8,7 @@ ordinary Python scripts call decorated models explicitly.
         [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
     cad serve DOC [--port N]
-    cad status [--json] | stop [--json] | server [--port N] [--rotate-token [--yes]]
+    cad server status [--json] | stop [--json]      (``cad_server.cli.server``, which starts it too)
     cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]   documents deleted: record, cached document, the
                                                   engine's copy; asked first, or --yes
     cad <type> inspect DOC [REF] [--query Q] [--json]   what a document holds and its build closure, or what a ref names (``refs``)
@@ -121,19 +121,6 @@ def _delete_arguments(delete: argparse.ArgumentParser) -> None:
                         help="say which documents would be deleted, and how many, and delete nothing")
     add_yes(delete, "delete them")
     delete.add_argument("--json", action="store_true", help="what was deleted (or would be) as JSON")
-
-
-def _server_arguments(server: argparse.ArgumentParser) -> None:
-    from cad_server._internal.consent import add_yes
-
-    server.add_argument("--port", type=int, default=None,
-                        help="the HTTP port the engine takes, refused when another process holds it (else "
-                             "CAD_ENGINE_PORT, else 3245 or the port this installation rolled to); 0 takes "
-                             "any free port")
-    server.add_argument("--rotate-token", action="store_true",
-                        help="replace the page token of every version on this device first: every link and browser "
-                             "session made before stops working, in every server running at once; asked first")
-    add_yes(server, "with --rotate-token, replace the token")
 
 
 def _inspect_arguments(parser: argparse.ArgumentParser, document_type: str | None = None) -> None:
@@ -428,16 +415,11 @@ def answered(runner: Callable[[argparse.Namespace, str], int], args: argparse.Na
     from cad_server._internal.cli_errors import classify, write
 
     as_json = bool(getattr(args, "json", False))
-    from cad.engine import client
-
-    # A verb that starts the engine says so, once, on stderr: a person can tell a fresh engine (its
-    # first build cold, every document read again) from the one they had.
-    client.on_started = lambda: print("engine started", file=sys.stderr, flush=True)
     try:
         return runner(args, prog)
     except (Failure, ConnectionError) as failure:
-        # ``ConnectionError``: the engine not reached (none runs and none can start: a sandbox, a
-        # folder refused), said in its one line, never as a crash.
+        # ``ConnectionError``: the engine not reached (none runs, one of another release, a folder refused),
+        # said in its one line, never as a crash.
         return write(classify(failure), prog=prog, as_json=as_json)
     except Exception as error:
         if not as_json:
@@ -719,47 +701,14 @@ def plain(text: str) -> str:
     return text.translate(_CONTROLS)
 
 
-def _server(args: argparse.Namespace, prog: str) -> int:
-    from cad_server.engine.daemon import main as daemon
-
-    if args.port is not None and not 0 <= args.port <= 65535:
-        raise Failed("--port must be between 0 and 65535", 2)
-    if args.rotate_token:
-        _consent_to_rotate(args, prog)
-        from cad_server.engine.daemon import rotate_token
-
-        try:
-            rotated = rotate_token(told=lambda line: print(f"cad: {line}", file=sys.stderr, flush=True))
-        except (OSError, ValueError) as error:
-            raise Failed(f"cannot replace the page token: {getattr(error, 'strerror', None) or error}") from None
-        if rotated is None:
-            raise Failed("cannot replace the page token: there is no state folder to keep it in")
-        print("cad: a new page token: every link and browser session made before no longer works, in every version's "
-              "server at once", file=sys.stderr, flush=True)
-    return daemon([], port=args.port, foreground=True, rotated=bool(args.rotate_token))
-
-
-def _consent_to_rotate(args: argparse.Namespace, prog: str) -> None:
-    """``--rotate-token`` retires every link and session made before, for good, in every version's server on the
-    device at once (``daemon.rotate_token``): asked first (``cad_server._internal.consent``)."""
-    from cad_server._internal.consent import confirm, retry
-
-    command = retry(prog, ["--rotate-token", *(["--port", str(args.port)] if args.port is not None else [])])
-    confirm("replacing the page token", "Replace the page token?", yes=bool(args.yes), as_json=False,
-            command=command,
-            preview=[f"{prog} --rotate-token replaces the page token of every cad version on this device: every "
-                     "CAD Viewer link and browser session made with the one it has now stops working at once, in every "
-                     "server running, and each page needs a new link (cad viewer prints one). This cannot be undone."])
-
-
 def _status(args: argparse.Namespace, _prog: str) -> int:
-    from cad.engine.client import request, sweep
+    from cad.engine.client import NOT_RUNNING, request, sweep
 
     swept = sweep(stop=False)
     _told_swept(swept)
     answer = request({"op": "status"}, start=False)
     if answer is None:
-        print("null" if args.json else "no engine server is running")
+        print("null" if args.json else NOT_RUNNING)
         return 0
     if args.json:
         print(json.dumps(answer, indent=2))
@@ -777,8 +726,7 @@ def _told_swept(swept: dict[str, list[str]]) -> None:
 def _stop(args: argparse.Namespace, prog: str) -> int:
     from cad.engine.client import sweep
 
-    # The engine, whatever release runs it; stopped means gone: the next command starts a fresh one,
-    # the current installation's.
+    # The server, whatever release runs it; stopped means gone, until `cad server start` starts one.
     try:
         swept = sweep(stop=True)
     except ConnectionError as error:
@@ -788,10 +736,10 @@ def _stop(args: argparse.Namespace, prog: str) -> int:
         print(json.dumps({"ok": True, "stopped": swept["stopped"]}, indent=2))
         return 0
     if not swept["stopped"]:
-        print("no engine server is running")
+        print("the cad server is not running")
     # A line per server stopped, for a person or an agent; JSON only under ``--json``.
     for address in swept["stopped"]:
-        print(f"stopped the engine server at {address}")
+        print(f"stopped the cad server at {address}")
     return 0
 
 
@@ -963,8 +911,6 @@ def status_text(answer: dict[str, Any]) -> str:
                          + f", up {_span(answer.get('up'))}", workers_text(answer),
                          *([f"held by {answer['holders']} app server{'' if answer['holders'] == 1 else 's'}"]
                            if answer.get("holders") else []),
-                         # The server of the version installations/current names answers clients of 0.11.10 too.
-                         *(["also answers clients of 0.11.10 and earlier"] if answer.get("bridge") else []),
                          memory])]
     names = [Path(str(worker["script"])).name for worker in workers]
     width = max((len(name) for name in names), default=0)
@@ -1077,12 +1023,11 @@ VERBS: dict[str, tuple[str, Callable[..., Any], Callable[[argparse.Namespace, st
                 "sequences, animations and declared files -- then its build closure (its source, modules, inputs "
                 "and key); or what one thing a ref names is and what made it. Nothing is built or meshed",
                 _inspect_arguments, _inspect),
-    "status": ("the engine server's workers, what each is building, and its served documents", _status_arguments,
+    "status": ("the cad server's workers, what each is building, and its served documents", _status_arguments,
                _status),
-    "stop": ("stop the engine server", _stop_arguments, _stop),
+    "stop": ("stop the cad server", _stop_arguments, _stop),
     "delete": ("delete documents: each one's record and its document in the engine's cache, and what the engine "
                "holds of it; never a file of yours", _delete_arguments, _delete),
-    "server": ("run the engine server in this process", _server_arguments, _server),
 }
 
 

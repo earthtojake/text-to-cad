@@ -20,9 +20,10 @@ CI job exists to run it whole, where a test that skips is a job that passed havi
 nothing.
 
 Each FILE runs in its own interpreter, ``--jobs`` at a time (default one), with an engine
-directory of its own (``CAD_ENGINE_DIR``): a build it asks for without naming one runs on
-an engine daemon of that file's alone, never on a developer's own, and a daemon the file left
-running there is stopped once it ends (``stop_engine``). Its ``CAD_CACHE_DIR``,
+directory of its own (``CAD_ENGINE_DIR``) and a server started there before it runs (``start_engine``, as
+``cad server start`` starts one: nothing else does): a build it asks for without naming one runs on
+that file's server alone, never on a developer's own, and the server running there is stopped once it
+ends (``stop_engine``). Its ``CAD_CACHE_DIR``,
 ``CAD_STATE_DIR`` and ``CAD_LAUNCHER_DIR`` are folders of its own, the state folder holding nothing but
 this run's interpreter registered as its current installation (``engine_daemon.register``: the
 installation whose engine a client starts, where with none it starts none), so
@@ -236,6 +237,10 @@ def run_in_process(files: list[str], top: str, verbose: bool, hang_seconds: floa
         resultclass=_Watching if places else None,
     )
     result = runner.run(suite)
+    # A build a test runs in its own process forgets every first-party module, the test's among them
+    # (``cad.engine.build.load_script``), and unittest then skips that module's cleanups -- the server
+    # ``engine_daemon.isolate`` started among them: they run as the file ends.
+    unittest.doModuleCleanups()
     return 0 if result.wasSuccessful() else 1
 
 
@@ -269,6 +274,15 @@ def _source_path(top: str) -> str:
     """``PYTHONPATH`` naming the checkout's packages, then whatever this run's already names."""
     return os.pathsep.join(filter(None, [*(os.path.join(top, *source) for source in SOURCES),
                                          os.environ.get("PYTHONPATH", "")]))
+
+
+def start_engine(top: str, env: dict[str, str]) -> str | None:
+    """A server started in a file's engine directory, with the file's environment (``client.start``): None, or
+    why it did not start."""
+    started = subprocess.run([sys.executable, "-P", "-c", "from cad.engine import client; client.start()"],
+                             env={**env, "PYTHONPATH": _source_path(top)}, capture_output=True, text=True,
+                             timeout=ENGINE_STOP_SECONDS)
+    return f"the test engine daemon did not start: {started.stdout}{started.stderr}" if started.returncode else None
 
 
 def stop_engine(top: str, engine_dir: str) -> None:
@@ -380,6 +394,9 @@ def _run_one_file(path: str, top: str, verbose: bool, env: dict[str, str],
     it hung, how (else None)."""
     started = time.perf_counter()
     try:
+        failed = start_engine(top, env)
+        if failed is not None:
+            return path, 1, f"{path}: {failed}\n", time.perf_counter() - started, None
         return _run_file(path, top, verbose, env, started, places,
                          FILE_HANG_SECONDS if hang_seconds is None else hang_seconds)
     finally:

@@ -67,7 +67,8 @@ class TheReasons(unittest.TestCase):
     def test_each_reason_has_one_class(self) -> None:
         # The table an agent branches on: a reason is added, never renamed, and its class sets the status.
         self.assertEqual(REASONS, {"usage": 2, "invalid_argument": 2, "wrong_type": 2, "not_found": 2,
-                                   "confirmation_required": 2, "bad_pin": 2, "declined": 1, "engine_unavailable": 1,
+                                   "confirmation_required": 2, "bad_pin": 2, "declined": 1, "not_running": 1,
+                                   "other_release": 1, "engine_unavailable": 1,
                                    "failed": 1, "internal_error": 1, "cannot_install_here": 3,
                                    "other_version": 5, "canceled": 130})
         with self.assertRaises(ValueError):
@@ -78,13 +79,18 @@ class TheReasons(unittest.TestCase):
             pass
 
         NotHeld.__module__ = "cad.engine.serve"
+        from cad.engine.client import NOT_RUNNING, NotRunning, OtherRelease
+
         cases = {ConnectionError("no engine"): ("engine_unavailable", 1), NotHeld("not held"): ("not_found", 2),
                  KeyboardInterrupt(): ("canceled", 130), RuntimeError("boom"): ("failed", 1),
-                 Failure("refused", "wrong_type"): ("wrong_type", 2)}
+                 Failure("refused", "wrong_type"): ("wrong_type", 2),
+                 # No server, and one of another release: an agent tells them from one that failed, and runs ``next``.
+                 NotRunning(NOT_RUNNING): ("not_running", 1), OtherRelease("cad here is 2"): ("other_release", 1)}
         for error, (reason, status) in cases.items():
             with self.subTest(error=type(error).__name__):
                 found = classify(error)
                 self.assertEqual((found.reason, found.status), (reason, status))
+                self.assertEqual(found.next, ("cad server start",) if isinstance(error, (NotRunning, OtherRelease)) else ())
 
     def test_the_document_carries_what_a_person_must_do(self) -> None:
         self.assertEqual(document(Failure("asked", "usage", next=["cad status --json"], user_action=True)),

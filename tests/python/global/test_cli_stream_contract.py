@@ -73,6 +73,7 @@ def setUpModule() -> None:
     # folder registers this interpreter as the installation whose engine the builds start.
     ENGINE = str(root / "engine")
     WATCHED.update(engine_daemon.watched({"CAD_STATE_DIR": str(root / "state")}, unittest.addModuleCleanup))
+    engine_daemon.start(_env())
 
 
 def tearDownModule() -> None:

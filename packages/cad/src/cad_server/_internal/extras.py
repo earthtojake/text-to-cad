@@ -773,7 +773,7 @@ def _complete(env: Path, spec: Spec) -> dict[str, Any] | None:
 def ensure(installation: base.Installation, spec: Spec | list[str], *, told: Callable[[str], None],
            engine: bool = False) -> base.Environment:
     """The environment of ``spec`` beside ``installation``'s base: made first when it is not complete -- by
-    the device's engine with ``engine`` (``cad run``) when one runs, its lines said to ``told``, else here.
+    the server with ``engine`` (``cad run``; none running, its one line), its lines said to ``told``, else here.
     ``Refused`` in one line when uv cannot make it. A list of requirements is a spec of them."""
     spec = spec if isinstance(spec, Spec) else Spec(requirements=tuple(sorted(set(spec))))
     supported(spec.integrations, installation.arch)
@@ -806,15 +806,18 @@ def _used(env: Path) -> None:
 
 
 def _by_the_engine(env: Path, spec: Spec, told: Callable[[str], None]) -> dict[str, Any] | None:
-    """The environment made by the device's engine when one runs and it is this installation's (``{"op":
-    "base", "key", "spec"}``, ``making``), its lines said to ``told``; None when none answers, or one of
-    another installation's, which this process makes it for. ``Refused`` in the engine's words."""
+    """The environment made by the device's engine when it is this installation's (``{"op":
+    "base", "key", "spec"}``, ``making``), its lines said to ``told``; None for one of another installation's,
+    which this process makes it for. ``Refused`` in the engine's words; no server running, or one of another
+    release, its one line (``client.NotRunning``, ``client.OtherRelease``)."""
     from cad.engine import client
 
     try:
         answer = client.request({"op": "base", "key": env.name, "spec": spec.as_dict(),
-                                 "with": list(spec.requirements)}, start=False,
+                                 "with": list(spec.requirements)},
                                 on_log=lambda frame: told(str(frame.get("log", ""))))
+    except (client.NotRunning, client.OtherRelease):
+        raise
     except (ConnectionError, OSError, ValueError):
         return None
     if not answer or answer.get("base") is not True:

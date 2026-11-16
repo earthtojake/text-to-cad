@@ -5,9 +5,12 @@ the registry (``cad.registry``), each its own module, ``cad_server.cli.<type>``
 (``cad_server.cli.document_types``: ``cad xbf export``, ``cad stl snapshot``, ``cad urdf validate``). An
 integration's, for its tool's own files, which are no document type, which cad checks or writes and never
 shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations``: ``cad mujoco check``,
-``cad orcaslicer presets``), only for the integrations the registry gives operations. And the commands that are no file's: the engine's process control (``serve``, ``status``, ``stop``,
-``delete``, ``server``), ``run``, and the installation's (``setup``, ``uninstall``, ``doctor``, ``viewer``,
-``telemetry``).
+``cad orcaslicer presets``), only for the integrations the registry gives operations. And the commands that are no file's: the server's (``server``: ``start``,
+``stop``, ``status``), the engine's verbs (``serve``, ``delete``), ``run``, and the installation's (``setup``,
+``uninstall``, ``doctor``, ``viewer``, ``telemetry``).
+
+A command that reaches the server holds it to its own release (``cad.engine.client.RELEASE``): one of another
+release is refused in one line. The server's own commands are not held to it (``_ANY_RELEASE``).
 
 A command line may start with a pin, ``cad +<version>[@<name>] ...``: the ``cad`` command runs the version it
 names, and that version reads it here before anything else (``cad_server._internal.pins``): a pin to another version
@@ -45,12 +48,12 @@ from cad.registry import DOCUMENT_TYPES, INTEGRATIONS
 # A model script builds by running it (``cad run <model>.py``: ``uv run``, cad pinned, in the environment the
 # device's engine makes for it): no command takes its place.
 _COMMANDS: dict[str, tuple[str, str]] = {
-    # The engine's process control: documents served, its server, and documents deleted.
+    # The server, documents served, and documents deleted.
+    "server": ("cad_server.cli.server", "the cad server: start, stop, status"),
     "serve": ("cad_server.cli.serve", "serve a document over HTTP and print its URL"),
-    "status": ("cad_server.cli.status", "show the engine server's workers and what it serves"),
-    "stop": ("cad_server.cli.stop", "stop the engine server"),
+    "status": ("cad_server.cli.status", "`cad server status`"),
+    "stop": ("cad_server.cli.stop", "`cad server stop`"),
     "delete": ("cad_server.cli.delete", "delete documents: record, cached document, the engine's copy"),
-    "server": ("cad_server.cli.server", "run the engine server in this process"),
     # Generic / services
     "run": ("cad_server.cli.run", "run a script (or -m, -c) as uv run does, cad pinned at this device's release "
                                   "with the integrations its imports use"),
@@ -60,10 +63,13 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # This version installed on this computer, and the cad command with it; and all of it removed.
     "setup": ("cad_server.cli.setup", "install this version of cad on this computer"),
     "uninstall": ("cad_server.cli.uninstall", "remove cad from this computer"),
-    # A page session on the installation engine; the launcher exits.
-    "viewer": ("cad_server.cli.viewer", "open a viewer page on the installation engine"),
+    # A page of the running server's; the launcher exits.
+    "viewer": ("cad_server.cli.viewer", "open a viewer page on the running cad server"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
 }
+# Only for the skill text of releases 0.10.0 to 0.11.10 (`cad status`, `cad stop`): run, never listed, and gone with
+# the bridge.
+_UNLISTED = frozenset({"status", "stop"})
 
 # Each document type's command, by its id: ``cad <type> <operation>`` (``cad_server.cli.document_types``).
 TYPE_COMMANDS: dict[str, str] = {document_type: f"cad_server.cli.{document_type}" for document_type in DOCUMENT_TYPES}
@@ -85,7 +91,7 @@ _USAGE_TAIL = (
 
 def _command_lines(names) -> str:
     width = max((len(name) for name in _COMMANDS), default=0)
-    return "\n".join(f"  {name.ljust(width)}  {_COMMANDS[name][1]}" for name in sorted(names)) + "\n"
+    return "\n".join(f"  {name.ljust(width)}  {_COMMANDS[name][1]}" for name in sorted(set(names) - _UNLISTED)) + "\n"
 
 
 def _type_lines() -> str:
@@ -297,6 +303,10 @@ def _main(argv: list[str]) -> int:
 
     if command not in _UNTOLD and not helping and not wants_json(rest):
         _tell()
+    if command not in _ANY_RELEASE:
+        from cad_server._internal.attach import when
+
+        when("cad.engine.client", _hold_to_release)  # as the client is imported, if it is: a command imports no more
     try:
         code = _run(command, entry[0], rest)
     except BrokenPipeError as error:
@@ -314,6 +324,13 @@ def _main(argv: list[str]) -> int:
     if not helping and command not in _UNNOTICED and (pin is None or pin.channel is None):
         _notice(daily=True)
     return code
+
+
+def _hold_to_release(client) -> None:
+    """This command's client holds the server it reaches to this release (``cad.engine.client.RELEASE``)."""
+    from cad.engine.previous import version
+
+    client.RELEASE = version()
 
 
 def _unknown(word: str, rest: list[str]) -> int:
@@ -432,9 +449,13 @@ NOTICE_SECONDS = 24 * 60 * 60.0
 # Commands whose run records no use and copies no data first (``_first_run``): setup makes the version and copies
 # its data itself, uninstall takes everything out.
 _UNUSED = frozenset({"setup", "uninstall"})
-# Commands after which no notice is said (``_notice``): the engine's server, which runs until it stops; setup, which
-# an updater of 0.11.10 and earlier runs with no person to read it; uninstall.
+# Commands after which no notice is said (``_notice``): the server's, run by an agent app as a session starts or in
+# the foreground until it stops; setup, which an updater of 0.11.10 and earlier runs with no person to read it;
+# uninstall.
 _UNNOTICED = frozenset({"server", "setup", "uninstall"})
+# Commands that reach a server of any release (``cad.engine.client.RELEASE``): the server's own -- which start this
+# release's in place of another's, stop whichever runs, and say which runs.
+_ANY_RELEASE = frozenset({"server", "status", "stop"})
 # Commands that never carry the analytics notice: the engine's server, writing nowhere; `telemetry`, which says it
 # its own way; `setup`, which an updater of 0.11.10 and earlier runs with no person to read it; `uninstall`; `run`,
 # which is only the python it runs, as the `cad` command's `run` is; and `requirement`, whose output a program reads.

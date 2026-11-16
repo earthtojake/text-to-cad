@@ -1,4 +1,4 @@
-"""``cad viewer`` ensures the engine, prints or opens its page URL, and exits.
+"""``cad viewer`` prints or opens the running server's page URL, and exits.
 
 The parser and launcher contract live in ``cad_server.viewer.main``.
 """

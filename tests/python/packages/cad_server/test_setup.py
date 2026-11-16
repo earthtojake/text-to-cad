@@ -25,7 +25,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from tests.python.packages.cad_server.test_version_servers import WAIT, Servers
+from tests.python.packages.cad_server.test_version_servers import Servers
 from tests.python.packages.cad_server.test_versions import OLD, Device
 
 from cad.engine import client, places
@@ -441,20 +441,6 @@ class Serving(Servers, Computer):
     """The server plain ``cad setup`` leaves running for every later session, a real one."""
 
     SERVES = True
-
-    def test_setup_leaves_its_version_s_server_running_and_again_starts_no_other(self) -> None:
-        before = dict(os.environ)
-        with mock.patch.object(setup, "_name", return_value=X):
-            code, out, err = self.main(setup, [])
-            self.assertEqual(code, 0, out + err)
-            self.assertTrue(out.endswith(f"cad {X}'s server is running\n"), out + err)
-            started = versions.ask(X, {"op": "pid"}, seconds=WAIT)
-            self.assertIsNotNone(started, "it answers at its own door")
-            self.assertTrue(dict(os.environ) == before, "this process's environment as it was")
-            code, out, err = self.main(setup, [])
-        self.assertEqual(code, 0, out + err)
-        self.assertEqual(versions.ask(X, {"op": "pid"}, seconds=WAIT)["pid"], started["pid"], "no other started")
-        self.no_app_touched()
 
     def test_a_server_that_cannot_start_is_said_and_the_setup_still_succeeds(self) -> None:
         with mock.patch.object(setup, "_name", return_value=X), \

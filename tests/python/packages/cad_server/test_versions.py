@@ -22,7 +22,6 @@ import threading
 import time
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 from unittest import mock
 
 from tests.python.support.paths import repo_path
@@ -359,17 +358,6 @@ class CopyOnce(Device):
         self.assertFalse(any(name.startswith(imports.STAGING) for name in os.listdir(places.version_dir(X))))
         self.assertTrue((places.data_dir(X) / "documents" / IDENT / "document.json").is_file())
 
-    def test_a_version_engine_imports_before_it_serves(self) -> None:
-        from cad_server.engine import daemon
-
-        self.data(X)
-        self.present(Y)
-        with mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": Y}):
-            places._versioned.cache_clear()
-            daemon._first_start()
-        self.assertEqual(imports.marker(Y)["imported"], {"kind": "version", "version": X})
-
-
     def test_what_a_version_wrote_before_its_marker_loses_to_the_import(self) -> None:
         self.data(X, {"telemetry": {"choice": "off", "decidedAt": 5.0}, "language": {"locale": "fr"}})
         token = places.data_dir(X) / "engines" / "token"
@@ -443,20 +431,6 @@ class Use(Device):
         self.assertFalse(versions.on_default_channel(Y), "not installed: nothing")
         with mock.patch.object(places, "versioned", return_value=None):
             self.assertFalse(versions.on_default_channel(), "a process of no version: nothing")
-
-    def test_a_server_marks_the_default_channel_for_a_request_that_names_no_channel(self) -> None:
-        # The record a command in a sandbox cannot write itself; every client names its store (the MCP launcher too).
-        from cad_server.engine import daemon
-
-        self.present(X)
-        with mock.patch.object(daemon, "versioned", return_value=X), \
-                mock.patch.object(places, "versioned", return_value=X):
-            daemon._used({"op": "http", "channel": "codex"})
-            daemon._used({"op": "status", "internal": True})
-            self.assertFalse(versions.on_default_channel(X), "a store's request, or the servers' own: nothing")
-            daemon._used({"op": "build"})
-            self.assertTrue(versions.on_default_channel(X))
-
 
 class Cleanup(Device):
     """The newest installed version's server removes every older one no agent has used for 2 days."""
@@ -608,47 +582,6 @@ class Cleanup(Device):
         self.assertTrue(ended(60.0), "the wait opened before it ended sees it end")
         child.wait(timeout=60)
         self.assertFalse(releases.running(folder))
-
-
-    def test_the_server_cleans_as_it_starts_then_every_24_hours(self) -> None:
-        from cad_server import updates
-        from cad_server.engine import daemon
-
-        self.assertTrue(versions.due(None, 5.0))
-        self.assertFalse(versions.due(5.0, 5.0 + versions.CLEAN_SECONDS - 1))
-        self.assertTrue(versions.due(5.0, 5.0 + versions.CLEAN_SECONDS))
-        cleaned: list[float] = []
-        engine = SimpleNamespace(draining=False, stopping=threading.Event(), cleaning=None, cleaned=None,
-                                 legacy_tried=None, bridge=SimpleNamespace(reconcile=lambda: False),
-                                 handover=SimpleNamespace(tend=lambda *_args, **_kwargs: None))
-        with mock.patch.object(daemon, "versioned", return_value=Y), mock.patch.object(updates, "refresh"), \
-                mock.patch.object(legacy, "removable", return_value=False), \
-                mock.patch.object(versions, "clean", side_effect=lambda **_kwargs: cleaned.append(engine.cleaned)):
-            for now in (100.0, 200.0, 100.0 + versions.CLEAN_SECONDS - 1, 100.0 + versions.CLEAN_SECONDS):
-                daemon.Daemon.versions(engine, now=now)
-                engine.cleaning.join(10)
-        self.assertEqual(cleaned, [100.0, 100.0 + versions.CLEAN_SECONDS], "as it starts, then a day later")
-
-    def test_the_layout_before_is_tried_again_every_minute_between_cleanups(self) -> None:
-        # The cleanup as the server starts finds the layout of 0.11.10 and earlier unsafe while the shipped updater's
-        # helper that started the server still runs from it: its removal is tried again a minute later, not a day.
-        from cad_server import updates
-        from cad_server.engine import daemon
-
-        cleaned, tried = [], []
-        engine = SimpleNamespace(draining=False, stopping=threading.Event(), cleaning=None, cleaned=None,
-                                 legacy_tried=None, bridge=SimpleNamespace(reconcile=lambda: False),
-                                 handover=SimpleNamespace(tend=lambda *_args, **_kwargs: None))
-        with mock.patch.object(daemon, "versioned", return_value=Y), mock.patch.object(updates, "refresh"), \
-                mock.patch.object(legacy, "removable", return_value=True), \
-                mock.patch.object(versions, "clean", side_effect=lambda **_kwargs: cleaned.append(True)), \
-                mock.patch.object(versions, "clean_legacy", side_effect=lambda **_kwargs: tried.append(True)):
-            for now in (100.0, 100.0 + versions.LEGACY_SECONDS - 1, 100.0 + versions.LEGACY_SECONDS,
-                        100.0 + versions.LEGACY_SECONDS + 1, 100.0 + 2 * versions.LEGACY_SECONDS):
-                daemon.Daemon.versions(engine, now=now)
-                if engine.cleaning is not None:
-                    engine.cleaning.join(10)
-        self.assertEqual((len(cleaned), len(tried)), (1, 2), "the cleanup as it starts, then the layout each minute")
 
 
 class TheLayoutBefore(Device):
@@ -844,34 +777,6 @@ class ServerDecisions(Device):
         self.assertEqual(channel._DEVELOPMENT.pattern, versions.DEVELOPMENT.pattern, "one rule, copied")
 
 
-    def test_the_bridge_taking_the_flat_door_from_0_11_10_takes_the_port_it_served(self) -> None:
-        from cad_server.engine import daemon
-
-        asked: list[dict] = []
-        engine = SimpleNamespace(listener=None, token="t", serve=asked.append, stopping=threading.Event(),
-                                 draining=False)
-        bridge = daemon.Bridge(engine)
-        folder = Path(tempfile.mkdtemp(prefix="cad-bridge-"))
-        self.addCleanup(shutil.rmtree, folder, True)
-        held = SimpleNamespace(close=lambda: None)
-        with mock.patch.object(daemon.Bridge, "folder", staticmethod(lambda: folder)), \
-                mock.patch.object(daemon, "_legacy_port", return_value=3245), \
-                mock.patch.object(daemon, "lock", side_effect=[None, held]), \
-                mock.patch("cad.engine.door.Door", return_value=SimpleNamespace(path=folder / "engine.door",
-                                                                               close=lambda: None)), \
-                mock.patch.object(daemon, "_identity", return_value=(1, 1)), \
-                mock.patch.object(daemon, "WINDOWS", False):
-            bridge._take()  # 0.11.10's server holds it: the port it serves noted
-            self.assertIsNone(bridge.held)
-            bridge._take()  # it went before its helper asked: the door, and that port
-            deadline = time.monotonic() + 10
-            while not asked:
-                self.assertLess(time.monotonic(), deadline, "the port was not asked for")
-                time.sleep(0.01)
-        self.assertIs(bridge.held, held)
-        self.assertEqual(asked, [{"op": "http", "port": 3245}])
-
-
 class TelemetryAcrossVersions(Device):
     """A no is a no everywhere (``analytics.everywhere``, ``inherit_no``)."""
 
@@ -971,43 +876,6 @@ class TelemetryAcrossVersions(Device):
         with mock.patch.object(places, "versioned", return_value=X):
             analytics.choose(True, by="cli")
         self.assertTrue(self.sharing(X))
-
-
-class TokenRotatedEverywhere(Device):
-    def test_every_version_s_data_and_the_state_folder_take_the_new_token_and_every_running_server_is_told(self) -> None:
-        """``cad server --rotate-token`` acts on the device: every version a server reads the token from, and the state
-        folder 0.11.10 and earlier read it from, get the new one; each running server is told to take it at once,
-        and one that cannot be told is said."""
-        import secrets
-
-        from cad_server.engine import daemon
-
-        before = secrets.token_urlsafe(32)
-        for name in (X, Y):
-            self.data(name)
-            registry.Registry(places.data_dir(name)).put_token(before)
-        registry.Registry(self.state).put_token(before)
-        self.present(Z)  # never started: it imports the new token as it starts
-        self.serving(X)
-        self.serving(Y)
-        asked: list = []
-
-        def ask(name, message, **_kwargs):
-            asked.append((name, message))
-            return {"ok": True} if name == X else {"failed": "unknown request 'token'"}
-
-        said: list[str] = []
-        with mock.patch.object(versions, "ask", side_effect=ask), \
-                mock.patch.object(versions, "ask_flat", return_value={"failed": "unknown request 'token'"}), \
-                mock.patch.object(places, "versioned", return_value=X):
-            token = daemon.rotate_token(told=said.append)
-        self.assertNotEqual(token, before)
-        for root in (places.data_dir(X), places.data_dir(Y), self.state):
-            self.assertEqual(registry.Registry(root).token(), token, root)
-        self.assertFalse((places.data_dir(Z) / registry.TOKEN).exists(), "a version not started writes nothing")
-        self.assertEqual(asked, [(X, {"op": "token"}), (Y, {"op": "token"})], "each running server told")
-        self.assertTrue(any(line.startswith(f"cad {Y}'s server could not take the new token") for line in said), said)
-        self.assertTrue(any("0.11.10 or earlier" in line for line in said), said)
 
 
 class DoctorReadsEveryVersion(Device):

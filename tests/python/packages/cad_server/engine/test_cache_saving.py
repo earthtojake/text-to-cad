@@ -121,6 +121,7 @@ class CacheSavingTest(cache_fixtures.CacheCase):
         self.said()
         self.run_script("cube")
         self.assertEqual(self.cli("stop").returncode, 0)
+        self.start()
         self.assert_taken()
 
     def test_a_rebuild_replaces_the_cache_at_its_new_revision(self) -> None:
@@ -165,6 +166,7 @@ class CacheSavingTest(cache_fixtures.CacheCase):
         self.assertEqual(self.record(ident)["cache"]["revision"], self.record(ident)["revision"])
         self.assertTrue(self.file(ident).is_file())
         # The next engine's viewer opens it by its id, as it held it.
+        self.start()
         launched = engine_daemon.run([sys.executable, "-m", "cad_server.viewer", "--json", "--api-only", ident],
                                      cwd=self.project, env=self.env)
         self.assertEqual(launched.returncode, 0, launched.stderr)
@@ -196,6 +198,7 @@ class CacheSavingTest(cache_fixtures.CacheCase):
         # Unchanged after a restart: taken by its key, nothing run; its STEP is the document's export, as
         # `cad <type> export` writes it of the document taken (OCCT's xbf read gives a -0. back for a 0.:
         # the first run after a restart may write it once, the same geometry).
+        self.start()
         done = self.run_script("plate")
         self.assertIn("took plate.py::plate cold in", done.stdout)
         self.assertIn("the engine's cache holds the model's key", done.stdout)

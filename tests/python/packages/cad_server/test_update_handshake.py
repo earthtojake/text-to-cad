@@ -86,12 +86,10 @@ def surface() -> dict:
     from cad_server.engine import daemon, registry
     from cad_server.viewer.engine_app import EngineApp
 
-    # A client of one release starting the current installation's engine: its Python, these arguments.
-    current = {"python": "PYTHON", "prefix": os.path.abspath("elsewhere"), "version": "9.9.9"}
-    with mock.patch.object(places, "engine", lambda: current), \
-            mock.patch.object(subprocess, "Popen", side_effect=Started) as popen:
+    # A server started by this release (``client.start``): its Python, these arguments, as the helper starts one.
+    with mock.patch.object(subprocess, "Popen", side_effect=Started) as popen:
         try:
-            client._start()
+            client._spawn(None)
         except Started:
             pass
     started = popen.call_args.args[0]

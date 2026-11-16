@@ -166,7 +166,7 @@ class BaseTest(unittest.TestCase):
 
         with self.made(own_uv), mock.patch.object(client, "request", side_effect=engine({"ok": True, "base": True})):
             found = base.ensure(self.installation, told=self.said.append, engine=True)
-        self.assertEqual(asked, [({"op": "base", "key": env.name}, False)], "a running engine, never one started")
+        self.assertEqual(asked, [({"op": "base", "key": env.name}, True)], "the running server, which it needs")
         self.assertEqual((found.prefix, own_uv.steps), (str(env), []), "made by the engine, not here")
         self.assertEqual(self.said, ["making the CAD kernel environment, once"])
         refused = {"failed": "the CAD kernel environment needs the network once: dns error", "base": True}
@@ -174,15 +174,20 @@ class BaseTest(unittest.TestCase):
                 mock.patch.object(base, "where", return_value=self.root / "cache" / base.BASE / "another"), \
                 self.assertRaisesRegex(base.Refused, "^the CAD kernel environment needs the network once: dns error$"):
             base.ensure(self.installation, told=self.said.append, engine=True)
-        # No engine running, one of another installation's, one that makes no base: the command makes it.
-        for answer in (None, {"ok": False, "other": True}, {"failed": "unknown request 'base'"}):
+        # No server running: its one line, and nothing made here (``cad server start`` starts it).
+        with self.made(own_uv), mock.patch.object(client, "request", side_effect=client.NotRunning(client.NOT_RUNNING)), \
+                mock.patch.object(base, "where", return_value=self.root / "cache" / base.BASE / "none"), \
+                self.assertRaises(client.NotRunning):
+            base.ensure(self.installation, told=self.said.append, engine=True)
+        # One of another installation's, one that makes no base: the command makes it.
+        for answer in ({"ok": False, "other": True}, {"failed": "unknown request 'base'"}):
             with self.subTest(answer=answer):
                 folder = self.root / "cache" / base.BASE / f"own-{len(own_uv.steps)}"
                 with self.made(own_uv), mock.patch.object(client, "request", return_value=answer), \
                         mock.patch.object(base, "where", return_value=folder):
                     self.assertEqual(base.ensure(self.installation, told=self.said.append, engine=True).prefix,
                                      str(folder))
-        self.assertEqual(own_uv.asked(), ["venv", "pip --offline"] * 3)
+        self.assertEqual(own_uv.asked(), ["venv", "pip --offline"] * 2)
 
     def kernel(self, making: base.Making, uv) -> contextlib.ExitStack:
         """``base.kernel`` as the engine asks it, its making ``making`` and uv ``uv``, the engine's log

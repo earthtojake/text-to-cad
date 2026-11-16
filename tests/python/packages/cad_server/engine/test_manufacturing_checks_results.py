@@ -35,6 +35,7 @@ def _restarted() -> dict[str, int]:
     from cad.engine import api, client
 
     api.stop()
+    engine_daemon.start()
     return client.request({"op": "status"})["checks"]
 
 

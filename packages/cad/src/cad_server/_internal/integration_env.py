@@ -101,8 +101,10 @@ def found(integration: Integrations) -> tuple[str, str, str]:
 
 def environment(integration: Integrations, told: Callable[[str], None], *, engine: bool = True) -> str:
     """The Python of the environment that holds ``integration``, made first when it is not complete (by
-    the device's engine when one runs, its lines said to ``told``; here, with ``engine`` false: the engine
-    itself, a viewer export). ``Failed`` in uv's or the engine's words."""
+    the server, its lines said to ``told``; here, with ``engine`` false: the engine itself, a viewer export).
+    ``Failed`` in uv's or the engine's words; no server running, or one of another release, its one line
+    (``client.NotRunning``, ``client.OtherRelease``), which the command says as it says every one."""
+    from cad.engine import client
     from cad_server._internal import base, extras
 
     try:
@@ -115,6 +117,8 @@ def environment(integration: Integrations, told: Callable[[str], None], *, engin
         else:
             found = extras.ensure(installation, extras.integration_spec(installation, names), told=told,
                                   engine=engine)
+    except (client.NotRunning, client.OtherRelease):
+        raise
     except (base.Refused, OSError) as error:
         raise Failed(str(error) if isinstance(error, base.Refused) else f"{error.strerror or error}") from None
     return found.python

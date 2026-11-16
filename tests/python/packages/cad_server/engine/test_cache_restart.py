@@ -26,7 +26,8 @@ class CacheRestartTest(cache_fixtures.CacheCase):
         self.assertEqual(self.cli("stop").returncode, 0)
         (self.project / "cube.ran").unlink()
 
-        inspected = self.cli("inspect", ident, "--json")  # starts the engine afresh
+        self.start()  # the engine afresh
+        inspected = self.cli("inspect", ident, "--json")
         self.assertEqual(inspected.returncode, 0, inspected.stderr)
         self.assertEqual(json.loads(inspected.stdout)["closure"]["source"]["function"], "cube")
         self.assertEqual(json.loads(inspected.stdout)["summary"]["state"]["state"], "held")
@@ -96,6 +97,7 @@ class CacheRestartTest(cache_fixtures.CacheCase):
         self.corrupt(ident)
         # After a restart, a verb that reads it fails once, says why and what builds it again, and drops
         # the file: it is not offered again, broken, after every restart.
+        self.start()
         out = self.folder / "cube.step"
         exported = self.cli("export", ident, str(out))
         self.assertEqual(exported.returncode, 2, exported.stderr)
@@ -109,9 +111,11 @@ class CacheRestartTest(cache_fixtures.CacheCase):
         # A build that finds it broken (no verb read it first) runs the body, and the file is written again.
         self.assertEqual(self.cli("stop").returncode, 0)
         self.corrupt(ident)
+        self.start()
         self.assertIn("the body ran", self.run_script("cube").stderr)
         self.cached(ident, meta["revision"])
         self.assertEqual(self.cli("stop").returncode, 0)
+        self.start()
         self.assertEqual(self.cli("export", ident, str(out)).returncode, 0, "the next restart reads it")
         self.assertGreater(out.stat().st_size, 0)
 

@@ -2,9 +2,8 @@
 else 3245 or the port it rolled to when 3245 was another's, remembered) and the user's one page token,
 the same at every start until ``cad server --rotate-token``. A named port another process holds
 is refused by name, and the device's port is rolled from it: another engine on it -- of another
-engine folder, as 0.8's server is to 0.10 -- is asked nothing, as any program is. One engine a
-device: a client of another release attaches to the engine running, and starts the current
-installation's, never its own."""
+engine folder, as 0.8's server is to 0.10 -- is asked nothing, as any program is. Each server here is
+started as ``cad server start`` starts one, with the environment the test gives it."""
 
 from __future__ import annotations
 
@@ -42,19 +41,6 @@ def held_port(test: unittest.TestCase) -> int:
     return holder.getsockname()[1]
 
 
-def other_installation(root: Path) -> str:
-    """The interpreter of a second installation: a virtual environment of its own (its own
-    ``sys.prefix``, so its own engine, ``daemon._tag``) that imports what this one does."""
-    import sysconfig
-
-    folder = root / "other"
-    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(folder)], check=True)
-    (site,) = (folder / "Lib" / "site-packages",) if os.name == "nt" else folder.glob("lib/python*/site-packages")
-    (site / "inherit.pth").write_text(f"import site; site.addsitedir({sysconfig.get_paths()['purelib']!r})\n",
-                                      encoding="utf-8")
-    return str(folder / ("Scripts/python.exe" if os.name == "nt" else "bin/python"))
-
-
 class Listener:
     """What ``daemon.bind``'s ``listen`` makes, in process: a plain listener on ``port``."""
 
@@ -89,24 +75,31 @@ class EnginePortTest(unittest.TestCase):
                                           "CAD_ENGINE_DIR": str(self.root / "engine"),
                                           "CAD_STATE_DIR": str(self.root / "state"),
                                           "CAD_CACHE_DIR": str(self.root / "cache")},
-                                         self.addCleanup)
+                                         self.addCleanup, started=False)
         self.addCleanup(self.answering)
         self.addCleanup(self.stop)
 
     def cli(self, *args: str, python: str = sys.executable, **extra: str) -> subprocess.CompletedProcess:
         return engine_daemon.run([python, "-m", "cad_server.engine", *args], env={**self.env, **extra})
 
+    def cad(self, *args: str, **extra: str) -> subprocess.CompletedProcess:
+        """The ``cad`` command; ``extra``: its environment."""
+        return engine_daemon.run([sys.executable, "-m", "cad_server.cli", *args], env={**self.env, **extra})
+
     def stop(self, python: str = sys.executable) -> None:
         done = self.cli("stop", python=python)
         self.assertEqual(done.returncode, 0, done.stderr)
 
     def started(self, python: str = sys.executable, **extra: str) -> subprocess.CompletedProcess:
-        """The viewer's launcher, run: it starts (or reuses) its installation's engine and its page."""
+        """The viewer's launcher, run on the server ``cad server start`` starts with ``extra`` in its environment
+        where none runs (or the one running): its page."""
+        begun = self.cad("server", "start", **extra)
+        self.assertEqual(begun.returncode, 0, begun.stderr)
         return engine_daemon.run([python, "-m", "cad_server.viewer", "--api-only", "--json"],
                                  env={**self.env, **extra}, cwd=self.root)
 
     def launch(self, python: str = sys.executable, **extra: str) -> dict:
-        """The engine's page, started (or reused) by the viewer's launcher: its port, token and pid."""
+        """The engine's page, by the viewer's launcher (``started``): its port, token and pid."""
         done = self.started(python, **extra)
         self.assertEqual(done.returncode, 0, done.stderr)
         return json.loads(done.stdout)
@@ -129,11 +122,12 @@ class EnginePortTest(unittest.TestCase):
             return places.address()
 
     def server(self, *args: str, **extra: str) -> subprocess.Popen:
-        """``cad server ARGS`` in the background, once its door answers; ``extra``: its environment."""
+        """``cad server ARGS`` in the background -- the server run in this process, as ``cad server start
+        --foreground`` runs it --, once its door answers; ``extra``: its environment."""
         from cad.engine import client, places
 
         env = {**self.env, **extra}
-        process = subprocess.Popen([sys.executable, "-m", "cad_server.engine", "server", *args], env=env,
+        process = subprocess.Popen([sys.executable, "-m", "cad_server.cli", "server", *args], env=env,
                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.addCleanup(engine_daemon.reap, process)
         with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": env["CAD_ENGINE_DIR"]}):
@@ -221,9 +215,10 @@ class EnginePortTest(unittest.TestCase):
         # An engine already running for other clients (no page yet): one viewer's --port, held by
         # another program, refuses that viewer and never stops the engine under the others.
         own = free_port()
+        begun = self.cad("server", "start", CAD_ENGINE_PORT=str(own))
+        self.assertEqual(begun.returncode, 0, begun.stderr)
         before = engine_daemon.run([sys.executable, "-c", "from cad.engine import client; "
-                                    "print(client.request({'op': 'pid'})['pid'])"],
-                                   env={**self.env, "CAD_ENGINE_PORT": str(own)})
+                                    "print(client.request({'op': 'pid'})['pid'])"], env=self.env)
         self.assertEqual(before.returncode, 0, before.stderr)
         port = held_port(self)
         done = engine_daemon.run([sys.executable, "-m", "cad_server.viewer", "--api-only", "--json", "--port", str(port)],
@@ -235,28 +230,31 @@ class EnginePortTest(unittest.TestCase):
         self.assertEqual(after.stdout.strip(), before.stdout.strip(), "the same engine answers")
         self.assertEqual(self.launch()["port"], own, "and serves the next page on its own port")
 
-    def test_cadgen_server_on_a_held_port_fails_at_once_and_leaves_no_engine(self) -> None:
+    def test_a_server_in_the_foreground_on_a_held_port_fails_at_once_and_leaves_no_engine(self) -> None:
         port = held_port(self)
-        done = self.cli("server", "--port", str(port))  # no request is ever sent: it binds at its start
-        self.assertEqual(done.returncode, 1, done.stdout)
-        self.assertRegex(done.stderr.strip().splitlines()[-1],
-                         rf"^cad: port {port} is held by .+: stop it, or pass another --port$")
-        self.answering()
+        # No request is ever sent: it binds at its start. Bare ``cad server`` is that start's alias.
+        for words in (("server", "start", "--foreground", "--port", str(port)), ("server", "--port", str(port))):
+            done = self.cad(*words)
+            self.assertEqual(done.returncode, 1, done.stdout)
+            self.assertRegex(done.stderr.strip().splitlines()[-1],
+                             rf"^cad: port {port} is held by .+: stop it, or pass another --port$")
+            self.answering()
 
-    def test_cadgen_server_beside_a_running_engine_says_so_and_a_port_it_cannot_take_fails(self) -> None:
+    def test_a_start_beside_a_running_server_of_its_release_does_nothing(self) -> None:
+        from cad.engine.previous import version
+
         running = self.launch(CAD_ENGINE_PORT=str(free_port()))
         asked = free_port()
-        done = self.cli("server", "--port", str(asked))
-        self.assertEqual(done.returncode, 1, done.stderr)
-        self.assertIn("the engine server is already running", done.stderr)
+        for words in (("server", "start", "--port", str(asked)), ("server", "start", "--foreground", "--port", str(asked)),
+                      ("server",)):
+            done = self.cad(*words)
+            self.assertEqual((done.returncode, done.stdout), (0, f"the cad server (cad {version()}) is already running\n"),
+                             done.stderr)
         self.assertFalse(listening(asked), "nothing serves the port it named")
-        plain = self.cli("server")
-        self.assertEqual(plain.returncode, 0, plain.stderr)
-        self.assertIn("already running", plain.stderr)
         self.assertEqual(self.launch()["pid"], running["pid"])
-        bad = self.cli("server", "--port", "70000")
+        bad = self.cad("server", "start", "--port", "70000")
         self.assertEqual(bad.returncode, 2)
-        self.assertRegex(bad.stderr.strip(), r"^[^:]*server: --port must be between 0 and 65535$", "its name said once")
+        self.assertEqual(bad.stderr.strip(), "cad server start: --port must be between 0 and 65535", "its name said once")
 
     def test_a_held_default_rolls_to_the_next_free_port_says_so_once_and_keeps_it(self) -> None:
         default = held_port(self)  # the test's default, held by this process: another program's
@@ -341,30 +339,6 @@ class EnginePortTest(unittest.TestCase):
         self.assertIsNone(theirs.poll(), "never asked to stop: it runs on")
         self.assertTrue(listening(default))
 
-    def test_a_client_of_another_release_attaches_and_starts_the_current_installation_s_engine(self) -> None:
-        """One engine a device: a client of another installation (an app's newer plugin) attaches to the
-        engine running, whatever its release, and with none running starts the current installation's,
-        never its own."""
-        from cad_server._internal import installations
-
-        found = installations.targets()
-        if found is None:
-            self.skipTest("this interpreter has no console script to register")
-        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": self.env["CAD_STATE_DIR"]}):
-            installations.register("1.0.0", found)
-            installations.point("1.0.0")
-        theirs = other_installation(self.root)  # another release's client, its environment its own
-        first = self.launch(CAD_ENGINE_PORT=str(free_port()))
-        attached = self.launch(theirs)
-        self.assertEqual(attached["pid"], first["pid"], "it attaches to the engine running")
-        self.stop()
-        started = self.launch(theirs)
-        self.assertNotEqual(started["pid"], first["pid"])
-        status = json.loads(self.cli("status", "--json", python=theirs).stdout)
-        self.assertEqual(os.path.realpath(status["prefix"]), os.path.realpath(found[2]),
-                         "it starts the current installation's engine, never its own")
-        self.answering(self.ours())
-
     def test_a_named_port_wins_and_rotate_token_replaces_the_token(self) -> None:
         named = free_port()
         first = self.launch(CAD_ENGINE_PORT=str(named))
@@ -392,9 +366,9 @@ class EnginePortTest(unittest.TestCase):
         # can be asked (here), nothing is replaced and nothing starts without --yes.
         other = free_port()
         self.env["CAD_ENGINE_PORT"] = str(named)
-        asked = self.cli("server", "--port", str(other), "--rotate-token")
+        asked = self.cad("server", "--port", str(other), "--rotate-token")
         self.assertEqual(asked.returncode, 2, asked.stderr)
-        self.assertIn(f"`python -m cad_server.engine server --rotate-token --port {other} --yes` says yes", asked.stderr)
+        self.assertIn(f"`cad server --rotate-token --port {other} --yes` says yes", asked.stderr)
         self.assertEqual(self.token(), first["token"])
         self.server("--port", str(other), "--rotate-token", "--yes")
         for headers in ({"Cookie": cookie}, {}):
@@ -407,17 +381,18 @@ class EnginePortTest(unittest.TestCase):
         # While an engine runs, it takes the new token at once: every link and session before ends now, not at its
         # next start, and the command says the engine runs on.
         self.assertEqual(self.ask(other, f"/api/v1/server?token={rotated['token']}")[0], 200)
-        again = self.cli("server", "--rotate-token", "--yes")
+        again = self.cad("server", "--rotate-token", "--yes")
         self.assertEqual(again.returncode, 0, again.stderr)
-        self.assertIn("in every version's server at once", again.stderr)
-        self.assertIn("already running", again.stderr)
+        self.assertIn("a new page token", again.stderr)
+        self.assertIn("already running", again.stdout)
         self.assertNotEqual(self.token(), rotated["token"])
         self.assertEqual(self.ask(other, f"/api/v1/server?token={rotated['token']}")[0], 403, "the token before: ended")
         self.assertEqual(self.ask(other, f"/api/v1/server?token={self.token()}")[0], 200, "the new one, at once")
         # With --port too, a server already running: the token is replaced, which is what was asked -- exit 0.
-        ported = self.cli("server", "--rotate-token", "--port", str(free_port()), "--yes")
+        ported = self.cad("server", "--rotate-token", "--port", str(free_port()), "--yes")
         self.assertEqual(ported.returncode, 0, ported.stderr)
-        self.assertIn("took the new token", ported.stderr)
+        self.assertIn("a new page token", ported.stderr)
+        self.assertIn("already running", ported.stdout)
 
 
 class BuildBoundNoticeTest(unittest.TestCase):

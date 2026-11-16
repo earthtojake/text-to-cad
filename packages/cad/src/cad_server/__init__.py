@@ -12,28 +12,10 @@ module is imported, never sooner (``_internal/attach.py``): importing the server
 
 from functools import cache as _cache
 
-from cad_server._internal import attach as _attach
 from cad_server._internal import engine_telemetry as _engine_telemetry
 
 _engine_telemetry.install()
 del _engine_telemetry
-
-
-def _unregistered() -> str:
-    """What a client in a process of cad-server's own says where no installation is registered: not the
-    library's line, which would tell a running cad-server that cad-server is not installed, but this one's
-    (``cad_server._internal.installations.unregistered``)."""
-    from cad_server._internal.installations import unregistered
-
-    return unregistered()
-
-
-def _say_unregistered(said) -> None:
-    said.UNREGISTERED = _unregistered
-
-
-_attach.when("cad.engine.said", _say_unregistered)
-del _attach
 
 __all__ = ["__version__"]
 

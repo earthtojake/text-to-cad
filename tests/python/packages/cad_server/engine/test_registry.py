@@ -272,6 +272,7 @@ class RegistryDaemonTest(unittest.TestCase):
                          "an unchanged build rewrites nothing")
         # A restart: the id is known, not held, with the command that builds it again; nothing runs it.
         self.assertEqual(self.cli("stop").returncode, 0)
+        engine_daemon.start(self.env)
         inspected = self.cli("inspect", cube)
         self.assertEqual(inspected.returncode, 2, inspected.stderr)
         self.assertIn(f"run `cad run {project / 'parts.py'}`", inspected.stderr)

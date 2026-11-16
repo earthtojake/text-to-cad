@@ -594,7 +594,7 @@ class RunWithTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        engine_daemon.isolate(cls.addClassCleanup)
+        engine_daemon.isolate(cls.addClassCleanup, started=False)  # its server is the one offline, below
         cls.project = Path(tempfile.mkdtemp(prefix="run-with-")).resolve()
         cls.addClassCleanup(shutil.rmtree, cls.project, True)
         cls.wheel = _wheel(cls.project)

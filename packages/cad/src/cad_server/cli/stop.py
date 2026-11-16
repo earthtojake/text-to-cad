@@ -1,4 +1,4 @@
-"""``cad stop``: the engine server stopped, and gone (``cad_server.engine.cli``).
+"""``cad stop``: ``cad server stop`` (``cad_server.cli.server``): the server stopped, and gone (``cad_server.engine.cli``).
 
 The parser and the run are the engine's (``cad_server.engine.cli.parser_for``, ``run``), the same
 verb ``python -m cad_server.engine stop`` takes.
@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
+# Only for the skill text of releases 0.10.0 to 0.11.10, which says `cad stop`: unlisted, and gone with the bridge.
 DEFAULT_PROG = "cad stop"
 ENGINE_VERB = "stop"
 
