@@ -2,7 +2,6 @@
 name: robot-simulation
 description: Robot and world descriptions (URDF, SRDF, MJCF) for ROS, MoveIt and MuJoCo. Use to generate a robot description or a MuJoCo scene from a CAD model's joints, materials and collision, or to write and review a `.urdf`, `.srdf` or MJCF `.xml` by hand (links, joints, inertials, meshes, MoveIt groups, MuJoCo classes, actuators, keyframes, model health). Not the CAD part itself, which the `cad` skill makes, nor a simulation run.
 license: MIT
-allowed-tools: Bash(cad *) Bash(uv tool install --managed-python --python 3.14 cad==*) Bash(uv --version)
 metadata:
   repository: earthtojake/text-to-cad
 ---

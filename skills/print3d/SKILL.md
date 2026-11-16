@@ -2,7 +2,6 @@
 name: print3d
 description: Prints a part - slices an `.stl`, `.3mf` or `.obj` into printer-ready G-code with OrcaSlicer, headless or in the app, with built-in profiles for most FDM printers (Prusa, Bambu Lab, Creality, Voron), and sends it to a Bambu Lab printer through Bambu Connect or Bambu Studio. Use when the person wants a model sliced or printed. Never starts a print; whether a part will print is the cad skill's check.
 license: MIT
-allowed-tools: Bash(cad *) Bash(uv tool install --managed-python --python 3.14 cad==*) Bash(uv --version)
 metadata:
   repository: earthtojake/text-to-cad
 ---
