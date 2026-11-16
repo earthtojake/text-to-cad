@@ -29,7 +29,24 @@
         "robotics",
         "fabrication",
         "skills"
-      ]
+      ],
+      "hooks": {
+        "SessionStart": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "cad",
+                "args": [
+                  "server",
+                  "start"
+                ],
+                "async": true
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

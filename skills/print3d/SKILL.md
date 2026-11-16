@@ -2,6 +2,7 @@
 name: print3d
 description: Prints a part - slices an `.stl`, `.3mf` or `.obj` into printer-ready G-code with OrcaSlicer, headless or in the app, with built-in profiles for most FDM printers (Prusa, Bambu Lab, Creality, Voron), and sends it to a Bambu Lab printer through Bambu Connect or Bambu Studio. Use when the person wants a model sliced or printed. Never starts a print; whether a part will print is the cad skill's check.
 license: MIT
+allowed-tools: Bash(cad *) Bash(uv tool install --managed-python --python 3.14 cad==*) Bash(uv --version)
 metadata:
   repository: earthtojake/text-to-cad
 ---
@@ -17,36 +18,51 @@ never starts a print.
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| **Slice it to G-code** | `cad +0.11.10 orcaslicer presets machine --match "<printer>"` | [Slice with OrcaSlicer](#slice-with-orcaslicer) |
+| **Slice it to G-code** | `cad orcaslicer presets machine --match "<printer>"` | [Slice with OrcaSlicer](#slice-with-orcaslicer) |
 | **Print on a Bambu Lab printer** | The sliced `.gcode.3mf` | [Print on a Bambu Lab printer](#print-on-a-bambu-lab-printer) |
 | **Will this print?** | The cad skill's printing check ($cad) | Its manufacturing references |
 
 ## Setup
 
-Every command in this skill starts `cad +0.11.10`: it runs cad 0.11.10, the version this skill was written for,
-and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your PATH; `cad.exe`
-on Windows).
+This skill was written for `cad==0.11.10`. The first time you use it in a chat, run `cad --version` in
+the shell. Then:
 
-If `cad` is missing, says 0.11.10 is not installed, or says `unknown command '+…'` (an older cad), install it,
-outside the sandbox, then run the command again:
+- `cad` is not found: run the install line below, then carry on.
+- It prints a version older than the one above: run the update line below, then carry on.
+- It prints a version newer than the one above: carry on. This skill is older than cad.
+
+Install line, on macOS and Linux:
 
 ```bash
-uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.10 cad setup
+curl -fsSL https://texttocad.dev/install.sh | sh
 ```
 
-It installs cad 0.11.10 and the `cad` command and changes nothing else. If `uvx` is missing, install uv
-first.
+On Windows, in PowerShell:
 
-<!-- manual-copy-update: start -->
-Keep this install up to date: nothing updates it but you.
+```powershell
+irm https://www.texttocad.dev/install.ps1 | iex
+```
 
-1. At the start of a session, run `cad +0.11.10 --version`.
-2. If it, or any `cad` command later, says a new version of cad is available, install the new version of
-   the plugin from https://github.com/earthtojake/text-to-cad.
+Update line, on macOS and Linux:
 
-Then tell the person it was updated and that a new chat will use the new version, and carry on with
-this chat: its commands keep working.
-<!-- manual-copy-update: end -->
+```bash
+cad server stop && curl -fsSL https://texttocad.dev/install.sh | sh && cad server start
+```
+
+On Windows, in PowerShell:
+
+```powershell
+cad server stop; irm https://www.texttocad.dev/install.ps1 | iex; cad server start
+```
+
+When a `cad` command prints that:
+
+- the cad server is not running: run `cad server start`, then run the command again.
+- the command and the server are different versions: do what that line says.
+- a newer version of cad is available: tell the person and ask whether to update. If they say yes, run
+  the update line above.
+
+Run models with `cad run`.
 
 A project written for an earlier text-to-cad may need changes. The migration guides say what, one per
 version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
@@ -73,7 +89,7 @@ Below, `<orca>` is that command.
 OrcaSlicer's command line (https://www.orcaslicer.com/wiki/cli/cli_mode) needs
 complete presets: it doesn't fill in a preset's parent settings, and it slices
 only with a process whose compatible printers name the printer.
-`cad +0.11.10 orcaslicer` writes them from OrcaSlicer's presets, searching the person's
+`cad orcaslicer` writes them from OrcaSlicer's presets, searching the person's
 own first, then OrcaSlicer's built-in profiles. It reads and writes preset
 files alone: it never runs OrcaSlicer, and works offline.
 
@@ -82,15 +98,15 @@ files alone: it never runs OrcaSlicer, and works offline.
    temperature can damage the printer.
 
    ```bash
-   cad +0.11.10 orcaslicer presets machine --match "MK4S"
-   cad +0.11.10 orcaslicer presets process --match "@MK4S 0.4"
-   cad +0.11.10 orcaslicer presets filament --match "PLA @MK4S"
+   cad orcaslicer presets machine --match "MK4S"
+   cad orcaslicer presets process --match "@MK4S 0.4"
+   cad orcaslicer presets filament --match "PLA @MK4S"
    ```
 
 2. Write the complete presets. It prints the files it wrote, as JSON:
 
    ```bash
-   cad +0.11.10 orcaslicer complete --printer "Prusa MK4S 0.4 nozzle" \
+   cad orcaslicer complete --printer "Prusa MK4S 0.4 nozzle" \
      --process "0.20mm SPEED @MK4S 0.4" --filament "Prusa Generic PLA @MK4S" \
      --out presets
    ```
@@ -111,7 +127,7 @@ files alone: it never runs OrcaSlicer, and works offline.
 
    This writes `plate_1.gcode`, the plain G-code, and `model.gcode.3mf`, the
    sliced 3MF, into that folder. The command line reads `.stl`,
-   `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF first (for a text-to-cad model, `cad +0.11.10 model export <id> part.3mf`, or `cad +0.11.10 step export part.step part.3mf`).
+   `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF first (for a text-to-cad model, `cad model export <id> part.3mf`, or `cad step export part.step part.3mf`).
    Override one setting with `--<setting>=<value>`, using the setting's key
    with hyphens for underscores, such as `--layer-height=0.16`.
 
@@ -140,7 +156,7 @@ Connect is still in development, use Bambu Studio.
 | --- | --- |
 | A sliced `.gcode.3mf`, from OrcaSlicer's command line or Bambu Studio's or OrcaSlicer's "Export plate sliced file" | Open it in Bambu Connect |
 | A plain `.gcode` sliced with this printer's Bambu profile | Open it in Bambu Connect; if Bambu Connect refuses it, slice the model in Bambu Studio instead |
-| A model with no slice: `.3mf`, `.stl` or `.step` (from a text-to-cad model: `cad +0.11.10 model export <id> part.3mf`) | Open it in Bambu Studio, which slices it and sends it to the printer itself |
+| A model with no slice: `.3mf`, `.stl` or `.step` (from a text-to-cad model: `cad model export <id> part.3mf`) | Open it in Bambu Studio, which slices it and sends it to the printer itself |
 
 ### Open a file in Bambu Connect
 

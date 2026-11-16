@@ -2,6 +2,7 @@
 name: sendcutsend
 description: Review DXF and STEP/STP uploads for SendCutSend.com orders using its ordering guide, catalog, and specs. Use only for SendCutSend.com preflight reports covering upload readiness, selected material/SKU/thickness/service availability, and service-specific checks for laser cutting, CNC routing, bending, tapping, countersinking, hardware insertion, and finishing.
 license: MIT
+allowed-tools: Bash(cad *) Bash(uv tool install --managed-python --python 3.14 cad==*) Bash(uv --version)
 metadata:
   repository: earthtojake/text-to-cad
 ---
@@ -14,30 +15,45 @@ Treat SendCutSend's ordering guide, catalog JSON, and specs JSON as evidence fee
 
 ## Setup
 
-Every command in this skill starts `cad +0.11.10`: it runs cad 0.11.10, the version this skill was written for,
-and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your PATH; `cad.exe`
-on Windows).
+This skill was written for `cad==0.11.10`. The first time you use it in a chat, run `cad --version` in
+the shell. Then:
 
-If `cad` is missing, says 0.11.10 is not installed, or says `unknown command '+…'` (an older cad), install it,
-outside the sandbox, then run the command again:
+- `cad` is not found: run the install line below, then carry on.
+- It prints a version older than the one above: run the update line below, then carry on.
+- It prints a version newer than the one above: carry on. This skill is older than cad.
+
+Install line, on macOS and Linux:
 
 ```bash
-uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.10 cad setup
+curl -fsSL https://texttocad.dev/install.sh | sh
 ```
 
-It installs cad 0.11.10 and the `cad` command and changes nothing else. If `uvx` is missing, install uv
-first.
+On Windows, in PowerShell:
 
-<!-- manual-copy-update: start -->
-Keep this install up to date: nothing updates it but you.
+```powershell
+irm https://www.texttocad.dev/install.ps1 | iex
+```
 
-1. At the start of a session, run `cad +0.11.10 --version`.
-2. If it, or any `cad` command later, says a new version of cad is available, install the new version of
-   the plugin from https://github.com/earthtojake/text-to-cad.
+Update line, on macOS and Linux:
 
-Then tell the person it was updated and that a new chat will use the new version, and carry on with
-this chat: its commands keep working.
-<!-- manual-copy-update: end -->
+```bash
+cad server stop && curl -fsSL https://texttocad.dev/install.sh | sh && cad server start
+```
+
+On Windows, in PowerShell:
+
+```powershell
+cad server stop; irm https://www.texttocad.dev/install.ps1 | iex; cad server start
+```
+
+When a `cad` command prints that:
+
+- the cad server is not running: run `cad server start`, then run the command again.
+- the command and the server are different versions: do what that line says.
+- a newer version of cad is available: tell the person and ask whether to update. If they say yes, run
+  the update line above.
+
+Run models with `cad run`.
 
 A project written for an earlier text-to-cad may need changes. The migration guides say what, one per
 version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
@@ -47,14 +63,14 @@ version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 Measure the exact upload file with `cad`, not by reading the file as text:
 
 ```bash
-cad +0.11.10 step inspect part.step                    # bodies, bounds, volume
-cad +0.11.10 step inspect part.step 'face 9'           # one face: a bend's cylinder and its radius, a hole's
+cad step inspect part.step                    # bodies, bounds, volume
+cad step inspect part.step 'face 9'           # one face: a bend's cylinder and its radius, a hole's
 ```
 
 A bend is a pair of cylindrical faces, inside and outside, whose radii differ by the stock thickness;
 the smaller is the inside radius. Measure a hole-to-bend distance in the convention the SKU's rule
 uses (to the bend's tangent line, its centerline, or the flange's edge) and say which. For a fact
-`inspect` does not give, write a small check script and run it with `cad +0.11.10 run`: `step.read` (`from cad
+`inspect` does not give, write a small check script and run it with `cad run`: `step.read` (`from cad
 import step`) for a STEP, `ezdxf` (`import ezdxf`, which comes with build123d) for a DXF. Do not use
 raw text parsing or other geometry backends for geometry facts.
 
@@ -76,7 +92,7 @@ Use the source URL, access date, and JSON `_meta` values in the source bibliogra
    - Record file type, intended process, material/SKU, thickness, quantity, services, finish, and hardware.
    - If order context is missing or ambiguous, inspect enough source data to present concrete options, then ask the user to confirm before writing a readiness verdict. Include candidate SKUs/materials/thicknesses/services with relevant source links; include `photo_url` images and `learn_more_url` links from the specs JSON when available.
 2. Read `references/official-sources.md`, fetch the official sources directly, then inspect the returned documents. Normalize source facts defensively: parse numeric strings, size strings, `N/A`, missing fields, mixed types, and absent service arrays into explicit notes.
-3. Inspect the exact upload file with `cad +0.11.10 step inspect` (above), and a check script run by `cad +0.11.10 run` for any missing facts. Do not inspect only the source generator, CAD model, or generator console summary. A text-to-cad model's upload is the STEP or DXF `cad +0.11.10 model export <id> part.step` (or `part.dxf`) wrote: inspect that file. Run text-to-cad's sheet check on it too -- `cad +0.11.10 step dfm part.step --process sheet --material <material> --thickness <mm> --json` (a DXF: `cad +0.11.10 dxf dfm part.dxf --material <material> --thickness <mm> --json`) -- for its measurements and its general findings (one thickness, bends modelled as two arcs, the flat pattern, hole and feature distances, cut-file defects). Give it the selected SKU's own figures where the specs list them: `--bend-radius` (its effective bend radius: a bend modelled at another is `sheet.bend_radius_differs`) and `--k-factor`. The check is general, not SendCutSend's: compare its measurements -- `parts.thickness_mm` with the SKU's thickness, `bends.inside_radius_mm` with `bending_specs.effective_bend_radius` or `bending_specs.bend_radius`, `flanges` with `bending_specs.min_flange_length_before_bend` and `min_flange_length_after_bend`, `hole_to_bend` and `reliefs` with the bending specs, the flat's size with the catalog's size limits -- with the specs JSON as Comparison describes, and report its general findings beside them.
+3. Inspect the exact upload file with `cad step inspect` (above), and a check script run by `cad run` for any missing facts. Do not inspect only the source generator, CAD model, or generator console summary. A text-to-cad model's upload is the STEP or DXF `cad model export <id> part.step` (or `part.dxf`) wrote: inspect that file. Run text-to-cad's sheet check on it too -- `cad step dfm part.step --process sheet --material <material> --thickness <mm> --json` (a DXF: `cad dxf dfm part.dxf --material <material> --thickness <mm> --json`) -- for its measurements and its general findings (one thickness, bends modelled as two arcs, the flat pattern, hole and feature distances, cut-file defects). Give it the selected SKU's own figures where the specs list them: `--bend-radius` (its effective bend radius: a bend modelled at another is `sheet.bend_radius_differs`) and `--k-factor`. The check is general, not SendCutSend's: compare its measurements -- `parts.thickness_mm` with the SKU's thickness, `bends.inside_radius_mm` with `bending_specs.effective_bend_radius` or `bending_specs.bend_radius`, `flanges` with `bending_specs.min_flange_length_before_bend` and `min_flange_length_after_bend`, `hole_to_bend` and `reliefs` with the bending specs, the flat's size with the catalog's size limits -- with the specs JSON as Comparison describes, and report its general findings beside them.
    - DXF: measure units, bounds, layers, entity types, open/duplicate geometry, unsupported annotations, candidate holes/circles, linework stats, bend-line candidates, bend-to-cut distances, bend-adjacent cut geometry, local flange depths, and degenerate zero-area contours as needed for the selected service.
    - STEP/STP: measure parseability, units hints, solid/surface signals, bounding box, shell/body signals, validity, sheet thickness where available, cylindrical bend-face radii where bending is in scope, and limitations as needed for the selected service.
    - Keep each inspection helper fact-only. It may report measurements, parse errors, and limitations, but it must not emit pass/fail/readiness statuses.
@@ -95,12 +111,12 @@ Compare only trustworthy pairs of evidence.
 - Cite the source field path or guide section.
 - Cite the measured file fact.
 - Compare only when both the source requirement and measured file fact are available and trustworthy.
-- If a needed measurement is missing or risky, write a small check script for that specific geometry fact and run it with `cad +0.11.10 run`.
+- If a needed measurement is missing or risky, write a small check script for that specific geometry fact and run it with `cad run`.
 - Treat every measured upload risk, manufacturability issue, or cited requirement violation as an error for now. Do not infer any alternate SendCutSend UI classification.
 - For DXF units, inspect `$INSUNITS`, header extents, measured bounds, and order context together. If `$INSUNITS` is missing, unsupported, or not one of the SendCutSend guide's expected DXF unit codes (`1` inches or `4` mm), report a unit/scale error and recommend re-exporting or confirming units before applying size-, flange-, or material-specific comparisons. Do not silently rescale geometry or use an uncertain scale to issue material-specific pass/fail checks.
 - For 2D files with bend lines, check flange length locally along every bend line. Measure the nearest cut/free edge on both sides of each bend at each span or sample point, including notches, slots, gaps, split tabs, and cutouts that interrupt the bend span or create a local free edge. Compare the minimum local flange depth to the selected SKU's `bending_specs.min_flange_length_before_bend` and `bending_specs.min_flange_length_after_bend`. Do not apply flange-length limits to ordinary enclosed holes or interior cutouts unless a cited source gives a hole-to-bend or feature-to-bend rule for that service; report those separately with centerline-to-bend or edge-to-bend measurements as the cited rule requires. Do not treat nearby bend-adjacent cut geometry as only corner relief unless the remaining local flange still passes the flange-length minimum. If any local flange depth is below the SKU minimum, report `❌ fail`. Do not rely on aggregate source-level values when exported geometry has local cutouts, interrupted bends, split bend segments, reliefs, tabs, or unsupported regions.
 - Keep bend findings separate by physical cause. Do not collapse bend-adjacent geometry into a generic flange failure. Report distinct rows for minimum flange/contact length errors, bend line or die-area geometry crossings, insufficient bend contact/support from nearby free edges or cutouts, bend lines that do not span the bent region, split/common-axis bend segments, and cut geometry touching or crossing bend lines. If a SendCutSend source does not expose the exact die-area/contact threshold, cite the measured file fact as direct file inspection and mark the source-limited comparison explicitly.
-- For STEP/STP bent parts, inspect bend radii when the model contains sheet-metal bend geometry or the intended service includes bending. Read cylindrical or toroidal bend faces and their radii with `cad +0.11.10 step inspect part.step 'face N'`, group repeated bend radii, and compare them to the selected SKU's `bending_specs.effective_bend_radius` or `bending_specs.bend_radius`. If the selected material/SKU is unknown, report the measured bend-radius set and ask for material/thickness before readiness verdicts. If measured radii conflict with the selected SKU tooling radius, report a bend-radius mismatch error.
+- For STEP/STP bent parts, inspect bend radii when the model contains sheet-metal bend geometry or the intended service includes bending. Read cylindrical or toroidal bend faces and their radii with `cad step inspect part.step 'face N'`, group repeated bend radii, and compare them to the selected SKU's `bending_specs.effective_bend_radius` or `bending_specs.bend_radius`. If the selected material/SKU is unknown, report the measured bend-radius set and ask for material/thickness before readiness verdicts. If measured radii conflict with the selected SKU tooling radius, report a bend-radius mismatch error.
 
 Report with restrained status labels:
 

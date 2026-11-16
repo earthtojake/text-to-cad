@@ -7,11 +7,8 @@
         "--managed-python",
         "--python",
         "3.14",
-        "--from",
-        "cad-mcp==0.11.10",
-        "cad-mcp",
-        "--startup-timeout",
-        "300"
+        "cad@0.11.10",
+        "mcp"
       ],
       "startup_timeout_sec": 300
     }

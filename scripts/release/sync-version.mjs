@@ -33,52 +33,34 @@ export const tomlTargets = [
   "packages/aliases/cadgen/pyproject.toml",
 ];
 
-// A requirement pinning one of the three distributions at a release: the library (`cad==`, with its
-// build123d extra or not), the server (`cad-server==`) and the shim (`cad-mcp==`). The name stands
-// alone: `cad` at the end of another name (`my-cad==`) pins no distribution of the release.
-export const pinPattern = /(?<![\w.-])(cad(?:-server|-mcp)?(?:\[[a-z0-9_,.-]+\])?==)([^"'`\s]+)/g;
+// The release written into a file the release does not stamp by a version field: cad as a requirement
+// (`cad==X`, with an extra or not: the aliases', each skill's setup block) or as uvx runs it (`cad@X`: Codex's
+// server line). `cad` stands alone (`my-cad==` is another name, `text-to-cad@earthtojake` a plugin) and the
+// version is three dotted numbers, so a pattern such as the skills' `Bash(... cad==*)` is never touched.
+const releaseName = String.raw`\d+\.\d+\.\d+(?:[0-9A-Za-z.+_-]*[0-9A-Za-z])?`;
+export const pinPattern = new RegExp(String.raw`(?<![\w.-])(cad(?:\[[a-z0-9_,.-]+\])?(?:==|@))(${releaseName})`, "g");
 
-// Files that pin a release by a requirement string rather than a version field: the command Codex,
-// the one app given the CAD server, runs to start its transport (`cad-mcp==`), the command the install
-// guide says the installer runs, and the aliases, which pin cad at their own release. The skills pin theirs a different way, in their commands (`skillPinPatterns`,
-// below). A file may also be a TOML target (those pyprojects); its pin is stamped on top of that change,
-// not over it.
+// Files that name the release that way: the aliases, which require cad at their own release, and the line
+// Codex runs to start the CAD app's server (`cad@X mcp`). A file may also be a TOML target (those pyprojects);
+// its pin is stamped on top of that change, not over it.
 export const pinTargets = [
   "packages/aliases/cad-server/pyproject.toml",
   "packages/aliases/cad-mcp/pyproject.toml",
   "packages/aliases/cadgen/pyproject.toml",
   "codex.mcp.json",
-  "docs/install.md",
-  // The README, the docs site's homepage and its policy pages pin nothing (the privacy policy's
-  // telemetry commands run `cad`, the installed command): a target without a pin is refused.
 ];
 
 // The one-line installer (install.sh and install.ps1 run install.py) carries the release it was
 // published with, which it installs when the version feed cannot be read. It is no pin target: it runs
-// `cad-server==<the release it found>`, which a pin's stamp would overwrite.
+// `cad==<the release it found>`, which a pin's stamp would overwrite.
 export const bootstrapTargets = [
   { path: "scripts/install/install.py", pattern: /^(FALLBACK = ")([^"\n]*)(")$/m },
 ];
 
-// Every command a skill runs names its release: `cad +<VERSION> <verb> ...`, the pin the first
-// argument, so the skill text of a release runs that release's software. Every Markdown file under
-// `skills/` is stamped, in place, by two patterns:
-// - the pin, `cad +X.Y.Z` (a suffix allowed, ending in a letter or digit) followed by a space, a
-//   backtick, a quote or the line's end. `cad` stands alone (not `scad +1.2.3`, not `my-cad`), and
-//   the version is three dotted numbers, so arithmetic such as `cad +0.5 ` is never touched;
-// - the setup block, from "Every command in this skill starts `cad +" to "install uv first." (a line
-//   break may fall between "uv" and "first"), where the release is named in prose ("runs cad X.Y.Z",
-//   "says X.Y.Z is not installed", "installs cad X.Y.Z") and in its install line
-//   (`--from cad-server==X.Y.Z`): every X.Y.Z in it.
-// A SKILL.md's header names no version: the commands carry it.
-// Every skill that runs `cad` carries that block (tests/python/global/test_skill_requirements.py), and
-// no command goes unpinned (test_skill_commands_pin_their_release.py).
+// Each skill's setup block names the cad it was written for, `cad==X`; no command names a version. Every
+// Markdown file under `skills/` is stamped in place by `pinPattern`, and one at least must name it
+// (tests/python/global/test_skill_requirements.py holds the block).
 export const skillsDir = "skills";
-const releaseName = String.raw`\d+\.\d+\.\d+(?:[0-9A-Za-z.+_-]*[0-9A-Za-z])?`;
-export const skillPinPatterns = {
-  pin: new RegExp(String.raw`(?<![\w.-])(cad \+)(${releaseName})(?=[\s\x60'"]|$)`, "gm"),
-  setupBlock: /Every command in this skill starts `cad \+[\s\S]*?install uv\s+first\./g,
-};
 
 function skillDocuments(dir = skillsDir) {
   let entries;
@@ -101,28 +83,20 @@ function skillDocuments(dir = skillsDir) {
     });
 }
 
-/** The skill text with every pin and the setup block's release set to `version`. */
-export function stampSkillText(text, version) {
-  const { pin, setupBlock } = skillPinPatterns;
-  return text
-    .replace(new RegExp(setupBlock.source, "g"), (block) => block.replace(/\b\d+\.\d+\.\d+\b/g, version))
-    .replace(new RegExp(pin.source, "gm"), (_, prefix) => `${prefix}${version}`);
-}
-
 function syncSkillTargets(version) {
   const documents = skillDocuments();
   const changes = [];
-  let pinned = 0;
+  let named = 0;
   for (const relativePath of documents) {
     const text = readRequiredText(relativePath);
-    pinned += [...text.matchAll(new RegExp(skillPinPatterns.pin.source, "gm"))].length;
-    const stamped = stampSkillText(text, version);
+    named += [...text.matchAll(new RegExp(pinPattern.source, "g"))].length;
+    const stamped = text.replace(new RegExp(pinPattern.source, "g"), (_, prefix) => `${prefix}${version}`);
     if (stamped !== text) {
-      changes.push({ path: relativePath, labels: ["skill command pins"], text: stamped });
+      changes.push({ path: relativePath, labels: ["the release the skill was written for"], text: stamped });
     }
   }
-  if (documents.length > 0 && pinned === 0) {
-    throw new Error(`no skill under ${skillsDir}/ pins its commands (cad +<version>)`);
+  if (documents.length > 0 && named === 0) {
+    throw new Error(`no skill under ${skillsDir}/ names the release it was written for (cad==<version>)`);
   }
   return changes;
 }
@@ -132,7 +106,8 @@ function usage() {
   scripts/release/sync-version.mjs [--check]
 
 Synchronizes duplicate package and plugin metadata versions from the canonical
-VERSION file, and the release each skill command pins (cad +<version>). Release preparation edits that file, then
+VERSION file, and the release named as cad==<version> or cad@<version> (the aliases, Codex's server line, each
+skill's setup block). Release preparation edits that file, then
 stamps derived metadata from it; the bundle script and the Publish Release
 workflow re-check the same metadata before production output is written.
 
@@ -279,7 +254,7 @@ function syncPinTarget(relativePath, version, text = readRequiredText(relativePa
   const pin = new RegExp(pinPattern.source, "g");
   const matches = [...text.matchAll(pin)];
   if (matches.length === 0) {
-    throw new Error(`${relativePath} must pin cad[-server|-mcp]==<version>`);
+    throw new Error(`${relativePath} must name cad==<version> or cad@<version>`);
   }
   if (matches.every((match) => match[2] === version)) {
     return null;

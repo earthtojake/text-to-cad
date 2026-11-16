@@ -17,14 +17,11 @@ that `mcpServers` "must resolve to the root `.mcp.json`". A server config kept
 under another name (a root `.mcp.json` is one Claude Code would load too) goes
 into the archive as `.mcp.json`, and the archived manifest points there.
 
-The package is the copy OpenAI's directory delivers, so it names that store, `codex`: every pin in it is
-stamped `@codex` (`cad +<VERSION>@codex <verb>`) and each skill's update paragraph is left out, since the
-store updates the copy (`channel_stamp.py`, the routine the directory branch of claude.ai uses too), and its
-launcher is told the store as an argument in its server config (`cad-mcp --channel codex`). It is told
-Codex's startup timeout too, the config's own `startup_timeout_sec`
-(`--startup-timeout 300`): a first start installs its version, and the launcher holds Codex's `initialize` for most
-of that time rather than answer early, since Codex acts on no `tools/list_changed` within a turn. The repository's
-config tells it so already, for the copies installed from `latest` and `main`; the package keeps it, never twice.
+The package is a store's copy: OpenAI's directory delivers it and updates it. So each skill's setup block
+installs cad by uv's one line, `uv tool install --managed-python --python 3.14 cad==<VERSION>`, in place of our
+install script, and says that the store updates the plugin (`store_copy`, the routine claude.ai's directory
+branch uses too: each substitution is strict, and a copy that still names the install script fails). Its
+server line is the repository's, as every copy's: `uvx ... cad@<VERSION> mcp`.
 
 The checks are the package rules the portal documents, named by its error codes
 (https://developers.openai.com/plugins/deploy/submission-errors). Listing limits
@@ -48,17 +45,68 @@ import subprocess
 import sys
 import zipfile
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import channel_stamp  # noqa: E402 - beside this script: the one stamping routine, plugin_branch.py's too
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ".codex-plugin/plugin.json"
 ROOTS = (".codex-plugin", "skills", "LICENSE")
 MCP_CONFIG = ".mcp.json"
-# The delivery channel of the copy this package is: OpenAI's directory's.
-CHANNEL = "codex"
-# The longest startup timeout the launcher takes (`cad_mcp.shim.STARTUP_MOST`, held equal by a test): a day.
-STARTUP_MOST = 86400
+# A store's copy (this package, and claude.ai's directory's: plugin_branch.py) differs from our own text in two
+# places of each skill's setup block (tests/python/global/test_skill_requirements.py holds ours): how cad is
+# installed and updated, and what to do when cad says a newer version is out. Ours runs our install script;
+# a store's never names it.
+OUR_LINES = """Install line, on macOS and Linux:
+
+```bash
+curl -fsSL https://texttocad.dev/install.sh | sh
+```
+
+On Windows, in PowerShell:
+
+```powershell
+irm https://www.texttocad.dev/install.ps1 | iex
+```
+
+Update line, on macOS and Linux:
+
+```bash
+cad server stop && curl -fsSL https://texttocad.dev/install.sh | sh && cad server start
+```
+
+On Windows, in PowerShell:
+
+```powershell
+cad server stop; irm https://www.texttocad.dev/install.ps1 | iex; cad server start
+```
+"""
+STORE_LINES = """Install line:
+
+```bash
+uv tool install --managed-python --python 3.14 cad=={version}
+```
+
+Update line, on macOS and Linux:
+
+```bash
+cad server stop && uv tool install --managed-python --python 3.14 cad=={version} && cad server start
+```
+
+On Windows, in PowerShell:
+
+```powershell
+cad server stop; uv tool install --managed-python --python 3.14 cad=={version}; cad server start
+```
+
+If `uv` is not found, install it as uv's install page says,
+https://docs.astral.sh/uv/getting-started/installation/, then run the line again.
+"""
+OUR_NEWER = """- a newer version of cad is available: tell the person and ask whether to update. If they say yes, run
+  the update line above.
+"""
+STORE_NEWER = """- a newer version of cad is available: carry on. The store that installed this plugin updates it.
+"""
+# A setup block opens with this sentence: each SKILL.md that has one holds our two passages exactly once.
+SETUP_OPENS = "This skill was written for `cad=="
+INSTALL_SCRIPT = "texttocad.dev/install"
+IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico")
 ICONS = ("logo", "logoDark", "composerIcon", "composerIconDark")
 SEMVER = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?")
 # A clone without git-lfs (CI's included) checks LFS-tracked files out as pointers.
@@ -167,61 +215,44 @@ def collect(root: Path) -> Package:
         if data.startswith(LFS_POINTER):
             package.errors.append(f"{source} is a Git LFS pointer, not the file; keep plugin files out of LFS")
             continue
-        if archived == MCP_CONFIG:
-            data = with_channel(package, data)
         package.files[archived] = (data, mode == "100755")
     if sources:
         package.files[MANIFEST] = (json.dumps(manifest, indent=2, ensure_ascii=False).encode("utf-8") + b"\n",
                                    False)
     version = manifest.get("version")
     if isinstance(version, str) and version:
-        stamped, errors = channel_stamp.stamp({path: data for path, (data, _) in package.files.items()},
-                                              version, CHANNEL)
-        package.files = {path: (stamped[path], executable) for path, (_, executable) in package.files.items()}
+        copied, errors = store_copy({path: data for path, (data, _) in package.files.items()}, version)
+        package.files = {path: (copied[path], executable) for path, (_, executable) in package.files.items()}
         package.errors.extend(errors)
     return package
 
 
-def with_channel(package: Package, data: bytes) -> bytes:
-    """The server config whose one `cad-mcp` launcher is told this package's channel as its argument (`cad-mcp
-    --channel codex`): the launcher runs its version on that channel. Nothing in its environment says a channel
-    or who updates the copy (a config of 0.11.10 or earlier did, and is ignored now). Where the config gives Codex a
-    startup timeout (`startup_timeout_sec`), the launcher is told that same number (`--startup-timeout N`), read from
-    it so the two never drift: its first start, which installs its version, then holds the app's `initialize` that
-    long rather than answer early, since Codex acts on no `tools/list_changed` within a turn. The repository's config
-    tells it already (`latest` and `main` are installed from it): a launcher told another number fails the package."""
-    try:
-        config = json.loads(data)
-        servers = [server for server in config["mcpServers"].values() if "cad-mcp" in server["args"]]
-    except (ValueError, KeyError, TypeError, AttributeError):
-        package.errors.append(f"{MCP_CONFIG} is not an mcpServers config this script can read")
-        return data
-    if len(servers) != 1:
-        package.errors.append(f"{MCP_CONFIG} must start exactly one `cad-mcp` server (found {len(servers)})")
-        return data
-    args = list(servers[0]["args"])
-    told = args[args.index("cad-mcp") + 1:]  # the launcher's own arguments, after its program
-    if "--channel" in told:
-        package.errors.append(f"{MCP_CONFIG}'s launcher names a channel already: only this script tells it one")
-        return data
-    args += ["--channel", CHANNEL]
-    timeout = servers[0].get("startup_timeout_sec")
-    if timeout is not None:
-        # The launcher's own rule (`cad_mcp.shim`'s `--startup-timeout`): never a line it would refuse.
-        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 0 < timeout <= STARTUP_MOST:
-            package.errors.append(f"{MCP_CONFIG}'s startup_timeout_sec is not a positive number of seconds, a day at "
-                                  f"most: {timeout!r}")
-            return data
-        if "--startup-timeout" in told:
-            given = told[told.index("--startup-timeout") + 1:][:1]
-            if given != [f"{timeout:g}"]:
-                package.errors.append(f"{MCP_CONFIG}'s launcher is told a startup timeout of {given} seconds, its "
-                                      f"startup_timeout_sec {timeout!r}")
-                return data
-        else:
-            args += ["--startup-timeout", f"{timeout:g}"]
-    servers[0]["args"] = args
-    return json.dumps(config, indent=2).encode("utf-8") + b"\n"
+def store_copy(files: dict[str, bytes], version: str) -> tuple[dict[str, bytes], list[str]]:
+    """A store's copy of `files` (path -> bytes): each skill's setup block with the store's lines for `version`
+    (`STORE_LINES`, `STORE_NEWER`) in place of ours, and what fails the build: a setup block where ours are not
+    there exactly once, a text file that is not UTF-8, or one that still names our install script. Images pass as
+    they are."""
+    out, errors = {}, []
+    for path, data in files.items():
+        if path.lower().endswith(IMAGE_SUFFIXES):
+            out[path] = data
+            continue
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            errors.append(f"{path}: not UTF-8 text")
+            out[path] = data
+            continue
+        if re.fullmatch(r"skills/[^/]+/SKILL\.md", path) and SETUP_OPENS in text:
+            for ours, store in ((OUR_LINES, STORE_LINES), (OUR_NEWER, STORE_NEWER)):
+                if text.count(ours) != 1:
+                    errors.append(f"{path}: its setup block holds {ours.splitlines()[0]!r} {text.count(ours)} times, "
+                                  "not once, so the store's lines cannot replace it")
+                text = text.replace(ours, store.format(version=version))
+        if INSTALL_SCRIPT in text:
+            errors.append(f"{path}: names our install script ({INSTALL_SCRIPT}); a store's copy installs cad by uv")
+        out[path] = text.encode("utf-8")
+    return out, errors
 
 
 def check_manifest(package: Package) -> None:

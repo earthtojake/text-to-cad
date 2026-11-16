@@ -23,21 +23,20 @@ Three copies, differing in what they carry:
   built by the one function that builds the ZIP (`plugin_zip.build`), each file's git mode its
   ZIP entry's.
 
-Each copy runs the release it was built from. `latest` is our own text, every pin as main has it
-(`cad +<VERSION> <verb>`) and the update paragraph in each skill's setup block. A store's copy, the
-directory's and Codex's, names its store in every pin (`cad +<VERSION>@claude <verb>`, `@codex`) and
-leaves the update paragraph out, since the store updates it (`channel_stamp.stamp`). No MCP config on
-main or `latest` names a store: Codex's launcher is told its store as an argument by `plugin_zip.py`
-(`cad-mcp --channel codex`), and the directory's copy carries no server at all.
+Commands carry no version and no copy names a store. `latest` is our own text, as main has it: each skill's
+setup block installs and updates cad by our install script. A store's copy, the directory's and Codex's,
+installs it by uv's one line, `uv tool install --managed-python --python 3.14 cad==<VERSION>`, and leaves the
+updates of the plugin to the store (`plugin_zip.store_copy`, strict: what it replaces must be there exactly
+once in each skill). Claude Code's and Cursor's session-start hooks sit in the catalog's entry and in
+Cursor's manifest, so the directory's copy, which holds neither, carries none.
 
-No copy holds a download piped to a shell (`PIPE_TO_SHELL`, checked in every copy): claude.ai's directory
-flags one as an install-time risk. The skills carry none (their update paragraph links the repository), so the one on main is
-the README's Quickstart: in `latest` and the directory's copy the README installs by the skills' own `uvx`
-line (`UVX_INSTALL`) in place of the Quickstart's two one-liners and the paragraph after them (`by_uvx`, a
-strict substitution that fails the build when what it replaces is not there exactly once). main's README
-keeps its Quickstart. The directory's copy differs once more: its manifest leaves out the listing links
-the directory's validation does not know (`UNLISTED`, also strict); the README, which the directory shows
-as the listing's description, links the same pages.
+No store's copy holds a download piped to a shell (`PIPE_TO_SHELL`): claude.ai's directory flags one as an
+install-time risk. In `latest` and the directory's copy the README installs by uv's line (`UV_INSTALL`) in
+place of the Quickstart's two one-liners and the paragraph after them (`by_uv`, a strict substitution that
+fails the build when what it replaces is not there exactly once). main's README keeps its Quickstart. The
+directory's copy differs once more: its manifest leaves out the listing links the directory's validation
+does not know (`UNLISTED`, also strict); the README, which the directory shows as the listing's description,
+links the same pages.
 
 The checks are claude.ai's file rules, the strictest of the directories
 (https://claude.com/docs/plugins/pre-submission-checklist.md): a tree that breaks
@@ -62,7 +61,6 @@ import tempfile
 from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import channel_stamp  # noqa: E402 - beside this script: the one stamping routine, plugin_zip.py's too
 import plugin_zip  # noqa: E402 - beside this script: the Codex directory's ZIP, whose files the codex copy holds
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -85,13 +83,14 @@ OTHER_APP_FILES = (".antigravity-plugin/plugin.json", ".kimi-plugin/plugin.json"
 
 class Copy(NamedTuple):
     files: tuple[str, ...]
-    # The delivery channel every pin of the copy is stamped with (`channel_stamp.py`); None: the default, as on main.
-    channel: str | None
+    # Whether a store delivers the copy: its skills install cad by uv (`plugin_zip.store_copy`), and it holds no
+    # download piped to a shell.
+    store: bool = False
     # Whether the copy holds only what claude.ai's directory accepts from an organization it has not
     # verified: the skills alone, in the file types `type_errors` allows.
     skills_only: bool = False
-    # Whether the copy's README installs by `UVX_INSTALL` in place of the install script (`by_uvx`).
-    uvx: bool = False
+    # Whether the copy's README installs by `UV_INSTALL` in place of the install script (`by_uv`).
+    uv: bool = False
     # Keys of Claude's manifest the copy leaves out (`unlisted`).
     unlisted: tuple[str, ...] = ()
     # Whether the copy is the Codex directory's ZIP's files (`plugin_zip.build`), not a choice of tracked files.
@@ -102,9 +101,9 @@ class Copy(NamedTuple):
 # manifests keep them.
 UNLISTED = ("documentationUrl", "privacyPolicyUrl", "supportUrl", "termsOfServiceUrl")
 COPIES = {
-    "latest": Copy(FILES + MARKETPLACE_FILES + GROK_FILES + OTHER_APP_FILES, None, uvx=True),
-    "directory": Copy(DIRECTORY_FILES, "claude", skills_only=True, uvx=True, unlisted=UNLISTED),
-    "codex": Copy((), plugin_zip.CHANNEL, codex_zip=True),
+    "latest": Copy(FILES + MARKETPLACE_FILES + GROK_FILES + OTHER_APP_FILES, uv=True),
+    "directory": Copy(DIRECTORY_FILES, store=True, skills_only=True, uv=True, unlisted=UNLISTED),
+    "codex": Copy((), store=True, codex_zip=True),
 }
 DIRECTORIES = ("skills/",)
 README = "README.md"
@@ -134,24 +133,23 @@ PACKAGE_CONFIGS = {"package.json", "package-lock.json", "npm-shrinkwrap.json", "
                    "requirements.txt", "constraints.txt", "uv.lock", "pyproject.toml", "Pipfile"}
 # What the directory's copy of Claude's manifest must not name: it carries the skills alone.
 NOT_SKILLS = ("mcpServers", "hooks", "lspServers")
-# The install script, as main's README runs it, and the `uvx` command the copies' READMEs install by in
-# its place: the skills' own install line (each setup block's), the server's line for a version
-# (`cad_server._internal.launch.launch_command`) running `cad setup`. test_plugin_branch.py holds it to both.
+# The install script, as main's README runs it, and the uv line the copies' READMEs install by in its place: a
+# store's copy's own install line (`plugin_zip.STORE_LINES`; test_plugin_branch.py holds the two equal).
 INSTALL_SCRIPT = "curl -fsSL https://texttocad.dev/install.sh | sh"
 INSTALL_SCRIPT_WINDOWS = "https://www.texttocad.dev/install.ps1"
-UVX_INSTALL = "uvx --no-config --managed-python --python 3.14 --from cad-server=={version} cad setup"
+UV_INSTALL = "uv tool install --managed-python --python 3.14 cad=={version}"
 # The README's install section: the Quickstart's two one-liners and the paragraph after them.
 README_INSTALL = re.compile(
     r"^macOS and Linux:\n\n```bash\n" + re.escape(INSTALL_SCRIPT) + r"\n```\n\n"
     r"Windows, in PowerShell:\n\n```powershell\n" + re.escape(f"irm {INSTALL_SCRIPT_WINDOWS} | iex") + r"\n```\n\n"
     r"(?:[^\n]+\n)+", re.M)
-README_UVX = """```bash
+README_UV = """```bash
 {command}
 ```
 
-The skills run the `cad` command. The first time, your agent installs it with
-[uv](https://docs.astral.sh/uv/), with your permission, or you run the command above yourself. It installs
-cad {version} and the `cad` command and changes nothing else.
+The skills run the `cad` command. The line above installs cad {version} with
+[uv](https://docs.astral.sh/uv/). The first time a skill needs `cad`, your agent runs the line, with your
+permission, or you run it yourself.
 """
 # A download piped to a shell or run as a script block: what claude.ai's directory flags (`RUNTIME_FETCH_EXEC`).
 _FETCH = r"(?:irm|iwr|invoke-restmethod|invoke-webrequest)"
@@ -209,31 +207,27 @@ def readme_for_tree(text: str, tree: set[str], repository: set[str], url: str, c
     return LINK.sub(point, text)
 
 
-def stamped(tree: dict[str, tuple[str, bytes]], version: object,
-            channel: str) -> tuple[dict[str, tuple[str, bytes]], list[str]]:
-    """The tree with every pin of the release (the manifest's `version`) stamped `@channel` (`channel_stamp.stamp`),
-    and what fails the build."""
-    if not isinstance(version, str) or not version:
-        return tree, [f"{MANIFEST}: no `version`, so its pins cannot be stamped @{channel}"]
-    files, errors = channel_stamp.stamp({path: data for path, (_mode, data) in tree.items()}, version, channel)
+def store_copy(tree: dict[str, tuple[str, bytes]], version: str) -> tuple[dict[str, tuple[str, bytes]], list[str]]:
+    """The tree as a store delivers it (`plugin_zip.store_copy`), and what fails the build."""
+    files, errors = plugin_zip.store_copy({path: data for path, (_mode, data) in tree.items()}, version)
     return {path: (mode, files[path]) for path, (mode, _data) in tree.items()}, errors
 
 
-def by_uvx(tree: dict[str, tuple[str, bytes]], version: str) -> tuple[dict[str, tuple[str, bytes]], list[str]]:
-    """The tree whose README installs by `UVX_INSTALL` for `version` in place of the install script, and what fails
+def by_uv(tree: dict[str, tuple[str, bytes]], version: str) -> tuple[dict[str, tuple[str, bytes]], list[str]]:
+    """The tree whose README installs by `UV_INSTALL` for `version` in place of the install script, and what fails
     the build: the README's install section (`README_INSTALL`) becomes the command and one paragraph, and must be
-    there exactly once. The skills install by that command already."""
-    command = UVX_INSTALL.format(version=version)
+    there exactly once."""
+    command = UV_INSTALL.format(version=version)
     out, errors = dict(tree), []
     if README in tree:
         text = tree[README][1].decode("utf-8")
         sections = list(README_INSTALL.finditer(text))
         if len(sections) != 1:
             errors.append(f"{README}: the Quickstart's two install one-liners and the paragraph after them are there "
-                          f"{len(sections)} times, not once, so the uvx command cannot replace them")
+                          f"{len(sections)} times, not once, so the uv line cannot replace them")
         else:
             section = sections[0]
-            text = text[:section.start()] + README_UVX.format(command=command, version=version) + text[section.end():]
+            text = text[:section.start()] + README_UV.format(command=command, version=version) + text[section.end():]
             out[README] = (tree[README][0], text.encode("utf-8"))
     return out, errors
 
@@ -326,7 +320,7 @@ def rule_errors(tree: dict[str, tuple[str, bytes]]) -> list[str]:
 
 def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str], dict]:
     """A copy's tree as path -> (git mode, bytes), what breaks the directory's rules, and the manifest."""
-    files, channel, skills_only, uvx, leaves_out, codex_zip = COPIES[copy]
+    files, store, skills_only, uv, leaves_out, codex_zip = COPIES[copy]
     if codex_zip:
         return codex(root)
     entries = tracked(root)
@@ -353,17 +347,16 @@ def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str
     text = readme_for_tree(text, set(tree), set(entries), url, head, errors)
     tree[README] = ("100644", text.encode("utf-8"))
     version = manifest.get("version")
-    if channel is not None:
-        tree, stamping = stamped(tree, version, channel)
-        errors += stamping
-    if uvx:
-        if isinstance(version, str) and version:
-            tree, substituting = by_uvx(tree, version)
-            errors += substituting
-        else:
-            errors.append(f"{MANIFEST}: no `version`, so the uvx command cannot name the release")
+    if (store or uv) and not (isinstance(version, str) and version):
+        return tree, errors + [f"{MANIFEST}: no `version`, so the uv line cannot name the release"], manifest
+    if uv:
+        tree, substituting = by_uv(tree, version)
+        errors += substituting
+    if store:
+        tree, substituting = store_copy(tree, version)
+        errors += substituting
     tree, leaving = unlisted(tree, leaves_out)
-    errors += leaving + pipes_to_shell(tree)
+    errors += leaving + (pipes_to_shell(tree) if store else [])
     return tree, errors + rule_errors(tree) + (type_errors(tree) if skills_only else []), manifest
 
 

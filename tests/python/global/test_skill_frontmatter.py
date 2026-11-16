@@ -37,7 +37,7 @@ class SkillFrontMatterTest(unittest.TestCase):
                     self.assertNotIn(" #", value, "quote it or write it as a `>-` block")
 
     def test_no_skill_header_names_a_version(self) -> None:
-        # A skill's release is in its commands (`cad +<VERSION>`), which the release stamps; a version in the header
+        # A skill's release is in its setup block (`cad==<VERSION>`), which the release stamps; a version in the header
         # would be a second copy of it that nothing reads.
         for path in sorted((REPO / "skills").glob("*/SKILL.md")):
             with self.subTest(skill=path.parent.name):
