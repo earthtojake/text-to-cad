@@ -104,7 +104,7 @@ export default function PrivacyPolicyPage() {
             starts a short-lived sender in the background, which sends it and exits; whether installing or
             updating finished is sent by such a sender started right away. Like any
             request over the internet, each one also reaches our host with your IP address, the time
-            and a user agent (just “cadgen”, the software’s name before 0.10); see section 4 for what happens to them.
+            and a user agent that names text-to-cad’s software; see section 4 for what happens to them.
             Section 5 says when telemetry is on and how to turn it off.
           </li>
           <li>
@@ -112,7 +112,7 @@ export default function PrivacyPolicyPage() {
             asks api.texttocad.dev which text-to-cad release is the
             newest, so it can tell you when there is an update. The request carries no ID and nothing
             about you or your work; like any request, it reaches our host with your IP address, the
-            time and a user agent (“cadgen”). It is not made in CI, and section 5 says how to turn it off.
+            time and a user agent that names text-to-cad’s software. It is not made in CI, and section 5 says how to turn it off.
             A copy a plugin store keeps up to date is never told of an update: the store updates it.
             text-to-cad never updates itself: you update it by running our install command again, which asks the same question, then
             downloads the release from PyPI. One exception: if an earlier release that updated itself brought
