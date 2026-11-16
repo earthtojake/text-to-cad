@@ -158,34 +158,32 @@ def build_parser_for(name: str):
     return builder() if builder is not None else None
 
 
-def _harden_std_stream_errors() -> None:
-    """Make an unencodable character survive as an escape instead of killing the write.
+def _standard_streams() -> None:
+    """The command's two streams: on Windows, UTF-8 where they go to a pipe or a file; everywhere, an unencodable
+    character written as an escape instead of killing the write.
 
-    Windows gives a CLI process a legacy code page, and under strict error
-    handling a character it cannot represent raises UnicodeEncodeError -- from
-    the MESSAGE rather than from the work, which is the worst possible moment.
-    cp1252 happens to carry the em dash and ellipsis this repo's teaching
-    messages use, but an OEM console page (cp437, cp850) carries neither, and a
-    user's own path can contain anything at all.
+    Windows gives a CLI process a legacy code page for a stream that is no console (cp1252, ...), while whatever reads
+    a command's output there -- an agent, a log, Git Bash -- reads UTF-8: a profile folder with an accent arrived
+    broken. So such a stream is UTF-8 (``cad._internal.streams.switches``); a console is left as it is, as is every
+    stream on other systems, and every reader of this release's output in this repository decodes UTF-8 (a reader
+    that decoded the code page is why an earlier switch was reverted).
 
-    Only the error HANDLER changes. Switching the encoding to utf-8 was tried
-    and reverted: it fixed how CI logs render and broke everything on Windows
-    that decodes our output with the platform's own code page -- including this
-    repo's own subprocess tests, where a cold build then reported an error
-    differently from a warm one. What we emit stays what the platform expects;
-    what cannot be emitted degrades to a backslash-u escape, which a reader
-    can decode,
-    rather than to a question mark that destroys it.
+    The error HANDLER changes everywhere: a stream's encoding may still lack a character (a POSIX locale of ASCII,
+    a path's undecodable bytes), and under strict handling one it cannot represent raises UnicodeEncodeError from
+    the MESSAGE rather than from the work. What cannot be emitted degrades to a backslash-u escape, which a reader
+    can decode, rather than to a question mark that destroys it.
 
     CLI ENTRY POINTS ONLY: these are process globals owned by whoever embedded
     us, so a library import must never touch them.
     """
+    from cad._internal.streams import switches
+
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is None:  # a caller replaced it with a plain object
             continue
         try:
-            reconfigure(errors="backslashreplace")
+            reconfigure(errors="backslashreplace", **({"encoding": "utf-8"} if switches(stream) else {}))
         except (OSError, ValueError):  # detached or already closed
             pass
 
@@ -233,7 +231,7 @@ def _output_closed() -> int:
 
 
 def _main(argv: list[str]) -> int:
-    _harden_std_stream_errors()
+    _standard_streams()
 
     # A pinned command, `cad +<version>[@<channel>] ...`: the pin names this version, or nothing runs; its
     # channel is this command's (`cad_server._internal.pins`, imported only for one: a command imports no more

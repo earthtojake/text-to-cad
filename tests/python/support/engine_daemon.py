@@ -225,9 +225,15 @@ def _say_stacks(env: dict[str, str]) -> None:
 
 
 def _text(data: bytes) -> str:
-    """As ``text=True`` reads a command's output: in the locale's encoding (cp1252 on the Windows
-    runner, where cadgen's ``·`` is 0xB7), with universal newlines."""
-    return data.decode(locale.getpreferredencoding(False), errors="replace").replace("\r\n", "\n")
+    """A command's output as its writer wrote it, with universal newlines: UTF-8, which the ``cad`` command and
+    ``cad run``'s program write to a pipe on every system; else, for a plain Python program's (a model script run by
+    itself, ``python -m cad_server.engine``), the locale's encoding, as ``text=True`` reads it (cp1252 on the Windows
+    runner, where ``·`` is 0xB7, no UTF-8 on its own)."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        text = data.decode(locale.getpreferredencoding(False), errors="replace")
+    return text.replace("\r\n", "\n")
 
 
 def _state(env: dict[str, str]) -> Path | None:

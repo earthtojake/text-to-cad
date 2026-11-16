@@ -370,7 +370,7 @@ class OrcaslicerCommands(unittest.TestCase):
             def cad(*argv: str) -> tuple[str, dict]:
                 done = subprocess.run([sys.executable, "-c", _ORCASLICER, "orcaslicer", *argv,
                                        "--profiles", str(root / "profiles")],
-                                      capture_output=True, text=True, env=env, cwd=root, timeout=60)
+                                      capture_output=True, text=True, encoding="utf-8", env=env, cwd=root, timeout=60)
                 return done.stdout, json.loads(done.stderr.strip().splitlines()[-1])
 
             said, ran = cad("presets", "machine", "--match", "ACME")

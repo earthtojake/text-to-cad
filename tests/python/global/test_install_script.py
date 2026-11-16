@@ -113,7 +113,7 @@ class InstallScriptTests(unittest.TestCase):
         if self.log.exists():
             self.log.unlink()
         return subprocess.run([sys.executable, str(INSTALL / "install.py"), *argv], env=self.environ(**extra),
-                              capture_output=True, text=True, timeout=120)
+                              capture_output=True, text=True, encoding="utf-8", timeout=120)
 
     def calls(self, name: str = None) -> list:
         lines = self.log.read_text(encoding="utf-8").splitlines() if self.log.exists() else []
@@ -227,12 +227,12 @@ class InstallScriptTests(unittest.TestCase):
         if self.log.exists():
             self.log.unlink()
         done = subprocess.run([sys.executable, str(INSTALL / "install.py")], env=self.environ(), cwd=person,
-                              capture_output=True, text=True, timeout=120)
+                              capture_output=True, text=True, encoding="utf-8", timeout=120)
         self.assertEqual(0, done.returncode, done.stderr)
         self.write(".gemini/extensions/text-to-cad/.gemini-extension-install.json",
                    {"type": "git", "source": install.URL, "ref": "latest"})
         again = subprocess.run([sys.executable, str(INSTALL / "install.py")], env=self.environ(), cwd=person,
-                               capture_output=True, text=True, timeout=120)
+                               capture_output=True, text=True, encoding="utf-8", timeout=120)
         self.assertEqual(0, again.returncode, again.stderr)
         found = [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines()]
         runs = [call for call in found if call["name"] == "gemini"]
@@ -407,8 +407,9 @@ class InstallScriptTests(unittest.TestCase):
             self.assertIn("~/.cursor/plugins/local/text-to-cad is a link: left alone", done.stdout)
 
     def test_a_character_the_output_cannot_encode_stops_no_app(self) -> None:
-        # Windows captures output in its ANSI code page, which has no ✘: the line is printed with a `?`, and the run
-        # goes on to the next app and the loose skills.
+        # An output in a code page that has no ✘ (cp1252, as Python writes a pipe on Windows): the line is printed
+        # with a `?`, and the run goes on to the next app and the loose skills. On Windows itself the pipe is UTF-8
+        # (`install.utf8`), whatever PYTHONIOENCODING says, and the mark goes through.
         self.programs("claude", "gemini")
         stand_in = self.bin / "claude"
         stand_in.write_text(stand_in.read_text(encoding="utf-8").replace(
@@ -418,8 +419,22 @@ class InstallScriptTests(unittest.TestCase):
         self.assertEqual(0, done.returncode, done.stderr)
         self.assertNotIn("Traceback", done.stderr)
         self.assertIn("Claude Code: failed: ", done.stdout)
-        self.assertIn("? Failed to add marketplace", done.stdout)
+        self.assertIn(("\u2718" if os.name == "nt" else "?") + " Failed to add marketplace", done.stdout)
         self.assertIn("Gemini CLI: installed", done.stdout)
+
+    def test_its_output_is_utf_8_on_windows_where_it_is_no_console(self) -> None:
+        # As `cad setup`'s, which it runs on the same streams: a pipe or a file on Windows; never a console, never
+        # another system.
+        class Stream:
+            def __init__(self, console: bool) -> None:
+                self.console = console
+
+            def isatty(self) -> bool:
+                return self.console
+
+        self.assertTrue(install.utf8(Stream(False), "nt"))
+        self.assertEqual([install.utf8(Stream(True), "nt"), install.utf8(Stream(False), "posix"),
+                          install.utf8(Stream(True), "posix"), install.utf8(None, "nt")], [False] * 4)
 
     def test_what_past_releases_left_is_removed_once_ours_is_in_and_nothing_else(self) -> None:
         self.programs("claude", "codex", "gemini", "grok", "npx")

@@ -426,9 +426,14 @@ def _run_file(path: str, top: str, verbose: bool, env: dict[str, str], started: 
 
 def _read_all(stream) -> str:
     stream.seek(0)
-    # What `text=True` did to a pipe: its encoding, and universal newlines. A Windows
-    # child ends lines with \r\n, and a summary line left ending in \r matches no regex.
-    text = stream.read().decode(locale.getpreferredencoding(False), errors="replace")
+    # As the file wrote it: UTF-8, which a test's `cad` command run in its own process makes of its
+    # streams on Windows, else what `text=True` did to a pipe, the locale's encoding; and universal
+    # newlines. A Windows child ends lines with \r\n, and a summary line left ending in \r matches no regex.
+    data = stream.read()
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        text = data.decode(locale.getpreferredencoding(False), errors="replace")
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 

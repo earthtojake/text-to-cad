@@ -123,7 +123,7 @@ class Dispatch(unittest.TestCase):
 
             def run(*argv):
                 return subprocess.run([sys.executable, "-m", "cad_server.cli", *argv], cwd=folder, env=env,
-                                      capture_output=True, text=True, timeout=120)
+                                      capture_output=True, text=True, encoding="utf-8", timeout=120)
 
             for argv in (["doctor", "--help"], ["help", "doctor"], ["status", "-h"], ["xbf", "export", "--help"],
                          ["help", "step"], ["status", "--json"]):
@@ -198,7 +198,7 @@ class LazyImports(unittest.TestCase):
             f"print('HEAVY:' + ','.join(m for m in {HEAVY!r} if m in sys.modules))"
         )
         proc = subprocess.run(
-            [sys.executable, "-c", code], capture_output=True, text=True
+            [sys.executable, "-c", code], capture_output=True, text=True, encoding="utf-8"
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         marked = [ln for ln in proc.stdout.splitlines() if ln.startswith("HEAVY:")]

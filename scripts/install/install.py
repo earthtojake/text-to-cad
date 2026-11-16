@@ -1728,13 +1728,24 @@ def write_report(here: Here, release: str, setup: int, outcomes: Dict[str, Outco
                 pass
 
 
+def utf8(stream: Any, system: str = os.name) -> bool:
+    """Whether this installer writes ``stream`` in UTF-8: on Windows, one that is no console (a pipe, a file), where
+    Python would write the ANSI code page. ``cad setup``, which it runs on the same streams, writes such a stream in
+    UTF-8 (cad's own rule), so the install command's lines are one encoding there. A console stays as it is, as does
+    every stream on other systems."""
+    try:
+        return system == "nt" and not stream.isatty()
+    except (AttributeError, OSError, ValueError):  # no stream, or a closed one
+        return False
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    # A character the output's encoding has not (an app's own mark, on Windows' code page) is printed as `?`, never
-    # raised: the encoding itself stays as it is.
+    # On Windows, a pipe or a file in UTF-8, as `cad setup`'s lines in it are (`utf8`). A character the output's
+    # encoding has not (a stream left in a code page) is printed as `?`, never raised.
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
-            reconfigure(errors="replace")
+            reconfigure(errors="replace", **({"encoding": "utf-8"} if utf8(stream) else {}))
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv:
         print("This installer takes no options: run it as it is to install or update text-to-cad in every agent app "

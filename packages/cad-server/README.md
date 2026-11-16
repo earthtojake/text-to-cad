@@ -225,6 +225,11 @@ refusal is one line on stderr (from the version, one JSON document on stdout und
 own); 5 `other_version`, a version's own `cad` given another version's pin. A `cad` command of 0.11.10 or earlier
 knows no pin: it says `+<version>` is an unknown command (exit 2).
 
+On Windows, what a command writes to a pipe or a file is UTF-8, and so is what the program `cad run` runs writes (a
+console is left as it is, as is every stream elsewhere); Windows PowerShell 5.1 decodes a program's piped output with
+the console's code page (`[Console]::OutputEncoding`), so an accent in a PowerShell pipeline is still wrong there, as
+it was before, and that is PowerShell's to set.
+
 **The update notice.** cad updates nothing by itself. Each version's server reads the version feed in the
 background at most once an hour (`updates.py`; never waited on; `CAD_UPDATE_CHECK=0` turns it off), and where the
 last read names a newer release, a command says so on stderr after its own output, at most once every 24 hours on

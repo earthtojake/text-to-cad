@@ -255,7 +255,7 @@ class EndToEnd(unittest.TestCase):
                                  (["xbf", "export", "--json"], "usage"), (["stats", "--json"], "usage")):
                 with self.subTest(argv=argv):
                     done = subprocess.run([sys.executable, "-m", "cad_server.cli", *argv], cwd=folder, env=env,
-                                          capture_output=True, text=True, timeout=120)
+                                          capture_output=True, text=True, encoding="utf-8", timeout=120)
                     self.assertEqual(done.returncode, 2, done.stderr)
                     lines = done.stdout.splitlines()
                     self.assertEqual(len(lines), 1, done.stdout)
