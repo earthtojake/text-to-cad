@@ -13,7 +13,8 @@ client (as ``kicode``), one KiCad nightly's build of both. A person's own KiCad 
   ``kicad-cli api-server`` on the file (KiCad makes one not there yet), one per project, which the board's
   and the schematic's edits share; KiPy connected to it, the open document handed over (a schematic's
   project symbol libraries loaded first), saved at the block's end when it was changed and not when the
-  block raises, the server stopped and its folder removed.
+  block raises, the server stopped and its folder removed; ``_drift``, the board's check at the save of the
+  nets KiCad moved onto a pad's.
 * ``_check``: KiCad's design rule check (``cad.kicad_pcb.drc``, ``cad kicad_pcb drc``).
 * ``_export``: the board's fabrication, assembly and 3D outputs by ``kicad-cli`` (``EXPORTS``: gerbers,
   drill, pos, bom, step, glb, odb, ipc2581, pdf, dxf), which ``cad.kicad_pcb.export`` and the server's ``cad
@@ -21,6 +22,9 @@ client (as ``kicode``), one KiCad nightly's build of both. A person's own KiCad 
 * ``_schematic``: a schematic's electrical rules check and its outputs (``EXPORTS``: pdf, svg, netlist,
   bom) by ``kicad-cli``, from its project's root sheet (``cad.kicad_sch.erc`` and ``export``, ``cad
   kicad_sch erc`` and ``export``).
+* ``route`` (``_route``, its search in ``_routing``): copper for the connections an agent names, in the order
+  it names them, written into the board a ``kicad_pcb.edit`` block has open: KiPy's board in, the copper out
+  through it, every rule the board's own; it answers a ``Routed``.
 
 The board readers are the document type's (``cad.kicad_pcb``), our own code for the file format: viewing,
 reading and drawing a board need no KiCad. Importing this package starts nothing and imports no kicode.
@@ -28,4 +32,6 @@ reading and drawing a board need no KiCad. Importing this package starts nothing
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from cad.kicad._route import Routed, route
+
+__all__ = ["Routed", "route"]

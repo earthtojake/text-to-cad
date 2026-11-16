@@ -939,7 +939,8 @@ def _validate_joint_limits(
                     path=limit_path,
                     hint="Use type=\"revolute\" if the joint genuinely has position limits.",
                 )
-            _validate_effort_velocity(limit_element, joint_type, joint_name, result, display, limit_path)
+            _validate_effort_velocity(limit_element, joint_type, joint_name, result, display, limit_path,
+                              mimicked=joint_element.find("mimic") is not None)
         return None, None
 
     if joint_type not in {"revolute", "prismatic"}:
@@ -988,7 +989,8 @@ def _validate_joint_limits(
             path=limit_path,
         )
         return None, None
-    _validate_effort_velocity(limit_element, joint_type, joint_name, result, display, limit_path)
+    _validate_effort_velocity(limit_element, joint_type, joint_name, result, display, limit_path,
+                              mimicked=joint_element.find("mimic") is not None)
     return lower, upper
 
 
@@ -999,6 +1001,8 @@ def _validate_effort_velocity(
     result: FindingsReport,
     display: str,
     limit_path: str,
+    *,
+    mimicked: bool = False,
 ) -> None:
     for attr_name in ("effort", "velocity"):
         if attr_name not in limit_element.attrib:
@@ -1025,6 +1029,17 @@ def _validate_effort_velocity(
                 f"negative_{attr_name}",
                 f"{display} {joint_type} joint {joint_name!r} {attr_name} limit must be non-negative",
                 path=limit_path,
+            )
+        elif value == 0.0 and not mimicked:
+            # A mimic follows its leader and no controller drives it: its zero bounds nothing.
+            result.add(
+                "warning",
+                f"zero_{attr_name}",
+                f"{display} {joint_type} joint {joint_name!r} {attr_name} limit is 0: some readers take it for no "
+                "bound, but a ROS controller reads it literally, a joint driven with no "
+                + ("effort" if attr_name == "effort" else "speed"),
+                path=limit_path,
+                hint="Give the drive's limits (cad.build123d.limits in a model), or set them where the joint is driven.",
             )
 
 

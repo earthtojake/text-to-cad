@@ -71,7 +71,12 @@ export function validatePromptContext(context) {
   return context;
 }
 
-export function createPromptContext(parts, operationId = `${operationNamespace}:${++operationSequence}`) {
+/**
+ * A context of `parts`. `folders`, where the host knows them (an object, or the promise of one): the
+ * workspace its paths are named from and the person's home (`{ start, home }`, `/`-separated), by which
+ * the message names each file (`displayPath`); the parts keep every file's absolute path.
+ */
+export function createPromptContext(parts, operationId = `${operationNamespace}:${++operationSequence}`, { folders } = {}) {
   validatePromptContext({ schemaVersion: 1, operationId, parts });
   const snapshot = parts.map(part => {
     if (part.kind === 'reference') {
@@ -83,7 +88,8 @@ export function createPromptContext(parts, operationId = `${operationNamespace}:
     }
     return Object.freeze(part.kind === 'attachment' && part.about ? { ...part, about: Object.freeze([...part.about]) } : { ...part });
   });
-  return Object.freeze({ schemaVersion: 1, operationId, parts: Object.freeze(snapshot) });
+  if (folders && typeof folders.then === 'function') void Promise.resolve(folders).catch(() => {});
+  return Object.freeze({ schemaVersion: 1, operationId, parts: Object.freeze(snapshot), ...(folders ? { folders } : {}) });
 }
 export function referencePart(reference, id = 'reference') { return { id, kind: 'reference', reference: validatePromptReference(reference) }; }
 export function textPart(text, id = 'text') { return { id, kind: 'text', text }; }
@@ -124,11 +130,48 @@ export function parsePromptReference(text) {
   catch { return null; }
 }
 
-/** Keep machine identity structured; these strings are the portable human/prompt representation. */
-export function formatPromptReference(reference) {
+// A folder as `displayPath` compares it: `/`-separated, without a trailing `/`, a drive's letter in either case.
+const folderOf = folder => String(folder || '').replace(/\\/g, '/').replace(/\/+$/, '');
+const drive = path => /^[A-Za-z]:\//.test(path);
+const same = (a, b) => (drive(a) ? a.toLowerCase() === b.toLowerCase() : a === b);
+// What `path` is below `folder`, or null where it is not below it.
+function below(path, folder) {
+  const base = folderOf(folder);
+  if (!base) return null;
+  const fold = drive(base) ? text => text.toLowerCase() : text => text;
+  return fold(path).startsWith(`${fold(base)}/`) ? path.slice(base.length + 1) || null : null;
+}
+
+/**
+ * A file's absolute path as a message names it, with no part of the person's home in it: relative to the
+ * workspace (`folders.start`, where the agent reading it works) when the file is inside it, else `~/...`
+ * inside their home, else as it is. A workspace that is the root, the home or a folder above it names
+ * nothing (`/Users/a.step` is not `a.step` of `/`). An id, a URL or a relative path is as it is.
+ * @param {string} path
+ * @param {{ start?: string, home?: string } | null} [folders]
+ */
+export function displayPath(path, folders) {
+  const text = String(path || '');
+  if (!folders || !/^(?:[A-Za-z]:)?\//.test(text)) return text;
+  const home = folderOf(folders.home);
+  const start = folderOf(folders.start);
+  // A drive's root (`C:`) or the root (``) is no workspace; nor is the home, or a folder it is below.
+  const workspace = Boolean(start) && !/^[A-Za-z]:$/.test(start) && !(home && (same(start, home) || below(home, start) !== null));
+  const inside = workspace ? below(text, start) : null;
+  if (inside) return inside;
+  const inHome = home ? below(text, home) : null;
+  return inHome ? `~/${inHome}` : text;
+}
+
+/**
+ * Keep machine identity structured; these strings are the portable human/prompt representation. A file
+ * by its absolute path; `folders` names it as `displayPath` does instead, for a message a person reads.
+ */
+export function formatPromptReference(reference, folders = null) {
   validatePromptReference(reference);
-  // A file by its absolute path, a URL as it is.
-  const path = reference.resource.kind === 'url' ? reference.resource.url : reference.resource.path;
+  // A file by its absolute path (or as `displayPath` names it), a URL as it is.
+  const path = reference.resource.kind === 'url' ? reference.resource.url
+    : reference.resource.kind === 'workspace-file' ? displayPath(reference.resource.path, folders) : reference.resource.path;
   requireValue(path.length > 0, 'a reference names its file or URL');
   if (reference.target.kind === 'cad-selector') {
     const selectors = [...reference.target.selectors];
@@ -166,33 +209,38 @@ export async function resolveAttachmentPaths(context) {
  * line — then each attachment that travels as a file, by its label and path (`attachmentPath`;
  * one sent beside the text is left out). One spelling, whether the message is sent, queued or copied.
  */
-export function formatPromptMessage(context, { attachmentPath, attachmentText } = {}) {
+export function formatPromptMessage(context, { attachmentPath, attachmentText, folders = null } = {}) {
   validatePromptContext(context);
   const said = context.parts.filter(part => part.kind === 'text').map(part => part.text.trim()).filter(Boolean);
   const files = [], references = [], attachments = [];
   for (const part of context.parts) {
-    if (part.kind === 'reference') (part.reference.target.kind === 'whole-resource' ? files : references).push(formatPromptReference(part.reference));
+    if (part.kind === 'reference') (part.reference.target.kind === 'whole-resource' ? files : references).push(formatPromptReference(part.reference, folders));
     else if (part.kind === 'attachment') {
       const inline = attachmentText?.(part);
       if (inline) { attachments.push(inline); continue; }
       const path = attachmentPath?.(part);
-      if (path) attachments.push(`${part.label || 'Attachment'}: ${path}`);
+      if (path) attachments.push(`${part.label || 'Attachment'}: ${displayPath(path, folders)}`);
     }
   }
   const about = [...files.map(file => `File: ${file}`), ...(references.length ? ['References:', ...references] : []), ...attachments];
   return [said.join('\n\n'), about.join('\n')].filter(Boolean).join('\n\n');
 }
 
-/** Resolve a prompt's inline text or file paths after the host has bound its destination. */
+/**
+ * Resolve a prompt's inline text or file paths after the host has bound its destination, and its
+ * `folders` (a file the host could not say them for is named by its absolute path).
+ */
 export async function resolvePromptMessage(context) {
   validatePromptContext(context);
+  const folders = await Promise.resolve(context.folders).catch(() => null);
   const inline = new Map(), paths = new Map();
   await Promise.all(context.parts.filter(part => part.kind === 'attachment').map(async part => {
     const text = await part.inlineText;
     if (text) inline.set(part.id, text);
     else if (part.path !== undefined) paths.set(part.id, String(await part.path));
   }));
-  return formatPromptMessage(context, { attachmentText: part => inline.get(part.id), attachmentPath: part => paths.get(part.id) });
+  return formatPromptMessage(context, { attachmentText: part => inline.get(part.id), attachmentPath: part => paths.get(part.id),
+    folders: folders && typeof folders === 'object' ? folders : null });
 }
 
 const failureMessage = error => error instanceof Error ? error.message : String(error);

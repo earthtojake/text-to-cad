@@ -6,9 +6,11 @@ sheet instance from its file's own geometry: each symbol from the drawing the fi
 them), its shown fields; the wires, buses and bus entries, junctions and no-connects; the labels
 (local, global, hierarchical) and their flags; the hierarchical sheets' boxes, names and pins; and
 the free text and graphics. Text is the board's stroke font, Hershey Simplex
-(:mod:`.stroke_font`), at KiCad's positions and sizes: same places, different glyphs. The page's
-edge is a layer of its own (``page``), which a view leaves off unless asked; KiCad's drawing sheet
-(its frame and title block) is not drawn.
+(:mod:`.stroke_font`), at KiCad's positions and sizes: same places, different glyphs, KiCad's markup
+(``~{overbar}``, ``_{subscript}``, ``^{superscript}``) drawn as KiCad draws it. The page's edge is a
+layer of its own (``page``), which a view leaves off unless asked. KiCad's drawing sheet (its frame and
+title block) is drawn only when asked (``drawing_sheet``, as a still and the viewer's route ask): KiCad's default
+(:mod:`.drawing_sheet`), its variables the sheet's own title block, path, file, paper and page.
 
 The payload is the board's plot payload's shape (``packages/core/docs/plot-payload.md``), with
 pages for sheets: ``kind: "schematic"``, one entry of ``sheets`` per sheet instance in page order,
@@ -29,6 +31,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from cad.engine.formats.kicad import PLOT_SCHEMA_VERSION, sexpr
+from cad.engine.formats.kicad.drawing_sheet import drawing_sheet_items
 from cad.engine.formats.kicad.geometry import arc_points, bezier_points
 from cad.engine.formats.kicad.schematic import (
     BUS_WIDTH, JUNCTION_DIAMETER, NO_CONNECT_SIZE, WIRE_WIDTH, LibPin, LibSymbol, SchematicIndex, Symbol,
@@ -41,7 +44,7 @@ __all__ = ["LAYERS", "SCHEMATIC_BACKGROUND", "build_schematic_plot", "schematic_
 
 #: The layers, bottom to top: ``(id, kind)``.
 LAYERS = (
-    ("page", "sheet"), ("notes", "notes"), ("sheets", "sheet_box"), ("symbols", "symbol"), ("pins", "pin"),
+    ("page", "sheet"), ("drawing_sheet", "drawing_sheet"), ("notes", "notes"), ("sheets", "sheet_box"), ("symbols", "symbol"), ("pins", "pin"),
     ("wires", "wire"), ("buses", "bus"), ("junctions", "junction"), ("no_connects", "no_connect"),
     ("pin_numbers", "pin_number"), ("pin_names", "pin_name"), ("fields", "field"), ("labels", "label"),
 )
@@ -129,7 +132,8 @@ def _text(text: str, at, angle: float, effects: dict, *, justify: Sequence[str] 
     if not text or effects["hidden"]:
         return None
     strokes = text_strokes(text, size=effects["size"], at=at, angle=angle,
-                           justify=effects["justify"] if justify is None else justify, italic=effects["italic"])
+                           justify=effects["justify"] if justify is None else justify, italic=effects["italic"],
+                           markup=True)
     if not strokes:
         return None
     # A letter's strokes to the micrometre: the text is most of a page's payload.
@@ -286,7 +290,7 @@ def _field_items(symbol: Symbol, node: list) -> list[dict]:
         at_node = sexpr.find(prop, "at")
         at = (sexpr.number(at_node[1]), sexpr.number(at_node[2]))
         own = sexpr.number(at_node[3]) if len(at_node) > 3 else 0.0
-        strokes = text_strokes(text, size=effects["size"], at=at, angle=own, justify=effects["justify"])
+        strokes = text_strokes(text, size=effects["size"], at=at, angle=own, justify=effects["justify"], markup=True)
         points = [p for stroke in strokes for p in stroke]
         if not points:
             continue
@@ -353,7 +357,7 @@ def _direction(angle: float) -> tuple[float, float]:
 
 
 def _text_length(text: str, size: float) -> float:
-    strokes = text_strokes(text, size=(size, size), justify=["left"])
+    strokes = text_strokes(text, size=(size, size), justify=["left"], markup=True)
     xs = [point[0] for stroke in strokes for point in stroke]
     return (max(xs) - min(xs)) if xs else 0.0
 
@@ -458,11 +462,13 @@ def _sheet_items(sheet, node: list, layers: dict[str, list]) -> None:
 # --- the payload ---------------------------------------------------------------------------------
 
 
-def _page_layers(index: SchematicIndex, sheet) -> list[dict]:
+def _page_layers(index: SchematicIndex, sheet, sheet_values: dict[str, str] | None = None) -> list[dict]:
     layers: dict[str, list] = {layer_id: [] for layer_id, _kind in LAYERS}
     width, height = sheet.paper
     layers["page"].append({"t": "path", "pts": _pts([(0, 0), (width, 0), (width, height), (0, height), (0, 0)]), "w": 0,
                            "closed": True, "page": True})
+    if sheet_values is not None:
+        layers["drawing_sheet"] = drawing_sheet_items(width, height, sheet_values)
     tree = index.trees.get(sheet.file)
     if tree is None:
         return [{"id": layer_id, "kind": kind, "side": "both", "items": layers[layer_id]} for layer_id, kind in LAYERS
@@ -541,14 +547,48 @@ def _id(node: list) -> str | None:
     return str(found).lower() if found else None
 
 
+def _sheet_values(index: SchematicIndex, sheet, project: Path | None) -> dict[str, str]:
+    """What a page's drawing sheet substitutes: its file's title block, file name and paper name, the
+    generator's version, its path, its page number and the count of pages, and the project's own text
+    variables."""
+    from cad.engine.formats.kicad.text_variables import title_variables
+
+    tree = index.trees.get(sheet.file)
+    values = title_variables(tree if tree is not None else [Sym("kicad_sch")], file_name=sheet.file.name, project=project)
+    values.update({"SHEETPATH": sheet.path, "#": str(sheet.page), "##": str(len(index.sheets))})
+    return values
+
+
+def _custom_drawing_sheet(project: Path | None) -> str:
+    """The drawing sheet the project names for its schematic (``.kicad_pro``'s
+    ``schematic.page_layout_descr_file``), ``""`` for KiCad's default."""
+    if project is None or not project.is_file():
+        return ""
+    try:
+        found = (json.loads(project.read_text(encoding="utf-8")).get("schematic") or {}).get("page_layout_descr_file")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return str(found or "").strip()
+
+
 def build_schematic_plot(path: Path | str, *, sheets: Sequence[str] | None = None,
-                         index: bool = True, read: tuple[SchematicIndex, list[str]] | None = None) -> dict[str, Any]:
+                         index: bool = True, read: tuple[SchematicIndex, list[str]] | None = None,
+                         drawing_sheet: bool = False) -> dict[str, Any]:
     """The plot payload of the schematic hierarchy ``path`` belongs to (the module doc): every sheet
     instance a page, in page order; ``sheets`` (paths, ``/Power/``) draws those alone, and ``index``
     False leaves the index out (a still draws without it). ``read`` is the hierarchy already read
     (:func:`.schematic.read_schematic_index`'s answer for ``path``), which a caller that keeps it
-    passes so the files are not parsed again."""
+    passes so the files are not parsed again. ``drawing_sheet`` adds each page a ``drawing_sheet``
+    layer: KiCad's default drawing sheet (:mod:`.drawing_sheet`), filled in from the page's title block;
+    a project that names a drawing sheet of its own still gets the default, and a warning says so."""
     read, warnings = read if read is not None else read_schematic_index(path)
+    warnings = list(warnings)
+    project = read.root.with_suffix(".kicad_pro") if drawing_sheet else None
+    if drawing_sheet:
+        custom = _custom_drawing_sheet(project)
+        if custom:
+            warnings.append(f"{project.name} names the drawing sheet {custom}, which is not drawn: "
+                            "the pages show KiCad's default drawing sheet")
     pages = []
     wanted = None if sheets is None else {_canonical(path_) for path_ in sheets}
     for sheet in read.sheets:
@@ -558,13 +598,13 @@ def build_schematic_plot(path: Path | str, *, sheets: Sequence[str] | None = Non
         pages.append({"name": sheet.name, "path": sheet.path, "number": sheet.page, "file": sheet.file.name,
                       "title": dict(sheet.title), "width": _r(width), "height": _r(height),
                       "background": SCHEMATIC_BACKGROUND, "page": [0.0, 0.0, _r(width), _r(height)],
-                      "layers": _page_layers(read, sheet)})
+                      "layers": _page_layers(read, sheet, _sheet_values(read, sheet, project) if drawing_sheet else None)})
     if wanted is not None and len(pages) != len(wanted):
         known = ", ".join(sheet.path for sheet in read.sheets)
         missing = ", ".join(sorted(wanted - {page["path"] for page in pages}))
         raise ValueError(f"{read.root.name} has no sheet {missing}; its sheets are {known}")
     return {"schemaVersion": PLOT_SCHEMA_VERSION, "kind": "schematic", "generator": read.generator,
-            "sheets": pages, "warnings": list(warnings), **({"schematic": read.as_json()} if index else {})}
+            "sheets": pages, "warnings": warnings, **({"schematic": read.as_json()} if index else {})}
 
 
 def _canonical(path: str) -> str:
@@ -573,8 +613,8 @@ def _canonical(path: str) -> str:
 
 
 def schematic_payload_bytes(path: Path | str, *, sheets: Sequence[str] | None = None, index: bool = True,
-                            read: tuple[SchematicIndex, list[str]] | None = None) -> bytes:
+                            read: tuple[SchematicIndex, list[str]] | None = None, drawing_sheet: bool = False) -> bytes:
     """The payload as compact JSON bytes, as the viewer's route answers it (``build_schematic_plot``'s
-    ``sheets``, ``index`` and ``read``)."""
-    return json.dumps(build_schematic_plot(path, sheets=sheets, index=index, read=read), separators=(",", ":"),
-                      ensure_ascii=False).encode("utf-8")
+    ``sheets``, ``index``, ``read`` and ``drawing_sheet``, which the route never asks for)."""
+    return json.dumps(build_schematic_plot(path, sheets=sheets, index=index, read=read, drawing_sheet=drawing_sheet),
+                      separators=(",", ":"), ensure_ascii=False).encode("utf-8")

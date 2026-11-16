@@ -55,6 +55,31 @@ class SchematicFiles(unittest.TestCase):
                 ours = {net.name: {f"{pin.ref}.{pin.number}" for pin in net.pins} for net in read_schematic(root).nets}
                 self.assertEqual(ours, kicad_nets(netlist))
 
+    def test_kicad_joins_a_pin_and_a_wires_end_on_a_wires_span_as_the_reader_does(self) -> None:
+        """What ``pin_on_wire_span`` and ``wire_end_on_wire_span`` warn of: a wire across R1's pin 1, and a wire
+        from the middle of the MID wire with no junction, each carrying a global label, which names the net KiCad
+        joins them into."""
+        from cad.kicad_sch import read as read_schematic
+
+        def wire(start, end, label, angle):
+            (x0, y0), (x1, y1) = at(*start), at(*end)
+            return (f'(wire (pts (xy {x0:g} {y0:g}) (xy {x1:g} {y1:g})) (stroke (width 0) (type default)) '
+                    f'(uuid "5c4e0000-0000-4000-8000-0000000000e{angle // 90}"))'
+                    f' (global_label "{label}" (shape input) (at {x1:g} {y1:g} {angle}) (fields_autoplaced yes)'
+                    f' (effects (font (size 1.27 1.27)) (justify left)) (uuid "5c4e0000-0000-4000-8000-0000000000f{angle // 90}"))')
+
+        for name, extra, net, pins in (("across", wire((86, 44), (74, 44), "X", 180), "X", {"R1.1"}),
+                                       ("tee", wire((90, 51), (90, 56), "Y", 270), "Y", {"R1.2", "R2.1", "C1.1"})):
+            with self.subTest(name), tempfile.TemporaryDirectory(prefix=f"kicad-sch-{name}-") as folder:
+                root = write_schematic(Path(folder))
+                text = root.read_text(encoding="utf-8")
+                root.write_text(text.replace("  (sheet_instances", f"  {extra}\n  (sheet_instances", 1), encoding="utf-8")
+                [netlist] = export(self, root, "netlist", Path(folder) / "out")
+                theirs = kicad_nets(netlist)
+                self.assertEqual(pins, theirs[net], "KiCad joins it")
+                self.assertEqual({net.name: {f"{pin.ref}.{pin.number}" for pin in net.pins}
+                                  for net in read_schematic(root).nets}, theirs)
+
     def test_erc_finds_what_kicad_finds_where_it_is(self) -> None:
         before = sorted(path.name for path in self.divider.parent.iterdir())
         # Any sheet: the hierarchy from its root.

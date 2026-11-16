@@ -46,7 +46,9 @@
  * is the pane's), in the `theme` (`theme.js`'s `schematicColors`: KiCad's light paper and dark
  * ink, or a dark sheet and light ink, each element the same hue; the file's own colour where it gives one,
  * a symbol body's background fill the device background), its page edge (`page`, kind `sheet`) left off
- * unless a view asks for its `border`. The fit frames the page.
+ * unless a view asks for its `border`. Its drawing sheet (`drawing_sheet`: KiCad's default frame, with its
+ * zone numbers and letters, and title block, which the route always sends) is drawn as KiCad's schematic
+ * editor shows it, always, a layer like the others. The fit frames the page, the frame 10 mm inside it.
  */
 import { DRAWING_FIT_MARGIN, fitTransform, modelToScreen, screenToModel } from "../drawing2d/transform.js";
 import { textStrokes } from "./strokeFont.js";
@@ -99,6 +101,7 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
  * @property {"pad"|"via"|"npth"} [hole]
  * @property {readonly [string, string]} [span] A blind or buried via's hole: its top and bottom copper.
  * @property {number} [clearance] A front-copper pad's clearance: KiCad outlines it, a hairline that far out.
+ * @property {number[][][]} [grown] That outline, as rings, for a pad that is not convex (a custom pad's).
  * @property {readonly (readonly [number, number])[]} [knockout] Knocked-out text's box: filled, the letters cut from it.
  * @property {readonly [number, number, number, number]} box The item's page box, computed at layout.
  *
@@ -193,7 +196,7 @@ function layoutItem(item, where) {
       || !finite(item.angle ?? 0) || !finite(item.lod ?? 0)) {
       throw new Error(`${where} (label) needs a string, a centre, a positive size, an angle and a level of detail; received ${describe(item)}.`);
     }
-    const strokes = textStrokes(item.text, { size, at: item.at, angle: item.angle ?? 0 });
+    const strokes = textStrokes(item.text, { size, at: item.at, angle: item.angle ?? 0, markup: true });
     box = strokes.length ? boxOf(strokes.flat(), width / 2) : boxOf([item.at], 0);
   } else if (item.t === "text") {
     if (typeof item.text !== "string" || !Array.isArray(item.strokes) || !item.strokes.every((stroke) => Array.isArray(stroke) && stroke.length >= 2 && stroke.every(isPoint))) {
@@ -499,7 +502,7 @@ function labelStrokes(item, mirrored) {
   let laid = LABELS.get(item);
   if (!laid) LABELS.set(item, (laid = {}));
   const key = mirrored ? "bottom" : "top";
-  if (!laid[key]) laid[key] = textStrokes(item.text, { size: item.size, at: item.at, angle: item.angle ?? 0, mirror: mirrored });
+  if (!laid[key]) laid[key] = textStrokes(item.text, { size: item.size, at: item.at, angle: item.angle ?? 0, mirror: mirrored, markup: true });
   return laid[key];
 }
 
@@ -552,7 +555,7 @@ function strokeTrackNames(ctx, item, viewport, mirrored, PathCtor) {
   const key = `${mirrored ? "b" : "t"}${names.length}`;
   const add = (target) => {
     for (const name of names) {
-      for (const points of textStrokes(name.text, { size: name.size, at: name.at, angle: name.angle, mirror: mirrored })) {
+      for (const points of textStrokes(name.text, { size: name.size, at: name.at, angle: name.angle, mirror: mirrored, markup: true })) {
         addPolyline(target, points, false);
       }
     }
@@ -619,7 +622,9 @@ function clearancePath(item, PathCtor) {
   let path = OUTLINES.get(item);
   if (!path) {
     path = new PathCtor();
-    addPolyline(path, grownOutline(item.pts, item.clearance), true);
+    // A pad that is not convex (a custom pad's) carries its grown outline (`grown`); a convex one is grown here.
+    if (Array.isArray(item.grown)) for (const ring of item.grown) addPolyline(path, ring, true);
+    else addPolyline(path, grownOutline(item.pts, item.clearance), true);
     OUTLINES.set(item, path);
   }
   return path;
@@ -734,7 +739,7 @@ function pageSpace(ctx, transform, pixelRatio, mirrorX) {
 }
 
 function drawLayer(ctx, layer, { hairline, poured, visible, PathCtor, detail, background, mirrored, vias, names, viewport, fade = 1, zones = ZONE_OPACITY,
-  tracks = 1, palette = BOARD_PALETTES.dark }) {
+  tracks = 1, palette = BOARD_PALETTES.dark, clearances = true }) {
   const color = palette.layer(layer.id);
   const copper = layer.kind === "copper";
   // The tracks whose net names this frame writes, over everything else on their copper (KiCad's netname layer).
@@ -767,7 +772,7 @@ function drawLayer(ctx, layer, { hairline, poured, visible, PathCtor, detail, ba
       drawKnockout(ctx, item, paint, background, PathCtor);
       continue;
     }
-    if (item.clearance > 0 && typeof PathCtor === "function") {
+    if (clearances && item.clearance > 0 && typeof PathCtor === "function") {
       ctx.strokeStyle = paint;
       ctx.lineWidth = hairline;
       ctx.stroke(clearancePath(item, PathCtor));
@@ -842,6 +847,117 @@ function drawBoardBackdrop(ctx, sheet, { transform, pixelRatio, mirrorX, PathCto
   for (const item of area.items) fill(ctx, pathOf(ctx, item, PathCtor, mirrorX != null), item.holes ? "evenodd" : undefined);
 }
 
+/** A palette of one colour for every layer (the made board's copper, its silkscreen), with holes seen through. */
+function madePalette(color, holeWall) {
+  const holes = { pad: { fill: null, wall: holeWall }, via: { fill: null, wall: holeWall }, npth: { fill: null, wall: null } };
+  return { layer: () => color, item: () => color, netname: () => color, holes, names: {} };
+}
+
+/** A scratch canvas the size of `ctx`'s: the one handed in, else an OffscreenCanvas, else one of the canvas's document; null for none. */
+function scratchFor(ctx, createCanvas) {
+  const width = ctx.canvas?.width, height = ctx.canvas?.height;
+  if (!(width > 0) || !(height > 0)) return null;
+  const document = ctx.canvas?.ownerDocument;
+  const canvas = typeof createCanvas === "function" ? createCanvas()
+    : typeof OffscreenCanvas === "function" ? new OffscreenCanvas(width, height)
+      : document ? document.createElement("canvas") : null;
+  if (!canvas) return null;
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+  const into = canvas.getContext?.("2d");
+  if (!into) return null;
+  into.setTransform(1, 0, 0, 1, 0, 0);
+  into.globalCompositeOperation = "source-over";
+  into.globalAlpha = 1;
+  into.clearRect(0, 0, width, height);
+  return { canvas, ctx: into };
+}
+
+/** Cut what a mask layer opens (its pads' openings, grown by their margins) out of what `ctx` holds. */
+function cutOpenings(ctx, mask, PathCtor) {
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.fillStyle = "#000";
+  ctx.strokeStyle = "#000";
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const item of mask.items) {
+    if (item.t === "label" || item.t === "text") continue;
+    const path = pathOf(ctx, item, PathCtor);
+    if (item.t === "poly" || (item.t === "circle" && !(item.w > 0))) fill(ctx, path, item.holes ? "evenodd" : undefined);
+    if (item.w > 0) {
+      ctx.lineWidth = item.w;
+      stroke(ctx, path);
+    }
+  }
+  ctx.globalCompositeOperation = "source-over";
+}
+
+/**
+ * One side of the board as it is made (`stackup.js`'s `boardFinish`): what a 3D face shows of a board whose
+ * stack-up names its colours, as KiCad's 3D viewer shows it with the stack-up's colours. Bottom to top: the
+ * substrate over the board's area; the copper facing the eye in the copper finish (the pours with
+ * `poured`, the vias' rings with Vias); the solder mask over the area at its opacity, its pads' openings
+ * cut out, so the finish shows bare there and faintly through the mask elsewhere; the silkscreen, not
+ * printed in the openings; then the holes, seen through, their plated walls the finish. What a made board
+ * does not have (fabrication, courtyards, user layers, paste, the ratsnest, names) is not drawn; the view's
+ * layers choose among the rest (`F.Cu`, `F.Mask`, `F.SilkS`, `drills`, `vias`: the side's), so a person can
+ * take the mask off to see the copper. The mask and the silkscreen are each drawn on a scratch canvas
+ * (`createCanvas`, else an OffscreenCanvas) and laid on; with none, the mask is left off and the
+ * silkscreen drawn uncut.
+ */
+function drawMadeSide(ctx, sheet, { finish, view, transform, pixelRatio, mirrorX, PathCtor, hairline, detail, background, viewport, createCanvas }) {
+  const side = view?.side === "bottom" ? "bottom" : "top";
+  const prefix = side === "bottom" ? "B" : "F";
+  const look = finish.sides[side];
+  const named = Array.isArray(view?.layers) ? new Set(view.layers) : null;
+  const shown = (id) => !named || named.has(id);
+  const find = (id) => sheet.layers.find((layer) => layer.id === id) || null;
+  const area = sheet.layers.find((layer) => layer.kind === "area");
+  const copper = find(`${prefix}.Cu`), mask = find(`${prefix}.Mask`), silk = find(`${prefix}.SilkS`);
+  const mirrored = mirrorX != null;
+  const common = { hairline, poured: view?.poured !== false, visible: null, PathCtor, detail, background, mirrored, vias: shown("vias"), names: false,
+    viewport, zones: 1, tracks: 1, clearances: false };
+  const fillArea = (target, color) => {
+    target.fillStyle = color;
+    if (!area?.items.length) target.fillRect(sheet.x, sheet.y, sheet.width, sheet.height);
+    else for (const item of area.items) fill(target, pathOf(target, item, PathCtor), item.holes ? "evenodd" : undefined);
+  };
+  const layOn = (scratch, alpha) => {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(scratch.canvas, 0, 0);
+    ctx.restore();
+  };
+  pageSpace(ctx, transform, pixelRatio, mirrorX);
+  fillArea(ctx, finish.substrate);
+  if (copper && shown(copper.id)) drawLayer(ctx, copper, { ...common, palette: madePalette(finish.copper, finish.copper) });
+  const masked = look.mask && (!mask || shown(mask.id)) ? scratchFor(ctx, createCanvas) : null;
+  if (masked) {
+    pageSpace(masked.ctx, transform, pixelRatio, mirrorX);
+    fillArea(masked.ctx, look.mask.color);
+    if (mask) cutOpenings(masked.ctx, mask, PathCtor);
+    layOn(masked, look.mask.opacity);
+  }
+  if (look.silk && silk && shown(silk.id)) {
+    const printed = scratchFor(ctx, createCanvas);
+    if (printed) {
+      pageSpace(printed.ctx, transform, pixelRatio, mirrorX);
+      drawLayer(printed.ctx, silk, { ...common, palette: madePalette(look.silk, look.silk), background: look.mask?.color ?? finish.substrate });
+      if (mask && look.mask) cutOpenings(printed.ctx, mask, PathCtor);
+      layOn(printed, 1);
+    } else {
+      pageSpace(ctx, transform, pixelRatio, mirrorX);
+      drawLayer(ctx, silk, { ...common, palette: madePalette(look.silk, look.silk) });
+    }
+  }
+  pageSpace(ctx, transform, pixelRatio, mirrorX);
+  for (const id of ["drills", "vias"]) {
+    const through = find(id);
+    if (through && shown(id)) drawLayer(ctx, through, { ...common, palette: madePalette(finish.copper, finish.copper) });
+  }
+}
+
 /**
  * Draw one frame of a plot: the canvas in the sheet's background, then the layers `view` chooses,
  * in its order, each item in KiCad's colours, all in page space under the view. Nothing is clipped
@@ -864,10 +980,13 @@ function drawBoardBackdrop(ctx, sheet, { transform, pixelRatio, mirrorX, PathCto
  *   `"board"`, the board's own area alone, the rest left clear (a library card's picture).
  *   `theme`: `"light"` or `"dark"`, the viewer's colour scheme — the board's palette and canvas
  *   (`theme.js`'s `boardPalette`); without one, KiCad's dark colours on the sheet's own background.
+ *   `finish`: the colours the board is made in (`stackup.js`'s `boardFinish`), to draw the side the view
+ *   looks at as it is made instead of its layers (`drawMadeSide`: a 3D face's), its mask and silkscreen
+ *   laid on from a scratch canvas `createCanvas` makes (the canvas's size; else an OffscreenCanvas).
  *   `Path2D` is injectable so this module is exercised in `node --test` with a recording double.
  */
 export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, detail = null, viewport = null, backdrop = "canvas",
-  theme = null, Path2D: PathCtor = globalThis.Path2D }) {
+  theme = null, finish = null, createCanvas = null, Path2D: PathCtor = globalThis.Path2D }) {
   const palette = boardPalette(theme);
   checkTransform(transform, "drawPlot");
   const visible = shownRect(ctx, transform, pixelRatio);
@@ -896,6 +1015,11 @@ export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, 
     if (backdrop === "board") drawBoardBackdrop(ctx, sheet, { transform, pixelRatio, mirrorX, PathCtor });
     else if (visible) ctx.fillRect(visible[0], visible[1], visible[2] - visible[0], visible[3] - visible[1]);
     else ctx.fillRect(sheet.x, sheet.y, sheet.width, sheet.height);
+    if (finish) {
+      drawMadeSide(ctx, sheet, { finish, view, transform, pixelRatio, mirrorX, PathCtor, hairline, detail: scale, background,
+        viewport: across ?? [sheet.width, sheet.height], createCanvas });
+      continue;
+    }
     for (const { layer, fade } of focusedLayers(sheet, view)) {
       pageSpace(ctx, transform, pixelRatio, mirrorX);
       drawLayer(ctx, layer, {

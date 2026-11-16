@@ -44,6 +44,13 @@ never changed. A script's ``requires-python`` the Python cannot meet is refused 
 do is said in one line (``base.failure``): requirements it cannot resolve beside cad's pins, with its
 reason; a package its cache lacks where the network cannot be reached, by name.
 
+**What an integration's tool decides** (the registry's ``python`` and ``platforms``: blender's bpy is built for
+CPython 3.13 alone, and not for every platform): an environment with such an integration is made on that
+line where the engine's own Python is another (``on``: a Python uv manages, ``uv venv --managed-python``,
+never ``uv python install``, which writes a ``python3.13`` among the person's commands), with cad pinned in
+it as in any other; a platform its tool has no build for is refused in one line before anything is made
+(``supported``), as are two integrations built for different lines.
+
 **Its releases**: environments are tied to the release (cad is pinned in each). When one is made, the
 environments of releases older than the one before the current go -- the current release's and the one
 before's stay, the way back, as ``releases/`` keeps the release before (``kept``) -- and the one its local
@@ -60,6 +67,7 @@ import hashlib
 import json
 import ntpath
 import os
+import platform
 import posixpath
 import re
 import stat
@@ -73,9 +81,10 @@ from typing import Any, Callable, Iterable
 
 from cad_server._internal import base
 
-__all__ = ["SKIPPED", "Making", "Project", "Refused", "Spec", "admits", "ensure", "fingerprint", "fingerprints",
-           "header", "integrations", "key", "kept", "local_package", "locked_cad", "making", "normalized",
-           "pinned", "project", "refusal", "split", "tell", "uv_config", "uv_settings", "where"]
+__all__ = ["SKIPPED", "Making", "Project", "Refused", "Spec", "admits", "admits_line", "ensure", "fingerprint",
+           "fingerprints", "header", "integration_spec", "integrations", "key", "kept", "local_package", "locked_cad",
+           "making", "normalized", "on", "pinned", "project", "python_line", "refusal", "split", "supported", "tell",
+           "uv_config", "uv_settings", "where"]
 # uv's settings that say how it reaches an index, never what it resolves: a run that differs from the base's
 # only by them still runs in the base, made with the engine's own.
 HOW = frozenset({"UV_NATIVE_TLS", "UV_SYSTEM_CERTS", "UV_HTTP_TIMEOUT", "UV_KEYRING_PROVIDER", "UV_INSECURE_HOST"})
@@ -100,6 +109,9 @@ _VERSION = (r"(?P<release>[0-9]+(?:\.[0-9]+)*)"
 _CLAUSE = re.compile(rf"\s*(?P<operator>~=|===|==|!=|<=|>=|<|>)\s*(?P<version>{_VERSION})(?P<star>\.\*)?\s*", re.I)
 # The pre-releases in PEP 440's order.
 _PRE = {"a": 0, "alpha": 0, "b": 1, "beta": 1, "c": 2, "rc": 2, "pre": 2, "preview": 2}
+# A ``--python`` that asks for a version of CPython, as uv reads one: ``3.13``, ``cpython@3.13``, ``cp3.13``,
+# ``>=3.12``.
+_REQUEST = re.compile(r"(?:(?:cpython|cp)[-@]?)?(?P<request>[0-9<>=!~].*)", re.I)
 # A URL's scheme, and a Windows drive, which a scheme's spelling also matches.
 _SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
 _DRIVE = re.compile(r"[A-Za-z]:[\\/]")
@@ -204,6 +216,17 @@ def admits(spec: str, version: str) -> bool | None:
     return True
 
 
+def admits_line(spec: str, line: str) -> bool | None:
+    """Whether some release of the Python minor version ``line`` (``3.13``: 3.13.0 to 3.13.99) meets ``spec``
+    (``admits``); None for a spec that does not read."""
+    found = None
+    for patch in range(100):
+        found = admits(spec, f"{line}.{patch}")
+        if found is None or found:
+            return found
+    return found
+
+
 def _padded(numbers: list[int], size: int) -> list[int]:
     return numbers + [0] * (size - len(numbers))
 
@@ -289,6 +312,95 @@ def integrations(*, header_cad: tuple[str, ...] | None, given_cad: Iterable[str]
     named = {key for requirement in requirements if (name := _name(requirement)) is not None
              and (key := for_distribution(name)) is not None}
     return tuple(sorted({*scanned(), *project_cad, *given_cad, *named}))
+
+
+# --- what an integration's tool decides of its environment -------------------------------------------
+
+
+def python_line(names: Iterable[str]) -> tuple[str, str] | None:
+    """The one Python line an environment of the integrations ``names`` is made on, where one of them is
+    built for one alone, and that integration's name (the registry's ``python``: ``("3.13", "blender")``, bpy
+    having wheels for CPython 3.13 alone); None for integrations that run on any. ``Refused`` in one line for
+    two built for different lines, which no environment holds together."""
+    from cad.registry import INTEGRATIONS as REGISTERED
+
+    found = {REGISTERED[name].python: name for name in sorted(set(names))
+             if name in REGISTERED and REGISTERED[name].python}
+    if len(found) > 1:
+        (first, one), (second, other) = sorted(found.items())[:2]
+        raise Refused(f"cad's {one} integration runs on Python {first} alone and its {other} integration on Python "
+                      f"{second} alone: no environment holds both")
+    return next(iter(found.items()), None)
+
+
+def on(names: Iterable[str], engine: str, python: str | None = None,
+       options: Iterable[str] = ()) -> tuple[str | None, tuple[str, ...]]:
+    """The Python an environment of the integrations ``names`` is made on, and ``uv venv``'s options for it:
+    ``python`` (``--python``) and ``options`` as given. With no ``--python`` it is the engine's own (None; its
+    version is ``engine``), unless one of the integrations is built for another line (``python_line``): then
+    that line, a Python uv manages (``--managed-python``, fetched by uv into its own folder on first need)
+    where ``options`` do not already say which kind. A ``--python`` every release of that line meets (``3.13``,
+    ``>=3.12``) is no request beyond the line, and makes the environment no ``--python`` makes; one only some
+    meet is narrowed to them (``narrowed``), so uv never picks a Python of another line for it."""
+    options = tuple(options)
+    found = python_line(names)
+    if found is not None and python is not None:
+        python = narrowed(python, found[0])
+        if python == found[0]:
+            python = None
+    if python is not None or found is None or admits(f"=={found[0]}.*", engine):
+        return python, options
+    if not {"--managed-python", "--no-managed-python"} & set(options):
+        options = (*options, "--managed-python")
+    return found[0], options
+
+
+def narrowed(python: str, line: str) -> str:
+    """A ``--python`` request, as uv reads one, for an environment that must be on the Python minor version
+    ``line``, narrowed to that line: the line itself (``3.13``) for a request every release of it meets (``3``,
+    ``3.13``, ``cpython@3.13``, ``>=3.12``, ``==3.13.*``); the request and the line together for one only some
+    meet (``>=3.13.5``: ``>=3.13.5,==3.13.*``); else the request as it is -- a release (``3.13.5``), a path, a
+    command's name, or one of another line, which ``cad run`` refuses first."""
+    found = _REQUEST.fullmatch(python.strip())
+    if found is None:
+        return python
+    request = found["request"]
+    if request[0].isdigit():
+        if re.fullmatch(r"\d+(?:\.\d+)*", request) is None:
+            return python
+        asked, mine = request.split("."), line.split(".")
+        return line if len(asked) <= len(mine) and mine[:len(asked)] == asked else python
+    meets = [admits(request, f"{line}.{patch}") for patch in range(100)]
+    if None in meets or not any(meets):
+        return python
+    return line if all(meets) else f"{request},=={line}.*"
+
+
+def integration_spec(installation: base.Installation, names: Iterable[str]) -> "Spec":
+    """The spec of the environment of the integrations ``names`` alone, as ``cad run`` makes it for a program
+    that names nothing else: on the Python they are built for (``on``)."""
+    names = tuple(sorted(set(names)))
+    python, options = on(names, installation.python or platform.python_version())
+    return Spec(integrations=names, python=python, python_options=options)
+
+
+def _system() -> str:
+    """The operating system, as ``sys.platform`` names it."""
+    return sys.platform
+
+
+def supported(names: Iterable[str], arch: str) -> None:
+    """Each of the integrations ``names`` built for this platform (the system, ``_system``, and ``arch``, the
+    installation's machine), else ``Refused`` in one line naming the platforms it has (the registry's
+    ``platforms``; an integration that names none runs on all)."""
+    from cad.registry import INTEGRATIONS as REGISTERED, platform_of
+
+    here = platform_of(_system(), arch)
+    for name in sorted(set(names)):
+        built = list(REGISTERED[name].platforms) if name in REGISTERED else []
+        if built and here not in built:
+            listed = ", ".join(built[:-1]) + f" and {built[-1]}" if len(built) > 1 else built[0]
+            raise Refused(f"cad's {name} integration has no build for {here}: it runs on {listed}")
 
 
 # --- a project ---------------------------------------------------------------------------------------
@@ -663,6 +775,7 @@ def ensure(installation: base.Installation, spec: Spec | list[str], *, told: Cal
     the device's engine with ``engine`` (``cad run``) when one runs, its lines said to ``told``, else here.
     ``Refused`` in one line when uv cannot make it. A list of requirements is a spec of them."""
     spec = spec if isinstance(spec, Spec) else Spec(requirements=tuple(sorted(set(spec))))
+    supported(spec.integrations, installation.arch)
     prints = fingerprints(spec)
     env = where(installation, spec, prints)
     marker = _complete(env, spec)
@@ -943,10 +1056,10 @@ def kept(folder: Path, current: str) -> set[str]:
 def _collect(folder: Path, keep: set[str], made: Path | None = None, spec: Spec | None = None,
              inputs: dict[str, Any] | None = None) -> list[str]:
     """The environments of a model's packages in ``folder`` of releases other than ``keep`` (``kept``: the
-    current one and the one before it) removed, and those the one just ``made`` supersedes -- of its
-    installation's base (``inputs``) and ``spec``, a local package since edited --, but one a process runs
-    from (``releases.running``), which goes at a later making: the paths removed. The bases are their
-    releases' to remove (``releases.collect``)."""
+    current one and the one before it) removed, those whose Python is gone (``base.marked``: dead, no way
+    back), and those the one just ``made`` supersedes -- of its installation's base (``inputs``) and ``spec``,
+    a local package since edited --, but one a process runs from (``releases.running``), which goes at a later
+    making: the paths removed. The bases are their releases' to remove (``releases.collect``)."""
     from cad_server._internal.releases import running
 
     removed = []
@@ -955,10 +1068,10 @@ def _collect(folder: Path, keep: set[str], made: Path | None = None, spec: Spec 
     except OSError:
         return removed
     for env in entries:
-        marker = base.complete(env) if env != made else None
+        marker = base.marked(env) if env != made else None
         if marker is None or not isinstance(marker.get("with"), list):
             continue
-        other = (marker.get("inputs") or {}).get("release") not in keep
+        other = (marker.get("inputs") or {}).get("release") not in keep or not base.interpreter(env).exists()
         superseded = (made is not None and spec is not None and marker.get("spec") == spec.keyed()
                       and marker.get("inputs") == inputs)
         if not (other or superseded) or running(env):

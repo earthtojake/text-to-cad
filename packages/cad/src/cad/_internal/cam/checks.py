@@ -179,8 +179,8 @@ def posted(setup_id: str, name: str, text: str, specs, work_offset: str) -> list
 
 def as_check_finding(found: dict):
     """One finding as every check's result says it (``cad.results.CheckFinding``): its severity, its type as the code,
-    its summary as the message, the refs, else the places, else the operations its items name as the location, and
-    its description as the hint."""
+    its summary as the message, the refs, else the places, else the operations its items name as the location, its
+    description as the hint, and its items as data (each a setup, an operation, a face or a point)."""
     from cad.results import CheckFinding
 
     def where(item: dict) -> str:
@@ -192,7 +192,8 @@ def as_check_finding(found: dict):
 
     places = list(dict.fromkeys(where(item) for item in found.get("items") or ()))
     return CheckFinding(str(found["severity"]), str(found["type"]), str(found["summary"]),
-                        ", ".join(place for place in places if place) or None, str(found.get("description") or "") or None)
+                        ", ".join(place for place in places if place) or None, str(found.get("description") or "") or None,
+                        items=[dict(item) for item in found.get("items") or ()])
 
 
 def by_severity(found) -> list[dict]:

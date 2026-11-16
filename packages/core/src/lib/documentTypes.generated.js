@@ -7,8 +7,10 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
     "snapshot",
     "inspect",
     "dfm",
+    "interference",
     "solve",
     "plan",
+    "ranges",
     "drc",
     "erc",
     "validate"
@@ -33,8 +35,10 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "snapshot",
         "inspect",
         "dfm",
+        "interference",
         "solve",
-        "plan"
+        "plan",
+        "ranges"
       ],
       "decorator": true
     },
@@ -52,8 +56,10 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "snapshot",
         "inspect",
         "dfm",
+        "interference",
         "solve",
-        "plan"
+        "plan",
+        "ranges"
       ],
       "decorator": true
     },
@@ -72,8 +78,10 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "snapshot",
         "inspect",
         "dfm",
+        "interference",
         "solve",
-        "plan"
+        "plan",
+        "ranges"
       ],
       "decorator": true
     },
@@ -136,7 +144,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "mime": "application/dxf",
       "view": "drawing",
       "operations": [
-        "snapshot"
+        "snapshot",
+        "dfm"
       ],
       "decorator": true
     },

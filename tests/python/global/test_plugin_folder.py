@@ -88,6 +88,10 @@ class ThePluginFolder(unittest.TestCase):
                     self.assertEqual(files[name].stat().st_mode & stat.S_IXUSR, (REPO_ROOT / name).stat().st_mode & stat.S_IXUSR)
         for name in plugin.MANIFESTS:
             self.assertEqual(json.loads(files[name].read_text(encoding="utf-8"))["version"], VERSION, name)
+        # Claude Code gets the skills alone; Grok Build, which reads its own manifest first, keeps the server.
+        self.assertNotIn("mcpServers", json.loads(files[plugin.MANIFEST].read_text(encoding="utf-8")))
+        self.assertEqual(json.loads(files[".grok-plugin/plugin.json"].read_text(encoding="utf-8"))["mcpServers"],
+                         "./claude.mcp.json")
         catalog = json.loads(files[plugin.CATALOG].read_text(encoding="utf-8"))
         self.assertEqual((catalog["name"], catalog["version"]), (plugin.MARKETPLACE, VERSION))
         self.assertEqual([(entry["name"], entry["source"], entry["version"]) for entry in catalog["plugins"]],

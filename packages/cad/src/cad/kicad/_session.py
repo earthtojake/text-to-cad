@@ -14,7 +14,10 @@ the ``ipc://`` form) and connects KiPy (kicode's, ``kicode.KiCad``) to it: ready
 path appears (Windows serves a named pipe, no file). One server holds a project (a board and a schematic of
 one ``.kicad_pro``): an edit of the other file of a project an enclosing edit already serves joins that
 server, KiCad opening the file in it (``OpenDocument``), and the server stops when the edit that started it
-ends.
+ends. A shell whose sandbox refuses sockets (an agent app's, by default) cannot run that server: the edit
+asks first, binding a socket of its own beside the server's (``_refused``), and refuses in one line, saying
+to run the script outside the sandbox, before any server starts -- KiCad's server, refused, says nothing
+and never answers. A server slow to answer (KiCad's first start from a new environment) is said once.
 
 The block is handed the open document. A file not there yet is made by KiCad (``CreateDocument``, with its
 project where it has none). On a normal exit the document is saved when the block changed it (KiCad's own
@@ -24,7 +27,10 @@ when KiCad's fails (it may have written some files of a hierarchy first), every 
 document, its project and, for a schematic, each sheet file of its hierarchy as KiCad holds it -- is put
 back as it was, a file it made is removed, and the edit raises ``KicadRunError`` with KiCad's words and what
 its server logged. Each document of a
-shared server is saved at its own block's exit, by the same rules. A ``.kicad_prl`` (KiCad's local
+shared server is saved at its own block's exit, by the same rules. A board's block is handed KiPy's board
+watched (``_drift``): the nets its ``create_items`` and ``update_items`` give items are noted, and after the
+save every item KiCad saved on another net (its connectivity takes copper onto the net of a pad it overlaps)
+is a warning on stderr and one of the board's ``net_changes``. A ``.kicad_prl`` (KiCad's local
 settings) the edit made beside its file is removed once its server stops, and so is a folder made for a new
 file that ends with no file in it.
 
@@ -67,6 +73,10 @@ START_SECONDS = 120.0
 STOP_SECONDS = 10.0
 LIBRARY_SECONDS = 120.0
 _POLL = 0.05
+# How long the server may take to answer before the edit says, once, what it waits for: a warm start
+# answers in about 2 s; KiCad's first start from a new environment, about a minute on macOS, which checks
+# each of its new libraries as it first loads them.
+NOTICE_SECONDS = 8.0
 
 
 # A Unix socket's path is at most 104 bytes on macOS (108 on Linux), and a sandbox's TMPDIR can be deep.
@@ -107,6 +117,45 @@ def _socket(folder: Path) -> Iterator[Path]:
 
 def _fits(path: Path) -> bool:
     return len(os.fsencode(path)) <= _SOCKET_PATH_MAX
+
+
+def _refused(socket_path: Path) -> str | None:
+    """Why this process may not listen on a Unix socket beside ``socket_path``, as the api-server must: a
+    sandbox that refuses sockets (macOS Seatbelt, deny by default: an agent app's shell in its
+    default mode), whose refusal the child inherits. KiCad's api-server says nothing then and never answers,
+    so it is asked here, in a moment, before the server starts. None where it may (and on Windows, which
+    serves a named pipe), or where the probe fails for any other reason than a refusal."""
+    if sys.platform.startswith("win"):
+        return None
+    import socket as sockets
+
+    probe = socket_path.with_name("try.sock")  # as long as api.sock: it fits where that does
+    try:
+        listener = sockets.socket(sockets.AF_UNIX, sockets.SOCK_STREAM)
+    except PermissionError as error:
+        return error.strerror or str(error)
+    except OSError:
+        return None
+    try:
+        listener.bind(str(probe))
+        listener.listen(1)
+    except PermissionError as error:
+        return error.strerror or str(error)
+    except OSError:
+        return None
+    finally:
+        listener.close()
+        try:
+            probe.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return None
+
+
+def _sandboxed(kind: "_Kind", why: str) -> KicadRunError:
+    return KicadRunError(f"{kind.type_id}.edit runs KiCad's edit server on a local socket, and this shell's sandbox "
+                         f"refuses one ({why}): run the script again outside the sandbox (an agent app's "
+                         "unsandboxed or escalated run); reading, checking and exporting the file work here")
 
 
 @contextmanager
@@ -180,8 +229,10 @@ def _document(kicad: Any, server: subprocess.Popen, log: Path, kind: "_Kind", pa
     server and pings it until it answers (a connection error until it listens), and the server says it is
     not ready to reply until it has loaded the file. A file not there yet is made first (``create``: KiCad's
     ``CreateDocument``, once the server listens). Any other refusal, a server that exits, or one that has not
-    answered within ``START_SECONDS``, is a failure."""
-    deadline, listened, made = time.monotonic() + START_SECONDS, False, not create
+    answered within ``START_SECONDS``, is a failure; one that has not answered within ``NOTICE_SECONDS`` says,
+    once, on stderr, what it waits for (``_waiting``), so a caller watching a quiet run knows it is going."""
+    started = time.monotonic()
+    deadline, listened, made, noticed = started + START_SECONDS, False, not create, False
     while True:
         try:
             kicad.ping()
@@ -201,7 +252,18 @@ def _document(kicad: Any, server: subprocess.Popen, log: Path, kind: "_Kind", pa
             if time.monotonic() > deadline:
                 stage = f"load the {kind.noun}" if listened else "answer"
                 raise KicadRunError(f"kicad-cli api-server did not {stage} within {START_SECONDS:g} s") from None
+            if not noticed and time.monotonic() - started > NOTICE_SECONDS:
+                noticed = True
+                print(_waiting(kind, path, listened), file=sys.stderr, flush=True)
         time.sleep(_POLL)
+
+
+def _waiting(kind: "_Kind", path: Path, listened: bool) -> str:
+    """What a slow start says, once: what it waits for, and that it is still going."""
+    if listened:
+        return f"{kind.type_id}.edit: KiCad is loading {path.name}; waiting for it (up to {START_SECONDS:g} s)"
+    return (f"{kind.type_id}.edit: waiting for KiCad's edit server to start (up to {START_SECONDS:g} s): its first "
+            "start from a new environment can take a minute")
 
 
 @dataclass(frozen=True)
@@ -399,6 +461,22 @@ def _save(opened: Any, path: Path, kind: _Kind, server: _Server) -> None:
                             + "; nothing is saved: every file the save writes is as it was") from None
 
 
+def _moved(watch: Any, before: str | None, path: Path, opened: Any) -> None:
+    """The items of the board just saved whose net KiCad changed (``_drift``): each said as a warning on stderr,
+    and kept as the board's ``net_changes``. A board that cannot be read back says so instead."""
+    from ._drift import say
+
+    if not path.is_file():
+        return
+    try:
+        changes = watch.check(before, path)
+    except (OSError, ValueError, UnicodeDecodeError) as error:
+        print(f"warning: {path.name}: its nets could not be checked after the save ({error})", file=sys.stderr)
+        return
+    opened.net_changes = tuple(changes)
+    say(changes, path.name)
+
+
 # The servers the edits of this process run, by project: its folder, its name and the thread editing it.
 _SERVERS: dict[tuple[Path, str, int], _Server] = {}
 
@@ -421,6 +499,9 @@ def _serving(path: Path, kind: _Kind, create: bool, cli: Path | None, kicad: Any
             after.enter_context(_made_for(path))
         after.enter_context(_local_settings_as_found(path))
         with private_run("cad-kicad-api-", cli) as (folder, env), _socket(folder) as socket:
+            refused = _refused(socket)
+            if refused is not None:
+                raise _sandboxed(kind, refused)
             log = folder / "api-server.log"
             command = [str(cli), "api-server", "--socket", str(socket), *([] if create else [str(path)])]
             with log.open("w", encoding="utf-8") as said:
@@ -479,12 +560,21 @@ def edit(path: Path | str, document_type: str, *, cli: Path | None = None) -> It
         else:
             opened = _join(server, kind, path, create)
             stack.callback(server.open.discard, path)
+        watch = None
         if kind is _SCHEMATIC:
             opened = _with_libraries(server.client, opened, path)
+        else:
+            from ._drift import Watch
+
+            watch = Watch()
+            opened = watch.board(opened)
         yield opened  # a raise leaves the file as it was: nothing is saved, and the exception goes on
         saved = create or _modified(opened)
         if saved:
+            was = None if create or watch is None else path.read_text(encoding="utf-8", errors="replace")
             _save(opened, path, kind, server)
+            if watch is not None:
+                _moved(watch, was, path, opened)
     if create:
         made = None if project or path.with_suffix(".kicad_pro") in server.said else path.with_suffix(".kicad_pro")
         server.said.add(path.with_suffix(".kicad_pro"))

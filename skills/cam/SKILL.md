@@ -37,7 +37,8 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor
---check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
+--check` explains any other failure, changing nothing; `cad doctor` repairs what it reports. Tell the
+person any next step `cad setup` prints.
 
 A job is an operation of the part's type, `plan`: `cad step plan` for a `.step` or `.stp`, `cad xbf
 plan` for an `.xbf`, `cad model plan` for a model the engine holds. With no `--job` it lists what a

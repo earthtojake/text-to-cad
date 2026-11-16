@@ -60,6 +60,9 @@ LIBRARY_REQUIRED=(
   "cad/_internal/findings.py"
   "cad/kicad_pcb/__init__.py"
   "cad/kicad/_program.py"
+  # The blender integration: what a render script imports (cad.blender.load), in place of a helper a skill shipped.
+  "cad/blender/__init__.py"
+  "cad/blender/_scene.py"
   # The engine's library half: the worker every build runs in, and the client every command reaches
   # the server by.
   "cad/engine/__init__.py"
@@ -86,6 +89,8 @@ SERVER_REQUIRED=(
   "cad_server/engine/daemon.py"
   "cad_server/engine/cli.py"
   "cad_server/_internal/engine_daemon.py"
+  # The script Open in starts a person's Blender with on a GLB or an STL (apps.BLENDER_SCRIPT).
+  "cad_server/_internal/open_in_blender.py"
   # Its README: the mechanisms the package's laws name.
   "cad_server/engine/README.md"
   "cad_server/_runtime/viewer/index.html"
@@ -103,6 +108,7 @@ SERVER_REQUIRED=(
   "cad_server/_runtime/plugin/.claude-plugin/marketplace.json"
   "cad_server/_runtime/plugin/.codex-plugin/plugin.json"
   "cad_server/_runtime/plugin/.cursor-plugin/plugin.json"
+  "cad_server/_runtime/plugin/.grok-plugin/plugin.json"
   "cad_server/_runtime/plugin/skills/cad/SKILL.md"
 )
 SHIM_REQUIRED=(

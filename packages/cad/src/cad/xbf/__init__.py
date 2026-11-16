@@ -4,8 +4,8 @@
 ``xbf.read(path)`` reads one into a model;
 its operations (``xbf.export("arm.xbf", *destinations)``, ...) are the ``cad xbf <operation>`` commands',
 each of an ``.xbf`` file: a model the engine holds, by its handle or id, is ``cad.model``'s.
-``xbf.dfm(source, process="molding")`` (or ``"printing"``) measures it for manufacturing, with
-the trimesh integration (``cad._internal.manufacturing``).
+``xbf.dfm(source, process="cnc")`` (or ``"sheet"``, ``"molding"``, ``"printing"``) checks it for manufacturing
+on its exact geometry, with the build123d integration (``cad._internal.manufacturing``).
 ``xbf.solve(source, study=..., out="results/")`` runs a stress study on its part or bonded assembly, writing
 its results into that folder (with no study, it lists the parts, pairs and faces a study names), with the
 kernel, netgen and calculix integrations (``cad._internal.fea.operation``).

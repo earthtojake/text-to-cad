@@ -12,9 +12,11 @@ Two copies, differing in what they carry and the channel each config names:
 
 - `latest`: the newest release, which every documented install command names. The copy also
   carries the marketplace catalog, which lists the plugin at the root of the branch it is read
-  from, Codex's manifest and config, and the Agent Plugins standard's.
+  from, Codex's manifest and config, Grok Build's manifest, and the Agent Plugins standard's.
+  Claude's manifest there is main's: it names no server, so Claude Code gets the skills alone.
 - `directory` (pushed to `claude-plugin`): claude.ai's plugin directory, which updates its
-  copies.
+  copies. Its files are what the directory reviewed: Claude's manifest names `claude.mcp.json`
+  (`CLAUDE_SERVER`), whose server lists no tools when Claude Code starts it.
 
 Each MCP config names the channel its installs come from in its server's environment,
 `CAD_INSTALL_CHANNEL`, and `CAD_AUTO_UPDATED=1` where a store keeps the copy up to
@@ -54,17 +56,24 @@ MARKETPLACE_FILES = (CATALOG, ".codex-plugin/plugin.json", ".codex-plugin/logo.p
 # The Agent Plugins standard's manifest and server config (agent-plugins.org), which VS Code reads before
 # Claude's manifest.
 STANDARD_FILES = ("plugin.json", "mcp.json")
+# Grok Build's manifest, which it reads before Claude's: Claude's names no server, Grok's names claude.mcp.json.
+GROK_FILES = (".grok-plugin/plugin.json",)
+# What the directory's copy of Claude's manifest names as its server config: main's names none.
+CLAUDE_SERVER = "./claude.mcp.json"
 
 
 class Copy(NamedTuple):
     files: tuple[str, ...]
     # Each config's channel, and whether a store keeps its copies up to date (`CAD_AUTO_UPDATED`).
     channels: dict[str, tuple[str, bool]]
+    # Whether Claude's manifest names CAD's server (`CLAUDE_SERVER`), as the directory's copy does.
+    claude_server: bool = False
 
 
 COPIES = {
-    "latest": Copy(FILES + MARKETPLACE_FILES + STANDARD_FILES, {"cursor.mcp.json": ("cursor-github", False)}),
-    "directory": Copy(FILES, {"claude.mcp.json": ("claude-directory", True), "cursor.mcp.json": ("cursor-github", False)}),
+    "latest": Copy(FILES + MARKETPLACE_FILES + STANDARD_FILES + GROK_FILES, {"cursor.mcp.json": ("cursor-github", False)}),
+    "directory": Copy(FILES, {"claude.mcp.json": ("claude-directory", True), "cursor.mcp.json": ("cursor-github", False)},
+                      claude_server=True),
 }
 DIRECTORIES = ("skills/",)
 README = "README.md"
@@ -168,7 +177,7 @@ def rule_errors(tree: dict[str, tuple[str, bytes]]) -> list[str]:
 
 def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str], dict]:
     """A copy's tree as path -> (git mode, bytes), what breaks the directory's rules, and the manifest."""
-    files, channels = COPIES[copy]
+    files, channels, claude_server = COPIES[copy]
     entries = tracked(root)
     chosen = {path: entry for path, entry in entries.items()
               if path in files or path.startswith(DIRECTORIES)}
@@ -184,6 +193,9 @@ def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str
         manifest = json.loads(tree[MANIFEST][1]) if MANIFEST in tree else {}
     except ValueError as error:
         return tree, errors + [f"{MANIFEST}: {error}"], {}
+    if claude_server and MANIFEST in tree:
+        manifest["mcpServers"] = CLAUDE_SERVER
+        tree[MANIFEST] = (tree[MANIFEST][0], (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
     repository = manifest.get("repository")
     if not isinstance(repository, str) or not repository.startswith("https://github.com/"):
         return tree, errors + [f"{MANIFEST}: `repository` must be the plugin's https://github.com/ URL"], manifest

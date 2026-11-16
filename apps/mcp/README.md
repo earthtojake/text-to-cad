@@ -42,9 +42,9 @@ terminal UI show none and are served as text clients.
   button; Back and Forward are dropped on a phone-width view), the tool strip ending
   in Projection, Display and Preview, the view's panel, the view cube, and Quick Edit. In
   Preview its own bar (the file's name, its settings, its exit) takes the navbar's place. A
-  newer card retires the older ones. The Claude app's Code tab draws the card too, but carries none of its calls
-  back: there the card tries the engine directly, else links the CAD Viewer (**A card says
-  why it cannot work**, below).
+  newer card retires the older ones. The Claude app's Code tab draws the card of Claude Desktop's own
+  server and carries its calls; a server Claude Code starts there gets cards whose calls it refuses, so
+  that server lists no tools ([Claude: where the card comes from](#claude-where-the-card-comes-from)).
 
 A client that renders no MCP Apps never loads this page. Its `cad_show` opens the
 model's page in this machine's CAD Viewer, `/<id>` (the file registered by its id, as
@@ -78,21 +78,76 @@ settles how a client that does not say so presents CAD: `inline`, a client that 
 without advertising them, as the reference host `basic-host` does; `text`, one that renders
 nothing.
 
-The agent also has `cad_export`, `cad_snapshot` and `cad_inspect` in
-all presentations, including text-only hosts. They use the Python operations,
-not page state. Each tool starts work with a request ID and polls or cancels its
-own operation; there is no `cad_job` tool. `cad_inspect` also takes
-`query: "structure"`, the summary without bounds, volume or mass. See the
-[operation contract](../../packages/cad/README.md#agent-operations) for progress,
-retry, cancellation and explicit server-host destinations. An operation's status carries where the
-engine is as the engine's own progress event -- `progress`, `{kind, stage, job, outputs, detail, done,
-total, elapsedMs}`, the latest it said (an export's `read` and `write`, a snapshot's `scene`, `draw`
-and `write`, an inspection's `measure`, counted where the stage has units) -- and the stage's words
-as `stage`; a status asked with `afterSequence` wakes with each event, as it wakes with the result.
-The same event is what a view's status line says of a build behind the model it shows
-(`@cad/ui`'s `kit/status`, in the view's language), so a card and an agent read one shape. No tool builds source
-text: to build a shape, wrap the shape in a decorated function and run its script.
-Inspection never builds. The web viewer's Export is a browser download; this page has no Export, having no HTTP origin to download from.
+No tool exports, inspects or draws a picture for the agent: those are the `cad` command's, which the
+agent runs in its shell (`cad model export <id> <file>`, `cad model inspect <id>`, `cad model snapshot
+<id> out.png`; a file's, `cad <type> ...` with its path), and every presentation's instructions say so
+at initialize, Claude Code's among them, for an agent that has not loaded the cad skill. No tool builds
+source text: to build a shape, wrap the shape in a decorated function and run its script. The web
+viewer's Export is a browser download; this page has no Export, having no HTTP origin to download from.
+
+## Claude: where the card comes from
+
+| Host | CAD's server | Cards |
+| --- | --- | --- |
+| Claude Desktop, Chat tab | `mcpServers.cad` in `claude_desktop_config.json`, which `cad setup` writes wherever Claude Desktop is | yes |
+| Claude Desktop, Code tab | the same entry: the desktop app starts it and offers it to the Claude Code session | yes |
+| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone, and `cad setup` removes a `claude mcp add` CAD server, the user's or a project's. claude.ai's directory's copy (`claude-plugin`) still names one, which lists no tools when Claude Code starts it | none: the skills' `cad viewer` link, in the browser pane or the browser |
+| Claude Code in a terminal | none | it draws none |
+
+Claude Desktop reads its config only when it starts: once `cad setup` first gives it CAD's server,
+quit and reopen it (setup's last lines say so; on Windows, quit it from the system tray). A new pin
+needs no restart: the server it runs keeps working with the newer engine. No developer mode is needed.
+
+What decides it, measured:
+
+- **The desktop-config server works in the Code tab.** 2026-10-04: its card drew and `cad_view`
+  and `cad_screenshot` answered. 2026-11-09, Claude Desktop 4.23118: the same (the server
+  `CAD_INSTALL_CHANNEL=claude-desktop`), and again with `developer_settings.json` at
+  `"allowDevTools": false`. The first card after the app starts can take a while to connect: a
+  `cad_view` about 6 s after `cad_show` said it had not reached CAD's server, and at about 20 s it
+  answered.
+- **A server Claude Code starts gets cards whose calls the Code tab refuses.** 2026-10-25: "IPC not
+  available for MCP tool call" (**No channel**, below); 2026-11-09, in the same session as the working
+  card above, the plugin's server (`claude-install`) showing the same file never reached CAD's server.
+  anthropics/claude-code#106708 reports the same split. The app carries such calls only with its
+  `quietOrchard` gate on, which needs GrowthBook flag 1824765482, off on the accounts we tried. To see
+  whether an account has it: `~/Library/Application Support/<profile>/fcache` (`Claude`, or the
+  profile's folder) is an 8-byte header, then gzipped JSON whose `features` holds the flags by id.
+- **The marker.** Claude Code sets `CLAUDE_CODE_ENTRYPOINT` for every server it starts (`cli` in a
+  terminal, `sdk-cli` headless, `claude-desktop` in the Code tab, with `CLAUDECODE=1`); the
+  `cad-mcp` processes the desktop app starts have neither (measured 2026-11-09). `cad-mcp` passes it
+  with the host's `initialize` (`claudeCode`), and the server lists no tools for that session
+  (`cad_server/mcp/host.py`'s `claude_code`), its instructions naming the cad skill, the `cad` command
+  and the desktop config. `CAD_MCP_CARDS=1` in `cad-mcp`'s environment keeps the tools, to test the
+  Claude Code path.
+
+Decided 2026-11-09: Claude Code gets the skills from the plugin, and CAD's card from Claude
+Desktop's config. To undo it once flag 1824765482 is on: name `./claude.mcp.json` in
+`.claude-plugin/plugin.json` again, drop `CLAUDE_SERVER` from `scripts/release/plugin_branch.py`
+(the directory's copy is then main's), drop the `remove server` step for Claude Code in
+`cad_server/_internal/providers.py`'s `_removal`, and drop `host.claude_code`. Then decide which one
+server the Code tab gets: with both, it lists CAD twice.
+
+## Cursor: where the card's capability comes from
+
+| Host | The page's capability | Cards |
+| --- | --- | --- |
+| Codex, Claude Desktop | the launch's result `_meta["dev.texttocad/httpToken"]`, as before | yes |
+| Cursor (`cursor-vscode`, declares MCP Apps) | the launching tool's own `_meta["dev.texttocad/httpToken"]` (`cad_show`'s, in `tools/list`), which Cursor hands the card at `ui/initialize` as `hostContext.toolInfo.tool.meta` | yes, inline |
+
+Cursor drops a result's `_meta` before its card sees it. Read from Cursor 3.25.6's bundle
+(`out/vs/workbench/workbench.glass.main.js`): the card's tool result is `JSON.parse` of the string the
+chat stored (`GIC` → `HIC`), and that string is built as `{content, structuredContent}` alone
+(`s.result=JSON.stringify(c)` in the `mcpToolCall` case); `cursor-mcp`'s `callTool` also returns
+`{structuredContent, content, isError}` alone. So from 0.10.0 every card call in Cursor was refused
+("Only a CAD view calls this tool."). What Cursor does keep: `hostContext.toolInfo = {id, tool}`, the tool
+as its cache holds it (`meta: _meta`, whole). What its agent reads of a tool: the descriptor files under
+`~/.cursor/projects/<project>/mcps/<server>/tools/`, name, description and arguments, never `_meta`.
+Cursor lists the app-only tools there too (`cad_sync.json`, `cad_http.json`, `cad_capture_reply.json`), so
+the capability is all that keeps its agent from acting as the page. Not the resource: Cursor's agent has
+`fetch_mcp_resource`, and the `ui://` page is listed to it. The server puts the capability in the tool for
+Cursor alone (`host.carries_capability`), so every other host's catalog is unchanged, and the page reads
+the launch's `_meta` first (`host/capability.ts`).
 
 ## The rules
 
@@ -240,7 +295,10 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   app-only and absent in text-only hosts. Every
   page launch includes the host connection's capability in result `_meta["dev.texttocad/httpToken"]`,
   which [MCP Apps hosts deliver to the UI](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx#2-tool-results), outside model context; content and structured content never
-  carry it. The page sends `x-cad-app` with HTTP calls, and the same capability
+  carry it. Cursor delivers no result `_meta` to its card, so there it rides `cad_show`'s own `_meta`
+  instead ([Cursor](#cursor-where-the-cards-capability-comes-from)). A call refused for it answers
+  `structuredContent: {"refused": "capability" | "stale"}` beside the words, and the card says it
+  cannot connect (`Unreachable`), with Open in browser. The page sends `x-cad-app` with HTTP calls, and the same capability
   as the `app` argument of `cad_sync` and `cad_capture_reply`; all three refuse a call
   without it: a host is asked to keep app-only tools from the model, and the server
   does not rely on it. The server validates
@@ -293,7 +351,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
     `tools/call` the card makes with its own error, "IPC not available for MCP tool call";
     the server never sees the view open, so `cad_view` and `cad_screenshot` answer that it has
     not reached CAD's server: not drawn yet, or drawn by a chat that carries none of its calls,
-    with the page the card links for the person and `cad_snapshot` for the agent's own look. The card knows its channel: at `ui/initialize` a host that declares
+    with the page the card links for the person and `cad <type> snapshot` for the agent's own look. The card knows its channel: at `ui/initialize` a host that declares
     `serverTools` carries calls (a tab host is trusted as before, whatever it declares), one
     that says nothing gets a single `GET /api/v1/server` before anything is drawn, and a call
     the host itself refuses (a JSON-RPC error: not a timeout, not the engine's answer) before
@@ -389,7 +447,8 @@ values have no reader and cannot hide it. Settings files need no conversion.
 | `live.ts`, `sync.ts` | the mounted view's live controller (`@cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`) and the catalog's revision |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
 | `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/app`), a long one a part at a time, else from the engine with the launch's link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch, the opening result, and `reload`); where neither way reaches the engine, the no-channel notice (`unconnected`) |
-| `unreachable.js` | the no-channel notice's words, which the app's notice (`Notice.tsx`) and the shell both say: the line by whether there is a page and a model, the button, the card's height, and the launch's page |
+| `capability.ts` | the page's capability: the launch's result `_meta`, else the launching tool's (`hostContext.toolInfo.tool`, Cursor) |
+| `unreachable.js` | the can't-connect notice's words, which the app's notice (`Notice.tsx`) and the shell both say in one look (`src/notice.css`): the line by whether there is a page and a model, or a capability from before CAD restarted (`refusalOf`), the button, the card's measured height, and the launch's page |
 | `release.ts` | the card through an update: the engine asked every half second while it restarts, and the engine's app loaded in the card's own place once it answers with another release (`useNextRelease`, `loadNextRelease`) |
 | `clipboard.ts` | the frame's clipboard, every copy's: the asynchronous clipboard where the host grants it (the resource asks for `clipboardWrite`), else the page's own copy command, still inside the press, for text |
 
@@ -439,7 +498,7 @@ no SSE stream, so GET returns 405. Missing sessions return 400; expired sessions
 When the engine restarts or a session's idle hour passes, the shim opens a new session
 with the host's own initialize and sends again only the request the engine refused
 unseen (404, a 403 from an engine whose token is not this shim's, or a refused connection);
-the host never reconnects. Views and operations start over with the new session, and
+the host never reconnects. Views start over with the new session, and
 mutations are never replayed. The app capability does not: the shim makes one for its host
 and gives it to every session it opens, so the views the host shows sync again with the new
 session at their next call. Only a view from before the host restarted the shim carries one

@@ -1,7 +1,9 @@
 /**
  * A board in 3D, its stage: the bare board as a kit scene (`lib/viewer/sceneContract.js`) — a slab cut
  * to the outline and as thick as the board, lit, and on its two faces the 2D drawer's pictures of the
- * two sides (`boardFaces.js`), unlit, so a face reads exactly as the 2D view does. Over each face a
+ * two sides (`boardFaces.js`), unlit, so a face reads exactly as the 2D view does; or, for a board whose
+ * stack-up names its colours (`plot2d/stackup.js`), shown whole (Board mode), each side as it is made,
+ * its edge the substrate's colour, as KiCad's 3D viewer draws it with the stack-up's colours. Over each face a
  * see-through overlay carries the highlight and the ink. What the 2D view draws past the outline (a
  * dimension, a fab note, ink) is drawn too, on a see-through plane round the slab at each face's height
  * (the face's surround): its pictures cover the face's box (`faceBox`), clear where nothing is drawn.
@@ -19,11 +21,13 @@
 import { BOARD_THICKNESS_MM, faceZ, rayOnBoard } from "./boardFrame.js";
 import { FACE_PIXELS, createFaceRasters, faceBox, faceUv } from "./boardFaces.js";
 import { pointInPolygon } from "../board2d/geometry.js";
+import { boardDisplayAsMade } from "../plot2d/boardDisplay.js";
+import { boardFinish } from "../plot2d/stackup.js";
 
 // How far a face's picture and its overlay stand off the slab, so neither fights it for depth.
 const FACE_LIFT_MM = 0.01;
 const OVERLAY_LIFT_MM = 0.02;
-// The slab's edge: FR4's tan, darker on the dark canvas.
+// The slab's edge: FR4's tan, darker on the dark canvas (a board made in its stack-up's colours: its substrate's).
 const EDGE_COLORS = Object.freeze({ dark: 0x6f6240, light: 0xb9a66a });
 
 const area = ring => ring.reduce((sum, [x, y], index) => { const [nx, ny] = ring[(index + 1) % ring.length]; return sum + x * ny - nx * y; }, 0) / 2;
@@ -66,6 +70,9 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
   const group = new THREE.Group();
   group.name = "board";
   const slabGeometry = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false, curveSegments: 8 });
+  // What the board is made in (its stack-up's colours), when its file names them: its faces and its edge are drawn in them.
+  const finish = boardFinish(layout.board?.stackup);
+  const edgeColor = (display, scheme) => (finish && boardDisplayAsMade(display) ? finish.substrate : EDGE_COLORS[scheme] ?? EDGE_COLORS.dark);
   const slabMaterial = new THREE.MeshStandardMaterial({ color: EDGE_COLORS[theme] ?? EDGE_COLORS.dark, roughness: 0.85, metalness: 0 });
   const slab = new THREE.Mesh(slabGeometry, slabMaterial);
   slab.position.z = -thickness;
@@ -153,7 +160,7 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
     const key = look.key;
     if (drawnKey[side] === key) return false;
     const started = performance.now();
-    upload(faces[side], rastersNow().drawFace(side, look));
+    upload(faces[side], rastersNow().drawFace(side, { ...look, finish }));
     timings.face = performance.now() - started;
     show(side, faces, true);
     drawnKey[side] = key;
@@ -245,7 +252,7 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
     setLook({ display, theme: scheme, lineScale = 0 }) {
       const { side, ...rest } = display;
       look = { display, theme: scheme, lineScale, key: JSON.stringify([rest, scheme, Math.round(lineScale * 100)]) };
-      slabMaterial.color.setHex(EDGE_COLORS[scheme] ?? EDGE_COLORS.dark);
+      slabMaterial.color.set(edgeColor(display, scheme));
       const top = drawFace("top"), bottom = drawFace("bottom");
       if (top) drawOverlay("top");
       if (bottom) drawOverlay("bottom");

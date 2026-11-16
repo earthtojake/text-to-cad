@@ -19,9 +19,12 @@ import { exitIsolateEntry, menuEntry, menuGroups, pickGroup, referenceGroup, zoo
 import AnnotationOverlay from "../kit/tools/annotate/AnnotationOverlay.jsx";
 import { plotAnnotationDocument, plotAnnotationSurface } from "../kit/tools/annotate/plotAnnotation.js";
 import { measureSelectHandlers } from "../kit/tools/measure/measureSelection.js";
+import { filterBadge } from "../kit/tools/select/selectFilter.js";
 import { useMeasureOverlay } from "../kit/tools/measure/useMeasureOverlay.js";
 import { readIsolation, useIsolation } from "../kit/tools/select/useIsolation.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
+import { useFlatBoxSelect } from "../kit/tools/select/useBoxSelectGesture.js";
+import { takeFlatBox } from "../kit/tools/select/boxTake.js";
 import { groupChips } from "../kit/tools/select/groupChips.js";
 import { TOUCH_HIT_PX } from "../kit/viewport/dom.js";
 import { readFlatView } from "../kit/viewport/flatView.js";
@@ -40,7 +43,8 @@ import { useSchematicDocument } from "./useSchematicDocument.js";
  * board is: the board's flat view (`kit/viewport/usePlotView.js`, `kit/shell/FlatViewFrame.jsx`), its
  * pan, zoom and fit, Select (a click the most specific thing under the pointer its filter ticks —
  * `SchematicSelectFilter.jsx` — a pin, a junction or a no-connect, a label, a wire, a symbol or a sheet
- * symbol; Shift adds; a drag the box between its ends, everything inside it), Annotate and Measure (to
+ * symbol; Shift adds; a plain drag the box between its ends, every viewer's, taking what it touches),
+ * Annotate and Measure (to
  * pins' and wires' ends, junctions and labels, in millimetres), Quick Edit's references (`#R1`, `#R1.2`,
  * `#net:/MID`, `#wire:<uuid>`, `#sheet:/Load/`) and its Export (KiCad's PDF, SVGs, netlist and BOM). The
  * payload comes from the BACKEND, a sheet at a time (`useSchematicDocument.js`); nothing here parses
@@ -144,7 +148,6 @@ function SchematicSurface({ view, data }) {
   filterRef.current = filter;
   const schemeRef = useRef(colorScheme);
   schemeRef.current = colorScheme;
-  const draftRef = useRef(null);
   const isolationRef = useRef(isolation);
   isolationRef.current = isolation;
   const annotationRef = useRef(annotation);
@@ -179,7 +182,7 @@ function SchematicSurface({ view, data }) {
     // A net in focus, or what is isolated, steps the rest of the sheet back.
     drawSchematicOverlay(ctx, sheetLayout, { transform, pixelRatio, width, height, appearance: schemeRef.current,
       isolated: entries(isolationRef.current.resolved), hovered: entries(hovered.slice(0, 1)), selected: entries(selected),
-      dim: selected.some(item => item.kind === "net"), draft: draftRef.current });
+      dim: selected.some(item => item.kind === "net") });
     const session = annotationRef.current;
     drawAnnotationMarks(ctx, session.items, { transform, pixelRatio, selected: session.selected, hovered: hoveredInkRef.current });
   }, []);
@@ -341,48 +344,46 @@ function SchematicSurface({ view, data }) {
       setHovered(hit && point ? hit.selector : "");
       setOverPick(current => (current === over ? current : over));
     };
-    // Select's drag is KiCad's window selection: drawn as it goes, everything wholly inside it once it lets go (Shift adds).
-    const drag = (phase, { start, point, event }) => {
+    // Select's box (every view's, `useFlatBoxSelect`), as the filter takes it: what it touches, even in
+    // part, KiCad's crossing selection; with the ink and the measurements it takes (`takeFlatBox`; Shift
+    // at its release adds).
+    const box = (drawnBox) => {
       const drawn = pageRef.current;
-      if (toolRef.current !== SCHEMATIC_TOOL.SELECT || !drawn) return false;
-      const from = atPoint(start, "mouse")?.page, to = atPoint(point, "mouse")?.page;
-      if (!from || !to) return false;
-      const box = [Math.min(from[0], to[0]), Math.min(from[1], to[1]), Math.max(from[0], to[0]), Math.max(from[1], to[1])];
-      draftRef.current = phase === "start" || phase === "move" ? box : null;
-      requestPaint();
-      if (phase === "end") {
-        const inside = drawn.within(box, { kinds: filterRef.current });
-        if (!event?.shiftKey) selectionRef.current.clear();
-        const kept = new Set(event?.shiftKey ? selectionRef.current.selected : []);
-        for (const selector of inside) if (!kept.has(selector)) selectionRef.current.select(selector, { multiSelect: true });
-      }
-      return true;
+      if (toolRef.current !== SCHEMATIC_TOOL.SELECT || !drawn) return;
+      const a = atPoint({ x: drawnBox.local.left, y: drawnBox.local.top }, "mouse")?.page, b = atPoint({ x: drawnBox.local.right, y: drawnBox.local.bottom }, "mouse")?.page;
+      if (!a || !b) return;
+      const bounds = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
+      const session = annotationRef.current;
+      takeFlatBox(drawnBox, { annotation: session, inks: session.items.length ? annotationSurface.onScreen(session.items) : [],
+        measure: measured(() => {}), selection: selectionRef.current, picked: filterRef.current.length ? drawn.pickBox(bounds, { kinds: filterRef.current }) : [] });
     };
     // The sheet symbol under a pane point, for the menu's Show sheet.
     const sheetUnder = (point, pointerType) => {
       const at = atPoint(point, pointerType);
       return at ? pageRef.current?.sheetAt(at.page, at.reach) || null : null;
     };
-    return { tap, hover, drag, doubleTap, pickAt, sheetUnder };
+    return { tap, hover, box, doubleTap, pickAt, sheetUnder };
   }, [annotationSurface, requestPaint, showSheet]);
 
   const plotView = usePlotView({
     plot, restored, colorScheme, surround: surroundOf, noun: "schematic", onViewMoved: rememberView, drawView, overlay,
-    onTap: handlers.tap, onHover: handlers.hover, onDrag: handlers.drag, onDoubleTap: handlers.doubleTap
+    onTap: handlers.tap, onHover: handlers.hover, onDoubleTap: handlers.doubleTap
   });
   viewRef.current = plotView;
+  useFlatBoxSelect(plotView, { enabled: toolMode === SCHEMATIC_TOOL.SELECT && Boolean(page), onBox: handlers.box });
   paintRef.current = plotView.requestPaint;
   const { canvasRef, capture, containerRef, dragging, fit, thumbnail } = plotView;
   useEffect(() => { requestPaint(); }, [annotation.items, annotation.selected, isolation.resolved, colorScheme, page, requestPaint]);
   useEffect(() => { handlers.hover(null, null); }, [toolMode, handlers]);
 
   // The view on screen as a prompt carries it: the plan view's camera, the pane's shape, and the sheet shown,
-  // which `cad kicad_sch snapshot --display` draws again: light, whatever the viewer's theme, as every snapshot is.
+  // which `cad kicad_sch snapshot --display` draws again: light, whatever the viewer's theme, as every snapshot is,
+  // and on the whole drawing sheet the viewer shows (`border`: its frame and zone labels with the title block).
   const currentView = useCallback(() => {
     const current = viewRef.current, size = current?.sizeRef.current;
     const camera = current && size ? planCamera(current.transformRef.current, size.width, size.height) : null;
     const seen = camera ? promptView({ camera, width: size.width, height: size.height }) : null;
-    return seen ? { ...seen, display: { sheet: pageRef.current?.path || "/", border: false } } : null;
+    return seen ? { ...seen, display: { sheet: pageRef.current?.path || "/", border: true } } : null;
   }, []);
 
   const measureCanvasRef = useRef(null);
@@ -450,7 +451,7 @@ function SchematicSurface({ view, data }) {
     readState: () => ({
       resource: { ...workspace.resource }, revision: String(workspace.resource.revision || ""),
       loading: document.loading || document.updating, selection: references, camera: null, display: {},
-      schematicDisplay: { sheet: pageRef.current?.path || "/", border: false }
+      schematicDisplay: { sheet: pageRef.current?.path || "/", border: true }
     }),
     setCamera() { throw new Error(SCHEMATIC_NO_CAMERA); },
     resetCamera() { fit(); },
@@ -507,7 +508,7 @@ function SchematicSurface({ view, data }) {
   const compact = Boolean(view.appearance?.compact);
   const chromeHidden = document.loading || failed;
   const selectMenu = <SchematicSelectFilter value={filter} onChange={changeFilter} disabled={!shown} />;
-  const { strip, row } = flatViewTools(tools, { colorScheme, shown, selectMenu, t });
+  const { strip, row } = flatViewTools(tools, { colorScheme, shown, selectMenu, selectBadge: filterBadge(filter, SCHEMATIC_SELECT_KINDS), t });
   const toolRow = row;
   // The panel (`kit/shell/FlatPanel.jsx`): the Parts, the Nets, then, for more than one sheet, the
   // Hierarchy; under them, what is picked in detail.

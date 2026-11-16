@@ -21,6 +21,10 @@ TABS_EXTENSION = "dev.texttocad/tabs"
 TAB_ENTRYPOINTS = frozenset({"global", "thread", "file"})
 MIME = "text/html;profile=mcp-app"  # an MCP App's page, which the ui extension lists
 CODEX_CLIENT = "codex-mcp-client"
+# Cursor's MCP client (``cursor-vscode``, from its cursor-mcp extension's ``createSdkClient``). Its card is
+# handed a result Cursor rebuilt from its transcript, ``content`` and ``structuredContent`` alone, so a
+# launch's ``_meta`` never reaches it: Cursor's card takes its capability from its tool's (``carries_capability``).
+CURSOR_CLIENT = "cursor-vscode"
 
 # Where a Codex call says its turn shows no app: ``codex exec`` (and its ``resume``) runs the turn
 # headless, though it greets the server as the Codex app does. Seen from the 0.163 app server's
@@ -52,6 +56,27 @@ def presentation(client: dict[str, Any], offered: dict[str, Any], launched: Any)
     if codex:
         return "tabs", None, "named codex, launched by " + (str(launched.get("host")) if isinstance(launched, dict) else "an unknown host")
     return "text", False, "no extension, no known launcher"
+
+
+def carries_capability(client: dict[str, Any], presentation: str) -> bool:
+    """Whether the launching tool's own metadata carries the page's capability: Cursor's inline cards alone.
+    Cursor drops a tool result's ``_meta`` before its card sees it (it rebuilds the result from its
+    transcript), and hands the card the tool that launched it in ``ui/initialize``'s host context
+    (``toolInfo.tool``, its ``_meta`` whole). A tool's ``_meta`` is the host's, as a result's is: Cursor's agent
+    reads its tools from descriptors that carry name, description and arguments, never ``_meta``. Every
+    other host reads the capability from the launch's result, as before."""
+    return client.get("name") == CURSOR_CLIENT and presentation == "inline"
+
+
+def claude_code(transport: Any) -> bool:
+    """Whether Claude Code started the session's transport, which then lists no tools: the transport saw
+    ``CLAUDE_CODE_ENTRYPOINT`` in its own environment (``claudeCode``, which Claude Code sets for every server
+    it starts, its terminal's and the desktop app's Code tab's), and was not told ``CAD_MCP_CARDS=1``
+    (``cards``), which keeps CAD's tools there for testing. A server Claude Desktop starts from its own
+    config, which its Code tab also offers, never sees the variable, so it keeps every tool."""
+    if not isinstance(transport, dict):
+        return False
+    return bool(transport.get("claudeCode")) and transport.get("cards") is not True
 
 
 def headless(meta: Any) -> bool:

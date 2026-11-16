@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { Box, MousePointer2 } from "lucide-react";
-import { PositionIcon } from "../kit/tools/ChangedDot.jsx";
 import { scenePartCount, viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
 const URDF_JOINT_VALUE_EPSILON = 1e-9;
 import { createRobotScene } from "@cad/core/lib/urdf/robotScene.js";
@@ -21,7 +19,8 @@ import { useSceneToolState, useSceneTools } from "../kit/tools/sceneTools.jsx";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
 import { PointerPick } from "../kit/tools/select/usePointerPick.js";
 import SelectFilterMenu from "../kit/tools/select/SelectFilterMenu.jsx";
-import { selects } from "../kit/tools/select/selectFilter.js";
+import { filterBadge, selects } from "../kit/tools/select/selectFilter.js";
+import { ToolModeIcon } from "../kit/tools/select/modeGlyphs.jsx";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import PositionControls from "./PositionControls.jsx";
 import { useRobotDescribe, useRobotInspect, useRobotReferences, useRobotTip } from "./robotReferences.jsx";
@@ -38,16 +37,12 @@ import { useI18n } from "@cad/ui/i18n";
 
 const NO_HANDLES = Object.freeze([]);
 const NO_REFERENCES = Object.freeze([]);
-const SELECT_ICON = <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />;
-const menuIcon = Icon => <Icon className="size-3.5" strokeWidth={2} aria-hidden="true" />;
-// What a robot's Select picks (`kit/tools/select/selectFilter.js`): All, its links and its
-// joints' knobs, as it opens; its links alone; or its knobs alone (a press on the model picks nothing).
+// What a robot's Select picks (`kit/tools/select/selectFilter.js`), its Filter: its one kind, Links, and its
+// extra, Position (its joints' knobs, shown while it is ticked, beside the links a click picks); both as it opens.
 const ROBOT_SELECT_DEFAULT = Object.freeze(["links", "position"]);
-const ROBOT_SELECT_MODES = Object.freeze([
-  { id: "all", label: "All", key: "pick.all", kinds: ROBOT_SELECT_DEFAULT, icon: menuIcon(MousePointer2) },
-  { id: "links", label: "Links", key: "pick.links", kinds: ["links"], icon: menuIcon(Box) },
-  { id: "position", label: "Position", key: "pick.position", kinds: ["position"], icon: menuIcon(PositionIcon) },
-]);
+const ROBOT_SELECT_KINDS = Object.freeze(["links"]);
+// The badge on Select's button (`filterBadge`): none while Links is ticked; Position's knobs alone, theirs; nothing ticked, the funnel.
+const ROBOT_SELECT_GLYPHS = Object.freeze({ position: "position" });
 // Solid, cut by Clip: a robot is posed, never exploded.
 const CLIP_OFF = Object.freeze({ clip: { enabled: false, axis: "x", invert: false } });
 // Whether a pose has a joint off its opening pose: Position is set.
@@ -274,7 +269,7 @@ function RobotSurface({ view, data }) {
   // Pose exists where something can be driven: a control of the articulation.
   const posable = Boolean(pose?.controls.length);
   const { toolMode, selectTool } = shell;
-  // What Select picks: Links and Position, each on its own; another file starts with both.
+  // What Select picks: Links and Position, each ticked on its own; another file starts with both.
   const [selectFilter, setSelectFilter] = useState(ROBOT_SELECT_DEFAULT);
   useEffect(() => { setSelectFilter(ROBOT_SELECT_DEFAULT); }, [document.modelKey]);
   // A selection outlives Select: Quick Edit names it and the view lights it under any tool, until it
@@ -301,9 +296,12 @@ function RobotSurface({ view, data }) {
   // the robot has loaded that is not known, and it is offered meanwhile); then Annotate, Measure and Clip.
   const sceneTools = useSceneTools({ shell, scene, features, state: tools, measurable: true, clearParts: clearSelection });
   const strip = [
-    shell.tools.own({ id: ROBOT_TOOL.SELECT, label: t("tool.select"), shortcut: TOOL_SHORTCUTS.select, icon: SELECT_ICON,
+    shell.tools.own({ id: ROBOT_TOOL.SELECT, label: t("tool.select"), shortcut: TOOL_SHORTCUTS.select,
+      icon: <ToolModeIcon tool="select" className="size-3" aria-hidden="true"
+        mode={filterBadge(selectFilter, ROBOT_SELECT_KINDS, { glyphs: ROBOT_SELECT_GLYPHS, alone: posable ? "position" : null })} />,
       // A robot with nothing to pose has one thing to pick, and no menu.
-      menu: robot && !posable ? null : <SelectFilterMenu value={selectFilter} modes={ROBOT_SELECT_MODES}
+      menu: robot && !posable ? null : <SelectFilterMenu value={selectFilter} order={ROBOT_SELECT_DEFAULT}
+        kinds={[{ id: "links", label: t("pick.links") }]} extras={[{ id: "position", label: t("pick.position") }]}
         onChange={value => { setSelectFilter(value); selectTool(ROBOT_TOOL.SELECT); }} /> }),
     ...sceneTools.tools
   ];

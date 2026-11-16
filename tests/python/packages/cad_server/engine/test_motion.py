@@ -513,7 +513,7 @@ def deviations(glb: Path, structure: dict, rate: int = 240) -> dict[str, tuple[i
     found = {}
     for animation in gltf["animations"]:
         timeline = mechanism.Timeline(kinematics, animation["name"])
-        duration = animation["extras"]["cadgen"]["duration"]
+        duration = animation["extras"]["cad"]["duration"]
         truths = {}
         worst = [0.0, 0.0]
         most = 0
@@ -550,7 +550,8 @@ class GlbTest(_Folder):
         structure = document.Loaded(self.xbf).structure()
         self.assertEqual([animation["name"] for animation in gltf["animations"]], ["lift", "nod", "wave"])
         nodes = {node["name"]: node for node in gltf["nodes"][1:]}
-        self.assertIn("matrix", nodes["base"], "a placement no motion moves stands by its matrix")
+        self.assertNotIn("translation", nodes["base"], "a placement no motion moves stands by its matrix (none: at "
+                                                         "its parent's place)")
         for name in ("link", "tip"):
             self.assertNotIn("matrix", nodes[name], "an animated node stands by translation and rotation")
             self.assertEqual(len(nodes[name]["rotation"]), 4)
@@ -565,9 +566,10 @@ class GlbTest(_Folder):
                 times = read(sampler["input"])[:, 0]
                 self.assertTrue(np.all(np.diff(times) > 0))
                 self.assertEqual(gltf["accessors"][sampler["input"]]["min"][0], 0.0)
-                self.assertAlmostEqual(float(times[-1]), animation["extras"]["cadgen"]["duration"], places=5)
-        extras = {animation["name"]: animation["extras"]["cadgen"] for animation in gltf["animations"]}
-        self.assertEqual(extras, {"lift": {"duration": 3.0}, "nod": {"duration": 6.0}, "wave": {"duration": 2.0}})
+                self.assertAlmostEqual(float(times[-1]), animation["extras"]["cad"]["duration"], places=5)
+        extras = {animation["name"]: animation["extras"]["cad"] for animation in gltf["animations"]}
+        self.assertEqual(extras, {"lift": {"duration": 3.0, "kind": "motion"}, "nod": {"duration": 6.0, "kind": "motion"},
+                                  "wave": {"duration": 2.0, "kind": "motion"}})
         self.assertAlmostEqual(read(gltf["animations"][2]["samplers"][0]["input"])[-1, 0], 2.0, places=5,
                                msg="a clip is the motion once: a player repeats it")
         size = math.dist((-50, -30, -10), (160, 30, 40))
@@ -595,8 +597,12 @@ class GlbTest(_Folder):
         self.arm()
         view = Source.read(self.xbf).view()
         kinematics = view.source.structure["kinematics"]
+        # Each part its own node, the root's child, its node index its instance's.
+        targets = [motion.Target(placed.instance, None, (placed.instance,), placed.instance,
+                                 np.asarray(placed.matrix, dtype=float), np.eye(4), "/".join(placed.path[1:]))
+                   for placed in view.placements]
         for name in kinematics["motions"]:
-            moving = motion._Motion(view, name, [placed.instance for placed in view.placements])
+            moving = motion._Motion(view, name, targets)
             for t in np.linspace(0.0, moving.timeline.duration, 7):
                 values = moving.timeline.values(float(t))
                 with mock.patch.object(mechanism, "_from_column", side_effect=AssertionError("a frame read again")):

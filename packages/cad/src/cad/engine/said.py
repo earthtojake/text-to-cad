@@ -14,8 +14,8 @@ import os
 import sys
 from typing import Any, Callable
 
-__all__ = ["COMMAND", "SERVER", "describe", "files", "given", "log", "number", "reported", "shown", "size", "weighed",
-           "written"]
+__all__ = ["COMMAND", "SERVER", "describe", "files", "given", "log", "number", "reported", "robot", "shown", "size",
+           "weighed", "written"]
 
 # The server's distribution and its command, as every line of the library names them: one place to
 # rename either (the server names them in its own, ``cad_server._internal.launch``).
@@ -106,20 +106,64 @@ def describe(report: dict[str, Any], wall: float, fresh: bool | None) -> str:
         counted = {status: bodies.count(status) for status in ("run", "replayed") if bodies.count(status)}
         ran = ", ".join(f"{count} {status}" for status, count in counted.items()) or "none"
         stages = ", ".join(f"{name} {timings[name]:.2f}s" for name in ("body", "names", "document", "xbf", "step",
-                                                                        "glb", "stl", "threemf", "dxf")
+                                                                        "glb", "stl", "threemf", "dxf", "mjcf",
+                                                                        "urdf")
                            if timings.get(name))
-        misses, hits = memo.get("misses", 0), memo.get("hits", 0)
+        misses, hits, uncached = memo.get("misses", 0), memo.get("hits", 0), memo.get("uncached", 0)
         line = (f"built {report['model']}{worker} in {wall:.2f}s: bodies {ran}; {misses} miss{'' if misses == 1 else 'es'}, "
-                f"{hits} hit{'' if hits == 1 else 's'}" + (f"; {stages}" if stages else ""))
+                f"{hits} hit{'' if hits == 1 else 's'}" + (f", {uncached} uncached" if uncached else "")
+                + (f"; {stages}" if stages else ""))
         line += _waited(report, "replayed" if counted.get("replayed") and not counted.get("run") else "ran after")
         line += _delta(report.get("delta"))
         if (report.get("cache") or {}).get("changed"):
             line += f"\n  rebuilt: {report['cache']['reason']}"
+        line += "".join(f"\n  not retained: {text}" for text in _unretained(report))
+    line += _cold(report) if fresh else ""
     if report.get("retired"):
         listed.append(f"retired: {report['retired']}")
     return (line + "".join(f"\n  {text}" for text in listed) + children
             + "".join(f"\n  warning: kinematics: {text}" for text in report.get("kinematics", {}).get("warnings", ()))
             + _verified(report.get("verify")))
+
+
+# Why the engine retired a script's worker (the supervisor's reasons), as the next run's line says it.
+_RETIRED = {
+    "RSS": "the engine's processes were over their memory cap (CAD_ENGINE_WORKER_RSS_MB, read when the engine starts)",
+    "pressure": "the system was short of memory",
+    "LRU": "the engine was at its count of workers, and this one was the least recently used",
+    "exited": "it exited (the system ends a process when memory runs out)",
+}
+
+
+def _cold(report: dict[str, Any]) -> str:
+    """Under a cold run's line, why its script's last worker went (``cold``: the engine's note of its
+    retirement, ``{reason, ago}``), so a build that took minutes where the last took seconds says what
+    cost it its warm worker. Nothing for a script that had none."""
+    cold = report.get("cold")
+    if not cold:
+        return ""
+    ago = int(cold.get("ago") or 0)
+    span = f"{ago}s" if ago < 60 else f"{ago // 60}m" if ago < 3600 else f"{ago // 3600}h{ago % 3600 // 60:02d}m"
+    reason = _RETIRED.get(cold.get("reason"), f"retired ({cold.get('reason')})")
+    return f"\n  cold: this script's worker went {span} ago: {reason}"
+
+
+# The bodies' reasons a build's lines give before they count the rest (``_unretained``).
+_REASONS = 4
+
+
+def _unretained(report: dict[str, Any]) -> list[str]:
+    """Why a body of this model cannot be kept and runs whole on every build, each with its remedy
+    (``retention.fallbacks``, the run's, of which this model's bodies are ``bodies``: a call that ran
+    uncached, a file read past the engine's readers): the first ``_REASONS``, then how many more.
+    Said under the run's line, where a build that is slow for it is read: ``12 misses, 6142 hits``
+    alone reads as a slow machine."""
+    mine = report.get("bodies") or {}
+    found = [f"{body} {reason}" for body, reasons in ((report.get("retention") or {}).get("fallbacks") or {}).items()
+             if body in mine for reason in reasons]
+    if len(found) > _REASONS:
+        found[_REASONS:] = [f"and {len(found) - _REASONS} more reason{'' if len(found) - _REASONS == 1 else 's'}"]
+    return found
 
 
 def _waited(report: dict[str, Any], how: str) -> str:
@@ -216,20 +260,85 @@ def reported(reports: list[dict[str, Any]], wall: float, fresh: bool | None, as_
 
 def written(rows: Any, typed: Any) -> None:
     """A line on stdout per file an export wrote or found holding its bytes already (``rows``), each
-    named as ``typed`` names it (``given``): ``cad <type> export``'s, and a program's own ``export()`` call's."""
+    named as ``typed`` names it (``given``): ``cad <type> export``'s, and a program's own ``export()`` call's;
+    after a robot description's, what it holds on stderr (``robot``)."""
     for row in rows:
         if row.written:
             print(f"wrote {given(row.path, typed)} ({size(row.bytes)}) in {row.seconds:.2f}s")
         else:
             print(f"unchanged {given(row.path, typed)} ({size(row.bytes)}): it holds these bytes already")
+        if getattr(row, "robot", None):
+            sys.stdout.flush()
+            for line in robot(row.robot):
+                print(line, file=sys.stderr)
+
+
+#: The names a robot's summary lists before it counts the rest.
+NAMED = 8
+
+
+def _named(names: Any) -> str:
+    names = list(names)
+    shown_ = ", ".join(names[:NAMED])
+    return shown_ + (f" and {len(names) - NAMED} more" if len(names) > NAMED else "")
+
+
+def robot(summary: dict[str, Any]) -> list[str]:
+    """What a robot description an export wrote holds (``Description.summary``), in a line or two: its links
+    and how its base stands, its joints by kind, its mass; then, where it has any, its couplings, closures,
+    frames, how its parts collide (``description.COLLIDES``), the contact excludes an MJCF writes for the bodies
+    touching at rest, keys (or, of a URDF, the states it does not write) and zero state, and the links with no
+    mass. Its warnings and
+    the writer's notes are the export's log lines, said as it wrote the file; the summary does not say them
+    again."""
+    links = summary.get("links") or []
+    joints = summary.get("joints") or {}
+    base = "on a free base" if summary.get("base") == "free" else "bolted to the world"
+    count = sum(len(names) for names in joints.values())
+    if count:
+        kinds = "; ".join(f"{len(names)} {kind} ({_named(names)})" for kind, names in joints.items())
+        moving = f"{count} joint{'s' if count != 1 else ''}: {kinds}"
+    else:
+        moving = "no joints"
+    mass = summary.get("mass")
+    weight = "no mass" if mass is None else f"{number(mass)} kg"
+    head = (f"  robot {summary.get('name')}: {len(links)} link{'s' if len(links) != 1 else ''} ({_named(links)}) "
+            f"{base}; {moving}; {weight}")
+    rest = []
+    couplings = summary.get("couplings") or []
+    if couplings:
+        rest.append("couplings " + ", ".join(f"{follower} follows {leader} x{number(ratio)}"
+                                             for follower, leader, ratio in couplings))
+    if summary.get("closures"):
+        rest.append(f"loops closed at {_named(summary['closures'])}")
+    if summary.get("frames"):
+        rest.append(f"frames {_named(summary['frames'])}")
+    if summary.get("collides"):
+        rest.append(summary["collides"])
+    touching = len(summary.get("touching") or ())
+    if touching:
+        rest.append(f"{touching} contact exclude{'s' if touching != 1 else ''} (bodies touching at rest)")
+    if summary.get("poses"):
+        rest.append(f"keys {_named(summary['poses'])}")
+    if summary.get("unwritten"):  # a URDF's: it holds no state
+        unwritten = summary["unwritten"]
+        rest.append(f"state{'s' if len(unwritten) != 1 else ''} {_named(unwritten)} not written (a URDF holds none; "
+                    "an MJCF has them as keys)")
+    if summary.get("zero"):
+        rest.append(f"zero at {summary['zero']}")
+    if summary.get("massless"):
+        rest.append(f"no mass in {_named(summary['massless'])}")
+    return [head] + (["    " + "; ".join(rest)] if rest else [])
 
 
 def weighed(structure: dict[str, Any], hit: Any, volumes: dict[str, float]) -> dict[str, Any]:
     """What the occurrence a ref names (``refs.Hit``, from ``refs.resolve_structure``) weighs: each
     part below it, its instance's volume (its prototype's, mm^3, by key in ``volumes``) times its
     material's density, in kg, summed; ``mass`` None when no part of it has a material with a
-    density, and the parts that have none listed by their occurrence paths."""
+    density, and the parts that have none listed by their occurrence paths. Where the model declares a mass or
+    point masses, they weigh as the robot description weighs them (``weights``), said in ``declared``."""
     from cad.engine.refs import path_text
+    from cad.engine.weights import declares, weigh
 
     prototypes = structure["prototypes"]
     total_volume = 0.0
@@ -247,8 +356,19 @@ def weighed(structure: dict[str, Any], hit: Any, volumes: dict[str, float]) -> d
             continue
         mass += volume * 1e-9 * density
         weighed_any = True
+    declared = None
+    if declares(structure):
+        # A part or an assembly declared to weigh grams, and its point masses, weigh as the robot description
+        # weighs them (``weights``): ``volumes`` holds every part's, since a declared mass scales them together.
+        weights = weigh(structure, volumes)
+        indices = [node.payload["instance"] for node in hit.node.parts()]
+        declared = weights.said(indices)
+        mass, weighed_any = declared["mass"] or 0.0, declared["mass"] is not None
+        if weights.refused is None:
+            unweighed = [path for at, (_instance, path) in zip(indices, held) if not weights.weighs(at)]
     found: dict[str, Any] = {"ref": hit.ref, "parts": len(held), "volume": total_volume,
-                             "mass": mass if weighed_any else None, "unweighed": unweighed}
+                             "mass": mass if weighed_any else None, "unweighed": unweighed,
+                             **({"declared": declared} if declared is not None else {})}
     if len(held) == 1:
         instance, path = held[0]
         material = (prototypes[instance["prototype"]].get("material") or {}).get("material")

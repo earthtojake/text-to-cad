@@ -1,7 +1,7 @@
 /**
  * The canvas a drawing is painted on: every flat view's (`../kit/viewport/useFlatCanvasView.js` — a
  * mouse's wheel or a pinch to zoom about the pointer, a trackpad's two-finger scroll to pan, a drag to
- * pan, the 3D views' pans too (the middle or the right button's drag, or a drag with Ctrl, Cmd or
+ * pan where Select's box does not take it, the 3D views' pans too (the middle or the right button's drag, or a drag with Ctrl, Cmd or
  * Shift), double-click to fit, a tap and the pointer resting over it for the tool in hand), painting
  * the drawing on the theme's background in the theme's pen, without the layers hidden, then what the
  * tools draw over it (`overlay`, a highlight and ink) in the same frame, so a capture of the canvas
@@ -81,6 +81,6 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
   /** The framed picture as a PNG, background included: it is painted into the canvas. */
   const capture = useCallback(() => encode("drawing"), [encode]);
 
-  return { containerRef: view.containerRef, canvasRef: view.canvasRef, dragging: view.dragging, fit: view.fit, frame: view.frame,
+  return { containerRef: view.containerRef, canvasRef: view.canvasRef, controls: view.controls, dragging: view.dragging, fit: view.fit, frame: view.frame,
     zoomBy: view.zoomBy, zoom: view.zoom, setView: view.setView, capture, thumbnail, transformRef: view.transformRef, sizeRef: view.sizeRef, requestPaint };
 }

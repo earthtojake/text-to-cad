@@ -1,0 +1,3 @@
+# What mjcf.py writes from the CAD model. Git holds the code that makes them, not them: no mesh, and no file a build writes.
+/meshes/
+/galatea.xml

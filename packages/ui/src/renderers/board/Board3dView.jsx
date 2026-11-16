@@ -21,9 +21,8 @@
  * frame: no frame of the viewport's own cover, nor of the bare slab. (Opened on the camera a file was
  * left at in 3D, it is shown at once, its cover over the pane until that frame.) Drawn and shown, it eases
  * to `opening.then` (the camera this file was left at in 3D) or to Home's tilt, on the side the 2D view
- * showed (`opening.side`: a camera on the other side turned over to it, `boardFrame.js`'s `cameraOnSide`);
- * whether anybody has moved the camera since (`moved`: a hand on it, `kit/camera/cameraTouch.js`) is what
- * leaving a 3D view opened on the 2D picture asks (`boardFrame.js`'s `leavingView`).
+ * showed (`opening.side`: a camera on the other side turned over to it, `boardFrame.js`'s `cameraOnSide`).
+ * Leaving it hands the 2D view nothing but the side: the flat canvas keeps its own window (`BoardRenderer.jsx`).
  *
  * Its parts stand on it (`@cad/core/lib/board3d/boardParts.js`): each footprint's 3D model, the STEP the
  * board's models table names (`models`, `GET …/models`) read by its document id through the engine
@@ -47,7 +46,6 @@ import ShellViewport from "../kit/shell/ShellViewport.jsx";
 import DoubleClickFit from "../kit/shell/DoubleClickFit.jsx";
 import { useStageViewport } from "../kit/shell/useStageViewport.js";
 import { plainShellCamera, scopeShellCamera } from "../kit/shell/fileView.js";
-import { cameraHands } from "../kit/camera/cameraTouch.js";
 import { PointerPick } from "../kit/tools/select/usePointerPick.js";
 
 const SCALE = VIEWER_SCENE_SCALE.CAD;
@@ -209,7 +207,6 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
   const [presented, setPresented] = useState(false);
   const presentation = useCallback(state => setPresented(state.key === modelKey && !state.preparing), [modelKey]);
   const eased = useRef(false);
-  const opened = useRef(null);
   // Head on in perspective, the eye stands where the face is drawn at the flat picture's scale for the lens
   // the viewport has (its focal length at its aspect), set before the first frame can be drawn (the faces
   // are drawn in this same pass); a lens or a projection changed later keeps that scale at the target.
@@ -223,8 +220,7 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
   useEffect(() => { if (presented) live.current.onShown(); }, [presented]);
   // Shown and drawn, it eases from head on, to a camera on the side the 2D view showed (`cameraOnSide`): the
   // camera the file was left at in 3D, turned over to that side if it looks at the other, or Home's tilt from
-  // that side, so the ease never crosses the board's plane. The hands on the camera then are the opening's own,
-  // and any after them somebody's (`moved`).
+  // that side, so the ease never crosses the board's plane.
   useEffect(() => {
     if (!shown || !presented || eased.current || !runtime()) return;
     eased.current = true;
@@ -237,7 +233,6 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
       const home = cameraOnSide({ position: [...DEFAULT_VIEW_DIRECTION], target: [0, 0, 0], up: [...WORLD_UP] }, opening.side);
       viewer?.goHome?.({ direction: home.position, up: home.up });
     }
-    opened.current = cameraHands(runtime());
   }, [shown, presented]);
   // The side the camera looks at is drawn on every stage: a revision is a new stage under a camera that
   // does not move, so no perspective change tells it the camera is under the board.
@@ -289,16 +284,13 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
     fit: () => viewerRef.current?.resetZoom?.(),
     /** A page box framed, the camera's direction kept. */
     frameSheet: ([x0, y0, x1, y1]) => viewerRef.current?.zoomToBounds?.({ min: [x0, -y1, -thickness], max: [x1, -y0, 0] }),
-    /** The camera turned over to `side`, eased: Flip's (a move of the camera, as a hand's is: `moved`). */
+    /** The camera turned over to `side`, eased: Flip's. */
     turnTo(side) {
       const viewer = viewerRef.current, now = viewer?.getPerspective?.();
       if (!now || sideNow() === side) return;
       viewer.setPerspective({ ...now, ...cameraTurnedOver(now) }, { animate: true });
     },
-    /** Whether anybody has moved the camera since it was shown and eased to where it opens: leaving a 3D view opened on the
-     *  2D picture then frames its `plan`, as leaving one opened on a stored camera always does (`boardFrame.js`'s `leavingView`). */
-    moved: () => opened.current !== null && cameraHands(runtime()) !== opened.current,
-    /** The 3D camera as the 2D view's window: what leaving 3D frames but after an untouched round trip (`leavingView`), and what a prompt's view is. */
+    /** The 3D camera as the 2D view's window: what a prompt's view of the board in 3D is (leaving 3D frames nothing on it). */
     plan(mirrorX) {
       const current = camera(), target = runtime()?.controls?.target, { width, height } = paneSize();
       if (!current || !target) return null;

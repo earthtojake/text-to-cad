@@ -1,0 +1,1890 @@
+"""3D printing's measurements of exact geometry (``cad._internal.dfm.printing`` says what they are for).
+
+The document stands on the plate as a whole: its lowest point is the plate, Z up. Every face is sampled
+(``_dfm_brep.samples``: points on the surface, their outward normals, their share of the area) and the
+families are measured on the B-rep, each item at the ref of the face that names it:
+
+- ``solid``: each part's validity (the kernel's checks), closure, solids, inner shells, volume;
+- ``overhangs``: each down-facing face's angle from horizontal (a plane's exactly, a curved face's over
+  its samples), its area under the angle limit, its height, and what kind of overhang it is (a slope, a
+  flat ceiling a bridge or cantilever carries, a hole's arch, a round on the plate's edge);
+- ``bridges``: each flat ceiling's span between the walls that carry it (a bridge) or reach past the
+  one that does (a cantilever), from its supporting edges (concave, the wall below);
+- ``wall_thickness``: exact rays into the material from every sample; per face the thinnest, whether the
+  wall is joined on two or more sides (supported) or fewer;
+- ``gaps``: exact rays out of the material: per face the narrowest slot to another face of the part;
+- ``holes`` and ``pins``: concave and convex cylinders round an axis (at least 250 degrees of it), their
+  diameter, depth or height, orientation, a horizontal hole's teardrop top, through or blind;
+- ``details``: embossed and engraved steps (a side face between two parallel faces), height and width;
+- ``clearances``: the exact minimum distance between distinct parts (BRepExtrema), contact and overlap;
+- ``trapped_volumes``: cavities -- every solid's inner shells, exactly, and from a voxel field the air
+  a ball cannot reach from outside -- each with its volume, escape holes (the holes from it to outside,
+  exactly), the wall around it;
+- ``knife_edges``: convex edges whose angle, read along the edge (``brep.edge_angles``), falls under 45 deg
+  (``meshops_printing.KNIFE_DEG``), where the material thins to nothing, with the stretch under it and the
+  depth it stays under the minimum wall; the walls leave every tip's sliver to it (``_knife_zones``);
+- ``build_volume``, ``bed``, ``stair_stepping``, ``support_volume`` (a raster of the triangulation),
+  ``sections`` (thickest walls, cross-sections), ``scale``; with ``candidates`` the orientations ranked.
+
+OCP, build123d and numpy alone; each family fails on its own (``{"error": ...}``, ``partial_sections``).
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+import numpy as np
+
+from cad._internal import meshops_printing as mo
+from cad._internal.dfm import printing as rules
+from cad.build123d import _dfm_brep as brep
+
+__all__ = ["measure", "measure_each"]
+
+#: Items a family lists, at most (worst first); the rest are counted.
+CAP = 300
+#: Samples: ``--samples`` spread over the faces by area, each face at least ``SAMPLE_FLOOR`` -- fewer when
+#: the floor alone would pass ``SAMPLE_CAP`` (a part of thousands of faces gets one each) -- and at most 400.
+SAMPLE_FLOOR = 4
+SAMPLE_CAP = 6000
+#: A flat ceiling is under this many degrees from horizontal.
+FLAT_DEG = 5.0
+#: Flat ceilings whose span is refined to the exact farthest point (600 samples, then a climb with the face's
+#: classifier), the largest first; the rest are read on their own samples (to about their spacing).
+REFINED_CEILINGS = 40
+#: A cylinder round an axis by at least this many degrees is a hole or a pin (a fillet is 90, a slot's end 180).
+ROUND_DEG = 250.0
+#: Gaps are reported up to this width, mm (every published minimum is under 1 mm).
+GAP_CEILING = 3.0
+#: Embossed and engraved steps are this high at most, mm.
+DETAIL_CEILING = 2.0
+#: A shallow slope stair-steps: above flat and under this many degrees from horizontal.
+SHALLOW_DEG = 20.0
+#: A wall ray that lands on a face sharing an edge with its own within this many mm met the seam, not the
+#: far side of a wall: a sample on a tangent or concave edge re-hits its neighbour at 0.0003-0.008 mm (seen on
+#: B-spline robot parts). Every published minimum wall is 0.3 mm or more. (A knife edge's sliver, whose two
+#: faces share the edge, is the knife family's: ``_walls`` leaves it to it.)
+SEAM_HIT_MM = 0.05
+#: Overhangs too small to need support: ``meshops_printing``'s floors, shared with the mesh path.
+OVERHANG_AREA_MM2 = mo.OVERHANG_AREA_MM2
+OVERHANG_REACH_MM = mo.OVERHANG_REACH_MM
+_OVERHANG_METHOD = ("each down-facing face's angle from horizontal off the plate; a slope, ceiling or cantilever "
+                    "under area_floor_mm2 below the limit, or a cantilever reaching under reach_floor_mm (the "
+                    "nozzle given, else one bead), is listed with counted false and judged by no rule: "
+                    "text-to-cad's own floors, no guide states them")
+#: An embossed or engraved step is a detail (text, a logo, a mark) only while it is narrower than this, mm:
+#: wider steps -- a lid's groove, a locating land, a ledge -- are the part's geometry, which the wall and gap
+#: rules judge.
+DETAIL_ACROSS_MM = 3.0
+
+
+#: The digits a figure a rule judges is kept to (``meshops_printing.JUDGED``): the messages print as many digits
+#: as tell the value from the limit.
+JUDGED = mo.JUDGED
+
+
+def _r(value: float | None, digits: int = 4) -> float | None:
+    return None if value is None or not math.isfinite(value) else round(float(value), digits)
+
+
+def _xyz(point: Any) -> list[float]:
+    return [round(float(value), 4) for value in point]
+
+
+def _safe(fn: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+    try:
+        return fn()
+    except Exception as error:  # noqa: BLE001 - one family failing never loses the rest
+        detail = f"{type(error).__name__}: {error}".splitlines()[0]
+        return {"error": detail[:300]}
+
+
+def _capped(items: list[dict[str, Any]], key: Callable[[dict[str, Any]], Any]) -> tuple[list[dict[str, Any]], int]:
+    items.sort(key=key)
+    return items[:CAP], len(items)
+
+
+# --- the faces ----------------------------------------------------------------------------------------------
+
+
+@dataclass
+class FaceInfo:
+    part: int
+    ordinal: int
+    face: Any
+    surface: brep.Surface
+    area: float
+    zmin: float
+    zmax: float
+    samples: list[brep.Sample] = field(default_factory=list)
+    box: Any = None                        # the face's box (the kernel's quick one, on its triangulation)
+    coverage_deg: float = 0.0              # a cylinder's angle round its axis
+    group: int | None = None               # its hole or pin
+    thickness: list[tuple[float, int, int]] = field(default_factory=list)  # (mm, sample index, hit ordinal)
+    gap: list[tuple[float, int, int]] = field(default_factory=list)
+
+
+@dataclass
+class Round:
+    """A hole (concave) or pin (convex): cylinder faces round one axis."""
+
+    part: int
+    faces: list[int]
+    concave: bool
+    radius: float
+    axis: np.ndarray
+    origin: np.ndarray
+    coverage_deg: float
+    lo: float = 0.0
+    hi: float = 0.0
+
+
+class Context:
+    """What every family reads: the parts, their faces sampled, their edges, rays, the plate."""
+
+    def __init__(self, document: brep.Document, options: dict[str, Any]) -> None:
+        # The parts as they are printed together: every occurrence where it stands, on one plate. The occurrences
+        # turned alike share neither their height above the plate, nor what stands under and beside them.
+        document = brep.every_occurrence(document)
+        self.document = document
+        self.options = options
+        self.technology = options["technology"]
+        self.angle_limit = rules.angle_limit(options)
+        self.layer = rules.layer_height(options)
+        self.parts = document.parts
+        self.faces: list[list[FaceInfo]] = []
+        self.rounds: list[Round] = []
+        self._rays: dict[int, brep.Rays] = {}
+        #: The faces the samples' shared rays could not be intersected with, per part (``measure_rays``), and
+        #: whether the family being measured read those rays.
+        self.ray_lost: dict[int, set[int]] = {}
+        self.used_rays = False
+        self._edges: dict[int, list[brep.Edge]] = {}
+        self._adjacent: dict[int, dict[int, list[brep.Edge]]] = {}
+        self._mesh: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
+        self._grids: dict[int, Any] = {}
+        total = sum(float(face.area) for part in self.parts for face in part.faces()) or 1.0
+        budget = int(options.get("samples") or 2000)
+        faces = sum(len(part.faces()) for part in self.parts)
+        # every face gets at least SAMPLE_FLOOR samples while the floor costs at most SAMPLE_CAP in all
+        floor = max(1, min(SAMPLE_FLOOR, SAMPLE_CAP // max(1, faces)))
+        for index, part in enumerate(self.parts):
+            infos = []
+            for ordinal, face in enumerate(part.faces(), start=1):
+                # the face's own size (its oriented box: the same however the part is turned) for the
+                # sampling's deflection; its world box is read again on the triangulation the sampling made
+                area = float(face.area)
+                count = int(min(400, max(floor, round(budget * area / total))))
+                deflection = brep.deflection_for(face)
+                samples = brep.samples(face, count, deflection) if area > 0 else []
+                if len(samples) > count:
+                    # a face of many triangles gives a sample per triangle: keep ``count``, spread over them
+                    keep = np.unique(np.linspace(0, len(samples) - 1, count).round().astype(int))
+                    samples = [samples[k] for k in keep]
+                box = face.bounding_box(optimal=False)
+                info = FaceInfo(index, ordinal, face, brep.surface(face), area, float(box.min.Z), float(box.max.Z))
+                info.box = box
+                info.samples = samples
+                if info.surface.kind == "cylinder":
+                    from OCP.BRepTools import BRepTools
+
+                    umin, umax, _, _ = BRepTools.UVBounds_s(face.wrapped)
+                    info.coverage_deg = math.degrees(umax - umin)
+                infos.append(info)
+            self.faces.append(infos)
+            self._group_rounds(index)
+        # the document's box from points on its surface -- every vertex, every sample, every node of the faces'
+        # triangulations -- not from a box the kernel pads with each face's tolerance: the plate is its lowest
+        V, _, _ = self.mesh()
+        points = [V] + [np.array([s.point for s in info.samples]) for infos in self.faces for info in infos
+                        if info.samples]
+        every = np.vstack(points)
+        self.lo, self.hi = every.min(axis=0), every.max(axis=0)
+        self.z0 = float(self.lo[2])
+        self.diag = float(np.linalg.norm(self.hi - self.lo))
+        self.tol = max(1e-4, 1e-6 * self.diag)
+
+    # the part's pieces, made on first use
+    def rays(self, part: int) -> brep.Rays:
+        if part not in self._rays:
+            self._rays[part] = brep.Rays(self.parts[part].shape)
+        return self._rays[part]
+
+    def edges(self, part: int) -> list[brep.Edge]:
+        if part not in self._edges:
+            self._edges[part] = brep.edges(self.parts[part])
+            adjacent: dict[int, dict[int, list[brep.Edge]]] = {}
+            for edge in self._edges[part]:
+                a, b = edge.faces
+                adjacent.setdefault(a, {}).setdefault(b, []).append(edge)
+                adjacent.setdefault(b, {}).setdefault(a, []).append(edge)
+            self._adjacent[part] = adjacent
+        return self._edges[part]
+
+    def adjacent(self, part: int, ordinal: int) -> dict[int, list[brep.Edge]]:
+        self.edges(part)
+        return self._adjacent[part].get(ordinal, {})
+
+    def info(self, part: int, ordinal: int) -> FaceInfo:
+        return self.faces[part][ordinal - 1]
+
+    def solid_of(self, part: int) -> dict[int, int]:
+        """Each face's solid (its index among the part's) where the part is of several solids; empty for a
+        part of one. Solids of one part are bodies printed together, as parts are: what lies between two of
+        them is a clearance, never a slot of one."""
+        found = self.__dict__.setdefault("_solid_of", {})
+        if part not in found:
+            solids = self.parts[part].solids()
+            found[part] = {} if len(solids) < 2 else {
+                ordinal: k for k, solid in enumerate(solids) for face in solid.faces()
+                if (ordinal := self.parts[part].face_ordinal(face))}
+        return found[part]
+
+    def bodies(self) -> list[tuple[int, int | None]]:
+        """The bodies the clearances lie between: every part, and every solid of a part of several (part,
+        solid; None for a part of one)."""
+        found: list[tuple[int, int | None]] = []
+        for part in range(len(self.parts)):
+            solids = sorted(set(self.solid_of(part).values()))
+            found += [(part, solid) for solid in solids] if solids else [(part, None)]
+        return found
+
+    def body_name(self, body: tuple[int, int | None]) -> str:
+        part, solid = body
+        name = self.parts[part].name or self.parts[part].owner
+        return f"{name or 'part'} (solid {solid + 1})" if solid is not None else name
+
+    def ref(self, part: int, ordinal: int) -> str:
+        return self.parts[part].ref("face", ordinal)
+
+    def on_plate(self, z: float) -> bool:
+        return z <= self.z0 + self.tol
+
+    def _group_rounds(self, part: int) -> None:
+        for info in self.faces[part]:
+            s = info.surface
+            if s.kind != "cylinder" or s.concave is None or s.radius is None:
+                continue
+            axis = np.array(s.axis, dtype=float)
+            axis = axis if (axis[2], axis[1], axis[0]) >= (0, 0, 0) else -axis
+            origin = np.array(s.origin, dtype=float)
+            for index, other in enumerate(self.rounds):
+                if other.part != part or other.concave != s.concave or abs(other.radius - s.radius) > 1e-4:
+                    continue
+                if abs(abs(float(other.axis @ axis)) - 1.0) > 1e-6:
+                    continue
+                offset = origin - other.origin
+                if np.linalg.norm(offset - other.axis * float(offset @ other.axis)) > 1e-4:
+                    continue
+                other.faces.append(info.ordinal)
+                other.coverage_deg += info.coverage_deg
+                info.group = index
+                break
+            else:
+                info.group = len(self.rounds)
+                self.rounds.append(Round(part, [info.ordinal], bool(s.concave), float(s.radius), axis, origin,
+                                         info.coverage_deg))
+        for group in self.rounds:
+            if group.part != part:
+                continue
+            along = []
+            for ordinal in group.faces:
+                face = self.info(part, ordinal).face
+                points = [np.array([v.X, v.Y, v.Z]) for v in face.vertices()]
+                points += [sample.point for sample in self.info(part, ordinal).samples]
+                along += [float((point - group.origin) @ group.axis) for point in points]
+            group.lo, group.hi = (min(along), max(along)) if along else (0.0, 0.0)
+
+    def rounds_of(self, concave: bool) -> list[tuple[int, Round]]:
+        return [(index, group) for index, group in enumerate(self.rounds)
+                if group.concave == concave and group.coverage_deg >= ROUND_DEG]
+
+    def mesh(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Every part triangulated together: vertices, triangles, and each triangle's owner (part << 20 |
+        face ordinal)."""
+        if self._mesh is None:
+            size = max(float(np.linalg.norm([p.shape.bounding_box(optimal=False).size.X,
+                                             p.shape.bounding_box(optimal=False).size.Y,
+                                             p.shape.bounding_box(optimal=False).size.Z])) for p in self.parts)
+            deflection = min(0.25, max(0.005, 5e-4 * size))
+            self._deflection = deflection
+            Vs, Fs, Os, offset = [], [], [], 0
+            for index, part in enumerate(self.parts):
+                V, F, O = brep.triangles(part.shape, deflection)
+                Vs.append(V)
+                Fs.append(F + offset)
+                Os.append(O + (index << 20))
+                offset += len(V)
+            self._mesh = (np.vstack(Vs), np.vstack(Fs).astype(int), np.concatenate(Os).astype(int))
+        return self._mesh
+
+    def owner_ref(self, owner: int) -> str:
+        return self.ref(owner >> 20, owner & 0xFFFFF)
+
+    def measure_rays(self) -> None:
+        """Every sample's wall (a ray into the material) and gap (a ray out of it, up to ``GAP_CEILING``), the
+        rays of a part cast together (``_first_hits``). The faces the kernel failed to intersect them with are
+        kept (``ray_lost``): every family that reads these rays is not measured there."""
+        self.used_rays = True
+        if getattr(self, "_rayed", False):
+            return
+        self._rayed = True
+        before = self.failures()
+        try:
+            self._measure_rays()
+        finally:
+            self.ray_lost = self.lost_since(before)
+
+    def failures(self) -> dict[int, list[dict[int, int]]]:
+        """Each part's rays' failures so far (``brep.failures``)."""
+        return {part: brep.failures([rays.screen]) for part, rays in self._rays.items()}
+
+    def lost_since(self, before: dict[int, list[dict[int, int]]]) -> dict[int, set[int]]:
+        """Per part, the faces the kernel failed to intersect a ray with since ``before`` (ordinals)."""
+        found: dict[int, set[int]] = {}
+        for part, rays in self._rays.items():
+            new = brep.failed_ordinals(self.parts[part], [rays.screen], [rays.faces], before.get(part))
+            if new:
+                found[part] = set(new)
+        return found
+
+    def _measure_rays(self) -> None:
+        for part, infos in enumerate(self.faces):
+            rays = self.rays(part)
+            owners = [(info, k) for info in infos for k in range(len(info.samples))]
+            if not owners:
+                continue
+            points = np.array([info.samples[k].point for info, k in owners])
+            normals = np.array([info.samples[k].normal for info, k in owners])
+            walls = _first_hits(rays, points, -normals, 1e-5, 1e9)
+            gaps = _first_hits(rays, points, normals, 1e-5, GAP_CEILING)
+            props: dict[int, Any] = {}
+            solids = self.solid_of(part)
+            for (info, k), wall, gap, normal in zip(owners, walls, gaps, normals):
+                adjacent = self.adjacent(part, info.ordinal)
+                if wall is not None:
+                    other = wall[1] + 1
+                    # a wall's far face looks back along the ray: its normal where the ray lands within KNIFE_DEG
+                    # of the ray. A face turned further measures a corner, whether or not it shares an edge with
+                    # the ray's own (a rim whose sides meet at 50 deg, its top between them), and one that does
+                    # look back is a wall's far side wherever it is, as the mesh path counts both: the faces'
+                    # topology decides neither. A knife edge's other flank (under KNIFE_DEG) looks back: its
+                    # sliver is real, and the knife family's (``_walls``)
+                    facing = _facing(rays, props, wall, -normal)
+                    # a ray re-hitting the neighbour across a shared edge at almost nothing met the seam
+                    seam = other in adjacent and wall[0] < SEAM_HIT_MM
+                    if facing and not seam:
+                        info.thickness.append((wall[0], k, other))
+                if gap is not None:
+                    other = gap[1] + 1
+                    same = other == info.ordinal or other in adjacent or (
+                        info.group is not None and self.info(part, other).group == info.group)
+                    # a slot's far wall looks back across it (within KNIFE_DEG, as a wall's far face does): a V
+                    # groove wider than that -- a thread's 60 deg -- is a notch, no slot, on both paths; and what
+                    # lies between two solids of one part is their clearance
+                    if not same and solids.get(other) == solids.get(info.ordinal) and _facing(rays, props, gap, -normal):
+                        info.gap.append((gap[0], k, other))
+
+
+#: A wall ray's hit counts while the face it lands on is turned toward it within KNIFE_DEG: a face turned
+#: exactly KNIFE_DEG (a 45-degree gusset's) is at the limit, not past it (``ANGLE_EPS``), however the rounding
+#: of its normal reads in this placement of the part.
+_FACING = math.cos(math.radians(mo.KNIFE_DEG + mo.ANGLE_EPS))
+#: Walls and gaps whose sampled figure is under these are refined to the exact least distance (``_refine``).
+REFINE_WALL_MM = 5.0
+#: A face of more edges than this is not refined (a web around many holes: its sampled figure stands).
+REFINE_EDGES = 16
+
+
+def _refine(ctx: "Context", part: int, item: dict[str, Any], i: int, j: int, outward: bool) -> None:
+    """A listed wall's thickness (``outward`` False) or gap's width refined to the exact least distance between
+    its face and the face across (``brep.least_segments``), where that segment leaves the face within 45 degrees
+    of its normal (into the material, or the void), the face across looks back along it as a wall's or a gap's
+    far side does, and an exact ray along it meets nothing before the face across: sampled rays land
+    a few points a face and read a wall between two holes, or a slot's narrowest, wide (``refined`` true, ``xyz``
+    the thinnest point). Faces sharing an edge or a corner are not refined: their least distance is 0."""
+    key = "gap_mm" if outward else "thickness_mm"
+    if i == j or j in ctx.adjacent(part, i):
+        return
+    a, b = ctx.info(part, i), ctx.info(part, j)
+    corners = {tuple(np.round([v.X, v.Y, v.Z], 6)) for v in a.face.vertices()}
+    if any(tuple(np.round([v.X, v.Y, v.Z], 6)) in corners for v in b.face.vertices()):
+        return
+    if a.surface.kind == b.surface.kind == "plane" and \
+            abs(float(np.asarray(a.surface.normal) @ np.asarray(b.surface.normal))) > 1 - 1e-9:
+        return  # parallel planes: every ray between them is as long, the sampled one exact
+    if len(ctx.adjacent(part, i)) > REFINE_EDGES:
+        return
+    segments = brep.least_segments(a.face, b.face, len(ctx.adjacent(part, j)) > REFINE_EDGES)
+    if not segments or segments[0][0] >= float(item[key]) - 1e-6:
+        return
+    rays = ctx.rays(part)
+    for length, pa, pb, normal, there in segments:
+        way = (pb - pa) / length
+        if float(way @ (normal if outward else -normal)) < _FACING:
+            continue
+        if outward:
+            if float(there @ way) > -_FACING:
+                continue  # the face across looks back at the gap
+        elif float(there @ way) < _FACING:
+            continue  # the wall's far side looks on along the ray
+        # nothing between: an exact ray along it meets the face across first, at that distance -- or nothing
+        # at all, where the least lies on that face's own edge and the ray passes it by a hair; or a face both
+        # meet, which the least runs along (a groove's floor: the gap under a thread's first flank is least
+        # along the shank, and the ray grazing it met it as the part was drawn and not turned 37 deg)
+        hit = _first_hits(rays, (pa + way * 1e-5)[None], way[None], 1e-6, length + 1e-3)[0]
+        other = hit[1] + 1 if hit is not None else j
+        floor = other in ctx.adjacent(part, i) and other in ctx.adjacent(part, j)
+        if other != j and not floor and abs(hit[0] + 1e-5 - length) > 1e-4:
+            continue
+        item[key] = _r(length, JUDGED)
+        item["xyz"] = _xyz(pa)
+        item["refined"] = True
+        if not outward:
+            item["_least"] = (pa, -way, length)  # a wall's least: where, the way out of the material there, and it
+        return
+
+
+def _normal_at(rays: brep.Rays, props: dict[int, Any], hit: tuple) -> np.ndarray | None:
+    """The outward unit normal of the face a ray crossed, where it crossed (``hit``: distance, face index, u, v);
+    None at a degenerate point (a cone's apex)."""
+    from OCP.BRepGProp import BRepGProp_Face
+    from OCP.gp import gp_Pnt, gp_Vec
+
+    face = int(hit[1])
+    if face not in props:
+        props[face] = BRepGProp_Face(rays.faces[face])
+    point, normal = gp_Pnt(), gp_Vec()
+    props[face].Normal(float(hit[2]), float(hit[3]), point, normal)
+    length = normal.Magnitude()
+    if not length > 1e-300:
+        return None
+    return np.array([normal.X(), normal.Y(), normal.Z()]) / length
+
+
+def _facing(rays: brep.Rays, props: dict[int, Any], hit: tuple, direction: np.ndarray) -> bool:
+    """Whether the face a ray of ``direction`` crossed (``hit``: distance, face index, u, v) looks back along it:
+    its outward normal there within ``KNIFE_DEG`` of the ray."""
+    n = _normal_at(rays, props, hit)
+    if n is None:
+        return True  # a degenerate point (a cone's apex): no normal to turn away
+    d = direction / (np.linalg.norm(direction) or 1.0)
+    return float(n @ d) > _FACING
+
+
+def _cast(ctx: "Context", part: int) -> Callable[[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
+    """``meshops_printing.wall_support``'s rays on a part, exact: each ray's distance to the surface and the
+    surface's outward normal where it lands."""
+    rays, props = ctx.rays(part), {}
+
+    def cast(origins: np.ndarray, directions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        distance, normals = np.full(len(origins), np.inf), np.zeros((len(origins), 3))
+        for k, hit in enumerate(_first_hits(rays, np.asarray(origins, dtype=float),
+                                            np.asarray(directions, dtype=float), 1e-7, 1e9)):
+            normal = _normal_at(rays, props, hit) if hit is not None else None
+            if normal is not None:
+                distance[k], normals[k] = hit[0], normal
+        return distance, normals
+
+    return cast
+
+
+def _first_hits(rays: brep.Rays, origins: np.ndarray, directions: np.ndarray, start: float, end: float,
+                chunk: int = 64) -> list[tuple[float, int, float, float] | None]:
+    """The nearest crossing beyond ``start`` (up to ``end``) of each ray: its distance, the face's index in
+    ``rays.faces`` (its ordinal less one) and the crossing's parameters on that face, or None. The rays' slab
+    tests against every face box run a chunk at a time (``Rays`` tests one ray at a time); each ray then
+    intersects its boxes' faces exactly, nearest box first, until no nearer crossing can follow."""
+    from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
+
+    lows, highs = rays.boxes[:, :3], rays.boxes[:, 3:]
+    found: list[tuple[float, int] | None] = []
+    for begin in range(0, len(origins), chunk):
+        o = origins[begin:begin + chunk, None, :]
+        d = directions[begin:begin + chunk] / np.maximum(np.linalg.norm(directions[begin:begin + chunk], axis=1,
+                                                                         keepdims=True), 1e-300)
+        d3 = d[:, None, :]
+        flat = np.abs(d3) <= 1e-300
+        with np.errstate(divide="ignore", invalid="ignore"):
+            inverse = np.where(flat, 0.0, 1.0 / np.where(flat, 1.0, d3))
+            t1, t2 = (lows[None] - o) * inverse, (highs[None] - o) * inverse
+        lo = np.where(flat, -np.inf, np.minimum(t1, t2))
+        hi = np.where(flat, np.inf, np.maximum(t1, t2))
+        across = np.all(~flat | ((lows[None] <= o) & (o <= highs[None])), axis=2)
+        enter, leave = lo.max(axis=2), hi.min(axis=2)
+        mask = across & (enter <= leave) & (leave >= start) & (enter <= end)
+        for r in range(mask.shape[0]):
+            index = np.flatnonzero(mask[r])
+            if not len(index):
+                found.append(None)
+                continue
+            entries = np.maximum(enter[r, index], start)
+            order = np.argsort(entries)
+            index, entries = rays.screen.order(o[r, 0], d[r], index[order], entries[order], start, end)
+            line = gp_Lin(gp_Pnt(*map(float, o[r, 0])), gp_Dir(*map(float, d[r])))
+            best: tuple[float, int, float, float] | None = None
+            for face, entry in zip(index, entries):
+                if best is not None and entry > best[0]:
+                    break
+                intersector = rays._intersector(int(face))
+                intersector.Perform(line, start, best[0] if best is not None else end)
+                if not intersector.IsDone():
+                    continue
+                for k in range(1, intersector.NbPnt() + 1):
+                    w = float(intersector.WParameter(k))
+                    if start <= w <= end and (best is None or w < best[0]):
+                        best = (w, int(face), float(intersector.UParameter(k)), float(intersector.VParameter(k)))
+            found.append(best)
+    return found
+
+
+# --- families -------------------------------------------------------------------------------------------------
+
+
+#: The kernel's boolean-argument check (self-intersections too) runs on the parts while their faces add up
+#: to this many; the rest get its topology check alone (BRepCheck), a fraction of the cost, and say that no
+#: self-intersection was looked for: not checked. The check's time grows with the square of a part's faces: a
+#: grille of 262 faces took 0.5 s and one of 406 faces 3.2 s, so 1000 is about 20 s -- more faces than the
+#: parts a printer is sent have (a helical thread of 26 took 4 s: its faces, not their count).
+SOUND_FACES = 1000
+#: A part with a free-form face of more control points than this has faces checked against edges, not faces
+#: against faces (``_boolean_check``): the boolean check's face/face search grows with them, without end.
+SOUND_POLES = 2000
+
+
+def _poles(face: Any) -> int:
+    """A free-form face's control points, its surface's own or, for a surface swept from or offset off another,
+    its basis's as a surface of them: a revolved curve's poles by a circle's nine, an extruded curve's by two, an
+    offset surface's its basis surface's (0 for a plane, a cylinder, a cone, a sphere or a torus)."""
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+
+    return _surface_poles(BRepAdaptor_Surface(face.wrapped, False))
+
+
+def _surface_poles(surface: Any, depth: int = 0) -> int:
+    from OCP.GeomAbs import (GeomAbs_BezierCurve, GeomAbs_BezierSurface, GeomAbs_BSplineCurve,
+                             GeomAbs_BSplineSurface, GeomAbs_OffsetSurface, GeomAbs_SurfaceOfExtrusion,
+                             GeomAbs_SurfaceOfRevolution)
+
+    kind = surface.GetType()
+    if kind == GeomAbs_BSplineSurface:
+        spline = surface.BSpline()
+        return int(spline.NbUPoles() * spline.NbVPoles())
+    if kind == GeomAbs_BezierSurface:
+        bezier = surface.Bezier()
+        return int(bezier.NbUPoles() * bezier.NbVPoles())
+    if kind in (GeomAbs_SurfaceOfRevolution, GeomAbs_SurfaceOfExtrusion):
+        curve = surface.BasisCurve()
+        poles = (curve.NbPoles() if curve.GetType() in (GeomAbs_BSplineCurve, GeomAbs_BezierCurve) else 0)
+        return int(poles * (9 if kind == GeomAbs_SurfaceOfRevolution else 2))
+    if kind == GeomAbs_OffsetSurface and depth < 4:
+        return _surface_poles(surface.BasisSurface(), depth + 1)
+    return 0
+
+
+def _boolean_check(part: Any) -> tuple[bool, list[str], list[int], bool]:
+    """The boolean kernel's argument check (``BRepAlgoAPI_Check``, as ``_geometry.is_sound``) on the part's own
+    shape: whether it passes, why not (its ``BOPAlgo_CheckStatus`` names, say ``BOPAlgo_SelfIntersect``), the
+    faces it names (ordinals, a faulty edge's or vertex's faces too), and whether faces were tried against faces.
+    A check the kernel could not finish raises: no verdict.
+
+    A part with a large free-form face (one of more than ``SOUND_POLES`` control points) has its
+    self-intersections checked up to edges against faces (``BOPAlgo_CheckerSI`` to its edge/face level), not
+    faces against faces: the kernel's face/face intersection of a large B-spline meeting a face tangentially
+    searched for hours on a 3-face part (a mirror stalk's 518 x 18-pole sweep against its flat ends), and nothing
+    stops a kernel call. A face crossing a face crosses its edges too, but where two faces cross inside both (no
+    edge of either meets the other) this check does not see it, and says so (the fourth answer False)."""
+    from OCP.BOPAlgo import BOPAlgo_CheckerSI, BOPAlgo_CheckStatus
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Check
+    from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_VERTEX
+    from OCP.TopExp import TopExp
+    from OCP.collections import (
+        IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher as TopTools_IndexedDataMapOfShapeListOfShape)
+    from OCP.collections import List_TopoDS_Shape
+
+    part._maps()
+    if part.shape.wrapped is None or part.shape.wrapped.IsNull():
+        return False, ["BOPAlgo_BadType"], [], True
+    whole = max((_poles(face) for face in part.faces()), default=0) <= SOUND_POLES
+    checker = BRepAlgoAPI_Check(part.shape.wrapped, True, whole)
+    if checker.HasErrors():
+        raise RuntimeError("boolean argument checker failed")
+    inconclusive = (BOPAlgo_CheckStatus.BOPAlgo_CheckUnknown, BOPAlgo_CheckStatus.BOPAlgo_OperationAborted)
+    names: set[str] = set()
+    faces: set[int] = set()
+    ancestors = {}
+
+    def faulty(shape: Any) -> None:
+        kind = shape.ShapeType()
+        if kind == TopAbs_FACE:
+            faces.add(int(part._face_map.FindIndex(shape)))
+        elif kind in (TopAbs_EDGE, TopAbs_VERTEX):
+            if kind not in ancestors:
+                found = TopTools_IndexedDataMapOfShapeListOfShape()
+                TopExp.MapShapesAndAncestors_s(part.shape.wrapped, kind, TopAbs_FACE, found)
+                ancestors[kind] = found
+            found = ancestors[kind]
+            index = found.FindIndex(shape)
+            if index:
+                faces.update(int(part._face_map.FindIndex(face)) for face in found.FindFromIndex(index))
+
+    for result in checker.Result():
+        if result.GetCheckStatus() in inconclusive:
+            raise RuntimeError(f"boolean argument check was inconclusive: {result.GetCheckStatus().name}")
+        names.add(result.GetCheckStatus().name)
+        for shapes in (result.GetFaultyShapes1(), result.GetFaultyShapes2()):
+            for shape in shapes:
+                faulty(shape)
+    sound = bool(checker.IsValid())
+    if not whole:
+        crossing = BOPAlgo_CheckerSI()
+        arguments = List_TopoDS_Shape()
+        arguments.Append(part.shape.wrapped)
+        crossing.SetArguments(arguments)
+        crossing.SetNonDestructive(True)
+        crossing.SetLevelOfCheck(4)  # vertices, edges, and edges against faces (BOPDS: VV VE EE VF EF)
+        crossing.Perform()
+        if crossing.HasErrors():
+            raise RuntimeError("boolean self-intersection check was inconclusive")
+        data = crossing.DS()  # a reference into the checker's own: read while it lives
+        pairs = [pair.Indices() for pair in data.Interferences()]
+        if pairs:
+            sound = False
+            names.add("BOPAlgo_SelfIntersect")
+            for a, b in pairs:
+                faulty(data.Shape(a))
+                faulty(data.Shape(b))
+    return sound, sorted(names), sorted(face for face in faces if face), whole
+
+
+def _solid(ctx: Context) -> dict[str, Any]:
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepClass3d import BRepClass3d
+    from OCP.TopAbs import TopAbs_SHELL
+    from OCP.TopExp import TopExp_Explorer
+
+    from cad.build123d import _geometry
+
+    items = []
+    checked = 0
+    for index, part in enumerate(ctx.parts):
+        solids = part.solids()
+        inner = closed = 0
+        shells = 0
+        for solid in solids:
+            outer = BRepClass3d.OuterShell_s(solid.wrapped)
+            explorer = TopExp_Explorer(solid.wrapped, TopAbs_SHELL)
+            while explorer.More():
+                shell = explorer.Current()
+                shells += 1
+                closed += int(BRep_Tool.IsClosed_s(shell))
+                if not shell.IsSame(outer):
+                    inner += 1
+                explorer.Next()
+        if not solids:
+            explorer = TopExp_Explorer(part.shape.wrapped, TopAbs_SHELL)
+            while explorer.More():
+                shells += 1
+                closed += int(BRep_Tool.IsClosed_s(explorer.Current()))
+                explorer.Next()
+        issues: list[str] = []
+        faulty: list[int] = []
+        faces = len(ctx.faces[index])
+        check = "boolean" if checked + faces <= SOUND_FACES else "topology"
+        try:
+            if check == "boolean":
+                checked += faces
+                sound, faults, faulty, whole = _boolean_check(part)
+                if not whole:
+                    check = "boolean_edges"
+                if not sound:
+                    issues = sorted({issue.code for issue in _geometry.topology_errors(part.shape)} | set(faults)) \
+                        or ["boolean check"]
+            else:
+                issues = sorted({issue.code for issue in _geometry.topology_errors(part.shape)})
+                sound = not issues
+        except Exception:  # noqa: BLE001 - a check the kernel cannot finish is no verdict
+            sound = None
+        faulty_faces = faulty if issues and check in ("boolean", "boolean_edges") else []
+        items.append({"part": part.name or part.owner or f"part {index + 1}",
+                      "location": ctx.ref(index, faulty_faces[0] if faulty_faces else 1),
+                      "faulty_faces": [ctx.ref(index, face) for face in faulty_faces][:20],
+                      "xyz": _xyz(part.shape.bounding_box(optimal=False).center()), "solids": len(solids), "shells": shells,
+                      "closed": bool(solids) and closed == shells, "inner_shells": inner, "sound": sound,
+                      "issues": issues, "check": check, "volume_mm3": _r(float(part.shape.volume), 3),
+                      "area_mm2": _r(float(part.shape.area), 3), "occurrences": part.occurrences})
+    return {"items": items, "part_count": len(items), "body_count": sum(item["solids"] for item in items),
+            "sound_budget_faces": SOUND_FACES,
+            "volume_mm3": _r(sum(item["volume_mm3"] or 0.0 for item in items), 3),
+            "watertight": all(item["closed"] for item in items),
+            "sound": None if any(item["sound"] is None for item in items) else all(item["sound"] for item in items),
+            "bbox_mm": _xyz(ctx.hi - ctx.lo)}
+
+
+def _overhangs(ctx: Context) -> dict[str, Any]:
+    limit = ctx.angle_limit
+    total_area = sum(info.area for infos in ctx.faces for info in infos) or 1.0
+    ceilings = {(item["part"], item["ordinal"]): item for item in _flat_ceilings(ctx)}
+    bridges = {key: item["kind"] for key, item in ceilings.items()}
+    reach_floor = float(ctx.options.get("nozzle") or OVERHANG_REACH_MM)
+    plate_band = max(1.0, 5 * ctx.layer)
+    items, histogram, below_total = [], np.zeros(9), 0.0
+    for infos in ctx.faces:
+        for info in infos:
+            down = [s for s in info.samples if s.normal[2] < -1e-9 and not ctx.on_plate(float(s.point[2]))]
+            if not down:
+                continue
+            if info.surface.kind == "plane" and info.surface.normal is not None:
+                angle = math.degrees(math.acos(min(1.0, -info.surface.normal[2])))
+                angles = np.full(len(down), angle)
+            else:
+                angles = np.degrees(np.arccos(np.clip([-s.normal[2] for s in down], -1.0, 1.0)))
+            if angles.min() >= 89.9:
+                continue
+            area = np.array([s.area for s in down])
+            scale = info.area / max(sum(s.area for s in info.samples), 1e-12)
+            area = area * scale
+            under = angles < limit - mo.ANGLE_EPS
+            heights = np.array([float(s.point[2]) - ctx.z0 for s in down])
+            for value, share in zip(angles, area):
+                histogram[min(8, int((value + mo.ANGLE_EPS) // 10))] += share
+            worst = int(angles.argmin())
+            kind = "slope"
+            if info.group is not None and ctx.rounds[info.group].coverage_deg >= ROUND_DEG and \
+                    ctx.rounds[info.group].concave:
+                kind = "hole"
+            elif (info.part, info.ordinal) in bridges:
+                kind = bridges[(info.part, info.ordinal)]
+            elif ctx.on_plate(info.zmin) and (not under.any() or heights[under].max() <= plate_band):
+                kind = "plate_edge"
+            below = float(area[under].sum())
+            reach = (ceilings.get((info.part, info.ordinal)) or {}).get("reach_mm")
+            # too small to need support: under the area floor, or a cantilever shorter than a bead is wide
+            # (a bridge passes the floors too: metal supports every ceiling; the headline leaves bridges out)
+            counted = kind not in ("hole", "plate_edge") and below >= OVERHANG_AREA_MM2 and not (
+                kind == "cantilever" and reach is not None and reach < reach_floor)
+            if counted and kind != "bridge":
+                below_total += below
+            items.append({"location": ctx.ref(info.part, info.ordinal), "xyz": _xyz(down[worst].point),
+                          "angle_deg": _r(float(angles.min()), JUDGED), "area_mm2": _r(float(area.sum()), 3),
+                          "area_below_limit_mm2": _r(below, 3), "height_mm": _r(float(heights.min()), 3),
+                          "max_height_mm": _r(float(heights.max()), 3), "kind": kind, "surface": info.surface.kind,
+                          "reach_mm": reach, "counted": bool(counted)})
+    counted = [item for item in items if item["counted"] and item["kind"] != "bridge"
+               and (item["area_below_limit_mm2"] or 0) > 0]
+    largest = sorted(counted, key=lambda item: -(item["area_below_limit_mm2"] or 0))[:8]
+    items, count = _capped(items, lambda item: (item["angle_deg"], -(item["area_mm2"] or 0)))
+    bins = {f"{10 * k}-{10 * k + 10}deg": _r(float(v), 2) for k, v in enumerate(histogram) if v > 0}
+    return {"items": items, "count": count, "angle_limit_used_deg": limit,
+            "down_facing_area_below_limit_mm2": _r(below_total, 2),
+            "down_facing_area_below_limit_pct": _r(100.0 * below_total / total_area, 1),
+            "face_count_below_limit": len(counted), "down_facing_angle_histogram_mm2": bins,
+            "largest_faces_below_limit": [{"location": item["location"], "location_xyz": item["xyz"],
+                                           "surface_angle_deg": item["angle_deg"],
+                                           "area_mm2": item["area_below_limit_mm2"]} for item in largest],
+            "plate_band_mm": plate_band, "area_floor_mm2": OVERHANG_AREA_MM2, "reach_floor_mm": reach_floor,
+            "method": _OVERHANG_METHOD}
+
+
+def _edge_points(edge: Any, step: float) -> np.ndarray:
+    count = max(2, int(math.ceil(float(edge.length) / step)) + 1)
+    return np.array([[p.X, p.Y, p.Z] for p in (edge.position_at(t) for t in np.linspace(0.0, 1.0, count))])
+
+
+def _flat_ceilings(ctx: Context) -> list[dict[str, Any]]:
+    if hasattr(ctx, "_ceilings"):
+        return ctx._ceilings  # type: ignore[attr-defined]
+    from OCP.BRepClass import BRepClass_FaceClassifier
+    from OCP.gp import gp_Pnt
+    from OCP.TopAbs import TopAbs_IN, TopAbs_ON
+
+    found = []
+    cos_flat = math.cos(math.radians(FLAT_DEG))
+    flats = [info for infos in ctx.faces for info in infos
+             if info.surface.kind == "plane" and info.surface.normal is not None
+             and info.surface.normal[2] < -cos_flat and not ctx.on_plate(info.zmin)]
+    refined = {id(info) for info in sorted(flats, key=lambda info: -info.area)[:REFINED_CEILINGS]}
+    for part, infos in enumerate(ctx.faces):
+        edges = ctx.parts[part].edges()
+        for info in infos:
+            n = info.surface.normal
+            if info.surface.kind != "plane" or n is None or not n[2] < -cos_flat or ctx.on_plate(info.zmin):
+                continue
+            starts, ends, supported = [], [], 0
+            z = info.zmax
+            box = info.box
+            step = max(1e-3, min(0.5, 0.01 * max(box.size.X, box.size.Y)))
+            for other, shared in ctx.adjacent(part, info.ordinal).items():
+                neighbour = ctx.info(part, other)
+                for edge in shared:
+                    carries = edge.concave or (edge.smooth and neighbour.surface.concave is True)
+                    if not carries or not neighbour.zmin < edge.midpoint[2] - ctx.tol:
+                        continue
+                    supported += 1
+                    points = _edge_points(edges[edge.ordinal - 1], step)
+                    starts.append(points[:-1])
+                    ends.append(points[1:])
+            fine = id(info) in refined
+            points = np.array([s.point for s in (brep.samples(info.face, 600) if fine else info.samples)]).reshape(-1, 3)
+            if not len(points):
+                # a face the kernel lays no sample on (its triangulation failed): its span is not measured, and
+                # says so (``unmeasured``) -- the rules count it not measured, never a pass
+                centre = info.box.center()
+                centre = (centre.X, centre.Y, centre.Z)
+                found.append({"part": part, "ordinal": info.ordinal, "kind": "ceiling", "length_mm": None,
+                              "reach_mm": None, "supporting_edges": supported, "area_mm2": _r(info.area, 3),
+                              "refined": fine, "height_mm": _r(z - ctx.z0, 4),
+                              "angle_deg": _r(math.degrees(math.acos(min(1.0, -n[2]))), 3),
+                              "location": ctx.ref(part, info.ordinal), "xyz": _xyz(centre),
+                              "unmeasured": "the kernel laid no sample on the face (its triangulation failed)"})
+                continue
+            face = info.face.wrapped
+
+            def inside(candidates: np.ndarray, face: Any = face) -> np.ndarray:
+                keep = []
+                for point in candidates:
+                    state = BRepClass_FaceClassifier(face, gp_Pnt(*map(float, point)), 1e-6).State()
+                    keep.append(state in (TopAbs_IN, TopAbs_ON))
+                return np.array(keep, dtype=bool)
+
+            a = np.vstack(starts) if starts else np.zeros((0, 3))
+            b = np.vstack(ends) if ends else np.zeros((0, 3))
+            spread = mo.span(points, a, b, inside=inside if fine else None, refine=2.0 * step if fine else None)
+            kind = {"bridge": "bridge", "cantilever": "cantilever"}.get(spread["kind"], "ceiling")
+            found.append({"part": part, "ordinal": info.ordinal, "kind": kind,
+                          "length_mm": _r(spread["length_mm"], JUDGED), "reach_mm": _r(spread["reach_mm"], JUDGED),
+                          "supporting_edges": supported, "area_mm2": _r(info.area, 3), "refined": fine,
+                          "height_mm": _r(z - ctx.z0, 4), "angle_deg": _r(math.degrees(math.acos(min(1.0, -n[2]))), 3),
+                          "location": ctx.ref(part, info.ordinal),
+                          "xyz": _xyz(spread["xyz"] if spread["xyz"] is not None else points[0])})
+    ctx._ceilings = found  # type: ignore[attr-defined]
+    return found
+
+
+def _bridges(ctx: Context) -> dict[str, Any]:
+    # a horizontal round hole's arch is no bridge: every layer of it stands on the one below but the crown's
+    # last few, so it is judged by its diameter (``printing.horizontal_hole``), not as a span
+    items = [{key: value for key, value in item.items() if key not in ("part", "ordinal")} for item in _flat_ceilings(ctx)]
+    items, count = _capped(items, lambda item: -(item["length_mm"] or 0.0))
+    return {"items": items, "count": count, "flat_within_deg": FLAT_DEG,
+            "bridge_count": sum(1 for item in items if item["kind"] == "bridge"),
+            "longest_bridge_mm": max((item["length_mm"] for item in items if item["kind"] == "bridge"), default=None)}
+
+
+def _connections(ctx: Context, part: int, ordinal: int) -> int:
+    """The sides a face is joined to the part by, counted on its edges: its concave edges (and smooth ones into
+    a concave round); a closed ring (a tube's face) counts as joined all round. The quick reading, for the walls
+    no verdict turns on (``_walls``): a skin over a cavity has no concave edge and reads 0."""
+    if ctx.info(part, ordinal).coverage_deg >= 355.0:
+        return 2
+    count = 0
+    for other, shared in ctx.adjacent(part, ordinal).items():
+        neighbour = ctx.info(part, other)
+        count += sum(1 for edge in shared if edge.concave or (edge.smooth and neighbour.surface.concave is True))
+    return count
+
+
+#: Points along an edge its material's angle is read at first (``brep.edge_angles``): where any is under the
+#: zone's limit, the edge is laid out again every quarter of its thin depth, at most ``KNIFE_POINTS`` points.
+KNIFE_PROFILE = 17
+KNIFE_POINTS = 400
+#: A curved edge's tip is a zone up to this angle: past the knife's 45 deg its sliver is no knife, but where its
+#: faces curve a ray from one flank can land on the other looking back at it (an edge of a cone and a sphere at
+#: 45.1 deg read a 0.44 mm "wall" 0.43 mm from it), and a tip's own sliver is never a wall, as a 46-degree
+#: wedge's between two planes reads none. Beyond 90 deg the thin depth is under half the minimum wall.
+ZONE_DEG = 90.0
+
+
+def _knife_runs(ctx: Context, part: int, upto: float) -> list[dict[str, Any]]:
+    """Each convex edge of ``part`` whose material's angle along it reaches ``upto`` or under: its segments
+    there (starts, ends), each segment's angle (the lesser of its two ends') and thin depth, and its two faces.
+    The angle is read along the edge, not at its middle alone: an edge where a cone meets a sphere runs from 63
+    to 42 degrees, a knife over its 42-degree stretch."""
+    minimum = rules.wall_minimum(ctx.options)
+    edges = ctx.parts[part].edges()
+    found = []
+    for edge in ctx.edges(part):
+        if edge.concave or edge.smooth:
+            continue
+        coarse = np.linspace(0.0, 1.0, KNIFE_PROFILE)
+        if all(ctx.info(part, ordinal).surface.kind == "plane" for ordinal in edge.faces):
+            if edge.angle_deg > min(upto, mo.KNIFE_DEG + mo.ANGLE_EPS):
+                continue  # two planes over the limit: no ray from one lands on the other looking back at it
+            angles = np.full(len(coarse), float(edge.angle_deg))  # two planes meet at one angle all along
+        else:
+            _, angles = brep.edge_angles(ctx.parts[part], edge, coarse)
+            if np.isfinite(angles).any():
+                # the least angle found exactly between the samples about it, whatever the sampling (a rod cut
+                # 25 deg off its axis reads 25.0, not the 25.99 or 25.01 its nearest samples give)
+                coarse, angles = brep.least_edge_angle(ctx.parts[part], edge, coarse, angles)
+        if not np.isfinite(angles).any() or not float(np.nanmin(angles)) <= upto:
+            continue
+        valid = np.isfinite(angles)
+        deepest = mo.thin_depth(minimum, max(float(np.nanmin(angles)), mo.FOLD_DEG)) or 1.0
+        count = max(2, int(math.ceil(float(edge.length) / max(0.05, deepest / 4.0))) + 1)
+        # the least angle's own place among the points, so the stretch about it reads it
+        fine = np.unique(np.append(np.linspace(0.0, 1.0, min(count, KNIFE_POINTS)), coarse[int(np.nanargmin(angles))]))
+        points = _edge_points_at(edges[edge.ordinal - 1], fine)
+        along = np.interp(fine, coarse[valid], angles[valid])
+        segment = np.minimum(along[:-1], along[1:])
+        under = segment <= upto
+        if not under.any():
+            continue
+        depths = np.array([mo.thin_depth(minimum, float(a)) or 0.0 for a in segment])
+        found.append({"edge": edge, "starts": points[:-1][under], "ends": points[1:][under],
+                      "angles": segment[under], "depths": depths[under], "faces": frozenset(edge.faces),
+                      "length": float(np.linalg.norm(points[1:][under] - points[:-1][under], axis=1).sum()),
+                      "middle": points[len(points) // 2]})
+    return found
+
+
+def _edge_points_at(edge: Any, fractions: np.ndarray) -> np.ndarray:
+    return np.array([[p.X, p.Y, p.Z] for p in (edge.position_at(float(t)) for t in fractions)])
+
+
+def _knife_zones(ctx: Context, part: int) -> list[tuple[np.ndarray, np.ndarray, np.ndarray, frozenset[int], bool]]:
+    """Each convex edge's tip of ``part`` as segments (starts, ends), their thin depths and its two faces (the
+    flanks): its sliver, which the walls leave to it -- the knife family's where the stretch is under 45 deg. A
+    stretch at the knife's limit (45 deg, within ``ANGLE_EPS``) or over it is a zone too, though no knife: a
+    44-degree tip is a knife, a 45- or a 46-degree one nothing, never a thin wall; and a curved edge's stretch
+    over the limit up to ``ZONE_DEG`` (two planes past the limit never face each other across their tip)."""
+    if not hasattr(ctx, "_zones"):
+        ctx._zones = {}  # type: ignore[attr-defined]
+    if part not in ctx._zones:  # type: ignore[attr-defined]
+        runs = _knife_runs(ctx, part, ZONE_DEG)
+        zones = []
+        for run in runs:
+            knife = run["angles"] <= mo.KNIFE_DEG + mo.ANGLE_EPS
+            # a knife's (or a tip at its limit's) sliver is every ray in its depth from or onto a flank; past
+            # the limit, a ray from one flank onto the other alone
+            for stretch, both in ((knife, False), (~knife, True)):
+                stretch = stretch & (run["depths"] > 0)
+                if stretch.any():
+                    zones.append((run["starts"][stretch], run["ends"][stretch], run["depths"][stretch], run["faces"],
+                                  both))
+        ctx._zones[part] = zones  # type: ignore[attr-defined]
+        ctx._runs = getattr(ctx, "_runs", {})  # type: ignore[attr-defined]
+        ctx._runs[part] = runs  # type: ignore[attr-defined]
+    return ctx._zones[part]  # type: ignore[attr-defined]
+
+
+def _walls(ctx: Context) -> dict[str, Any]:
+    ctx.measure_rays()
+    minimum = rules.wall_minimum(ctx.options)
+    items, every, where = [], [], []
+    for part, infos in enumerate(ctx.faces):
+        zones = _knife_zones(ctx, part)
+        for info in infos:
+            # a pin is a wall too, joined on one side, its thickness its diameter (as a mesh reads it): the wall
+            # minimum is its floor, the pins' rules their guides' own figures for it
+            if not info.thickness:
+                continue
+            thickness = info.thickness
+            # a ray inside a knife edge's thin depth that starts or lands on one of its two faces (its flanks) is
+            # that knife's sliver -- from a flank, or from a face meeting them at the knife's end across to one --
+            # reported once, by the knife; a ray near it between two other faces (a fin beside the knife, across
+            # itself) measures its own wall
+            flanked = [zone for zone in zones if info.ordinal in zone[3] or any(o in zone[3] for _, _, o in thickness)]
+            if flanked:
+                points = np.array([info.samples[k].point for _, k, _ in thickness])
+                landed = np.array([other for _, _, other in thickness])
+                keep = np.ones(len(points), dtype=bool)
+                for starts, ends, depths, faces, both in flanked:
+                    on = np.isin(landed, list(faces)) & (info.ordinal in faces) if both else \
+                        np.isin(landed, list(faces)) | (info.ordinal in faces)
+                    keep &= ~on | (mo.past_segments(points, starts, ends, depths) > ctx.tol)
+                thickness = [row for row, kept in zip(thickness, keep) if kept]
+                if not thickness:
+                    continue
+            values = np.array([t for t, _, _ in thickness])
+            thinnest = thickness[int(values.argmin())]
+            every.extend(values.tolist())
+            where.extend((float(t), info.samples[k].point) for t, k, _ in thickness)
+            joined = max(_connections(ctx, part, info.ordinal), _connections(ctx, part, thinnest[2]))
+            items.append({"location": ctx.ref(part, info.ordinal), "xyz": _xyz(info.samples[thinnest[1]].point),
+                          "thickness_mm": _r(thinnest[0], JUDGED), "median_mm": _r(float(np.median(values)), 4),
+                          "opposite": ctx.ref(part, thinnest[2]), "faces": [ctx.ref(part, thinnest[2])],
+                          "supported": joined >= 2, "joined_sides": joined, "samples": len(values), "sampled": True,
+                          "_at": (part, info.ordinal, thinnest[2]),
+                          "_sample": (info.samples[thinnest[1]], float(thinnest[0]))})
+    if not every:
+        return {"items": [], "samples_valid": 0, "note": "no ray met a wall: the shape is open or empty"}
+    field_ = np.array(every)
+    for item in sorted(items, key=lambda item: item["thickness_mm"])[:CAP]:
+        if item["thickness_mm"] < REFINE_WALL_MM:
+            part, i, j = item["_at"]
+            _refine(ctx, part, item, i, j, outward=False)
+    seen, unique = set(), []
+    for item in sorted(items, key=lambda item: item["thickness_mm"]):
+        part = item.pop("_at")[0]
+        sample, sampled = item.pop("_sample")
+        # the wall's thinnest place: its refined least, else its thinnest sample
+        place, outward, thickness = item.pop("_least", (sample.point, sample.normal, sampled))
+        pair = tuple(sorted((item["location"], item["opposite"])))
+        if pair not in seen:
+            seen.add(pair)
+            unique.append(item)
+            # a skin in the layer plane, laid layer on layer: by its refined least's own way across, else (a
+            # wall a verdict can turn on) by its two faces, whichever it was read from
+            across = None
+            if not item.get("refined") and minimum is not None and item["thickness_mm"] < minimum:
+                _, there = _cast(ctx, part)((place - outward * 1e-5)[None], -np.asarray(outward)[None])
+                across = there[0] if np.linalg.norm(there[0]) > 0 else None
+            item["lying"] = mo.lying(outward, across)
+            # a wall a verdict can turn on (under the unsupported minimum) has its support read off the wall
+            # itself, as a mesh's is (``mo.wall_support``): its thin region's outline, and what it is joined to
+            if minimum is not None and item["thickness_mm"] < minimum and len(unique) <= CAP:
+                found = mo.wall_support(_cast(ctx, part), place, outward, thickness)
+                if found["supported"] is not None:
+                    item.update(supported=found["supported"], joined_sides=found["joined_sides"],
+                                free_fraction=found["free_fraction"])
+    items, count = _capped(unique, lambda item: item["thickness_mm"])
+    thinnest = sorted(where, key=lambda pair: pair[0])[:8]
+    # the least is the thinner of the field's and a refined item's: the summary never reads thicker than a finding
+    least = min([float(field_.min())] + [float(item["thickness_mm"]) for item in items if item.get("refined")])
+    return {"items": items, "count": count, "samples_valid": int(len(field_)),
+            "min_mm": _r(least, 4), "p05_mm": _r(float(np.percentile(field_, 5)), 4),
+            "p25_mm": _r(float(np.percentile(field_, 25)), 4), "median_mm": _r(float(np.median(field_)), 4),
+            "max_mm": _r(float(field_.max()), 4),
+            "method": "exact rays into the material from samples on every face, each to the first face it crosses "
+                      "that looks back along it (within 45 deg); none within a knife edge's thin depth that starts "
+                      "or lands on its flanks. Sampled (each item sampled: true): a face's thinnest sample; the "
+                      f"listed items under {REFINE_WALL_MM:g} mm refined to the exact least distance to the face "
+                      "across (refined: true) where it runs within 45 deg of both faces' normals and nothing lies "
+                      "between; the field's figures are the samples'",
+            "thinnest_samples": [{"location_xyz": _xyz(point), "thickness_mm": _r(value, 4)} for value, point in thinnest]}
+
+
+def _gaps(ctx: Context) -> dict[str, Any]:
+    ctx.measure_rays()
+    items = []
+    for part, infos in enumerate(ctx.faces):
+        for info in infos:
+            if not info.gap:
+                continue
+            width, k, other = min(info.gap)
+            item = {"location": ctx.ref(part, info.ordinal), "xyz": _xyz(info.samples[k].point),
+                    "gap_mm": _r(width, JUDGED), "faces": [ctx.ref(part, other)]}
+            _refine(ctx, part, item, info.ordinal, other, outward=True)
+            items.append(item)
+    # a slot is seen from both its walls: keep each pair once
+    seen, unique = set(), []
+    for item in sorted(items, key=lambda item: item["gap_mm"]):
+        pair = tuple(sorted((item["location"], item["faces"][0])))
+        if pair in seen:
+            continue
+        seen.add(pair)
+        unique.append(item)
+    unique, count = _capped(unique, lambda item: item["gap_mm"])
+    return {"items": unique, "count": count, "reported_below_mm": GAP_CEILING,
+            "min_mm": unique[0]["gap_mm"] if unique else None,
+            "method": "exact rays out of the material from samples on every face, to another face of the same part "
+                      "(not a neighbour, not the same hole), each face's narrowest refined to the exact least "
+                      "distance to the face across (refined: true) where it runs within 45 deg of both faces' "
+                      "normals and nothing lies between"}
+
+
+def _orientation(axis: np.ndarray) -> str:
+    tilt = math.degrees(math.acos(min(1.0, abs(float(axis[2])))))
+    return "vertical" if tilt < 10.0 else "horizontal" if tilt > 80.0 else "inclined"
+
+
+def _inside(ctx: Context, part: int, points: list[np.ndarray], solid: int | None = None) -> list[bool]:
+    """Whether each point lies inside a solid of ``part`` (inside its ``solid``, where given): one classifier
+    per solid, made once (making one is most of a query's cost on a large solid)."""
+    from OCP.BRepClass3d import BRepClass3d_SolidClassifier
+    from OCP.gp import gp_Pnt
+    from OCP.TopAbs import TopAbs_IN
+
+    cache = ctx.__dict__.setdefault("_classifiers", {})
+    if part not in cache:
+        cache[part] = [BRepClass3d_SolidClassifier(solid.wrapped)
+                       for solid in (ctx.parts[part].solids() or [ctx.parts[part].shape])]
+    found = []
+    for point in points:
+        state = False
+        for classifier in cache[part] if solid is None else [cache[part][solid]]:
+            classifier.Perform(gp_Pnt(*map(float, point)), 1e-6)
+            if classifier.State() == TopAbs_IN:
+                state = True
+                break
+        found.append(state)
+    return found
+
+
+def _round_items(ctx: Context, concave: bool) -> list[dict[str, Any]]:
+    cache = ctx.__dict__.setdefault("_round_cache", {})
+    if concave not in cache:
+        cache[concave] = _measure_rounds(ctx, concave)
+    return [dict(item) for item in cache[concave]]
+
+
+def _measure_rounds(ctx: Context, concave: bool) -> list[dict[str, Any]]:
+    items = []
+    for index, group in ctx.rounds_of(concave):
+        part = group.part
+        largest = max(group.faces, key=lambda ordinal: ctx.info(part, ordinal).area)
+        center = group.origin + group.axis * (0.5 * (group.lo + group.hi))
+        length = group.hi - group.lo
+        item = {"location": ctx.ref(part, largest), "xyz": _xyz(center), "diameter_mm": _r(2.0 * group.radius, JUDGED),
+                "orientation": _orientation(group.axis), "axis": _xyz(group.axis),
+                "coverage_deg": _r(min(360.0, group.coverage_deg), 2),
+                "faces": [ctx.ref(part, ordinal) for ordinal in group.faces if ordinal != largest]}
+        if concave:
+            item["depth_mm"] = _r(length, 4)
+            ends = [group.origin + group.axis * (group.lo - 1e-3 * max(1.0, group.radius)),
+                    group.origin + group.axis * (group.hi + 1e-3 * max(1.0, group.radius))]
+            item["through"] = not any(_inside(ctx, part, ends))
+            item["channel"] = bool(length >= 5.0 * 2.0 * group.radius)
+            up = np.array([0.0, 0.0, 1.0]) - group.axis * float(group.axis[2])
+            top = 1.0
+            if np.linalg.norm(up) > 1e-9 and group.coverage_deg < 355.0:
+                up /= np.linalg.norm(up)
+                radial = []
+                for ordinal in group.faces:
+                    for sample in ctx.info(part, ordinal).samples:
+                        rel = sample.point - group.origin
+                        rel = rel - group.axis * float(rel @ group.axis)
+                        radial.append(float(rel @ up) / (np.linalg.norm(rel) or 1.0))
+                top = max(radial, default=1.0)
+            item["teardrop"] = bool(item["orientation"] == "horizontal" and top < math.cos(math.radians(15.0)))
+            item["low_z_mm"] = _r(min(ctx.info(part, ordinal).zmin for ordinal in group.faces) - ctx.z0, 4)
+        else:
+            item["height_mm"] = _r(length, 4)
+            item["aspect_ratio"] = _r(length / (2.0 * group.radius), JUDGED)
+        items.append(item)
+    return items
+
+
+def _holes(ctx: Context) -> dict[str, Any]:
+    items, count = _capped(_round_items(ctx, True), lambda item: item["diameter_mm"])
+    return {"items": items, "count": count, "round_deg": ROUND_DEG,
+            "horizontal_count": sum(1 for item in items if item["orientation"] == "horizontal")}
+
+
+def _pins(ctx: Context) -> dict[str, Any]:
+    items, count = _capped(_round_items(ctx, False), lambda item: item["diameter_mm"])
+    return {"items": items, "count": count, "round_deg": ROUND_DEG}
+
+
+def _details(ctx: Context) -> dict[str, Any]:
+    ctx.measure_rays()
+    found: dict[tuple[int, int, str], dict[str, Any]] = {}
+    # each region's steps, whatever their width: the sides stepping down from a top ("emboss") or up from a
+    # floor ("engrave")
+    sides: dict[tuple[int, int, str], set[int]] = {}
+    for part, infos in enumerate(ctx.faces):
+        for side in infos:
+            # a side is any face standing between a top and a bottom, of any surface: a plane square to them, a
+            # round corner's cylinder, a dot's, a letter's spline
+            normals = ([np.asarray(side.surface.normal, dtype=float)] if side.surface.kind == "plane"
+                       and side.surface.normal is not None else [sample.normal for sample in side.samples])
+            if not normals:
+                continue
+            tops, bottoms = [], []
+            for other, shared in ctx.adjacent(part, side.ordinal).items():
+                neighbour = ctx.info(part, other)
+                if neighbour.surface.kind != "plane" or neighbour.surface.normal is None:
+                    continue
+                if max(abs(float(np.dot(neighbour.surface.normal, n))) for n in normals) > 0.2:
+                    continue
+                for edge in shared:
+                    if edge.smooth:
+                        continue
+                    (bottoms if edge.concave else tops).append(neighbour)
+            for top in tops:
+                for bottom in bottoms:
+                    nt, nb = np.array(top.surface.normal), np.array(bottom.surface.normal)
+                    if float(nt @ nb) < 0.999:
+                        continue
+                    height = float((np.array(top.surface.origin) - np.array(bottom.surface.origin)) @ nt)
+                    if not 1e-6 < height <= DETAIL_CEILING:
+                        continue
+                    sides.setdefault((part, top.ordinal, "emboss"), set()).add(side.ordinal)
+                    sides.setdefault((part, bottom.ordinal, "engrave"), set()).add(side.ordinal)
+                    # which side is the detail is its extent across: a raised one is narrow through the
+                    # material (the side's rays in), a sunk one across the air (its rays out); a step wide both
+                    # ways is the part's geometry, not a detail
+                    across = min((t for t, _, _ in side.thickness), default=math.inf)
+                    over = min((g for g, _, _ in side.gap), default=math.inf)
+                    emboss = across <= over
+                    width = across if emboss else over
+                    if not width < DETAIL_ACROSS_MM:
+                        continue
+                    region = top if emboss else bottom
+                    key = (part, region.ordinal, "emboss" if emboss else "engrave")
+                    item = found.get(key)
+                    if item is None:
+                        found[key] = item = {"location": ctx.ref(part, region.ordinal),
+                                             "xyz": _xyz(side.samples[0].point if side.samples else [0, 0, 0]),
+                                             "kind": key[2], "height_mm": _r(height, JUDGED), "width_mm": _r(width, JUDGED),
+                                             "faces": []}
+                    item["height_mm"] = _r(min(item["height_mm"], height), JUDGED)
+                    if width is not None and (item["width_mm"] is None or width < item["width_mm"]):
+                        item["width_mm"] = _r(width, JUDGED)
+                    if ctx.ref(part, side.ordinal) not in item["faces"]:
+                        item["faces"].append(ctx.ref(part, side.ordinal))
+    # A detail is an island or a pocket: its region (the raised top, the sunk floor) is bounded by its steps all
+    # round. A step that runs on to the region's other faces -- across a face from edge to edge, a hinge
+    # knuckle's shoulder, a ledge -- is the part's geometry, which the walls and gaps judge.
+    kept = [item for key, item in found.items()
+            if set(ctx.adjacent(key[0], key[1])) <= sides.get(key, set())]
+    items, count = _capped(kept, lambda item: (item["height_mm"], item["width_mm"] or 0.0))
+    for item in items:
+        item["faces"] = item["faces"][:12]
+    return {"items": items, "count": count, "step_ceiling_mm": DETAIL_CEILING, "across_below_mm": DETAIL_ACROSS_MM,
+            "method": "steps between parallel planes up to step_ceiling_mm high, by sides of any surface; a step "
+                      "is a detail while it is narrower than across_below_mm (text-to-cad's own figure: no guide states one) and its steps "
+                      "bound the raised top or the sunk floor all round (an island or a pocket: text, a logo, a "
+                      "mark); wider, or a step running on across a face, is the part's geometry, which the walls and "
+                      "gaps judge"}
+
+
+def _face_at(ctx: Context, part: int, point: np.ndarray) -> int:
+    """The ordinal of the face of ``part`` nearest ``point``."""
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeVertex
+    from OCP.BRepExtrema import BRepExtrema_DistShapeShape
+    from OCP.gp import gp_Pnt
+
+    vertex = BRepBuilderAPI_MakeVertex(gp_Pnt(*map(float, point))).Vertex()
+    best, found = math.inf, 1
+    for info in ctx.faces[part]:
+        box = info.box
+        lower = max(0.0, box.min.X - point[0], point[0] - box.max.X, box.min.Y - point[1], point[1] - box.max.Y,
+                    box.min.Z - point[2], point[2] - box.max.Z)
+        if lower > best:
+            continue
+        query = BRepExtrema_DistShapeShape(vertex, info.face.wrapped)
+        if query.IsDone() and query.Value() < best:
+            best, found = float(query.Value()), info.ordinal
+    return found
+
+
+#: Clearances: each side of a pair of parts is read as at most this many points of its triangulation (a
+#: voxel thinning, one point per cell), the face pairs nearest on them measured exactly, at most
+#: ``CLEARANCE_FACES`` per pair, and at most ``OVERLAP_BOOLEANS`` touching pairs' overlap volume by boolean.
+CLEARANCE_POINTS = 1500
+CLEARANCE_FACES = 3
+#: Exact face-pair queries a document gets, at most, spent on the nearest pairs first (about 30 ms each on
+#: B-spline faces); the rest keep their triangulations' distance, ``exact: false``.
+EXACT_QUERIES = 90
+OVERLAP_BOOLEANS = 4
+#: A pair whose triangulations stay this far apart (less their sampling's margin) is above every published
+#: clearance (all under 1 mm): its distance is the triangulations', ``exact: false``, with the margin.
+EXACT_BELOW = 1.5
+
+
+def _thinned(points: np.ndarray, owners: np.ndarray, budget: int) -> tuple[np.ndarray, np.ndarray, float]:
+    """At most about ``budget`` of ``points`` (one per cube of a side chosen for it), their owners, the side."""
+    if len(points) <= budget:
+        return points, owners, 0.0
+    lo, hi = points.min(axis=0), points.max(axis=0)
+    side = float(np.prod(np.maximum(hi - lo, 1e-9)) / budget) ** (1.0 / 3.0)
+    for _ in range(12):
+        keys = np.floor((points - lo) / side).astype(np.int64)
+        _, keep = np.unique(keys, axis=0, return_index=True)
+        if len(keep) <= budget:
+            return points[keep], owners[keep], side
+        side *= 1.3
+    return points[keep], owners[keep], side
+
+
+def _near_pairs(pa: np.ndarray, pb: np.ndarray, within: float) -> tuple[float, np.ndarray, np.ndarray, np.ndarray]:
+    """The least distance between the clouds, and every pair (i, j, d) within ``within`` of it, nearest first."""
+    best = math.inf
+    found_i, found_j, found_d = [], [], []
+    for start in range(0, len(pa), 512):
+        d = np.linalg.norm(pa[start:start + 512, None, :] - pb[None, :, :], axis=2)
+        best = min(best, float(d.min()))
+        i, j = np.nonzero(d <= best + within)
+        found_i.append(i + start)
+        found_j.append(j)
+        found_d.append(d[i, j])
+    i, j, d = np.concatenate(found_i), np.concatenate(found_j), np.concatenate(found_d)
+    keep = d <= best + within
+    order = np.argsort(d[keep], kind="stable")
+    return best, i[keep][order], j[keep][order], d[keep][order]
+
+
+def _clearances(ctx: Context) -> dict[str, Any]:
+    """The least distance between each pair of bodies -- parts, and the solids of a part of several
+    (``Context.bodies``) -- within ``reach``: their triangulations (thinned to a points budget) find the nearest
+    faces, BRepExtrema measures those face pairs exactly."""
+    from OCP.BRepExtrema import BRepExtrema_DistShapeShape
+    from OCP.Extrema import Extrema_ExtFlag_MIN
+
+    from cad.build123d import _geometry
+
+    items, reach = [], 5.0
+    V, F, O = ctx.mesh()
+    bodies = ctx.bodies()
+    at = {body: index for index, body in enumerate(bodies)}
+    first = {part: index for index, (part, _solid) in reversed(list(enumerate(bodies)))}
+    # each triangle's body: its part's, or its face's solid's (a face beside a part's solids: its first's)
+    owners = np.unique(O)
+    body_of = np.array([at.get((int(owner) >> 20, ctx.solid_of(int(owner) >> 20).get(int(owner) & 0xFFFFF)),
+                               first[int(owner) >> 20]) for owner in owners], dtype=int)
+    body_of = body_of[np.searchsorted(owners, O)] if len(owners) else np.zeros(0, dtype=int)
+    shapes = [ctx.parts[part].shape if solid is None else ctx.parts[part].solids()[solid] for part, solid in bodies]
+    clouds = []
+    for body in range(len(bodies)):
+        mine = body_of == body
+        tri = V[F[mine]]
+        points = np.vstack([tri.reshape(-1, 3), tri.mean(axis=1)])
+        owners = np.concatenate([np.repeat(O[mine] & 0xFFFFF, 3), O[mine] & 0xFFFFF])
+        clouds.append((points, owners))
+    boxes = [(c[0].min(axis=0), c[0].max(axis=0)) if len(c[0]) else (None, None) for c in clouds]
+    booleans = 0
+    exact_pairs = 0
+    candidates: list[tuple[Any, ...]] = []
+    # the pairs whose boxes come within reach, every pair's boxes tested at once (an assembly of hundreds of
+    # parts has tens of thousands of pairs, few of them near)
+    meshed = np.array([index for index, (low, _high) in enumerate(boxes) if low is not None], dtype=int)
+    lows = np.array([boxes[index][0] for index in meshed]).reshape(-1, 3)
+    highs = np.array([boxes[index][1] for index in meshed]).reshape(-1, 3)
+    near: list[tuple[int, int]] = []
+    for start in range(0, len(meshed), 256):
+        rows = slice(start, start + 256)
+        apart = np.max(np.maximum(lows[rows, None, :] - highs[None, :, :], lows[None, :, :] - highs[rows, None, :]), axis=2)
+        for i, j in zip(*np.nonzero(apart <= reach)):
+            if start + i < j:
+                near.append((int(meshed[start + i]), int(meshed[j])))
+    for a, b in near:
+        (la, ha), (lb, hb) = boxes[a], boxes[b]
+        # each cloud where the other's box (and the reach) is: the rest cannot be nearest
+        ina = np.all((clouds[a][0] >= lb - reach) & (clouds[a][0] <= hb + reach), axis=1)
+        inb = np.all((clouds[b][0] >= la - reach) & (clouds[b][0] <= ha + reach), axis=1)
+        if not ina.any() or not inb.any():
+            continue
+        pa, oa, sa = _thinned(clouds[a][0][ina], clouds[a][1][ina], CLEARANCE_POINTS)
+        pb, ob, sb = _thinned(clouds[b][0][inb], clouds[b][1][inb], CLEARANCE_POINTS)
+        spacing = max(sa, sb, ctx._deflection * 4)
+        margin = 2.0 * spacing + ctx._deflection
+        rough, ii, jj, _ = _near_pairs(pa, pb, margin + 0.5)
+        if rough > reach + margin:
+            continue
+        keys = oa[ii].astype(np.int64) * (1 << 21) + ob[jj].astype(np.int64)
+        _, first = np.unique(keys, return_index=True)
+        nearest = np.sort(first)[:CLEARANCE_FACES]
+        candidates.append((rough, margin, a, b, [(int(oa[ii[k]]), int(ob[jj[k]])) for k in nearest],
+                           pa[ii[0]], pb[jj[0]]))
+    # exact where it can decide a verdict, the nearest pairs first, within the document's budget
+    for rough, margin, a, b, faces, q1, q2 in sorted(candidates, key=lambda row: row[0]):
+        if rough - margin > EXACT_BELOW or exact_pairs + len(faces) > EXACT_QUERIES:
+            items.append({"location": ctx.ref(bodies[a][0], faces[0][0]), "xyz": _xyz((q1 + q2) / 2.0),
+                          "distance_mm": _r(rough, JUDGED), "kind": "gap" if rough > margin else "near",
+                          "overlap_mm3": None, "exact": False, "uncertainty_mm": _r(margin, 4),
+                          "faces": [ctx.ref(bodies[b][0], faces[0][1])],
+                          "parts": [ctx.body_name(bodies[a]), ctx.body_name(bodies[b])]})
+            continue
+        best = None
+        for fa, fb in faces:
+            query = BRepExtrema_DistShapeShape(ctx.info(bodies[a][0], fa).face.wrapped,
+                                               ctx.info(bodies[b][0], fb).face.wrapped, Extrema_ExtFlag_MIN)
+            exact_pairs += 1
+            if query.IsDone() and query.NbSolution() and (best is None or query.Value() < best[0]):
+                p1, p2 = query.PointOnShape1(1), query.PointOnShape2(1)
+                best = (float(query.Value()), fa, fb, np.array([p1.X(), p1.Y(), p1.Z()]),
+                        np.array([p2.X(), p2.Y(), p2.Z()]))
+        if best is None or best[0] > reach:
+            continue
+        distance, fa, fb, p1, p2 = best
+        overlap = None
+        if distance <= 1e-6:
+            # touching faces: the parts touch, or one runs into the other (a sample of one inside the other)
+            mine = ctx.solid_of(bodies[a][0])
+            probes = [s.point - s.normal * 1e-3 for info in ctx.faces[bodies[a][0]]
+                      if mine.get(info.ordinal) == bodies[a][1] for s in info.samples[:1]][:40]
+            if any(_inside(ctx, bodies[b][0], probes, bodies[b][1])):
+                overlap = math.nan
+            if booleans < OVERLAP_BOOLEANS:
+                booleans += 1
+                try:
+                    overlap = float(_geometry.overlap_volume(shapes[a], shapes[b]))
+                except Exception:  # noqa: BLE001 - a boolean that fails leaves the overlap unmeasured
+                    pass
+        kind = "gap" if distance > 1e-6 else ("overlap" if overlap is not None and (
+            math.isnan(overlap) or overlap > 1e-6) else "contact")
+        items.append({"location": ctx.ref(bodies[a][0], fa), "xyz": _xyz((p1 + p2) / 2.0),
+                      "distance_mm": _r(distance, JUDGED),
+                      "kind": kind, "exact": True, "overlap_mm3": None if overlap is None or math.isnan(overlap) else _r(overlap, 4),
+                      "faces": [ctx.ref(bodies[b][0], fb)],
+                      "parts": [ctx.body_name(bodies[a]), ctx.body_name(bodies[b])]})
+    items, count = _capped(items, lambda item: item["distance_mm"])
+    return {"items": items, "count": count, "part_count": len(ctx.parts), "body_count": len(bodies),
+            "reported_below_mm": reach,
+            "min_mm": items[0]["distance_mm"] if items else None, "exact_face_pairs": exact_pairs,
+            "budget": {"points_per_side": CLEARANCE_POINTS, "face_pairs_per_pair": CLEARANCE_FACES,
+                       "exact_queries": EXACT_QUERIES,
+                       "overlap_booleans": OVERLAP_BOOLEANS, "exact_below_mm": EXACT_BELOW},
+            "method": "each pair of parts' triangulations (thinned to points_per_side) find their nearest faces; "
+                      "BRepExtrema measures those face pairs exactly where the triangulations come within "
+                      f"{EXACT_BELOW:g} mm (plus their margin); farther pairs keep the triangulations' distance"}
+
+
+#: A part's voxel field read by every family that reads it, and dropped (``_trapped``): made again if asked.
+_DROPPED = object()
+
+
+def _grid(ctx: Context, part: int) -> tuple[Any, list[mo.Cavity], np.ndarray, float] | None:
+    """The part's voxel field, its cavities and labels, and the probing ball's radius."""
+    if part in ctx._grids and ctx._grids[part] is not _DROPPED:
+        return ctx._grids[part]
+    shape = ctx.parts[part].shape
+    box = shape.bounding_box(optimal=False)
+    size = np.array([box.size.X, box.size.Y, box.size.Z])
+    if size.min() <= 0:
+        ctx._grids[part] = None
+        return None
+    pitch, ball = mo.field_pitch(size)
+    V, F, O = ctx.mesh()
+    own = (O >> 20) == part
+    used = np.unique(F[own])
+    remap = np.full(len(V), -1)
+    remap[used] = np.arange(len(used))
+    grid = mo.voxels(V[used], remap[F[own]], pitch, pad=mo.ball_pad(ball, pitch))
+    # each opening's throat is measured on the part's triangulation (``mo.cavities``): to its deflection
+    found, labels = mo.cavities(grid, ball, caster=mo.Caster(V[used], remap[F[own]]))
+    ctx._grids[part] = (grid, found, labels, ball)
+    return ctx._grids[part]
+
+
+def _inner_shells(ctx: Context, part: int) -> list[dict[str, Any]]:
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeSolid
+    from OCP.BRepClass3d import BRepClass3d
+    from OCP.BRepGProp import BRepGProp
+    from OCP.GProp import GProp_GProps
+    from OCP.TopAbs import TopAbs_FACE, TopAbs_SHELL
+    from OCP.TopExp import TopExp_Explorer
+    from OCP.TopoDS import TopoDS
+
+    found = []
+    for solid in ctx.parts[part].solids():
+        outer = BRepClass3d.OuterShell_s(solid.wrapped)
+        shells = TopExp_Explorer(solid.wrapped, TopAbs_SHELL)
+        while shells.More():
+            shell = shells.Current()
+            shells.Next()
+            if shell.IsSame(outer):
+                continue
+            props = GProp_GProps()
+            BRepGProp.VolumeProperties_s(BRepBuilderAPI_MakeSolid(TopoDS.Shell(shell)).Solid(), props)
+            faces = []
+            explorer = TopExp_Explorer(shell, TopAbs_FACE)
+            while explorer.More():
+                ordinal = ctx.parts[part].face_ordinal(explorer.Current())
+                if ordinal:
+                    faces.append(ordinal)
+                explorer.Next()
+            center = props.CentreOfMass()
+            found.append({"volume_mm3": abs(float(props.Mass())), "faces": sorted(set(faces)),
+                          "centroid": np.array([center.X(), center.Y(), center.Z()])})
+    return found
+
+
+def _runs(ctx: Context, group: Round) -> list[tuple[float, float]]:
+    """The stretches of a round along its axis that its faces cover, overlapping ones merged: a hole cut
+    through two opposite walls is two runs; a cylinder the kernel split into halves along its seam is one."""
+    spans = []
+    for ordinal in group.faces:
+        info = ctx.info(group.part, ordinal)
+        points = [np.array([v.X, v.Y, v.Z]) for v in info.face.vertices()] + [s.point for s in info.samples]
+        along = [float((point - group.origin) @ group.axis) for point in points]
+        if along:
+            spans.append((min(along), max(along)))
+    merged: list[list[float]] = []
+    for lo, hi in sorted(spans):
+        if merged and lo <= merged[-1][1] + 1e-6:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+    return [(lo, hi) for lo, hi in merged] or [(group.lo, group.hi)]
+
+
+def _trapped(ctx: Context) -> dict[str, Any]:
+    ctx.measure_rays()
+    items, pitches, balls = [], [], []
+    for part in range(len(ctx.parts)):
+        made = _grid(ctx, part)
+        exact = _inner_shells(ctx, part)
+        if made is None:
+            continue
+        grid, found, labels, ball = made
+        pitches.append(grid.pitch)
+        balls.append(ball)
+        # the sections' reading of this part's field now, and the field dropped when the part is done: an
+        # assembly's fields held together are megabytes a part (``_section``)
+        _section(ctx, part)
+
+        def label(point: np.ndarray, grid: Any = grid, labels: np.ndarray = labels) -> int:
+            return int(labels[grid.index(np.asarray(point))[0]])
+
+        cavities: list[dict[str, Any]] = [{"k": k, "cavity": cavity, "shell": None, "faces": [], "holes": []}
+                                          for k, cavity in enumerate(found)]
+        # every inner shell is a sealed cavity, measured exactly; it replaces the voxels' reading of it
+        for shell in exact:
+            walls = [sample for ordinal in shell["faces"] for sample in ctx.info(part, ordinal).samples[:6]]
+            k = mo.cavity_at(grid, labels, np.array([sample.point for sample in walls]),
+                             np.array([sample.normal for sample in walls])) if walls else None
+            entry = next((c for c in cavities if c["k"] == k), None) if k is not None else None
+            if entry is None:
+                entry = {"k": None, "cavity": None, "holes": []}
+                cavities.append(entry)
+            entry.update(shell=shell, faces=shell["faces"])
+        # escape holes: each run of a hole along its axis with one end in the cavity and the other outside --
+        # a run, not the whole round, so one cut through two opposite walls is the two holes it makes
+        for index, group in ctx.rounds_of(True):
+            if group.part != part:
+                continue
+            reach = 1.5 * grid.pitch + 1e-3
+            for lo, hi in _runs(ctx, group):
+                ends = [group.origin + group.axis * (lo - reach), group.origin + group.axis * (hi + reach)]
+                marks = [label(end) for end in ends]
+                for cavity in cavities:
+                    if cavity["k"] is not None and cavity["k"] in marks and -1 in marks:
+                        cavity["holes"].append(group)
+        # every wall sample's outside, labelled at once: the cavity (if any) each wall faces
+        rows = [(t, info.ordinal, info.samples[k]) for info in ctx.faces[part] for t, k, _ in info.thickness]
+        facing = (labels[grid.index(np.array([s.point + s.normal * 0.75 * grid.pitch for _, _, s in rows]))]
+                  if rows else np.zeros(0, dtype=int))
+        for cavity in cavities:
+            walls = []
+            if cavity["k"] is not None:
+                walls = [(rows[i][0], rows[i][1]) for i in np.flatnonzero(facing == cavity["k"])]
+            for ordinal in cavity["faces"]:
+                walls += [(t, ordinal) for t, _, _ in ctx.info(part, ordinal).thickness]
+            shell = cavity["shell"]
+            if shell is not None:
+                item = {"xyz": shell["centroid"], "volume_mm3": _r(shell["volume_mm3"], 2), **mo.SEALED_EXACT}
+            else:
+                # the exact holes' diameters, and the throat of every opening no hole explains: an opening of
+                # another shape, measured on the triangulation
+                diameters = [(2.0 * group.radius, 0.0) for group in cavity["holes"]]
+                for opening in cavity["cavity"].openings:
+                    explained = False
+                    for group in cavity["holes"]:
+                        rel = opening["xyz"] - group.origin
+                        off = np.linalg.norm(rel - group.axis * float(rel @ group.axis))
+                        explained |= bool(off <= group.radius + 2.0 * grid.pitch)
+                    if not explained:
+                        diameters.append((float(opening["diameter_mm"]), float(opening["uncertainty_mm"])))
+                item = mo.trapped_item(cavity["cavity"], grid.pitch, diameters)
+            thinnest = min(walls) if walls else None
+            location = (ctx.ref(part, thinnest[1]) if thinnest else
+                        ctx.ref(part, cavity["faces"][0]) if cavity["faces"] else ctx.ref(part, 1))
+            items.append({"location": location, **item, "xyz": _xyz(item["xyz"]),
+                          "min_wall_mm": _r(thinnest[0], JUDGED) if thinnest else None,
+                          "faces": [ctx.ref(part, ordinal) for ordinal in cavity["faces"][:12]]})
+        ctx._grids[part] = _DROPPED
+    items, count = _capped(items, lambda item: (item["escape_holes"], -(item["volume_mm3"] or 0)))
+    return {"items": items, "count": count, "sealed_count": sum(1 for item in items if item["sealed"]),
+            "trapped_volume_mm3": _r(sum(item["volume_mm3"] or 0 for item in items), 2),
+            "pitch_mm": _r(max(pitches), 4) if pitches else None, "ball_radius_mm": _r(max(balls), 3) if balls else None,
+            "method": mo.TRAPPED_METHOD + "; escape holes the exact holes from a cavity to outside, every other "
+                      "opening's throat measured on the triangulation"}
+
+
+def _build_volume(ctx: Context) -> dict[str, Any]:
+    """How the document fits the build volume lying the best way (``meshops_printing.build_fit``), read on its
+    triangulation's hull: the fit does not turn with how the parts stand."""
+    return mo.build_fit(ctx.lo, ctx.hi, rules.machine_volume(ctx.options), ctx.mesh()[0])
+
+
+def _bed(ctx: Context) -> dict[str, Any]:
+    items, contact, xs, ys = [], 0.0, [], []
+    sharp = 0.0
+    for part, infos in enumerate(ctx.faces):
+        for info in infos:
+            n = info.surface.normal
+            if info.surface.kind != "plane" or n is None or n[2] > -0.9999 or not ctx.on_plate(info.zmax):
+                continue
+            box = info.box
+            contact += info.area
+            xs += [box.min.X, box.max.X]
+            ys += [box.min.Y, box.max.Y]
+            for other, shared in ctx.adjacent(part, info.ordinal).items():
+                sharp += sum(edge.length for edge in shared if not edge.concave and not edge.smooth
+                             and abs(edge.angle_deg - 90.0) < 1.0)
+            items.append({"location": ctx.ref(part, info.ordinal), "xyz": _xyz(box.center()),
+                          "area_mm2": _r(info.area, 3), "length_mm": _r(max(box.size.X, box.size.Y), 4)})
+    holes = sum(1 for _, group in ctx.rounds_of(True) if _orientation(group.axis) == "vertical"
+                and min(ctx.info(group.part, o).zmin for o in group.faces) <= ctx.z0 + ctx.tol)
+    footprint = (ctx.hi - ctx.lo)[:2]
+    items.sort(key=lambda item: -item["area_mm2"])
+    return {"items": items[:CAP], "count": len(items), "contact_area_mm2": _r(contact, 3),
+            "footprint_mm": _xyz(footprint), "footprint_area_mm2": _r(float(footprint[0] * footprint[1]), 3),
+            "contact_ratio": _r(contact / float(footprint[0] * footprint[1]), 4) if footprint.prod() > 0 else None,
+            "contact_length_mm": _r(max(max(xs) - min(xs), max(ys) - min(ys)), 4) if xs else 0.0,
+            "sharp_bottom_edges_mm": _r(sharp, 3), "holes_on_plate": holes}
+
+
+def _stairs(ctx: Context) -> dict[str, Any]:
+    items, bins = [], np.zeros(4)
+    edges = [0.5, 5.0, 10.0, 15.0, SHALLOW_DEG]
+    for part, infos in enumerate(ctx.faces):
+        for info in infos:
+            if not info.samples:
+                continue
+            tilt = np.degrees(np.arccos(np.clip([abs(float(s.normal[2])) for s in info.samples], 0.0, 1.0)))
+            shallow = (tilt > edges[0]) & (tilt < SHALLOW_DEG)
+            if not shallow.any():
+                continue
+            scale = info.area / max(sum(s.area for s in info.samples), 1e-12)
+            area = np.array([s.area for s in info.samples]) * scale
+            for k in range(4):
+                bins[k] += float(area[shallow & (tilt >= edges[k]) & (tilt < edges[k + 1])].sum())
+            mean = float(np.average(tilt[shallow], weights=area[shallow]))
+            up = float(np.average([s.normal[2] for s, keep in zip(info.samples, shallow) if keep])) > 0
+            items.append({"location": ctx.ref(part, info.ordinal), "xyz": _xyz(info.samples[int(np.flatnonzero(shallow)[0])].point),
+                          "angle_deg": _r(mean, 3), "area_mm2": _r(float(area[shallow].sum()), 3),
+                          "cusp_mm": _r(ctx.layer * math.cos(math.radians(mean)), 4),
+                          "step_width_mm": _r(ctx.layer / math.tan(math.radians(mean)), 4),
+                          "facing": "up" if up else "down"})
+    items, count = _capped(items, lambda item: -item["area_mm2"])
+    return {"items": items, "count": count, "layer_height_mm": ctx.layer, "shallow_below_deg": SHALLOW_DEG,
+            "area_by_angle_mm2": {f"{edges[k]:g}-{edges[k + 1]:g}deg": _r(float(bins[k]), 2) for k in range(4)},
+            "area_mm2": _r(float(bins.sum()), 2)}
+
+
+def _knife_edges(ctx: Context) -> dict[str, Any]:
+    """Every convex edge whose material angle along it falls under ``KNIFE_DEG``: its stretch there, its least
+    angle, and how deep from it the material is thinner than the technology's unsupported-wall minimum."""
+    minimum = rules.wall_minimum(ctx.options)
+    items = []
+    for part in range(len(ctx.parts)):
+        _knife_zones(ctx, part)
+        for run in ctx._runs[part]:  # type: ignore[attr-defined]
+            under = run["angles"] < mo.KNIFE_DEG - mo.ANGLE_EPS
+            if not under.any():
+                continue  # at the limit, no knife (its sliver is no wall either: ``_knife_zones``)
+            edge = run["edge"]
+            least = float(run["angles"][under].min())
+            depth = mo.thin_depth(minimum, least)
+            lengths = np.linalg.norm(run["ends"][under] - run["starts"][under], axis=1)
+            stretch = float(lengths.sum())
+            middle = (run["starts"][under][len(lengths) // 2] + run["ends"][under][len(lengths) // 2]) / 2.0
+            area = float((run["depths"][under] * lengths).sum()) if depth else None
+            items.append({"location": ctx.parts[part].ref("edge", edge.ordinal), "xyz": _xyz(middle),
+                          "faces": [ctx.ref(part, ordinal) for ordinal in edge.faces],
+                          "angle_deg": _r(least, 3), "length_mm": _r(stretch, 4),
+                          "edge_length_mm": _r(edge.length, 4), "thickness_mm": 0.0,
+                          "thin_depth_mm": _r(depth, 4), "thin_area_mm2": _r(area, 4)})
+    items, count = _capped(items, lambda item: item["angle_deg"])
+    return {"items": items, "count": count, "knife_below_deg": mo.KNIFE_DEG, "min_wall_mm": minimum,
+            "length_mm": _r(sum(item["length_mm"] for item in items), 4),
+            "method": "convex edges whose material angle, read along the edge, falls under knife_below_deg: "
+                      "angle_deg the least, length_mm the stretch under it; the material at d from such an "
+                      "edge is 2 d tan(angle / 2) thick: thin_depth_mm is where it reaches min_wall_mm"}
+
+
+def _pitch(ctx: Context) -> float:
+    return mo.raster_pitch(ctx.hi - ctx.lo)
+
+
+def _at_limit(ctx: Context, turned: np.ndarray | None = None) -> np.ndarray:
+    """The triangles (a mask) of the triangulation whose face, the document turned by the rotation ``turned``
+    where given, is nowhere under the angle limit: the support raster and the orientations read the triangles,
+    and a round's chords turn from its surface -- a 45 deg cone's triangles read 44.3 deg, where the cone, read
+    exactly on its samples, is at 45 and needs no support."""
+    V, F, O = ctx.mesh()
+    under: set[int] = set()
+    for infos in ctx.faces:
+        for info in infos:
+            normals = np.array([sample.normal for sample in info.samples]).reshape(-1, 3)
+            if info.surface.kind == "plane" and info.surface.normal is not None:
+                normals = np.array([info.surface.normal], dtype=float)
+            if turned is not None:
+                normals = normals @ np.asarray(turned, dtype=float).T
+            if len(normals) and bool(((normals[:, 2] < -1e-9) &
+                                      (mo.angles(normals) < ctx.angle_limit - mo.ANGLE_EPS)).any()):
+                under.add((info.part << 20) | info.ordinal)
+    return ~np.isin(O, np.fromiter(under, dtype=np.int64, count=len(under)))
+
+
+def _cosmetic(ctx: Context) -> set[int]:
+    """The faces a support mark spoils, as owners: each part's faces of 5% of its area or more, holes aside."""
+    chosen = set()
+    for part, infos in enumerate(ctx.faces):
+        total = sum(info.area for info in infos) or 1.0
+        for info in infos:
+            hole = info.group is not None and ctx.rounds[info.group].concave
+            if info.area >= 0.05 * total and not hole:
+                chosen.add((part << 20) | info.ordinal)
+    return chosen
+
+
+def _support(ctx: Context) -> dict[str, Any]:
+    V, F, O = ctx.mesh()
+    held = mo.support(V, F, ctx.angle_limit, _pitch(ctx), plate_z=ctx.z0, owners=O, skip=_at_limit(ctx))
+    volume = sum(float(part.shape.volume) for part in ctx.parts)
+    cosmetic = _cosmetic(ctx)
+    items = [{"location": ctx.owner_ref(owner), "contact_mm2": _r(area, 3), "cosmetic": owner in cosmetic}
+             for owner, area in held["per_owner_mm2"].items()]
+    items, count = _capped(items, lambda item: -item["contact_mm2"])
+    return {"items": items, "count": count, "angle_limit_used_deg": ctx.angle_limit,
+            "estimated_support_volume_mm3": _r(held["volume_mm3"], 2), "part_volume_mm3": _r(volume, 2),
+            "support_to_part_ratio_pct": _r(100.0 * held["volume_mm3"] / volume, 2) if volume > 0 else None,
+            "support_contact_mm2": _r(held["contact_area_mm2"], 2),
+            "support_contact_cosmetic_mm2": _r(sum(i["contact_mm2"] for i in items if i["cosmetic"]), 2),
+            "pitch_mm": _r(held["pitch_mm"], 4),
+            "method": "column fill under every down-facing surface under the angle limit, down to the part or the "
+                      "plate, from a raster of the triangulation along Z"}
+
+
+def _section(ctx: Context, part: int) -> tuple[dict[str, Any], float] | None:
+    """The part's sections read from its voxel field (``mo.sections``) and the field's pitch, read once."""
+    readings = ctx.__dict__.setdefault("_sections", {})
+    if part not in readings:
+        made = _grid(ctx, part)
+        readings[part] = None if made is None else (mo.sections(made[0]), made[0].pitch)
+    return readings[part]
+
+
+def _sections(ctx: Context) -> dict[str, Any]:
+    """The thickest sections -- the largest ball each part's material holds, from its voxel field -- and the
+    cross-sections layer by layer (residual stress in metal follows a large flat section)."""
+    items: list[dict[str, Any]] = []
+    best: dict[str, Any] = {}
+    for part in range(len(ctx.parts)):
+        reading = _section(ctx, part)
+        if reading is None:
+            continue
+        found, pitch = reading
+        if found["thickness_mm"] is not None:
+            items.append({"location": ctx.ref(part, _face_at(ctx, part, found["center"])), "xyz": _xyz(found["center"]),
+                          "thickness_mm": _r(found["thickness_mm"], JUDGED), "at_least": found["at_least"],
+                          "pitch_mm": _r(pitch, 4)})
+        if found.get("max_cross_section_mm2", 0) > best.get("max_cross_section_mm2", -1):
+            best = found
+    items.sort(key=lambda item: -item["thickness_mm"])
+    report: dict[str, Any] = {"items": items, "count": len(items),
+                              "max_thickness_mm": items[0]["thickness_mm"] if items else None, "measured_up_to_mm": 12.0,
+                              "method": "the largest ball each part's material holds, from its voxel field (to a "
+                                        "voxel); thicker than measured_up_to_mm reads at_least"}
+    if best.get("max_cross_section_mm2") is not None:
+        report.update(max_cross_section_mm2=_r(best["max_cross_section_mm2"], 2),
+                      max_cross_section_z_mm=_r(best["max_cross_section_z"] - ctx.z0, 4),
+                      largest_section_change_mm2=_r(best["largest_section_change_mm2"], 2))
+    return report
+
+
+def _scale(ctx: Context) -> dict[str, Any]:
+    """The document's size and whether its unit looks wrong (``_common.units_doubt``, every process's test)."""
+    from cad._internal.dfm._common import units_doubt
+
+    return {"bbox_diagonal_mm": _r(ctx.diag, 4), **units_doubt(ctx.diag, "it reads")}
+
+
+def _orientations(ctx: Context) -> dict[str, Any]:
+    V, F, O = ctx.mesh()
+    candidates = dict(mo.ROTATIONS)
+    # each of the largest flat faces laid on the plate, where no axis orientation already lays it
+    planes = sorted((info for infos in ctx.faces for info in infos if info.surface.kind == "plane"),
+                    key=lambda info: -info.area)
+    for info in planes:
+        n = np.array(info.surface.normal)
+        if np.max(np.abs(n)) > 0.9999 or any(np.allclose(R @ n, [0, 0, -1], atol=1e-4) for R in candidates.values()):
+            continue
+        candidates[f"face_down:{ctx.ref(info.part, info.ordinal)}"] = mo.down_to(n)
+        if len(candidates) >= 10:
+            break
+    rows = mo.orientation_rows(V, F, candidates, ctx.angle_limit, _pitch(ctx), SHALLOW_DEG, owners=O,
+                               cosmetic=_cosmetic(ctx), at_limit=lambda R: _at_limit(ctx, R))
+    volume = np.array(rules.machine_volume(ctx.options)["volume_mm"])
+    for row in rows:
+        box = np.array(row["bbox_mm"])
+        xy = max(float(sorted(box[:2])[k]) / float(sorted(volume[:2])[k]) for k in range(2))
+        row["fill_ratio"] = _r(max(xy, float(box[2]) / float(volume[2])), 4)
+        row["fits"] = bool(row["fill_ratio"] <= 1.0 + 1e-9)
+        row["support_area_mm2"] = row["overhang_area_mm2"]
+    weights = mo.WEIGHTS["powder" if ctx.technology in rules.POWDER else "support"]
+    rows = mo.ranked(rows, weights)
+    return {"angle_limit_used_deg": ctx.angle_limit, "weights": weights, "candidates": rows,
+            "best": rows[0]["orientation"] if rows else None,
+            "ranking": "each figure over the largest any candidate has, weighted, summed: lowest first"}
+
+
+FAMILIES: tuple[tuple[str, Callable[[Context], dict[str, Any]]], ...] = (
+    ("solid", _solid), ("scale", _scale), ("overhangs", _overhangs), ("bridges", _bridges),
+    ("wall_thickness", _walls), ("gaps", _gaps), ("holes", _holes), ("pins", _pins), ("details", _details),
+    ("clearances", _clearances), ("trapped_volumes", _trapped), ("build_volume", _build_volume), ("bed", _bed),
+    ("knife_edges", _knife_edges), ("stair_stepping", _stairs), ("support_volume", _support),
+    ("sections", _sections),
+)
+
+
+#: The families no option decides but the samples: read once a ``Context``, whatever it is then measured for
+#: (``measure_each``). The others read the technology's angle limit, layer, wall minimum or machine.
+FIXED = frozenset({"solid", "scale", "gaps", "holes", "pins", "details", "clearances", "trapped_volumes", "bed",
+                   "sections"})
+
+
+def measure(document: brep.Document, options: dict[str, Any], candidates: bool) -> dict[str, Any]:
+    """The printing report of ``document``: facts alone, every family's ``items`` at a ref."""
+    from cad._internal.dfm import Unmeasured
+
+    if not document.parts:
+        raise Unmeasured("document_empty", "the document has no parts to print")
+    return _report(Context(document, options), candidates, {})
+
+
+def measure_each(document: brep.Document, each: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The printing reports of ``document`` for each of the options ``each`` -- the same but for what a
+    technology changes -- the document read once: its faces sampled, its rays cast, its triangulation and its
+    voxel fields made once serve them all, the families no option decides (``FIXED``) are measured once, and
+    what an option decides (the overhangs under its angle, a knife's thin depth and a wall's support against its
+    wall minimum, the support, the build volume) is read again for each. Each report is what ``measure`` answers
+    for its options."""
+    import copy
+
+    from cad._internal.dfm import Unmeasured
+
+    if not document.parts:
+        raise Unmeasured("document_empty", "the document has no parts to print")
+    if len({options.get("samples") for options in each}) > 1:
+        raise ValueError("measure_each: the options differ in samples, which decide what is read once")
+    ctx, kept, found = Context(document, each[0]), {}, []
+    for options in each:
+        ctx.options, ctx.technology = options, options["technology"]
+        ctx.angle_limit, ctx.layer = rules.angle_limit(options), rules.layer_height(options)
+        for name in ("_zones", "_runs"):  # the knives' thin depths, against this technology's wall minimum
+            ctx.__dict__.pop(name, None)
+        found.append(copy.deepcopy(_report(ctx, False, kept)))
+    return found
+
+
+def _report(ctx: Context, candidates: bool, kept: dict[str, Any]) -> dict[str, Any]:
+    """``ctx``'s report for its options; a family of ``FIXED`` already in ``kept`` is not measured again, and
+    one measured is kept there."""
+    report: dict[str, Any] = {"technology": ctx.technology}
+    if candidates:
+        report["scale"] = _safe(lambda: _scale(ctx))
+        report["orientations"] = _safe(lambda: _orientations(ctx))
+    else:
+        for name, family in FAMILIES:
+            if name in FIXED and name in kept:
+                report[name] = kept[name]
+                continue
+            ctx.used_rays = False
+            before = ctx.failures()
+            report[name] = _safe(lambda family=family: family(ctx))
+            # the faces its rays (its own, or the samples' shared ones it read) could not be intersected with:
+            # its figures there not measured (``rules``)
+            lost = ctx.lost_since(before)
+            for part, ordinals in (ctx.ray_lost.items() if ctx.used_rays else ()):
+                lost.setdefault(part, set()).update(ordinals)
+            refs = sorted(ctx.parts[part].ref("face", ordinal) for part, ordinals in lost.items() for ordinal in ordinals)
+            if refs and isinstance(report[name], dict) and "error" not in report[name]:
+                report[name]["unmeasured_faces"] = refs
+            if name in FIXED:
+                kept[name] = report[name]
+    failed = sorted(name for name, value in report.items() if isinstance(value, dict) and "error" in value)
+    missed = [brep.unintersected(ctx.parts[index], [rays.screen], [rays.faces]) for index, rays in sorted(ctx._rays.items())]
+    if any(missed):
+        report["findings"] = [finding for finding in missed if finding]
+    report["partial"] = bool(failed)
+    if failed:
+        report["partial_sections"] = failed
+    return report

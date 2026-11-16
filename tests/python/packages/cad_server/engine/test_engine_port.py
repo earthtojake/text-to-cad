@@ -18,6 +18,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 from tests.python.support import engine_daemon
@@ -265,7 +266,7 @@ class EnginePortTest(unittest.TestCase):
         port = json.loads(done.stdout)["port"]
         self.assertTrue(default < port <= default + 64, port)
         pid = str(os.getpid()) if os.name != "nt" else r"\d+"  # the system names the holder
-        said = rf"{default} is held by (.+pid {pid}\)|another process); the engine serves on {port} and keeps it"
+        said = rf"the engine serves on port {port} and keeps it for its links: {default} is in use by (.+pid {pid}\)|another process)"
         self.assertRegex(done.stderr, rf"(?m)^cad: {said}$")
         self.assertEqual(self.record()["port"], port)
         status = self.cli("status", **extra).stdout
@@ -275,7 +276,7 @@ class EnginePortTest(unittest.TestCase):
         again = self.started(**extra)  # the remembered port: the same links, nothing said
         self.assertEqual(again.returncode, 0, again.stderr)
         self.assertEqual(json.loads(again.stdout)["port"], port)
-        self.assertNotIn(f"{default} is held", again.stderr + self.cli("status", **extra).stdout)
+        self.assertNotIn(f"{default} is in use", again.stderr + self.cli("status", **extra).stdout)
 
     def test_the_installation_port_returns_to_a_free_default_and_rolls_from_a_held_remembered_one(self) -> None:
         from cad.engine import places
@@ -292,8 +293,8 @@ class EnginePortTest(unittest.TestCase):
         self.addCleanup(held.socket.close)
         server, where = self.bound(default)
         self.assertGreater(server.port, remembered)
-        self.assertRegex(where["notice"], rf"^{remembered} is held by .+; the engine serves on {server.port} "
-                                          "and keeps it$")
+        self.assertRegex(where["notice"], rf"^the engine serves on port {server.port} and keeps it for its links: "
+                                          rf"{remembered} is in use by .+$")
         self.assertEqual(self.remembered(), server.port)
         server.socket.close()
         default = free_port()  # the default free again: taken back, the rolled port forgotten
@@ -331,8 +332,9 @@ class EnginePortTest(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         port = json.loads(done.stdout)["port"]
         self.assertTrue(default < port <= default + 64, port)
-        (said,) = [line for line in done.stderr.splitlines() if line.startswith(f"cad: {default} is held by ")]
-        self.assertTrue(said.endswith(f"; the engine serves on {port} and keeps it"), said)
+        (said,) = [line for line in done.stderr.splitlines() if line.startswith("cad: the engine serves on port ")]
+        self.assertTrue(said.startswith(f"cad: the engine serves on port {port} and keeps it for its links: "
+                                        f"{default} is in use by "), said)
         if os.name != "nt":  # the system names the holder by its command line
             self.assertIn("another cad-server (", said)
             self.assertIn(f"pid {theirs.pid})", said)
@@ -418,7 +420,7 @@ class BuildBoundNoticeTest(unittest.TestCase):
 
         from cad_server.engine import daemon
 
-        said = "3245 is held by another process; this installation serves on 3246 and keeps it"
+        said = "the engine serves on port 3246 and keeps it for its links: 3245 is in use by another process"
 
         class Engine:
             refusal, token, unsaid = None, "ab" * 16, said
@@ -442,6 +444,37 @@ class BuildBoundNoticeTest(unittest.TestCase):
                 self.assertEqual(asked("status"), [{"log": "building"}, {"ok": True}])
                 self.assertEqual(asked("build"), [{"log": "building"}, {"ok": True, "notice": said}])
                 self.assertEqual(asked("build"), [{"log": "building"}, {"ok": True}])
+
+
+    def test_the_notice_is_said_on_stderr_after_what_stdout_has_printed_never_inside_it(self) -> None:
+        """A command's output piped with its stderr (``2>&1``): stdout buffered, stderr not. The notice comes
+        after the lines the command printed before the request, not ahead of them in the pipe."""
+        import io
+
+        from cad.engine import client
+
+        class Pipe(io.RawIOBase):
+            def __init__(self) -> None:
+                self.bytes = bytearray()
+
+            def writable(self) -> bool:
+                return True
+
+            def write(self, data: Any) -> int:
+                self.bytes += bytes(data)
+                return len(data)
+
+        pipe = Pipe()
+        out = io.TextIOWrapper(io.BufferedWriter(pipe, 1 << 16))  # a pipe's stdout: block-buffered
+        err = io.TextIOWrapper(pipe, write_through=True)
+        with mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", err):
+            print("structure: 270 parts")
+            client._notice("the engine serves on port 3247 and keeps it for its links: 3245 is in use by another cad-server")
+            print("  Base_SO101")
+            out.flush()
+        self.assertEqual(pipe.bytes.decode().splitlines(), [
+            "structure: 270 parts", "cad: the engine serves on port 3247 and keeps it for its links: 3245 is in use by another cad-server",
+            "  Base_SO101"])
 
 
 class PortHolderTest(unittest.TestCase):

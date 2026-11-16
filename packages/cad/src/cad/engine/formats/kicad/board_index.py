@@ -1,8 +1,8 @@
 """Any KiCad board, read as what a person can point at, and board references answered.
 
 :func:`read_index` reads a saved ``.kicad_pcb`` into its parts (footprints, with their fields and outlines), pads,
-tracks, vias, pours, unplated holes, ``Edge.Cuts`` outline, nets, texts, dimensions and
-graphics, from the file alone: no KiCad runs. :func:`read_board` (``pcb.read_board``) answers
+tracks, vias, pours, unplated holes, ``Edge.Cuts`` outline, nets, texts, dimensions,
+graphics and its stack-up (its layers' colours and copper finish, as the file names them), from the file alone: no KiCad runs. :func:`read_board` (``pcb.read_board``) answers
 board references (:mod:`cad.engine.formats.kicad.refs`) against that index:
 ``board.resolve("#U3.9")`` is pad 9 of U3, where it is, its net, and its part;
 ``board.resolve("#track:<uuid>")`` the track KiCad saved with that uuid (an item's
@@ -24,7 +24,7 @@ its pads and graphics are in its own frame (a pad's position relative to the
 footprint, before its rotation; its angle absolute), a bottom-side footprint's
 already flipped; a pad's shape
 is a polygon (rect, roundrect, oval, circle, trapezoid, chamfered rect; a
-custom pad's is the hull of its primitives); arcs and circles are sampled, a
+custom pad's is the outline of its anchor and primitives united, its largest piece); arcs and circles are sampled, a
 graphic's (an Edge.Cuts outline, a courtyard) with chords within ``CHORD_TOLERANCE``
 (0.005 mm) of it, so a part fitted to the outline read back fits the board as drawn; a
 part's outline is its courtyard (else the box around its pads and fabrication
@@ -52,8 +52,8 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from cad.engine.formats.kicad.ref_path import ref_prefix_names
 from cad.engine.formats.kicad import sexpr
 from cad.engine.formats.kicad.geometry import (
-    CHORD_TOLERANCE, XY, arc_points, area, bezier_points, box, chords, format_xy, hull, inside, polygon_distance,
-    polyline_distance, rotate,
+    CHORD_TOLERANCE, XY, arc_points, area, bezier_points, box, chords, cos_sin, disc, format_xy, hull, inside, pen_outlines,
+    polygon_distance, polyline_distance, rotate, union,
 )
 from cad.engine.formats.kicad.naming import natural, netclass_of, project_netclasses, unescape_net_name
 from cad.engine.formats.kicad.refs import (
@@ -76,6 +76,8 @@ __all__ = [
     "Part",
     "Point",
     "Shape",
+    "Stackup",
+    "StackupLayer",
     "Text",
     "Track",
     "Via",
@@ -89,11 +91,13 @@ __all__ = [
     "layer_of",
     "net_of",
     "net_table",
+    "pad_pieces",
     "pad_shape",
     "points_of",
     "read_board",
     "read_board_index",
     "read_index",
+    "read_stackup",
     "zone_outline",
 ]
 
@@ -141,6 +145,51 @@ class Pad:
         shared = (f"; one of {self.shared} pads numbered {self.number}: "
                   f"part.pads_numbered({self.number!r}) lists them") if self.shared > 1 else ""
         return f"Pad({self.part}.{self.number}{name}, net={self.net!r}, at={format_xy(self.at)}, {self.side}{shared})"
+
+
+@dataclass(frozen=True)
+class StackupLayer:
+    """One layer of the board's physical stack-up (``(setup (stackup (layer "F.Mask" ..)))``), as the file
+    writes it: ``name`` (``F.SilkS``, ``F.Mask``, ``F.Cu``, ``dielectric 1``...), ``type`` (``Top Solder
+    Mask``, ``copper``, ``core``, ``prepreg``...), ``color`` as KiCad names it (``Black``, ``FR4 natural``,
+    or ``#RRGGBBAA``; ``None`` where the file names none), ``thickness`` in millimetres and ``material``."""
+
+    name: str
+    type: str | None = None
+    color: str | None = None
+    thickness: float | None = None
+    material: str | None = None
+
+
+@dataclass(frozen=True)
+class Stackup:
+    """The board's stack-up, front to back, and its ``copper_finish`` (``ENIG``, ``HAL SnPb``, ``OSP``...;
+    ``None`` where it names none): what the board is made of and what colour it is made in."""
+
+    layers: tuple[StackupLayer, ...] = ()
+    finish: str | None = None
+
+
+def read_stackup(tree: list) -> Stackup | None:
+    """The board's ``(setup (stackup ...))``, or ``None`` for a board that saved none."""
+    node = sexpr.find(sexpr.find(tree, "setup") or [], "stackup")
+    if node is None:
+        return None
+
+    def text(value: Any) -> str | None:
+        return str(value) if isinstance(value, str) and str(value).strip() else None
+
+    layers = []
+    for entry in sexpr.find_all(node, "layer"):
+        if len(entry) < 2 or not isinstance(entry[1], str):
+            continue
+        thickness = sexpr.value(entry, "thickness")
+        layers.append(StackupLayer(
+            name=str(entry[1]), type=text(sexpr.value(entry, "type")), color=text(sexpr.value(entry, "color")),
+            thickness=float(thickness) if isinstance(thickness, (int, float)) and not isinstance(thickness, bool) else None,
+            material=text(sexpr.value(entry, "material")),
+        ))
+    return Stackup(layers=tuple(layers), finish=text(sexpr.value(node, "copper_finish")))
 
 
 @dataclass(frozen=True)
@@ -528,6 +577,7 @@ class BoardIndex:
     shapes: tuple[Shape, ...] = ()
     layers: tuple[str, ...] = ()  # every layer the board's table declares, as KiCad names it
     rule_areas: tuple[Zone, ...] = ()  # the keepout zones, one per layer each keeps out of
+    stackup: Stackup | None = None  # the physical stack-up the file saved: its layers' colours, its copper finish
 
     @property
     def pads(self) -> tuple[Pad, ...]:
@@ -627,6 +677,9 @@ class BoardIndex:
             "holes": [{"at": xy(hole.at), "diameter": num(hole.diameter), "part": hole.part} for hole in self.holes],
             "outline": [path(line) for line in self.outline],
             "nets": [{"name": name, "class": netclass} for name, netclass in self.nets],
+            # What the board is made in (its stack-up's colours and copper finish), as the file names them:
+            # what a 3D view draws it as.
+            **({"stackup": _stackup_json(self.stackup, num)} if self.stackup is not None else {}),
             # What a person picks beside the copper: the texts and the dimensions (a graphic is picked
             # from what the plot draws of it, which carries its id: the plot's `graphic`).
             "texts": [
@@ -644,11 +697,21 @@ class BoardIndex:
         }
 
 
+def _stackup_json(stackup: Stackup, num: Callable[[float], float]) -> dict:
+    layers = [{"name": layer.name, **({"type": layer.type} if layer.type else {}), **({"color": layer.color} if layer.color else {}),
+               **({"thickness": num(layer.thickness)} if layer.thickness is not None else {}),
+               **({"material": layer.material} if layer.material else {})} for layer in stackup.layers]
+    return {"layers": layers, **({"finish": stackup.finish} if stackup.finish else {})}
+
+
 # --- geometry ------------------------------------------------------------------------
 
 
 def _circle(center: XY, radius: float, segments: int = _CIRCLE_SEGMENTS) -> list[XY]:
-    return [(center[0] + radius * math.cos(2 * math.pi * k / segments), center[1] + radius * math.sin(2 * math.pi * k / segments)) for k in range(segments)]
+    """A circle as ``segments`` points, the same bits on every platform (``cos_sin``): the router reads a board's
+    circles from here."""
+    return [(center[0] + radius * cos, center[1] + radius * sin)
+            for cos, sin in (cos_sin(2 * math.pi * k / segments) for k in range(segments))]
 
 
 def _close(a: XY, b: XY, within: float = _JOIN) -> bool:
@@ -854,7 +917,8 @@ def _text_box(text: str, at: XY, angle: float, node: list) -> tuple[XY, ...]:
     """The box ``text``'s letters fill where KiCad puts it: drawn unturned about its anchor in the
     plot's stroke font (``stroke_font``), its stroke round it, then turned and placed as KiCad turns text."""
     size, thickness, justify = _text_effects(node)
-    points = [point for stroke in text_strokes(text, size=size, justify=justify, mirror="mirror" in justify) for point in stroke]
+    points = [point for stroke in text_strokes(text, size=size, justify=justify, mirror="mirror" in justify, markup=True)
+              for point in stroke]
     if not points:
         return ()
     reach = thickness / 2
@@ -1042,6 +1106,54 @@ def _oval(width: float, height: float) -> list[XY]:
     return out
 
 
+def _primitive_filled(node: list, width: float) -> bool:
+    """Whether a custom pad's primitive covers its inside: a polygon unless its ``(fill ..)`` says not; a
+    circle or rectangle when its fill says so, or, saying nothing, drawn with no pen (KiCad 5's filled shape)."""
+    fill = sexpr.find(node, "fill")
+    said = None
+    if fill is not None and len(fill) >= 2:
+        said = sexpr.value(fill, "type") if isinstance(fill[1], list) else fill[1]
+    if said is not None:
+        return str(said) in ("yes", "solid")
+    return (sexpr.head(node) or "").endswith("poly") or width <= 0
+
+
+def custom_pad_pieces(pad: list) -> list[tuple[list[XY], list[list[XY]]]]:
+    """A custom pad's copper in its own frame, as KiCad makes it: its anchor (a circle of the pad's
+    width, or a rectangle of its size) and each primitive -- a filled polygon, circle or rectangle,
+    and every outline, line, arc and curve drawn with its pen's width -- united
+    (:func:`~cad.engine.formats.kicad.geometry.union`): the pieces, largest first, each an outline
+    with its holes. A comb is a comb, not the hull round it."""
+    size = sexpr.pair(sexpr.find(pad, "size"), (0.0, 0.0))
+    width, height = abs(size[0]), abs(size[1])
+    options = sexpr.find(pad, "options")
+    anchor = str(sexpr.value(options, "anchor") or "circle") if options is not None else "circle"
+    covered: list[list[XY]] = []
+    if width > 0 and (anchor == "circle" or height > 0):
+        covered.append(disc((0.0, 0.0), width / 2) if anchor == "circle" else _rounded_rect(width, height, 0.0))
+    for primitive in (sexpr.find(pad, "primitives") or [])[1:]:
+        if not isinstance(primitive, list):
+            continue
+        drawn = graphic(primitive)
+        if drawn is None:
+            continue
+        points, closed = drawn
+        pen = _stroke_width(primitive)
+        if closed and len(points) >= 3 and _primitive_filled(primitive, pen):
+            covered.append(points)
+        if pen > 0 or not closed:
+            covered.extend(pen_outlines(points, max(pen, 0.0), closed=closed))
+    pieces = union(covered)
+    return pieces or [(_rounded_rect(width, height, 0.0), [])]
+
+
+def pad_pieces(pad: list) -> list[tuple[list[XY], list[list[XY]]]]:
+    """The pad's copper as pieces with holes, in its own frame: one piece but for a custom pad
+    (:func:`custom_pad_pieces`)."""
+    shape = str(pad[3]) if len(pad) > 3 and isinstance(pad[3], str) else "rect"
+    return custom_pad_pieces(pad) if shape == "custom" else [(pad_shape(pad), [])]
+
+
 def pad_shape(pad: list) -> list[XY]:
     """The pad's copper outline in its own frame, centred on its shape (not yet offset or turned)."""
     shape = str(pad[3]) if len(pad) > 3 and isinstance(pad[3], str) else "rect"
@@ -1062,19 +1174,7 @@ def pad_shape(pad: list) -> list[XY]:
         chamfer = sexpr.number(sexpr.value(pad, "chamfer_ratio"), 0.0) * min(width, height) if corners else 0.0
         return _rounded_rect(width, height, radius, chamfer, corners)
     if shape == "custom":
-        options = sexpr.find(pad, "options")
-        anchor = str(sexpr.value(options, "anchor") or "circle") if options is not None else "circle"
-        points = list(_circle((0.0, 0.0), width / 2) if anchor == "circle" else _rounded_rect(width, height, 0.0))
-        for primitive in (sexpr.find(pad, "primitives") or [])[1:]:
-            if not isinstance(primitive, list):
-                continue
-            drawn = graphic(primitive)
-            if drawn is None:
-                continue
-            reach = sexpr.number(sexpr.value(primitive, "width"), 0.0) / 2
-            for x, y in drawn[0]:
-                points.extend([(x - reach, y - reach), (x + reach, y - reach), (x + reach, y + reach), (x - reach, y + reach)] if reach else [(x, y)])
-        return hull(points)
+        return custom_pad_pieces(pad)[0][0]
     return _rounded_rect(width, height, 0.0)
 
 
@@ -1409,10 +1509,11 @@ def _outline(items: list[tuple[list[XY], bool]]) -> list[XY]:
     return hull(point for points, _closed_ in items for point in points)
 
 
-def zone_outline(node: list, frame: FootprintFrame | None = None) -> list[XY]:
+def zone_outline(node: list, frame: FootprintFrame | None = None, tolerance: float | None = None) -> list[XY]:
     """A zone's outline on the board: as written, or placed through ``frame``, its footprint's, when the
-    footprint holds it in its own frame (``FootprintFrame.zones_placed``)."""
-    outline = points_of(sexpr.find(sexpr.find(node, "polygon") or [], "pts"))
+    footprint holds it in its own frame (``FootprintFrame.zones_placed``); an arc in it sampled as
+    :func:`points_of` samples it (within ``tolerance`` of it, given one)."""
+    outline = points_of(sexpr.find(sexpr.find(node, "polygon") or [], "pts"), tolerance)
     return [frame.place(point) for point in outline] if frame is not None else outline
 
 
@@ -1539,6 +1640,7 @@ def read_index(text: str | list, *, project: Path | None = None, graphics: bool 
         shapes=tuple(named.named("shape")),
         layers=declared,
         rule_areas=tuple(rule_areas),
+        stackup=read_stackup(tree),
     )
 
 

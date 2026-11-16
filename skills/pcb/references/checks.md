@@ -25,7 +25,12 @@ Project netclass names are read from the sibling `.kicad_pro` when present. Refr
 after an edit. `part.pads_numbered(number)` includes all shapes for a shared pin number.
 `from cad.kicad_pcb import inside` tests whether a point lies in a polygon (a pour's fill, the
 outline) by the even-odd rule, in the same millimetres. DRC is `cad kicad_pcb drc` (`--json`: each
-finding's items with their uuids and positions under `measurements.drc`), and
+finding's `items`, as under `measurements.drc`, each with KiCad's `uuid`, `description` and `pos`, and what the
+board says it is: `kind` (track, via, pad, zone, footprint, shape, text, field), `layers`, `net`, `ref` (the
+reference `board.resolve` takes: `#track:<uuid>`, `#U3.7`, `#U3`) and `part`; each `measurements.drc` entry
+adds the `layer` its description ends with. KiCad reports a copper sliver with no item or position: the
+check finds it again in that layer's saved copper (`at_source: "board"`, the finding's location), and where
+it cannot, says why in `note`), and
 `cad.kicad_pcb.drc(path)` in a script run with `cad run` whose header names `cad[kicad]` (a
 `# /// script` block's `dependencies`); both run kicode's `kicad-cli`.
 

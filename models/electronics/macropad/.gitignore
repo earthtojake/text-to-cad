@@ -13,3 +13,13 @@ __pycache__/
 # KiCad's local settings beside a board it opened.
 *.kicad_prl
 fp-info-cache
+# The KiCad project build.py writes (cad run build.py): build output, made again from scripts/. The library
+# tables (fp-lib-table, sym-lib-table) are the source: no script writes them.
+/macropad.kicad_pcb
+/macropad.kicad_pro
+/macropad.kicad_dru
+/macropad.kicad_sch
+/usb_power.kicad_sch
+/mcu.kicad_sch
+/keys.kicad_sch
+/macropad.pretty/

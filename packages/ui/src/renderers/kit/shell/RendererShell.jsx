@@ -16,6 +16,8 @@ import { viewportZoom, zoomViewControl } from "./ZoomControl.jsx";
 import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 import PreviewSettings from "./PreviewSettings.jsx";
 import { withGroups } from "../../../annotation/geometry.js";
+import { BoxSelectGesture } from "../tools/select/useBoxSelectGesture.js";
+import { takeInkInBox } from "../tools/select/boxTake.js";
 import { useStripButtonClass } from "../tools/FloatingToolBar.js";
 import { AnnotationToolbar } from "../../../annotation/toolbar.jsx";
 import ToolStack from "../tools/ToolStack.jsx";
@@ -140,6 +142,15 @@ const DOUBLE_PRESS_MS = 600;
  *   down): the renderer lights its own overlay under it, and returns true when there is one.
  *   `selectsAnnotations`: whether Select picks the annotation's ink, as the renderer's Select filter says; the
  *   ink is drawn either way.
+ *   `boxSelect`: `{ enabled, onBox(box), mayStart?(event) }`, a renderer's Box select
+ *   (`kit/tools/select/useBoxSelectGesture.js`). While Select is up and `enabled`, a drag that starts on
+ *   empty space draws a box -- not on the annotation's ink (the shell's own test) nor wherever the
+ *   renderer's `mayStart` says no (the model, a measurement): a drag from there is Select's, the camera's
+ *   -- and its release takes the annotation's ink it touches (`selectsAnnotations`; with what was drawn
+ *   with it), then hands the box to `onBox` for what is the renderer's own: the model and its overlays
+ *   (a measurement, `measureSelectHandlers`' `box`). Shift adds to each; otherwise the box replaces
+ *   each, the ink included, so parts, measurements and ink one box takes stay picked together
+ *   (`kit/tools/select/boxTake.js`). Without it, no box.
  *   `inkTouches`: what the model is under a point of the view, `(clientX, clientY) => [{ part, ref? }]` —
  *   the part, with the face or edge there as a prompt reference where the renderer can name one: what
  *   Annotate records a mark as touching. Without it, a mark touches parts alone.
@@ -153,7 +164,7 @@ const DOUBLE_PRESS_MS = 600;
  */
 export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, references = null, referenceChips = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null, previewView = null,
-  frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, inkTouches = null,
+  frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, boxSelect = null, inkTouches = null,
   doubleClickFits = true, zoomToSelection = null, inspect = null }) {
   const { t } = useI18n();
   const frame = shell.frame;
@@ -372,6 +383,17 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   const zoom = { ...zoomBase, zoomToSelection: zoomToSelection?.run || null, selectionAvailable: Boolean(zoomToSelection?.available) };
   // What the zoom's keys reach (`useRendererShell`'s `zoom`): the zoom as the strip has it now.
   frame.zoomKeys.current = zoom;
+  // Box select's box: the ink it touches, as it takes the model (`annotationsInBox`), then
+  // the renderer's own. Shift adds; otherwise the ink picked is what the box took, none if nothing.
+  const takeBox = box => {
+    const session = frame.annotation;
+    const touched = selectsAnnotations && session.items.length ? frame.viewerRef.current?.annotationsInBox?.(box.client) || [] : [];
+    takeInkInBox(session, touched, box.additive);
+    boxSelect?.onBox?.(box);
+  };
+  // A drag from the ink is Select's, never a box: the ink is drawn there whatever the filter picks.
+  const boxMayStart = event => !(frame.annotation.items.length && frame.viewerRef.current?.annotationAt?.(event.clientX, event.clientY, event.pointerType))
+    && (boxSelect?.mayStart ? boxSelect.mayStart(event) : true);
   const overlay = viewport => <>
     {previewing || !contextMenuItems ? null : <ViewportContextMenu viewport={viewport} items={contextMenuItems} onOpenChange={onContextMenuOpenChange} />}
     {previewing || !doubleClickFits ? null : <DoubleClickFit viewport={viewport} scene={scene} viewerRef={frame.viewerRef} />}
@@ -379,6 +401,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     {frame.selecting && frame.annotation.selected.length ? <AnnotationSelectionBar annotation={frame.annotation} colorScheme={colorScheme} runtimeRef={viewport.runtimeRef}
       viewerReadyTick={viewport.viewerReadyTick} onDelete={frame.deletePicked} disabled={viewerLoading || !scene} /> : null}
     {typeof viewportOverlay === "function" ? viewportOverlay(viewport) : viewportOverlay}
+    {boxSelect ? <BoxSelectGesture viewport={viewport} enabled={frame.selecting && Boolean(boxSelect.enabled)} onBox={takeBox} mayStart={boxMayStart} /> : null}
   </>;
   // One place says the view is catching up: a newer revision of the file loading behind the model on
   // screen, or a Display change being prepared — the latter's failure first, since it is the one with

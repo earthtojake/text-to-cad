@@ -42,7 +42,7 @@ An SRDF pairs with its URDF by **colocation and robot name** — nothing else:
 - Save the `.srdf` in the **same folder** as the `.urdf` it describes.
 - Both files declare the identical `<robot name="...">`.
 - Exactly one `.urdf` in that folder may declare that robot name; the validator and the CAD Viewer resolve the pairing by scanning the folder, and they error when zero or several URDFs match.
-- Matching basenames (`so101.srdf` next to `so101.urdf`) are conventional and recommended for readability, but the robot name is what pairs the files. Multiple SRDF planning variants for one robot (`so101_dual.srdf`, `so101_precise.srdf`) all pair with the same URDF through its name.
+- Matching basenames (`arm.srdf` next to `arm.urdf`) are conventional and recommended for readability, but the robot name is what pairs the files. Multiple SRDF planning variants for one robot (`arm_dual.srdf`, `arm_precise.srdf`) all pair with the same URDF through its name.
 - There is no link element: an SRDF pairs with the same-folder URDF whose robot name matches.
 
 ## Names Come From the URDF Table

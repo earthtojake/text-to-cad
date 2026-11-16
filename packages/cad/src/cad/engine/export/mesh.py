@@ -4,9 +4,10 @@ A part is meshed once per geometry key, wherever it is placed, from its shape by
 (``Source.shape_data``) at the engine's one tolerance (``engine.mesh``), and held in the
 process's mesh cache -- the one the viewer serves from (``serve.MESHES``): a worker's
 patch, its exports and a snapshot it draws all take a key's buffer from there, so a part
-the build meshed for the viewer is not meshed again for a GLB. An export's own tolerance
-(``View.tolerance``: an STL's or a 3MF's) meshes each part again to within it, for that file alone: the
-cache holds the engine's tolerance and nothing else. A mesh file's document is meshed already:
+the build meshed for the viewer is not meshed again for a GLB. An export's own tolerance or angle
+(``View.tolerance``, ``View.angle``: a GLB's, an STL's or a 3MF's) meshes each part again to within it,
+for that file alone: the cache holds the engine's tolerance and nothing else. A mesh file's document
+is meshed already:
 its parts' meshes are the file's (``Source.meshes``), and nothing is cached.
 
 A part's look, per triangle group: its painted faces' colours and materials, and its own
@@ -35,11 +36,11 @@ def meshes(view: Any) -> dict[int, Any]:
     from cad.engine.serve import MESHES
 
     found: dict[int, Any] = {}
-    tolerance = view.tolerance
+    tolerance, angle = view.tolerance, view.angle
     for index in view.used():
         key = view.prototypes[index]["key"]
-        if tolerance is not None:
-            found[index] = made = mesh_shape(view.source.shape_data(key), parallel=True, tolerance=tolerance)
+        if tolerance is not None or angle is not None:
+            found[index] = made = mesh_shape(view.source.shape_data(key), parallel=True, tolerance=tolerance, angle=angle)
             if made.unmeshed:
                 view.unmeshed = {**(view.unmeshed or {}), view.prototypes[index]["name"]: len(made.unmeshed)}
             continue

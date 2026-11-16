@@ -19,6 +19,7 @@ import {
   visiblePageRect
 } from "./plot.js";
 import { DIM_OPACITY, HOLE_COLORS, NAME_COLORS, ZONE_OPACITY, boardPalette, layerColor, netnameColor } from "./theme.js";
+import { boardFinish } from "./stackup.js";
 
 // A tiny board in the payload's own shape (`docs/plot-payload.md`): a 40 x 30 mm sheet, its
 // area, a courtyard, one pad on each copper layer, a track, a pour with its fill and outline, a via's
@@ -400,13 +401,32 @@ test("other layers shown, dimmed or hidden keep the outline, and the holes throu
   assert.deepEqual(strengths({ layer: "F.SilkS", others: "hidden" }), [["area", 0, 1], ["F.SilkS", 1, 1], ["Edge.Cuts", 1, 1]]);
 });
 
+test("a pad's and a via's names draw KiCad's markup, as the board's text does: no tilde or brace", () => {
+  const named = (text) => {
+    const names = layer("names", "names", "both", [{ t: "label", kind: "via", text, at: [20, 15], size: [1, 1], angle: 0, w: 0.1, lod: 0 }]);
+    const layout = layoutPlot({ ...BOARD, sheets: [{ ...BOARD.sheets[0], layers: [names] }] });
+    const [left, top, right] = layout.sheets[0].layers[0].items[0].box;
+    return { width: right - left, top };
+  };
+  const barred = named("~{EN}");
+  const plain = named("EN");
+  // EN's letters, the bar a little past their ink at each end; spelled out, `~{EN}` would be twice as wide.
+  assert.ok(Math.abs(barred.width - plain.width) < 0.25, `as wide as EN: ${barred.width} against ${plain.width}`);
+  assert.ok(barred.top < plain.top, "with a bar over it");
+});
+
 // A schematic's sheet, as `GET /api/v1/documents/kicad_sch/<id>/plot?sheet=/` answers it: an A4 page, its
-// edge, a resistor (its body's background fill, its outline, a pin), a wire, a junction and a field.
+// edge, KiCad's drawing sheet (a frame line and the title block's box), a resistor (its body's background
+// fill, its outline, a pin), a wire, a junction and a field.
 const SCHEMATIC = {
   schemaVersion: 4, kind: "schematic", generator: "eeschema",
   sheets: [{ name: "/", path: "/", number: "1", file: "divider.kicad_sch", width: 297, height: 210, background: "#F5F4EF", page: [0, 0, 297, 210],
     layers: [
       layer("page", "sheet", "both", [{ t: "path", pts: [[0, 0], [297, 0], [297, 210], [0, 210], [0, 0]], w: 0, closed: true, page: true }]),
+      layer("drawing_sheet", "drawing_sheet", "both", [
+        { t: "path", pts: [[10, 10], [287, 10], [287, 200], [10, 200], [10, 10]], w: 0.15, closed: true, frame: true },
+        { t: "path", pts: [[177, 166], [285, 166], [285, 198], [177, 198], [177, 166]], w: 0.15, closed: true }
+      ]),
       layer("symbols", "symbol", "both", [
         { t: "poly", pts: square(100, 60, 2, 5), fill: "background", ref: "#R1", id: "b1" },
         { t: "path", pts: square(100, 60, 2, 5), w: 0.254, closed: true, ref: "#R1", id: "b1", color: "#123456", opacity: 0.5 }
@@ -419,7 +439,7 @@ const SCHEMATIC = {
   schematic: { root: "divider.kicad_sch", sheets: [{ path: "/", name: "/", page: "1", parent: null, pins: [] }] }
 };
 
-test("a schematic's sheet is drawn on its paper alone, in KiCad's schematic colours, its page edge off", () => {
+test("a schematic's sheet is drawn on its paper alone, on KiCad's drawing sheet, in KiCad's schematic colours, its page edge off", () => {
   const layout = layoutPlot(SCHEMATIC);
   assert.equal(layout.kind, "schematic");
   assert.equal(layout.sheets[0].path, "/");
@@ -431,6 +451,8 @@ test("a schematic's sheet is drawn on its paper alone, in KiCad's schematic colo
   assert.deepEqual(calls.filter(([name]) => name === "fillRect"), [["fillRect", "#F5F4EF", 0, 0, 297, 210]]);
   const inks = painted(calls).map(([name, , style]) => [name, name === "fill" ? style.fill : style.stroke, style.alpha]);
   assert.deepEqual(inks, [
+    ["stroke", "#840000", 1], // the drawing sheet's frame, always drawn, as KiCad's schematic editor shows it
+    ["stroke", "#840000", 1], // and its title block
     ["fill", "#FFFFC2", 1],   // the body's background: KiCad's device background
     ["stroke", "#123456", 0.5], // its outline in the file's own colour
     ["stroke", "#840000", 1], // the pin
@@ -443,9 +465,55 @@ test("a schematic's sheet is drawn on its paper alone, in KiCad's schematic colo
   drawPlot(dark.ctx, layout, { transform: fitPlotTransform(layout, 800, 600), Path2D: dark.Path2D, theme: "dark" });
   assert.deepEqual(dark.calls.filter(([name]) => name === "fillRect"), [["fillRect", "#1C1C1C", 0, 0, 297, 210]]);
   assert.deepEqual(painted(dark.calls).map(([name, , style]) => (name === "fill" ? style.fill : style.stroke)),
-    ["#2E2E24", "#123456", "#D07050", "#3CC83C", "#3CC83C", "#4FCBCB"]);
+    ["#D07050", "#D07050", "#2E2E24", "#123456", "#D07050", "#3CC83C", "#3CC83C", "#4FCBCB"]);
   // Asked for, the page's edge is drawn too.
   const bordered = recorder(800, 600);
   drawPlot(bordered.ctx, layout, { transform: fitPlotTransform(layout, 800, 600), Path2D: bordered.Path2D, view: { border: true } });
   assert.equal(painted(bordered.calls).length, inks.length + 1);
+});
+
+test("a board drawn as it is made: substrate, the finish's copper, the mask laid on with its openings cut, uncut silk off the pads, holes seen through", () => {
+  const layout = layoutPlot(BOARD);
+  const finish = boardFinish({ layers: [{ name: "F.SilkS", color: "White" }, { name: "F.Mask", color: "Black" }, { name: "B.Mask", color: "Red" }], finish: "ENIG" });
+  const frame = (side, layers = null) => {
+    const { ctx, calls, Path2D } = recorder(800, 600);
+    // Each scratch canvas records into its own list: what is drawn on it, and how it is composited.
+    const scratches = [];
+    const createCanvas = () => {
+      const { ctx: into, calls: drawn } = recorder(800, 600);
+      const record = { drawn, ops: [] };
+      Object.defineProperty(into, "globalCompositeOperation", { set: (value) => record.ops.push(value), get: () => record.ops.at(-1) ?? "source-over" });
+      into.clearRect = () => {};
+      const canvas = { width: 800, height: 600, getContext: () => into, record };
+      into.canvas = canvas;
+      scratches.push(record);
+      return canvas;
+    };
+    drawPlot(ctx, layout, { transform: { scale: 10, offsetX: 0, offsetY: 0 }, Path2D, view: { side, layers }, finish, createCanvas });
+    return { calls, scratches };
+  };
+  const { calls, scratches } = frame("top");
+  const fills = painted(calls).map(([kind, , style]) => [kind, kind === "fill" ? style.fill : style.stroke]);
+  assert.deepEqual(fills[0], ["fill", finish.substrate], "the substrate first, over the board's area");
+  assert.ok(fills.some(([, color]) => color === finish.copper), "the front copper in the finish");
+  for (const id of ["B.Cu", "B.CrtYd", "F.Mask", "F.SilkS", "ratsnest"]) {
+    assert.ok(!fills.some(([, color]) => color === layerColor(id)), `${id} is not drawn in its editor colour`);
+  }
+  // The mask: the area in the mask's colour, its pad's opening cut out, laid on at the mask's opacity; then the silk, cut too.
+  assert.equal(scratches.length, 2);
+  const [mask, silk] = scratches;
+  assert.equal(painted(mask.drawn)[0][2].fill, "rgb(11, 11, 11)");
+  assert.ok(mask.ops.includes("destination-out"));
+  assert.ok(painted(silk.drawn).some(([kind, , style]) => kind === "stroke" && style.stroke === "rgb(245, 245, 245)"));
+  assert.ok(silk.ops.includes("destination-out"), "no silkscreen is printed in an opening");
+  const laid = calls.filter(([name]) => name === "drawImage");
+  assert.equal(laid.length, 2);
+  // A pad's hole is the canvas seen through, its wall the finish.
+  assert.ok(fills.some(([, color]) => color === "#292929"));
+  // From below: the back's copper and its red mask, the front's not; no silk where the back names none.
+  const below = frame("bottom");
+  assert.equal(below.scratches.length, 1);
+  assert.equal(painted(below.scratches[0].drawn)[0][2].fill, "rgb(181, 19, 21)");
+  // The view's layers choose among the made board's: the mask taken off shows the copper bare.
+  assert.equal(frame("top", ["area", "F.Cu", "F.SilkS"]).scratches.length, 1);
 });

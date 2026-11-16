@@ -2,6 +2,7 @@ import { StrictMode, useMemo, useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import * as THREE from 'three';
 import { createCadClient } from '@cad/core/client';
 import { APP_THEME_COLORS } from '@cad/core/lib/appTheme.js';
 import { pageToScreen, screenToPage } from '@cad/core/lib/plot2d/plot.js';
@@ -36,8 +37,9 @@ vi.mock('@cad/core/lib/plot2d/index.js', async (importOriginal) => {
 });
 // The board in 3D mounts the 3D views' viewport, which needs WebGL: a stand-in here, which says it has
 // presented and answers the camera calls; the pixels and the picks through it are the browser suite's.
-// `homes`: what each Home was asked to frame from (its direction and up).
-const viewport3d = vi.hoisted(() => ({ props: null as any, calls: [] as string[], homes: [] as any[] }));
+// `homes`: what each Home was asked to frame from (its direction and up). `camera`, `controls` and `hands`: a
+// camera for the runtime to hold, its orbit's target and the hands on it (none unless a test sets them).
+const viewport3d = vi.hoisted(() => ({ props: null as any, calls: [] as string[], homes: [] as any[], camera: null as any, controls: null as any, hands: 0 }));
 vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', async () => {
   const React = await import('react');
   return {
@@ -56,7 +58,8 @@ vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', async () => {
       React.useEffect(() => { props.onPresentationChange?.({ key: props.modelKey, preparing: false }); }, [props.modelKey]);
       const context = { hostRef, runtimeRef, mountRef: hostRef, viewerReadyTick: 1, commitScene: () => true };
       return <div ref={hostRef} data-stand-in-viewport="">
-        <canvas ref={canvas => { runtimeRef.current = canvas ? { renderer: { domElement: canvas, capabilities: { maxTextureSize: 4096 }, initTexture() {} }, requestRender() {} } : null; }} />
+        <canvas ref={canvas => { runtimeRef.current = canvas ? { renderer: { domElement: canvas, capabilities: { maxTextureSize: 4096 }, initTexture() {} }, requestRender() {},
+          get camera() { return viewport3d.camera; }, get controls() { return viewport3d.controls; }, get cameraHands() { return viewport3d.hands; } } : null; }} />
         {typeof props.children === 'function' ? props.children(context) : props.children}
       </div>;
     })
@@ -84,6 +87,7 @@ beforeEach(() => {
   drawn.length = 0;
   themes.length = 0;
   canvases.length = 0;
+  Object.assign(viewport3d, { camera: null, controls: null, hands: 0 });
   copied = [];
   readPlot = () => json(BOARD);
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 0));
@@ -214,16 +218,23 @@ const controllerOf = (view: { controller: any }) => waitFor(() => { expect(view.
 const openMenu = (name: string) => waitFor(() => { const found = document.querySelector<HTMLElement>(`[role=menu][aria-label="${name}"]`); expect(found).not.toBeNull(); return found!; });
 const menuShown = (name: string) => document.querySelector(`[role=menu][aria-label="${name}"]`);
 const selected = (controller: any) => controller.readState().selection.map((reference: any) => reference.target.selectors[0]);
-/** Select's filter menu, opened from its chevron when a press on the board has put it away. */
+/** Select's filter, the submenu of its chevron menu's one row, opened when a press on the board has put it away. */
+const filterSubmenu = () => document.querySelector<HTMLElement>('[data-slot=dropdown-menu-sub-content][aria-label="Filter"]');
+const filterRow = () => document.querySelector<HTMLElement>('[data-select-filter-row]');
 const filterMenu = async (pane: HTMLElement, user: ReturnType<typeof userEvent.setup>) => {
-  const shown = menuShown('Selection filter') as HTMLElement | null;
+  const shown = filterSubmenu();
   if (shown) return shown;
-  await user.click(within(strip(pane)).getByRole('button', { name: /^Selection filter:/ }));
-  return openMenu('Selection filter');
+  if (!menuShown('Filter')) await user.click(within(strip(pane)).getByRole('button', { name: /^Filter:/ }));
+  await user.click(await waitFor(() => { expect(filterRow()).not.toBeNull(); return filterRow()!; }));
+  return waitFor(() => { expect(filterSubmenu()).not.toBeNull(); return filterSubmenu()!; });
 };
-/** Ticks or unticks one of the filter's boxes, the menu opened first. */
+/**
+ * Ticks or unticks one of the filter's boxes, the menu opened first. jsdom has no geometry for a submenu's
+ * pointer grace area: the keyboard ticks, the same handler.
+ */
+const tick = async (user: ReturnType<typeof userEvent.setup>, box: HTMLElement) => { box.focus(); await user.keyboard('{Enter}'); };
 const toggleBox = async (pane: HTMLElement, user: ReturnType<typeof userEvent.setup>, name: string) => {
-  await user.click(within(await filterMenu(pane, user)).getByRole('menuitemcheckbox', { name }));
+  await tick(user, within(await filterMenu(pane, user)).getByRole('menuitemcheckbox', { name }));
 };
 
 /** A tap on the board where sheet point `at` is on screen in the last frame painted. */
@@ -242,7 +253,7 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
   expect([...tools.querySelectorAll(':scope button[aria-pressed]')].filter(button => !button.closest('[data-view-controls]'))
     .map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
   expect(within(tools).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
-  expect(within(tools).getByRole('button', { name: 'Selection filter: everything' })).toBeTruthy();
+  expect(within(tools).getByRole('button', { name: 'Filter: everything' })).toBeTruthy();
   // Its view controls on the screen end the strip, after its rule: Flip and 2D/3D, the state buttons, then Display's menu.
   expect(viewButtons(pane)).toEqual(['Side: Top', 'View: 2D', 'Display mode: Board']);
   expect(tools.querySelector('[data-strip-rule] + [data-view-controls]')).not.toBeNull();
@@ -370,31 +381,47 @@ it('a tap picks the most specific thing: a pad, then copper, then nothing; Shift
   dispose();
 });
 
-it("Select's filter is KiCad's grid of boxes: they tick what a click takes, All items ticks them all, and the menu stays up", async () => {
+it("Select's filter is KiCad's boxes in one row's submenu: they tick what a click takes, All ticks them all, Locked items at the foot, and the submenu stays up", async () => {
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const view = await open();
   const { pane, dispose } = view;
   await opened(pane);
   const controller = await controllerOf(view);
-  await user.click(within(strip(pane)).getByRole('button', { name: 'Selection filter: everything' }));
-  const menu = await openMenu('Selection filter');
+  await user.click(within(strip(pane)).getByRole('button', { name: 'Filter: everything' }));
+  // The chevron's menu is one row, Filter, summing up what is ticked: every kind, as a board opens.
+  const root = await openMenu('Filter');
+  expect([...root.querySelectorAll('[role^=menuitem]')].map(item => item.getAttribute('aria-label'))).toEqual(['Filter: All']);
+  const menu = await filterMenu(pane, user);
   const boxes = () => within(menu).getAllByRole('menuitemcheckbox').map(item => [item.textContent, item.getAttribute('aria-checked')]);
-  // KiCad's two columns, row by row, each box its name alone; every kind ticked and no locked items as a board opens.
+  // All, a rule, the kinds in KiCad's order in one column, each its name alone, then Locked items at the foot after a
+  // rule; every kind ticked and no locked items as a board opens.
   expect(menu.querySelectorAll('[data-select-filter] > svg')).toHaveLength(0);
-  expect(boxes()).toEqual([['All items', 'true'], ['Locked items', 'false'], ['Footprints', 'true'], ['Text', 'true'], ['Tracks', 'true'],
-    ['Vias', 'true'], ['Pads', 'true'], ['Graphics', 'true'], ['Zones', 'true'], ['Rule Areas', 'true'], ['Dimensions', 'true']]);
-  // All items unticks every kind, and the menu stays up for the next box.
-  await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'All items' }));
+  expect([...menu.querySelectorAll('[data-select-filter], [role=separator]')].map(item => item.getAttribute('data-select-filter') ?? 'rule'))
+    .toEqual(['all', 'rule', 'parts', 'texts', 'tracks', 'vias', 'pads', 'graphics', 'zones', 'ruleAreas', 'dimensions', 'rule', 'locked']);
+  expect(boxes()).toEqual([['All', 'true'], ['Footprints', 'true'], ['Text', 'true'], ['Tracks', 'true'], ['Vias', 'true'],
+    ['Pads', 'true'], ['Graphics', 'true'], ['Zones', 'true'], ['Rule areas', 'true'], ['Dimensions', 'true'], ['Locked items', 'false']]);
+  // All unticks every kind, and the submenu stays up for the next box.
+  await tick(user, within(menu).getByRole('menuitemcheckbox', { name: 'All' }));
   expect(boxes().filter(([, checked]) => checked === 'true')).toEqual([]);
-  await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'Footprints' }));
-  expect(menuShown('Selection filter')).not.toBeNull();
-  expect(boxes()[0]).toEqual(['All items', 'mixed']);
-  expect(within(strip(pane)).getByRole('button', { name: 'Selection filter: Footprints' })).toBeTruthy();
+  expect(filterRow()!.getAttribute('aria-label')).toBe('Filter: None');
+  await tick(user, within(menu).getByRole('menuitemcheckbox', { name: 'Footprints' }));
+  expect(filterSubmenu()).not.toBeNull();
+  expect(boxes()[0]).toEqual(['All', 'mixed']);
+  // Select's button wears the funnel while the filter is not every kind (a board's kinds have no glyph of their own).
+  const badge = () => within(strip(pane)).getByRole('button', { name: 'Select' }).querySelector('[data-tool-icon-badge]')?.getAttribute('data-tool-icon-badge') ?? '';
+  expect(badge()).toBe('filter');
+  // The row names the one kind ticked, and counts several; the chevron names them.
+  expect(filterRow()!.getAttribute('aria-label')).toBe('Filter: Footprints');
+  expect(within(strip(pane)).getByRole('button', { name: 'Filter: Footprints' })).toBeTruthy();
+  await tick(user, within(menu).getByRole('menuitemcheckbox', { name: 'Pads' }));
+  expect(filterRow()!.getAttribute('aria-label')).toBe('Filter: 2 of 9');
+  expect(within(strip(pane)).getByRole('button', { name: 'Filter: Footprints, Pads' })).toBeTruthy();
+  await tick(user, within(menu).getByRole('menuitemcheckbox', { name: 'Pads' }));
   // R1.1, under the VBUS track's end: the part, not the pad or the copper.
   tap(pane, [34.175, 15]);
   expect(selected(controller)).toEqual(['#R1']);
   // A press on the board puts the menu away, as any dropdown's outside press does.
-  expect(menuShown('Selection filter')).toBeNull();
+  expect(menuShown('Filter')).toBeNull();
   // Zones alone takes the pour anywhere inside it; Graphics without Footprints a part's own silkscreen line.
   await toggleBox(pane, user, 'Footprints');
   await toggleBox(pane, user, 'Zones');
@@ -423,7 +450,7 @@ it('a locked footprint is no pick until Locked items is ticked, but for its pads
   const controller = await controllerOf(view);
   tap(pane, [34.175, 15]);
   expect(selected(controller)).toEqual(['#R1.1']);
-  await toggleBox(pane, user, 'All items');
+  await toggleBox(pane, user, 'All');
   await toggleBox(pane, user, 'Footprints');
   tap(pane, [34.175, 15]);
   expect(selected(controller)).toEqual([]);
@@ -433,7 +460,7 @@ it('a locked footprint is no pick until Locked items is ticked, but for its pads
   dispose();
 });
 
-it("a drag under Select draws the box and names the area on the working layer; the other drags pan as the 3D views' do; a jittered click is a click", async () => {
+it("a drag under Select draws the shared box: over bare board it names the area on the working layer, over the board's items it takes what it touches; the other drags pan as the 3D views' do; a jittered click is a click", async () => {
   const promptFiles = { create: vi.fn(async () => ({ snapshot: '/tmp/board.snapshot.json' })), read: vi.fn(), save: vi.fn() };
   const view = await open('blinky.kicad_pcb', { promptFiles });
   const { pane, dispose } = view;
@@ -448,13 +475,16 @@ it("a drag under Select draws the box and names the area on the working layer; t
   fireEvent.pointerMove(canvas, { ...press, clientX: r11.clientX + 2, clientY: r11.clientY + 1 });
   fireEvent.pointerUp(canvas, { ...press, clientX: r11.clientX + 2, clientY: r11.clientY + 1 });
   expect(selected(controller)).toEqual(['#R1.1']);
-  // A drag is the box between its ends, on F.Cu, the copper seen from the top; Shift adds it; it does not pan.
+  // A drag is the box between its ends, every viewer's (drawn as it goes); over bare board it takes nothing, so it
+  // names its area on F.Cu, the copper seen from the top; Shift at its release adds it; it does not pan.
   const before = { ...frames.at(-1)! };
-  fireEvent.pointerDown(canvas, { ...press, ...at([30, 10]) });
-  fireEvent.pointerMove(canvas, { ...press, ...at([34, 14]) });
-  fireEvent.pointerMove(canvas, { ...press, ...at([40, 20]) });
-  fireEvent.pointerUp(canvas, { ...press, ...at([40, 20]), shiftKey: true });
-  expect(selected(controller)).toEqual(['#R1.1', '#F.Cu@x30y10..x40y20']);
+  fireEvent.pointerDown(canvas, { ...press, ...at([25, 1]) });
+  fireEvent.pointerMove(canvas, { ...press, ...at([30, 6]) });
+  fireEvent.pointerMove(canvas, { ...press, ...at([35, 11]) });
+  expect(pane.querySelectorAll('[data-box-select]')).toHaveLength(1);
+  fireEvent.pointerUp(canvas, { ...press, ...at([35, 11]), shiftKey: true });
+  expect(pane.querySelector('[data-box-select]')).toBeNull();
+  expect(selected(controller)).toEqual(['#R1.1', '#F.Cu@x25y1..x35y11']);
   expect(frames.at(-1)).toEqual(before);
   // The middle button pans, as KiCad's does, and picks nothing.
   const middle = { pointerId: 2, pointerType: 'mouse', button: 1 };
@@ -485,7 +515,7 @@ it("a drag under Select draws the box and names the area on the working layer; t
   const closeMenu = async () => { fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' }); await waitFor(() => expect(screen.queryByRole('menu')).toBeNull()); };
   expect(await menuAt([36, 26])).toEqual(['Zoom to fit', 'Zoom to selection']);
   await closeMenu();
-  expect(selected(controller)).toEqual(['#R1.1', '#F.Cu@x30y10..x40y20']);
+  expect(selected(controller)).toEqual(['#R1.1', '#F.Cu@x25y1..x35y11']);
   // Over a pad: its reference, Deselect (it is picked), its net, and the framing.
   const overPad = await menuAt([34.175, 15]);
   expect(overPad.slice(0, 2)).toEqual(['Copy Reference', 'Deselect']);
@@ -500,8 +530,27 @@ it("a drag under Select draws the box and names the area on the working layer; t
   fireEvent.input(note);
   fireEvent.click(within(quickEdit).getByRole('button', { name: 'Copy Prompt' }));
   await waitFor(() => expect(promptFiles.create).toHaveBeenCalledTimes(1));
-  expect((promptFiles.create.mock.calls[0] as any)[0].references).toEqual(['#R1.1', '#F.Cu@x30y10..x40y20']);
-  await waitFor(() => expect(copied.at(-1)).toContain(`${FILE}#F.Cu@x30y10..x40y20`));
+  expect((promptFiles.create.mock.calls[0] as any)[0].references).toEqual(['#R1.1', '#F.Cu@x25y1..x35y11']);
+  await waitFor(() => expect(copied.at(-1)).toContain(`${FILE}#F.Cu@x25y1..x35y11`));
+  // A box that starts on R1 is a box all the same. It takes what it touches, even in part, as the filter
+  // does (the part, its pads, the track into it), in place of the rest, whichever way it is drawn.
+  const drag = (from: [number, number], to: [number, number]) => {
+    fireEvent.pointerDown(canvas, { ...press, ...at(from) });
+    fireEvent.pointerMove(canvas, { ...press, ...at([(from[0] + to[0]) / 2, (from[1] + to[1]) / 2]) });
+    fireEvent.pointerUp(canvas, { ...press, ...at(to) });
+  };
+  drag([35.5, 15.2], [33.8, 15.6]);
+  expect(selected(controller)).toEqual(expect.arrayContaining(['#R1', '#R1.1', '#R1.2']));
+  expect(selected(controller).some((id: string) => id.includes('@x25'))).toBe(false);
+  expect(selected(controller).some((id: string) => id.startsWith('#track:'))).toBe(true);
+  tap(pane, [36, 26]);
+  expect(selected(controller)).toEqual([]);
+  drag([33.8, 15.2], [35.5, 15.6]);
+  expect(selected(controller)).toEqual(expect.arrayContaining(['#R1', '#R1.1', '#R1.2']));
+  expect(selected(controller).some((id: string) => id.startsWith('#track:'))).toBe(true);
+  // A box that touches nothing names the area, either way.
+  drag([35, 11], [25, 1]);
+  expect(selected(controller)).toEqual(['#F.Cu@x25y1..x35y11']);
   // A click on bare board lets go of it all, as KiCad's does.
   tap(pane, [36, 26]);
   expect(selected(controller)).toEqual([]);
@@ -1215,6 +1264,60 @@ it("entering 3D eases to a camera on the side 2D showed, so Flip keeps it: Home'
   await waitFor(() => expect(viewport3d.calls).toContain('setPerspective [10,-40,30]'));
   expect([viewport3d.homes.length, side()]).toEqual([1, 'top']);
   dispose();
+});
+
+it("leaving 3D gives the 2D view its own window back, whatever the camera did there: an orbit's zoom and centre never reach the plan, after a reload in 3D too", async () => {
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  // The 2D view panned off its fit (a middle-button drag): its own window.
+  const canvas = pane.querySelector<HTMLCanvasElement>('[data-board-surface] canvas')!;
+  const at = ([x, y]: [number, number]) => { const [clientX, clientY] = pageToScreen(frames.at(-1)!, x, y); return { clientX, clientY }; };
+  const middle = { pointerId: 2, pointerType: 'mouse', button: 1 };
+  const fitted = { ...frames.at(-1)! };
+  fireEvent.pointerDown(canvas, { ...middle, ...at([20, 15]) });
+  fireEvent.pointerMove(canvas, { ...middle, ...at([28, 18]) });
+  fireEvent.pointerUp(canvas, { ...middle, ...at([28, 18]) });
+  await waitFor(() => expect(frames.at(-1)!.offsetX).not.toBe(fitted.offsetX));
+  const own = { ...frames.at(-1)! };
+  // In 3D, a hand orbits and zooms the camera: tilted, zoomed in threefold, centred far off the 2D window.
+  const orbit = (where: HTMLElement) => {
+    const camera = new THREE.OrthographicCamera(-600, 600, 350, -350, 0.1, 1000);
+    camera.position.set(60, -80, 40);
+    camera.up.set(0, 0, 1);
+    camera.zoom = 3;
+    camera.lookAt(60, -20, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
+    Object.assign(viewport3d, { camera, controls: { target: new THREE.Vector3(60, -20, 0) }, hands: viewport3d.hands + 1 });
+    const solid = where.querySelector<HTMLCanvasElement>('[data-board-3d] canvas')!;
+    Object.defineProperties(solid, { clientWidth: { configurable: true, value: 1200 }, clientHeight: { configurable: true, value: 700 } });
+    act(() => { viewport3d.props.onPerspectiveChange({ position: [60, -80, 40], target: [60, -20, 0], up: [0, 0, 1] }); });
+  };
+  fireEvent.click(dimensionButton(pane));
+  await waitFor(() => expect(viewport3d.calls).toContain('goHome'));
+  orbit(pane);
+  fireEvent.click(dimensionButton(pane));
+  await waitFor(() => expect(pane.querySelector('[data-board-3d]')).toBeNull());
+  // Back in 2D: the window it was left at, exactly, from the side Flip showed.
+  expect(frames.at(-1)).toEqual(own);
+  expect(drawn.at(-1)).toMatchObject({ side: 'top' });
+  // Into 3D again and left there; reopened in 3D, the camera orbited, then back to 2D: the 2D window the file
+  // was left at, never the camera's.
+  fireEvent.click(dimensionButton(pane));
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value?.mode).toBe('3d'));
+  const stored = view.state;
+  dispose();
+  cleanup();
+  frames.length = 0;
+  const again = await open('blinky.kicad_pcb', { state: stored });
+  await waitFor(() => expect(again.pane.querySelector('[data-board-3d]')).not.toBeNull());
+  orbit(again.pane);
+  fireEvent.click(dimensionButton(again.pane));
+  await waitFor(() => expect(again.pane.querySelector('[data-board-3d]')).toBeNull());
+  await waitFor(() => expect(frames.length).toBeGreaterThan(0));
+  for (const key of ['scale', 'offsetX', 'offsetY'] as const) expect(frames.at(-1)![key], key).toBeCloseTo(own[key], 6);
+  again.dispose();
 });
 
 it("a part's card says its 3D model, or why it has none, and the Parts end with the parts that have none; the Layers' 3D models eye is kept with the file", async () => {
