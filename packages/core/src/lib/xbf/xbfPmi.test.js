@@ -435,7 +435,7 @@ test("views carry their camera, section, shows and placements, keyed by part", (
 test("each new kind's call is the engine's call exactly", () => {
   const read = readXbfPmi(served("v4"));
   const call = (id, changes) => pmiCallText(pmiEntryCall(read.entries.find(entry => entry.id === id), changes));
-  assert.equal(call("thickness"), `dimensional_location("thickness", "${V4_BOTTOM}", "${V4_TOP}", tolerance=limits(9.8, 10.2), presentation=place(anchor=(50, 30, 0), offset=(15, 0, 0)))`);
+  assert.equal(call("thickness"), `dimensional_location("thickness", "${V4_BOTTOM}", "${V4_TOP}", tolerance=size_limits(9.8, 10.2), presentation=place(anchor=(50, 30, 0), offset=(15, 0, 0)))`);
   assert.equal(call("hole-profile"), `surface_profile_tolerance("hole-profile", "${V4_HOLE}", 0.2, datums=["A"], presentation=place(anchor=(0, 5, 5), offset=(0, 15, 15)))`);
   assert.equal(call("general"), `general_profile("general", 0.5, datums=["A"])`);
   assert.equal(call("edges"), `note("edges", "Break all sharp edges 0.2 max")`);
@@ -455,7 +455,7 @@ test("each new kind's call is the engine's call exactly", () => {
   const values = { tolerance: { type: "limits", lower: 9.9, upper: 10.1 } };
   const thickness = read.entries.find(entry => entry.id === "thickness");
   assert.match(pmiChangeRequest({ kind: "edit", id: "thickness", values, call: pmiEntryCall(thickness, values), placementOnly: false }),
-    /^Change the PMI "thickness" in the model's annotate\(\.\.\.\) call \(from cad\.build123d import annotate, dimensional_location, limits, place\): tolerance=limits\(9\.9, 10\.1\)\. .*tolerance=limits\(9\.9, 10\.1\), presentation=/s);
+    /^Change the PMI "thickness" in the model's annotate\(\.\.\.\) call \(from cad\.build123d import annotate, dimensional_location, place, size_limits\): tolerance=size_limits\(9\.9, 10\.1\)\. .*tolerance=size_limits\(9\.9, 10\.1\), presentation=/s);
   // What a kind needs and lacks makes no call: a note with no words, a profile on no face, a view seen down nothing, a general profile placed (it takes no placement).
   assert.equal(pmiCallText({ kind: "note", id: "n", text: " " }), null);
   assert.equal(pmiCallText({ kind: "geometric_tolerance", characteristic: "surface_profile", id: "p", refs: [], value: 0.1 }), null);

@@ -345,7 +345,7 @@ it("a view from here is refused where its part's placement turns the Clip off th
   expect((within(form()).getByRole('button', { name: 'Add to Quick Edit' }) as HTMLButtonElement).disabled).toBe(true);
 });
 
-it("a limits dimension's tolerance field reads back as its limits, and limits typed are asked for as limits()", async () => {
+it("a limits dimension's tolerance field reads back as its limits, and limits typed are asked for as size_limits()", async () => {
   const user = userEvent.setup();
   openMbd();
   fireEvent.click(screen.getByRole('button', { name: '9.8–10.2', exact: true }));
@@ -358,5 +358,5 @@ it("a limits dimension's tolerance field reads back as its limits, and limits ty
   expect(live.changes).toEqual([]);
   await user.clear(field);
   await user.type(field, '9.9 to 10.2{Enter}');
-  expect(requests()).toEqual([expect.stringMatching(/^Change the PMI "thickness" .*: tolerance=limits\(9\.9, 10\.2\)\. .*tolerance=limits\(9\.9, 10\.2\)/s)]);
+  expect(requests()).toEqual([expect.stringMatching(/^Change the PMI "thickness" .*: tolerance=size_limits\(9\.9, 10\.2\)\. .*tolerance=size_limits\(9\.9, 10\.2\)/s)]);
 });

@@ -57,9 +57,37 @@ class TheTableIsTheSource(unittest.TestCase):
                     # A program the person installs, which ships no package: found by its probe alone.
                     self.assertIsNotNone(integration.probe, "an integration with no extra is a program, found by its probe")
                     self.assertFalse(integration.modules or integration.distributions)
+                    self.assertFalse(integration.python or integration.platforms or integration.homes,
+                                     "what a tool decides of its environment is its extra's environment's")
                 else:
                     self.assertTrue(integration.modules and integration.distributions)
+                self.assertRegex(integration.python or "3.13", r"^3\.\d+$", "a Python line, as uv is asked for one")
+                self.assertTrue(set(integration.platforms) <= set(registry.PLATFORMS))
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
+        # An integration has operations of its own only on a file of its tool's that is no document type (a file
+        # cad checks and never shows): a MuJoCo model's, which mujoco checks. A name is a type's or an
+        # integration's, a suffix one or the other's, and a type's file has its operations there alone.
+        self.assertEqual({"mujoco": (("check",), (".xml", ".mjcf"))},
+                         {name: (found.operation_names, found.files)
+                          for name, found in registry.INTEGRATIONS.items() if found.operations})
+        self.assertEqual(("check",), registry.INTEGRATION_OPERATIONS)
+        self.assertFalse(set(registry.INTEGRATIONS) & set(registry.DOCUMENT_TYPES))
+        for found in registry.INTEGRATIONS.values():
+            self.assertEqual(bool(found.operations), bool(found.files))
+            self.assertFalse([suffix for suffix in found.files if registry.by_extension(suffix)],
+                             "a suffix that is a document type's is not an integration's too")
+            for operation in found.operations:
+                self.assertEqual(found.name, operation.integration)
+        self.assertNotIn("mjcf", registry.DOCUMENT_TYPES, "an MJCF is written and checked, never shown: no type")
+        self.assertIsNone(registry.type_of("robot.xml"))
+        self.assertIn("operations (on .xml, .mjcf):\n  check  ", registry.integration_help("mujoco"))
+        self.assertIn("operations: none of its own", registry.integration_help("trimesh"))
+        with self.assertRaisesRegex(ValueError, "'validate' is not an integration's operation"):
+            registry.Integration("tool", "a tool", "tool", "in-process",
+                                 operations=(registry.Operation("validate", "check it"),), files=(".tool",))
+        with self.assertRaisesRegex(ValueError, "operations take its tool's own files"):
+            registry.Integration("tool", "a tool", "tool", "in-process",
+                                 operations=(registry.Operation("check", "check it"),))
         # A KiCad board and schematic are edited in place (``<type>.edit``), by the kicad integration; no other
         # type is.
         self.assertEqual({"kicad_pcb": "kicad", "kicad_sch": "kicad"},
@@ -80,12 +108,33 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual(("solve",), tuple(name for name in registry.DOCUMENT_TYPES["step"].operation_names
                                            if registry.DOCUMENT_TYPES["step"].operation(name).integration == "calculix"))
         self.assertEqual("calculix", integrations.for_command("ccx"))
+        # A mechanism's joint stops are the kernel's, run in the caller: a script that calls them needs build123d.
+        self.assertEqual("build123d", integrations.for_name("cad.xbf.ranges"))
+        self.assertEqual({"model", "xbf", "step"},
+                         {entry.id for entry in registry.DOCUMENT_TYPES.values() if "ranges" in entry.operation_names})
         self.assertEqual("cad.calculix._command", integrations.INTEGRATIONS["calculix"].runner)
         self.assertEqual(("build123d", "netgen"), registry.INTEGRATIONS["calculix"].alongside)
         for integration in registry.INTEGRATIONS.values():
             self.assertTrue(set(integration.alongside) <= set(registry.INTEGRATIONS) - {integration.name})
         self.assertEqual(registry.INTEGRATIONS["build123d"].modules, integrations.INTEGRATIONS["build123d"].modules)
         self.assertIsNone(integrations.for_distribution("pillow"), "a package an extra installs is not the integration")
+        # Blender's bpy is an extra like any other, cad[blender]: what only bpy decides is the one Python it is built
+        # for, its platforms and the folders its settings are read from. A program's import of bpy, or of cad's own
+        # namespace for it, finds the integration, and one run without it is told the extra in the one line all are.
+        blender = registry.INTEGRATIONS["blender"]
+        self.assertEqual((blender.extra, blender.process, blender.python), ("blender", "in-process", "3.13"))
+        self.assertEqual(("macOS arm64", "Linux x86-64", "Windows x86-64", "Windows arm64"), blender.platforms)
+        self.assertTrue(blender.homes and all(name.startswith("BLENDER_USER_") for name in blender.homes))
+        self.assertEqual(["blender"], [name for name, found in registry.INTEGRATIONS.items() if found.python])
+        self.assertEqual(("blender", "blender", "blender"),
+                         (integrations.for_module("bpy.ops"), integrations.for_distribution("bpy"),
+                          integrations.for_name("cad.blender.load")))
+        self.assertIsNone(integrations.for_command("bpy"))
+        self.assertEqual(integrations.missing(ModuleNotFoundError("no bpy", name="bpy")),
+                         "bpy comes with cad's blender integration: add `cad[blender]` to the script's header")
+        self.assertEqual(["macOS x86-64", "Linux arm64", "Windows x86-64", "macOS arm64"],
+                         [registry.platform_of(*given) for given in (("darwin", "x86_64"), ("linux", "aarch64"),
+                                                                     ("win32", "AMD64"), ("darwin", "arm64"))])
 
     def test_a_decorator_has_exactly_one_producer_per_value(self) -> None:
         class Shape:  # a build123d Shape, by its ancestry's names alone

@@ -414,7 +414,7 @@ class PmiPaintTest(unittest.TestCase):
 # note words are illustrative.
 PLATE = """
 import build123d as bd
-from cad.build123d import (annotate, datum, dimensional_location, flatness_tolerance, general_profile, limits, note,
+from cad.build123d import (annotate, datum, dimensional_location, flatness_tolerance, general_profile, size_limits, note,
                           place, section, surface_profile_tolerance, view)
 from cad.engine import xbf
 
@@ -424,7 +424,7 @@ def plate():
     body.label = "plate"
     bottom, top = body.faces().sort_by(bd.Axis.Z)[0], body.faces().sort_by(bd.Axis.Z)[-1]
     left, hole = body.faces().sort_by(bd.Axis.X)[0], body.faces().filter_by(bd.GeomType.CYLINDER)[0]
-    return annotate(body, datum("A", bottom), dimensional_location("thickness", bottom, top, tolerance=limits(7.9, 8.1)),
+    return annotate(body, datum("A", bottom), dimensional_location("thickness", bottom, top, tolerance=size_limits(7.9, 8.1)),
                     flatness_tolerance("top-flat", top, 0.05), dimensional_location("hole-from-left", left, hole, basic=True),
                     surface_profile_tolerance("hole-profile", hole, 0.1, datums=["A"]),
                     general_profile("general", 0.5, datums=["A"]),

@@ -4,12 +4,13 @@
   "groupings": [
     {
       "title": "CAD",
-      "description": "Model, draw, source, check and fabricate parts.",
+      "description": "Model, draw, render, source, check and fabricate parts.",
       "skills": [
         "cad",
         "engineering-drawing",
         "print3d",
         "fea",
+        "render",
         "sendcutsend"
       ]
     },
@@ -20,7 +21,7 @@
     },
     {
       "title": "Robotics",
-      "description": "Robots and worlds for simulation and motion planning: ROS, MoveIt2 and Gazebo.",
+      "description": "Robots and worlds for simulation and motion planning: ROS, MoveIt2 and MuJoCo.",
       "skills": ["robot-simulation"]
     }
   ]

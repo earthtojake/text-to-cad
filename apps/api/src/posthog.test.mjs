@@ -172,6 +172,16 @@ test("a crash is PostHog's $exception: its type and frames, only cadgen's in the
       chunk_id: '0de4d024-c159-4f6d-b15a-cc4ef7a6856d', in_app: true }]);
 });
 
+test("a crash of no kernel process carries which failure it was as a property PostHog can group by", async () => {
+  const { asked, store } = posthog();
+  await store.insert(rowsOf({ ...BATCH, schema: 10, batch: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d', at: 1_800_000_000,
+    events: [{ name: 'exception', where: 'tool', tool: 'cad_show', type: 'cad.engine.serve.KernelProcessesUnavailable',
+      handled: true, frames: [{ file: 'cad/engine/places.py', function: 'kernel', line: 728 }], count: 1, cause: 'network' }] }));
+  const [crash] = asked[0].body.batch;
+  assert.deepEqual([crash.event, crash.properties.cause, crash.properties.tool], ['$exception', 'network', 'cad_show']);
+  assert.equal(crash.properties.$exception_list[0].type, 'cad.engine.serve.KernelProcessesUnavailable');
+});
+
 test("a page's frame in a vendor chunk (react, radix, three, lucide) is not in the app: the page's own frame is blamed", async () => {
   const { asked, store } = posthog();
   // The frames as the CAD Viewer's build names its chunks and the page reports them (`vendor-<package>-<hash>.js`),

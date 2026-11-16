@@ -371,6 +371,50 @@ test('schema 9 names the part of a request a snapshot refused, and why the machi
   ]) assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(bad)))).status, 400, JSON.stringify(bad));
 });
 
+test('schema 10 names a CAD tool call the engine could start no kernel process for, and no schema before it does', async () => {
+  const failure = { name: 'tool_failure', tool: 'cad_show', reason: 'no_kernel', count: 2 };
+  const batch = { ...PARTS, schema: 10, events: [{ name: 'tool', tool: 'cad_show', calls: 3, errors: 2 }, failure] };
+  const store = memory();
+  assert.equal((await send(store, 'POST', '/v1/events', batch)).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf).map(({ id, at, ...fields }) => fields),
+    batch.events.map(({ name, ...counts }) => ({ event: name, ...counts })));
+  assert.equal((await send(memory(), 'POST', '/v1/events', { ...batch, schema: 9 })).status, 400);
+  // Schema 9's own batch is read as ever under 10.
+  assert.equal((await send(memory(), 'POST', '/v1/events', { ...PARTS, schema: 10 })).status, 204);
+});
+
+test('schema 10 names a build the server did without an option the library asked, being older, and no schema before it does', async () => {
+  const exported = [{ name: 'build', kind: 'stl', via: 'command', count: 1, failed: 1, crashed: 0, cancelled: 0, cached: 0,
+    seconds: 0.5, longest: 0.5 }, { name: 'build_failure', kind: 'stl', via: 'command', reason: 'outdated', count: 1 }];
+  const store = memory();
+  assert.equal((await send(store, 'POST', '/v1/events', { ...PARTS, schema: 10, events: exported })).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf).map(({ id, at, ...fields }) => fields).at(-1),
+    { event: 'build_failure', kind: 'stl', via: 'command', reason: 'outdated', count: 1 });
+  assert.equal((await send(memory(), 'POST', '/v1/events', { ...PARTS, schema: 9, events: exported })).status, 400);
+});
+
+test("schema 10's crash of no kernel process says which failure it was, a word of the vocabulary, and no other crash does", async () => {
+  const frames = [{ file: 'cad/engine/places.py', function: 'kernel', line: 728 }];
+  const unavailable = { name: 'exception', where: 'tool', tool: 'cad_show', type: 'cad.engine.serve.KernelProcessesUnavailable',
+    handled: true, frames, count: 1 };
+  const batch = { ...PARTS, schema: 10, events: [{ ...unavailable, cause: 'resolve' }, { ...unavailable, cause: 'pool' }, CRASH] };
+  const store = memory();
+  assert.equal((await send(store, 'POST', '/v1/events', batch)).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf).map(({ id, at, ...fields }) => fields),
+    batch.events.map(({ name, ...crash }) => ({ event: name, ...crash })));
+  // Two causes are two crashes; a crash without one is keyed, and so given its id, as before.
+  assert.equal(new Set(store.rows.map(row => row.id)).size, 3);
+  const before = memory();
+  assert.equal((await send(before, 'POST', '/v1/events', { ...PARTS, schema: 9, events: [CRASH] })).status, 204);
+  assert.equal(store.rows[2].id, before.rows[0].id);
+  for (const bad of [
+    { ...batch, schema: 9, events: [{ ...unavailable, cause: 'resolve' }] }, // schema 9 named no cause
+    { ...batch, events: [{ ...unavailable, cause: 'uv could not resolve cad==0.11.9' }] }, // never its words
+    { ...batch, events: [{ ...unavailable, cause: 'disk' }] }, // a word outside the vocabulary
+    { ...batch, events: [{ ...CRASH, cause: 'pool' }] }, // only that crash names one
+  ]) assert.equal((await send(memory(), 'POST', '/v1/events', bad)).status, 400, JSON.stringify(bad));
+});
+
 test('every schema a released cadgen sends is stored: a copy nobody updated keeps counting', async () => {
   const store = memory();
   assert.equal((await send(store, 'POST', '/v1/events', SCHEMA_1)).status, 204);

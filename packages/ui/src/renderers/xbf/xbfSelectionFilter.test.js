@@ -5,7 +5,7 @@ import { nextSelectionIds } from './xbfSelectionFilter.js';
 
 test("a plain pick of exactly what is selected lets it go, one element or a group; any other replaces it; Shift adds or takes away the group", () => {
   assert.deepEqual(nextSelectionIds(['f1'], ['f1']), []);
-  // A grown group (Group faces, Group edges) or a folded row's parts, picked again while they are the selection.
+  // A tangent chain (Select tangent faces, Select tangent edges) or a folded row's parts, picked again while they are the selection.
   assert.deepEqual(nextSelectionIds(['f2', 'f1'], ['f1', 'f2']), []);
   // Not exactly what is selected: the pick replaces it.
   assert.deepEqual(nextSelectionIds(['f1'], ['f1', 'f2']), ['f1', 'f2']);

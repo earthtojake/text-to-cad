@@ -35,7 +35,7 @@ import unittest
 from pathlib import Path
 
 from cad.build123d import (annotate, camera, datum, dimensional_location, dimensional_size, flatness_tolerance,
-                          general_profile, general_tolerance, limits, note, place, plus_minus_tolerance,
+                          general_profile, general_tolerance, size_limits, note, place, plus_minus_tolerance,
                           position_tolerance, section, surface_profile_tolerance, view)
 from cad.engine import build as engine_build
 from cad.engine import document, export
@@ -449,7 +449,7 @@ def pmi_plate():
 # A plate whose hole and thickness are given limits: values ILLUSTRATIVE.
 LIMITS = '''
 import build123d as bd
-from cad.build123d import annotate, dimensional_location, dimensional_size, limits
+from cad.build123d import annotate, dimensional_location, dimensional_size, size_limits
 from cad.engine import step, xbf
 
 
@@ -463,8 +463,8 @@ def pmi_plate():
     hole = body.faces().filter_by(bd.GeomType.CYLINDER)[0]
     return annotate(
         body,
-        dimensional_size("hole", hole, tolerance=limits(10.0, 10.05)),
-        dimensional_location("thickness", bottom, top, tolerance=limits(9.9, 10.1)),
+        dimensional_size("hole", hole, tolerance=size_limits(10.0, 10.05)),
+        dimensional_location("thickness", bottom, top, tolerance=size_limits(9.9, 10.1)),
     )
 '''
 
@@ -486,7 +486,7 @@ class LimitsTest(_Folder):
         """Limits the measured size lies outside are a size the model does not have: the build fails,
         naming the dimension, and writes none of its files (law 17), where it once warned of a
         conflict and wrote a STEP whose nominal, the limits' midpoint, is no size of the model."""
-        report = self.build(LIMITS.replace("limits(10.0, 10.05)", "limits(9.9, 9.95)"), ok=False)
+        report = self.build(LIMITS.replace("size_limits(10.0, 10.05)", "size_limits(9.9, 9.95)"), ok=False)
         self.assertIn("PMIError: pmi_plate: hole: the diameter measures 10 mm, outside its limits 9.90–9.95: model "
                       "it within them, or correct the limits", report["error"])
         self.assertFalse(self.xbf.exists())
@@ -494,18 +494,18 @@ class LimitsTest(_Folder):
 
     def test_limits_are_refused_when_not_upper_above_lower(self) -> None:
         with self.assertRaisesRegex(PMIError, "upper limit .* is above its lower, not 10.05 and 10.05"):
-            limits(10.05, 10.05)
+            size_limits(10.05, 10.05)
 
     def test_limits_are_sizes_above_zero(self) -> None:
         with self.assertRaisesRegex(PMIError, "lower limit is a size above 0, not 0.0"):
-            limits(0, 0.05)
+            size_limits(0, 0.05)
 
     def test_a_basic_dimension_refuses_limits(self) -> None:
         import build123d as bd
 
         faces = bd.Box(10, 10, 10).faces().sort_by(bd.Axis.Z)
         with self.assertRaisesRegex(PMIError, "a basic dimension is theoretically exact"):
-            dimensional_location("b", faces[0], faces[-1], basic=True, tolerance=limits(9.9, 10.1))
+            dimensional_location("b", faces[0], faces[-1], basic=True, tolerance=size_limits(9.9, 10.1))
 
     def test_the_step_carries_the_limits_and_the_check_matches_them(self) -> None:
         self.build(LIMITS)
@@ -724,7 +724,7 @@ def pmi_plate():
 # A block each face of which has a size of its own, and a general profile: values ILLUSTRATIVE.
 CONTROLLED = '''
 import build123d as bd
-from cad.build123d import annotate, datum, dimensional_location, general_profile, limits, plus_minus_tolerance
+from cad.build123d import annotate, datum, dimensional_location, general_profile, size_limits, plus_minus_tolerance
 from bd_materials import metals
 from cad.engine import step, xbf
 
@@ -740,7 +740,7 @@ def pmi_plate():
         body,
         datum("A", z[0]),
         dimensional_location("length", x[0], x[-1], tolerance=plus_minus_tolerance(0.2)),
-        dimensional_location("width", y[0], y[-1], tolerance=limits(59.8, 60.2)),
+        dimensional_location("width", y[0], y[-1], tolerance=size_limits(59.8, 60.2)),
         dimensional_location("thickness", z[0], z[-1], tolerance=plus_minus_tolerance(0.1)),
         general_profile("general", 0.5, datums=["A"]),
     )
@@ -1320,7 +1320,7 @@ class ViewTest(_Folder):
 REQUIREMENTS = '''
 import build123d as bd
 from cad.build123d import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance, general_profile,
-                          general_tolerance, limits, plus_minus_tolerance, position_tolerance,
+                          general_tolerance, size_limits, plus_minus_tolerance, position_tolerance,
                           surface_profile_tolerance)
 from bd_materials import metals
 from cad.engine import step, xbf
@@ -2380,7 +2380,7 @@ class RefusedTest(_Folder):
     def test_an_annotation_is_of_its_functions_closed_keys(self) -> None:
         """``annotate`` takes what the functions make, their keys closed (law 16): a dict of another
         kind, a key beyond its set or one missing is refused naming the set, never read in part; a
-        hand-made tolerance or presentation is checked as ``limits``, ``plus_minus_tolerance`` and
+        hand-made tolerance or presentation is checked as ``size_limits``, ``plus_minus_tolerance`` and
         ``place`` check theirs."""
         import build123d as bd
 
@@ -2414,7 +2414,7 @@ class RefusedTest(_Folder):
         # A tolerance's keys are its type's, its values checked by its function.
         with self.assertRaisesRegex(PMIError, r"dimension 'd''s tolerance: unknown key 'fit'; its keys are type, "
                                               r"lower, upper"):
-            dimensional_size("d", top, tolerance={**limits(9.9, 10.1), "fit": "H7"})
+            dimensional_size("d", top, tolerance={**size_limits(9.9, 10.1), "fit": "H7"})
         with self.assertRaisesRegex(PMIError, r"a dimension's upper limit \(the second\) is above its lower"):
             dimensional_size("d", top, tolerance={"type": "limits", "lower": 10.1, "upper": 9.9})
         size = dimensional_size("d", top, tolerance=plus_minus_tolerance(0.1))

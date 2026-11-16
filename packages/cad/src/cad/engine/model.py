@@ -68,21 +68,23 @@ _MODELS: dict[str, "Model"] = {}
 
 @dataclass(frozen=True)
 class Output:
-    """One file a model declares: its kind and path (None requests the CLI default), and an STL's
-    or a 3MF's own mesh tolerance in mm (None: the engine's)."""
+    """One file a model declares: its kind and path (None requests the CLI default), and a GLB's,
+    an STL's or a 3MF's own mesh tolerance in mm and angle in degrees (None: the engine's)."""
 
     kind: str
     out: str | None
     tolerance: float | None = None
+    angle: float | None = None
 
 
 @dataclass(frozen=True)
 class Target:
-    """One file a build writes: its kind, its path and its mesh tolerance (``Output``'s)."""
+    """One file a build writes: its kind, its path and its mesh tolerance and angle (``Output``'s)."""
 
     kind: str
     path: Path
     tolerance: float | None = None
+    angle: float | None = None
 
 
 def check_output(kind: str, out: Any, where: str) -> None:
@@ -289,7 +291,7 @@ class Model:
     def plan(self) -> list[Target]:
         """The files a build of this model writes: what its decorators declare (law 10), the
         xbf first, then the derived files in the order the decorators are written."""
-        return [Target(output.kind, self._path(output.kind, output.out), output.tolerance)
+        return [Target(output.kind, self._path(output.kind, output.out), output.tolerance, output.angle)
                 for output in sorted(self.outputs, key=lambda output: output.kind != "xbf")]
 
     # --- the verbs, through the daemon (``cad.engine.api``) -----------------------------
@@ -419,41 +421,42 @@ def model(target: Any = None, /, *, name: str | None = None, animations: Any = N
 
 
 def _decorator(kind: str) -> Callable[..., Any]:
-    def declare(out: Any, name: str | None, tolerance: float | None) -> Any:
+    from cad.engine.export import TOLERANT, angle_of, tolerance_of
+
+    def declare(out: Any, name: str | None, tolerance: float | None = None, angle: float | None = None) -> Any:
         if out is None:
             raise TypeError(f"@{kind} requires an output path")
         check_output(kind, out, f"@{kind}(out=...)")
         if name is not None:
             check_name(name)
-        if tolerance is not None:
-            from cad.engine.export import tolerance_of
-
-            tolerance = tolerance_of(tolerance, [out])
+        tolerance, angle = tolerance_of(tolerance, [out]), angle_of(angle, [out])
 
         def apply(target: Any) -> Model:
             model = target if isinstance(target, Model) else Model(target)
             model.declared(kind)
             if any(output.kind == kind for output in model.outputs):
                 raise TypeError(f"model {model.name!r} declares @{kind} twice")
-            model.outputs.insert(0, Output(kind, os.fspath(out), tolerance))
+            model.outputs.insert(0, Output(kind, os.fspath(out), tolerance, angle))
             return model.named(name)
 
         return apply
 
-    # An STL and a 3MF take their own mesh tolerance (``export/__init__.py``); no other kind is meshed.
-    if kind in ("stl", "threemf"):
-        def decorate(out: Any, *, name: str | None = None, tolerance: float | None = None) -> Any:
-            return declare(out, name, tolerance)
+    # A GLB, an STL and a 3MF take their own mesh tolerance and angle (``export/__init__.py``); no other
+    # kind is meshed.
+    if kind in TOLERANT:
+        def decorate(out: Any, *, name: str | None = None, tolerance: float | None = None,
+                     angle: float | None = None) -> Any:
+            return declare(out, name, tolerance, angle)
     else:
         def decorate(out: Any, *, name: str | None = None) -> Any:
-            return declare(out, name, None)
+            return declare(out, name)
 
     decorate.__name__ = kind
     decorate.__qualname__ = kind
     decorate.__doc__ = (f"Declare an explicit output: @{kind}(out='path{SUFFIXES[kind]}'), optionally named "
                         "within the script folder by name=. The output path is required; decoration builds nothing."
-                        + (" tolerance= meshes it at an absolute tolerance in mm, as cad xbf export --tolerance does."
-                           if kind in ("stl", "threemf") else ""))
+                        + (" tolerance= and angle= mesh it to within an absolute tolerance in mm and an angle in "
+                           "degrees, as cad xbf export --tolerance and --angle do." if kind in TOLERANT else ""))
     return decorate
 
 

@@ -39,8 +39,24 @@ if (!tests.length) {
 // Browser specs (`*.browser.test.*`) each drive a Chromium doing WebGL, in software on Linux CI:
 // four at once saturate a four-core runner until clicks time out. They run as their own pass,
 // `UI_BROWSER_TEST_CONCURRENCY` at a time (4 unless set; CI sets 1); everything else stays at 4.
-const browserTests = tests.filter((test) => /\.browser\.test\.[cm]?js$/u.test(test));
-const nodeTests = tests.filter((test) => !browserTests.includes(test));
+// `UI_TEST_PASS` runs one half alone, for CI's two jobs: `units` is the Node tests and Vitest (no
+// browser), `browser` the browser specs. Unset, everything runs.
+const fail = (message) => {
+  console.error(`run-tests.mjs: ${message}`);
+  process.exit(2);
+};
+const testPass = process.env.UI_TEST_PASS || "";
+if (!["", "units", "browser"].includes(testPass)) {
+  fail(`UI_TEST_PASS wants "units", "browser" or nothing, not "${testPass}"`);
+}
+const allBrowserTests = tests.filter((test) => /\.browser\.test\.[cm]?js$/u.test(test));
+// A collector that finds nothing fails: the browser pass asked for, with no spec named, on a tree
+// whose specs it no longer finds would pass having run none.
+if (!requestedTests.length && !allBrowserTests.length && testPass === "browser") {
+  fail("no *.browser.test.* spec found under src/ or scripts/, and the browser pass was asked for");
+}
+const browserTests = testPass === "units" ? [] : allBrowserTests;
+const nodeTests = testPass === "browser" ? [] : tests.filter((test) => !allBrowserTests.includes(test));
 const browserConcurrency = Math.max(1, Number.parseInt(process.env.UI_BROWSER_TEST_CONCURRENCY || "4", 10) || 4);
 const run = (files, concurrency) => files.length ? spawnSync(process.execPath, [
   "--test",
@@ -53,7 +69,7 @@ const run = (files, concurrency) => files.length ? spawnSync(process.execPath, [
   stdio: "inherit",
 }).status ?? 1 : 0;
 
-// Both passes run, so one failing pass still reports the other's results.
+// Every pass runs, so one failing pass still reports the others' results.
 const status = run(nodeTests, 4) || 0;
 // The renderer harness every browser spec serves, bundled once for the pass (`harness/bundle.mjs`).
 let browserStatus = 0;
@@ -69,7 +85,7 @@ if (browserTests.length) {
   }
 }
 if (status !== 0 || browserStatus !== 0) process.exit(status || browserStatus);
-if (!requestedTests.length) {
+if (!requestedTests.length && testPass !== "browser") {
   const unit = spawnSync(process.execPath, [path.join(packageRoot, '../../node_modules/vitest/vitest.mjs'), 'run', '--config', path.join(packageRoot, 'vitest.config.ts')], { cwd: packageRoot, env: process.env, stdio: 'inherit' });
   process.exit(unit.status ?? 1);
 }

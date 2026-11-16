@@ -5,10 +5,11 @@ import validator from "gltf-validator";
 import * as THREE from "three";
 import { buildGlbDocumentFromBuffer, disposeGlbDocument } from "./glbMeshData.js";
 import { createGlbAnimationRuntime, disposeGlbAnimationRuntime, setGlbAnimationTime } from "./glbAnimationRuntime.js";
+import { createGlbScene } from "./glbScene.js";
 
 // The engine's bakes of an `animation()` with every path, every interpolation and a pose
-// (`animation.glb`) and of a motion, an AP242 configuration sequence (`motion.glb`): see
-// `fixtures/README.md`.
+// (`animation.glb`), of a motion, an AP242 configuration sequence (`motion.glb`), and of an
+// assembly three levels deep written as its tree (`nested.glb`): see `fixtures/README.md`.
 function bytes(name) {
   return new Uint8Array(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
 }
@@ -18,7 +19,7 @@ function buffer(name) {
   return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
 }
 
-for (const name of ["animation.glb", "motion.glb"]) {
+for (const name of ["animation.glb", "motion.glb", "nested.glb"]) {
   test(`the Khronos glTF-Validator finds no error and no warning in ${name}`, async () => {
     const report = await validator.validateBytes(bytes(name), { maxIssues: 50 });
     const loud = report.issues.messages.filter((issue) => issue.severity <= 1);
@@ -33,7 +34,7 @@ test("the viewer's mixer plays a baked animation's STEP and LINEAR channels as t
   const clip = document.clips.find((candidate) => candidate.name === "showcase");
   assert.ok(clip, document.clips.map((candidate) => candidate.name).join(", "));
   assert.equal(clip.duration, 2, "every sampler runs the whole animation");
-  assert.deepEqual(clip.userData, { cadgen: { duration: 2 } });
+  assert.deepEqual(clip.userData, { cad: { duration: 2, kind: "animation" } });
   // three.js names a node as glTF does, less the characters a property path reserves (`feet/foot_1`: `feetfoot_1`).
   const node = (name) => document.scene.getObjectByName(THREE.PropertyBinding.sanitizeNodeName(name));
   const runtime = createGlbAnimationRuntime(THREE, document.scene, clip);
@@ -79,4 +80,55 @@ test("the viewer plays a motion's clip in the same GLB the xbf's export writes",
   assert.ok(Math.abs(lid.quaternion.angleTo(rest) - 100 * Math.PI / 180) < 2e-3, lid.quaternion.angleTo(rest));
   disposeGlbAnimationRuntime(runtime);
   disposeGlbDocument(document);
+});
+
+test("a nested GLB's parts, picks, Explode and clips are its parts' wherever its sub-assemblies place them", async () => {
+  const document = await buildGlbDocumentFromBuffer(buffer("nested.glb"));
+  const scene = createGlbScene(THREE, document);
+  const ids = [0, 1, 2, 3, 4, 5, 6].map(index => `n${index}`);
+  // The parts are the nodes that draw, each named by its path below the root; a sub-assembly is none.
+  assert.deepEqual(ids.filter(id => scene.hasPart(id)).map(id => scene.nameOf(id)),
+    ["base", "arm/bar", "arm/head/pin_1", "arm/head/pin_2"]);
+  // Where a part stands, in CAD millimetres: the middle of what it draws.
+  const centre = (id) => {
+    scene.object3D.updateMatrixWorld(true);
+    const { min, max } = scene.selectionBounds([id]);
+    return min.map((value, axis) => (value + max[axis]) / 2);
+  };
+  const near = (got, want, tolerance, label) => assert.ok(got.every((value, axis) => Math.abs(value - want[axis]) < tolerance),
+    `${label}: ${got.join(", ")} for ${want.join(", ")}`);
+  // The arm at 30 degrees about the swing axis (Z through x = -20), the head at 90 in it, the pins 8 mm
+  // apart in the head and 6 mm tall: each where the three placements above it put it.
+  const rad = Math.PI / 180;
+  const pin1 = [-20 + 30 * Math.cos(30 * rad), 30 * Math.sin(30 * rad), 7];
+  const pin2 = [-20 + 30 * Math.cos(30 * rad) - 8 * Math.sin(30 * rad), 30 * Math.sin(30 * rad) + 8 * Math.cos(30 * rad), 7];
+  near(centre("n5"), pin1, 0.15, "pin_1");
+  near(centre("n6"), pin2, 0.15, "pin_2");
+  near(centre("n1"), [0, 0, -5], 1e-6, "base");
+  const hit = scene.pick(new THREE.Ray(new THREE.Vector3(pin2[0], pin2[1], 100), new THREE.Vector3(0, 0, -1)));
+  assert.deepEqual([hit?.id, hit?.name], ["n6", "arm/head/pin_2"], "a pick names the part under the ray");
+  // Explode moves the four parts by the file's tree, and puts them back.
+  assert.equal(scene.explodeParts, 4);
+  assert.equal(scene.setExplode(1), true);
+  assert.ok(Math.hypot(...centre("n6").map((value, axis) => value - pin2[axis])) > 1, "exploded");
+  scene.setExplode(0);
+  near(centre("n6"), pin2, 0.15, "pin_2 back at rest");
+
+  const [sweep, show] = document.clips;
+  assert.deepEqual([sweep.name, show.name], ["sweep", "show"]);
+  // The motion swings the arm's sub-assembly as one: at 1 s, 60 degrees on, so 90 from X.
+  let runtime = createGlbAnimationRuntime(THREE, document.scene, sweep);
+  setGlbAnimationTime(runtime, 1);
+  near(centre("n5"), [-20, 30, 7], 0.15, "pin_1 swung");
+  near(centre("n6"), [-28, 30, 7], 0.15, "pin_2 swung");
+  near(centre("n1"), [0, 0, -5], 1e-6, "the base stays");
+  disposeGlbAnimationRuntime(runtime);
+  // The animation lifts the head 10 mm, and the second pin 5 more: each pin keyed in the head's frame.
+  runtime = createGlbAnimationRuntime(THREE, document.scene, show);
+  setGlbAnimationTime(runtime, 2);
+  near(centre("n5"), [pin1[0], pin1[1], 17], 0.15, "pin_1 lifted");
+  near(centre("n6"), [pin2[0], pin2[1], 22], 0.15, "pin_2 lifted");
+  disposeGlbAnimationRuntime(runtime);
+  near(centre("n6"), pin2, 0.15, "stopping puts every part back at rest");
+  scene.dispose();
 });

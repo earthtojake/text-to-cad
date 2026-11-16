@@ -385,11 +385,11 @@ export function pmiPlaceText(presentation) {
 }
 
 /**
- * The tolerance a dimension's call gives it: `limits(lower, upper)`, or `plus_minus_tolerance(...)`,
+ * The tolerance a dimension's call gives it: `size_limits(lower, upper)`, or `plus_minus_tolerance(...)`,
  * its lower deviation left out where it is the upper's negative.
  */
 function pmiToleranceCallText(tolerance) {
-  if (tolerance.type === "limits") return `limits(${pyNumber(tolerance.lower)}, ${pyNumber(tolerance.upper)})`;
+  if (tolerance.type === "limits") return `size_limits(${pyNumber(tolerance.lower)}, ${pyNumber(tolerance.upper)})`;
   const symmetric = Math.abs(tolerance.upper + tolerance.lower) < 1e-12;
   return symmetric ? `plus_minus_tolerance(${pyNumber(tolerance.upper)})`
     : `plus_minus_tolerance(${pyNumber(tolerance.upper)}, ${pyNumber(tolerance.lower)})`;
@@ -427,7 +427,7 @@ function pmiViewText(call) {
  * - `{ kind: "dimension", type: "distance", basic: true, id, from, to }`:
  *   `dimensional_location(id, from, to, basic=True)` (exact: a tolerance given it makes no call);
  * - `{ kind: "dimension", type: "diameter", id, ref, tolerance? }`: `dimensional_size(id, ref, tolerance=...)`;
- *   a dimension's tolerance `plus_minus_tolerance(...)`, or `limits(lower, upper)` for limits;
+ *   a dimension's tolerance `plus_minus_tolerance(...)`, or `size_limits(lower, upper)` for limits;
  * - `{ kind: "geometric_tolerance", characteristic: "flatness", id, ref, value }`: `flatness_tolerance(id, ref, value)`;
  * - `{ kind: "geometric_tolerance", characteristic: "position", id, ref, value, datums, diameterZone }`:
  *   `position_tolerance(id, ref, value, datums=[...], diameter_zone=True)`, its zone said either way

@@ -10,6 +10,17 @@ from cad.engine.export.viewer import fingerprint
 from cad.engine.worker import _export
 
 
+def _prepared(write):
+    """``export.prepare`` faked: the destination it hands back lands (``Prepared.land``) by ``write``, as
+    ``translate`` would write it, ``check`` and all."""
+    from types import SimpleNamespace
+
+    def prepare(source, _kind, target, *_args, **_kwargs):
+        return SimpleNamespace(land=lambda told=None, summary=None, *, check=None: write(source, None, target,
+                                                                                         check=check))
+    return prepare
+
+
 class ViewerExportsTest(unittest.TestCase):
     def test_semantic_changes_invalidate_export_identity(self):
         self.assertNotEqual(fingerprint({"pmi": [{"value": .1}]}), fingerprint({"pmi": [{"value": .2}]}))
@@ -32,7 +43,7 @@ class ViewerExportsTest(unittest.TestCase):
             request = {"source": {"path": str(output)}, "expected": {"version": "v"}, "destinations": [str(output)]}
             with patch.object(Source, "read", return_value=source), \
                  patch("cad.engine.export.viewer.check"), \
-                 patch("cad.engine.export.translate", side_effect=write), \
+                 patch("cad.engine.export.prepare", side_effect=_prepared(write)), \
                  patch("cad.engine.export.ap242.check",
                        return_value={"matched": 1, "total": 1, "problems": []}) as check:
                 result = _export(request, lambda _: None)
@@ -42,7 +53,7 @@ class ViewerExportsTest(unittest.TestCase):
                                                               "not be verified."]}
             with patch.object(Source, "read", return_value=source), \
                  patch("cad.engine.export.viewer.check"), \
-                 patch("cad.engine.export.translate", side_effect=write), \
+                 patch("cad.engine.export.prepare", side_effect=_prepared(write)), \
                  patch("cad.engine.export.ap242.check", return_value=failed):
                 with self.assertRaisesRegex(ExportRefused, r"result.step not written: the PMI in the STEP written does "
                                                            r"not match the model's document.*\(0 of 1 matched\): A: "):
@@ -51,7 +62,7 @@ class ViewerExportsTest(unittest.TestCase):
             source.structure = {}
             with patch.object(Source, "read", return_value=source), \
                  patch("cad.engine.export.viewer.check"), \
-                 patch("cad.engine.export.translate", side_effect=write), \
+                 patch("cad.engine.export.prepare", side_effect=_prepared(write)), \
                  patch("cad.engine.export.ap242.check") as check:
                 result = _export({"source": {"path": str(output)}, "expected": {"version": "v"}, "destinations": [str(output)]}, lambda _: None)
                 check.assert_not_called()
@@ -74,7 +85,7 @@ class ViewerExportsTest(unittest.TestCase):
 
             with patch.object(Source, "read", return_value=source), \
                  patch("cad.engine.export.viewer.check"), \
-                 patch("cad.engine.export.translate", side_effect=write), \
+                 patch("cad.engine.export.prepare", side_effect=_prepared(write)), \
                  patch("cad.engine.export.ap242.check") as check:
                 result = _export({"source": {"path": str(output)}, "expected": {"version": "v"},
                                   "destinations": [str(output)]}, lambda _: None)

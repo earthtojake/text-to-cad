@@ -53,7 +53,7 @@ not confirmed:
    controls, so most faces need nothing more.
 3. **Then each feature's own requirements**, where the general profile is not enough: a
    size (`dimensional_size`, `dimensional_location` with `plus_minus_tolerance` or
-   `limits`), a location (`position_tolerance` and the basic dimensions to its true
+   `size_limits`), a location (`position_tolerance` and the basic dimensions to its true
    position), a form (`flatness_tolerance`), a tighter profile
    (`surface_profile_tolerance`). A size, a location or a profile
    takes its faces out of the general profile.
@@ -71,7 +71,7 @@ not confirmed:
 
 ```python
 from cad.build123d import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance,
-                          general_profile, limits, note, position_tolerance, section, surface_profile_tolerance,
+                          general_profile, note, position_tolerance, section, surface_profile_tolerance,
                           view)
 from lib.notes import NOTES   # the project's notes, in its own module (Notes, below)
 
@@ -80,7 +80,7 @@ return annotate(
     body,
     datum("A", bottom), datum("B", front), datum("C", left),                   # 1
     general_profile("general", 0.5, datums=["A", "B", "C"]),                    # 2: Note 1
-    dimensional_size("hole-diameter", hole, tolerance=limits(10.0, 10.1)),      # 3
+    dimensional_size("hole-diameter", hole, tolerance=size_limits(10.0, 10.1)),      # 3
     position_tolerance("hole-position", hole, 0.1, datums=["A", "B", "C"]),
     dimensional_location("hole-from-B", front, hole, basic=True),
     dimensional_location("hole-from-C", left, hole, basic=True),
@@ -154,8 +154,8 @@ Its run warns that the four sides have no requirement: nothing here holds them.
 - **Nominals are measured**: a cylinder's diameter, or a distance between two parallel
   planes, from a plane to a hole's axis parallel to it, or between two parallel axes.
 - **Tolerances are explicit.** `plus_minus_tolerance(upper, lower=None)` takes signed
-  deviations, `lower` defaulting to `-upper`; `limits(lower, upper)` takes the
-  least and the greatest size instead (`limits(10.0, 10.05)` is 10.00–10.05). A
+  deviations, `lower` defaulting to `-upper`; `size_limits(lower, upper)` takes the
+  least and the greatest size instead (`size_limits(10.0, 10.05)` is 10.00–10.05). A
   dimension given no `tolerance=` holds none: nothing is assumed. A size measured
   outside its own limits fails the run, naming it: model it within them, or correct
   the limits. A STEP writes limits with their midpoint as the nominal (the file
@@ -176,7 +176,7 @@ Its run warns that the four sides have no requirement: nothing here holds them.
   profile of every face of the part that nothing else controls. You name no faces: each
   build computes them from that build's annotations and geometry, so after an edit it
   covers the new faces. A face is otherwise controlled when it has a size or location
-  requirement of its own: a face of a `plus_minus_tolerance` or `limits` dimension, or
+  requirement of its own: a face of a `plus_minus_tolerance` or `size_limits` dimension, or
   the face of a position or of a `surface_profile_tolerance`. A flatness alone, a datum,
   or the start of a basic dimension leaves a face to the general profile. The datum features it names are
   controlled on their own and left out of it (no face is profiled relative to itself):
@@ -306,7 +306,7 @@ warning: pmi: PART: IDS: PROBLEM
 ```
 
 - **Faces with no requirement.** A face is covered by an `ok` toleranced dimension
-  (`plus_minus_tolerance` or `limits`) or geometric tolerance on it, or by the general profile.
+  (`plus_minus_tolerance` or `size_limits`) or geometric tolerance on it, or by the general profile.
   A basic dimension, a datum and a note cover nothing: a basic dimension only locates
   what a position or a profile controls. One `general_profile` usually covers most
   of them: add it first, with the user's value and datums (ask for them;

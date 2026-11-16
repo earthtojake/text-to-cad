@@ -11,16 +11,24 @@ operations, one to one with the ``cad <type> <operation>`` commands: ``.export``
 ``.inspect``, and those named for what they do (``.dfm``, ``.solve``, ``.drc``, ``.erc``, ``.validate``). Our helpers that take build123d's objects are
 the build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's
 ``animation``, measurements, flat patterns); those that take trimesh's are the trimesh integration's,
-``cad.trimesh`` (a mesh's manufacturing measurements: ``molding``, ``pulls``, ``printing``,
-``orientations``). Process control (``cad serve``, ``status``, ``stop``,
+``cad.trimesh`` (a mesh's 3D printing measurements: ``printing``, ``orientations``); those that call MuJoCo
+are the mujoco integration's, ``cad.mujoco`` (a document as a ``mujoco.MjSpec``, a part's collision chosen on
+it, the spec saved, and a MuJoCo model checked by MuJoCo's own compiler: ``spec``, ``fit``, ``save``, ``check``); those that take Blender's are the blender integration's, ``cad.blender`` (``load``: a
+GLB in Blender's scene, for a render). Process control (``cad serve``, ``status``, ``stop``,
 ``server``) is the ``cad`` command's alone. Every name loads on first use: ``import cad`` imports no CAD
 kernel, and ``import build123d`` binds a module the kernel loads into on its first attribute
 (``_internal/lazy_kernel.py``). The earlier spellings (``cad.read_step``, ``cad.export``, ``cad.ap242``,
 ...) are aliases of what they name now, each saying so once (``_internal/aliases.py``).
 """
 
+import time as _time
 from functools import cache as _cache
 from typing import TYPE_CHECKING as _TYPE_CHECKING
+
+# When this library's code began to load in this process: what measures a manufacturing check here
+# (``cad.engine._measuring.measuring``, taken when one is first asked) says a code edited since as no other's.
+_LOADED_NS = _time.time_ns()
+del _time
 
 # Before anything imports build123d, which every entry point of the library eventually does:
 # build123d parses EVERY font in the system font folders at import time, with no
@@ -55,7 +63,7 @@ del _install_font_guard
 _TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
 
 # The integrations' namespaces (``cad.registry.INTEGRATIONS``): our helpers that take each tool's objects.
-_INTEGRATIONS = ("build123d", "kicad", "trimesh", "netgen", "calculix")
+_INTEGRATIONS = ("build123d", "kicad", "trimesh", "mujoco", "coacd", "netgen", "calculix", "blender")
 
 __all__ = [
     "__version__",

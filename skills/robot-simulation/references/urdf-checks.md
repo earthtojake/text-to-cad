@@ -9,7 +9,7 @@ Run in order; stop and fix at the first failing step:
 1. **Bundled validator** (always): `cad urdf validate path/to/robot.urdf`. It collects *all* findings in one pass (severity, code, XML path); fix them and re-run until clean. Use `--strict` to fail on warnings, `--json` for machine-readable output, and `--packages NAME=PATH` (repeatable) to resolve `package://` mesh URIs.
 2. **External URDF tools** (when installed): `check_urdf robot.urdf` (ros liburdfdom) parses with the reference parser and prints the link tree. Report as skipped when unavailable.
 3. **Viewer sweep** (open it as in [Show the model](../SKILL.md#show-the-model)): load the file, confirm meshes appear at sane scale and pose, then sweep **every** movable joint through its limits and compare the motion against the ledger's positive-motion statement, joint by joint. This is the only step that catches a wrong axis sign. Snapshots at `--pose` values ([snapshots.md](snapshots.md)) record the same sweep as stills. A link alone does not complete the sweep; report any checks you could not perform.
-4. **Consumer smoke test** (when the target runtime is available): RViz display, robot_state_publisher TF tree, Gazebo/Ignition load, or MoveIt model load.
+4. **Consumer smoke test** (when the target runtime is available): RViz display, robot_state_publisher TF tree, a MuJoCo load, or MoveIt model load.
 
 Report which steps ran and which were skipped.
 
@@ -30,7 +30,7 @@ Joints:
 - revolute/prismatic joints have finite `lower <= upper` limits; `effort`/`velocity` must be non-negative and warn when omitted; fixed/continuous joints warn when they carry ignored position limits;
 - `<dynamics>` damping/friction must be non-negative;
 - `<mimic>` must reference an existing, non-fixed, non-self joint with no mimic cycles;
-- joint names colliding with link names warn (URDF-to-SDF conversion breaks).
+- joint names colliding with link names warn (a consumer that keeps links and joints in one namespace, as some converters do, refuses the file).
 
 Geometry and meshes:
 
@@ -47,7 +47,7 @@ Inertials (when present):
 
 Authoring hygiene:
 
-- unknown elements under `<robot>`, `<link>`, `<joint>`, `<visual>`, `<collision>`, and `<inertial>` warn — misspelled elements are otherwise silently ignored by consumers (namespaced extensions like `<gazebo>` pass through);
+- unknown elements under `<robot>`, `<link>`, `<joint>`, `<visual>`, `<collision>`, and `<inertial>` warn — misspelled elements are otherwise silently ignored by consumers (namespaced extensions and simulator extension elements pass through);
 - visual `<material name>` references without a matching definition warn;
 - mesh extensions outside the common set (stl/dae/obj/3mf/glb/gltf/ply) warn.
 

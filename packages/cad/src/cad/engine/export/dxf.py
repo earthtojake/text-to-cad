@@ -13,7 +13,9 @@ A layer name holding a character DXF reserves is refused by name.
 
 **Planar or refused.** A document holding a solid is refused before anything is written
 (``tom.xbf is 3D``), and so is an edge with a point off z=0, by its element name: exporting either
-would write its XY shadow, silently wrong.
+would write its XY shadow, silently wrong. The drawing is made, and checked, before any file of the
+export is written (``rendered``, the kind's ``render``), so an export that names a DXF beside other
+files writes none of them when the DXF is refused.
 
 **The bytes are a function of the geometry.** Layers are written in name order and each layer's
 edges in an order of their content -- curve kind, then points sampled along it and its length,
@@ -54,7 +56,7 @@ from cad.engine.export import ExportRefused
 
 __all__ = ["DEFAULT_LAYER", "DrawingFinding", "DrawingValidationError", "DxfDeterminismError", "document_is_drawing",
            "drawing_apparatus", "dxf_bytes", "layer_allows_open_geometry", "layer_intent", "layer_table_intents",
-           "raise_on_error_findings", "validate_drawing_document", "validate_dxf_file", "write"]
+           "raise_on_error_findings", "rendered", "validate_drawing_document", "validate_dxf_file", "write"]
 
 # The layer of a document of one part. Layers are CAM operations (CUT, ENGRAVE, SCORE); a
 # drawing of one need not name it.
@@ -82,8 +84,17 @@ class DxfDeterminismError(RuntimeError):
 def write(view: Any, path: Path) -> int:
     """The view's drawing at ``path``: written beside it and moved over it, or, when the file
     holds these bytes already, left as it is. Returns its size."""
+    return rendered(view)(path)
+
+
+def rendered(view: Any) -> Any:
+    """The view's drawing made and checked, nothing written (``Kind.render``): what writes it at a path
+    and answers its size."""
     data = dxf_bytes(view)
-    path = Path(path)
+    return lambda path: _land(data, Path(path))
+
+
+def _land(data: bytes, path: Path) -> int:
     try:
         if path.stat().st_size == len(data) and path.read_bytes() == data:
             return len(data)
@@ -306,7 +317,10 @@ def _check_pinned(text: str, named: str) -> None:
 # Layer intent, by WHOLE tokens of the name (split on non-alphanumerics), never substrings:
 # PREFORM is not "ref". An explicit cut token wins: CUT_SECTION is a cut path whose name mentions
 # a view. A dimensioned drawing's furniture is reference (dimensions, sections, hidden and centre
-# lines, title blocks, text).
+# lines, title blocks, text), and so is what a CAD's flat pattern export writes beside the cut and the
+# bend centre lines: Autodesk Inventor's layers (its "Layer Mapping for Export Flat Pattern Reference":
+# IV_ARC_CENTERS and IV_TOOL_CENTER marks, IV_FEATURE_PROFILES edges that are no outline, IV_ALTREP
+# punch representations, IV_UNCONSUMED_SKETCHES, IV_ROLL centre lines).
 _INTENT_BY_TOKEN = {
     "cut": "cut", "profile": "cut",
     "bend": "bend", "fold": "bend",
@@ -315,8 +329,13 @@ _INTENT_BY_TOKEN = {
         "ref", "reference", "note", "notes", "annotation", "construction", "dim", "dims", "dimension",
         "dimensions", "section", "sections", "hidden", "center", "centre", "centerline", "centreline",
         "phantom", "title", "titleblock", "border", "frame", "viewport", "hatch", "text", "label", "labels",
-        "leader", "axis")},
+        "leader", "axis", "centers", "centres", "feature", "altrep", "sketch", "sketches", "unconsumed", "roll")},
 }
+# A bend's extent lines -- its two tangent lines, where the radius starts -- are reference though the name may
+# say bend: neither cut nor a bend's centre line. Inventor writes them on IV_TANGENT (and IV_ROLL_TANGENT);
+# Fusion's flat pattern export puts its "extent lines" on a layer of their own, which its help does not name
+# (a BEND_EXTENT layer reads so by its ``extent`` token).
+_BEND_EXTENT_TOKENS = frozenset({"tangent", "extent", "extents"})
 _TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")
 _ANNOTATION_TYPES = frozenset({"TEXT", "MTEXT", "DIMENSION", "LEADER", "MULTILEADER", "HATCH"})
 _TOLERANCE = 1e-6
@@ -347,9 +366,12 @@ class DrawingValidationError(ValueError):
 
 def layer_intent(layer_name: str) -> str:
     """A layer name's intent: ``cut``, ``bend``, ``engrave`` or ``reference`` (``cut`` when no
-    token says otherwise)."""
+    token says otherwise; a bend's extent lines, ``_BEND_EXTENT_TOKENS``, are reference before they are
+    bend)."""
     tokens = [token for token in _TOKEN_SPLIT.split(str(layer_name or "").strip().lower()) if token]
-    for intent in ("cut", "bend", "engrave", "reference"):
+    for intent in ("cut", "extent", "bend", "engrave", "reference"):
+        if intent == "extent" and _BEND_EXTENT_TOKENS.intersection(tokens):
+            return "reference"
         if any(_INTENT_BY_TOKEN.get(token) == intent for token in tokens):
             return intent
     return "cut"

@@ -19,7 +19,8 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor
---check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
+--check` explains any other failure, changing nothing; `cad doctor` repairs what it reports. Tell the
+person any next step `cad setup` prints.
 
 text-to-cad reads a board or schematic itself, so inspecting either, and viewing a schematic or taking
 its snapshot, need no KiCad. DRC (`cad kicad_pcb drc`), ERC (`cad
@@ -215,8 +216,8 @@ the report then names every error they went ahead with.
 
 Show the person each model you create or change, and any model or file they ask to see. If your
 tools include `cad_show` (your host may prefix it), call it with the model's id or the file's
-absolute path; its description says the rest. Otherwise give the person the page's link once: a
-model's page is the `view:` line its run prints, and a file's is the `url` that
+absolute path; its description says the rest. Otherwise give the person the page's link once, to
+open in the app's browser pane where it has one, or their browser: a model's page is the `view:` line its run prints, and a file's is the `url` that
 `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
 download: give its path. Never screenshot the viewer to check your own work; review with
 `cad <type> snapshot`. If it fails to launch, say so.
@@ -226,7 +227,8 @@ download: give its path. Never screenshot the viewer to check your own work; rev
 The board view supports layers, selection, Measure, annotations and Quick Edit, in 2D and in 3D.
 Select works as KiCad's: a click picks a part, pad, track, via, zone, rule area, text, dimension or
 graphic, as its Selection Filter ticks them (locked items only when the person ticks them), and a
-drag names an area, a box on the layer the person works on. The panel at the left (⌘\ or Ctrl+\
+drag draws a box that takes anything it touches. A box that takes nothing names an area, a box on the layer the person works on
+(`#F.Cu@x10y5..x20y15`). The panel at the left (⌘\ or Ctrl+\
 hides and shows it, / searches it) has one search over three tabs. **Parts** lists the parts in the
 schematic blocks their footprints record (by kind on a board that records none): a block picks every
 part in it. **Nets** lists the nets: a net picks the whole net. Each arrives as a reference
@@ -295,7 +297,8 @@ selection, Measure, annotations and Quick Edit, and its panel: one search over *
 and, for more than one sheet, the **Hierarchy**. The Hierarchy is KiCad's
 Hierarchy Navigator: a press shows that sheet. A double-click on a sheet symbol enters it, and the
 Hierarchy goes back up; a sheet shown again is where it was left. Select works as KiCad's: a click picks a symbol, pin, wire, label, sheet,
-junction or no-connect, as its Selection Filter ticks them, and a drag picks what lies inside the box.
+junction or no-connect, as its Selection Filter ticks them, and a drag draws a box that picks anything
+it touches.
 **Parts** lists the parts by the sheet they are placed on, each with its pins, and **Nets** the nets
 with the pins on them. A net picked there lights across the sheet shown, and a part on another sheet shows
 that sheet. Each arrives as a schematic reference (`#R1`, `#R1.2`, `#net:/MID`, `#sheet:/Power/`,

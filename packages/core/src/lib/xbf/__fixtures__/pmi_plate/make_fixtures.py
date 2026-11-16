@@ -46,7 +46,7 @@ import build123d as bd
 
 from cad import xbf
 from cad.build123d import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance, general_profile,
-                          limits, note, place, plus_minus_tolerance, position_tolerance, section,
+                          size_limits, note, place, plus_minus_tolerance, position_tolerance, section,
                           surface_profile_tolerance, view)
 
 THICKNESS = {thickness}
@@ -104,7 +104,7 @@ DEFINITION = '''
 VERSIONS = {"v1": (10, "round", 5, "plus_minus_tolerance(0.2)", ""),
             "v2": (12, "round", 6, "plus_minus_tolerance(0.2)", ""),
             "v3": (12, "square", 6, "plus_minus_tolerance(0.2)", ""),
-            "v4": (10, "round", 5, "limits(9.8, 10.2)", DEFINITION)}
+            "v4": (10, "round", 5, "size_limits(9.8, 10.2)", DEFINITION)}
 
 
 def main() -> None:

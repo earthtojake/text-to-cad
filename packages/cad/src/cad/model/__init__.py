@@ -5,9 +5,10 @@ A model has no file behind it: it is addressed by its document id (``cad run SCR
 the handle its call returns. ``@model`` declares one (``@model(name=...)``; ``model(shape, name=...)`` hands
 a shape over), with no file of its own; the files it declares are the other types' decorators
 (``@xbf("XBF/arm.xbf")``, ``@step("arm.step")``). Its operations are the ``cad model <operation>`` commands':
-``model.export(handle_or_id, *destinations, tolerance=None)``, ``model.snapshot(...)``,
-``model.inspect(...)`` and ``model.dfm(handle_or_id, process="molding")`` (or ``"printing"``), which
-measures it for manufacturing with the trimesh integration (``cad._internal.manufacturing``), and
+``model.export(handle_or_id, *destinations, tolerance=None, angle=None)``, ``model.snapshot(...)``,
+``model.inspect(...)`` and ``model.dfm(handle_or_id, process="cnc")`` (or ``"sheet"``, ``"molding"``,
+``"printing"``), which checks it for manufacturing on its exact geometry, measured by the engine with the build123d
+integration (``cad._internal.manufacturing``), and
 ``model.solve(handle_or_id, study=..., out="results/")``, a stress study of it (``cad._internal.fea.operation``),
 which reads an ``.xbf`` the engine writes of it in a temporary folder. A file is
 refused by name: ``arm.xbf`` is an xbf's (``cad.xbf``). Everything loads on first use: ``import cad.model``

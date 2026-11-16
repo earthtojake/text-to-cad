@@ -1,4 +1,4 @@
-"""The engine's verbs counted for telemetry (``cad_server/analytics.py``).
+"""The engine's verbs, and the model builds its daemon answers, counted for telemetry (``cad_server/analytics.py``).
 
 The engine counts nothing and imports nothing of cadgen (its law 3). After each build, export and
 snapshot it calls the functions in ``cad.engine.api.observers`` with a plain dict of what the verb
@@ -7,32 +7,40 @@ did (``api._facts``). ``observe`` is the server's: appended by the server's comm
 process that does not use the engine imports none of it; with it, what the library counts itself (a
 drawing, ``cad._internal.counts``) is told to the server's telemetry. A process no command of the
 server's runs -- a model's own, in the CAD kernel environment, where only the library is -- counts
-nothing. It counts these events (``analytics.EVENTS``):
+nothing. So a model build is counted where it is answered, by the daemon (``answered``), and never by the
+observer, which would count it a second time in a Python caller that imports the server; a build in the
+caller's own process (``daemon=False``, a debugging path no daemon sees) is counted nowhere. It counts these
+events (``analytics.EVENTS``):
 
-- a ``build`` of kind ``model``, by who asked (``via``): ``python model.py``, or a Python caller's
-  ``Model.build()``, is ``script`` (no command builds one now; ``command`` is still a value
-  ``analytics.VIAS`` reads, which releases before 0.8 sent). How it ended (``crashed``: its
-  worker died under it; ``cancelled``: interrupted), whether its documents were their xbfs taken whole
-  (``cached``: every model's ``cache.used``), how long it took, and why it failed (``build_failure``,
-  ``analytics.told_failure``);
+- a ``build`` of kind ``model`` (the daemon's): ``python model.py``, or a Python caller's ``Model.build()``,
+  is ``script`` (no command builds one now; ``command`` is still a value ``analytics.VIAS`` reads, which
+  releases before 0.8 sent). Every build the daemon answered is in its ``count``; it failed only for the
+  system's reasons (``analytics.SYSTEM_FAILURES``: one the person's script caused counts in ``count`` alone);
+  ``crashed``: its worker died under it; whether its documents were their xbfs taken whole (``cached``:
+  every model's ``cache.used``), how long it took, and why it failed (``build_failure``,
+  ``analytics.told_failure``). Never ``cancelled``: a build whose caller goes goes on, and a model that
+  raises an interrupt itself is the person's;
 - an export: a ``build`` of each destination's kind, asked as a build is, the verb's time shared out;
 - a ``snapshot`` of the source's kind (``model`` for a live model; ``xbf`` for an actual file), and why one failed
   (``snapshot_failure``), a refused one with the part of its request it refused (``part``);
-- ``feature``: a model calling other models or of several parts (``assembly``), one writing mesh files
-  (``declared_mesh``), an export or a snapshot posing joints (``kinematics``);
-- ``health``: a warm worker started for the work, one that died under it, one retired over its memory
+- ``feature``: an export or a snapshot posing joints (``kinematics``). A build's features (``assembly``,
+  ``declared_mesh``, a model's ``drawing``) are usage, not CAD failing, and are not counted;
+- ``health``: a warm worker started for a build, one that died under the work, one retired over its memory
   cap after it -- each told by the one answer it came with, so counted once;
 - ``exception``: a mistake in cadgen's own code a worker answered with, or a file it could not write
   failed for (``analytics.told_signature``, where ``build``); one raised here, when no ``cadgen``
-  command runs this process to report it (where ``command``, as the command's own report says it); and a
-  worker that died, its exit status (``analytics.died``).
+  command runs this process to report it (where ``command``, as the command's own report says it); a
+  worker that died, its exit status (``analytics.died``); and the kernel environment a build found
+  could not be made, once per making that failed (``first_report``).
 
-What a verb counted is kept in the spool beside the settings (``analytics.spool``), as a command's counts
-are: the CAD app's or the viewer's next send takes it (as a ``cli`` batch of its own, naming no app) or, with
-nothing taking it for a window, the sender a command starts (``telemetry_send``). Nothing is counted where
-the environment turns telemetry off
-(``analytics.refused``, read first), in an engine worker (what a build asks for is that build's), or for a
-server's own work (``cad viewer``, ``cad-mcp``: each counts what it serves). Never raises.
+What a verb or a build counted is kept in the spool beside the settings (``analytics.spool``), as a command's
+counts are: the CAD app's or the viewer's next send takes it (as a ``cli`` batch of its own, naming no app) or,
+with nothing taking it for a window, the sender a command starts (``telemetry_send``), or the daemon, which
+looks each time it tends itself (``daemon.Daemon.tend``), so a person who only ever runs ``python model.py``
+has its builds sent too. Nothing is counted where the environment turns telemetry off (``analytics.refused``,
+read first: this process's, or for a build the daemon answered its asker's, ``request["env"]``), in an engine
+worker (what a build asks for is that build's), or for a server's own work (``cad viewer``, ``cad-mcp``: each
+counts what it serves). Never raises.
 """
 
 from __future__ import annotations
@@ -102,8 +110,8 @@ def observe(facts: dict[str, Any]) -> None:
             return
         from cad_server import analytics
 
-        if analytics.refused():
-            return
+        if analytics.refused() or facts.get("verb") == "build":
+            return  # a build is the daemon's to count, where it is answered (``answered``)
         via = _via(facts)
         if via is not None and analytics.spool(counts(facts, via)):
             from cad_server._internal import telemetry_send
@@ -162,7 +170,8 @@ def counts(facts: dict[str, Any], via: str) -> dict[str, Any]:
                           **({"part": _refused_part(error)} if reason == "bad_request" else {})})
     if verb == "snapshot" and facts.get("pose"):
         features.append("kinematics")
-    health = {name: 1 for name, happened in (("workers", worker.get("fresh") is True),
+    # A worker started is told only by a build's answer: counted with the build, by the daemon, once.
+    health = {name: 1 for name, happened in (("workers", verb == "build" and worker.get("fresh") is True),
                                              ("crashes", worker.get("died") is not None),
                                              ("recycles", bool(worker.get("retired")))) if happened}
     crashes = [analytics.died(worker["died"])] if worker.get("died") is not None else []
@@ -233,3 +242,86 @@ def _snapshot_failure(facts: dict[str, Any], error: dict[str, Any] | None, outco
     if kind is not None and issubclass(kind, MemoryError):
         return "memory"
     return "render_error"
+
+
+# --- the model builds the daemon answers ----------------------------------------------------------------
+
+
+def answered(answer: dict[str, Any], seconds: float, env: Any, *, fresh: bool | None = None, died: Any = None,
+             unavailable: BaseException | None = None, path: Any = None) -> bool:
+    """One model build the daemon answered (``cad_server.engine.daemon``'s ``build``), counted for the person who
+    asked it: ``answer`` as it was sent, ``seconds`` the daemon's time on it, ``env`` the asker's environment
+    (``request["env"]``: a no there, or no environment told, counts nothing; else the settings decide, as a
+    command's count would), ``fresh`` whether its worker was started for it, ``died`` the exit status of one that
+    died under it (``True`` where none is known), ``unavailable`` the error of a kernel environment that could not
+    be made (its crash reported once per failed making, ``first_report``). Kept in the spool, and the sender
+    started when the spool has waited a window: a local write, after the answer, never the network. Whether it
+    was kept. Never raises."""
+    try:
+        from cad_server import analytics
+
+        if not isinstance(env, dict) or analytics.refused(env):
+            return False
+        found = model_build(_answered_facts(answer, seconds, fresh, died))
+        if unavailable is not None and first_report(unavailable):
+            crash = analytics.signature(unavailable, "build")
+            if crash is not None:
+                found.setdefault("crashes", []).append(crash)
+        if not analytics.spool(found, path=path, env=env):
+            return False
+        from cad_server._internal import telemetry_send
+
+        telemetry_send.start_if_due(path)
+        return True
+    except Exception:  # noqa: BLE001 - telemetry never fails the build it counts
+        import logging
+
+        logging.getLogger("cad_server.analytics").debug("could not count a build", exc_info=True)
+        return False
+
+
+def _answered_facts(answer: dict[str, Any], seconds: float, fresh: bool | None, died: Any) -> dict[str, Any]:
+    """The facts of a build the daemon answered, as its caller's library would tell them of the same answer
+    (``api._facts``, its error as ``api._failed`` raises it there)."""
+    from cad.engine import api
+
+    done = answer.get("done")
+    reports = [report for report in done if isinstance(report, dict)] if isinstance(done, list) else []
+    error = api._failed(answer) if "failed" in answer else None
+    result = None if error is not None else api.Report(reports, round(seconds, 4), fresh)
+    found = api._facts("build", (), {}, {"worker": {"fresh": fresh}}, result, error, seconds)
+    if died is not None:
+        found["worker"]["died"] = died
+    return found
+
+
+def model_build(facts: dict[str, Any]) -> dict[str, Any]:
+    """What one model build the daemon answered counts (``counts``, ``script``): a failure the person's script
+    caused -- any reason outside ``analytics.SYSTEM_FAILURES`` -- in ``count`` alone (kept as ``ok``, the outcome
+    that adds to nothing else), never ``failed``, a reason or a crash; a build's features are not counted."""
+    from cad_server import analytics
+
+    found = counts(facts, "script")
+    found.pop("features", None)
+    build = found["builds"][0]
+    # A worker's report of an interrupt is the model's own (``cancelled``): the daemon's builds go on whoever leaves.
+    if build["outcome"] in ("failed", "cancelled") and build.get("reason") not in analytics.SYSTEM_FAILURES:
+        found["builds"] = [{"kind": "model", "via": "script", "outcome": "ok", "seconds": build["seconds"],
+                            "cached": False}]
+        found.pop("crashes", None)
+    elif "crashes" in found:
+        # A worker's answer or its death: never one raised in the daemon, which no command runs.
+        found["crashes"] = [crash for crash in found["crashes"] if crash.get("where") == "build"]
+    return {name: value for name, value in found.items() if value}
+
+
+def first_report(error: BaseException) -> bool:
+    """Whether the engine's ``KernelProcessesUnavailable`` is reported as a crash now: a pool the system refused,
+    each time (each request tried it); a kernel environment that could not be made, once per making that failed
+    (``base.Making.claim``), whichever meets it first -- a CAD tool's call (``mcp.server``) or a build the daemon
+    answered (``answered``) -- however many are told it afterwards without making it again."""
+    if getattr(error, "cause", None) == "pool":
+        return True
+    from cad_server._internal.base import MAKING
+
+    return MAKING.claim()

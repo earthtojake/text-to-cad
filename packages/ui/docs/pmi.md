@@ -29,7 +29,7 @@ requirements that cannot both hold (`coverage`). An entry is one of:
 - A **dimension** (`distance` between two parallel flat faces, `diameter` of a round one): its
   nominal is the engine's, measured on the geometry (`source: "geometry"`), or as another system's
   file gives it (`source: "file"`, said so in its values); its tolerance is what
-  the code supplied (`plus_minus_tolerance(upper, lower)`, or its **limits**, `limits(lower, upper)`:
+  the code supplied (`plus_minus_tolerance(upper, lower)`, or its **limits**, `size_limits(lower, upper)`:
   its least size and its greatest, which need no nominal, a file's having none), and none where it
   supplied none. The viewer never fills a tolerance in, not even a default. A **basic** dimension
   (`dimensional_location(..., basic=True)`,
@@ -178,7 +178,7 @@ document says it (a label, a position's zone, round or not):
   for none), a geometric tolerance's value and a position's datums, committed as the tab's
   fields are. Limits are two unsigned sizes, the least first, between an en dash (the field's own
   text for them, so a limits dimension's field reads back as its limits), a hyphen or "to"
-  (`10.00-10.05`, `10.00 to 10.05`: `limits(10, 10.05)`); a signed or slashed pair stays
+  (`10.00-10.05`, `10.00 to 10.05`: `size_limits(10, 10.05)`); a signed or slashed pair stays
   deviations (`+0.1/-0.05`, `0.1 -0.05`). The label keeps saying what the document says until the
   code does.
 - **New**: from a face's menu ("Add datum", "Add flatness"... whatever it and the faces picked with

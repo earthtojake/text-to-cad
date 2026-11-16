@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import { english } from "../../i18n/core.js";
 import { useI18n } from "@cad/ui/i18n";
-import { menuEntry, referenceGroup, zoomGroup } from "../kit/shell/viewMenu.js";
+import { menuEntry, referenceGroup, tangentGroup, zoomGroup } from "../kit/shell/viewMenu.js";
 
 // An engine document's menus, which read as the STEP renderer's did.
 //
@@ -35,6 +35,15 @@ function zoomEntries(menu, { disabled = false, actions = {}, t = english } = {})
 }
 
 /**
+ * Select tangent faces and Select tangent edges, where the descriptor names faces or edges to take the
+ * chains of (`tangentFaceIds`, `tangentEdgeIds`: the view's menu's, `xbfMenus.js`'s `xbfTangentSources`).
+ */
+function tangentEntries(menu, { disabled = false, actions = {}, t = english } = {}) {
+  return tangentGroup({ faces: menu.tangentFaceIds?.length > 0, edges: menu.tangentEdgeIds?.length > 0, disabled, t,
+    onFaces: () => actions.onSelectTangentFaces?.(menu), onEdges: () => actions.onSelectTangentEdges?.(menu) });
+}
+
+/**
  * The entries of the part menu for the descriptor the workspace builds for a node
  * (`assemblyNodeMenu` in `CadFileView`): `{ id, label, disabled, separatorBefore, onSelect }`.
  *
@@ -60,6 +69,7 @@ export function assemblyPartMenuEntries(menu, { disabled = false, actions = {}, 
   if (menu.showExitAllIsolate === true) {
     entries.push(entry("exit-all-isolates", t("menu.exitAllIsolates"), off(menu.exitAllIsolateDisabled), run(actions.onExitAllIsolate)));
   }
+  entries.push(...tangentEntries(menu, { disabled, actions, t }));
   // One separator ahead of the visibility group, whichever of its items comes first.
   let visibilitySeparator = true;
   const visibility = (id, text, isDisabled, onSelect) => {
@@ -85,8 +95,8 @@ export function assemblyPartMenuEntries(menu, { disabled = false, actions = {}, 
 }
 
 /**
- * What a secondary tap on EMPTY space offers: the model as a whole (Show all, Expand all,
- * Collapse all) and the framing group — which is why this menu always has something to
+ * What a secondary tap on EMPTY space offers: Select tangent faces or edges while faces or edges are
+ * selected, the model as a whole (Show all, Expand all, Collapse all) and the framing group — which is why this menu always has something to
  * show, and why somebody who has zoomed off the model can press anywhere to get it back.
  * A lone part's model menu is also the menu over the part itself, so when the descriptor
  * carries the whole part's reference (`menu.copyText`) it opens with the part menu's
@@ -95,6 +105,8 @@ export function assemblyPartMenuEntries(menu, { disabled = false, actions = {}, 
 export function modelMenuEntries(menu, { actions = {}, t = english } = {}) {
   const run = (action) => () => action?.(menu);
   const entries = String(menu.copyText || "").trim() ? referenceEntries(menu, { actions, t }) : [];
+  // While faces or edges are selected, their tangent chains, the menu's pick group.
+  tangentEntries(menu, { actions, t }).forEach((item, at) => entries.push({ ...item, separatorBefore: at === 0 && entries.length > 0 }));
   if (menu.showShowAll === true) {
     entries.push({ id: "show-all", label: t("tree.showAll"), separatorBefore: entries.length > 0, onSelect: run(actions.onHideAll) });
   }

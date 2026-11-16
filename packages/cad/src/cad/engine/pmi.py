@@ -83,7 +83,7 @@ of it) carries no views or notes yet, and is refused for any of them, by name
 **Values.** A dimension's nominal is the geometry's, measured at document time: a cylinder's
 diameter, the distance between two parallel planes. No nominal is typed in. A tolerance is held
 only where the code gives one (``plus_minus_tolerance``: signed deviations, upper above lower;
-``limits``: the least and the greatest size, absolute). XCAF holds a dimension's lower deviation as
+``size_limits``: the least and the greatest size, absolute). XCAF holds a dimension's lower deviation as
 a magnitude and the STEP writer negates it, so ``plus_minus_tolerance(0.2)`` is written
 ``TOLERANCE_VALUE(-0.2, 0.2)``; the conversion is this module's, both ways. XCAF holds limits as a
 dimension's two values in place of its nominal, its value then their midpoint, which the STEP
@@ -170,9 +170,9 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 __all__ = ["PMIError", "PMIUnsupported", "annotate", "camera", "coverage", "datum", "dimensional_location",
-           "dimensional_size", "flatness_tolerance", "general_profile", "general_tolerance", "limits", "note",
+           "dimensional_size", "flatness_tolerance", "general_profile", "general_tolerance", "note",
            "otherwise_controlled", "place", "plus_minus_tolerance", "position_tolerance", "read", "section",
-           "step_entries", "suggestions", "surface_profile_tolerance", "view"]
+           "size_limits", "step_entries", "suggestions", "surface_profile_tolerance", "view"]
 
 # The attribute an annotated shape holds its annotations in (a tuple of plain dicts), as a part's
 # configurations are held (``kernel.memo`` keys it).
@@ -229,9 +229,9 @@ def plus_minus_tolerance(upper: float, lower: float | None = None) -> dict[str, 
     return {"type": "plus_minus", "upper": upper, "lower": lower}
 
 
-def limits(lower: float, upper: float) -> dict[str, Any]:
+def size_limits(lower: float, upper: float) -> dict[str, Any]:
     """Limits: the least and the greatest size, absolute millimetres, ``upper`` above ``lower``
-    (``limits(10.0, 10.05)`` is 10.00–10.05). In place of deviations; the nominal is still
+    (``size_limits(10.0, 10.05)`` is 10.00–10.05). In place of deviations; the nominal is still
     measured. Written as the dimension's ``'lower limit'`` and ``'upper limit'`` values, no entity
     of their own."""
     lower = _number(lower, "a dimension's lower limit")
@@ -277,7 +277,7 @@ def dimensional_size(id: str, ref: Any, *, tolerance: dict | None = None, label:
                      presentation: dict | None = None) -> dict[str, Any]:
     """AP242's ``dimensional_size`` named 'diameter': the diameter of a cylindrical face (a hole, a
     boss), measured from the geometry; ``tolerance`` given explicitly (``plus_minus_tolerance`` or
-    ``limits``)."""
+    ``size_limits``)."""
     return _annotation(id, "dimension", [("feature", ref)], label, presentation,
                        dimension={"type": "diameter", "basic": False, "tolerance": _tolerance(tolerance, id)})
 
@@ -285,7 +285,7 @@ def dimensional_size(id: str, ref: Any, *, tolerance: dict | None = None, label:
 def dimensional_location(id: str, ref_from: Any, ref_to: Any, *, tolerance: dict | None = None, basic: bool = False,
                          label: str | None = None, presentation: dict | None = None) -> dict[str, Any]:
     """AP242's ``dimensional_location``: the distance between two parallel planar faces, measured
-    from the geometry; ``tolerance`` given explicitly (``plus_minus_tolerance`` or ``limits``).
+    from the geometry; ``tolerance`` given explicitly (``plus_minus_tolerance`` or ``size_limits``).
     ``basic``: theoretically exact (ASME's basic, ISO's theoretical), with no tolerance -- between
     two parallel planes, from a plane to a hole's axis parallel to it, or between two parallel axes:
     what a position tolerance's true position is located by."""
@@ -604,7 +604,7 @@ def _closed(given: Any, keys: Sequence[str], what: str) -> None:
 def _keys(given: Any) -> None:
     """An annotation given to ``annotate`` as its function made it: of a kind it knows, each dict of
     it of its closed keys (``_COMMON`` and its kind's block, each ref's, a view's), its tolerance and
-    its presentation as ``plus_minus_tolerance``/``limits`` and ``place`` make them; refused by
+    its presentation as ``plus_minus_tolerance``/``size_limits`` and ``place`` make them; refused by
     name otherwise, never read in part."""
     if not isinstance(given, dict) or given.get("pmi") != 1:
         raise PMIError(f"annotate() takes annotations made by datum(), dimensional_size(), ...: not {given!r}")
@@ -672,17 +672,17 @@ def _presentation(presentation: Any, id: str) -> dict[str, Any] | None:
 
 
 def _tolerance(tolerance: dict | None, id: str) -> dict | None:
-    """A dimension's tolerance as ``plus_minus_tolerance`` or ``limits`` makes it: its closed keys,
+    """A dimension's tolerance as ``plus_minus_tolerance`` or ``size_limits`` makes it: its closed keys,
     and its values checked again by the function of its type."""
     if tolerance is None:
         return None
     if not isinstance(tolerance, dict) or tolerance.get("type") not in _TOLERANCES:
-        raise PMIUnsupported(f"dimension {id!r}: a tolerance is plus_minus_tolerance(...) or limits(...); fits and "
+        raise PMIUnsupported(f"dimension {id!r}: a tolerance is plus_minus_tolerance(...) or size_limits(...); fits and "
                              "general tolerances are not written yet")
     _closed(tolerance, _TOLERANCES[tolerance["type"]], f"dimension {id!r}'s tolerance")
     if tolerance["type"] == "plus_minus":
         return plus_minus_tolerance(tolerance["upper"], tolerance["lower"])
-    return limits(tolerance["lower"], tolerance["upper"])
+    return size_limits(tolerance["lower"], tolerance["upper"])
 
 
 def _number(value: Any, what: str) -> float:

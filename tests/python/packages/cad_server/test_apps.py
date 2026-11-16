@@ -5,6 +5,9 @@ computer's own index."""
 from __future__ import annotations
 
 import calendar
+import contextlib
+import importlib.util
+import io
 import os
 import plistlib
 import subprocess
@@ -103,6 +106,27 @@ class MacTest(Tree):
     def test_a_toolbox_pycharm_is_found_by_its_glob(self) -> None:
         toolbox = bundle(self.root / "PyCharm 2025.2.app")
         self.assertEqual(apps.mac([self.root], None), {"pycharm": toolbox})
+
+    def test_rhino_its_newest_named_release_first_and_plasticity_by_its_bundle_or_identifier(self) -> None:
+        bundle(self.root / "Rhino 7.app")
+        rhino = bundle(self.root / "Rhino 8.app")
+        self.assertEqual(apps.mac([self.root], None), {"rhino": rhino})
+        plasticity = bundle(self.root / "elsewhere" / "Plasticity.app", "com.electron.plasticity")
+        asked = []
+
+        def spotlight(idents):
+            asked.append(idents)
+            return [plasticity]
+
+        self.assertEqual(apps.mac([self.root], spotlight), {"rhino": rhino, "plasticity": plasticity})
+        self.assertNotIn("com.mcneel.rhinoceros.8", asked[0])
+        self.assertIn("com.electron.plasticity", asked[0])
+        # A Rhino whose release no name here says, by the glob.
+        other = self.root / "other"
+        self.assertEqual(apps.mac([other], None), {})
+        self.assertEqual(apps.mac([other], lambda idents: []), {})
+        nine = bundle(other / "Rhino 9.app")
+        self.assertEqual(apps.mac([other], None), {"rhino": nine})
 
 
 class MacKiCadTest(Tree):
@@ -446,6 +470,56 @@ class WindowsTest(Tree):
         # A folder variable that is not absolute is no folder.
         self.assertEqual(apps.windows({"LOCALAPPDATA": "Local", "ProgramFiles": "Program Files"}, lambda exe: None), {})
 
+    def test_solidworks_by_app_paths_else_its_installers_folder_the_newest_of_parallel_installations(self) -> None:
+        program_files = self.root / "Program Files"
+        environ = {"ProgramFiles": str(program_files)}
+        default = executable(program_files / "SOLIDWORKS Corp" / "SOLIDWORKS" / "SLDWORKS.exe")
+        self.assertEqual(apps.windows(environ, lambda exe: None), {"solidworks": default})
+        # A parallel installation with its version in a folder's name, written later than the other: the newer.
+        os.utime(default, (1_000_000, 1_000_000))
+        parallel = executable(program_files / "SOLIDWORKS Corp (2026)" / "SOLIDWORKS" / "SLDWORKS.exe")
+        executable(program_files / "SOLIDWORKS Corp" / "eDrawings" / "eDrawings.exe")  # not SolidWorks
+        self.assertEqual(apps.windows(environ, lambda exe: None), {"solidworks": parallel})
+        # App Paths, where it names one, comes first, wherever it is.
+        registered = executable(self.root / "D" / "CAD" / "SLDWORKS.exe")
+        found = apps.windows(environ, {"SLDWORKS.exe": registered}.get)
+        self.assertEqual(found, {"solidworks": registered})
+        # And it is started on the STEP as every Windows app is: its executable, the file the one argument.
+        spawn = mock.Mock()
+        apps.open_file("C:/m/part.step", found["solidworks"], app_id="solidworks", platform="win32", spawn=spawn)
+        spawn.assert_called_once_with([registered, "C:/m/part.step"], creationflags=0x00000008 | 0x00000200,
+                                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                      close_fds=True)
+
+    def test_rhino_by_its_releases_folder_and_plasticity_by_its_installers_the_users_first(self) -> None:
+        local, program_files = self.root / "Local", self.root / "Program Files"
+        environ = {"LOCALAPPDATA": str(local), "ProgramFiles": str(program_files)}
+        seven = executable(program_files / "Rhino 7" / "System" / "Rhino.exe")
+        os.utime(seven, (1_000_000, 1_000_000))
+        eight = executable(program_files / "Rhino 8" / "System" / "Rhino.exe")
+        machine = executable(program_files / "Plasticity" / "Plasticity.exe")
+        self.assertEqual(apps.windows(environ, lambda exe: None), {"rhino": eight, "plasticity": machine})
+        user = executable(local / "Plasticity" / "Plasticity.exe")
+        self.assertEqual(apps.windows(environ, lambda exe: None)["plasticity"], user)
+        # The MSI's App Paths entry, where there is one, first.
+        self.assertEqual(apps.windows(environ, {"Plasticity.exe": machine}.get)["plasticity"], machine)
+
+    def test_solid_edge_in_siemens_folder_before_its_older_releases_folder(self) -> None:
+        program_files = self.root / "Program Files"
+        environ = {"ProgramFiles": str(program_files)}
+        older = executable(program_files / "Solid Edge ST10" / "Program" / "Edge.exe")
+        self.assertEqual(apps.windows(environ, lambda exe: None), {"solidedge": older})
+        current = executable(program_files / "Siemens" / "Solid Edge 2026" / "Program" / "Edge.exe")
+        os.utime(current, (1_000_000, 1_000_000))  # written before the older one: the folder, not the time, decides
+        self.assertEqual(apps.windows(environ, lambda exe: None), {"solidedge": current})
+
+    def test_solidworks_is_windows_alone(self) -> None:
+        # No macOS or Linux build: no bundle, identifier or command is looked for.
+        self.assertNotIn("solidworks", {**apps.MAC_BUNDLES, **apps.MAC_IDS, **apps.LINUX_COMMANDS})
+        bundle(self.root / "SOLIDWORKS.app")
+        self.assertNotIn("solidworks", apps.mac([self.root]))
+        self.assertNotIn("solidworks", apps.linux(lambda name: f"/usr/bin/{name}"))
+
 
 class LinuxTest(unittest.TestCase):
     def test_each_app_by_its_first_command_found(self) -> None:
@@ -454,8 +528,10 @@ class LinuxTest(unittest.TestCase):
         self.assertEqual(apps.linux(commands.get), {"vscode": "/usr/bin/code", "zed": "/usr/bin/zeditor",
                                                     "pycharm": "/snap/bin/pycharm-community",
                                                     "freecad": "/opt/freecad/FreeCAD", "blender": "/usr/bin/blender"})
-        # Fusion has no Linux build: no command finds it.
-        self.assertNotIn("fusion", apps.linux(lambda name: f"/usr/bin/{name}"))
+        # Fusion, SolidWorks, Solid Edge and Rhino have no Linux build: no command finds them. Plasticity's packages put `plasticity` on PATH.
+        everything = apps.linux(lambda name: f"/usr/bin/{name}")
+        self.assertFalse({"fusion", "solidworks", "solidedge", "rhino"} & set(everything))
+        self.assertEqual(everything["plasticity"], "/usr/bin/plasticity")
 
 
 class KindsTest(unittest.TestCase):
@@ -464,17 +540,19 @@ class KindsTest(unittest.TestCase):
         ids = {kind: [entry["id"] for entry in apps.apps_for(kind, every)]
                for kind in ("script", "step", "stl", "3mf", "glb", "dxf", "urdf", "sdf", "srdf", "xbf", "kicad_pcb", "kicad_sch")}
         self.assertEqual(ids, {"script": ["vscode", "cursor", "zed", "pycharm", "sublime"],
-                               "step": ["fusion", "freecad", "bambu", "orca", "prusa"],
+                               "step": ["fusion", "solidworks", "solidedge", "rhino", "plasticity", "freecad", "bambu", "orca",
+                                        "prusa"],
                                "stl": ["bambu", "orca", "prusa", "freecad", "blender"],
-                               "3mf": ["bambu", "orca", "prusa", "freecad", "blender"],
+                               "3mf": ["bambu", "orca", "prusa", "freecad"],
                                "glb": ["blender"], "dxf": [], "urdf": [], "sdf": [], "srdf": [], "xbf": [],
                                "kicad_pcb": ["kicad", "kicad-nightly"], "kicad_sch": ["kicad", "kicad-nightly"]})
         self.assertEqual(apps.apps_for("step", {"bambu": "/b", "vscode": "/v"}), [{"id": "bambu", "name": "Bambu Studio"}])
         self.assertEqual(apps.APPS, {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed",
                                      "pycharm": "PyCharm", "sublime": "Sublime Text", "fusion": "Autodesk Fusion",
-                                     "freecad": "FreeCAD", "bambu": "Bambu Studio", "orca": "OrcaSlicer",
+                                     "solidworks": "SolidWorks", "freecad": "FreeCAD", "bambu": "Bambu Studio", "orca": "OrcaSlicer",
                                      "prusa": "PrusaSlicer", "blender": "Blender", "kicad": "KiCad",
-                                     "kicad-nightly": "KiCad nightly"})
+                                     "kicad-nightly": "KiCad nightly", "rhino": "Rhino", "plasticity": "Plasticity",
+                                     "solidedge": "Solid Edge"})
         self.assertEqual([apps.file_manager(platform) for platform in ("darwin", "win32", "linux")],
                          ["finder", "explorer", "files"])
 
@@ -601,6 +679,45 @@ class OpenTest(unittest.TestCase):
                 self.assertRaisesRegex(FileNotFoundError, "xdg-open"):
             self.opened("linux", None)
 
+    def test_blender_is_started_with_its_import_script_and_the_file_after_the_double_dash(self) -> None:
+        # Blender opens only a .blend from its command line: it runs the package's script, which reads the file's
+        # path after `--` as data. No code is made of the path, whatever it holds.
+        quiet = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "close_fds": True}
+        script = apps.BLENDER_SCRIPT
+        for file in ("/m/part.glb", "/m/it's \"odd\"; import os.glb", "/m/part.stl"):
+            for platform, app, command, options in (
+                    ("darwin", "/Applications/Blender.app",
+                     ["/usr/bin/open", "-n", "-a", "/Applications/Blender.app", "--args"], {"start_new_session": True}),
+                    ("win32", "C:/Blender/blender.exe", ["C:/Blender/blender.exe"],
+                     {"creationflags": 0x00000008 | 0x00000200}),
+                    ("linux", "/usr/bin/blender", ["/usr/bin/blender"], {"start_new_session": True})):
+                with self.subTest(platform=platform, file=file):
+                    spawn = mock.Mock()
+                    apps.open_file(file, app, app_id="blender", platform=platform, spawn=spawn)
+                    spawn.assert_called_once_with([*command, "--python", script, "--", file], **options, **quiet)
+                    argv = spawn.call_args.args[0]
+                    self.assertNotIn("--python-expr", argv)
+                    self.assertEqual([part for part in argv if file in part], [file])
+        # Another app's id, or the default handler, is the file alone.
+        self.opened("linux", "/usr/bin/freecad", app_id="freecad").assert_called_once_with(
+            ["/usr/bin/freecad", "/m/part.step"], start_new_session=True, **quiet)
+        with mock.patch.object(apps.executables, "find", return_value="/usr/bin/xdg-open"):
+            self.opened("linux", None, app_id="blender").assert_called_once_with(
+                ["/usr/bin/xdg-open", "/m/part.step"], start_new_session=True, **quiet)
+
+    def test_the_blender_script_ships_beside_the_opener_and_reads_its_file_from_after_the_double_dash(self) -> None:
+        script = Path(apps.BLENDER_SCRIPT)
+        self.assertTrue(script.is_absolute())
+        self.assertEqual(script.parent, Path(apps.__file__).resolve().parent)
+        text = script.read_text(encoding="utf-8")
+        self.assertIn("import_scene.gltf", text)
+        # Its argument parsing alone, without bpy (which the script imports only where Blender runs it): the one
+        # argument after `--`.
+        requested = blender_script().requested
+        self.assertEqual(requested(["blender", "--python", "s.py", "--", "/m/a b.glb"]), "/m/a b.glb")
+        for argv in (["blender", "--python", "s.py"], ["blender", "--"], ["blender", "--", "/a.glb", "/b.glb"]):
+            self.assertIsNone(requested(argv), argv)
+
     def test_a_kicad_opens_its_editor_for_the_files_extension_and_nothing_else_opens_such_a_file(self) -> None:
         quiet = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "close_fds": True}
         kicad = apps.KiCad("10.0.6", None, "/K/pcbnew.app", "/K/eeschema.app", False)
@@ -623,6 +740,241 @@ class OpenTest(unittest.TestCase):
                     apps.open_file(file, app, platform=platform, spawn=spawn, startfile=startfile)
         spawn.assert_not_called()
         startfile.assert_not_called()
+
+
+def blender_script() -> types.ModuleType:
+    """A fresh copy of Open in's Blender script as a module: it imports nothing of Blender's until Blender runs it."""
+    spec = importlib.util.spec_from_file_location("open_in_blender_under_test", apps.BLENDER_SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class FakeOps:
+    """``bpy.ops`` as Blender makes it: an attribute of a module is a callable for ANY name, registered or not (the
+    call fails), and only ``dir()`` lists the registered ones."""
+
+    def __init__(self, registered: dict) -> None:
+        self.registered = registered
+
+    def __getattr__(self, module: str):
+        registered = self.registered
+
+        class Module:
+            def __getattr__(self, name: str):
+                def unknown(*args, **kwargs):
+                    raise AttributeError(f"Calling operator 'bpy.ops.{module}.{name}' error, could not be found")
+                return registered.get(f"{module}.{name}", unknown)
+
+            def __dir__(self):
+                return [key.split(".", 1)[1] for key in registered if key.split(".", 1)[0] == module]
+        return Module()
+
+
+class FakeBlender:
+    """What of ``bpy`` the script's window work reaches, recording each operator call with the context it ran in:
+    ``temp_override`` where ``modern`` (Blender 3.2 and later), else the dictionary an operator takes first."""
+
+    def __init__(self, windows: list, *, modern: bool = True, background: bool = False) -> None:
+        self.calls: list = []
+        self.timers: list = []
+        self.classes: list = []
+        self.texts: dict = {}
+        self.current: dict = {}
+        fake = self
+
+        @contextlib.contextmanager
+        def temp_override(**given):
+            fake.current = given
+            try:
+                yield
+            finally:
+                fake.current = {}
+
+        context = types.SimpleNamespace(window_manager=types.SimpleNamespace(windows=windows))
+        if modern:
+            context.temp_override = temp_override
+        self.context = context
+
+        def operator(name: str, fails: bool = False):
+            def call(*args, **kwargs):
+                if args and isinstance(args[0], dict):
+                    given, args = args[0], args[1:]
+                else:
+                    given = dict(fake.current)
+                fake.calls.append((name, given, args))
+                if fails:
+                    raise RuntimeError("Operator bpy.ops.view3d.view_selected.poll() failed, context is incorrect")
+                return {"FINISHED"}
+            return call
+        self.operator = operator
+        self.ops = FakeOps({"view3d.view_selected": operator("view3d.view_selected")})
+
+        class Text:
+            def __init__(self) -> None:
+                self.body = ""
+
+            def clear(self) -> None:
+                self.body = ""
+
+            def write(self, text: str) -> None:
+                self.body += text
+
+        def new_text(name: str):
+            fake.texts[name] = Text()
+            return fake.texts[name]
+
+        def register_class(cls) -> None:
+            fake.classes.append(cls)
+            fake.ops.registered[cls.bl_idname] = operator(cls.bl_idname)
+
+        self.data = types.SimpleNamespace(texts=types.SimpleNamespace(get=self.texts.get, new=new_text))
+        self.app = types.SimpleNamespace(background=background, timers=types.SimpleNamespace(
+            register=lambda function, first_interval: fake.timers.append((function, first_interval))))
+        self.types = types.SimpleNamespace(Operator=type("Operator", (), {}))
+        self.utils = types.SimpleNamespace(register_class=register_class)
+
+
+def window(*areas) -> types.SimpleNamespace:
+    return types.SimpleNamespace(screen=types.SimpleNamespace(areas=list(areas)))
+
+
+def area(kind: str, *regions: str) -> types.SimpleNamespace:
+    return types.SimpleNamespace(type=kind, regions=[types.SimpleNamespace(type=region) for region in regions])
+
+
+class BlenderScriptTest(unittest.TestCase):
+    """Open in's Blender script's choices, without a Blender: ``tests/python/packages/blender`` runs it in bpy."""
+
+    def setUp(self) -> None:
+        self.script = blender_script()
+
+    def test_the_file_is_the_one_argument_after_the_double_dash_as_each_platform_passes_it(self) -> None:
+        requested = self.script.requested
+        for file in ("/m/a b.glb", "/m/it's \"odd\"; import os.glb", "/m/\u00fcber \u6a21\u578b.stl", "-lead.glb",
+                     "--python", "C:\\Users\\Jo \u00c5\\part.glb", "/m/--/part.stl"):
+            for argv in (["/usr/bin/blender", "--python", apps.BLENDER_SCRIPT, "--", file],  # Linux
+                         ["C:\\Blender\\blender.exe", "--python", apps.BLENDER_SCRIPT, "--", file],  # Windows
+                         # macOS: what `open -n -a Blender.app --args ...` leaves Blender
+                         ["/Applications/Blender.app/Contents/MacOS/Blender", "--python", apps.BLENDER_SCRIPT, "--",
+                          file]):
+                with self.subTest(argv=argv):
+                    self.assertEqual(requested(argv), file)
+        # What the opener starts is what the script reads back, whatever the path holds.
+        for file in ("/m/a b.glb", "-lead.stl", "/m/\u00fcber.glb"):
+            spawn = mock.Mock()
+            apps.open_file(file, "/usr/bin/blender", app_id="blender", platform="linux", spawn=spawn)
+            self.assertEqual(requested(spawn.call_args.args[0]), file)
+        for argv in (["blender"], ["blender", "--"], ["blender", "--", ""], ["blender", "--", "/a.glb", "/b.glb"]):
+            self.assertIsNone(requested(argv), argv)
+
+    def test_an_operator_is_found_by_what_blender_lists_never_by_an_attribute(self) -> None:
+        # An attribute of bpy.ops.wm is there for any name: the PR's `hasattr(bpy.ops.wm, "stl_import")` was always
+        # true, so a Blender before 3.6 called the missing built-in importer and never its STL add-on.
+        old = FakeOps({"import_mesh.stl": print, "import_scene.gltf": print})
+        self.assertTrue(hasattr(old.wm, "stl_import"))
+        self.assertEqual(self.script.operators(old, ("wm", "import_mesh", "import_scene")),
+                         {"import_mesh.stl", "import_scene.gltf"})
+
+    def test_the_importer_is_the_first_this_blender_has(self) -> None:
+        importer = self.script.importer
+        for have, stl in (({"import_mesh.stl", "import_scene.gltf"}, "import_mesh.stl"),  # 2.80 to 3.5
+                          ({"wm.stl_import", "import_mesh.stl", "import_scene.gltf"}, "wm.stl_import"),  # 3.6 to 4.1
+                          ({"wm.stl_import", "import_scene.gltf"}, "wm.stl_import"),  # 4.2 and later
+                          ({"import_scene.gltf"}, None)):  # the STL add-on disabled before 3.6
+            with self.subTest(have=sorted(have)):
+                self.assertEqual(importer(".stl", have), stl)
+                self.assertEqual(importer(".STL", have), stl)
+                self.assertEqual(importer(".glb", have), "import_scene.gltf")
+                self.assertEqual(importer(".gltf", have), "import_scene.gltf")
+        self.assertIsNone(importer(".glb", {"wm.stl_import"}))  # glTF's add-on disabled
+        self.assertIsNone(importer(".3mf", {"wm.stl_import", "import_scene.gltf", "import_mesh.stl"}))
+
+    def test_each_refusal_says_why_and_a_file_it_can_import_has_none(self) -> None:
+        refusal = self.script.refusal
+        everything = {"wm.stl_import", "import_scene.gltf"}
+        self.assertIsNone(refusal(["b", "--", "/m/a.glb"], lambda path: True, everything))
+        self.assertIn("No file was named", refusal(["b"], lambda path: True, everything))
+        self.assertIn("/m/a.3mf is not a GLB, glTF or STL file", refusal(["b", "--", "/m/a.3mf"], lambda path: True,
+                                                                         everything))
+        self.assertIn("/m/a.glb is not there", refusal(["b", "--", "/m/a.glb"], lambda path: False, everything))
+        said = refusal(["b", "--", "/m/a.stl"], lambda path: True, {"import_scene.gltf"})
+        self.assertIn("This Blender has no STL importer", said)
+        self.assertIn("add-on", said)
+
+    def test_a_refusal_is_shown_in_blender_in_a_dialog_a_text_block_and_on_the_console(self) -> None:
+        for modern in (True, False):
+            with self.subTest(modern=modern):
+                first, second = window(area("VIEW_3D", "WINDOW")), window()
+                fake = FakeBlender([first, second], modern=modern)
+                self.script.bpy = fake
+                console = io.StringIO()
+                with contextlib.redirect_stderr(console):
+                    self.script.say("/m/a.glb is not there.")
+                self.assertIn("open_in_blender: Open in Blender did not open the file. /m/a.glb is not there.",
+                              console.getvalue())
+                self.assertEqual(fake.texts["Open in Blender"].body,
+                                 "Open in Blender did not open the file.\n/m/a.glb is not there.\n")
+                # The dialog waits for the window: a timer, run once, invokes it in the first window.
+                [(timer, _)] = fake.timers
+                self.assertEqual(fake.calls, [])
+                self.assertIsNone(timer())
+                self.assertEqual(fake.calls, [("open_in_blender.said", {"window": first, "screen": first.screen},
+                                               ("INVOKE_DEFAULT",))])
+                # The registered operator draws the reason, its first line marked an error, in a dialog.
+                [said] = fake.classes
+                self.assertEqual(said.bl_idname, "open_in_blender.said")
+                instance = said()
+                labels = []
+                instance.layout = types.SimpleNamespace(label=lambda text, icon: labels.append((text, icon)))
+                said.draw(instance, None)
+                self.assertEqual(labels, [("Open in Blender did not open the file.", "ERROR"),
+                                          ("/m/a.glb is not there.", "NONE")])
+                dialogs = mock.Mock(return_value={"RUNNING_MODAL"})
+                context = types.SimpleNamespace(window_manager=types.SimpleNamespace(invoke_props_dialog=dialogs))
+                self.assertEqual(said.invoke(instance, context, None), {"RUNNING_MODAL"})
+                dialogs.assert_called_once_with(instance, width=560)
+                # A second refusal reuses the operator, with its own words.
+                with contextlib.redirect_stderr(io.StringIO()):
+                    self.script.say("Another reason.")
+                fake.timers[-1][0]()
+                self.assertEqual(len(fake.classes), 1)
+                labels.clear()
+                said.draw(instance, None)
+                self.assertEqual(labels[-1], ("Another reason.", "NONE"))
+
+    def test_in_the_background_a_refusal_is_written_and_no_dialog_is_waited_for(self) -> None:
+        fake = FakeBlender([], background=True)
+        self.script.bpy = fake
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.script.say("x.3mf is not a GLB, glTF or STL file.")
+        self.assertIn("x.3mf", fake.texts["Open in Blender"].body)
+        self.assertEqual(fake.timers, [])
+
+    def test_the_selection_is_framed_in_every_3d_viewport_of_every_window_one_failure_aside(self) -> None:
+        for modern in (True, False):
+            with self.subTest(modern=modern):
+                view, header_only, properties = area("VIEW_3D", "HEADER", "WINDOW"), area("VIEW_3D", "HEADER"), \
+                    area("PROPERTIES", "WINDOW")
+                other = area("VIEW_3D", "WINDOW")
+                first, second = window(view, header_only, properties), window(other)
+                fake = FakeBlender([first, second], modern=modern)
+                failing, framed = fake.operator("view3d.view_selected", fails=True), fake.operator("view3d.view_selected")
+                calls = []
+
+                def view_selected(*args, **kwargs):  # the first viewport refuses; the next is framed all the same
+                    calls.append(args)
+                    return (failing if len(calls) == 1 else framed)(*args, **kwargs)
+                self.script.bpy = fake
+                fake.ops = FakeOps({"view3d.view_selected": view_selected})
+                console = io.StringIO()
+                with contextlib.redirect_stderr(console):
+                    self.assertIsNone(self.script.frame())  # a timer that returns None runs once
+                self.assertEqual([given for _, given, _ in fake.calls],
+                                 [{"window": first, "screen": first.screen, "area": view, "region": view.regions[1]},
+                                  {"window": second, "screen": second.screen, "area": other,
+                                   "region": other.regions[0]}])
+                self.assertIn("could not frame the model", console.getvalue())
 
 
 if __name__ == "__main__":

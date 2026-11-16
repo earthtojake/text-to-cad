@@ -566,8 +566,10 @@ class NoDistConfigured(unittest.TestCase):
     def test_every_page_path_is_404_when_no_client_is_built(self):
         fixture = ServerFixture(with_dist=False)
         try:
-            status, _, _ = fixture.request("GET", "/")
+            status, _, body = fixture.request("GET", "/")
             self.assertEqual(status, 404)
+            # A build's `view:` link leads here: the page says what is missing, and how to get it.
+            self.assertEqual(body, b"CAD Viewer client is not built; build apps/web or install the cad-server wheel")
             status, _, _ = fixture.request("GET", "/api/v1/server")
             self.assertEqual(status, 200)
         finally:

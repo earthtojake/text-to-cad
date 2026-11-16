@@ -3,9 +3,9 @@ speaks the failure contract (``cli_errors``).
 
 - **No abbreviation.** Only an option's full name and the aliases it declares are read (``allow_abbrev``
   off): adding an option can never change what a prefix of it meant, and ``--p`` is no ``--prune``.
-- **One suggestion.** A choice it does not take gets the closest one (``suggest_on_error``), and an option
-  it does not take the closest of its own (``unrecognized``), never more than one, and nothing is run on a
-  guess.
+- **One suggestion.** A choice it does not take gets the closest one (``suggest_on_error``; said here, in
+  argparse's words, on a Python before 3.14, whose argparse names none), and an option it does not take the
+  closest of its own (``unrecognized``), never more than one, and nothing is run on a guess.
 - **Its usage errors are the contract's.** A command line it cannot read (``error``) is a ``usage``
   failure, exit 2: under ``--json`` -- when the parser takes ``--json`` and the command line gives it -- its
   one JSON document on stdout and nothing else; without it, the usage and the error on stderr, as argparse
@@ -29,6 +29,9 @@ from cad_server._internal.cli_errors import Failure, wants_json, write
 
 __all__ = ["Parser", "parser", "suggest", "unrecognized"]
 
+# argparse names the closest choice itself from Python 3.14 (``suggest_on_error``); the packages' floor is 3.13.
+_SUGGESTS = sys.version_info >= (3, 14)
+
 
 class Parser(argparse.ArgumentParser):
     """``argparse.ArgumentParser`` under the failure contract (see the module); ``checks`` each take the
@@ -37,10 +40,25 @@ class Parser(argparse.ArgumentParser):
     def __init__(self, *args: Any, checks: Iterable[Callable[[argparse.Namespace], None]] = (),
                  **kwargs: Any) -> None:
         kwargs.setdefault("allow_abbrev", False)
-        kwargs.setdefault("suggest_on_error", True)  # Python 3.14, the floor (packages/cad's requires-python)
+        if _SUGGESTS:
+            kwargs.setdefault("suggest_on_error", True)
         super().__init__(*args, **kwargs)
         self.checks = list(checks)
         self._tokens: list[str] = []
+
+    if not _SUGGESTS:
+        def _check_value(self, action: argparse.Action, value: Any) -> None:
+            """Python 3.13's refusal of a choice, with the closest one named as 3.14's argparse names it."""
+            try:
+                super()._check_value(action, value)  # type: ignore[misc]
+            except argparse.ArgumentError as refused:
+                choices = list(action.choices or ())
+                close = (difflib.get_close_matches(value, choices, 1)
+                         if isinstance(value, str) and all(isinstance(choice, str) for choice in choices) else [])
+                if not close:
+                    raise
+                said = str(refused.message).replace(" (choose from ", f", maybe you meant {close[0]!r}? (choose from ", 1)
+                raise argparse.ArgumentError(action, said) from None
 
     def parse_known_args(self, args: Sequence[str] | None = None, namespace: Any = None) -> Any:  # type: ignore[override]
         self._tokens = list(sys.argv[1:] if args is None else args)
