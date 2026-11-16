@@ -362,7 +362,7 @@ class Counted(State):
         environment = mock.patch.dict(os.environ, test_arrival.QUIET)
         environment.start()
         self.addCleanup(environment.stop)
-        spawn = mock.patch.object(telemetry_send, "_spawn", lambda settings, at=None: None)
+        spawn = mock.patch.object(telemetry_send, "_spawn", lambda settings: None)
         spawn.start()
         self.addCleanup(spawn.stop)
         self.state = places.state_dir() / "settings.json"

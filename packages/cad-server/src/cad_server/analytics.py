@@ -87,8 +87,8 @@ batch, whose client and presentation say who looked, not who built. With nothing
 window, a command or the daemon starts a sender that sends it and exits (``cad_server._internal.telemetry_send``).
 An arrival (``arrival``) waits for no other process: the step that counts it may be the last this version ever runs
 on the computer -- a setup that failed, a server that never served. It is kept in a file of its own (``ARRIVALS``),
-which no earlier release's sender takes, and starts a sender at once, or as the window of the last one started ends
-(``telemetry_send.start_soon``), from whichever Python counted it: a version's own, uvx's, an updater's folder.
+which no earlier release's sender takes, and starts a sender at once, every time (``telemetry_send.start_now``), from
+whichever Python counted it: a version's own, uvx's, an updater's folder.
 
 Never a path or a file name of the person's, a model, an argument, a message, a prompt or anything
 typed. A batch with nothing in it is never sent: a process the host started and nobody used counts
@@ -1722,9 +1722,9 @@ def arrival(step: str, *, route: str, earlier: str | None, outcome: str, reason:
 
     From a command's process or a server's alike: kept beside this process's settings (``ARRIVALS``: a process of no
     version's are the state folder's, which 0.11.10 and earlier share) under the answer in force,
-    only while sharing is on, as a command's counts are (``spool``), and the sender started at once, or as the window
-    of the last one started ends (``telemetry_send.start_soon``), so it is sent though no process of this version runs
-    again. A local write and a detached start: never the network, never raises. Whether it was kept."""
+    only while sharing is on, as a command's counts are (``spool``), and a sender started at once
+    (``telemetry_send.start_now``), so it is sent though no process of this version runs again. A local write and a
+    detached start: never the network, never raises. Whether it was kept."""
     try:
         found = _arrival(step, route, earlier, outcome, reason, attempts)
         if found is None or refused():
@@ -1737,7 +1737,7 @@ def arrival(step: str, *, route: str, earlier: str | None, outcome: str, reason:
             return False
         from cad_server._internal import telemetry_send
 
-        telemetry_send.start_soon(path)
+        telemetry_send.start_now(path)
         return True
     except Exception:  # noqa: BLE001 - a step counted or not never fails the step
         LOG.debug("could not count an arrival", exc_info=True)

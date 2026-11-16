@@ -39,9 +39,9 @@ class ArrivalTest(unittest.TestCase):
         self.addCleanup(environment.stop)
         self.settings = analytics.settings_path()
         self.assertEqual(self.settings, self.tmp / "state" / "settings.json")  # a process of no version: the state folder's
-        self.started: list[tuple[Path, float | None]] = []
+        self.started: list[Path] = []
         self.spawn = telemetry_send._spawn
-        spawn = mock.patch.object(telemetry_send, "_spawn", lambda settings, at=None: self.started.append((settings, at)))
+        spawn = mock.patch.object(telemetry_send, "_spawn", self.started.append)
         spawn.start()
         self.addCleanup(spawn.stop)
 
@@ -76,8 +76,7 @@ class ArrivalTest(unittest.TestCase):
         # A file of its own, never the spool an earlier release's sender in the same folder takes and drops.
         self.assertFalse(self.settings.with_name(analytics.SPOOL).exists())
         self.assertEqual(len(self.kept()), 6)
-        self.assertEqual([(settings, at is None) for settings, at in self.started], [(self.settings, True), (self.settings, False)],
-                         "a sender at once, one more as its window ends, and no other")
+        self.assertEqual(self.started, [self.settings] * 6, "a sender at once for each, none set to start later")
         [batch] = self.sent()
         self.assertEqual((batch["schema"], batch["process"], batch["version"]), (11, "cli", RELEASE))
         self.assertNotIn("client", batch)
@@ -159,61 +158,53 @@ class ArrivalTest(unittest.TestCase):
         [moved] = [json.loads(line) for line in target.with_name(analytics.ARRIVALS).read_text(encoding="utf-8").splitlines()]
         self.assertEqual((moved["arrival"]["step"], moved["source"]["version"]), ("setup", RELEASE))
 
-    def test_a_sender_starts_at_once_or_as_the_window_of_the_last_one_ends_never_two_a_window(self) -> None:
+    def test_each_arrival_starts_a_sender_at_once_and_a_command_none_more_that_window(self) -> None:
         window = analytics.FLUSH_SECONDS
+        self.tell()  # the last sender started long ago
         lock = self.settings.with_name(file_lock.STATE_LOCK)
-        self.settings.parent.mkdir(parents=True)
-        lock.touch()
         now = time.time()
-        os.utime(lock, (now - 2 * window, now - 2 * window))  # the last sender started long ago
-        started: list[tuple[Path, float | None]] = []
+        started: list[Path] = []
 
-        def soon(at: float) -> bool:
-            return telemetry_send.start_soon(self.settings, now=at, spawn=lambda settings, at=None: started.append((settings, at)))
+        def at_once(at: float) -> bool:
+            return telemetry_send.start_now(self.settings, now=at, spawn=started.append)
 
-        self.assertTrue(soon(now))
-        self.assertTrue(soon(now + 1), "one more within the window: a sender that waits until it ends")
-        self.assertFalse(soon(now + 2), "that one takes this too")
-        self.assertTrue(soon(now + window + 1), "after it started")
-        self.assertEqual([(settings, None if at is None else round(at - now)) for settings, at in started],
-                         [(self.settings, None), (self.settings, window), (self.settings, 2 * window)])
-        # A sender that could not be started leaves the lock's time as it was: the next arrival tries again.
+        self.assertTrue(at_once(now))
+        self.assertTrue(at_once(now + 1), "one more a second later: started at once too")
+        self.assertEqual(started, [self.settings, self.settings])
+        self.assertEqual(lock.stat().st_mtime, now + 1, "the lock's time: when the last sender started")
+        # A command's sender goes by that time, as in 0.11.10: none within a window of it.
+        self.assertTrue(analytics.spool({"builds": [{"kind": "xbf", "via": "script", "outcome": "ok", "seconds": 1.0}]},
+                                        path=self.settings))
+        self.assertFalse(telemetry_send.start_if_due(self.settings, now=now + window, spawn=started.append))
+        self.assertTrue(telemetry_send.start_if_due(self.settings, now=now + window + 2, spawn=started.append))
+        # A sender that could not be started leaves the lock's time as it was.
         before = lock.stat().st_mtime
 
-        def broken(settings: Path, at: float | None = None) -> None:
+        def broken(settings: Path) -> None:
             raise OSError("no such program")
 
-        self.assertFalse(telemetry_send.start_soon(self.settings, now=now + 3 * window, spawn=broken))
+        self.assertFalse(telemetry_send.start_now(self.settings, now=now + 3 * window, spawn=broken))
         self.assertEqual(lock.stat().st_mtime, before)
-        # Detached as every sender is, told when to start.
+        # Detached as every sender is, sending as it starts: nothing it is told to wait for.
         with mock.patch.object(subprocess, "Popen") as popen:
-            self.spawn(self.settings, at=12.5)
+            self.spawn(self.settings)
         [call] = popen.call_args_list
-        self.assertEqual(call.args[0], [sys.executable, "-P", "-m", "cad_server._internal.telemetry_send", "--at", "12.5"])
+        self.assertEqual(call.args[0], [sys.executable, "-P", "-m", "cad_server._internal.telemetry_send"])
         self.assertEqual(call.kwargs["stdout"], subprocess.DEVNULL)
 
-    def test_a_fresh_folder_s_first_arrival_starts_a_sender_at_once_and_still_one_a_window(self) -> None:
-        # A version's data folder, made a moment ago as its setup imported (its lock taken then: made then): no sender
-        # was ever started there, so its first arrival is sent at once, not a window later.
+    def test_a_fresh_folder_s_arrivals_each_start_a_sender_at_once(self) -> None:
+        # A version's data folder, made a moment ago as its setup imported (its lock taken then: made then). Its lock's
+        # time says nothing of a sender: its first arrival is sent at once, not a window later, and so is each after.
         analytics.choose(True, by="cli", path=self.settings)
         lock = self.settings.with_name(file_lock.STATE_LOCK)
         self.assertLess(time.time() - lock.stat().st_mtime, analytics.FLUSH_SECONDS, "the lock made a moment ago")
-        self.assertFalse(self.settings.with_name(telemetry_send.STARTED).exists())
-        now = time.time()
         self.assertTrue(analytics.arrival("setup", route="updater", earlier="0.11.10", outcome="ok"))
         self.assertTrue(analytics.arrival("serving", route="updater", earlier="0.11.10", outcome="ok"))
         self.assertTrue(analytics.arrival("handover", route="updater", earlier="0.11.10", outcome="done", attempts=1))
-        self.assertEqual([at is None for _settings, at in self.started], [True, False],
-                         "at once, then one as that window ends, and none more")
-        later = self.started[1][1]
-        self.assertGreaterEqual(later - now, analytics.FLUSH_SECONDS)
-        stamp = self.settings.with_name(telemetry_send.STARTED)
-        self.assertEqual((stamp.stat().st_mtime, lock.stat().st_mtime), (later, later),
-                         "when the next starts: the stamp's time, and the lock's, which 0.11.10 and earlier read")
-        # A command's sender too goes by the stamp: none while one is set to start.
-        self.assertTrue(analytics.spool({"builds": [{"kind": "xbf", "via": "script", "outcome": "ok", "seconds": 1.0}]},
-                                        path=self.settings))
-        self.assertFalse(telemetry_send.start_if_due(self.settings, now=later - 1, spawn=lambda settings: None))
+        self.assertEqual(self.started, [self.settings] * 3, "each at once, none set to start later")
+        self.assertLessEqual(lock.stat().st_mtime, time.time(), "no time to come: nothing waits to start")
+        self.assertEqual(sorted(path.name for path in self.settings.parent.iterdir()),
+                         ["settings.json", "settings.lock", analytics.ARRIVALS])
 
 
 class WithNoServerTest(unittest.TestCase):

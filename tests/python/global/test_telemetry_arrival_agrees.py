@@ -61,7 +61,7 @@ class ArrivalSenderAndReceiverAgree(unittest.TestCase):
                                                                        reasons, attempts):
                     shapes.append(dict(step=step, route=route, earlier=earlier, outcome=outcome, reason=reason,
                                        attempts=tried))
-        with mock.patch.object(telemetry_send, "start_soon"):  # sent below, by the sender, in this process
+        with mock.patch.object(telemetry_send, "start_now"):  # sent below, by the sender, in this process
             for shape in shapes:
                 self.assertTrue(analytics.arrival(**shape), shape)
         batches: list[dict] = []
