@@ -7,8 +7,31 @@ smooth blends between any two shapes, gyroid and beam lattices, conformal infill
 forms. Its output is a mesh (STL), never a STEP: a part that has to be machined, toleranced or exported as exact
 geometry is remodelled in build123d once its shape is settled.
 
-Use it when the request asks for GSL or omega, works on an existing `.gsl`, or wants a lattice, an infill or a
-blended organic shape for 3D printing. build123d stays the default for everything else.
+Use it for the first stage of a design, while a part's shape is still being settled and the person wants to see
+it and change it quickly: a bracket, an enclosure, a fitting or a knob is a concept in GSL sooner than it is
+exact in build123d, and each change to it is a few edited numbers. Use it too when the request asks for GSL or
+omega, works on an existing `.gsl`, or wants a lattice, an infill or a blended organic shape.
+
+Use build123d when the request needs exact geometry from the start: a STEP or a drawing, toleranced holes,
+threads and fits, a fillet held to its radius, sheet metal, or a part that goes straight to being made. A
+request for a new part that names none of these is a concept: say that it was taken as one.
+
+## The stage: a concept, quickly
+
+A GSL model is a concept: something to look at and change in seconds, before the part is exact. Work to that:
+
+- **Sizes, positions, wall thicknesses and holes are as asked.** Probe them.
+- **Blend and fillet radii are nominal.** Use the library's round blends (`unionRound`, `intersectRound`,
+  `differenceRound`) as they are, and say where one departs from the radius asked ([Blends and
+  fillets](#blends-and-fillets) says where that is). Do not write a blend of your own to hold a radius: that is
+  the build123d remodel's work, and it costs minutes for a fraction of a millimetre nobody sees at this stage.
+- **Check with the picture, `bounds` and a handful of `eval` points**, the ones that say each face and hole is
+  where it was asked for. `certify` is for a through hole or a join that is in doubt.
+- **No `volume` and no mesh while iterating.** `volume` takes over a minute on a blended part and a mesh longer;
+  neither says anything the picture and `bounds` do not.
+- **Stop when the part is right for this stage**, and say what is approximate.
+
+When the person asks for an exact radius, a proof or a file, give it: the rest of this page says how.
 
 ## The tool
 
@@ -85,6 +108,7 @@ return min(skin, infill);
 - Reserved and builtin names are not identifiers: `part`, `map`, `box`, `sphere`, `select`, `chan`, among others.
   The compiler suggests a rename.
 - A shape's `.color` is sRGB `[r, g, b]` in 0..1, or `color.fromHex("#8fa3b8")`; a bare hex string is refused.
+- `shape.dp` is a field's gradient. In omega-core 0.1.2 it does not compile on anything built with `profileXY`.
 - `remap(shape, q)` reads `shape` at the point `q` and drops its bounds; `transform.translate`, `transform.rotateX`
   and the rest move a shape and keep them.
 - `@range(lo, hi) name = value;` makes a top-level number a slider: make a part's driving dimensions sliders.
@@ -139,11 +163,12 @@ wrong.
 | A hole, feature by feature, from its mouth at `zTop` | `drill.hole([...], zTop)` of `drill.thru(d)`, `drill.blind(d, depth)`, `drill.bore(d, depth)`, `drill.chamfer(d, leg)`, `drill.countersink(d, included)` (the angle in radians: `90 * 3.141592653589793 / 180`), `drill.tap(major, pitch, depth)`, `drill.slot(d, centers, ang)` |
 | A screw's hole, to ISO 273 `fit` (`fastener.fitFine`, `fitMedium`, `fitCoarse`) | `fastener.clearanceHole(m, fit)`, `fastener.countersunkHole(m, fit)` (ISO 10642), `fastener.tappedHole(m, shankLength)` |
 | Place it | a hole by `map.axisAt(point, outwardNormal)`; a screw by `fastener.seatedAt(seat, shankDir)` |
-| Hollow | `max(d, -(d + t))` keeps the outside and hollows a wall `t` thick inward. `shell(d, thickness)` centres the wall on the surface, half of it outside; `shell(d, thickness, bias)` in omega-core 0.1.1 puts it outside at bias -1 and inside at +1, the reverse of its own comment |
+| Hollow | `max(d, -(d + t))` keeps the outside and hollows a wall `t` thick inward. `shell(d, thickness)` centres the wall on the surface, half of it outside; `shell(d, thickness, bias)` puts it inside at bias -1 and outside at +1 |
 
 ## Blends and fillets
 
-What a blend makes decides whether a build123d remodel can match the concept:
+For a concept, `unionRound` and its family are the blend to use; the rest of this section is what they make,
+so a departure can be named, and what an exact one costs.
 
 - `unionRound(a, b, r)` is a round fillet of radius `r` only where two exact distance fields meet at 90 degrees, a
   boss standing on a plate. Where the faces meet at another angle it departs from a fillet: by about 1.2, 2.5 and
@@ -152,11 +177,24 @@ What a blend makes decides whether a build123d remodel can match the concept:
   `r` of the surface. So it suits an upright standing on a plate inside the plate's outline, as in Write a
   model, where no face of one is flush with a face of the other. For an L-corner, whose wall and base share
   their back, bottom and end faces, union sharply and add the fillet as its own solid, as in the idioms.
-- For a fillet that keeps its radius at any angle, use the closing of the two bodies with exact distance fields:
-  `unionRoundExact(() { return a - r; }, () { return b - r; }) + r`. A max of planes is exact only on its faces;
-  write a rectangle as `m = max([qx, qy], 0);` then `sqrt(max(dot(m, m), 1e-30)) + min(max(qx, qy), 0)`. On a
-  curved seam it is slightly fuller than a rolling-ball fillet (about 0.08 mm for `r = 3` on a 12 mm boss), and it
-  fills any concave gap narrower than `2r`.
+- Two more places a round blend adds material where none was meant, both of which `bounds` shows as a box
+  larger than the part. A post standing on a floor with its base in the floor's outer face bulges through
+  that face (0.05 to 0.6 mm for `r = 2`): blend the post into the cavity (`differenceRound(cavity, posts, r)`)
+  or cut the result back to the outside shape (`intersectSharp(blended, outer)`). A cylinder that starts on
+  another's axis swells the far side of it: start it part way out, still buried.
+- A blend does not bridge a gap as wide as its radius or wider: a post 2 mm from a wall is not joined to it by
+  `unionRound(shell, post, 2)`. Where the request asks for the two to be joined, join them: add a web, widen
+  the blend, or move the post, and say which. Leaving the gap open is not the request.
+- When a fillet must keep its radius at any angle, the closing of the two bodies does on straight seams:
+  `unionRoundExact(() { return a - r; }, () { return b - r; }) + r`, with exact distance fields. A max of planes
+  is exact only on its faces; write a rectangle with `m = [max(qx, 0), max(qy, 0)];` and `w = max(m.x, m.y);`
+  as `max(qx, qy) + sqrt(dot(m, m) + 1e-30) - sqrt(w * w + 1e-30)`, whose gradient is the normal on the faces
+  themselves, which the closing reads. It has costs, so it is not for a concept:
+  - on a curved seam it runs full: about 0.08 mm for `r = 3` on a 12 mm boss standing square, and up to
+    1.7 mm for `r = 12` where a 24 mm pipe leaves a 30 mm one at 30 degrees;
+  - it fills any concave gap narrower than `2r`, and can leave a pocket or slivers in one near that width;
+  - `bounds` answers unproven and `certify` indeterminate on a model that uses it;
+  - in omega-core 0.1.2 a slider read inside its closures stops the model from being shown as a field.
 - The closing reads both fields' gradients, so it breaks down where the two bodies share a flush face (the sides
   of a part extruded across, a lip's front face): it grows fins and pulls the face back. For a part that is one
   profile extruded, take the closing of the 2D profiles and extrude the result; the flush faces never meet a
@@ -190,8 +228,8 @@ loop leans on, for a plate named `plate`:
 
 - **`eval` is the check for a dimension.** It gives the field at each point: negative inside, positive outside,
   zero on the surface (a face reads `1e-15`). A point 0.5 mm inside a face reads -0.5 and one on a 10 mm hole's
-  axis +5, so a few points say whether each face and hole is where it was asked for. It needs its `exprs`: names
-  the model declares.
+  axis +5, so a few points say whether each face and hole is where it was asked for. `exprs` are names the
+  model declares, and default to its returns.
 - **`surface` finds a face.** It moves each point onto the surface and gives the normal there: `[50, 0, 0]` lands
   on `[40, 0, 0]` for a plate 80 mm long.
 - **`certify` proves, where the others sample.** Its verdict is `proven` when `expr` stays at or above
@@ -200,11 +238,17 @@ loop leans on, for a plate named `plate`:
   one are joined. `"overSliders": true` proves it for every value of every slider at once. Keep the box about
   0.5 mm clear of the surface: nearer, and on most lattices anywhere, the verdict is `indeterminate`, which is no
   answer; measure with `eval` and `surface` there.
-- **`volume` catches a gross error only.** Its bracket is 2 to 4 percent wide on a plain part and wider on a
-  lattice, whatever tolerance is asked.
-- **`bounds` is no measure of size.** Its box is fitted on a coarse grid (8 mm cells in `@scene(120)`), so it can
-  be larger or smaller than the part and can miss a wall thinner than a cell. The mesh's box, which `cad gsl
-  mesh` reports, is the part's.
+- **`volume` catches a gross error only, and slowly.** It needs its `region`. Its bracket is 2 to 4 percent wide
+  on a plain part, and on a blended part or a lattice it is wider and `"converged": false` after about 100
+  seconds (`"relativeTolerance": 0.1` answers in about 20). Leave it out of the loop.
+- **`bounds` gives the part's box when it answers `"proven": true`.** It takes about a second and needs no
+  region. The box holds the whole part, thin walls included, and stands off it by at most `cellSize`: about
+  0.02 mm on a plain part, so a box larger than the part by more is material where none was meant (a blend
+  bulging through a face). Read `cellSize` before the box: omega-core 0.1.2 can answer `proven` with one of
+  several millimetres on an axis, where an angle is folded with `atan`, as `map.patternPolarXY` does. Placed by
+  a `map` over a list of positions, the same repeats give a tight box. With `"proven": false` (`reason` says
+  why: a lattice under `normalizeField`, or an exact closing) the box is fitted on a coarse grid and can miss
+  a wall thinner than a cell: read no size from it, and probe the faces with `eval`.
 
 `"defs"` gives a name another value for that question alone (`"defs": "r = 6.5;"`), so a size is tried without
 editing the file.
@@ -234,10 +278,11 @@ writing, and `--mesh part.stl` judges a mesh made another way.
 | `compile_failed` | gsl's own words: fix the GSL, or a value given outside its slider's range. |
 
 Look at the field too, from two or three sides (`cad run gsl render --views iso,front,top`): holes through,
-fillets on the edges meant, nothing floating. The picture is the field itself, raymarched, never a mesh of it. A
-fin, a gap or a floating band in it is the model's own (a piece reaching where it should not, or a field that
-claims more distance than there is, as nested exact blends can), so fix the GSL; a fault in the mesh that the
-picture does not show is the mesher's.
+fillets on the edges meant, nothing floating. `--views` also takes a direction to look from (`1,-1,0.8`), for
+a feature `iso` hides, such as the inside of a corner. The picture is the field itself, raymarched, never a
+mesh of it. A fin, a gap or a floating band in it is the model's own (a piece reaching where it should not, or
+a field that claims more distance than there is, as nested exact blends can), so fix the GSL; a fault in the
+mesh that the picture does not show is the mesher's.
 
 Then the GLB is a document like any other: show it, `cad glb snapshot`, and for printing always `cad glb dfm
 part.glb --process printing --technology T` ([Can it be made?](../SKILL.md#can-it-be-made)). It measures what
