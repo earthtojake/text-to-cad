@@ -31,6 +31,7 @@ import sys
 import tarfile
 import tempfile
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -43,6 +44,8 @@ BRANCH = "latest"
 # The ports the person's own servers serve on: never a test's.
 TAKEN = range(3245, 3251)
 DEFAULT_PORT = 3245
+# How long the processes of a computer stopped by its own command may take to end.
+GONE_SECONDS = 60.0
 # The file the stand-in's copy carries beside the plugin, naming this run: a copy holding it came from here.
 MARK = ".real-install"
 # The variables of the machine a computer keeps: what the system and a proxy need, nothing of a person.
@@ -365,12 +368,18 @@ class Computer:
                 found.append((int(pid), command))
         return found
 
-    def stop(self, cad: Path | None = None) -> list[str]:
-        """The computer's cad server stopped by its own command, then anything still running from its folder
-        ended. What had to be ended, which the caller treats as a process left behind."""
+    def stop(self, cad: Path | None = None, seconds: float = GONE_SECONDS) -> list[str]:
+        """The computer's cad server stopped by its own command, every process from its folder awaited until gone
+        (``cad stop`` returns once the server's door is shut and its lock free: the server's process is still
+        exiting then, and a kernel worker's multiprocessing resource tracker ends only after the worker), then what
+        is still running after ``seconds`` ended. What had to be ended, which the caller treats as left behind."""
         if cad is not None and cad.exists():
             self.run([cad, "stop"])
+        deadline = time.monotonic() + seconds
         left = self.processes()
+        while left and time.monotonic() < deadline:
+            time.sleep(0.25)
+            left = self.processes()
         for pid, _command in left:
             try:
                 if WINDOWS:
