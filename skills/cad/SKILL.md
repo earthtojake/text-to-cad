@@ -18,7 +18,8 @@ and change quickly, while its form is still being settled: rough it out in GSL. 
 will be drawn, exported or made as modelled: build it in build123d. Dimensions in a request do not make it
 exact; what the model is for does: a STEP or a drawing, a tolerance or a fit, a process it is made by. Where
 the request names none of these, the part is a concept: say so before anything else, and that an exact model
-follows when its shape is settled.
+follows when its shape is settled. Making a settled concept exact is a bake, checked against the concept's
+field: [From concept to exact geometry](references/omega-gsl.md#from-concept-to-exact-geometry).
 
 | Task | Start with | Reference |
 | --- | --- | --- |

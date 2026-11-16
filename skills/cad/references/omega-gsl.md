@@ -294,5 +294,25 @@ or a thin shell, which a slicer may fill wrongly).
 
 GSL is for the shape: iterate on the field and its pictures (`gsl render` is fast, no mesh), mesh it once it is
 settled, print it. When the part needs exact faces (a machined part, a STEP for a supplier, toleranced holes),
-remodel it in build123d from the dimensions the GSL settled, and keep the GSL as the concept. A lattice or an infill, which has
-no exact form, stays a mesh.
+bake it: build it in build123d from the concept, check it against the concept's field, and keep the `.gsl` as
+the concept. A lattice or an infill, which has no exact form, stays a mesh.
+
+1. **Take the shape from the `.gsl`.** Its named values (sliders at their values) are the dimensions. Keep its
+   positions, orientations and the choices it made: a web, a buried start, where a pattern begins.
+2. **Make each round blend a true fillet** at the radius the file names. Where one cannot be built as written
+   (a fillet "between lobe and disc" whose neighbours overlap), build the nearest true fillet and say so.
+3. **Check the part against the concept's field, both ways.**
+   - Points spread by area over every face of the build123d part, put to `eval` of the concept's return: the
+     value is the concept's distance there.
+   - Points on the concept's surface (`surface` from a grid near it), measured to the solid
+     (`closest_points` in `cad.build123d`).
+   - Exact features agree within 0.01 mm: flat faces, bores, holes, slots, and fillets where faces meet at
+     90 degrees. A larger gap belongs where the concept's blend was nominal; report where, how large and why
+     (for a blend at a known angle the expected gap can be worked out from the geometry, and should match).
+   - Inside a nominal blend the concept's value is not a true distance: measure the gap there by moving the point
+     onto the concept's surface with `surface`.
+4. **Expect the concept to carry more material at its blends**, never less: a round blend fills past a true
+   fillet. Its volume bracket holds the exact part's volume.
+
+A bake took about 6 minutes a part in tests, a model that built first time and a check script of a few hundred
+lines. The check is what tells a faithful bake from a guess: it names every place the two differ.
