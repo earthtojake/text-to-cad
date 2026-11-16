@@ -641,28 +641,40 @@ newer releases ([No version left behind](#no-version-left-behind)). The reasons 
 ### What must stay the same
 
 Everything else may change in any release. These may not, because past releases, their skills and
-the agents running them depend on them:
+the agents running them reach for them, and nothing shipped later can change what they reach for:
 
 1. **`texttocad.dev/install.sh` and `www.texttocad.dev/install.ps1`, run with no options.** Every
    past release's skills, notices and documents name them. The Windows line names `www.` because
    Windows PowerShell 5.1 does not follow the redirect from `texttocad.dev`.
-2. **The README's Quickstart on GitHub, with the install command.** The viewers of 0.7 and 0.8 send
-   agents there.
-3. **The version feed, `api.texttocad.dev/v1/versions`, and its `latest` field.** Every shipped release
+2. **The version feed, `api.texttocad.dev/v1/versions`, and its `latest` field.** Every shipped release
    reads it to learn of a newer one.
-4. **The telemetry address, accepting what older releases send.** They keep sending as long as they
+3. **The telemetry address, accepting what older releases send.** They keep sending as long as they
    run ([The version feed](#the-version-feed)).
-5. **Every release on PyPI.** Every skill command pins its release, and uvx resolves the pin through
+4. **Every release on PyPI.** Every skill command pins its release, and uvx resolves the pin through
    PyPI: a release removed there breaks every copy of the skills that names it.
-6. **The repository and its `latest`, `claude-plugin` and `codex-plugin` branches.** Installs, apps and
-   stores follow them by name.
-7. **The names `text-to-cad` (the plugin) and `earthtojake` (the catalog).** Apps record our plugin as
-   `text-to-cad@earthtojake`; another name leaves every install behind as someone else's copy.
-8. **`~/.local/bin/cad` and the `cad +<version>` form.** Every skill command runs through them. They
-   may change only where the old forms keep working.
-9. **Where versions are kept** (`versions/<version>` in the state folder). A `cad` command file written
-   by one release finds later releases there. It may change on the same condition.
-10. **The hidden `cad setup --engine-update`.** The updaters of 0.10.0 to 0.11.10 call it.
+5. **The hidden `cad setup --engine-update`.** The updaters of 0.10.0 to 0.11.10 call it.
+6. **The repository's address answering, with its `latest`, `claude-plugin` and `codex-plugin` branches
+   and a README that tells an agent how to install.** Installs, apps and stores follow the branches by
+   name, and the viewers of 0.7 and 0.8 send agents to the README. GitHub keeps an old address
+   answering (web links, and `git clone`, `fetch` and `push`) after a rename or a move to an
+   organisation, until a repository is made at the old address again; whether a renamed branch
+   redirects is not known, so the three branch names are held fixed.
+
+**Everything else follows one rule: a new release carries the old ones, and an old release never needs
+to know a new one.** A name, a place or a layout may change in any release, on the condition that the
+release that changes it brings along every computer an earlier one is on, by its own setup or by the
+install script. Three things that look fixed are instances of the rule:
+
+- **The names `text-to-cad` (the plugin) and `earthtojake` (the catalog).** They are words in our own
+  manifests, not GitHub's: moving the repository changes neither. A new name is carried by the install
+  script, which removes the copies under the old one, as it does for four older names; a copy the
+  script never runs on stays under the old name.
+- **`~/.local/bin/cad` and the `cad +<version>` form.** A skill whose `cad` is missing, or does not know
+  its pin, has the agent install it, and each version's setup writes the command it needs, so the place
+  can change. What must never be left behind is a `cad` on the path that no longer understands
+  `cad +<version>`: the skills of earlier releases would install again and again.
+- **Where versions are kept** (`versions/<version>` in the state folder). This release changed the layout
+  of 0.11.10 and earlier and carries it along; a later one may do the same.
 
 ### No version left behind
 

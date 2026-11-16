@@ -149,15 +149,16 @@ cad reads one thing of the report the script writes: whether its setup and every
 
 **Decision.** As many past releases as reasonable can reach the latest. Releases 0.10.0 to 0.11.10
 get there through their own updater and `--engine-update`. Older ones get there when a person or
-an agent runs the install command, which removes what they left behind. The install command, the
-README's Quickstart and the version feed stay where they are, because old releases point people and
-agents at them.
+an agent runs the install command, which removes what they left behind. The install command, a
+README that says how to install and the version feed stay where they are, because old releases point
+people and agents at them.
 
 **Why.** People install and forget. A release that strands its users leaves them with bugs we have
 fixed and a support load we cannot see.
 
-**What it costs.** The install script carries the cleanup of every past layout, and a few addresses
-and names can never change (CONTRIBUTING, "What must stay the same").
+**What it costs.** The install script carries the cleanup of every past layout, a few addresses can
+never change, and whatever else changes must bring the earlier releases along (CONTRIBUTING, "What
+must stay the same").
 
 ## Built to move quickly
 
