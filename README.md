@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/earthtojake/text-to-cad/raw/337ac4e3c820d37b14eff30f337f82fbf75343c6/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
+<img src="https://github.com/earthtojake/text-to-cad/raw/f34aeafc99cf3b0b51e2f71caaffd7579756b887/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
 
 Design physical products with AI.
 
@@ -43,7 +43,7 @@ lists the apps to restart.
 Then ask your agent for a part or an assembly: it writes the model as a Python
 script, runs it to build the model and shows it in the CAD viewer.
 
-Installing by hand, app by app, and updates: [docs/install.md](https://github.com/earthtojake/text-to-cad/blob/337ac4e3c820d37b14eff30f337f82fbf75343c6/docs/install.md)
+Installing by hand, app by app, and updates: [docs/install.md](https://github.com/earthtojake/text-to-cad/blob/f34aeafc99cf3b0b51e2f71caaffd7579756b887/docs/install.md)
 
 ## ✨ Features
 
@@ -58,6 +58,12 @@ The text-to-cad plugin gives your agent local workflows to generate 3D models as
 - [**Fabrication services**](skills/sendcutsend/SKILL.md): [Checks DXF and STEP files against SendCutSend's guide](skills/sendcutsend/SKILL.md) before you upload them, and [slices 3D prints](skills/print3d/SKILL.md) with OrcaSlicer and sends them to Bambu Connect or Bambu Studio.
 - [**Robotics and simulation**](skills/robot-simulation/SKILL.md): Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and MJCF for MuJoCo.
 
+## 🌐 Community
+
+Projects built on top of text-to-cad, and projects that text-to-cad uses.
+
+- **Studio**: An open-source desktop CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand. [Website](https://texttocad.studio) · [GitHub](https://github.com/amywork777/studio)
+
 ## 🛠️ Contributing
 
 text-to-cad is MIT-licensed and built in the open.
@@ -65,19 +71,16 @@ text-to-cad is MIT-licensed and built in the open.
 - **Bugs and plugin requests**: [open an issue](https://github.com/earthtojake/text-to-cad/issues/new).
   A bug report with the model script and the output of `cad doctor --check` is the
   fastest to fix, and an agent app without a plugin gets one on request. A
-  security problem is reported privately, as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/337ac4e3c820d37b14eff30f337f82fbf75343c6/SECURITY.md) says.
+  security problem is reported privately, as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/f34aeafc99cf3b0b51e2f71caaffd7579756b887/SECURITY.md) says.
 - **Questions, ideas and what you made**: the [Discord](https://discord.gg/5FGB9DwJYU).
   Say what the skills got wrong, too: that is what improves them.
 - **Code, skills and models**: a new skill (a fabrication service, a printer, a
   CAD workflow) goes in `skills/`, an example model in `models/`, and fixes
-  anywhere. [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/337ac4e3c820d37b14eff30f337f82fbf75343c6/CONTRIBUTING.md) has the local setup and how to
+  anywhere. [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/f34aeafc99cf3b0b51e2f71caaffd7579756b887/CONTRIBUTING.md) has the local setup and how to
   test in the agent apps; an agent working in the repository starts at
-  [AGENTS.md](https://github.com/earthtojake/text-to-cad/blob/337ac4e3c820d37b14eff30f337f82fbf75343c6/AGENTS.md).
+  [AGENTS.md](https://github.com/earthtojake/text-to-cad/blob/f34aeafc99cf3b0b51e2f71caaffd7579756b887/AGENTS.md).
 
 By default, text-to-cad sends usage stats and crash reports, tagged with a random
 ID and never including your files, paths or prompts. The
 [privacy policy](https://www.texttocad.dev/privacy-policy) says what is sent and
 how to turn it off.
-
-
-<a href="https://trendshift.io/repositories/26559"><img src="https://trendshift.io/api/badge/repositories/26559" alt="earthtojake/text-to-cad | Trendshift" width="250" height="55"></a>
