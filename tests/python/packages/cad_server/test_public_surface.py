@@ -121,6 +121,8 @@ UNCLASSIFIED = {
     # The viewer launcher owns its parser: the launch contract (reuse, replace or start on its
     # one port, the --json announce line) is not a function signature to mirror.
     "viewer",
+    # The CAD app an agent app starts: MCP on stdin and stdout, which no function's signature describes.
+    "mcp",
 }
 
 HEAVY = ("OCP", "build123d", "ezdxf", "shapely")
@@ -182,7 +184,7 @@ class Manifest(unittest.TestCase):
         # No backwards compatibility: a retired command has no entry and no module, so it gets the
         # same answer as any unknown command.
         for command in ("build", "step build", "step compile", "stl build", "3mf build", "3mf snapshot", "glb build",
-                        "store", "daemon", "daemon status", "where", "install", "mcp", "export", "snapshot", "inspect",
+                        "store", "daemon", "daemon status", "where", "install", "export", "snapshot", "inspect",
                         "urdf check", "sdf check", "srdf check", "stl check", "xbf check", "kicad_pcb check",
                         "kicad_sch check", "pcb drc", "mjcf validate", "mjcf snapshot", "mjcf"):
             self.assertNotIn(command, _commands())

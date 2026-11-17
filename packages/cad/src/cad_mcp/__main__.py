@@ -1,4 +1,4 @@
-"""``python -m cad_mcp``: the stdio transport (``shim.main``)."""
+"""``python -m cad_mcp``: ``cad mcp`` (``shim.main``)."""
 
 import sys
 

@@ -10,8 +10,8 @@
   environment makers, telemetry. It runs in the core, where the CAD kernel is not installed, so
   importing every module of it loads no kernel module, not even bound lazily (the build123d extra lives in
   the base: ``cad_server._internal.base``). Of the library it imports the modules that need no kernel.
-- **The shim** (``cad_mcp``): the stdio transport an agent app starts, the standard
-  library alone.
+- **The shim** (``cad_mcp``): the stdio transport an agent app starts (``cad mcp``): the standard library, the
+  library's engine client (``cad.engine``) and the server's MCP protocol (``cad_server.mcp``), loading no kernel.
 
 Inside the library, each integration's package (``cad/<integration>/``, ``cad.registry.INTEGRATIONS``)
 imports only its own extra's dependencies, and each document type's (``cad/<type>/``) no third-party
@@ -130,22 +130,21 @@ class SidesTest(unittest.TestCase):
                 f"print(json.dumps(sorted(name for name in sys.modules if name.partition('.')[0] in {KERNEL!r})))\n")
         self.assertEqual(loaded(code), [])
 
-    def test_the_shim_imports_the_standard_library_and_itself_alone(self) -> None:
+    def test_the_shim_imports_the_engine_client_and_the_mcp_protocol_and_no_kernel(self) -> None:
+        allowed = ("cad.engine", "cad_server.mcp")
         offenders = []
         for name, path in modules(SHIM_PACKAGE).items():
             for line, imported in imports(name, path):
                 root = imported.partition(".")[0]
-                if root != SHIM_PACKAGE and root not in sys.stdlib_module_names and root != "__future__":
+                if root not in (SHIM_PACKAGE, "__future__") and root not in sys.stdlib_module_names \
+                        and not any(of(package, imported) for package in allowed):
                     offenders.append(f"{name}:{line} -> {imported}")
         self.assertEqual(offenders, [])
         shim = sorted(name for name in modules(SHIM_PACKAGE) if not name.endswith("__main__"))
-        # What the environment loads at its start (a checkout's .pth binds the lazy kernel) is not the shim's.
         code = ("import importlib, json, sys\n"
-                "before = set(sys.modules)\n"
                 f"for name in {shim!r}:\n"
                 "    importlib.import_module(name)\n"
-                "print(json.dumps(sorted(name for name in set(sys.modules) - before "
-                f"if name.partition('.')[0] in {('cad', 'cadgen', SERVER_PACKAGE)!r})))\n")
+                f"print(json.dumps(sorted(name for name in sys.modules if name.partition('.')[0] in {KERNEL!r})))\n")
         self.assertEqual(loaded(code), [])
 
 

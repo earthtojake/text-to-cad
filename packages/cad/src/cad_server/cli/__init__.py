@@ -6,8 +6,8 @@ the registry (``cad.registry``), each its own module, ``cad_server.cli.<type>``
 integration's, for its tool's own files, which are no document type, which cad checks or writes and never
 shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations``: ``cad mujoco check``,
 ``cad orcaslicer presets``), only for the integrations the registry gives operations. And the commands that are no file's: the server's (``server``: ``start``,
-``stop``, ``status``), the engine's verbs (``serve``, ``delete``), ``run``, and the installation's (``setup``,
-``uninstall``, ``doctor``, ``viewer``, ``telemetry``).
+``stop``, ``status``), the CAD app an agent app starts (``mcp``), the engine's verbs (``serve``, ``delete``), ``run``,
+and the installation's (``setup``, ``uninstall``, ``doctor``, ``viewer``, ``telemetry``).
 
 A command that reaches the server holds it to its own release (``cad.engine.client.RELEASE``): one of another
 release is refused in one line. The server's own commands are not held to it (``_ANY_RELEASE``).
@@ -54,6 +54,8 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "status": ("cad_server.cli.status", "`cad server status`"),
     "stop": ("cad_server.cli.stop", "`cad server stop`"),
     "delete": ("cad_server.cli.delete", "delete documents: record, cached document, the engine's copy"),
+    # The CAD app an agent app's plugin starts: the server started as `cad server start` starts it, then MCP on stdio.
+    "mcp": ("cad_mcp.shim", "serve the CAD app to the agent app that starts it, over MCP on stdin and stdout"),
     # Generic / services
     "run": ("cad_server.cli.run", "run a script (or -m, -c) as uv run does, cad pinned at this device's release "
                                   "with the integrations its imports use"),
@@ -450,16 +452,18 @@ NOTICE_SECONDS = 24 * 60 * 60.0
 # its data itself, uninstall takes everything out.
 _UNUSED = frozenset({"setup", "uninstall"})
 # Commands after which no notice is said (``_notice``): the server's, run by an agent app as a session starts or in
-# the foreground until it stops; setup, which an updater of 0.11.10 and earlier runs with no person to read it;
-# uninstall.
-_UNNOTICED = frozenset({"server", "setup", "uninstall"})
+# the foreground until it stops; `mcp`, which an agent app runs; setup, which an updater of 0.11.10 and earlier runs
+# with no person to read it; uninstall.
+_UNNOTICED = frozenset({"server", "mcp", "setup", "uninstall"})
 # Commands that reach a server of any release (``cad.engine.client.RELEASE``): the server's own -- which start this
-# release's in place of another's, stop whichever runs, and say which runs.
-_ANY_RELEASE = frozenset({"server", "status", "stop"})
-# Commands that never carry the analytics notice: the engine's server, writing nowhere; `telemetry`, which says it
-# its own way; `setup`, which an updater of 0.11.10 and earlier runs with no person to read it; `uninstall`; `run`,
-# which is only the python it runs, as the `cad` command's `run` is; and `requirement`, whose output a program reads.
-_UNTOLD = frozenset({"server", "telemetry", "setup", "uninstall", "run", "requirement"})
+# release's in place of another's, stop whichever runs, and say which runs -- and `mcp`, which decides it itself
+# (``cad_mcp.shim.start_server``).
+_ANY_RELEASE = frozenset({"server", "status", "stop", "mcp"})
+# Commands that never carry the analytics notice: the engine's server and `mcp`, writing nowhere a person reads;
+# `telemetry`, which says it its own way; `setup`, which an updater of 0.11.10 and earlier runs with no person to read
+# it; `uninstall`; `run`, which is only the python it runs, as the `cad` command's `run` is; and `requirement`, whose
+# output a program reads.
+_UNTOLD = frozenset({"server", "mcp", "telemetry", "setup", "uninstall", "run", "requirement"})
 
 
 # The told commands that register this installation (``cad_server._internal.installations.setup``).

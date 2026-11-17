@@ -317,7 +317,7 @@ class TabServerTest(_Session):
                 # A store's launcher's session: its launches say nothing of releases.
                 store = Server(page=self.server.page, recents=self.server.recents)
                 params = initialize_params({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": CODEX})
-                params["_meta"]["dev.texttocad/transport"]["pin"]["channel"] = "codex"
+                params["_meta"]["dev.texttocad/transport"]["pin"] = {"channel": "codex"}  # what PR #835's launchers said
                 store.handle("initialize", params, None)
                 launch = store.handle("tools/call", {"name": "cad_home", "arguments": {}}, RequestContext(1, {"threadId": "s"}))
                 self.assertNotIn("notice", launch["structuredContent"]["launch"])

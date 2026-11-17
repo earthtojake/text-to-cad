@@ -867,38 +867,5 @@ class RequestBodies(HttpLayerTestCase):
         self.assertIn(b"request body too large", raw)
 
 
-class EngineClientFollowsARestartedEngine(unittest.TestCase):
-    """A long-lived client (the MCP stdio peer) holds the engine's endpoint; an engine restarted on
-    the same --port has a new token, and the client's next call asks the engine for it."""
-
-    def test_a_refused_token_is_asked_again_once(self):
-        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
-        from cad_mcp import engine as engine_client
-
-        class Engine(BaseHTTPRequestHandler):
-            def do_GET(self):
-                ok = self.headers.get("Authorization") == "Bearer new"
-                body = b"{}" if ok else b'{"error":"engine token required"}'
-                self.send_response(200 if ok else 403)
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
-            def log_message(self, *args):
-                pass
-
-        server = ThreadingHTTPServer(("127.0.0.1", 0), Engine)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        self.addCleanup(server.server_close)
-        self.addCleanup(server.shutdown)
-        url = f"http://127.0.0.1:{server.server_address[1]}"
-        answers = [{"url": url, "token": "old"}, {"url": url, "token": "new"}]
-        with mock.patch.object(engine_client, "request", side_effect=lambda _message, start=True: answers.pop(0)):
-            client = engine_client.EngineClient()
-            self.assertEqual(client.call("GET", "/api/v1/server")[0], 200)
-            self.assertEqual(client.endpoint["token"], "new")
-
-
 if __name__ == "__main__":
     unittest.main()

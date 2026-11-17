@@ -1,4 +1,5 @@
-"""JSON-RPC 2.0 over newline-delimited stdio: the transport an MCP host speaks.
+"""JSON-RPC 2.0 over newline-delimited stdio: the transport an MCP host speaks (its error codes and
+``RpcError`` the server's own, ``cad_server.mcp.protocol``).
 
 One reader thread parses messages. Requests the host sends run on daemon threads, a
 bounded number at once, so the process ends with its host even mid-call, and a slow request (a model's bytes, a picture) never blocks the others; ``initialize`` and ``ping``
@@ -23,42 +24,13 @@ import threading
 from collections.abc import Callable, Iterable
 from typing import Any, BinaryIO
 
-LOG = logging.getLogger("cad_mcp")
+from cad_server.mcp.protocol import INTERNAL_ERROR, INVALID_REQUEST, PARSE_ERROR, RequestContext, RpcError
 
-PARSE_ERROR = -32700
-INVALID_REQUEST = -32600
-METHOD_NOT_FOUND = -32601
-INVALID_PARAMS = -32602
-INTERNAL_ERROR = -32603
+LOG = logging.getLogger("cad_mcp")
+__all__ = ["Connection", "RequestContext", "RpcError", "claim_stdin", "claim_stdout"]
 
 # Methods answered on the reader thread, in arrival order.
 _INLINE_METHODS = frozenset({"initialize", "ping"})
-
-
-class RpcError(Exception):
-    """A JSON-RPC error the handler wants returned to the caller as-is."""
-
-    def __init__(self, code: int, message: str, data: Any = None) -> None:
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.data = data
-
-    def payload(self) -> dict[str, Any]:
-        error: dict[str, Any] = {"code": self.code, "message": self.message}
-        if self.data is not None:
-            error["data"] = self.data
-        return error
-
-
-class RequestContext:
-    """What a handler knows about the request it is serving."""
-
-    __slots__ = ("request_id", "meta")
-
-    def __init__(self, request_id: Any, meta: dict[str, Any]) -> None:
-        self.request_id = request_id
-        self.meta = meta
 
 
 Handler = Callable[[str, dict[str, Any], RequestContext], Any]

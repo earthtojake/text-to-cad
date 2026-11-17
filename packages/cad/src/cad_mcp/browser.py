@@ -13,7 +13,7 @@ it again.
 The page's URL carries a link, a credential for a day, and a browser (or the launcher that starts it) is
 given its URL as an argument, which other local users may read in the process list. So the browser is
 given a file instead: a page of one redirect to the URL, written owner-only (0600) in the engine folder,
-which is this user's alone (``engine.folder_refusal``), and removed after ``KEEP_SECONDS``.
+which is this user's alone (``places.folder_refusal``), and removed after ``KEEP_SECONDS``.
 """
 from __future__ import annotations
 
@@ -28,15 +28,11 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Callable
 
-from cad_mcp import engine
+from cad.engine import places
+from cad_server.mcp.browser import OPEN, OPENED
 
-# A text host's cad_show result: ``{"url", "said", "failed"}``, the page this process opens, the sentence
-# of the result that says it opened, and the one it says in its place where the open fails (``{reason}``
-# the failure). Only a transport that declared ``transport_browser`` is sent it.
-OPEN = "dev.texttocad/open"
-# This process's word on that page, the notification it sends on its session once its open returned and
-# before its host has the answer: ``{"url", "opened"}``.
-OPENED = "notifications/dev.texttocad/opened"
+__all__ = ["OPEN", "OPENED", "deliver", "open_page", "transport_browser"]
+
 KEEP_SECONDS = 10.0
 PREFIX = "open-"
 
@@ -99,12 +95,12 @@ def open_page(url: str, *, opener: Callable[[str], bool] = webbrowser.open) -> P
     refusal = display_refusal()
     if refusal is not None:
         raise CannotOpen(refusal)
-    folder = engine.engine_dir()
+    folder = places.engine_dir()
     try:
-        folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+        places.make_engine_dir(folder)
     except OSError as error:
         raise CannotOpen(f"the engine's folder {folder} cannot be made: {error.strerror or error}") from error
-    refusal = engine.folder_refusal(folder)
+    refusal = places.folder_refusal(folder)
     if refusal is not None:
         raise CannotOpen(refusal)
     _sweep(folder)
