@@ -797,7 +797,7 @@ test('the version feed is the same for everyone, kept at the edge, and answers w
   const down = { ...memory(), async ready() { throw new Error('unreachable'); } };
   const reply = await handle(new Request('https://api.texttocad.dev/v1/versions/'), down, { versions: async () => feed, missing: ['POSTHOG_REGION'] });
   assert.deepEqual([reply.status, reply.headers.get('content-type'), await reply.json()], [200, 'application/json', feed]);
-  assert.equal(reply.headers.get('cache-control'), 'public, s-maxage=3600, stale-while-revalidate=86400, stale-if-error=604800');
+  assert.equal(reply.headers.get('cache-control'), 'public, s-maxage=300, stale-while-revalidate=60, stale-if-error=604800');
   // No feed to give: an error the edge keeps nowhere, which a released cadgen takes as a check that failed.
   const none = await handle(new Request('https://api.texttocad.dev/v1/versions'), down, { versions: async () => null });
   assert.deepEqual([none.status, none.headers.get('cache-control')], [503, 'no-store']);

@@ -22,7 +22,10 @@ import { withoutNoise } from './noise.mjs';
 
 const COUNTRY = /^[A-Z]{2}$/; // ISO 3166-1 alpha-2, as the host gives it; anything else is no country
 const JSON_TYPE = /^application\/json\s*(?:;|$)/i; // a parameter, such as `; charset=utf-8`, is still JSON
-const FEED_CACHE = 'public, s-maxage=3600, stale-while-revalidate=86400, stale-if-error=604800';
+// The feed is the brake on a release: a hold, or a release's hour coming to an end, reaches the edge within six
+// minutes of the function knowing it (five fresh, one more served stale while it refreshes). A failing PyPI or
+// function never blanks it: the edge serves the last answer on for a week.
+const FEED_CACHE = 'public, s-maxage=300, stale-while-revalidate=60, stale-if-error=604800';
 const LATER_SECONDS = 3600; // when a sender may try a schema this receiver does not read yet again
 
 // No CORS headers, so no page can read a reply. A page can still make its visitors' browsers post here
@@ -86,7 +89,7 @@ export async function handle(request, store, { missing = [], country, versions, 
     // Unhealthy without its settings, or with a service that will not take its keys: a deploy's check fails
     // rather than shipping an API that drops every batch or cannot delete what an opt-out asks it to. The
     // service's answer by its code alone.
-    // One feed for everyone, never a reply to anything a request says: PyPI's, which the edge keeps an hour
+    // One feed for everyone, never a reply to anything a request says: PyPI's, which the edge keeps five minutes
     // and serves on while PyPI or the function fails. It asks no telemetry service, so it answers even when
     // telemetry cannot. With no feed at all, a 503 the edge keeps nowhere.
     if (path === '/v1/versions' && request.method === 'GET' && versions) {

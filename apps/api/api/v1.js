@@ -4,11 +4,13 @@
 import { handle } from '../src/handler.mjs';
 import { clientOf, rateLimiter } from '../src/limit.mjs';
 import { missingSettings, posthogStore, settingsOf } from '../src/posthog.mjs';
-import { versions } from '../src/versions.mjs';
+import { heldOf, pypiVersions } from '../src/versions.mjs';
 
 // Both live as long as the instance: the store keeps health's answer a minute, the limiter /v1/forget's counts.
 let store;
 const limiter = rateLimiter();
+// The version feed, holding back the releases the project's `CAD_HELD_RELEASES` names (README, "Holding a release").
+const versions = pypiVersions({ held: heldOf(process.env) });
 const serve = request => handle(request, (store ??= posthogStore(settingsOf(process.env))), {
   // Names only: what /v1/health reports missing, so a deploy without them fails its check.
   missing: missingSettings(process.env),
