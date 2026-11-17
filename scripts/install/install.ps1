@@ -41,6 +41,28 @@ function Install-TextToCad {
         return $null
     }
 
+    # The uv uv's own installer put in place, never PATH's: the first in its folders, in the order it picks one
+    # (UV_INSTALL_DIR, and its bin for a Cargo-style folder; XDG_BIN_HOME; XDG_DATA_HOME\..\bin; ~\.local\bin).
+    function Find-InstalledUv {
+        $folders = @($env:UV_INSTALL_DIR)
+        if ($env:UV_INSTALL_DIR) { $folders += (Join-Path $env:UV_INSTALL_DIR 'bin') }
+        $folders += @($env:XDG_BIN_HOME)
+        if ($env:XDG_DATA_HOME) { $folders += (Join-Path $env:XDG_DATA_HOME '..\bin') }
+        $folders += @((Join-Path $HOME '.local\bin'))
+        foreach ($folder in $folders) {
+            if ($folder -and (Test-Path (Join-Path $folder 'uv.exe'))) { return (Join-Path $folder 'uv.exe') }
+        }
+        return $null
+    }
+
+    # uv's own installer, run by a PowerShell of the kind running this one, its output to the window (never the
+    # function's own output); its exit status.
+    function Install-Uv {
+        $shell = (Get-Process -Id $PID).Path
+        & $shell -NoProfile -ExecutionPolicy ByPass -Command 'irm https://astral.sh/uv/install.ps1 | iex' | Out-Host
+        return $LASTEXITCODE
+    }
+
     # uv's version, from "uv 0.9.5 (...)"; $null where it does not say.
     function Get-UvVersion($uv) {
         $said = (& $uv --version 2>$null | Select-Object -First 1)
@@ -54,10 +76,9 @@ function Install-TextToCad {
     $uv = Find-Uv
     if (-not $uv) {
         Write-Host "uv is not installed: installing it with uv's own installer (https://docs.astral.sh/uv/)."
-        $shell = (Get-Process -Id $PID).Path
-        & $shell -NoProfile -ExecutionPolicy ByPass -Command 'irm https://astral.sh/uv/install.ps1 | iex'
-        if ($LASTEXITCODE) {
-            Write-Host "error: uv's installer could not be downloaded or failed (exit $LASTEXITCODE; what it said is above): check the network connection, or install uv (https://docs.astral.sh/uv/), then run this again" -ForegroundColor Red
+        $installed = Install-Uv
+        if ($installed) {
+            Write-Host "error: uv's installer could not be downloaded or failed (exit $installed; what it said is above): check the network connection, or install uv (https://docs.astral.sh/uv/), then run this again" -ForegroundColor Red
             $global:LASTEXITCODE = 1
             return
         }
@@ -71,17 +92,27 @@ function Install-TextToCad {
 
     $version = Get-UvVersion $uv
     if (-not $version -or $version -lt $UvMinimum) {
+        $old = if ($version) { "uv $version" } else { 'uv of an unknown version' }
         # uv's own installer leaves a receipt, which `uv self update` needs.
         $receipt = Join-Path $(if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path $HOME 'AppData\Local' }) 'uv\uv-receipt.json'
         if (Test-Path $receipt) {
-            Write-Host "uv $version is older than $UvMinimum, the first that installs Python 3.14: updating it (uv self update)."
+            Write-Host "$old is older than $UvMinimum, the first that installs Python 3.14: updating it (uv self update)."
             & $uv self update
             $version = Get-UvVersion $uv
         }
+        # One that cannot update itself (winget's, pip's), or did not: uv's own installer puts a newer uv in its own
+        # folder, as where uv is missing, and this run uses that one, whatever PATH finds first.
         if (-not $version -or $version -lt $UvMinimum) {
-            Write-Host "error: uv $version is older than $UvMinimum, the first that installs Python 3.14: update it the way it was installed (winget: winget upgrade astral-sh.uv; pip: pip install -U uv; uv's own installer: uv self update), then run this again" -ForegroundColor Red
-            $global:LASTEXITCODE = 1
-            return
+            Write-Host "$old is older than $UvMinimum, the first that installs Python 3.14: installing a newer uv with uv's own installer (https://docs.astral.sh/uv/)."
+            $null = Install-Uv
+            $version = $null
+            $uv = Find-InstalledUv
+            if ($uv) { $version = Get-UvVersion $uv }
+            if (-not $version -or $version -lt $UvMinimum) {
+                Write-Host "error: $old is older than $UvMinimum, and uv's installer did not install a newer uv (what it said is above)." -ForegroundColor Red
+                $global:LASTEXITCODE = 1
+                return
+            }
         }
     }
     # uv's folder on this window's PATH: a window open before uv's installer ran does not see it.

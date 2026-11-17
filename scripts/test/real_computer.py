@@ -620,7 +620,7 @@ def _within(path: Path, folder: Path) -> bool:
 @dataclass
 class Sentinels:
     """Each file or folder a run must never change on the machine it runs on -- the agent apps' plugin lists and
-    configuration, cad's state folder and command, uv's tools and their commands -- and its modification time (None
+    configuration, cad's state folder and command, uv's tools and their commands, the shell profiles -- and its modification time (None
     where there is none). ``moved``: what changed between two readings. Not ``~/.claude.json``: a Claude Code
     session that is open on the machine rewrites it as it works, so a run beside one would fail for nothing; the
     plugin lists beside it, which a run could change, are watched.
@@ -642,6 +642,9 @@ class Sentinels:
                  home / ".claude" / "plugins" / "known_marketplaces.json", home / ".cursor",
                  home / ".gemini" / "extensions", home / ".local" / "bin" / ("cad.exe" if WINDOWS else "cad"),
                  home / ".local" / "bin", home / ".local" / "share" / "uv" / "tools"]
+        # The shell profiles `uv tool update-shell` (which the install command runs) and uv's installer may edit.
+        paths += [home / name for name in (".zshenv", ".zshrc", ".zprofile", ".bashrc", ".bash_profile",
+                                           ".bash_login", ".profile")] + [home / ".config" / "fish" / "conf.d"]
         if sys.platform == "darwin":
             support = home / "Library" / "Application Support"
             paths += [support / "cad", support / "cad" / "installations" / "current", support / "Claude"

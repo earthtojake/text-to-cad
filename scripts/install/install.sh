@@ -52,6 +52,19 @@ download() {
   fi
 }
 
+# The uv uv's own installer put in place, never PATH's: the first in its folders, in the order it picks one
+# (UV_INSTALL_DIR, and its bin for a Cargo-style folder; XDG_BIN_HOME; XDG_DATA_HOME/../bin; ~/.local/bin).
+installed_uv() {
+  for dir in "${UV_INSTALL_DIR:-}" "${UV_INSTALL_DIR:+$UV_INSTALL_DIR/bin}" "${XDG_BIN_HOME:-}" \
+             "${XDG_DATA_HOME:+$XDG_DATA_HOME/../bin}" "$HOME/.local/bin"; do
+    if [ -n "$dir" ] && [ -x "$dir/uv" ]; then
+      printf '%s\n' "$dir/uv"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # uv's version, "0.9.5" from "uv 0.9.5 (Homebrew 2025-10-21)"; empty where it does not say.
 uv_version() {
   "$1" --version 2>/dev/null | awk 'NR == 1 { print $2 }'
@@ -96,13 +109,26 @@ main() {
 
   version=$(uv_version "$uv")
   if [ -z "$version" ] || older_than "$version" "$UV_MINIMUM"; then
+    old="uv ${version:-of an unknown version}"
     if uv_standalone; then
-      say "uv ${version:-of an unknown version} is older than $UV_MINIMUM, the first that installs Python 3.14: updating it (uv self update)."
-      "$uv" self update || die "uv could not update itself (what it said is above): update uv, then run this again"
+      say "$old is older than $UV_MINIMUM, the first that installs Python 3.14: updating it (uv self update)."
+      "$uv" self update || true
       version=$(uv_version "$uv")
     fi
+    # One that cannot update itself (Homebrew's, pip's), or did not: uv's own installer puts a newer uv in its own
+    # folder, as where uv is missing, and this run uses that one, whatever PATH finds first.
     if [ -z "$version" ] || older_than "$version" "$UV_MINIMUM"; then
-      die "uv ${version:-of an unknown version} is older than $UV_MINIMUM, the first that installs Python 3.14: update it the way it was installed (Homebrew: brew upgrade uv; pip: pip install -U uv; uv's own installer: uv self update), then run this again"
+      say "$old is older than $UV_MINIMUM, the first that installs Python 3.14: installing a newer uv with uv's own installer (https://docs.astral.sh/uv/)."
+      if download "$UV_INSTALLER" "$scratch/uv-install.sh"; then
+        sh "$scratch/uv-install.sh" || true
+      fi
+      version=""
+      if uv=$(installed_uv); then
+        version=$(uv_version "$uv")
+      fi
+      if [ -z "$version" ] || older_than "$version" "$UV_MINIMUM"; then
+        die "$old is older than $UV_MINIMUM, and uv's installer did not install a newer uv (what it said is above)."
+      fi
     fi
   fi
   # CAD_INSTALL_PY: a local install.py instead (the installer rehearsals run this checkout's).

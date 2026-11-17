@@ -10,7 +10,9 @@ PATH holds only the stand-ins, install.py is told not to search Homebrew's or np
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -39,7 +41,8 @@ THEIRS = "---\nname: {name}\ndescription: someone else's\n---\n"
 # A stand-in: records {name, argv} as a JSON line; fails (exit FAKE_EXIT, default 1) where FAKE_FAIL names it
 # (`name`, or `name:word` for a call whose arguments hold that word); `git clone` writes a small plugin folder with our
 # skills, `git ls-remote` names the commit LATEST, `git status` prints FAKE_GIT_STATUS (a clean clone of `latest` by
-# default); `uv --version` says FAKE_UV_VERSION; uv's tools are FAKE_UV_STATE's ({name: version}), their commands in
+# default); `uv --version` says the version in a file `uv-version` beside it, else FAKE_UV_VERSION; `curl -o <file>` writes
+# FAKE_UV_INSTALLER there (a stand-in of uv's own installer); uv's tools are FAKE_UV_STATE's ({name: version}), their commands in
 # FAKE_UV_BIN: `uv tool list` lists them, `uv tool install` records one (`cad`, unversioned: FAKE_PYPI; at
 # FAKE_NO_COMMAND, a release with no command, it fails and takes the tool away, as uv does) and writes its command, a
 # stand-in (its receipt names an `editable` requirement where it was one); `pipx environment --value` says
@@ -54,7 +57,7 @@ STAND_IN = textwrap.dedent('''\
     from pathlib import Path
     name = Path(sys.argv[0]).name
     with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as log:
-        log.write(json.dumps({{"name": name, "argv": sys.argv[1:], "cwd": os.getcwd(),
+        log.write(json.dumps({{"name": name, "argv": sys.argv[1:], "cwd": os.getcwd(), "path": sys.argv[0],
                                "trust": os.environ.get("GEMINI_CLI_TRUST_WORKSPACE")}}) + "\\n")
     if any(fail == name or (fail.partition(":")[0] == name and fail.partition(":")[2] in sys.argv[1:])
            for fail in os.environ.get("FAKE_FAIL", "").split(",")):
@@ -65,7 +68,10 @@ STAND_IN = textwrap.dedent('''\
     if name == "git" and "status" in sys.argv:
         print(os.environ.get("FAKE_GIT_STATUS", "## latest...origin/latest"))
     if name == "uv" and sys.argv[1:] == ["--version"]:
-        print("uv " + os.environ.get("FAKE_UV_VERSION", "0.11.0") + " (stand-in)")
+        told = Path(sys.argv[0]).with_name("uv-version")
+        print("uv " + (told.read_text().strip() if told.exists() else os.environ.get("FAKE_UV_VERSION", "0.11.0")) + " (stand-in)")
+    if name == "curl" and "-o" in sys.argv:
+        Path(sys.argv[sys.argv.index("-o") + 1]).write_text(os.environ.get("FAKE_UV_INSTALLER", "exit 1\\n"))
     if name == "uv" and sys.argv[1:3] in (["tool", "dir"], ["tool", "list"], ["tool", "install"], ["tool", "uninstall"]):
         state, tools_dir = Path(os.environ["FAKE_UV_STATE"]), Path(os.environ["FAKE_UV_STATE"]).with_suffix(".tools")
         tools = json.loads(state.read_text()) if state.exists() else {{}}
@@ -125,6 +131,16 @@ STAND_IN = textwrap.dedent('''\
             (target / "skills" / skill / "SKILL.md").write_text(
                 f"---\\nname: {{skill}}\\nmetadata:\\n  repository: earthtojake/text-to-cad\\n---\\nnew\\n")
 ''')
+
+
+def exe(path: Path, main: str) -> Path:
+    """A cad.exe as 0.11 wrote it: distlib's launcher, a shebang naming the ``cad-launcher`` beside it, then a zip whose
+    ``__main__.py`` is ``main`` (0.11's carries the mark)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("__main__.py", main)
+    path.write_bytes(b"MZ launcher\n#!<launcher_dir>\\cad-launcher\\Scripts\\python.exe -I\n" + path.read_bytes())
+    return path
 
 
 @unittest.skipIf(os.name == "nt", "the stand-ins are scripts run by their #! line")
@@ -399,14 +415,7 @@ class InstallScriptTests(unittest.TestCase):
         self.assertEqual(self.calls("cad"), [])
 
     def test_the_old_windows_commands_are_known_by_their_mark(self) -> None:
-        # 0.11's cad.exe: distlib's launcher, a shebang, then a zip whose __main__.py carries the mark; 0.10's cad.cmd.
-        # uv's own cad.exe is a launcher and a zip too, with no mark.
-        def exe(path: Path, main: str) -> Path:
-            with zipfile.ZipFile(path, "w") as archive:
-                archive.writestr("__main__.py", main)
-            path.write_bytes(b"MZ launcher\n#!<launcher_dir>\\cad-launcher\\Scripts\\python.exe -I\n" + path.read_bytes())
-            return path
-
+        # 0.11's cad.exe (``exe``); 0.10's cad.cmd. uv's own cad.exe is a launcher and a zip too, with no mark.
         bin_ = self.home / ".local/bin"
         bin_.mkdir(parents=True)
         old = exe(bin_ / "cad.exe", "# cad proxy: 11\n# The cad command on Windows (cad.exe)\nimport json\n")
@@ -445,27 +454,96 @@ class InstallScriptTests(unittest.TestCase):
         self.assertEqual(install.make_room(here, bin_, {"cad": install.Tool("1.0.0", {"cad": str(bin_ / "cad.exe")})}),
                          (None, []))
 
-    def test_on_windows_a_running_cad_exe_is_never_replaced_and_uv_s_folder_goes_on_the_path(self) -> None:
-        # uv cannot replace a cad.exe that runs from its bin folder or the tool's environment: it fails halfway and
-        # leaves the tool broken (measured). One from uv's cache (Codex's `uvx ... cad@X mcp`, open as long as a Codex
-        # thread is) blocks nothing, nor does one whose path cannot be read (left out).
+    def test_on_windows_a_cad_exe_in_uv_s_way_is_set_aside_and_uv_s_folder_goes_on_the_path(self) -> None:
+        # uv cannot replace a cad.exe that runs (it fails halfway, measured), but one that runs can be renamed: uv's
+        # cad.exe and the tool environment's own go aside, into uv's bin folder (never the environment, which uv
+        # deletes), under cad's own update's name; back where uv fails, deleted where it is in.
         here = install.Here(self.environ(), platform="win32")
-        folder, tool = Path("C:/Users/x/.local/bin"), install.Tool("1.0.0", {}, "C:/Users/x/AppData/Roaming/uv/tools/cad")
-        for running, blocks in (([], False), (["C:/Users/x/AppData/Local/uv/cache/archive-v0/abc/Scripts/cad.exe"], False),
-                                (["C:/Users/x/.local/bin/cad.exe"], True),
-                                (["C:/Users/x/AppData/Roaming/uv/tools/cad/Scripts/cad.exe"], True)):
-            with mock.patch.object(install, "running_commands", return_value=running):
-                self.assertEqual(install.cad_running(folder, tool), blocks, running)
-        self.assertEqual(install.running_commands(), [], "none off Windows")
-        # A shell whose PATH lacks uv's bin folder (winget's uv puts its own there): uv puts it on the user's PATH.
-        install.on_path(here, str(self.bin / "uv"), self.uv_bin)
-        self.assertEqual(self.calls("uv")[-1], ["tool", "update-shell"])
-        if self.log.exists():
-            self.log.unlink()
-        install.on_path(install.Here(self.environ(PATH=f"{self.uv_bin};{self.bin}"), platform="win32"),
-                        str(self.bin / "uv"), self.uv_bin)
-        self.assertEqual(self.calls("uv"), [])
+        folder = self.uv_bin
+        env = self.home / "AppData/Roaming/uv/tools/cad"
+        mine = [self.write(".local/bin/cad.exe", "uv's"), self.write("AppData/Roaming/uv/tools/cad/Scripts/cad.exe", "env's")]
+        tool = install.Tool("1.0.0", {"cad": str(mine[0])}, str(env))
+        moved = install.set_aside(folder, tool)
+        self.assertEqual([path for path, _aside in moved], mine)
+        self.assertTrue(all(aside.parent == folder and aside.is_file() and not path.exists() for path, aside in moved))
+        self.assertEqual(len(list(folder.glob(install.ASIDE.format(stamp="*", n="*")))), 2)
+        install.put_back(moved, False)
+        self.assertEqual([path.read_text(encoding="utf-8") for path in mine], ["uv's", "env's"])
+        install.put_back(install.set_aside(folder, tool), True)
+        self.assertEqual(sorted(path.name for path in folder.iterdir()), [])
+        # Where uv has no cad tool, a cad.exe there is not its: never moved.
+        theirs = self.write(".local/bin/cad.exe", "another program's")
+        self.assertEqual(install.set_aside(folder, None), [])
+        self.assertEqual(theirs.read_text(encoding="utf-8"), "another program's")
         self.assertFalse(install.packaged(here), "no app package off Windows")
+
+    def test_uv_s_folder_goes_on_the_path_by_uv_s_own_command_on_every_system(self) -> None:
+        # A shell whose PATH lacks uv's bin folder (winget's or Homebrew's uv puts its own folder there): uv's own
+        # `uv tool update-shell` puts it on the PATH for new terminals, as uv's and Codex's installers do; nothing of
+        # ours edits a profile. UV_NO_MODIFY_PATH, uv's own switch, stops it; where it fails, a line says what to do.
+        uv = str(self.bin / "uv")
+        put = ("~/.local/bin is on your PATH now for new terminals (uv tool update-shell): apps and terminals opened "
+               "before this one see it once restarted.\n")
+        not_put = ("~/.local/bin is not on this shell's PATH: open a new terminal to use cad (where it is still not "
+                   "found, run `uv tool update-shell`).\n")
+        for platform, separator in (("darwin", ":"), ("linux", ":"), ("win32", ";")):
+            for extra, called, line in (({}, True, put), ({"UV_NO_MODIFY_PATH": "1"}, False, not_put),
+                                        ({"FAKE_FAIL": "uv:update-shell", "FAKE_EXIT": "2"}, True, not_put),
+                                        ({"PATH": f"{self.bin}{separator}{self.uv_bin}"}, False, "")):
+                if self.log.exists():
+                    self.log.unlink()
+                said = io.StringIO()
+                with contextlib.redirect_stdout(said):
+                    install.on_path(install.Here(self.environ(**extra), platform=platform), uv, self.uv_bin)
+                self.assertEqual(self.calls("uv"), [["tool", "update-shell"]] if called else [], (platform, extra))
+                self.assertEqual(said.getvalue(), line, (platform, extra))
+        self.assertFalse((self.home / ".zshenv").exists(), "the stand-in uv edits no profile; nor does install.py")
+
+    def test_on_windows_a_running_cad_exe_never_stops_the_install_and_a_later_run_removes_what_it_left(self) -> None:
+        # Measured on Windows 11 (0.11.0 and 0.11.10): a person's agent types the old `cad update`, whose cad.exe (0.11's
+        # launcher) runs the install command. The launcher and its Python go aside, uv's cad goes in, and what was set
+        # aside, still running, cannot be deleted (Windows refuses): it stays, and nothing is said of it. The next run
+        # deletes it, quietly, and nothing else in uv's bin folder.
+        here = install.Here(self.environ(UV=str(self.bin / "uv")), platform="win32")
+        exe(self.uv_bin / "cad.exe", "# cad proxy: 11\n# The cad command on Windows (cad.exe)\n")
+        self.write(".local/bin/cad-launcher/pyvenv.cfg", "home = C:\\Python314\n")
+        discard = install.discard
+
+        def running(path: Path) -> None:  # Windows deletes no file that runs, nor a folder holding one
+            if path.name == ".cad.exe.text-to-cad-old":
+                raise PermissionError(13, "Access is denied")
+            discard(path)
+
+        def busy(_path: Path) -> None:
+            raise PermissionError(13, "The process cannot access the file")
+
+        said = io.StringIO()
+        with mock.patch.object(install, "discard", running), mock.patch.object(install, "_rmtree", busy), \
+                contextlib.redirect_stdout(said):
+            cad = install.install_cad(here)
+        self.assertEqual((cad.code, cad.release), (0, "0.13.0"), said.getvalue())
+        self.assertIn("Installing cad with uv.", said.getvalue())
+        self.assertNotIn("not installed", said.getvalue())
+        self.assertNotIn("Removed the cad command", said.getvalue())
+        left = sorted(path.name for path in self.uv_bin.iterdir())
+        self.assertEqual([name for name in left if not name.startswith(".text-to-cad-trash-")],
+                         [".cad.exe.text-to-cad-old", "cad"])
+        self.assertEqual(len(left), 3, left)
+        # The next run: cad is here and starts; what was left goes, quietly. Someone else's files stay.
+        self.write(".local/bin/notes.old", "mine")
+        self.write(".local/bin/.cad.exe.backup", "mine")
+        self.write(".local/bin/" + install.ASIDE.format(stamp="123-456", n=0), "cad's own update's")
+        said = io.StringIO()
+        with contextlib.redirect_stdout(said):
+            cad = install.install_cad(here)
+        self.assertEqual(cad.code, 0)
+        self.assertEqual(said.getvalue(), "cad 0.13.0 is installed already: it is left as it is, and updates itself.\n")
+        self.assertEqual(sorted(path.name for path in self.uv_bin.iterdir()), [".cad.exe.backup", "cad", "notes.old"])
+        # Where a cad command of 0.10.0-0.11.10 is still there (its install did not happen), nothing set aside goes.
+        kept = self.write(".local/bin/.cad-launcher.text-to-cad-old/pyvenv.cfg", "home = C:\\Python314\n")
+        exe(self.uv_bin / "cad.exe", "# cad proxy: 11\n")
+        install.tidy(here, self.uv_bin)
+        self.assertTrue(kept.is_file())
 
     def test_the_plugin_switch_is_tolerated_where_cad_does_not_know_it(self) -> None:
         # A cad with no `cad plugin auto-update` (a usage error, exit 2): one line, and the install has not failed.
@@ -960,18 +1038,41 @@ class InstallScriptTests(unittest.TestCase):
         self.assertEqual(run[:-1], ["run", "--no-config", "--managed-python", "--python", "3.14", "--no-project"])
         self.assertEqual(Path(run[-1]).name, "install.py")
 
-    def test_install_sh_refuses_a_uv_too_old_for_python_3_14_and_updates_its_own_install(self) -> None:
-        self.programs("uv")
-        script = self.run_sh(FAKE_UV_VERSION="0.8.24")
-        self.assertEqual(1, script.returncode)
-        self.assertIn("uv 0.8.24 is older than 0.9.0", script.stderr)
-        self.assertIn("brew upgrade uv", script.stderr)
-        self.assertEqual(self.calls("uv"), [["--version"]])
-        # uv from its own installer (its receipt) updates itself.
+    def uvs(self) -> list:
+        """Each uv call: the program that ran (its path) and its first word."""
+        lines = self.log.read_text(encoding="utf-8").splitlines() if self.log.exists() else []
+        return [(Path(call["path"]), call["argv"][0]) for call in map(json.loads, lines) if call["name"] == "uv"]
+
+    def test_install_sh_installs_a_newer_uv_where_uv_is_too_old_for_python_3_14_and_runs_with_it(self) -> None:
+        # A uv older than 0.9.0 that cannot update itself (Homebrew's, pip's: no receipt of uv's own installer): uv's
+        # own installer runs, as where uv is missing, with nothing added, and the run goes on with the uv it put in
+        # its folder (~/.local/bin here), never the old one first on PATH. The person is never asked to update uv.
+        self.programs("uv", "curl")
+        old, new = self.bin / "uv", self.uv_bin / "uv"
+        installer = ('echo "$#" > "$HOME/installer-args"\nmkdir -p "$HOME/.local/bin"\n'
+                     f'cp "{old}" "$HOME/.local/bin/uv"\necho "$NEW_UV" > "$HOME/.local/bin/uv-version"\n')
+        refused = "uv 0.8.24 is older than 0.9.0, and uv's installer did not install a newer uv (what it said is above)."
+        # Its installer could not be downloaded, or put in a uv still too old: one line says so, and nothing runs.
+        for extra in ({"FAKE_FAIL": "curl"}, {"NEW_UV": "0.8.30"}):
+            script = self.run_sh(FAKE_UV_VERSION="0.8.24", FAKE_UV_INSTALLER=installer, **extra)
+            self.assertEqual(1, script.returncode, extra)
+            self.assertIn(refused, script.stderr)
+            self.assertNotIn("brew", script.stderr)
+            self.assertNotIn("run", [word for _path, word in self.uvs()], extra)
+        script = self.run_sh(FAKE_UV_VERSION="0.8.24", FAKE_UV_INSTALLER=installer, NEW_UV="0.13.9")
+        self.assertEqual(0, script.returncode, script.stderr)
+        self.assertIn("uv 0.8.24 is older than 0.9.0, the first that installs Python 3.14: installing a newer uv with "
+                      "uv's own installer (https://docs.astral.sh/uv/).", script.stderr)
+        self.assertEqual([argv[1] for argv in self.calls("curl")], ["https://astral.sh/uv/install.sh"])
+        self.assertEqual((self.home / "installer-args").read_text(encoding="utf-8").strip(), "0")
+        self.assertEqual(self.uvs(), [(old, "--version"), (new, "--version"), (new, "run")])
+        # uv from its own installer (its receipt) updates itself first; where it is still too old, the installer runs.
         self.write(".config/uv/uv-receipt.json", "{}")
-        script = self.run_sh(FAKE_UV_VERSION="0.8.24")
-        self.assertEqual(self.calls("uv"), [["--version"], ["self", "update"], ["--version"]])
+        script = self.run_sh(FAKE_UV_VERSION="0.8.24", FAKE_UV_INSTALLER=installer, NEW_UV="0.13.9")
+        self.assertEqual(0, script.returncode, script.stderr)
         self.assertIn("updating it (uv self update)", script.stderr)
+        self.assertEqual(self.uvs(), [(old, "--version"), (old, "self"), (old, "--version"), (new, "--version"),
+                                      (new, "run")])
 
     def test_the_development_install_puts_the_checkout_in_place_of_the_published_copy(self) -> None:
         dev_spec = importlib.util.spec_from_file_location("text_to_cad_dev_install", INSTALL / "dev_install.py")
@@ -1028,6 +1129,10 @@ class InstallScriptTests(unittest.TestCase):
         # Where uv's Python could not be set up (inside an app's package, first time), the person is told what to do.
         self.assertIn("& $uv python find --no-config --system --managed-python 3.14", text)
         self.assertIn("open PowerShell from the Start menu, run the install command there once", text)
+        # A uv too old for Python 3.14 that cannot update itself (winget's, pip's): uv's own installer, as install.sh
+        # runs it, and the run goes on with the uv it put in its folder; the person is never asked to update uv.
+        self.assertIn("$null = Install-Uv\n            $version = $null\n            $uv = Find-InstalledUv", text)
+        self.assertNotIn("winget upgrade", text)
 
     def test_the_installer_names_no_release(self) -> None:
         # Nothing in the install command changes with a release: no fallback, no pin, nothing a release stamps.

@@ -14,7 +14,9 @@ person or by cad (``cad plugin install``). It does these things alone:
    is installed again, ``uv tool install --reinstall ...``, PyPI's newest. A ``cad`` pipx installed, where uv has none,
    is a global cad too (``pipx_cad``): left as it is where it starts, and installed again by pipx where it does not
    (``repair_pipx``); uv installs no second cad. First the ``cad`` command 0.10.0-0.11.10 wrote in uv's bin folder goes, where it is
-   provably ours (``old_launcher``); another program's ``cad`` there stops this step, in one line;
+   provably ours (``old_launcher``); another program's ``cad`` there stops this step, in one line. On Windows a
+   ``cad.exe`` that runs is renamed out of uv's way (``set_aside``), never a reason to stop; what a run set aside and
+   could not delete, a later run deletes (``tidy``);
 3. installs or updates the plugin in each agent app it finds, with that app's own command, from the GitHub
    repository's ``latest`` branch, or copies the skills into the agent's own skills folder;
 4. only then removes what earlier releases left in that app (each row of ``APPS``), Claude Desktop's server,
@@ -101,6 +103,13 @@ UV_TOOL_ARGS = ("--managed-python", "--python", "3.14")
 # The mark in the first lines of the `cad` command 0.10.0-0.11.10 wrote in the bin folder, with its revision: `# ` in
 # the sh script and in the `__main__.py` of the zip behind cad.exe's launcher (Windows, 0.11), `rem ` in cad.cmd (0.10).
 OLD_LAUNCHER = re.compile(r"(#|rem) cad proxy: \d+")
+# A cad.exe of uv's tool set aside in uv's bin folder before uv installs cad (``set_aside``): the name cad's own update
+# gives one (``ASIDE`` in cad's ``auto_update_helper.py``), so either one's tidying removes the other's.
+ASIDE = ".cad.exe.{stamp}.{n}.old"
+# What a run sets aside or throws away in uv's bin folder and could not delete then (Windows keeps a file while it
+# runs): ``make_room``'s names, ``discard``'s trash folders, and ``ASIDE``. A later run deletes them (``tidy``).
+LEFTOVERS = (*(f".{name}.text-to-cad-old" for name in ("cad", "cad.exe", "cad.cmd", "cad-launcher")),
+             ".text-to-cad-trash-*", ASIDE.format(stamp="*", n="*"))
 # GetCurrentPackageFullName's answer in a process that runs in no app package (Windows' APPMODEL_ERROR_NO_PACKAGE).
 NO_PACKAGE = 15700
 # How long one app command may take before it is stopped (with every process it started). The slowest is a
@@ -1652,18 +1661,27 @@ def old_launcher(path: Path) -> bool:
     return any(OLD_LAUNCHER.match(line.strip()) for line in head.decode("utf-8", "replace").splitlines()[:3])
 
 
+def launcher_names(here: Here) -> Tuple[str, ...]:
+    """The names of the ``cad`` command 0.10.0-0.11.10 wrote (on Windows 0.11's cad.exe and 0.10's cad.cmd)."""
+    return ("cad.exe", "cad.cmd") if here.windows else ("cad",)
+
+
+def launcher_folders(here: Here, folder: Path) -> List[Path]:
+    """uv's bin folder ``folder``, and the folder 0.10.0-0.11.10 wrote their ``cad`` command in where that is another
+    (``CAD_LAUNCHER_DIR``, else ``~/.local/bin``)."""
+    return list(dict.fromkeys([folder, Path(here.environ.get("CAD_LAUNCHER_DIR") or here.home / ".local" / "bin")]))
+
+
 def make_room(here: Here, folder: Path, tools: Dict[str, Tool]) -> Tuple[Optional[str], List[Tuple[Path, Path]]]:
     """The ``cad`` command of 0.10.0-0.11.10 (``old_launcher``) set aside, beside itself under a name no shell runs,
-    in uv's bin folder ``folder`` and in the folder those releases wrote it in where that is another
-    (``CAD_LAUNCHER_DIR``, else ``~/.local/bin``); with it, on Windows, 0.10's cad.cmd (a cad.exe that runs can be
-    renamed, not deleted), and the Python 0.11's cad.exe ran (``launcher_python``). ``settle`` deletes them once uv's
-    cad is in, and puts them back where it is not. Why the
+    in each of ``launcher_folders``; with it, on Windows, 0.10's cad.cmd (a cad.exe that runs can be renamed, not
+    deleted), and the Python 0.11's cad.exe ran (``launcher_python``). ``settle`` deletes them once uv's cad is in, and
+    puts them back where it is not; one still in use then stays for a later run (``tidy``). Why the
     install cannot go on, or None: another program's ``cad`` in ``folder``, which uv would not replace (one no tool of
     uv's lists), or ours that cannot be moved; and what was set aside."""
-    names = ("cad.exe", "cad.cmd") if here.windows else ("cad",)
+    names = launcher_names(here)
     listed = {os.path.normcase(path) for tool in tools.values() for path in tool.commands.values() if path}
-    earlier = Path(here.environ.get("CAD_LAUNCHER_DIR") or here.home / ".local" / "bin")
-    found = [where / name for where in dict.fromkeys([folder, earlier]) for name in names if old_launcher(where / name)]
+    found = [where / name for where in launcher_folders(here, folder) for name in names if old_launcher(where / name)]
     command = folder / names[0]
     if command not in found and os.path.lexists(command) and os.path.normcase(str(command)) not in listed:
         return (f"cad: not installed: {here.shown(command)} is another program's cad command, which uv will not "
@@ -1720,60 +1738,58 @@ def settle(here: Here, moved: List[Tuple[Path, Path]], done: bool) -> None:
             print(f"Removed {what} ({here.shown(path)}).", flush=True)
 
 
-def running_commands() -> List[str]:
-    """Windows: the paths of the ``cad.exe`` processes that run, read through the Win32 API in this process (no
-    program started, no window shown); those it may not read, and every one where the API fails, left out."""
-    if os.name != "nt":
+def tidy(here: Here, folder: Path) -> None:
+    """What earlier runs set aside in ``launcher_folders`` and could not delete then (``LEFTOVERS``: Windows keeps a
+    file while it runs), deleted where it can be now, quietly; one still in use stays for a later run. Never in a folder
+    where a cad command of 0.10.0-0.11.10 is still there (its install did not happen): what is set aside there may be
+    what it runs."""
+    for where in launcher_folders(here, folder):
+        if any(old_launcher(where / name) for name in launcher_names(here)):
+            continue
+        for pattern in LEFTOVERS:
+            for path in where.glob(pattern):
+                try:
+                    if path.is_dir() and not path.is_symlink():
+                        _rmtree(path)
+                    else:
+                        path.unlink()
+                except OSError:
+                    pass
+
+
+def set_aside(folder: Path, tool: Optional[Tool]) -> List[Tuple[Path, Path]]:
+    """Windows, before uv installs the cad tool ``tool`` again: its ``cad.exe`` in uv's bin folder ``folder`` and its
+    environment's own each renamed to a name of its own in ``folder`` (``ASIDE``), never inside the environment, which
+    uv deletes as it installs again. uv cannot replace a cad.exe that runs, and fails halfway (measured, uv 0.13.8), but
+    one that runs can be renamed, and runs on from its new name (measured). One that is not there, or cannot be renamed
+    (another disk), is skipped. Where uv has no cad tool, nothing: a cad.exe of ours there is ``make_room``'s, and
+    another program's is left alone. What was set aside, for ``put_back``."""
+    if tool is None:
         return []
-    try:
-        import ctypes
-        from ctypes import wintypes
-
-        class Entry(ctypes.Structure):  # PROCESSENTRY32W
-            _fields_ = [("size", wintypes.DWORD), ("usage", wintypes.DWORD), ("pid", wintypes.DWORD),
-                        ("heap", ctypes.c_size_t), ("module", wintypes.DWORD), ("threads", wintypes.DWORD),
-                        ("parent", wintypes.DWORD), ("priority", ctypes.c_long), ("flags", wintypes.DWORD),
-                        ("name", ctypes.c_wchar * 260)]
-
-        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
-        kernel.OpenProcess.restype = wintypes.HANDLE
-        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-        kernel.Process32FirstW.argtypes = kernel.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(Entry)]
-        kernel.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
-                                                      ctypes.POINTER(wintypes.DWORD)]
-        snapshot = kernel.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
-        if not snapshot or snapshot == wintypes.HANDLE(-1).value:
-            return []
-        found: List[str] = []
-        entry = Entry()
-        entry.size = ctypes.sizeof(Entry)
+    stamp = f"{os.getpid()}-{time.time_ns()}"
+    places = [folder / "cad.exe", *([Path(tool.env) / "Scripts" / "cad.exe"] if tool.env else [])]
+    moved: List[Tuple[Path, Path]] = []
+    for n, exe in enumerate(places):
+        aside = folder / ASIDE.format(stamp=stamp, n=n)
         try:
-            more = kernel.Process32FirstW(snapshot, ctypes.byref(entry))
-            while more:
-                if entry.name.lower() == "cad.exe":
-                    process = kernel.OpenProcess(0x1000, False, entry.pid)  # PROCESS_QUERY_LIMITED_INFORMATION
-                    if process:
-                        buffer, size = ctypes.create_unicode_buffer(32768), wintypes.DWORD(32768)
-                        if kernel.QueryFullProcessImageNameW(process, 0, buffer, ctypes.byref(size)):
-                            found.append(buffer.value)
-                        kernel.CloseHandle(process)
-                more = kernel.Process32NextW(snapshot, ctypes.byref(entry))
-        finally:
-            kernel.CloseHandle(snapshot)
-        return found
-    except (AttributeError, OSError, ValueError):
-        return []
+            os.replace(exe, aside)
+        except OSError:
+            continue
+        moved.append((exe, aside))
+    return moved
 
 
-def cad_running(folder: Path, tool: Optional[Tool]) -> bool:
-    """Windows: whether a ``cad.exe`` runs from uv's bin folder ``folder`` or the cad tool's environment. uv cannot
-    replace one of those while it runs, and fails halfway, leaving the tool without its packages until it is run
-    again with none running (measured, uv 0.13.8). One that runs from elsewhere (uv's cache: ``uvx ... cad@X mcp``,
-    the line Codex runs, for as long as a Codex thread is open) is no matter; one whose path cannot be read neither:
-    uv tries, and its failure is said."""
-    places = [folder, *([Path(tool.env)] if tool is not None and tool.env else [])]
-    return any(within(path, place) for path in running_commands() for place in places)
+def put_back(moved: List[Tuple[Path, Path]], done: bool) -> None:
+    """What ``set_aside`` moved: deleted once uv's cad is in (``done``), else put back where nothing took its place.
+    Quietly; one that still runs, or cannot go back, stays for a later run (``tidy``)."""
+    for path, aside in moved:
+        try:
+            if done:
+                aside.unlink()
+            elif not os.path.lexists(path):
+                os.replace(aside, path)
+        except OSError:
+            pass
 
 
 def packaged(here: Here) -> bool:
@@ -1791,17 +1807,20 @@ def packaged(here: Here) -> bool:
 
 
 def on_path(here: Here, uv: str, folder: Path) -> None:
-    """Where uv's bin folder is not on this shell's PATH: on Windows, uv's ``uv tool update-shell`` puts it on the
-    user's PATH for new windows (winget's uv puts its own folder there instead; ``install.ps1`` adds it to the window
-    that ran it); elsewhere, where uv's own installer put it in the shell's profile already, a line says so."""
+    """Where uv's bin folder is not on this shell's PATH, uv's own ``uv tool update-shell`` puts it there for new
+    terminals, as uv's and Codex's installers do for their own folders: on Windows the user's PATH (winget's uv puts
+    its own folder there instead; ``install.ps1`` adds it to the window that ran it), elsewhere the profile of the
+    shell in ``SHELL`` (zsh: ``.zshenv``; bash: ``.bashrc`` and ``.bash_profile``; measured, uv 0.13.9). Nothing of
+    ours edits a profile. Not where ``UV_NO_MODIFY_PATH`` is set, uv's own switch for this. Where it does not end 0 (it
+    has put it there already, and this shell was opened before: exit 2), a line says to open a new terminal."""
     entries = here.environ.get("PATH", "").split(";" if here.windows else ":")
     if any(same_path(entry, folder) for entry in entries if entry):
         return
-    if here.windows and not here.environ.get("UV_NO_MODIFY_PATH"):
+    if not here.environ.get("UV_NO_MODIFY_PATH"):
         ran = here.run([uv, "tool", "update-shell"], timeout=60)
         if ran.ok:
-            print(f"{here.shown(folder)} is on your PATH now (uv tool update-shell): apps and windows opened before "
-                  "this one see it once restarted.", flush=True)
+            print(f"{here.shown(folder)} is on your PATH now for new terminals (uv tool update-shell): apps and "
+                  "terminals opened before this one see it once restarted.", flush=True)
             return
     print(f"{here.shown(folder)} is not on this shell's PATH: open a new terminal to use cad (where it is still not "
           "found, run `uv tool update-shell`).", flush=True)
@@ -1916,7 +1935,8 @@ def install_cad(here: Here) -> Cad:
     tool, or one whose command does not start (installed again); one that starts, at any release, is left as it is.
     A ``cad`` pipx installed (``pipx install cad``), where uv has none, is a global cad as uv's is: left as it is
     where it starts; installed again by pipx where it does not (``repair_pipx``), and uv installs no second cad. uv's
-    output shown as it runs."""
+    output shown as it runs. On Windows a ``cad.exe`` that runs never stops it: each one in uv's way is renamed aside
+    first (``set_aside``), and what is left set aside is deleted by a later run (``tidy``)."""
     uv = here.environ.get("UV") or here.which("uv")  # `uv run` names itself in UV
     if not uv:
         print("cad: failed: uv was not found (install uv: https://docs.astral.sh/uv/)", flush=True)
@@ -1925,6 +1945,7 @@ def install_cad(here: Here) -> Cad:
     lines = said.out.strip().splitlines() if said.ok else []
     folder = Path(lines[-1].strip()) if lines else here.home / ".local" / "bin"
     command = str(folder / ("cad.exe" if here.windows else "cad"))
+    tidy(here, folder)
     tools = uv_tools(here, uv)
     tool = tools.get("cad")
     piped = pipx_cad(here, folder) if tool is None else None
@@ -1947,11 +1968,8 @@ def install_cad(here: Here) -> Cad:
         # There, but it does not start (a tool Windows left half-replaced, say): installed again.
         print(f"cad {tool.version} is installed but does not start: installing it again with uv.", flush=True)
         again = True
-    if here.windows and cad_running(folder, tool):
-        settle(here, moved, False)
-        print("cad: not installed: cad.exe is running from cad's own folder, and Windows lets no one replace it while "
-              "it does. Close the apps and terminals that use cad, then run this again.", flush=True)
-        return Cad(tool.version if tool else None, 1)
+    # Windows: a cad.exe that runs (the typed `cad update` of 0.11.0-0.11.10 that ran this, say) is out of uv's way.
+    aside = set_aside(folder, tool) if here.windows else []
     if not again:
         print("Installing cad with uv. The first run downloads it, which takes a minute.", flush=True)
     try:
@@ -1960,6 +1978,7 @@ def install_cad(here: Here) -> Cad:
     except OSError as error:
         code = 127
         print(f"cad: failed: {error}", flush=True)
+    put_back(aside, not code)
     settle(here, moved, not code)  # the earlier command back where uv's is not in
     if code:
         where = ("This ran inside an app's package, where Windows keeps uv's first install of Python to that app: run "
