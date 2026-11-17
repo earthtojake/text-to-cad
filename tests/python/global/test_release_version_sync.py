@@ -107,9 +107,8 @@ class VersionSyncMirrorTests(unittest.TestCase):
     def test_a_file_with_a_version_and_a_pin_takes_both(self) -> None:
         """A pyproject is a TOML target and a pin target: stamping one must keep the other."""
         targets = json.loads(_node(
-            "const { jsonTargets, pinTargets, bootstrapTargets, tomlTargets } = await import(%s);\n"
-            "console.log(JSON.stringify([...jsonTargets.map((t) => t.path), ...pinTargets,"
-            " ...bootstrapTargets.map((t) => t.path), ...tomlTargets]));"
+            "const { jsonTargets, pinTargets, tomlTargets } = await import(%s);\n"
+            "console.log(JSON.stringify([...jsonTargets.map((t) => t.path), ...pinTargets, ...tomlTargets]));"
             % json.dumps(SYNC_SCRIPT.as_uri())))
         self.assertIn("codex.mcp.json", targets)
         with tempfile.TemporaryDirectory() as scratch:
@@ -143,8 +142,6 @@ class VersionSyncMirrorTests(unittest.TestCase):
                 if project != "cad":
                     self.assertIn('"cad==9.9.9"', text, project)
                     self.assertNotRegex(text, r"cad==(?!9\.9\.9)", project)
-            # The one-line installer falls back to the release it ships with.
-            self.assertIn('\nFALLBACK = "9.9.9"\n', (root / "scripts/install/install.py").read_text(encoding="utf-8"))
             self.assertEqual(skill.read_text(encoding="utf-8"), stamped)
             # Stamped once, it is stamped: a second run changes nothing.
             again = subprocess.run(["node", str(root / "scripts/release/sync-version.mjs")],
@@ -159,9 +156,9 @@ class VersionSyncMirrorTests(unittest.TestCase):
                          "apps/docs/src/app/terms-of-service/page.tsx"):
                 self.assertNotRegex(repo_path(page).read_text(encoding="utf-8"), r"(?<![\w.-])(cadgen|cad(-server|-mcp)?(\[[a-z0-9_,.-]+\])?)==", page)
 
-    def test_the_version_check_holds_the_installer_s_fallback_to_the_release(self) -> None:
-        """check-version.sh refuses an installer script that would fall back to another release, and a skill
-        written for another."""
+    def test_the_version_check_holds_the_manifests_and_the_skills_to_the_release(self) -> None:
+        """check-version.sh refuses a manifest or a server line of another release, and a skill written for
+        another."""
         # The four distributions' pyprojects, which it checks too, as they are.
         projects = json.loads(_node("const { tomlTargets } = await import(%s);\nconsole.log(JSON.stringify(tomlTargets));"
                                     % json.dumps(SYNC_SCRIPT.as_uri())))
@@ -173,7 +170,7 @@ class VersionSyncMirrorTests(unittest.TestCase):
                                          % json.dumps(SYNC_SCRIPT.as_uri())))
             manifests = [path for path in manifests if path.endswith(".json") and "package" not in path]
             for relative in ("scripts/release/check-version.sh", "scripts/release/release-tags.sh",
-                             "scripts/release/unavailable-versions.txt", "scripts/install/install.py",
+                             "scripts/release/unavailable-versions.txt",
                              *projects, *manifests):
                 (root / relative).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(repo_path(relative), root / relative)
@@ -187,7 +184,6 @@ class VersionSyncMirrorTests(unittest.TestCase):
             stale = subprocess.run(check, capture_output=True, text=True, timeout=60)
             self.assertEqual(1, stale.returncode, stale.stdout + stale.stderr)
             released = repo_path("VERSION").read_text(encoding="utf-8").strip()
-            self.assertIn(f"scripts/install/install.py falls back to {released}; expected 9.9.9", stale.stderr)
             self.assertIn(f"skills/ names cad=={released}; expected 9.9.9", stale.stderr)
             for manifest in (".claude-plugin/plugin.json", ".muse-plugin/marketplace.json", ".kimi-plugin/plugin.json"):
                 self.assertIn(f"{manifest} names version {released}; expected 9.9.9", stale.stderr)

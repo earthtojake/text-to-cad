@@ -1,29 +1,26 @@
 #!/usr/bin/env python3
-"""Install this checkout into the agent apps, to test the plugin and the server locally; and go back.
+"""Install this checkout into the agent apps, to test the plugin and cad locally; and go back.
 
     scripts/install/dev_install.py                 # this checkout, into every app found here
     scripts/install/dev_install.py claude codex    # into these apps alone (install.py's APPS keys)
     scripts/install/dev_install.py --release       # back to the published release, in every app
 
 It does what the install script does (scripts/install/install.py, whose table of apps it uses), with this
-checkout as the source instead of GitHub:
+checkout as the source instead of PyPI and GitHub:
 
-1. registers the checkout's .venv as a text-to-cad version of its own, ``<VERSION>-dev.<time>``, and writes the
-   ``cad`` command (cad_server's own code, run by that interpreter);
-2. writes the plugin from this checkout into ``tmp/dev-plugin/text-to-cad``: every command in its skills pins that
-   version (``cad +<VERSION>-dev.<time>``), Codex's CAD server (the one app given one: ``codex.mcp.json``) runs the
-   .venv (``uv run ... --python <.venv's python> --module cad_mcp``: a bare command, as the published entry's
-   ``uvx``), and its catalog is ``earthtojake-dev``;
+1. installs the checkout's cad as the ``cad`` uv tool, editable (``uv tool install --managed-python --python 3.14
+   --editable packages/cad``; the cad command of 0.10.0-0.11.10 removed first, as install.py removes it), and
+   switches cad's automatic updates off: an update would put the release in its place;
+2. writes the plugin from this checkout into ``tmp/dev-plugin/text-to-cad``: its manifests name the version
+   ``<VERSION>-dev.<time>`` (so each app takes it as new), Codex's CAD server (the one app given one:
+   ``codex.mcp.json``) runs ``cad mcp``, the editable tool's command, and its catalog is ``earthtojake-dev``;
 3. installs that folder in each app with the app's own command (install.py's ``local`` commands; an app that cannot
    install from a folder is skipped and says so), and only then removes the published copy of ours there.
 
-``--release`` first removes every development version (its server stopped where nothing is in flight there): one
-sorts after its release, so left installed it would stay the newest, the one a ``cad`` command with no pin runs and
-whose server cleans. Then it runs install.py as it is: the newest release, every app moved back to the GitHub copy
-(the development copies, ``text-to-cad@earthtojake-dev`` and the rest, are among the old copies it removes). Run it
-again after a change; restart an app's session to load it.
-
-Environment: ``CAD_PYTHON``, the interpreter that runs the server (default: the checkout's .venv).
+``--release`` uninstalls the editable tool (only where the ``cad`` tool is one), then runs install.py as it is: the
+newest release of cad, every app moved back to the GitHub copy (the development copies, ``text-to-cad@earthtojake-dev``
+and the rest, are among the old copies it removes), automatic updates on. Run it again after a change; restart an
+app's session to load it. Run ``scripts/bundle/bundle.sh`` once first: the CAD Viewer's page comes from the bundle.
 """
 
 from __future__ import annotations
@@ -31,7 +28,6 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
-import os
 from pathlib import Path
 import re
 import shutil
@@ -54,51 +50,36 @@ def _install_module():
 
 install = _install_module()
 
-# Registers the interpreter running it as the development version named by the first argument and writes the
-# `cad` command, through the checkout's own cad_server (this script cannot import it).
-REGISTER = ("import sys\n"
-            "from pathlib import Path\n"
-            "from cad_server._internal import installations, releases, versions\n"
-            "versions.development(sys.argv[1], sys.executable, str(releases.console(Path(sys.prefix))), sys.prefix)\n"
-            "_path, _status, unwritten = installations.write_proxy()\n"
-            "sys.exit(unwritten or 0)\n")
-# Removes every development version installed (``versions.remove``: its server stopped first), each said.
-REMOVE = ("from cad_server._internal import versions\n"
-          "for name in versions.present():\n"
-          "    if versions.DEVELOPMENT.fullmatch(name):\n"
-          "        done = versions.remove(name, told=print)\n"
-          "        if done not in ('removed', 'absent'):\n"
-          "            print(f'text-to-cad {name} stays for now ({done}): run this again once nothing runs from it')\n")
-# The variable naming the version the server registers as when an app starts it (cad_server's installations).
-VERSION_ENV = "CAD_INSTALLATION_VERSION"
+
+def uv_folder(uv: str, *bin_: str) -> Path:
+    """``uv tool dir`` (``--bin``: the folder of the tools' commands)."""
+    return Path(subprocess.run([uv, "tool", "dir", *bin_], capture_output=True, text=True, check=True).stdout.strip())
 
 
-class Refused(Exception):
-    """This checkout cannot be installed as it is; the message says why."""
+def install_checkout(uv: str) -> int:
+    """This checkout's cad as the ``cad`` uv tool, editable, its automatic updates off: 0, else uv's exit status."""
+    here = install.Here()
+    folder = uv_folder(uv, "--bin")
+    problem, moved = install.make_room(here, folder, install.uv_tools(here, uv))
+    if problem:
+        print(problem, file=sys.stderr)
+        return 1
+    code = subprocess.call([uv, "tool", "install", *install.UV_TOOL_ARGS, "--reinstall-package", "cad", "--editable",
+                            str(REPO_ROOT / "packages" / "cad")])
+    install.settle(here, moved, code == 0)
+    if code == 0:
+        cad = folder / ("cad.exe" if here.windows else "cad")
+        if subprocess.run([str(cad), "auto-update", "off"], capture_output=True).returncode == 0:
+            print("Automatic updates are off: an update would replace this checkout's cad with the release.")
+    return code
 
 
-def interpreter() -> str:
-    python = os.environ.get("CAD_PYTHON") or str(REPO_ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt"
-                                                                      else "bin/python"))
-    check = ("import pathlib, sys\nimport cad, cad_server, cad_mcp\nroot = pathlib.Path(sys.argv[1]).resolve()\n"
-             "for package in (cad, cad_server, cad_mcp):\n"
-             "    if root not in pathlib.Path(package.__file__).resolve().parents:\n"
-             "        sys.exit(f'{sys.executable} imports {package.__name__} from {package.__file__}, not from {root}')\n")
-    if subprocess.run([python, "-c", check, str(REPO_ROOT)]).returncode != 0:
-        raise Refused(f"{python} cannot run this checkout's server: install requirements-dev.txt into .venv, "
-                      "or set CAD_PYTHON")
-    return python
-
-
-def remove_development() -> None:
-    """Every development version removed, by this checkout's own server code (``REMOVE``); where the checkout cannot
-    run it, said, and nothing removed."""
+def editable(uv: str) -> bool:
+    """Whether the ``cad`` uv tool is an editable install (its receipt names an ``editable`` requirement)."""
     try:
-        python = interpreter()
-    except Refused as refusal:
-        print(f"The development versions stay ({refusal}).", file=sys.stderr)
-        return
-    subprocess.run([python, "-c", REMOVE])
+        return bool(re.search(r"\beditable\s*=", (uv_folder(uv) / "cad" / "uv-receipt.toml").read_text(encoding="utf-8")))
+    except (OSError, subprocess.CalledProcessError):
+        return False
 
 
 def plugin_files(root: Path = REPO_ROOT) -> list:
@@ -115,28 +96,23 @@ def plugin_files(root: Path = REPO_ROOT) -> list:
     return found
 
 
-def assemble(target: Path, version: str, python: str, root: Path = REPO_ROOT) -> None:
-    """The development plugin written into ``target``: ``version`` in every pin and manifest, every CAD server
-    entry running ``cad_mcp`` on ``python`` as that version, and the catalog named ``earthtojake-dev``."""
+def assemble(target: Path, version: str, root: Path = REPO_ROOT) -> None:
+    """The development plugin written into ``target``: ``version`` in every manifest, the CAD server entry running
+    the ``cad`` command's ``cad mcp``, and the catalog named ``earthtojake-dev``."""
     release = (root / "VERSION").read_text(encoding="utf-8").strip()
     if target.exists():
         shutil.rmtree(target)
     for name in plugin_files(root):
         source, path = root / name, target / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        if name.endswith(".md"):
-            text = source.read_text(encoding="utf-8").replace(f"cad +{release}", f"cad +{version}")
-            text = text.replace(f"--from cad-server=={release} cad setup", f"--from cad-server=={release} cad setup  "
-                                f"# not here: this is a development install of {root}")
-            path.write_text(text, encoding="utf-8")
-        elif name.endswith(".json"):
-            path.write_text(json.dumps(_json(json.loads(source.read_text(encoding="utf-8")), name, release, version,
-                                             python), indent=2) + "\n", encoding="utf-8")
+        if name.endswith(".json"):
+            path.write_text(json.dumps(_json(json.loads(source.read_text(encoding="utf-8")), name, release, version),
+                                       indent=2) + "\n", encoding="utf-8")
         else:
             shutil.copy2(source, path)
 
 
-def _json(data, name: str, release: str, version: str, python: str):
+def _json(data, name: str, release: str, version: str):
     if not isinstance(data, dict):
         return data
     if name.endswith("marketplace.json") and isinstance(data.get("name"), str):
@@ -149,14 +125,11 @@ def _json(data, name: str, release: str, version: str, python: str):
             plugin["version"] = version
     servers = data.get("mcpServers")
     if isinstance(servers, dict) and isinstance(servers.get("cad"), dict):
-        # Codex's entry, the one there is, keeps a bare command, as its published uvx: a server config whose command
-        # is a path has been dropped by Codex with no error. uv, which the published entry's uvx comes with, runs the
-        # interpreter in place, and the shim takes it for a launcher when it looks for its host. Its other keys (its
+        # Codex's entry, the one there is: the editable tool's command, bare as the published entry's uvx (a server
+        # config whose command is a path has been dropped by Codex with no error). Its other keys (its
         # startup_timeout_sec) are kept.
         entry = {key: value for key, value in servers["cad"].items() if key not in ("command", "args", "env")}
-        servers["cad"] = {**entry, "command": "uv",
-                          "args": ["run", "--no-config", "--no-project", "--python", python, "--module", "cad_mcp"],
-                          "env": {VERSION_ENV: version}}
+        servers["cad"] = {**entry, "command": "cad", "args": ["mcp"]}
     return data
 
 
@@ -170,23 +143,24 @@ def main(argv=None) -> int:
     unknown = [name for name in args.apps if name not in keys]
     if unknown:
         parser.error(f"no app {', '.join(unknown)}: choose from {', '.join(keys)}")
+    uv = shutil.which("uv")
+    if not uv:
+        print("error: uv is needed (https://docs.astral.sh/uv/)", file=sys.stderr)
+        return 1
     if args.release:
         if args.apps:
             parser.error("--release takes no apps: it puts the published release into every app")
-        remove_development()
+        if editable(uv) and subprocess.call([uv, "tool", "uninstall", "cad"]) != 0:
+            return 1
         return install.main([])
-    version = f"{(REPO_ROOT / 'VERSION').read_text(encoding='utf-8').strip()}-dev.{time.strftime('%Y%m%d%H%M%S')}"
-    try:
-        python = interpreter()
-        if subprocess.run([python, "-c", REGISTER, version]).returncode != 0:
-            raise Refused(f"could not register this checkout as {version}")
-    except Refused as refusal:
-        print(f"error: {refusal}", file=sys.stderr)
+    if install_checkout(uv) != 0:
+        print("error: this checkout's cad was not installed (what went wrong is above)", file=sys.stderr)
         return 1
-    assemble(PLUGIN_DIR, version, python)
+    version = f"{(REPO_ROOT / 'VERSION').read_text(encoding='utf-8').strip()}-dev.{time.strftime('%Y%m%d%H%M%S')}"
+    assemble(PLUGIN_DIR, version)
     source = install.Source(folder=PLUGIN_DIR, catalog=install.DEV_CATALOG, skills_dir=PLUGIN_DIR / "skills")
     apps = [app for app in install.APPS if not args.apps or app.key in args.apps]
-    print(f"This checkout is text-to-cad {version}.")
+    print(f"This checkout's plugin is text-to-cad {version}; `cad` runs this checkout.")
     report = install.install_apps(install.Here(), source, apps)  # each app's line printed as it finishes
     if report.changed:
         print("Start a new session in each app to use it.")

@@ -50,13 +50,6 @@ export const pinTargets = [
   "codex.mcp.json",
 ];
 
-// The one-line installer (install.sh and install.ps1 run install.py) carries the release it was
-// published with, which it installs when the version feed cannot be read. It is no pin target: it runs
-// `cad==<the release it found>`, which a pin's stamp would overwrite.
-export const bootstrapTargets = [
-  { path: "scripts/install/install.py", pattern: /^(FALLBACK = ")([^"\n]*)(")$/m },
-];
-
 // Each skill's setup block names the cad it was written for, `cad==X`; no command names a version. Every
 // Markdown file under `skills/` is stamped in place by `pinPattern`, and one at least must name it
 // (tests/python/global/test_skill_requirements.py holds the block).
@@ -266,22 +259,6 @@ function syncPinTarget(relativePath, version, text = readRequiredText(relativePa
   };
 }
 
-function syncBootstrapTarget(target, version) {
-  const text = readRequiredText(target.path);
-  const matches = [...text.matchAll(new RegExp(target.pattern.source, "gm"))];
-  if (matches.length !== 1) {
-    throw new Error(`${target.path} must stamp exactly one fallback version (${target.pattern.source})`);
-  }
-  if (matches[0][2] === version) {
-    return null;
-  }
-  return {
-    path: target.path,
-    labels: ["fallback version"],
-    text: text.replace(target.pattern, (_, before, _stale, after) => `${before}${version}${after}`),
-  };
-}
-
 /** Merge targets that are the SAME FILE into one, unioning their fields.
  *
  * The mirrored viewer/skill paths are symlinks to the canonical package in the development
@@ -340,12 +317,6 @@ function main() {
   }
   for (const target of tomlTargets) {
     const change = syncTomlTarget(target, version);
-    if (change) {
-      changes.push(change);
-    }
-  }
-  for (const target of bootstrapTargets) {
-    const change = syncBootstrapTarget(target, version);
     if (change) {
       changes.push(change);
     }

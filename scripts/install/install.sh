@@ -4,10 +4,10 @@
 #   curl -fsSL https://texttocad.dev/install.sh | sh
 #
 # It makes sure uv is here and new enough (installing it with uv's own installer when it is not), downloads
-# install.py from beside this script and runs it with uv's Python: that installs the newest release of
-# text-to-cad and puts the plugin into every agent app on this computer (install.py says how). Run it again to
-# update. It takes no options. Everything happens inside main, called on the last line, so a download cut short
-# runs nothing.
+# install.py from beside this script and runs it with uv's Python: that installs the cad command as a uv tool
+# and puts the plugin into every agent app on this computer (install.py says how). Run it again to update. It
+# takes no options, and names no release. Everything happens inside main, called on the last line, so a
+# download cut short runs nothing.
 
 set -eu
 
@@ -79,7 +79,7 @@ main() {
   if [ "$#" -gt 0 ]; then
     say "This installer takes no options: run it as it is to install or update text-to-cad in every agent app"
     say "on this computer:  curl -fsSL https://texttocad.dev/install.sh | sh"
-    say "To remove text-to-cad, run \`cad uninstall\`, and each app's own remove command."
+    say "To remove text-to-cad, run \`uv tool uninstall cad\`, and each app's own remove command."
     exit 2
   fi
   scratch=$(mktemp -d 2>/dev/null || mktemp -d -t text-to-cad)
@@ -105,17 +105,14 @@ main() {
       die "uv ${version:-of an unknown version} is older than $UV_MINIMUM, the first that installs Python 3.14: update it the way it was installed (Homebrew: brew upgrade uv; pip: pip install -U uv; uv's own installer: uv self update), then run this again"
     fi
   fi
-  # uv's folder on PATH, so install.py finds uvx beside it.
-  PATH="$(dirname "$uv"):$PATH"
-  export PATH
-
   # CAD_INSTALL_PY: a local install.py instead (the installer rehearsals run this checkout's).
   if [ -n "${CAD_INSTALL_PY:-}" ]; then
     cp "$CAD_INSTALL_PY" "$scratch/install.py"
   else
     download "$INSTALL_PY" "$scratch/install.py" || die "could not download $INSTALL_PY"
   fi
-  # It asks nothing, so it reads no terminal.
+  # It asks nothing, so it reads no terminal. It finds uv by the UV variable `uv run` sets, and sees the PATH
+  # this shell had, to say whether a new terminal is needed to find cad.
   "$uv" run --no-config --managed-python --python 3.14 --no-project "$scratch/install.py" </dev/null
 }
 

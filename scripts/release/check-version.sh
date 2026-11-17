@@ -14,8 +14,8 @@ Usage:
 Checks that VERSION contains a valid canonical release version, that the four
 projects (cad and its three aliases) are that version and require cad at it
 (`cad==<version>`), that it is not one PyPI will never take
-(scripts/release/unavailable-versions.txt), that the one-line installer's
-scripts fall back to it, that every plugin manifest names it, that Codex's server
+(scripts/release/unavailable-versions.txt), that every plugin manifest names it,
+that Codex's server
 line runs it (`cad@<version> mcp`) and that each skill names it as the cad it was
 written for (`cad==<version>`), with no command pinned to a version. main is the
 source branch AND what installers clone, so a stale version ships.
@@ -98,12 +98,6 @@ for project in packages/cad packages/aliases/*; do
   fi
   check_pins "$project/pyproject.toml" "$(pins "$project/pyproject.toml")"
 done
-# The one-line installer falls back to the release it was published with.
-fallback="$(sed -n 's/^FALLBACK = "\([^"]*\)"$/\1/p' scripts/install/install.py)"
-if [ "$fallback" != "$version" ]; then
-  echo "scripts/install/install.py falls back to ${fallback:-(no stamped version)}; expected $version" >&2
-  stale=1
-fi
 # Every plugin manifest says the release it is (each `"version"` field, a catalog's plugin entries
 # too), and the one server config, Codex's, starts that release's server (`cad@<version> mcp`).
 for manifest in .claude-plugin/plugin.json .claude-plugin/marketplace.json .codex-plugin/plugin.json \
@@ -139,4 +133,4 @@ if [ "$stale" -ne 0 ]; then
   echo "Run node scripts/release/sync-version.mjs to stamp the pins from VERSION." >&2
   exit 1
 fi
-echo "The four projects, the installer's fallback, the plugin manifests, Codex's server line and the skills match VERSION ($version)."
+echo "The four projects, the plugin manifests, Codex's server line and the skills match VERSION ($version)."

@@ -3,11 +3,12 @@
 #   irm https://www.texttocad.dev/install.ps1 | iex
 #
 # It makes sure uv is here and new enough (installing it with uv's own installer when it is not), downloads
-# install.py from beside this script and runs it with uv's Python: that installs the newest release of
-# text-to-cad and puts the plugin into every agent app on this computer (install.py says how). Run it again to
-# update. It takes no options. Everything happens inside Install-TextToCad, called on the last lines: a download
-# cut short runs nothing, and a failure returns instead of closing the window. Where it fails it writes an
-# error last, so `powershell -Command "irm ... | iex"` exits 1 (its exit status is 1 when the last command failed).
+# install.py from beside this script and runs it with uv's Python: that installs the cad command as a uv tool
+# and puts the plugin into every agent app on this computer (install.py says how). Run it again to update. It
+# takes no options, and names no release. Everything happens inside Install-TextToCad, called on the last
+# lines: a download cut short runs nothing, and a failure returns instead of closing the window. Where it fails
+# it writes an error last, so `powershell -Command "irm ... | iex"` exits 1 (its exit status is 1 when the last
+# command failed).
 
 function Install-TextToCad {
     # 'Continue': a native command's line on stderr is never an error that stops the run (Windows PowerShell 5.1
@@ -22,7 +23,7 @@ function Install-TextToCad {
     if ($args.Count) {
         Write-Host 'This installer takes no options: run it as it is to install or update text-to-cad in every agent app'
         Write-Host 'on this computer:  irm https://www.texttocad.dev/install.ps1 | iex'
-        Write-Host "To remove text-to-cad, run ``cad uninstall``, and each app's own remove command."
+        Write-Host "To remove text-to-cad, run ``uv tool uninstall cad``, and each app's own remove command."
         $global:LASTEXITCODE = 2
         return
     }
@@ -83,7 +84,7 @@ function Install-TextToCad {
             return
         }
     }
-    # uv's folder on PATH, so install.py finds uvx beside it.
+    # uv's folder on this window's PATH: a window open before uv's installer ran does not see it.
     $env:Path = "$(Split-Path $uv);$env:Path"
 
     $scratch = Join-Path ([IO.Path]::GetTempPath()) ("text-to-cad-" + [Guid]::NewGuid().ToString('N'))
@@ -105,6 +106,13 @@ function Install-TextToCad {
     try {
         & $uv run --no-config --managed-python --python 3.14 --no-project $script
         $code = $LASTEXITCODE
+        # The window that ran this finds cad at once: uv's bin folder on its PATH. Windows gives the user's PATH to a
+        # window or app as it starts, so one open before cad's folder was put there does not see it (measured).
+        $bin = & $uv tool dir --bin 2>$null | Select-Object -Last 1
+        if ($LASTEXITCODE -eq 0 -and $bin -and (Test-Path -LiteralPath $bin) -and
+                -not (($env:Path -split ';') -contains $bin)) {
+            $env:Path = "$bin;$env:Path"
+        }
         if ($code) {
             Write-Host "The installer exited $code; what it said is above." -ForegroundColor Red
         }
