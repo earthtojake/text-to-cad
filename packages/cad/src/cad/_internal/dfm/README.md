@@ -900,7 +900,9 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   hole wall is a countersink. A chamfer or a round of a skin's edge (a slanted plane, a convex cylinder of at
   most `t` along it, a cone, torus or sphere about its normal, within the sheet) is an `edge_break`, and a
   face square to the skin that reaches it and its opposite skin through breaks is a cut edge: its rays run
-  across the plate and measure its width, never its thickness. A cone, torus, sphere or freeform face whose
+  across the plate and measure its width, never its thickness. A bend's end is broken by a cone or a torus
+  about the bend's axis, beside one of its cylinders and a cut edge or a flange's break, within the sheet:
+  an `edge_break` too, and the bend's length runs to the cut. A cone, torus, sphere or freeform face whose
   rays cross `t` is `formed` (a cone between flanges is not a bend). A face square between two opposite planes that face away from each other,
   nearer each other than its own rays run, is the cut edge of a stretch off the thickness (a 3 mm wall's end
   cap): the stretch is judged on its skins, not on rays that run along it. Everything else, and any stretch
@@ -940,7 +942,11 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   39), and a hole with a broken rim is read back from it at its cut size. A break's edge that is no line and
   no arc (its end where it meets the next break at a corner of the outline: an ellipse's arc between two
   rounds, a conic between a chamfer along a line and one along an arc) is laid as chords within `CHORD_MM`
-  of it, as an arc's are, so none is shorter than the tolerance the breaks are fused with.
+  of it, as an arc's are, so none is shorter than the tolerance the breaks are fused with. A bend's ends'
+  breaks are unrolled with its strip, and every break is laid face up, as the flanges are (the far skin's
+  project face down, and were left beside the flat as pieces of their own).
+  A countersink sunk into the unfolded side is laid in the same way: that skin's hole is the countersink's
+  rim, the flat's the hole under it (a plate countersunk from both sides has one whichever side unfolds).
   `cad.build123d.unfold(shape, thickness=, k_factor=, material=, bend_lines=False)` returns it
   (`bend_lines=True`: a Compound of `CUT` and `BEND` children, one DXF layer each, `BEND` empty for a flat
   plate), and raises `ValueError`
@@ -948,7 +954,10 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   the flat pattern in the plane (`cad._internal.sheet_plane`, numpy), each place mapped back onto the
   part for its ref. At K = 0.5 the flat area equals volume / t exactly (`neutral_area_ratio`); the flat's area
   with each strip widened to K = 0.5, over volume / t, is `flat_material_fraction`: 1 where the flat holds
-  all of the part's material.
+  all of the part's material. The volume is the sheet's as cut and bent: the part's, and what its
+  countersinks and edge breaks cut from it afterwards (under each one's face, up to the skin it faces, or
+  for a bend's end the cylinder it breaks, on the face's triangulation), which the blank has and the flat's
+  area counts.
 
 ### Families (each `{"items": [...], "count": n}`, items sorted worst first, capped at 300)
 

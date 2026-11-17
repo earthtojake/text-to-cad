@@ -251,17 +251,35 @@ def material_of(entry: dict[str, Any]) -> dict[str, Any]:
                              "roughness": float(pbr.get("roughnessFactor", 1.0)), "ior": 1.5,
                              "emissive": [float(value) for value in entry.get("emissiveFactor", (0.0, 0.0, 0.0))]}
     found.update(look_extensions(entry.get("extensions") or {}))
-    from bd_materials import FinishedMaterial
-    from bd_materials.core import RangeMaterial
-    from threejs_materials import PbrProperties
     from cad.engine.colors import linear_to_srgb
-    from cad.engine.document import material_json
 
     name = found.pop("name")
     rgba = found.pop("color")
     found["color"] = [linear_to_srgb(c) for c in rgba[:3]]
     found["opacity"] = preview_alpha(rgba[3], found.get("transmission") or 0.0)
     found["metalness"] = found.pop("metallic")
+    try:
+        from bd_materials import FinishedMaterial
+        from bd_materials.core import RangeMaterial
+        from threejs_materials import PbrProperties
+        from cad.engine.document import material_json
+    except ModuleNotFoundError:
+        # A mesh file read where bd_materials is not installed: the display properties the file
+        # names are the material, as the document JSON the round trip above builds, written here by
+        # hand. ``found`` holds every PBR value the round trip keeps (an ior of 1.5, no emission
+        # where the file says nothing of them: ``threejs_materials``' own defaults).
+        values: dict[str, Any] = {"color": found["color"], "metalness": found["metalness"],
+                                  "roughness": found["roughness"], "ior": found.get("ior", 1.5),
+                                  "emissive": found.get("emissive", [0.0, 0.0, 0.0]),
+                                  "opacity": found["opacity"]}
+        for key in ("transmission", "attenuationDistance", "attenuationColor", "clearcoat",
+                    "clearcoatRoughness", "anisotropy", "anisotropyRotation", "emissiveIntensity"):
+            if key in found:
+                values[key] = found[key]
+        return {"type": "RangeMaterial",
+                "material": {"name": name, "density": None, "family": None, "transparent": False},
+                "pbr": {"id": name, "name": name, "source": "glTF", "url": "", "license": "",
+                        "values": values, "textures": {}}}
     return material_json(FinishedMaterial(RangeMaterial(name=name, density=None),
         pbr=PbrProperties.from_dict({"id": name, "name": name, "source": "glTF", "values": found})))
 

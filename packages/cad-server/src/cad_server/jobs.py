@@ -1,4 +1,4 @@
-"""In-memory operation lifecycle shared by viewer delivery and agent operations.
+"""In-memory operation lifecycle for the viewer's exports (``cad_server.viewer.exports``).
 
 Subclasses own the work and its outputs. The queue owns admission, request identity,
 progress, bounded waits and cancellation. It never imports a CAD kernel or saves a registry.
@@ -15,14 +15,11 @@ MAX_JOBS = 16
 
 
 class JobError(ValueError):
-    """A request refused before any work: its words, its HTTP status, and why, as the CAD app's telemetry
-    counts a tool's failure (``analytics.FAILURES``: ``bad_request``, or ``relative_path`` for a path
-    that is not absolute)."""
+    """A request refused before any work: its words, and its HTTP status."""
 
-    def __init__(self, message, status=400, reason="bad_request"):
+    def __init__(self, message, status=400):
         super().__init__(message)
         self.status = status
-        self.reason = reason
 
 
 class Jobs:

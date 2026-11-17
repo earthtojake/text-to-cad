@@ -229,51 +229,6 @@ class HttpSessionsTest(unittest.TestCase):
         with urlopen(f"{self.endpoint['url']}/?token={fresh['link']}", timeout=10) as page:
             self.assertEqual(page.status, 200, 'it opens the page')
 
-    def test_inspect_export_tools_run_without_a_view(self):
-        proxy = self.proxy()
-        def finished(name, arguments):
-            status = self.tool(proxy, name, arguments)['structuredContent']
-            for _ in range(30):
-                if status['state'] in ('succeeded', 'failed', 'cancelled', 'rejected'):
-                    break
-                status = self.tool(proxy, name, {'action': 'status', 'operationId': status['id'],
-                    'epoch': status['epoch'], 'afterSequence': status['sequence'], 'waitMs': 25000})['structuredContent']
-            return status
-
-        def operation(name, arguments):
-            status = finished(name, arguments)
-            self.assertEqual(status['state'], 'succeeded', status)
-            return status['result']
-        # A model is built by its script's call, never by a tool: a bare model, held in memory alone.
-        folder = (self.root / 'tool-models').resolve()
-        folder.mkdir()
-        script = folder / 'http_part.py'
-        script.write_text('from build123d import Box\nfrom cad import model\n\n\n@model\n'
-                          'def http_part():\n    return Box(2, 3, 4)\n', encoding='utf-8')
-        from cad.engine.api import build_script
-        built = build_script(script, ['http_part'])
-        self.assertTrue(built.ok)
-        ident = built.models[0]['id']  # what `python http_part.py` prints, `id:`
-        self.assertNotIn('cad_build', {tool['name'] for tool in self.call(proxy, 'tools/list')['tools']})
-        facts = operation('cad_inspect', {'requestId': 'inspect-request-01', 'source': f'{ident}#face 1'})
-        self.assertEqual(facts['inspection']['kind'], 'face')
-        target = (self.root / 'tool-export.step').resolve()
-        written = operation('cad_export', {'requestId': 'export-request-001', 'source': ident, 'destinations': [str(target)]})
-        # A script is never a source, whatever names it: each tool refuses it as it refuses any
-        # file that is no document, and nothing is built or written.
-        for at, named in enumerate((str(script), f'{script}::http_part')):
-            for name, arguments in (('cad_export', {'destinations': [str(self.root / 'refused.step')]}),
-                                    ('cad_snapshot', {'output': str(self.root / 'refused.png')}),
-                                    ('cad_inspect', {})):
-                with self.subTest(tool=name, source=named):
-                    status = finished(name, {'requestId': f'refused-{name}-{at:02d}-request', 'source': named, **arguments})
-                    self.assertIn(status['state'], ('failed', 'rejected'), status)
-                    self.assertRegex(status.get('error', ''), 'is no document|is neither a document')
-        self.assertFalse((self.root / 'refused.step').exists() or (self.root / 'refused.png').exists())
-        self.assertEqual([path.name for path in folder.iterdir()], ['http_part.py'])
-        self.assertEqual(written['files'][0]['bytes'], target.stat().st_size)
-        self.assertGreater(target.stat().st_size, 0)
-
     def test_http_transport_validation_and_session_lifecycle(self):
         client = EngineClient()
         def post(message, **headers):

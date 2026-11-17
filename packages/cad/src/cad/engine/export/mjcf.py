@@ -101,7 +101,8 @@ from cad.engine.atomic_replace import replace_atomic, same_bytes, staging
 from cad.engine.description import Description, DescriptionError, Geometry, Joint, Link
 from cad.engine.export import ExportRefused, note
 
-__all__ = ["SCENE", "digest", "rendered", "scene", "scene_around", "scene_of", "write", "write_description"]
+__all__ = ["SCENE", "digest", "rendered", "rendered_view", "scene", "scene_around", "scene_of", "write",
+           "write_description"]
 
 #: The moments a principal inertia may miss the triangle inequality by and be nudged onto it, kg*m^2.
 NUDGE = 1e-9
@@ -118,6 +119,12 @@ def write(view: Any, path: Path) -> None:
     """The export ``Kind``'s writer: ``view``'s document described (at its ``zero``, where it has one) and
     written to ``path``, with a scene beside it where there is none (the module's **The scene**); what it
     holds said (``export.described``)."""
+    rendered_view(view)(path)
+
+
+def rendered_view(view: Any) -> Any:
+    """The export ``Kind``'s drawing (``render``): ``view``'s document described and rendered, a description
+    that does not describe refused here, before any file of the export is written; what writes it at a path."""
     from cad.engine.describe import describe
     from cad.engine.export import described
 
@@ -127,17 +134,24 @@ def write(view: Any, path: Path) -> None:
     for text in description.warnings:
         note(text)
     found = touching(description)
-    write_description(description, path, scene=True, touching=found)
-    described(description.summary("mjcf", touching=found))
+    made = rendered(description, "assets", touching=found)
+
+    def land(path: Path) -> None:
+        write_description(description, path, scene=True, touching=found, made=made)
+        described(description.summary("mjcf", touching=found))
+
+    return land
 
 
 def write_description(description: Description, path: Any, *, assets: str = "assets",
-                      scene: bool = False, touching: list[tuple[str, str]] | None = None) -> list[Path]:
+                      scene: bool = False, touching: list[tuple[str, str]] | None = None,
+                      made: tuple[str, dict[str, bytes]] | None = None) -> list[Path]:
     """Write ``description`` as an MJCF at ``path`` and its meshes in ``<path.parent>/<assets>``, and, given
     ``scene``, a ``scene.xml`` beside it where there is none (the module's **The scene**); the files it
-    wrote, the MJCF first. ``touching``: the pairs ``contact.touching`` found of it, where the caller has them."""
+    wrote, the MJCF first. ``touching``: the pairs ``contact.touching`` found of it, where the caller has them;
+    ``made``: its ``rendered`` text and files, where the caller rendered it already."""
     path = Path(path)
-    text, files = rendered(description, assets, touching=touching)
+    text, files = made or rendered(description, assets, touching=touching)
     written = place(path, text, files, assets)
     if scene and path.name.lower() != SCENE:
         beside = path.parent / SCENE

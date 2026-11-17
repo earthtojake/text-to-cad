@@ -51,7 +51,14 @@
  * request a refusal named (`part`, `SNAPSHOT_PARTS`: a word cadgen chose, never the value; `none` for a failure
  * that was no refusal), and two more reasons a snapshot or a build failed, the machine's: no OpenGL context
  * (`no_gl`, a snapshot's) and no kernel process the engine could start (`no_kernel`). A schema before it sends
- * none of them, and its rows are read, and keyed, as ever.
+ * none of them, and its rows are read, and keyed, as ever. Schema 10 is schema 9 with one more reason a CAD tool's call
+ * failed, the machine's: no kernel process the engine could start for it (`no_kernel`), which earlier schemas counted
+ * as `other`; and that failure's crash says which failure it was (`cause`, `KERNEL_CAUSES`: a word cadgen chose
+ * where it classified the failure, never read from its message), on that crash's type alone; and one more reason a
+ * build failed, the server older than the library that asked it (`outdated`), earlier `export_error`. A model build's
+ * `failed` from schema 10 counts the failures the system or the machine caused alone: a script that raised is in its
+ * `count`, never `failed`. A schema before it sends none of these, and its rows are read, and keyed, as ever.
+ * Schema 11 is schema 10 with one more format, a GSL model (`gsl`): an implicit field the CAD Viewer draws.
  */
 
 import { createHash } from 'node:crypto';
@@ -92,7 +99,7 @@ const CHUNK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
 const KINDS_6 = new Set([...KINDS, 'xbf']);
 const KINDS_8 = new Set([...KINDS_6, 'model', 'kicad_pcb', 'kicad_sch']);
-const KINDS_10 = new Set([...KINDS_8, 'gsl']);
+const KINDS_11 = new Set([...KINDS_8, 'gsl']);
 const VIAS = new Set(['script', 'command']);
 const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'quick_edit']);
 // What a person used in a CAD view (`cad_server/analytics.py`: `CONTROLS`, the page's own in `@cad/ui`'s
@@ -169,6 +176,18 @@ const SNAPSHOT_FAILURES = new Set(['bad_request', 'no_file', 'input_error', 'bro
 // start the kernel process the work runs in (`no_kernel`), which earlier schemas counted as a refusal.
 const SNAPSHOT_FAILURES_9 = new Set([...SNAPSHOT_FAILURES, 'no_gl', 'no_kernel']);
 const BUILD_FAILURES_9 = new Set([...BUILD_FAILURES, 'no_kernel']);
+// Schema 10's: a CAD tool's call the engine could start no kernel process for (`no_kernel`), earlier `other`; and
+// a build (an export) the CAD server running did without an option the library asked of it, being older
+// (`outdated`), earlier `export_error`.
+const FAILURES_10 = new Set([...FAILURES, 'no_kernel']);
+const BUILD_FAILURES_10 = new Set([...BUILD_FAILURES_9, 'outdated']);
+// Why the engine could start no kernel process, on that crash (`exception`'s `cause`), schema 10's
+// (`cad_server/analytics.py`: `KERNEL_CAUSES`): the system refused the process pool, or the kernel environment could
+// not be made -- the network, a denial, uv killed, the installation's Python, resolving or installing the release, a
+// file, no uv, the made environment not running -- or none of these.
+const KERNEL_CAUSES = new Set(['pool', 'network', 'denied', 'killed', 'python', 'resolve', 'install', 'files', 'uv',
+  'probe', 'other']);
+const KERNEL_UNAVAILABLE = 'cad.engine.serve.KernelProcessesUnavailable';
 // Which part of a snapshot's request a refusal (`bad_request`) named, schema 9's (`cad_server/analytics.py`:
 // `SNAPSHOT_PARTS`): a word cadgen chose where it refused, never the value given. `none`: a failure that was no
 // refusal.
@@ -243,10 +262,10 @@ const READERS = {
     if (errors > calls) fail(`${at} counts more errors than calls`);
     return { key: `tool ${tool}`, fields: { tool, calls, errors } };
   },
-  tool_failure(event, at) {
+  tool_failure(event, at, { toolFailures = FAILURES }) {
     exactly(event, FIELDS.tool_failure, at);
     const tool = matches(event.tool, TOOL, `${at}.tool`);
-    const reason = oneOf(event.reason, FAILURES, `${at}.reason`);
+    const reason = oneOf(event.reason, toolFailures, `${at}.reason`);
     return { key: `tool_failure ${tool} ${reason}`, fields: { tool, reason, count: some(event.count, `${at}.count`) } };
   },
   view(event, at) {
@@ -323,8 +342,8 @@ const READERS = {
     if (!Object.values(fields).some(Boolean)) fail(`${at} counts nothing`);
     return { key: 'health', fields };
   },
-  exception(event, at) {
-    only(event, ['name', ...FIELDS.exception], at);
+  exception(event, at, { causes = false }) {
+    only(event, ['name', ...FIELDS.exception, ...(causes ? ['cause'] : [])], at);
     if (typeof event.handled !== 'boolean') fail(`${at}.handled is not true or false`);
     if (!Array.isArray(event.frames) || event.frames.length > MAX_FRAMES) fail(`${at}.frames is a list of at most ${MAX_FRAMES}`);
     const fields = {
@@ -338,6 +357,13 @@ const READERS = {
     };
     if (fields.where !== 'page' && fields.frames.some(frame => frame.chunk_id)) fail(`${at}: only a page's frames name a chunk`);
     const crash = [fields.where, fields.tool, fields.type, fields.handled, fields.status, fields.frames];
+    // Schema 10's: which failure left the engine no kernel process, on that crash alone; a crash without one is
+    // keyed as ever.
+    if (event.cause !== undefined) {
+      if (fields.type !== KERNEL_UNAVAILABLE) fail(`${at}: only ${KERNEL_UNAVAILABLE} names a cause`);
+      fields.cause = oneOf(event.cause, KERNEL_CAUSES, `${at}.cause`);
+      crash.push(fields.cause);
+    }
     return { key: `exception ${JSON.stringify(crash)}`, fields };
   },
 };
@@ -382,10 +408,15 @@ const SCHEMAS = new Map([
   [9, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_8,
     origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7, parts: true,
     snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_9 }],
-  // A GSL model, an implicit field the page draws, is a format of its own. Nothing else of schema 9 changes.
-  [10, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_10,
+  // And the machine's reason a CAD tool's call failed: no kernel process, and on its crash which failure it was;
+  // and a build's reason the server is older than the library (`outdated`).
+  [10, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_8,
     origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7, parts: true,
-    snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_9 }],
+    snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_10, toolFailures: FAILURES_10, causes: true }],
+  // A GSL model, an implicit field the page draws, is a format of its own. Nothing else of schema 10 changes.
+  [11, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_11,
+    origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7, parts: true,
+    snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_10, toolFailures: FAILURES_10, causes: true }],
 ]);
 
 export function isUuid(value) {

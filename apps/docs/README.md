@@ -155,7 +155,10 @@ vanishes into the page (no blend mode: iOS Safari never blends a scroller's cont
 links, and nothing follows them in the hero: under their names as much room as the label has over
 their glyphs, so the strip closes the first screen evenly. Then Features (below). The site has no
 Install section, no per-app install of its own and no telemetry note: the privacy policy, linked
-from the footer and from `/llms.txt`, says what is sent and how to turn it off. Contributing closes
+from the footer and from `/llms.txt`, says what is sent and how to turn it off. Community follows
+Features (`community`, the README's Community item for item and word for word): its intro, then
+a bullet for each project built on top of text-to-cad or that text-to-cad uses: its name, what it
+is and its links side by side (its website, its repository). Contributing closes
 the page (`contributing`, the README's Contributing in substance): its intro, then each way to take
 part, bugs and plugin requests, questions and ideas, and code, skills and models, with
 its links. The footer links the privacy policy and the terms of service, then Made by @earthtojake.
@@ -164,7 +167,7 @@ text fill the content width. Command text remains monospace.
 
 The homepage and the repository README share their structure and are changed
 together: the install commands, what they
-do, the link to installing by hand, the features and Contributing. Updates are on
+do, the link to installing by hand, the features, Community and Contributing. Updates are on
 `docs/install.md`, with each app's own commands, which both link, and the telemetry in full is
 the privacy policy. The site has the hero and the agents carousel. The page's copy lives in
 `src/lib/content.ts`, which `/llms.txt`
