@@ -96,7 +96,8 @@ KINDS: dict[str, type] = {
     "material": str, "units": str, "axes": int, "turning": bool, "tools": str, "stock": str,
     "thickness": float, "k_factor": float, "bend_radius": float, "kerf": float, "sheet_size": str, "pull": str,
     "wall_limit": float, "zero_tol": float, "cavities": int, "technology": str, "build_volume": str,
-    "angle_limit": float, "samples": int, "layer_height": float, "nozzle": float}
+    "angle_limit": float, "samples": int, "layer_height": float, "nozzle": float,
+    "printer": str}
 # Raised, not asserted: the signature and the command's choices are these, under ``python -O`` too.
 if get_args(Process) != PROCESSES:
     raise RuntimeError(f"manufacturing.Process {get_args(Process)} is not dfm.PROCESSES {PROCESSES}")
@@ -157,6 +158,11 @@ def _spelled(given: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value, (list, tuple)) and value and all(
                 isinstance(part, (int, float)) and not isinstance(part, bool) for part in value):
             spelled[name] = joint.join(repr(part) for part in value)
+    if isinstance(spelled.get("printer"), os.PathLike):
+        spelled["printer"] = os.fspath(spelled["printer"])
+    if isinstance(spelled.get("printer"), str):
+        # a file is read where it is named from: the caller's working directory, not an engine's it is sent to
+        spelled["printer"] = os.path.abspath(spelled["printer"])
     if isinstance(spelled.get("material"), str):
         spelled["material"] = _material(spelled["material"])
     return spelled
@@ -768,6 +774,7 @@ def through_engine(document_type: str, source: Any, process: str | None, given: 
     label = _label(source)
     if isinstance(source, (str, os.PathLike)) and label.is_absolute() and not label.is_file():
         return _failed(label, "file not found", "invalid_target")
+    given = _spelled(given)
     resolved = options(document_type, process, given, candidates=candidates)
     return _held(document_type, source, process, resolved, candidates, given, label, local=False, strict=strict)
 
@@ -859,6 +866,8 @@ _HELP = {
     "samples": "printing: rays cast for the wall-thickness field on a mesh; default 2000.",
     "layer_height": "printing: the layer height in mm, for stair-stepping; default the technology's.",
     "nozzle": "printing: fdm's nozzle diameter in mm; default 0.4.",
+    "printer": "printing: a file of the printer's settings -- a 3MF OrcaSlicer or Bambu Studio saved, or a complete "
+               "machine preset JSON -- for its build volume and nozzle; --build-volume and --nozzle win.",
 }
 # The enumerations among the options: the command's choices.
 _ENUMS: dict[str, Any] = {"units": Unit, "technology": Technology}
@@ -996,6 +1005,7 @@ def called(document_type: str, signature: inspect.Signature, args: tuple[Any, ..
     from cad._internal.dfm import _common
 
     _common.require_bool("strict", strict)
+    given = _spelled(given)
     resolved = options(document_type, process, given, candidates=candidates)
     if process is None and resolved is not None:
         process = processes_for(document_type)[0]
