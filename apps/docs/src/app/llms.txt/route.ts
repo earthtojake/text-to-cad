@@ -1,6 +1,7 @@
 // /llms.txt: the homepage for an agent, as markdown (https://llmstxt.org). It says what the page
 // says, from the same copy (src/lib/content.ts), so the two never drift apart.
 import {
+  community,
   contributing,
   features,
   featuresIntro,
@@ -8,7 +9,6 @@ import {
   installSummary,
   manualInstall,
   pluginDescription,
-  studio,
 } from "@/lib/content";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 
@@ -35,9 +35,13 @@ export function GET() {
     "",
     ...features.map((feature) => `- [${feature.name}](${onGitHub(feature.path)}): ${feature.summary.replace(/\]\((skills\/[^)]+)\)/g, (_, path) => `](${onGitHub(path)})`)}`),
     "",
-    `## ${studio.title}`,
+    "## Community",
     "",
-    `${studio.body} ${studio.links.map(({ text, href }) => `[${text}](${href})`).join(" ")}`,
+    community.intro,
+    "",
+    ...community.items.map(({ title, body, links }) =>
+      `- **${title}**: ${body} ${links.map(({ text, href }) => `[${text}](${href})`).join(" ")}`
+    ),
     "",
     "## Contributing",
     "",

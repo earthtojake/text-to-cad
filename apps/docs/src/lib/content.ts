@@ -80,14 +80,19 @@ export const contributing = {
   ],
 };
 
-// Studio, a separate open-source desktop app built on text-to-cad, for someone who would rather have
-// an app than an agent and a terminal: the README's Studio, word for word, with its links.
-export const studio = {
-  title: "Studio",
-  body: "Studio is a separate, open-source CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand.",
-  links: [
-    { text: "Download Studio", href: "https://texttocad.studio" },
-    { text: "Studio on GitHub", href: "https://github.com/amywork777/studio" },
+// The projects around text-to-cad, the README's Community, item for item and word for word: the ones
+// built on top of it and the ones it uses. Each one's name, what it is, and its links, side by side.
+export const community = {
+  intro: "Projects built on top of text-to-cad, and projects that text-to-cad uses.",
+  items: [
+    {
+      title: "Studio",
+      body: "An open-source desktop CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand.",
+      links: [
+        { text: "Website", href: "https://texttocad.studio" },
+        { text: "GitHub", href: "https://github.com/amywork777/studio" },
+      ],
+    },
   ],
 };
 

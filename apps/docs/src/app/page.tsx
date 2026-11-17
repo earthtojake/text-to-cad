@@ -1,10 +1,10 @@
 import { ExternalLink, LinkIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { FeatureGrid } from "@/components/feature-grid";
 import { HeroSection } from "@/components/hero-section";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
-import { contributing, featuresIntro, studio } from "@/lib/content";
+import { community, contributing, featuresIntro } from "@/lib/content";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 import { withCode } from "@/lib/with-code";
 
@@ -22,23 +22,31 @@ function TitleLink({ anchor, children }: { anchor: string; children: ReactNode }
   );
 }
 
-// A row of links, each opening in a new tab.
-function ExternalLinks({ links }: { links: { text: string; href: string }[] }) {
+// The projects around text-to-cad (`community`, the README's Community), a bullet each as the README
+// lists them: its name, what it is, and its links side by side, each opening in a new tab.
+function Community() {
   return (
-    <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-      {links.map(({ text, href }) => (
-        <a
-          key={text}
-          href={href}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1.5 text-foreground underline underline-offset-4"
-        >
-          {text}
-          <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
-        </a>
+    <ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
+      {community.items.map(({ title, body, links }) => (
+        <li key={title}>
+          <span className="font-medium text-foreground">{title}</span>: {body}{" "}
+          {links.map(({ text, href }, at) => (
+            <Fragment key={text}>
+              {at > 0 ? " · " : null}
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-foreground underline underline-offset-4"
+              >
+                {text}
+                <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
+              </a>
+            </Fragment>
+          ))}
+        </li>
       ))}
-    </p>
+    </ul>
   );
 }
 
@@ -51,7 +59,20 @@ function Contributing() {
         <li key={title} className="space-y-1">
           <h3 className="text-sm font-medium text-foreground">{title}</h3>
           <p className="text-sm leading-6 text-muted-foreground">{withCode(body)}</p>
-          <ExternalLinks links={links} />
+          <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            {links.map(({ text, href }) => (
+              <a
+                key={text}
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-foreground underline underline-offset-4"
+              >
+                {text}
+                <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
+              </a>
+            ))}
+          </p>
         </li>
       ))}
     </ul>
@@ -133,9 +154,9 @@ export default function Home() {
             <FeatureGrid />
           </section>
 
-          <section id="studio" aria-labelledby="studio-title" className="scroll-mt-20 space-y-3 py-6">
-            <SectionIntro section="studio" title={studio.title} description={studio.body} />
-            <ExternalLinks links={studio.links} />
+          <section id="community" aria-labelledby="community-title" className="scroll-mt-20 space-y-3 py-6">
+            <SectionIntro section="community" title="Community" description={community.intro} />
+            <Community />
           </section>
 
           <section id="contributing" aria-labelledby="contributing-title" className="scroll-mt-20 space-y-3 py-6">
