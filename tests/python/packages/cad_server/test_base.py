@@ -180,24 +180,37 @@ class BaseTest(unittest.TestCase):
                 mock.patch.object(base, "where", return_value=self.root / "cache" / base.BASE / "none"), \
                 self.assertRaises(client.NotRunning):
             base.ensure(self.installation, told=self.said.append, engine=True)
-        # A server that makes another base than this command's (the release installed from elsewhere), or none:
+        # A server that makes another base than this command's (the release installed from elsewhere, or on another
+        # Python line), or none:
         # one line, and nothing made here -- only the server makes it.
         for answer in ({"ok": False, "other": True}, {"failed": "unknown request 'base'"}):
             with self.subTest(answer=answer), self.made(own_uv), \
                     mock.patch.object(client, "request", return_value=answer), \
                     mock.patch.object(base, "where", return_value=self.root / "cache" / base.BASE / "other"), \
                     self.assertRaisesRegex(base.Refused, "^the running server is cad of this release installed from "
-                                                         "elsewhere, .+: run `cad server stop`, then `cad server start`$"):
+                                                         "elsewhere or on another Python, .+: run `cad server stop`, "
+                                                         "then `cad server start`$"):
                 base.ensure(self.installation, told=self.said.append, engine=True)
         self.assertEqual(own_uv.steps, [])
 
-    def test_one_release_has_one_base_wherever_cad_is_installed_and_whatever_python_asks(self) -> None:
+    def test_one_release_has_one_base_per_python_line_wherever_cad_is_installed(self) -> None:
         # An agent app starts the server from uvx's cache; the `cad` in the agent's shell is installed elsewhere
-        # (uv's tool folder), perhaps on another Python: both name the one base, which the server makes.
+        # (uv's tool folder): on the same Python line both name the one base, which the server makes.
         tool = self.root / "tools" / "cad"
-        elsewhere = base.dataclasses.replace(self.installation, python="3.13.1", executable=str(base.interpreter(tool)),
+        elsewhere = base.dataclasses.replace(self.installation, python="3.14.0", executable=str(base.interpreter(tool)),
                                              prefix=str(tool), root=str(tool / "site-packages"))
         self.assertEqual(base.where(elsewhere), base.where(self.installation))
+        self.assertEqual(base._inputs(self.installation)["python"], "3.14")
+        # A cad on another line (pip on a system 3.12) makes its base on that line, so the key says that line: a
+        # base made on 3.12 is never found by a cad on 3.14, nor the other way round.
+        older = base.dataclasses.replace(elsewhere, python="3.12.10")
+        self.assertEqual(base._inputs(older)["python"], "3.12")
+        self.assertNotEqual(base.where(older), base.where(self.installation))
+        fake = Fake()
+        with self.made(fake):
+            base.ensure(older, told=self.said.append)
+        self.assertEqual(fake.steps[0][:5], ["uv", "venv", "--no-project", "--python", older.executable])
+        self.assertEqual(base.complete(base.where(older))["inputs"]["python"], "3.12")
         for other in ({"release": "9.9.10"}, {"source": "file:///wheels/cad-9.9.9-py3-none-any.whl"}):
             with self.subTest(other=other):
                 self.assertNotEqual(base.where(base.dataclasses.replace(self.installation, **other)),

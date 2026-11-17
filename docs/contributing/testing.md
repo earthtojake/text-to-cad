@@ -36,14 +36,14 @@ Each is held by a test where one can hold it.
 | unit | `packages (Linux)`, `js-core`, `js-ui`, `js-web`, `js-mcp`, `docs`, `skills` | when its component changes | Behaviour of one package or app |
 | platform | `packages (Windows)`, `routing (macOS)` | with every change to the packages | What differs by operating system: paths, locks, subprocesses, line endings, the C library |
 | integration | `fea`, `kicad`, `blender`, `packaging`, `viewer-e2e` | with every change to the packages; the last two with the UI and the apps too | A third-party tool installed as a person has it; the wheels as they ship; the bundled viewer through the real backend |
-| release | `packages (Python 3.13 floor)`, `install (Linux)`, `install (Windows)` | a full run: a `VERSION` change, nightly, a dispatch | Rare breaks that must not reach a release, at a cost not worth paying on every push |
+| release | `packages (Python 3.11 floor)`, `install (Linux)`, `install (Windows)` | a full run: a `VERSION` change, nightly, a dispatch | Rare breaks that must not reach a release, at a cost not worth paying on every push |
 | gate | `CI` | always | The one required check |
 
 **The release tier's criterion.** A job runs on a full run only, not on every push, when both hold:
 it rarely catches what a per-push job does not, and catching it before a release ships is soon
 enough. Every other job runs on the changes that reach it. The two there now:
 
-- `packages (Python 3.13 floor)` is a third run of suites the packages jobs already run on the Python
+- `packages (Python 3.11 floor)` is a third run of suites the packages jobs already run on the Python
   the server's installations use. It guards one kind of break, a call the floor's standard library
   lacks, of which the repository has had one (argparse's `suggest_on_error`), at 11 minutes a run.
 - The installer rehearsals install this tree's wheel on a fresh machine. What they exercise changes in
@@ -161,7 +161,7 @@ no other job has:
 
 - another operating system (`packages (Windows)`, `routing (macOS)`);
 - another toolchain or environment, installed as a person has it (`fea`, `kicad`, `blender`);
-- another interpreter (`packages (Python 3.13 floor)`);
+- another interpreter (`packages (Python 3.11 floor)`);
 - the built artifact in place of the source (`packaging`, `viewer-e2e`, the installer rehearsals).
 
 Splitting a job that has outgrown its time is the other reason: shards of one suite, not a new kind of
@@ -216,7 +216,7 @@ decide which tests reach it. The components:
 | `blender` | the packages, its suite | `test-blender.sh`, in the environment `cad run` makes for bpy; a test that skips there fails the run |
 | `packaging` | the packages, the UI, `apps/web`, `apps/mcp`: whatever ships in a wheel | Clean bundle, layout, the wheels' contents, the installed commands |
 | `viewer-e2e` | the packages, the UI, `apps/web`, `tests/browser` | The bundle's viewer through the real backend: the launch smoke test and the format and camera gates in Chromium |
-| `packages (Python 3.13 floor)` | a full run | The three suites on the packages' oldest Python (`test-floor.sh`) |
+| `packages (Python 3.11 floor)` | a full run | The three suites on the packages' oldest Python (`test-floor.sh`) |
 | `install (Linux)`, `install (Windows)` | a full run; `scripts/install`, the two workflows | `install-linux.yml` and `install-windows.yml`: the one-line installers on a fresh machine, against this tree's wheel |
 | `real install` | a full run; `scripts/install`, its workflow, its runner | `real-install.yml`: the install script against the real `claude`, `codex` and `gemini` on Windows, macOS and Linux |
 | `CI` | always | The one required check: every job that ran passed (`scripts/github-workflows/ci_gate.py`) |
@@ -234,7 +234,7 @@ tests resolve. Root prose, the plugin manifests and configs, the release scripts
 
 **The release tier** runs on a full run only, so before a release ships and not
 on every push ([its criterion](#what-runs-where)): the packages' suites on Python
-3.13, the installer and update rehearsals and the real install, which also run on a change to the
+3.11, the installer and update rehearsals and the real install, which also run on a change to the
 installers themselves (`scripts/install`, their workflows) or to the update rehearsal or the real install. The nightly run, on `main`, is
 that tier for whatever merged without a release; it runs nothing when a run
 already tested `main`'s tree in full.

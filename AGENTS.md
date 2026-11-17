@@ -47,7 +47,7 @@ list of what must stay the same
 
 Merge a release pull request only on the user's explicit word, once its checks
 pass: the merge is the release. `Test` runs every job for a `VERSION` change (the
-installer rehearsals and the Python 3.13 floor among them), and its `static` job
+installer rehearsals and the Python 3.11 floor among them), and its `static` job
 vets the bump (a branch of this repository only, a version past
 `main`'s and the latest tag, every stamp in step). `Publish Release`
 (`release-publish.yml`) runs on the merge: it builds the plugin ZIP, the bundle
@@ -229,11 +229,11 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
   Only their pure helper units run in a test runner.
 - The Python floor is `requires-python` in `packages/cad/pyproject.toml` and
   nowhere else (every other `pyproject.toml` declares the same). Every source of the
-  distribution is parsed against that floor, so syntax
+  distribution, and every test, is parsed against that floor, so syntax
   newer than it fails here rather than at `pip install` time on a user's
   interpreter; raising the declared minimum relaxes the check automatically.
-  The floor (3.13, the one Python Blender's module is built for) is older than the
-  Python the server's installations run on (3.14, `cad_server._internal.launch.PYTHON`):
+  The floor (3.11, so cad installs on the older Python a person may already have) is
+  older than the Python the server's installations run on (3.14, `cad_server._internal.launch.PYTHON`):
   a call the floor's standard library lacks parses and fails only when it runs, so CI
   runs the library's, the server's and the transport's suites on the floor too
   (`scripts/test/test-floor.sh`), on every full run: before a release ships, and nightly.

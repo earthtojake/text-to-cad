@@ -413,8 +413,8 @@ own release -- or the source tree, or the wheel, the installation was made from 
 Python, made by uv at `base/<key>` in the cache folder (`base.folder`), its files hard links into uv's cache; uv is
 asked `--offline` first and goes to the network only for what its cache lacks, saying so first
 (`cad_server._internal.base`). One per installation, keyed by it (the version it runs as, its release
-and source), its Python and the architecture, so an update has a base of its
-own. Its marker, `cad-env.json`, written last, makes it complete, so a later use reads the marker and
+and source), the Python line it is made on and the architecture, so an update has a base of its
+own, and so has a cad on another Python line. Its marker, `cad-env.json`, written last, makes it complete, so a later use reads the marker and
 resolves nothing; a lock beside it makes one process make it while another waits. An installation
 whose own environment carries the kernel (installed with the extra, `pip install
 'cad[build123d]==<release>'`) is its own base, and none is made. **Nothing is made ahead of need**:

@@ -18,10 +18,10 @@ exists (``Making.made``), never before.
   installation whose own environment carries the kernel (installed with the extra:
   ``pip install 'cad[build123d]==<release>'``, a checkout's development environment) is its own base, and none is
   made.
-- **The key** digests the release, where it installs from, the Python line and the platform (``_inputs``) --
-  never where cad is installed: a server started from one place (uvx's cache, as an agent app starts it) makes
-  the base that a ``cad`` installed elsewhere (uv's tool folder) of the same release then finds and uses,
-  whatever Python that ``cad`` runs on.
+- **The key** digests the release, where it installs from, the Python line the base is made on and the platform
+  (``_inputs``) -- never where cad is installed: a server started from one place (uvx's cache, as an agent app
+  starts it) makes the base that a ``cad`` installed elsewhere (uv's tool folder) of the same release on the same
+  Python line then finds and uses. A ``cad`` on another line (pip on a system 3.12) makes its own.
 - **The marker**, ``cad-env.json``, written last, makes it complete: a later use reads the marker
   and resolves nothing. It names the installation that made it (``home``), and records the base's own import
   path, which the engine's spawned kernel processes start with, and its Python's version.
@@ -253,13 +253,13 @@ def interpreter(env: Path) -> Path:
 
 def _inputs(installation: Installation) -> dict[str, Any]:
     """What makes the base, which its key digests and its marker holds: the release, where it installs from (None:
-    the release on the index), the Python line every installation runs on (``launch.PYTHON``, never the asking
-    process's) and the platform -- nothing of where cad is installed, so every installation of one release finds
-    the one base its server made."""
-    from cad_server._internal.launch import PYTHON
-
-    return {"schema": SCHEMA, "release": installation.release, "source": installation.source, "python": PYTHON,
-            "platform": f"{sys.platform}-{installation.arch}"}
+    the release on the index), the Python line the base is made on (``kernel_python``: ``3.12`` for a cad on
+    3.12.10) and the platform -- nothing of where cad is installed, so every installation of one release on one
+    Python line finds the one base its server made, and one on another line makes its own."""
+    said = kernel_python(installation)[2]
+    line = re.match(r"\d+\.\d+", said)
+    return {"schema": SCHEMA, "release": installation.release, "source": installation.source,
+            "python": line[0] if line else said, "platform": f"{sys.platform}-{installation.arch}"}
 
 
 def folder() -> Path:
@@ -327,7 +327,7 @@ def _by_the_engine(env: Path, order: dict[str, Any], done: Callable[[Path], dict
     """The environment at ``env`` made by the server (``order``: the door's ``base``, ``Making``): its making
     followed, each line said to ``told``, and its marker (``done``) once made. ``Refused`` in the server's words
     when it could not make it, and in one line when the server makes another one than ``env`` -- the same
-    release installed from elsewhere (a source tree, a wheel). No server running, or one of another release:
+    release installed from elsewhere (a source tree, a wheel) or on another Python line. No server running, or one of another release:
     its one line (``client.NotRunning``, ``client.OtherRelease``), as every command says it."""
     from cad.engine import client
 
@@ -336,8 +336,8 @@ def _by_the_engine(env: Path, order: dict[str, Any], done: Callable[[Path], dict
         raise Refused(str(answer["failed"]))
     marker = done(env) if answer and answer.get("base") is True else None
     if marker is None:
-        raise Refused("the running server is cad of this release installed from elsewhere, and makes its own "
-                      "environments, not this one's: run `cad server stop`, then `cad server start`")
+        raise Refused("the running server is cad of this release installed from elsewhere or on another Python, "
+                      "and makes its own environments, not this one's: run `cad server stop`, then `cad server start`")
     return marker
 
 

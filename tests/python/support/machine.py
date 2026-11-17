@@ -13,6 +13,7 @@ import base64
 import hashlib
 import os
 import shutil
+import stat
 import tomllib
 import zipfile
 from pathlib import Path
@@ -23,6 +24,19 @@ from tests.python.support.paths import LIBRARY, REPO_ROOT
 # and cad-server, its alias, which the updaters of 0.10.0 to 0.11.10 install a release by.
 DISTRIBUTIONS = {"cad": (LIBRARY, ("cad", "cadgen", "cad_server", "cad_mcp"), ("cad-lazy-kernel.pth",)),
                  "cad-server": (REPO_ROOT / "packages" / "aliases" / "cad-server", (), ())}
+
+
+def _is_junction(path: Path) -> bool:
+    """Whether ``path`` is a Windows junction. ``os.path.isjunction`` is new in Python 3.12; on 3.11 the
+    entry's reparse tag says it. Nothing else has junctions."""
+    if hasattr(os.path, "isjunction"):
+        return os.path.isjunction(path)
+    if os.name != "nt":
+        return False
+    try:
+        return getattr(os.lstat(path), "st_reparse_tag", 0) == stat.IO_REPARSE_TAG_MOUNT_POINT
+    except OSError:
+        return False
 
 
 def wheel(distribution: str, version: str, folder: Path, replace: dict[str, bytes] | None = None) -> Path:
@@ -92,7 +106,7 @@ def forget(uv_cache: Path, versions: tuple[str, ...]) -> list[str]:
             # A link to the archive (on Windows perhaps a junction: taken out, never followed), or its lock
             # or revision file; a real folder is not one of these, and is left.
             try:
-                if entry.is_symlink() or os.path.isjunction(entry):
+                if entry.is_symlink() or _is_junction(entry):
                     try:
                         entry.unlink()
                     except OSError:

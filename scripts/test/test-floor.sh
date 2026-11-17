@@ -2,12 +2,11 @@
 set -euo pipefail
 
 # The packages' floor: the library's suite, the server's and the shim's, on the oldest Python the packages declare
-# (requires-python in packages/cad/pyproject.toml). The server's installations run on a newer one
-# (cad_server._internal.launch.PYTHON), and so does every other job; the library runs on the floor wherever a
-# render script does (bpy has builds for that Python alone: cad[blender]), in the script's process and in the
-# worker that builds its models, and the server and the shim declare the same floor, so a pip install puts them
-# on it too. A call the floor's standard library lacks parses there and fails only when it runs (one already
-# slipped into the server: argparse's suggest_on_error), so nothing but running the suites on it holds the floor.
+# (requires-python in packages/cad/pyproject.toml). Our own installs run cad on a newer one
+# (cad_server._internal.launch.PYTHON), and so does every other job. But pip, pipx or a plain `uv tool install cad`
+# on a system Python puts cad on whatever Python meets the floor. A call the floor's standard library lacks parses
+# there and fails only when it runs (one already slipped into the server: argparse's suggest_on_error), so nothing
+# but running the suites on it holds the floor.
 #
 #   PYTHON_BIN=<a Python of the floor, requirements-dev.txt installed> scripts/test/test-floor.sh
 #

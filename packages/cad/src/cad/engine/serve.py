@@ -518,8 +518,8 @@ _PREPARATION: Callable[[str], dict[str, Any]] | None = None
 
 def _end(pool: concurrent.futures.ProcessPoolExecutor) -> None:
     """A process pool shut down now: its queued jobs cancelled and each of its processes ended, a busy one
-    too. ``ProcessPoolExecutor.terminate_workers`` from Python 3.14; on 3.13, the packages' floor, the same
-    steps here: the processes noted, the pool shut down without waiting, each one still alive terminated."""
+    too. ``ProcessPoolExecutor.terminate_workers`` from Python 3.14; before it (the packages' floor is 3.11), the
+    same steps here: the processes noted, the pool shut down without waiting, each one still alive terminated."""
     if hasattr(pool, "terminate_workers"):
         pool.terminate_workers()
         return

@@ -353,7 +353,7 @@ jobs:
 
   # ---- release tier: a full run, or a change to the thing itself ---------------------------------
 
-  # The library's, the server's and the shim's suites on Python 3.13, the packages' floor
+  # The library's, the server's and the shim's suites on Python 3.11, the packages' floor
   # (test-floor.sh), in an environment made here with requirements-dev.txt: a call the floor's
   # standard library lacks parses there and fails only when it runs (one reached the server
   # once: argparse's suggest_on_error), so only the suites hold the floor. A third run of
@@ -361,7 +361,7 @@ jobs:
   # rare kind of break: so it runs before a release ships (a VERSION change), nightly and on a
   # manual run, not on every push. Whole, unsharded: 7 to 14 minutes.
   packages-floor:
-    name: packages (Python 3.13 floor)
+    name: packages (Python 3.11 floor)
     needs: changes
     if: needs.changes.outputs.floor == 'true'
     runs-on: ubuntu-latest
@@ -383,10 +383,10 @@ jobs:
           npm: none
           apt: xvfb libgl1-mesa-dri fonts-dejavu-core
 
-      - name: Make an environment on Python 3.13, the packages' floor
+      - name: Make an environment on Python 3.11, the packages' floor
         timeout-minutes: 10
         run: |
-          uv venv --python 3.13 "$RUNNER_TEMP/floor"
+          uv venv --python 3.11 "$RUNNER_TEMP/floor"
           uv pip install --python "$RUNNER_TEMP/floor/bin/python" -r requirements-dev.txt
 
       - name: Run the library's, the server's and the shim's suites on the floor

@@ -35,7 +35,7 @@ Push the branch to `origin` and open the pull request against
 ### Development environment
 
 Choose the setup for the environment where the tools and tests will run. Use
-Python 3.14, the Python the server's installations run on; the packages' floor is 3.13
+Python 3.14, the Python the server's installations run on; the packages' floor is 3.11
 (`requires-python`), which CI holds with the library's, the server's and the transport's suites on
 it before a release ships ([CI](docs/contributing/testing.md#ci), the release tier). Install Node.js 22 for the
 packaged runtime, Viewer, `@cad/core`, or documentation site; Python-only work

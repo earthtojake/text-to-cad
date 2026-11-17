@@ -575,8 +575,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     private homes, never one on PATH. A tool built for one Python alone (blender's bpy, CPython 3.13) is
     an integration like any other, its extra installing it only there: the registry names that Python, the
     platforms it has builds for and the folders its settings are read from, an environment with it is
-    made on that Python with the library pinned in it, and a run's settings folders are private. That is
-    why the library's floor is Python 3.13 while cad itself, installed as a uv tool, runs on a newer one.
+    made on that Python with the library pinned in it, and a run's settings folders are private. So the
+    library runs on Python 3.13 for blender's sake while cad itself, installed as a uv tool, runs on a newer
+    one; its floor, 3.11, admits both.
 
 29. **cad wraps a tool only where it adds something.** *The package.* Nothing is a superficial wrapper:
     a helper in the library and a typed command alike are added because something is missing without

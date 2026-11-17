@@ -15,7 +15,7 @@ irm https://www.texttocad.dev/install.ps1 | iex
 It does five things, and nothing else:
 
 1. Installs [uv](https://docs.astral.sh/uv/) if it is missing. Where uv is older than 0.9.0, it updates
-   it, or says how.
+   it, or installs a newer one beside it with uv's own installer.
 2. Installs `cad`, the command text-to-cad runs on, as a uv tool, at the newest release. Where cad
    is installed already, it leaves it as it is: cad updates itself. Where that cad does not start,
    it installs it again.
@@ -48,7 +48,7 @@ uv tool install cad
 ```
 
 If uv says the `cad` executable already exists, add `--force` after `install`. cad updates itself
-([Updating](#updating)). The runtime supports Python 3.13+.
+([Updating](#updating)). The runtime supports Python 3.11+.
 
 Then install the plugin in each app with the commands under its name. Install it once per app: two
 copies show every skill twice. Restart the app afterwards. The plugin's skills run text-to-cad
