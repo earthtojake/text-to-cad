@@ -14,6 +14,10 @@ stand-in on loopback (``CAD_API_URL``, ``CAD_INSTALL_FEED``). Every computer's s
 - ``self-update``: the feed names the next release and an hour passes; the running server, idle, stops, uv installs
   the next release, and its server answers; then, the second switch on, the new server runs the install command in
   update mode once, and the release it last ran for is recorded (``installer_ran_for``).
+- ``self-typed``: with switch 1 off (the second on), the feed names the next release and ``cad update`` is typed: the
+  server reads the feed at once and updates cad to it; the command waits and says so (on Windows it says the update
+  began, and the route waits for its record); the uv tool is the next release, its server answers, and the install
+  command runs in update mode once.
 - ``self-off``: with ``cad auto-update off``, the server reads the feed naming the next release, and a start of the
   server starts the same cad: nothing updates.
 - ``self-broken``: an update to a release whose server cannot start (its daemon module raises): cad is that release, its
@@ -39,12 +43,16 @@ updater), installed by its own ``cad setup`` through uvx, its server serving pag
   never runs.
 - ``install-command``: the install command run by a person on a computer of the shipped release whose server serves
   pages: cad a uv tool, the old launcher gone, both switches on; ``cad server start`` then replaces the old server.
+- ``typed``: the shipped release's own ``cad update`` typed (what today's skill text has an agent type where cad is
+  older): it brings this build, whose plain ``cad setup`` runs the install command: the end of ``install-command``.
+- ``store-typed``: the same on a store-only computer: cad alone moves, as in ``store-only``; ``cad server start`` then
+  replaces the old server with this build's.
 
 Usage::
 
     scripts/test/rehearse-update.py [ROUTE ...] [--old RELEASE] [--wheels DIR] [--uv-cache DIR]
 
-``all`` (the default) is every route; ``self`` the four of cad updating itself; ``bridge`` the five from a shipped
+``all`` (the default) is every route; ``self`` the five of cad updating itself; ``bridge`` the seven from a shipped
 release. ``--wheels``: this tree's wheels as ``scripts/release/check-wheel-contents.sh`` keeps them; without it they
 are built from the source (``tests/python/support/machine.py``, no packaged runtime: no route opens a page).
 ``--uv-cache``: one folder for uv's cache and Pythons, shared by every computer of the run (default: a new one of the
@@ -501,6 +509,30 @@ def pages(box: Box, version: str) -> None:
     say(f"        an open page's port and token reach {version}'s server")
 
 
+def self_typed(box: Box) -> None:
+    box.set_up()
+    # Switch 1 off, the second on: a typed update needs neither, and the install command still runs after it.
+    kept = box.read("settings.json")
+    kept["auto_update"] = {**(kept.get("auto_update") or {}), "on": False, "installer": True}
+    (box.state / "settings.json").write_text(json.dumps(kept), encoding="utf-8")
+    box.feed.latest = NEXT
+    done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
+    said = (f"updating cad {NEW} to {NEXT}: it takes about a minute" if WINDOWS else f"cad {NEW} updated to {NEXT}")
+    if (done.returncode, done.stdout.strip()) != (0, said):
+        raise Failed(f"{box.label}: cad update exited {done.returncode}: {done.stdout}{done.stderr}\n{box.said()}")
+    updated(box, NEXT)
+    box.tool_serves(NEXT)
+    box.is_tool(NEXT)
+    record = box.until(lambda: (lambda found: found if found.get("mode") == "update" and found.get("version") == NEXT
+                                and found.get("state") == "done" else None)(box.read("handover.json")),
+                       "the install command in update mode, done")
+    if record.get("attempts") != 1 or (box.read("settings.json").get("auto_update") or {}).get("on") is not False:
+        raise Failed(f"{box.label}: after cad update: {record}, switches {box.read('settings.json').get('auto_update')}")
+    say(f"        {NEW} -> {NEXT} by `cad update` with switch 1 off ({said!r}); the install command in update mode "
+        "ran once")
+    pages(box, NEXT)
+
+
 def self_off(box: Box) -> None:
     box.set_up()
     switched = box.run([box.cad(), "auto-update", "off"]).stdout.splitlines()
@@ -671,10 +703,48 @@ def install_command(box: Box, old: str) -> None:
     pages(box, NEW)
 
 
-SELF = {"self-update": self_update, "self-off": self_off, "self-broken": self_broken,
+def typed(box: Box, old: str) -> None:
+    box.install_old(old)
+    box.feed.latest = NEW
+    box.run([box.cad(), "update"], timeout=SECONDS + 300)
+    box.is_tool(NEW)
+    started = box.run([box.cad(), "server", "start"]).stdout
+    if f"cad {NEW}" not in started:
+        raise Failed(f"{box.label}: cad server start said {started!r}")
+    box.tool_serves(NEW)
+    box.until(lambda: box.current() == NEW, f"installations/current naming {NEW}")
+    left = box.from_folder(box.old_state / "releases")
+    if left:
+        raise Failed(f"{box.label}: {old}'s server still runs:\n" + "\n".join(left))
+    say(f"        {old} -> {NEW} by {old}'s `cad update`: uv's cad, both switches on, the old server replaced by "
+        f"`cad server start`, current {NEW}")
+
+
+def store_typed(box: Box, old: str) -> None:
+    box.install_old(old)
+    (box.old_state / "install-receipt.json").unlink(missing_ok=True)
+    shutil.rmtree(box.old_state / "plugin", ignore_errors=True)
+    box.feed.latest = NEW
+    box.run([box.cad(), "update"], timeout=SECONDS + 300)
+    started = box.run([box.cad(), "server", "start"]).stdout
+    status = box.until(lambda: (lambda found: found if found and found.get("version") == NEW else None)(
+        box.ask(rc.interpreter(box.old_state / "releases" / NEW), "status")), f"{NEW}'s server answering")
+    held = {"current": box.current(), "handover": box.read("handover.json"), "tool": box.tool(),
+            "plugin": (box.state / "plugin").exists(), "report": box.read("install-report.json"),
+            "cad": box.version()}
+    if (held["current"], held["handover"], held["tool"], held["plugin"], held["report"]) != (NEW, {}, None, False, {}) \
+            or not rc._within(Path(status.get("prefix") or "/nowhere"), box.old_state / "releases" / NEW) \
+            or held["cad"] != f"cad {NEW}":
+        raise Failed(f"{box.label}: a store-only computer after {old}'s cad update: {held}, {started!r}, server "
+                     f"{status.get('prefix')}\n{box.said()}")
+    say(f"        {old} -> {NEW} by {old}'s `cad update`, cad alone: no install command, no uv tool, no plugin folder; "
+        f"`cad server start` serves {NEW}")
+
+
+SELF = {"self-update": self_update, "self-typed": self_typed, "self-off": self_off, "self-broken": self_broken,
         "self-uninstallable": self_uninstallable}
 BRIDGE = {"updater": updater, "automatic": automatic, "store-only": store_only, "rollback": rollback,
-          "install-command": install_command}
+          "install-command": install_command, "typed": typed, "store-typed": store_typed}
 
 
 def publish_all(source: Path | None, out: Path) -> None:

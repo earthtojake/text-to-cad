@@ -205,10 +205,11 @@ def _note(said: str, denied: bool = False) -> None:
 # while it is underway (``Daemon.handle``).
 SERVING = frozenset({"serve", "viewer", "http", "read", "warm"})
 # The requests that are no command's, which the last command's time (``Daemon.worked``) never counts
-# (``Daemon.ended``): who answers, a page token read again, an app's hold, cad's own update switched. Besides these,
-# any request marked ``internal`` (what one server asks another) and an ``http`` that names a port (an updater handing
-# the pages' port on, 0.11.10's among them) are not counted either.
-UNCOUNTED = frozenset({"pid", "token", "hold", "auto_update"})
+# (``Daemon.ended``): who answers, a page token read again, an app's hold, cad's own update switched or asked for (``cad
+# update``, and its looks while it waits). Besides these, any request marked ``internal`` (what one server asks
+# another) and an ``http`` that names a port (an updater handing the pages' port on, 0.11.10's among them) are not
+# counted either.
+UNCOUNTED = frozenset({"pid", "token", "hold", "auto_update", "update"})
 # The type a worker answers bytes of a held document that do not read with (``build.Unreadable``),
 # as ``worker.refusal`` names it.
 UNREADABLE = "cad.engine.build:Unreadable"
@@ -607,6 +608,8 @@ class Daemon:
         self.holders = 0
         # Draining for an update (``drain``): it stops once nothing is in flight.
         self.draining = False
+        # The update ``cad update`` asked for, until it begins (``update``): its release and when it was asked.
+        self.asked_update: tuple[str, float] | None = None
         self.listener: socket.socket | None = None  # on Windows, the port clients reach it by
         self.hosts: dict[str, int] = {}  # the holders per agent host they serve (``hold``)
         self.door = None  # on POSIX, the door clients reach it by (``door.Door``)
@@ -1665,6 +1668,8 @@ class Daemon:
             send(self.retoken())
         elif op == "auto_update":
             send(switch_auto_update(request))
+        elif op == "update":
+            send(self.update(request))
         elif op == "stop":
             # ``drain``: an update's switch (0.11.10's and earlier's), which waits for what is in flight; else at once.
             send({"ok": True, "draining": True} if request.get("drain") else {"ok": True})
@@ -1674,6 +1679,50 @@ class Daemon:
                 self.stopping.set()
         else:
             send({"failed": f"unknown request {op!r}"})
+
+    def update(self, request: dict[str, Any]) -> dict[str, Any]:
+        """``cad update`` (``{"op": "update"}``): judged (``auto_update.asked``: the feed read now, in this request's
+        thread), then, where a newer release is out, the attempt underway joined, or the update begun as soon as nothing
+        is in flight (``_update_when_idle``) -- not after the idle minute, whatever switch 1 says. ``{"ok": true,
+        "updating", "from", "since"}`` (``since``: when the attempt that serves it began, or was asked for), else what
+        ``asked`` answers. ``{"op": "update", "begin": false}`` begins nothing: ``{"ok": true, "version", "last",
+        "waiting"}``, this release, the last attempt (``auto_update.last``) and the release an update waits to begin
+        for, which ``cad update`` asks while it waits."""
+        from cad_server._internal import auto_update
+
+        if request.get("begin") is False:
+            with self.busy_lock:
+                waiting = self.asked_update
+            return {"ok": True, "version": auto_update._version(), "last": auto_update.last(),
+                    "waiting": waiting[0] if waiting else None}
+        judged = auto_update.asked()
+        if "updating" not in judged:
+            return judged
+        found = auto_update.underway()
+        if found is not None:
+            return {**judged, "updating": found["release"], "since": found["at"]}
+        with self.busy_lock:
+            first = self.asked_update is None
+            asked = self.asked_update = self.asked_update or (judged["updating"], time.time())
+        target, since = asked
+        if first:
+            threading.Thread(target=self._update_when_idle, args=(target,), name="cad-update", daemon=True).start()
+        return {**judged, "updating": target, "since": since}
+
+    def _update_when_idle(self, target: str) -> None:
+        """The update ``cad update`` asked for, begun once nothing is in flight (``working``), on a thread of its own
+        (``auto_update.begin``); never on a server that stops."""
+        from cad_server._internal import auto_update
+
+        try:
+            while self.working() and not self.stopping.is_set():
+                time.sleep(0.05)
+            if not (self.draining or self.stopping.is_set()) and auto_update.begin(target) is not None:
+                print("cad: updating cad, as `cad update` asked: this server stops, and the update starts the next",
+                      file=sys.stderr, flush=True)
+        finally:
+            with self.busy_lock:
+                self.asked_update = None
 
     def retoken(self) -> dict[str, Any]:
         """The user's page token read again from this server's data (``{"op": "token"}``, which ``cad server

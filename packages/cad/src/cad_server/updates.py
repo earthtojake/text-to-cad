@@ -4,15 +4,16 @@ At most once an hour, a server reads the version feed (``GET /v1/versions``, ``c
 
     {"latest": "0.10.0"}
 
-in the background (``refresh``), never waited on. It is one anonymous request: no id, no path, nothing about the
+in the background (``refresh``), never waited on; and at once when someone types ``cad update`` (``read_now``,
+waited on for ``TIMEOUT_SECONDS`` at most). It is one anonymous request: no id, no path, nothing about the
 person or their machine beyond what any web request carries. ``CAD_UPDATE_CHECK=0`` turns it off, and it never runs
 in CI (``CI`` set) or for a development build (``cad_server._internal.editable.development``). The feed as last read
 is kept in the state folder (``versions.json``), where every process of the person's reads it: ``latest`` is the
 release cad's own update moves to (``cad_server._internal.auto_update``). Nothing here updates anything, and nothing
 here says anything to a person or an agent.
 
-Nothing here ever raises or waits. Each hour's attempt is spent before it is made, so a feed that cannot be reached
-is tried once an hour.
+Nothing here ever raises, or waits longer than ``TIMEOUT_SECONDS``. Each hour's attempt is spent before it is made,
+so a feed that cannot be reached is tried once an hour.
 """
 
 from __future__ import annotations
@@ -120,14 +121,30 @@ def feed(*, fetch: bool = True, force: bool = False, now: float | None = None, p
     known = parse_feed(kept.get("feed"))
     now = time.time() if now is None else now
     if fetch and checking() and (force or _due(kept, "checked", now)):
-        # The hour's attempt is spent before it is made: a process that exits mid-request, or a feed
-        # that never answers, costs one wait an hour.
-        _save(path, now, known)
-        fresh = parse_feed((get or _get)(f"{api_url()}/versions"))
-        if fresh is not None:
-            known = fresh
-            _save(path, now, fresh)
+        known = _read(path, now, known, get) or known
     return known
+
+
+def read_now(*, now: float | None = None, path: Path | None = None,
+             get: Callable[[str], Any] | None = None) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """The feed read now, whatever its hour, for ``cad update``: ``(fresh, known)``, what the feed says now (None
+    where it could not be read) and the feed as last read before. Whether to read it at all (``checking``) is the
+    caller's to ask first."""
+    path = path or _cache()
+    known = parse_feed(_load(path).get("feed"))
+    return _read(path, time.time() if now is None else now, known, get), known
+
+
+def _read(path: Path, now: float, known: dict[str, Any] | None,
+          get: Callable[[str], Any] | None) -> dict[str, Any] | None:
+    """The feed read and kept: what it says, or None where it could not be read."""
+    # The hour's attempt is spent before it is made: a process that exits mid-request, or a feed
+    # that never answers, costs one wait an hour.
+    _save(path, now, known)
+    fresh = parse_feed((get or _get)(f"{api_url()}/versions"))
+    if fresh is not None:
+        _save(path, now, fresh)
+    return fresh
 
 
 def _quietly() -> None:

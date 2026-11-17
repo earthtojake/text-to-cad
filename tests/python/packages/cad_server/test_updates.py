@@ -1,5 +1,5 @@
 """The version feed (`cad_server/updates.py`): read at most once an hour by a server, in the background, for cad's own
-update, and never said to anyone. No test reaches the real feed: each one is handed in, or kept as just read."""
+update, and at once for `cad update`; never said to anyone. No test reaches the real feed: each one is handed in, or kept as just read."""
 
 from __future__ import annotations
 
@@ -69,6 +69,13 @@ class UpdatesTest(unittest.TestCase):
         self.assertEqual(updates.feed(get=get, now=start + updates.CHECK_SECONDS + 60)["latest"], "0.9.0")
         self.assertEqual(len(asked), 2)
         self.assertEqual(updates.feed(get=get, now=start + 2 * updates.CHECK_SECONDS)["latest"], "0.9.1")
+
+    def test_cad_update_reads_the_feed_now_whatever_its_hour_and_learns_whether_it_was_read(self) -> None:
+        self.just_read(FEED)
+        self.assertEqual(updates.read_now(get=lambda _url: {"latest": "0.9.1"}), ({"latest": "0.9.1"}, FEED))
+        self.assertEqual(updates.feed(fetch=False), {"latest": "0.9.1"}, "kept as just read")
+        self.assertEqual(updates.read_now(get=lambda _url: None), (None, {"latest": "0.9.1"}), "unreachable")
+        self.assertEqual(updates.feed(fetch=False), {"latest": "0.9.1"}, "the feed as last read stands")
 
     def test_the_feed_is_asked_for_as_cad(self) -> None:
         """The request names cad, the product (``apps/api`` keys nothing on it)."""

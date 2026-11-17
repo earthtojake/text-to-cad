@@ -3,10 +3,10 @@ same in each.
 
 The block names the cad the skills were written for once, as `cad==<VERSION>`, which the release stamps
 (scripts/release/sync-version.mjs); no command and no install line carries a version. It has the agent check
-`cad --version` on first use; install cad where it is missing; where it is older, restart the server, which
-updates cad first (cad's automatic update, which the install switches on), and install only where it is still
-older; carry on where cad is newer, since cad updates itself ahead of a store's copy of the skills; and start the
-server when cad says it is not running. Nothing in it asks the person whether to update: the app's own prompt for
+`cad --version` on first use; install cad where it is missing; where it is older, `cad update`, which has the
+running server install the newest release with no permission asked, and install only where it is still older;
+carry on where cad is newer, since cad updates itself ahead of a store's copy of the skills; and start the server
+when cad says it is not running. Nothing in it asks the person whether to update: the app's own prompt for
 a command is the only asking. A store's copy gets the same block with the store's install line in place of the
 install script's (scripts/release/plugin_zip.py, `store_copy`). A skill that runs the server any other way -- a
 `pip install -r requirements.txt` into the project's interpreter -- makes a second installation.
@@ -31,9 +31,8 @@ SETUP = """This skill was written for `cad=={X}`. The first time you use it in a
 anything, run `cad --version` as a command by itself and read what it prints. Then:
 
 - `cad` is not found: run the install line below.
-- A version older than the one above: run `cad server stop`, then `cad server start`, then
-  `cad --version` again. Starting the server may update cad. If it is still older, run
-  `cad server stop`, then the install line below, then `cad server start`.
+- A version older than the one above: run `cad update`, then `cad --version` again. If it is still
+  older, run `cad server stop`, then the install line below, then `cad server start`.
 - The version above or a newer one: go on.
 
 Install line, on macOS and Linux:
@@ -117,10 +116,10 @@ class SkillLaunchCommand(unittest.TestCase):
                                      "run node scripts/release/sync-version.mjs to stamp VERSION")
 
     def test_no_skill_names_what_the_software_no_longer_has(self) -> None:
-        # No updater, no plugin command, no setup command, no exit codes a pin once added, no repair of apps, no
-        # newer-version notice and no asking the person whether to update (cad updates itself), and nothing that
-        # claims a permission (agents refused the commands it named).
-        gone = re.compile(r"cad(?:\.exe)? (?:update|plugin|setup)\b|doctor --prune|--add \d|exit code says why"
+        # No plugin command, no setup command, no exit codes a pin once added, no repair of apps, no newer-version
+        # notice and no asking the person whether to update (cad updates itself, and `cad update` asks nobody), and
+        # nothing that claims a permission (agents refused the commands it named).
+        gone = re.compile(r"cad(?:\.exe)? (?:plugin|setup)\b|doctor --prune|--add \d|exit code says why"
                           r"|\.local/bin/cad|unknown command '\+|newer version of cad is available"
                           r"|ask whether to update|without asking", re.I)
         for skill in SKILLS:

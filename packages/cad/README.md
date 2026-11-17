@@ -389,9 +389,11 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     counts under a random id, sent by default once a `cad` command has said so -- never its help, nor an
     answer in JSON, which no person reads --, and never
     after the person's no) and the hourly version check (the server's `updates.py`). Both run in the
-    background and fail silently: no start, command, build, request or tool call waits on them.
+    background and fail silently: no start, command, build, request or tool call waits on them -- but `cad
+    update`, typed to get the newest release now, which waits on the feed (5 s at most) and the install, and says
+    in one line when either fails.
     cad updates itself only where the person turned it on (`cad auto-update on`, for a cad installed as a uv
-    tool, off by default): its server, at its start or once nothing has run for a minute, hands the update to a
+    tool, off by default), or asks (`cad update`): its server, at its start or once nothing has run for a minute, hands the update to a
     detached helper (the server's `_internal/auto_update.py`), which stops it, has uv install the release the
     feed names and starts it again; the server decides from the feed as last read, and nothing waits on the
     install but a start that would otherwise start the release it replaces.
@@ -555,7 +557,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     does, says the files it wrote.
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
     --help` groups the commands: the document types, the integrations with operations of their own, the rest. The commands that are no document's -- setup,
-    doctor, cache, viewer, status, stop, server, telemetry, auto-update, run, serve and delete -- stay
+    doctor, cache, viewer, status, stop, server, telemetry, auto-update, update, run, serve and delete -- stay
     top-level.
 
 28. **An integration runs where its extra is installed.** *The package.* An integration's code runs

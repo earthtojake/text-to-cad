@@ -100,9 +100,13 @@ cad_server/
   both off. Where a server runs, it keeps the switches (`{"op": "auto_update"}`), as it does every other
   command's writing, so a shell whose sandbox may not write cad's state folder needs no permission; with none
   running, the command writes them itself.
+- **`cad update`**: cad updated to the newest release now, by the server that runs (below), even with
+  switch 1 off. It never starts a server, and is refused unless this cad is a uv tool. It waits until the
+  update ends and says how, in one line; on Windows, where a running `cad.exe` of the tool makes uv's install
+  fail, it says the update began and returns.
 - **`cad telemetry [status|on|off]`**: the person's answer about usage stats and crash reports.
 
-There is no command that installs, updates or removes cad: that is uv's (`uv tool install cad`,
+There is no command that installs or removes cad: that is uv's (`uv tool install cad`,
 `uv tool uninstall cad`). Every command that destroys asks first (`cad delete`,
 `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`; `_internal/consent.py`).
 
@@ -137,6 +141,11 @@ when the start fails, so a release whose server cannot start still updates. Forw
 to an older release, and a start joins a running server of a newer release rather than replacing it. With
 no answer from the feed, nothing happens. `CAD_UPDATE_CHECK=0` in a process's environment turns the check
 off for it. A cad that is not a uv tool never updates itself.
+
+`cad update` asks the server that runs (`{"op": "update"}`, which an agent's sandboxed shell may send with no
+permission): it reads the feed at once and, where a newer release is out, begins the same update as soon as nothing
+is in flight, with switch 1 off too and past the limits on automatic tries (it counts as a try all the same), or
+joins the one underway.
 
 After an update, with switch 2 on, the new server runs the hosted install command once in its update
 mode, which updates only the copies of the plugin it installed that are still there

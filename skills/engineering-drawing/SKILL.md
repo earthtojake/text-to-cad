@@ -28,9 +28,8 @@ This skill was written for `cad==0.11.10`. The first time you use it in a chat, 
 anything, run `cad --version` as a command by itself and read what it prints. Then:
 
 - `cad` is not found: run the install line below.
-- A version older than the one above: run `cad server stop`, then `cad server start`, then
-  `cad --version` again. Starting the server may update cad. If it is still older, run
-  `cad server stop`, then the install line below, then `cad server start`.
+- A version older than the one above: run `cad update`, then `cad --version` again. If it is still
+  older, run `cad server stop`, then the install line below, then `cad server start`.
 - The version above or a newer one: go on.
 
 Install line, on macOS and Linux:

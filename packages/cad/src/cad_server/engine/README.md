@@ -270,11 +270,12 @@ server where the bridge pointed it there (below). Such a client's builds are ref
 (`contract.refusal`).
 
 The version feed (`cad_server.updates`): the server reads it in the background at most once an hour as it tends
-itself (`updates.refresh`), never waited on, for cad's own update alone; nothing says a newer release to a person or
-an agent.
+itself (`updates.refresh`), never waited on, for cad's own update alone, and at once when `cad update` asks
+(`updates.read_now`); nothing says a newer release to a person or an agent.
 
 cad updates itself only where the person turned it on (`cad auto-update on`, a cad installed as a uv tool alone;
-`cad_server._internal.auto_update`): first thing as a server starts, before its door opens, and as it tends itself
+`cad_server._internal.auto_update`), or asks (`cad update`: `Daemon.update`, the update begun once nothing is in
+flight, whatever switch 1 says): first thing as a server starts, before its door opens, and as it tends itself
 once nothing has run for a minute (or nothing since it started), where the version feed as last read names a newer
 release, a detached helper that is not cad (`auto_update_helper`, run by the Python cad's environment was made from)
 stops the server, has uv install that release, tried again on failure, and starts the server with whatever cad is

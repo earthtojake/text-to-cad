@@ -442,6 +442,189 @@ class FailedStartTest(Case):
                                                        "cad server start: the engine server did not start"])
 
 
+class AskedTest(Case):
+    """``cad update`` as the server judges it (``auto_update.asked``) and begins it (``begin``): the feed read now, and
+    none of the automatic limits -- switch 1, ``TRIES``, ``RETRY_SECONDS`` -- applies."""
+
+    def asked(self, fresh, known=None) -> dict:
+        return auto_update.asked(read=lambda: (fresh, known))
+
+    def test_what_it_refuses_and_what_it_answers(self) -> None:
+        newer, same = {"latest": "0.2.0"}, {"latest": "0.1.0"}
+        self.assertEqual(self.asked(newer), {"ok": True, "updating": "0.2.0", "from": "0.1.0"}, "switch 1 is off")
+        self.assertEqual(self.asked(None, newer)["updating"], "0.2.0", "the feed out of reach, a newer one known")
+        self.assertEqual(self.asked(same, newer), {"ok": True, "newest": "0.1.0"}, "what the feed says now wins")
+        self.assertIn("could not read which release is newest, so cad 0.1.0 stays as it is",
+                      self.asked(None, same)["failed"])
+        with mock.patch.object(updates, "checking", return_value=False):
+            self.assertEqual(self.asked(newer), {"failed": auto_update.CHECK_OFF})
+        with mock.patch.object(auto_update, "find_uv", return_value=None):
+            self.assertEqual(self.asked(newer), {"failed": auto_update.NO_UV})
+        with mock.patch.object(sys, "prefix", str(self.tmp)):
+            self.assertEqual(self.asked(newer), {"failed": auto_update.NOT_THE_TOOL})
+        auto_update._keep(self.state / auto_update.RECORD, {"release": "0.2.0", "from": "0.1.0", "at": 1.0,
+                                                            "tries": auto_update.TRIES, "outcome": "failed"})
+        self.assertEqual(self.asked(newer)["updating"], "0.2.0", "a typed update after the automatic tries ran out")
+
+    def test_begin_starts_one_attempt_counted_as_any_and_joins_the_one_underway(self) -> None:
+        with mock.patch.object(auto_update.subprocess, "Popen") as popen, \
+                mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True):
+            first = auto_update.begin("0.2.0")
+            self.assertEqual((first["release"], first["outcome"], first["tries"]), ("0.2.0", "underway", 1))
+            self.assertEqual(auto_update.begin("0.2.0"), first, "joined, never a second at once")
+            self.assertEqual(auto_update.begin("0.2.1"), first, "an attempt of another release underway: joined too")
+            self.assertEqual(popen.call_count, 1)
+            auto_update._keep(self.state / auto_update.RECORD, {**first, "outcome": "failed"})
+            again = auto_update.begin("0.2.0")
+            self.assertEqual((again["tries"], popen.call_count), (2, 2), "counted, so the automatic tries stay bounded")
+            auto_update._keep(self.state / auto_update.RECORD, {**again, "at": again["at"] - auto_update.RETRY_SECONDS})
+            self.assertEqual(auto_update.begin("0.2.0")["tries"], 3, "an underway record past the hour: a dead helper")
+        with mock.patch.object(auto_update, "trigger", return_value=False):
+            auto_update._keep(self.state / auto_update.RECORD, {**again, "outcome": "failed"})
+            self.assertIsNone(auto_update.begin("0.2.0"))
+
+    def test_the_install_command_in_update_mode_is_owed_after_it_with_switch_1_off(self) -> None:
+        from cad_server._internal import install_script
+
+        auto_update.change(False, installer=True, ran_for="0.1.0")
+        with mock.patch.object(cad_server, "__version__", "0.2.0"):
+            self.assertTrue(install_script.update_owed("0.2.0"))
+
+
+class ServerUpdateTest(Case):
+    """The server's part of ``cad update`` (``Daemon.update``): the update begun at once where nothing is in flight,
+    else the moment it ends, never twice; an attempt underway joined; what the command asks while it waits."""
+
+    def daemon(self, working: list[bool]):
+        import threading
+
+        from cad_server.engine.daemon import Daemon
+
+        fake = types.SimpleNamespace(busy_lock=threading.Lock(), asked_update=None, stopping=threading.Event(),
+                                     draining=False, working=lambda: working[0])
+        fake._update_when_idle = types.MethodType(Daemon._update_when_idle, fake)
+        return fake, lambda request: Daemon.update(fake, request)
+
+    def test_begun_once_nothing_is_in_flight_and_never_twice(self) -> None:
+        import threading
+
+        working, begun = [True], threading.Event()
+        fake, ask = self.daemon(working)
+        judged = {"ok": True, "updating": "0.2.0", "from": "0.1.0"}
+        with mock.patch.object(auto_update, "asked", return_value=judged), \
+                mock.patch.object(auto_update, "underway", return_value=None), \
+                mock.patch.object(auto_update, "begin", side_effect=lambda _t: begun.set() or {"at": 1.0}) as begin, \
+                redirect_stderr(io.StringIO()):
+            first = ask({"op": "update"})
+            self.assertEqual({key: first[key] for key in judged}, judged)
+            self.assertEqual(ask({"op": "update"})["since"], first["since"], "the same update, asked twice")
+            self.assertEqual(ask({"op": "update", "begin": False})["waiting"], "0.2.0")
+            self.assertFalse(begun.is_set(), "not while work is in flight")
+            working[0] = False
+            self.assertTrue(begun.wait(30))
+            for thread in threading.enumerate():
+                if thread.name == "cad-update":
+                    thread.join(30)
+        begin.assert_called_once_with("0.2.0")
+        self.assertIsNone(fake.asked_update)
+        underway = {"release": "0.2.0", "at": 5.0, "outcome": "underway"}
+        with mock.patch.object(auto_update, "asked", return_value=judged), \
+                mock.patch.object(auto_update, "underway", return_value=underway), \
+                mock.patch.object(auto_update, "begin") as begin:
+            self.assertEqual(ask({"op": "update"})["since"], 5.0, "joined")
+        begin.assert_not_called()
+        with mock.patch.object(auto_update, "asked", return_value={"ok": True, "newest": "0.1.0"}):
+            self.assertEqual(ask({"op": "update"}), {"ok": True, "newest": "0.1.0"})
+
+    def test_a_real_server_answers_it_and_one_that_is_no_uv_tool_refuses(self) -> None:
+        from tests.python.support import engine_daemon
+        from cad_server.cli import update as typed
+
+        env = {**os.environ, "PATH": os.environ.get("PATH", ""), "CAD_UPDATE_CHECK": "0",
+               "CAD_CACHE_DIR": str(self.tmp / "cache")}
+        engine_daemon.start(env, self.addCleanup)
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = typed.main([])
+        self.assertEqual((code, out.getvalue(), err.getvalue()), (1, "", f"cad update: {auto_update.NOT_THE_TOOL}\n"))
+        looked = client.request({"op": "update", "begin": False}, start=False)
+        self.assertEqual((looked["ok"], looked["last"], looked["waiting"]), (True, None, None))
+
+
+class UpdateCommandTest(Case):
+    """``cad update`` (``cad_server/cli/update.py``): refused for a cad that is no uv tool, the one line with no server,
+    an older server's answer; on POSIX it waits and says how the update ended; on Windows it says it began."""
+
+    def typed(self, answer=None, *, windows: bool = False, raises: Exception | None = None, looks=()):
+        from cad_server.cli import update as typed
+
+        out, err = io.StringIO(), io.StringIO()
+        looks = iter(looks)
+        with mock.patch.object(client, "request", return_value=answer, side_effect=raises) as request, \
+                mock.patch.object(typed, "look", side_effect=lambda *_a: next(looks)), \
+                mock.patch.object(typed.time, "sleep"), redirect_stdout(out), redirect_stderr(err):
+            code = typed.main([], windows=windows)
+        return code, out.getvalue(), err.getvalue(), request
+
+    def test_refused_never_started_and_an_older_server_s_answer(self) -> None:
+        from cad_server.cli import update as typed
+
+        (self.tool / "uv-receipt.toml").unlink()
+        code, out, err, request = self.typed()
+        self.assertEqual((code, out, err), (1, "", f"cad update: {typed.NOT_A_TOOL}\n"))
+        request.assert_not_called()
+        (self.tool / "uv-receipt.toml").write_text(RECEIPT, encoding="utf-8")
+        self.assertEqual(self.typed(raises=client.NotRunning(client.NOT_RUNNING))[:3],
+                         (1, "", "cad update: the cad server is not running: run `cad server start`\n"))
+        self.assertEqual(self.typed({"failed": "unknown request 'update'"})[:3],
+                         (1, "", f"cad update: {typed.OLD_SERVER}\n"))
+        self.assertEqual(self.typed({"failed": auto_update.CHECK_OFF})[:3],
+                         (1, "", f"cad update: {auto_update.CHECK_OFF}\n"))
+        self.assertEqual(self.typed({"ok": True, "newest": "0.1.0"})[:3], (0, "cad 0.1.0 is the newest release\n", ""))
+        self.assertEqual(self.typed()[3].call_args.args[0], {"op": "update"})
+
+    def test_on_windows_it_says_the_update_began_and_ends(self) -> None:
+        answer = {"ok": True, "updating": "0.2.0", "from": "0.1.0", "since": 5.0}
+        self.assertEqual(self.typed(answer, windows=True)[:3],
+                         (0, "updating cad 0.1.0 to 0.2.0: it takes about a minute\n", ""))
+
+    def test_elsewhere_it_waits_for_the_attempt_and_says_how_it_ended(self) -> None:
+        answer = {"ok": True, "updating": "0.2.0", "from": "0.1.0", "since": 5.0}
+        underway = {"release": "0.2.0", "at": 5.0, "outcome": "underway"}
+        earlier = {"release": "0.1.9", "at": 1.0, "outcome": "installed"}
+        for record, ended in (({**underway, "outcome": "installed", "started": "started"},
+                               (0, "cad 0.1.0 updated to 0.2.0\n", "")),
+                              ({**underway, "outcome": "failed", "detail": "uv said no", "restored": True},
+                               (1, "", "cad update: could not update cad 0.1.0 to 0.2.0: uv said no; cad 0.1.0 is "
+                                       "running\n")),
+                              ({**underway, "outcome": "installed", "started": "not started: it exited 1"},
+                               (1, "", "cad update: cad 0.1.0 updated to 0.2.0, but the cad server did not start "
+                                       "again: run `cad server start`\n"))):
+            with self.subTest(outcome=record["outcome"]):
+                running = "0.2.0" if record["outcome"] == "installed" else "0.1.0"
+                looks = [("0.1.0", earlier, "0.2.0", True), (None, underway, None, False),
+                         (running, record, None, True)]
+                self.assertEqual(self.typed(answer, looks=looks)[:3], ended)
+        failed = {**underway, "outcome": "failed", "detail": "uv said no"}
+        self.assertIn("; no cad server is running: run `cad server start`",
+                      self.typed(answer, looks=[(None, failed, None, False)])[2])
+        self.assertEqual(self.typed(answer, looks=[("0.1.0", earlier, None, True)])[:3],
+                         (1, "", "cad update: the update could not begin, so cad 0.1.0 stays as it is\n"))
+
+    def test_it_gives_up_waiting_after_ten_minutes(self) -> None:
+        from cad_server.cli import update as typed
+
+        said: list[str] = []
+        clock = iter(range(0, 10_000, 100))
+        code = typed.wait(lambda: (None, {"release": "0.2.0", "at": 5.0, "outcome": "underway"}, None, False), "0.1.0",
+                          5.0, said=lambda words: said.append(words) or 1, clock=lambda: float(next(clock)),
+                          sleep=lambda _s: None)
+        self.assertEqual((code, said), (1, ["the update of cad 0.1.0 is still underway after 10 minutes: run "
+                                            "`cad --version` later to see where it ended"]))
+        self.assertTrue(typed.waits(windows=False))
+        self.assertFalse(typed.waits(windows=True))
+
+
 class DoctorTest(Case):
     def test_doctor_shows_the_switches_the_tool_uv_and_the_last_attempt(self) -> None:
         from cad_server.cli import doctor

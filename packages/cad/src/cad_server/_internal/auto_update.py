@@ -15,10 +15,16 @@ read again in the background once an hour), and by ``cad server start`` when the
 the feed read when due): a release whose server cannot start still updates.
 
 **The trigger** (``trigger``), once nothing is in flight -- at a start, at once; otherwise once nothing has run for
-``IDLE_SECONDS``, or nothing has run since the server started: a detached helper, never the ``cad`` executable and
+``IDLE_SECONDS``, or nothing has run since the server started (one update begun at a time, ``_BEGIN``): a detached
+helper, never the ``cad`` executable and
 never run from cad's environment (``auto_update_helper``, run by the Python that environment was made from), stops the
 server, installs ``cad==<latest>`` with uv, and starts the server with whatever cad is there. The attempt is kept in the
 state folder (``RECORD``), which ``cad doctor`` shows.
+
+**Asked for** (``cad update``, which the server it asks judges, ``asked``, and begins, ``begin``): the feed read now,
+whatever its hour; switch 1, ``TRIES`` and ``RETRY_SECONDS`` do not apply (a typed update always updates); the update
+begun as soon as nothing is in flight, not after the idle minute, or joined where one is underway. Counted in the
+record as any attempt is, so the automatic tries stay bounded.
 
 Imports the standard library alone; what it asks of cad it imports as it asks: ``cad.engine.places`` (the folders),
 ``cad_server.updates`` (the feed), ``cad._internal.atomic_replace`` (the attempt kept) and, to change a switch,
@@ -33,7 +39,9 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +54,8 @@ RETRY_SECONDS = 60 * 60.0  # how long after an attempt (underway, or ended) its 
 # (``cad.engine.client.UPDATING``).
 UPDATING = 75
 HELPER = Path(__file__).with_name("auto_update_helper.py")
+# One update begun at a time in a process: the check and the trigger together (``_begin_due``, ``begin``).
+_BEGIN = threading.Lock()
 # What the helper's environment leaves out: anything that would point its Python, uv or cad at this environment.
 _UNSET = ("PYTHONPATH", "PYTHONHOME", "PYTHONEXECUTABLE", "__PYVENV_LAUNCHER__", "VIRTUAL_ENV")
 
@@ -266,11 +276,17 @@ def _keep(path: Path, record: dict[str, Any]) -> None:
     write_bytes_atomic(path, json.dumps(record, sort_keys=True).encode("utf-8"))
 
 
+def _begin_due(*, fetch: bool = False) -> str | None:
+    """The update begun where it is due (``due``, ``trigger``), under ``_BEGIN``: the release it updates to, or None."""
+    with _BEGIN:
+        target = due(fetch=fetch)
+        return target if target is not None and trigger(target) else None
+
+
 def at_start() -> bool:
     """First thing as the server starts, before it opens its door (nothing has run): the update begun where it is due
     by the feed as last read. True when it was: the server then exits ``UPDATING``, and the helper starts the next."""
-    target = due()
-    return target is not None and trigger(target)
+    return _begin_due() is not None
 
 
 def tend(*, working: bool, ran: bool, quiet_for: float) -> bool:
@@ -278,12 +294,70 @@ def tend(*, working: bool, ran: bool, quiet_for: float) -> bool:
     has run since the server started (``ran``), or nothing for ``IDLE_SECONDS`` (``quiet_for``). True when it was."""
     if working or (ran and quiet_for < IDLE_SECONDS):
         return False
-    target = due()
-    return target is not None and trigger(target)
+    return _begin_due() is not None
 
 
 def after_failed_start() -> str | None:
     """``cad server start`` failed: the update begun where it is due, the feed read first where an hour has passed. The
     release it updates to, or None."""
-    target = due(fetch=True)
-    return target if target is not None and trigger(target) else None
+    return _begin_due(fetch=True)
+
+
+# --- an update asked for: ``cad update`` ------------------------------------------------------------------------------
+
+NOT_THE_TOOL = ("the cad server running is not the uv tool's cad: run `cad server stop`, then `cad server start`, then "
+                "`cad update` again")
+CHECK_OFF = ("this cad server does not look for updates (CAD_UPDATE_CHECK=0, CI, or a development build), so it does "
+             "not update cad")
+NO_UV = "the cad server cannot find uv, which cad updates itself with: install uv, then run `cad update` again"
+
+
+def asked(*, read: Callable[[], tuple[Any, Any]] | None = None) -> dict[str, Any]:
+    """``cad update`` judged by the server it asks (``{"op": "update"}``), for the cad this process is: ``{"failed"}`` in
+    one line where it cannot update cad -- not the uv tool's cad, the check turned off for this process
+    (``updates.checking``), no uv, or the feed not read and nothing newer known --; ``{"ok": true, "newest"}``, this
+    release, where the feed names none newer; or ``{"ok": true, "updating", "from"}``, the update to ``begin``. The
+    feed is read now (``updates.read_now``, or ``read``), whatever its hour. Never raises."""
+    try:
+        version = _version()
+        if uv_tool() is None:
+            return {"failed": NOT_THE_TOOL}
+        from cad_server import updates
+
+        if not updates.checking():
+            return {"failed": CHECK_OFF}
+        if find_uv() is None:
+            return {"failed": NO_UV}
+        fresh, known = (read or updates.read_now)()
+        target = (fresh or known or {}).get("latest")
+        if newer(target, version):
+            return {"ok": True, "updating": target, "from": version}
+        if fresh is None:
+            return {"failed": f"could not read which release is newest, so cad {version} stays as it is: try "
+                              "`cad update` again later"}
+        return {"ok": True, "newest": version}
+    except Exception as error:  # noqa: BLE001 - said in its one line, never a crash of the server's
+        return {"failed": f"could not look for an update: {type(error).__name__}: {error}"}
+
+
+def underway(now: float | None = None) -> dict[str, Any] | None:
+    """The attempt underway now, of any release: the last one, begun less than ``RETRY_SECONDS`` ago and not ended (a
+    helper that died ends nothing, so past that none is). None where none is."""
+    found = last()
+    if found is None or found.get("outcome") != "underway":
+        return None
+    return found if 0 <= (time.time() if now is None else now) - float(found["at"]) < RETRY_SECONDS else None
+
+
+def begin(target: str) -> dict[str, Any] | None:
+    """The update to ``target`` that ``cad update`` asked for, begun now -- or the attempt underway joined, whatever
+    its release (``underway``): never a second at once. The attempt's record (``release``, ``at``), or None where it
+    could not begin."""
+    with _BEGIN:
+        found = underway()
+        if found is not None:
+            return found
+        if not trigger(target):
+            return None
+        found = last()
+        return found if found is not None and found["release"] == target else None

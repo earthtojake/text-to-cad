@@ -94,9 +94,9 @@ for word, and tests keep the copies from drifting:
   the release script stamps (`scripts/release/sync-version.mjs`); no command carries a version. It has
   the agent run `cad --version` on first use, then:
   - `cad` is not found: install it with the install command.
-  - cad is older than the skill: run `cad server stop` and `cad server start`, since cad updates itself
-    as its server starts, and check again. Still older: stop the server, run the install command,
-    start the server.
+  - cad is older than the skill: run `cad update`, which has the running server install the newest
+    release with no approval asked, and check again. Still older: stop the server, run the install
+    command, start the server.
   - cad is the same or newer: carry on.
   - cad says its server is not running: run `cad server start`.
 

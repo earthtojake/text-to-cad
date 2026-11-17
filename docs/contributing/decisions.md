@@ -88,7 +88,9 @@ listed and nothing is running, a helper stops the server, installs the release w
 server again. Then, where the install command set the computer up, cad runs that command once more
 in an update mode, which updates only the copies of our plugin still in the apps. A plugin store
 (Codex's directory, Claude's) updates the copy it installed. A cad that is not a uv tool, such as one
-installed with pip into a project's own Python, never updates itself.
+installed with pip into a project's own Python, never updates itself. `cad update` updates a uv tool's cad at
+once, with automatic updates off too: the server does it, so an agent whose skills are newer than cad can
+get the newest release with one plain command that needs no approval.
 
 **Why.** People install and forget, and they should get our fixes without being asked. Nothing of
 ours asks a person to update: in blind tests, agents would not install without the person's say-so,

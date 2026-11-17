@@ -327,7 +327,14 @@ installed another way, such as with pip into a project's own Python, never does.
 ### Updating by hand
 
 Run the install command again. It updates cad and the plugin in every app it finds. To update one
-app, run the update command under its name. To update cad alone:
+app, run the update command under its name. To update cad alone, while its server runs:
+
+```bash
+cad update
+```
+
+It installs the newest release now, even with automatic updates off, and says when it is done (on
+Windows it starts the update and returns; it takes about a minute). Or do the same with uv yourself:
 
 ```bash
 cad server stop
