@@ -27,14 +27,14 @@ SKILLS = sorted(p for p in (REPO_ROOT / "skills").iterdir() if p.is_dir())
 VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 # The owner's text, word for word (X is the release, stamped).
-SETUP = """This skill was written for `cad=={X}`. The first time you use it in a chat, run `cad --version` in
-the shell. Then:
+SETUP = """This skill was written for `cad=={X}`. The first time you use it in a chat, before you write or build
+anything, run `cad --version` as a command by itself and read what it prints. Then:
 
-- `cad` is not found: run the install line below, then carry on.
-- It prints a version older than the one above: run `cad server stop`, then `cad server start`, then
-  `cad --version` again. cad updates itself when its server starts. If it is still older, run
+- `cad` is not found: run the install line below.
+- A version older than the one above: run `cad server stop`, then `cad server start`, then
+  `cad --version` again. Starting the server may update cad. If it is still older, run
   `cad server stop`, then the install line below, then `cad server start`.
-- It prints the version above or a newer one: carry on.
+- The version above or a newer one: go on.
 
 Install line, on macOS and Linux:
 
@@ -51,7 +51,7 @@ irm https://www.texttocad.dev/install.ps1 | iex
 When a `cad` command prints that the cad server is not running, run `cad server start`, then run the
 command again.
 
-Run models with `cad run`.
+Run models with `cad run`. Run each `cad` command by itself, not joined to others by `;`, `&&` or a pipe.
 
 A project written for an earlier text-to-cad may need changes. The migration guides say what, one per
 version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations

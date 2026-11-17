@@ -33,14 +33,14 @@ the page the person has open updates. Files are exports, made when asked.
 
 ## Setup and paths
 
-This skill was written for `cad==0.11.10`. The first time you use it in a chat, run `cad --version` in
-the shell. Then:
+This skill was written for `cad==0.11.10`. The first time you use it in a chat, before you write or build
+anything, run `cad --version` as a command by itself and read what it prints. Then:
 
-- `cad` is not found: run the install line below, then carry on.
-- It prints a version older than the one above: run `cad server stop`, then `cad server start`, then
-  `cad --version` again. cad updates itself when its server starts. If it is still older, run
+- `cad` is not found: run the install line below.
+- A version older than the one above: run `cad server stop`, then `cad server start`, then
+  `cad --version` again. Starting the server may update cad. If it is still older, run
   `cad server stop`, then the install line below, then `cad server start`.
-- It prints the version above or a newer one: carry on.
+- The version above or a newer one: go on.
 
 Install line, on macOS and Linux:
 
@@ -57,7 +57,7 @@ irm https://www.texttocad.dev/install.ps1 | iex
 When a `cad` command prints that the cad server is not running, run `cad server start`, then run the
 command again.
 
-Run models with `cad run`.
+Run models with `cad run`. Run each `cad` command by itself, not joined to others by `;`, `&&` or a pipe.
 
 A project written for an earlier text-to-cad may need changes. The migration guides say what, one per
 version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
@@ -136,18 +136,18 @@ cad run src/bracket.py
 built src/bracket.py::bracket cold in 2.61s: bodies 1 run; 6 misses, 0 hits; body 0.01s, names 0.00s, document 0.00s
   parts 1 · bounds 40 × 20 × 6 mm · joints 0 · sequences 0
   id: 0dc50a92-a21f-5895-a245-ebdeb5352f3b
-  view: http://127.0.0.1:54360/0dc50a92-a21f-5895-a245-ebdeb5352f3b?token=...
+  view: http://127.0.0.1:<port>/<id>?token=<token>
 built src/bracket.py::bracket_wide warm in 0.01s: bodies 1 run; 6 misses, 0 hits; body 0.01s, names 0.00s, document 0.00s
   parts 1 · bounds 60 × 20 × 6 mm · joints 0 · sequences 0
   id: 966d03a5-7b43-5bed-b75c-eb67d56c72d2
-  view: http://127.0.0.1:54360/966d03a5-7b43-5bed-b75c-eb67d56c72d2?token=...
+  view: http://127.0.0.1:<port>/<id>?token=<token>
 ```
 
 Each call the script's `__main__` makes prints how its model built, the delta under it
 (parts, bounds, joints and sequences), its document's `id:` and its page, `view:` (the
 handle's `.id` and `.url`). An unchanged rerun prints `took ... nothing ran` instead. Give the
-user the page once ([Show the model](#show-the-model)) and use the id for every command
-after it. The id comes from the
+user the page your run's `view:` line printed, once ([Show the model](#show-the-model)), and use
+the id for every command after it. The id comes from the
 script's path and the function's name, or the script's folder and an explicit `@model(name="...")`,
 so it is the same run after run, and the open page follows every run. A model's name is its identity
 within its namespace, the function's name by default, `name=` gives it another. The namespace
