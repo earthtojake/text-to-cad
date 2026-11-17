@@ -114,16 +114,19 @@ where those files ship, so these scripts are what produces them.
   packaged CAD app over stdio and a manufacturing check of a built part for each process
   (the checks' measuring modules, loaded from the wheel); installs the same wheels as the uv tool
   the install command makes (`uv tool install cad`, offered them above PyPI's newest), where
-  `cad auto-update` and `cad plugin auto-update` answer, and as an updater of 0.10.0 to 0.11.10
+  `cad auto-update` and `cad plugin auto-update` answer, and as an updater of 0.10.0 to 0.11.11
   brings a release. Called by `test.yml` and `release-publish.yml`.
 - `rehearse-update.py [ROUTE ...] [--old RELEASE]` — rehearses cad's updates on private computers (each its
   own home, state, engine, cache and `cad` command folders), with real uv and real servers. `self`: cad, a uv
-  tool, updating itself (idle, typed with `cad update`, at a server's start, switched off, past a release
+  tool, updating itself (idle, typed with `cad update` with and without a server running, at a server's
+  start, switched off, past a release
   whose server cannot start, back from one uv cannot install), and the helper running `cad plugin install`
   once after an automatic update where `cad plugin auto-update` is on, never after a typed or a failed one.
   `bridge`: a computer on a shipped release (0.11.10, or `--old`'s) arriving at this build by its updater,
-  its automatic update, its typed `cad update` and the install command, this build's server running the
-  install command once where the computer had it, and handing over to the uv tool's server. It installs the
+  its automatic update, its typed `cad update`, the install command and the uv line, this build's server
+  running the install command once where the computer had it, installing cad with uv itself where the
+  computer had only a store's copy or the install command failed, and handing over to the uv tool's server;
+  this build's servers there tend themselves every two seconds (`CAD_ENGINE_TEND_SECONDS`). It installs the
   real releases from PyPI and publishes this tree as later releases. Needs uv and the network. Called by
   `test.yml`'s `update-rehearsal` job on Linux, macOS and Windows.
 - `real-install.py --wheels DIR [--require claude,codex,gemini] [--keep] [--work DIR]` — the install script
@@ -296,7 +299,9 @@ where those files ship, so these scripts are what produces them.
 - `install.py` — the installer itself, the standard library alone, carrying no version and taking no
   options, with one behaviour whether a person or cad (`cad plugin install`) runs it: installs cad as a uv
   tool, PyPI's newest, only where no cad is installed (a cad that starts is left as it is: it updates
-  itself; one that does not start is installed again), installs or updates the plugin in each app found
+  itself; one that does not start is installed again; a cad installed with pipx is left as it is, or
+  installed again with pipx where it does not start), puts cad's folder on the PATH with uv's own
+  `uv tool update-shell` (unless `UV_NO_MODIFY_PATH` is set), installs or updates the plugin in each app found
   with that app's own command from the repository's `latest` branch (or copies the skills into an agent's
   own skills folder), removes our own older copies there, turns on `cad plugin auto-update`, and prints a
   line per app. It reads no version feed. `APPS` is the one table of apps; each row says how its commands

@@ -9,7 +9,9 @@ from this process: ``real_computer.stamp``, newer than every release PyPI holds)
 the index (``UV_FIND_LINKS``, ``CAD_UPDATE_FIND_LINKS``), and the version feed is a stand-in on loopback
 (``CAD_API_URL``), as is PyPI's JSON API that ``cad update`` asks
 (``CAD_PYPI_URL``), which names what the feed names. Every computer's server takes a port of its own
-(``CAD_ENGINE_DEFAULT_PORT``: the true default, 3245, on CI alone). No real agent app is on any PATH.
+(``CAD_ENGINE_DEFAULT_PORT``: the true default, 3245, on CI alone). This build's servers tend themselves every two
+seconds, not every half minute (``CAD_ENGINE_TEND_SECONDS``); nothing else of their timing changes, so a step that
+waits for a minute with nothing run still waits that minute. No real agent app is on any PATH.
 
 Every computer has a folder of releases of its own, holding only those that are out (``Box.out``): the install command
 installs PyPI's newest, and an upgrade is ``uv tool install cad@latest``, so a release not out yet must not be there.
@@ -25,6 +27,10 @@ The install command cad runs counts its runs on every computer (``Box.runs``).
   PyPI: it says so and nothing restarts; then PyPI names the next release and ``cad update`` is typed again: the
   server asks PyPI at once and updates cad to it; the command, a running ``cad`` of the tool, waits and says so; the uv
   tool is the next release, its server answers, and no install command runs.
+- ``self-typed-stopped``: the same with no server running: ``cad update`` with nothing newer says so and starts no
+  server; with the next release out it says ``cad <new> updated to <next>`` (exit 0, nothing on stderr), the record
+  says no server is started (``"start": false``, no ``started``), the uv tool is the next release, no server and no
+  process of the computer runs afterwards, automatic updates stay off, and no install command runs.
 - ``self-at-start``: the plugin's switch off, the server stopped, the feed's file already naming the next release, then
   ``cad server start``: the server it spawns hands its start to the update, and the starter, a running ``cad`` of the
   tool, waits for the update's server. It exits 0, the uv tool is the next release and serves, the attempt installed
@@ -44,7 +50,7 @@ The install command cad runs counts its runs on every computer (``Box.runs``).
   typed ``cad update`` with nothing newer says so, and with the release after out updates pipx's cad to it, no install
   command after it. Each time pipx's cad serves the new release, and an open page's port and token reach it.
 
-**The bridge** from a shipped release (``--old``, 0.11.10 by default; 0.11.0 to 0.11.10 and 0.10.0 to 0.10.4 have the
+**The bridge** from a shipped release (``--old``, 0.11.10 by default; 0.11.0 to 0.11.11 and 0.10.0 to 0.10.4 have the
 updater), installed by its own ``cad setup`` through uvx, its server serving pages on the computer's port:
 
 - ``updater``: its update button: its updater installs this build in ``releases/<new>`` and runs its hidden ``cad setup
@@ -86,7 +92,7 @@ Usage::
 
     scripts/test/rehearse-update.py [ROUTE ...] [--old RELEASE] [--wheels DIR] [--uv-cache DIR]
 
-``all`` (the default) is every route; ``self`` the seven of cad updating itself; ``bridge`` the ten from a shipped
+``all`` (the default) is every route; ``self`` the eight of cad updating itself; ``bridge`` the ten from a shipped
 release. ``--wheels``: this tree's wheels as ``scripts/release/check-wheel-contents.sh`` keeps them; without it they
 are built from the source (``tests/python/support/machine.py``, no packaged runtime: no route opens a page).
 ``--uv-cache``: one folder for uv's cache and Pythons, shared by every computer of the run (default: a new one of the
@@ -127,8 +133,11 @@ _BASE = 9000 + os.getpid() % 800
 # it, and one uv cannot install as a tool.
 NEW, NEXT, BROKEN, AFTER, NOCMD = (rc.stamp(_BASE + step) for step in range(5))
 BROKEN_DAEMON = b"raise SystemExit('cad: this build cannot start its server (a rehearsal of a release that cannot)')\n"
-# How long each wait may take: an install from uv's cache, a switch, a tending or two of a server (30 s each).
+# How long each wait may take: an install from uv's cache, a switch, a tending or two of a server.
 SECONDS = 600.0
+# How often this build's servers tend themselves on these computers (``CAD_ENGINE_TEND_SECONDS``; a person's every
+# 30 s): each step the bridge takes waits for a tending.
+TEND_SECONDS = 2.0
 INSTALL_SH = REPO_ROOT / "scripts" / "install" / "install.sh"
 INSTALL_PS1 = REPO_ROOT / "scripts" / "install" / "install.ps1"
 INSTALL_PY = REPO_ROOT / "scripts" / "install" / "install.py"
@@ -217,6 +226,9 @@ class Box:
             # the server's first tending (a shipped switch here decides in seconds).
             "CAD_ENGINE_UPDATE_INSTALLER": installer_command(self.counted), "CAD_INSTALL_PY": str(INSTALL_PY),
             "CAD_ENGINE_UPDATE_FIRST_SECONDS": "0",
+            # This build's servers tend themselves every TEND_SECONDS, not every half minute (the shipped releases'
+            # servers do not read it).
+            "CAD_ENGINE_TEND_SECONDS": str(TEND_SECONDS),
             # PyPI, as `cad update` asks it: a stand-in on loopback.
             **({"CAD_PYPI_URL": pypi.url} if pypi is not None else {}),
         })
@@ -552,7 +564,7 @@ class Box:
 
 
 def launcher(path: Path) -> bool:
-    """Whether ``path`` is the ``cad`` command 0.10.0 to 0.11.10 wrote (its mark, ``cad proxy: <revision>``, in its first
+    """Whether ``path`` is the ``cad`` command 0.10.0 to 0.11.11 wrote (its mark, ``cad proxy: <revision>``, in its first
     lines, or in the ``__main__.py`` of the zip behind 0.11's cad.exe)."""
     import zipfile
 
@@ -643,6 +655,49 @@ def self_typed(box: Box) -> None:
         f"{NEXT} with automatic updates off ({said!r}); no install command")
     pages(box, NEXT)
     never_installed(box, box.read("auto-update.json"), "a typed cad update")
+
+
+def self_typed_stopped(box: Box) -> None:
+    """``cad update`` typed with no server running: cad updates in the command's own process, the helper starts no
+    server, and the install command never runs."""
+    box.set_up("on")  # the plugin's switch on: a typed update still never runs the install command
+    switched = box.run([box.cad(), "auto-update", "off"]).stdout.strip()
+    if switched != "auto-update: off":
+        raise Failed(f"{box.label}: cad auto-update off said {switched!r}")
+    python = rc.interpreter(Path(box.tool()["env"]))
+    box.run([box.cad(), "server", "stop"])
+    box.until(lambda: box.ask(python, "status") is None, "no server running")
+    # Nothing newer on PyPI: said, nothing begun, no server started.
+    done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
+    say(f"        typed, nothing newer: exit {done.returncode}, stdout {done.stdout.strip()!r}, "
+        f"stderr {done.stderr.strip()!r}")
+    if (done.returncode, done.stdout.strip()) != (0, f"cad {NEW} is the newest release") \
+            or box.read("auto-update.json") or box.ask(python, "status") is not None:
+        raise Failed(f"{box.label}: cad update with nothing newer exited {done.returncode}: "
+                     f"{done.stdout}{done.stderr}, {box.read('auto-update.json')}\n{box.said()}")
+    box.out(NEXT)  # out on PyPI
+    began = time.monotonic()
+    done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
+    say(f"        typed, {NEXT} out: exit {done.returncode} after {time.monotonic() - began:.0f} s, "
+        f"stdout {done.stdout.strip()!r}, stderr {done.stderr.strip()!r}")
+    said = f"cad {NEW} updated to {NEXT}"
+    if (done.returncode, done.stdout.strip(), done.stderr.strip()) != (0, said, ""):
+        raise Failed(f"{box.label}: cad update exited {done.returncode}: {done.stdout}{done.stderr}\n{box.said()}")
+    record = updated(box, NEXT)
+    say(f"        the record: {record}")
+    if record.get("start") is not False or "started" in record:
+        raise Failed(f"{box.label}: the helper was to start no server: {record}")
+    box.is_tool(NEXT)
+    python = rc.interpreter(Path(box.tool()["env"]))
+    # No server afterwards: none answers, and nothing of the computer runs once the helper has exited.
+    box.until(lambda: not box.computer.processes(), "nothing of the computer running", seconds=60)
+    if box.ask(python, "status") is not None or box.computer.processes():
+        raise Failed(f"{box.label}: a server runs after the update:\n{box.said()}")
+    if (box.read("settings.json").get("auto_update") or {}).get("on") is not False:
+        raise Failed(f"{box.label}: switches {box.read('settings.json').get('auto_update')}")
+    never_installed(box, record, "a typed cad update")
+    say(f"        no server ran: {NEW} -> {NEXT} by a typed `cad update` ({said!r}); no server after it, no "
+        f"install command (runs {box.runs()}), processes {box.computer.processes()} (looked: {box.computer.looked})")
 
 
 def self_at_start(box: Box) -> None:
@@ -873,10 +928,6 @@ def bridged(box: Box, old: str) -> None:
         f"hand-over done (attempt {record.get('attempts')}), automatic updates on, releases/{old} and releases/{NEW} "
         "kept; the install command ran once, and two tendings later still once")
     pages(box, NEW)
-
-
-# A server tends itself every 30 s (``cad_server.engine.daemon.TEND_SECONDS``).
-TEND_SECONDS = 30.0
 
 
 def tendings(box: Box, env: Path, count: int) -> None:
@@ -1162,8 +1213,9 @@ def store_uv_line(box: Box, old: str) -> None:
     by_uv_line(box, old, ours=False)
 
 
-SELF = {"self-update": self_update, "self-typed": self_typed, "self-at-start": self_at_start, "self-off": self_off,
-        "self-broken": self_broken, "self-uninstallable": self_uninstallable, "self-pipx": self_pipx}
+SELF = {"self-update": self_update, "self-typed": self_typed, "self-typed-stopped": self_typed_stopped,
+        "self-at-start": self_at_start, "self-off": self_off, "self-broken": self_broken,
+        "self-uninstallable": self_uninstallable, "self-pipx": self_pipx}
 BRIDGE = {"updater": updater, "automatic": automatic, "updater-fallback": updater_fallback, "store-only": store_only,
           "rollback": rollback, "install-command": install_command, "typed": typed, "store-typed": store_typed,
           "uv-line": uv_line, "store-uv-line": store_uv_line}

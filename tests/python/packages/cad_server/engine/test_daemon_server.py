@@ -83,7 +83,7 @@ class ConnectTest(unittest.TestCase):
     def test_a_client_starts_none_and_a_cad_command_reaches_its_own_release_alone(self) -> None:
         """A client starts no server: none answering is ``NotRunning`` in one line (or None, asked with ``start``
         false). A ``cad`` command (``RELEASE``) is refused a server of another release, in one line naming both and
-        the ways on; every other process -- a person's own Python, a client of 0.10.0 to 0.11.10 -- reaches
+        the ways on; every other process -- a person's own Python, a client of 0.10.0 to 0.11.11 -- reaches
         whichever runs, its builds held to the worker contract alone."""
         from cad.engine import client
 
@@ -377,7 +377,7 @@ class WindowsTokenFirstTest(unittest.TestCase):
         request = b'{"token": "' + token.encode() + b'", "op": "status"}\n'
         from cad.engine.previous import version
 
-        greeting = door.greeting(1, version())  # the server's release, which a reader of 0.11.10 and earlier skips
+        greeting = door.greeting(1, version())  # the server's release, which a reader of 0.11.11 and earlier skips
         for hello in (door.hello(token), token.encode() + b" 9 later\n"):
             said: list[bytes] = []
             handled, _token = self.serve(hello + request, said)
@@ -545,6 +545,17 @@ class NoTimerTest(unittest.TestCase):
         door.unlink()  # its folder cleaned up: no one can reach it
         engine.tend()
         self.assertTrue(engine.stopping.is_set())
+
+    def test_it_tends_every_half_minute_unless_a_test_s_computer_says_otherwise(self) -> None:
+        from cad_server.engine import daemon
+
+        with mock.patch.dict(os.environ):
+            os.environ.pop(daemon.TEND_ENV, None)
+            self.assertEqual(daemon.tend_seconds(), daemon.TEND_SECONDS)
+            self.assertEqual(daemon.TEND_SECONDS, 30.0)
+            for given, seconds in (("2", 2.0), ("0", 1.0), ("soon", 30.0)):
+                os.environ[daemon.TEND_ENV] = given
+                self.assertEqual(daemon.tend_seconds(), seconds, given)
 
 
 class BusyTest(unittest.TestCase):
@@ -833,7 +844,7 @@ class SweepTest(unittest.TestCase):
             return done.returncode, done.stdout, done.stderr
 
         unknown = "00000000-0000-5000-8000-000000000000"
-        for words in (("server", "status"), ("status",)):  # the short form, for skill text of 0.10.0 to 0.11.10
+        for words in (("server", "status"), ("status",)):  # the short form, for skill text of 0.10.0 to 0.11.11
             self.assertEqual(cad(*words), (0, f"{NOT_RUNNING}\n", ""))
         self.assertEqual(cad("server", "status", "--json")[:2], (0, "null\n"))
         self.assertEqual(cad("serve", unknown), (1, "", f"cad serve: {NOT_RUNNING}\n"))

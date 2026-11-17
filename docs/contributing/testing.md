@@ -52,11 +52,15 @@ enough. Every other job runs on the changes that reach it. The two there now:
   so no release ships unrehearsed. They also run on a change to the installers themselves.
 - The update rehearsal (`update-rehearsal`, `scripts/test/rehearse-update.py`) installs real releases
   from PyPI on private computers and brings each to this tree's build by the route it takes, on Linux,
-  macOS and Windows: the updater of 0.11.10 and 0.10.4 (`cad setup --engine-update`, then the install
-  command the new server runs once), cad's own automatic update, and the install command on a computer
-  of 0.11.10 and of 0.8.4, which has no updater. It is the one test of the move every computer makes,
-  unattended or by the install command. It runs with the installer rehearsals, and on a change to the
-  rehearsal itself. A route runs alone too, as `scripts/test/rehearse-update.py from-0.8`.
+  macOS and Windows: the updater of 0.11.10, 0.11.0 and 0.10.4 (`cad setup --engine-update`, then the
+  install command the new server runs once; where that run fails, `updater-fallback`, or the computer had
+  only a store's copy, `store-only`, the new server installs cad with uv itself), the shipped release's
+  typed `cad update` (`typed`, `store-typed`), the uv line typed on a computer of 0.11.10 (`uv-line`,
+  `store-uv-line`), and the install command on a computer of 0.11.10; then cad's own update, automatic
+  and typed with and without a server running, and cad installed by pipx (`self-pipx`). It is the one test
+  of the move every computer makes, unattended or by the install command. It runs with the installer
+  rehearsals, and on a change to the rehearsal itself. A route runs alone too, as
+  `scripts/test/rehearse-update.py store-only`.
 - The real install (`real install`, `real-install.yml`, `scripts/test/real-install.py`) runs the install script
   against the real `claude`, `codex` and `gemini` on Windows, macOS and Linux, each on a private computer: the
   one test of the half of the script that touches agent apps on Windows, where its unit tests (stand-in

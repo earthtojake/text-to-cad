@@ -428,18 +428,21 @@ jobs:
 
   # cad's updates rehearsed end to end, each on a private computer of its own (scripts/test/rehearse-update.py): this
   # tree published as releases no index holds (wheels uv reads beside the index, a local version feed), real uv, real
-  # servers and the real install command. cad updating itself as a uv tool (`self`: idle, typed, at a start whose
-  # starter waits for it, switched off, to a release whose server cannot start and on past it, to a release uv cannot
-  # install and back); and the bridge from the real
-  # shipped releases on PyPI (`bridge`: 0.11.10's update button and automatic update into this build, through its
-  # server's run of the install command in install mode to the uv tool's server; a computer with no receipt of our
-  # installer, which gets cad alone; 0.11.10 going back from a build whose server cannot start; the install command
-  # on a computer of 0.11.10), and the button of 0.11.0 and 0.10.4, and on Windows of 0.10.0, which this build
-  # takes over. Each checks the end state (uv's cad in the bin folder, its server answering, the records 0.11.10's
-  # clients read naming it, both switches on, nothing of a past release deleted) and that no file of the runner's own
-  # home moved. Measured on macOS: `self` about 6 minutes, `bridge` about 11 (0.11.10's first setup downloads its
-  # kernel). Before a release ships (a full run), nightly, and on a change to the installers, the rehearsal or the
-  # code of this build it runs.
+  # servers and the real install command; this build's servers there tend themselves every 2 s, not every 30 s
+  # (CAD_ENGINE_TEND_SECONDS). cad updating itself (`self`: idle, typed with and without a server running, at a start
+  # whose starter waits for it, switched off, to a release whose server cannot start and on past it, to a release uv
+  # cannot install and back, and installed by pipx); and the bridge from the real shipped releases on PyPI (`bridge`:
+  # 0.11.10's update button and automatic update into this build, through its server's run of the install command in
+  # install mode to the uv tool's server, and the same where that run fails; a computer with no receipt of our
+  # installer, whose server installs cad with uv itself and runs no install command, by the button and by a typed
+  # `cad update`; 0.11.10 going back from a build whose server cannot start; the install command, the typed update and
+  # the uv line on a computer of 0.11.10, the uv line on one with no receipt too), and the button of 0.11.0 and 0.10.4,
+  # and on Windows of 0.10.0, which this build takes over. Each checks the end state (uv's cad in the bin folder, its
+  # server answering, the records 0.11.10's clients read naming it, the switches as the route leaves them, nothing of
+  # a past release deleted) and that no file of the runner's own home moved. Measured on macOS with uv's cache warm:
+  # `self` about 2 minutes, `bridge` about 8; a fresh runner adds 0.11.10's first setup, which downloads its kernel.
+  # Before a release ships (a full run), nightly, and on a change to the installers, the rehearsal or the code of this
+  # build it runs.
   update-rehearsal:
     name: update rehearsal (${{ matrix.os }})
     needs: changes
@@ -468,12 +471,12 @@ jobs:
 
       # The rehearsal builds this tree's wheels from the source with the standard library alone
       # (tests/python/support/machine.py): nothing of cad is installed here.
-      - name: cad updating itself (idle, typed, at a start, switched off, past a broken server, back from an uninstallable release)
+      - name: cad updating itself (idle, typed, typed with no server, at a start, switched off, past a broken server, back from an uninstallable release, by pipx)
         timeout-minutes: 20
         run: python scripts/test/rehearse-update.py self --uv-cache "${{ runner.temp }}/uv"
 
-      - name: From 0.11.10 (button, automatic, store-only, gone back from, the install command)
-        timeout-minutes: 30
+      - name: From 0.11.10 (button, automatic, a failed install command, store-only, gone back from, the install command, typed, the uv line)
+        timeout-minutes: 35
         run: python scripts/test/rehearse-update.py bridge --uv-cache "${{ runner.temp }}/uv"
 
       - name: From 0.11.0, the first with an automatic update, by itself

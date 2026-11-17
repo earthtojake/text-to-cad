@@ -1,7 +1,7 @@
 """The engine daemon: the computer's one server, behind the engine folder's one door, lock and port file, which
 every client reaches (``client``) and only ``cad server start`` starts (``client.start``); its greeting names its
 release (``door.greeting``). It is never stopped by a timer: it stops on ``cad server stop`` (or a terminate), once
-it has drained (``drain``: nothing in flight; asked by the switch of 0.11.10 and earlier), when its door is gone and
+it has drained (``drain``: nothing in flight; asked by the switch of 0.11.11 and earlier), when its door is gone and
 no one can reach it (``tend``), and with the machine. Idleness sheds memory instead.
 
 Every process it starts is a service it declares (``services``): a model script's warm worker (the
@@ -157,6 +157,9 @@ _places.KERNEL = _kernel
 # How often the daemon tends itself (``Daemon.tend``): its door, its pipes, and its processes'
 # memory against its cap. The server's pressure poller asks the system's signal more often.
 TEND_SECONDS = 30.0
+# What sets it instead, in seconds, one at the least (``tend_seconds``): a test's computers, whose servers
+# would otherwise wait half a minute for each step the tending takes.
+TEND_ENV = "CAD_ENGINE_TEND_SECONDS"
 # The engine's HTTP port when nothing names one (0xCAD): ``--port`` on ``cad server start`` (or a
 # request's own), then ``CAD_ENGINE_PORT``, then the installation's remembered port, then this
 # (``bind``). Held by another program, the engine rolls to the next free port and remembers it.
@@ -250,6 +253,15 @@ def default_port() -> int:
     the default it holds or frees without touching the machine's 3245."""
     given = os.environ.get(DEFAULT_PORT_ENV, "").strip()
     return int(given) if given.isdigit() and 0 < int(given) <= 65535 else DEFAULT_PORT
+
+
+def tend_seconds() -> float:
+    """How often the daemon tends itself: ``TEND_SECONDS``, or what ``CAD_ENGINE_TEND_SECONDS`` names, one second at
+    the least (a test's computers)."""
+    try:
+        return max(1.0, float(os.environ[TEND_ENV]))
+    except (KeyError, ValueError):
+        return TEND_SECONDS
 
 
 def _held(error: OSError) -> bool:
@@ -514,7 +526,7 @@ def rotate_token(told: Callable[[str], None] = lambda _line: None) -> str | None
     """Replace the user's page token (``cad server --rotate-token``): every link and browser session made before
     stops working, at once. The new token is written into the state folder (an ``OSError`` there is the command's
     failure), and the server running is told to take it now (``{"op": "token"}``, ``Daemon.retoken``); one that
-    cannot be told -- a server of 0.11.10 or earlier, which reads its token only as it starts -- is said through
+    cannot be told -- a server of 0.11.11 or earlier, which reads its token only as it starts -- is said through
     ``told``. The new token; None where there is no state folder to keep it in."""
     from cad.engine.client import request
     from cad_server.engine import registry
@@ -1686,7 +1698,7 @@ class Daemon:
         elif op == "update":
             send(self.update(request))
         elif op == "stop":
-            # ``drain``: an update's switch (0.11.10's and earlier's), which waits for what is in flight; else at once.
+            # ``drain``: an update's switch (0.11.11's and earlier's), which waits for what is in flight; else at once.
             send({"ok": True, "draining": True} if request.get("drain") else {"ok": True})
             if request.get("drain"):
                 self.drain()
@@ -1848,7 +1860,8 @@ class Daemon:
                              and hasattr(self.server.http, "app") else [])}
 
     def watch(self) -> None:
-        while not self.stopping.wait(TEND_SECONDS):
+        seconds = tend_seconds()
+        while not self.stopping.wait(seconds):
             self.tend()
 
     def reached_by(self, address: Path) -> None:
@@ -1866,7 +1879,7 @@ class Daemon:
         (``auto_update.tend``: the update stops this server and starts the next, and runs the install command after it
         where the person's switch says); then, BRIDGE-ONLY, the install command run once where it is owed for a
         computer a shipped updater brought (``install_script.Carrier``), and the bridge's part (``cli.setup.Tending``:
-        such a server, once that run installed cad as a uv tool, hands over to the uv tool's). The engine stops on
+        such a server, once cad is installed globally, hands over to the global cad's). The engine stops on
         ``stop``, a terminate, another installation's
         retiring it (``bind``), and here when its door is gone (its folder removed, a temporary
         folder cleaned up) or another's: no one can reach it, so it stops as ``stop`` does, saving
