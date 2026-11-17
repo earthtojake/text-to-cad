@@ -90,6 +90,21 @@ def _threemf(path: Path) -> tuple[list[tuple], list[tuple], dict[str, Any]]:
     return parts, [(item.part, item.matrix, item.path) for item in placed], tree
 
 
+def _look_color(value: dict | None) -> tuple:
+    """A look's linear RGBA: its material JSON's PBR colour (sRGB) back to linear, its opacity (1
+    where it has none) -- without ``bd_materials``, for a mesh file read where it is not installed,
+    the colour straight from the JSON the round trip above would rebuild."""
+    from cad.engine.colors import srgb_to_linear
+
+    try:
+        return material_color(material_from_json(value))
+    except ModuleNotFoundError:
+        values = (value or {}).get("pbr", {}).get("values") or {}
+        color = values.get("color") or (0.8, 0.8, 0.8)
+        return (*[round(srgb_to_linear(c), 6) for c in color],
+                values.get("opacity") if values.get("opacity") is not None else 1.0)
+
+
 def _glb(path: Path) -> tuple[list[tuple], list[tuple], dict[str, Any]]:
     from cad.engine.formats.gltf import read_gltf
 
@@ -101,18 +116,18 @@ def _glb(path: Path) -> tuple[list[tuple], list[tuple], dict[str, Any]]:
             # One look for every primitive: the part's own.
             own = looks[0] if looks else None
             parts.append((part.name, mesh_of(part.points, part.triangles, None, part.normals),
-                          None if own is None else material_color(material_from_json(own)), {}, own, {}))
+                          None if own is None else _look_color(own), {}, own, {}))
             continue
         # Several looks: the one most of its triangles wear is the part's own (of two alike, the first), and
         # each other primitive a painted face -- as the document the GLB was written from holds them, so what
         # is written from this names the part's look its default and no look that nothing wears.
         worn = np.bincount(np.asarray(part.faces, np.int64), minlength=len(looks) + 1)[1:]
         own = looks[int(np.argmax(worn))]
-        face_colors = {at: DEFAULT_COLOR if look is None else material_color(material_from_json(look))
+        face_colors = {at: DEFAULT_COLOR if look is None else _look_color(look)
                        for at, look in enumerate(looks, 1) if look != own}
         face_materials = {at: look for at, look in enumerate(looks, 1) if look is not None and look != own}
         parts.append((part.name, mesh_of(part.points, part.triangles, part.faces, part.normals),
-                      None if own is None else material_color(material_from_json(own)), face_colors, own,
+                      None if own is None else _look_color(own), face_colors, own,
                       face_materials))
     placed = [(index, matrix, f"{path.stem}/{name}") for index, matrix, name in read.placed]
     leaves = [{"name": name, "prototype": index, "instance": at} for at, (index, _matrix, name) in enumerate(read.placed)]
