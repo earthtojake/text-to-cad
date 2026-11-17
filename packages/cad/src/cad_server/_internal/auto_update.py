@@ -18,8 +18,10 @@ the feed read when due): a release whose server cannot start still updates.
 ``IDLE_SECONDS``, or nothing has run since the server started (one update begun at a time, ``_BEGIN``): a detached
 helper, never the ``cad`` executable and
 never run from cad's environment (``auto_update_helper``, run by the Python that environment was made from), stops the
-server, installs ``cad==<latest>`` with uv, and starts the server with whatever cad is there. The attempt is kept in the
-state folder (``RECORD``), which ``cad doctor`` shows.
+server, installs ``cad==<latest>`` with uv, and starts the server with whatever cad is there. On Windows it renames
+each ``cad.exe`` of the tool aside before uv runs and puts a copy back, because uv cannot remove one that is running (a
+``cad update`` that waits, a ``cad server start``); that works because cad takes its launcher off ``sys.path`` as it
+starts (``cad_server/__init__.py``). The attempt is kept in the state folder (``RECORD``), which ``cad doctor`` shows.
 
 **Asked for** (``cad update``, which the server it asks judges, ``asked``, and begins, ``begin``): the feed read now,
 whatever its hour; switch 1, ``TRIES`` and ``RETRY_SECONDS`` do not apply (a typed update always updates); the update

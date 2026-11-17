@@ -263,15 +263,19 @@ class HelperTest(unittest.TestCase):
         self.told = {"uv": "uv", "cad": "cad", "target": "0.2.0", "prefix": str(self.tmp), "record": "r",
                      "from": "0.1.0", "at": 1.0}
 
-    def fake(self, installs: list[int], removes: bool = False):
+    def fake(self, installs: list[int], removes: bool = False, bin_folder: tuple[int, str] = (1, "no tools")):
         """A stand-in for uv and cad: each install exits as ``installs`` says, putting its release in place when it
-        succeeds and, with ``removes``, removing the whole tool when it fails (as uv does once it has begun)."""
+        succeeds and, with ``removes``, removing the whole tool when it fails (as uv does once it has begun); ``uv tool
+        dir --bin`` answers ``bin_folder``."""
         ran: list[list[str]] = []
 
         def run(line, timeout):
-            ran.append(line[1:3] if line[0] == "cad" else ["install", line[-1]])
+            if line[1:3] == ["tool", "dir"]:
+                ran.append(["dir"])
+                return bin_folder
+            ran.append(line[1:3] if line[0] == self.told["cad"] else ["install", line[-1]])
             present = list(self.site.glob("cad-*.dist-info"))
-            if line[0] == "uv":
+            if line[0] == self.told["uv"]:
                 code = installs.pop(0)
                 for found in present:
                     found.rmdir()
@@ -287,7 +291,7 @@ class HelperTest(unittest.TestCase):
     def test_stop_install_start_and_tried_again_on_failure(self) -> None:
         ran, run = self.fake([1, 1, 0])
         waited: list[float] = []
-        found = helper.update(self.told, run=run, sleep=waited.append)
+        found = helper.update(self.told, run=run, sleep=waited.append, windows=False)
         self.assertEqual(ran, [["server", "stop"], *[["install", "cad==0.2.0"]] * 3, ["server", "start"]])
         self.assertEqual(waited, list(helper.WAITS[:3]))
         self.assertEqual((found["outcome"], found["release"], found["from"], found["started"]),
@@ -295,29 +299,85 @@ class HelperTest(unittest.TestCase):
 
     def test_a_failed_install_still_starts_the_server_with_whatever_cad_is_there(self) -> None:
         ran, run = self.fake([1] * len(helper.WAITS))
-        found = helper.update(self.told, run=run, sleep=lambda _s: None)
+        found = helper.update(self.told, run=run, sleep=lambda _s: None, windows=False)
         self.assertEqual((ran[0], ran[-1], found["outcome"], found["detail"]),
                          (["server", "stop"], ["server", "start"], "failed", "uv said"))
 
     def test_an_install_that_failed_and_took_the_tool_with_it_puts_back_the_release_that_ran_then_starts(self) -> None:
         ran, run = self.fake([1] * len(helper.WAITS) + [0], removes=True)
-        found = helper.update(self.told, run=run, sleep=lambda _s: None)
+        found = helper.update(self.told, run=run, sleep=lambda _s: None, windows=False)
         self.assertEqual(ran, [["server", "stop"], *[["install", "cad==0.2.0"]] * len(helper.WAITS), ["--version"],
                                ["install", "cad==0.1.0"], ["server", "start"]])
         self.assertEqual((found["outcome"], found["restored"], found["started"]), ("failed", True, "done"))
         self.assertEqual(helper.installed(self.tmp), (0, 1, 0), "the release that ran before, and no other")
         ran, run = self.fake([1] * len(helper.WAITS))  # a failure that left the tool as it was: nothing put back
-        self.assertNotIn("restored", helper.update(self.told, run=run, sleep=lambda _s: None))
+        self.assertNotIn("restored", helper.update(self.told, run=run, sleep=lambda _s: None, windows=False))
         self.assertEqual(ran[-2:], [["--version"], ["server", "start"]])
 
     def test_forward_only_an_environment_at_the_target_or_newer_is_left_alone(self) -> None:
         (self.site / "cad-0.1.0.dist-info").rename(self.site / "cad-0.3.0.dist-info")
         ran, run = self.fake([])
-        self.assertEqual(helper.update(self.told, run=run)["outcome"], "current")
+        self.assertEqual(helper.update(self.told, run=run, windows=False)["outcome"], "current")
         self.assertEqual(ran, [["server", "stop"], ["server", "start"]])
         windows = self.tmp / "win"
         (windows / "Lib" / "site-packages" / "cad-0.2.0.dist-info").mkdir(parents=True)
         self.assertEqual(helper.installed(windows), (0, 2, 0), "a Windows environment's layout")
+
+    def windows_tool(self) -> Path:
+        """A Windows tool as uv lays it out: the bin folder's ``cad.exe`` (outside the environment) and the
+        environment's own ``Scripts/cad.exe``. The bin folder."""
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, folder, ignore_errors=True)
+        (folder / "cad.exe").write_bytes(b"uv's launcher")
+        (self.tmp / "Scripts").mkdir()
+        (self.tmp / "Scripts" / "cad.exe").write_bytes(b"the environment's launcher")
+        self.told["cad"] = str(self.tmp / "Scripts" / "cad.exe")
+        return folder
+
+    def test_on_windows_each_cad_exe_is_set_aside_in_the_bin_folder_before_each_try_and_tidied(self) -> None:
+        """A running cad.exe cannot be removed, only renamed: before each try both are renamed into the bin folder,
+        never left inside the environment uv deletes on a failure, and a copy put back; what was set aside is deleted
+        at the start and the end."""
+        folder = self.windows_tool()
+        (folder / ".cad.exe.1-1.0.old").write_bytes(b"an earlier run's")
+        ran, run = self.fake([1, 0], bin_folder=(0, str(folder)))
+        seen = []
+
+        def looking(line, timeout):
+            if line[0] == "uv" and line[1:3] == ["tool", "install"]:
+                seen.append((sorted(path.name for path in folder.iterdir()),
+                             sorted(path.name for path in (self.tmp / "Scripts").iterdir()),
+                             (folder / "cad.exe").read_bytes(), (self.tmp / "Scripts" / "cad.exe").read_bytes()))
+            return run(line, timeout)
+
+        found = helper.update(self.told, run=looking, sleep=lambda _s: None, windows=True)
+        self.assertEqual(found["outcome"], "installed")
+        self.assertEqual(ran, [["dir"], ["server", "stop"], *[["install", "cad==0.2.0"]] * 2, ["server", "start"]])
+        for tries, (bin_names, scripts, launcher, own) in enumerate(seen, start=1):
+            aside = [name for name in bin_names if name != "cad.exe"]
+            self.assertEqual(len(aside), 2 * tries, "both set aside at each try; the earlier run's tidied first")
+            self.assertTrue(all(name.startswith(".cad.exe.") and name.endswith((".0.old", ".1.old")) for name in aside))
+            self.assertNotIn(".cad.exe.1-1.0.old", aside)
+            self.assertEqual((scripts, launcher, own), (["cad.exe"], b"uv's launcher", b"the environment's launcher"),
+                             "a copy put back where each was, and nothing set aside inside the environment")
+        self.assertEqual([path.name for path in folder.iterdir()], ["cad.exe"], "tidied at the end")
+
+    def test_on_windows_a_set_aside_that_fails_is_skipped_and_the_install_still_tried(self) -> None:
+        folder = self.windows_tool()
+        with mock.patch.object(helper.os, "replace", side_effect=OSError(18, "not the same device")):
+            self.assertEqual(helper.set_aside(self.told, folder), [])
+        (self.tmp / "Scripts" / "cad.exe").unlink()
+        moved = helper.set_aside(self.told, folder)
+        self.assertEqual(([path.parent for path in moved], (folder / "cad.exe").read_bytes()),
+                         ([folder], b"uv's launcher"))
+        # A file still running refuses to be deleted (here a folder by that name): left for the next run, no error.
+        (folder / ".cad.exe.2-2.1.old").mkdir()
+        helper.tidy(folder)
+        self.assertEqual(sorted(path.name for path in folder.iterdir()), [".cad.exe.2-2.1.old", "cad.exe"])
+        # uv cannot say where its bin folder is: nothing set aside, the install tried all the same.
+        ran, run = self.fake([0])
+        self.assertEqual(helper.update(self.told, run=run, sleep=lambda _s: None, windows=True)["outcome"], "installed")
+        self.assertEqual(ran, [["dir"], ["server", "stop"], ["install", "cad==0.2.0"], ["server", "start"]])
 
     def test_no_console_window_on_windows(self) -> None:
         with mock.patch.object(helper.subprocess, "run", return_value=types.SimpleNamespace(returncode=0, stdout="")) \
@@ -378,6 +438,36 @@ class HelperTest(unittest.TestCase):
         self.assertEqual((kept["outcome"], kept["started"]), ("installed", f"started the cad server (cad {version()})"))
         with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(engine)}):
             self.assertEqual(client.request({"op": "pid"}, start=False)["ok"], True, "a server answers")
+
+
+class LauncherTest(unittest.TestCase):
+    """uv's ``cad.exe`` runs ``python cad.exe``: the launcher, a zip, is ``sys.path[0]``, and a process that reads
+    package metadata through it holds it open, which Windows will not rename. Importing ``cad_server`` takes it off."""
+
+    def path_after_import(self, *argv: str) -> list[str]:
+        from tests.python.support.paths import SOURCE_PATH
+
+        done = subprocess.run([sys.executable, *argv], capture_output=True, text=True, timeout=120,
+                              env={**os.environ, "PYTHONPATH": SOURCE_PATH})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return json.loads(done.stdout)
+
+    def test_the_launcher_is_taken_off_the_path_and_any_other_first_entry_left(self) -> None:
+        import zipfile
+
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, folder, ignore_errors=True)
+        for name, gone in (("CAD.EXE", True), ("OTHER.EXE", False)):  # cad's launcher, in any case; another program's
+            program = folder / name
+            with zipfile.ZipFile(program, "w") as archive:
+                archive.writestr("__main__.py", "import json, sys\nimport cad_server\nprint(json.dumps(sys.path))\n")
+            path = self.path_after_import(str(program))
+            self.assertEqual(str(program) not in path, gone, name)
+            if not gone:
+                self.assertEqual(path[0], str(program), "another program's zip keeps its first path entry")
+        first = str(folder / "bin")
+        script = f"import json, sys\nsys.path.insert(0, {first!r})\nimport cad_server\nprint(json.dumps(sys.path))"
+        self.assertEqual(self.path_after_import("-c", script)[0], first)
 
 
 class JoinTest(unittest.TestCase):
@@ -477,6 +567,27 @@ class FailedStartTest(Case):
         self.assertEqual(feed.call_args.kwargs, {"fetch": True}, "the feed read where it is due: no server reads it")
         self.assertEqual(err.getvalue().splitlines(), ["cad: updating cad to 0.2.0, which then starts the server",
                                                        "cad server start: the engine server did not start"])
+
+    def test_a_start_whose_files_an_update_removed_under_it_still_says_one_line(self) -> None:
+        """As a failed install on Windows did: cad's own files gone while the start waited. What the failure needs was
+        imported before, so it says its one line, never a traceback."""
+        from cad_server import _internal
+        from cad_server.cli import server
+
+        def removed(_port):
+            delattr(_internal, "auto_update")
+            sys.modules["cad_server._internal.auto_update"] = None  # importing it now raises ImportError
+            raise ConnectionError("the engine server did not start: cad is updating")
+
+        self.addCleanup(sys.modules.__setitem__, "cad_server._internal.auto_update", auto_update)
+        self.addCleanup(setattr, _internal, "auto_update", auto_update)
+        err = io.StringIO()
+        with mock.patch.object(client, "start", side_effect=removed), \
+                mock.patch.object(auto_update, "after_failed_start", return_value=None), \
+                redirect_stderr(err), redirect_stdout(io.StringIO()):
+            code = server.main(["start"])
+        self.assertEqual((code, err.getvalue()),
+                         (1, "cad server start: the engine server did not start: cad is updating\n"))
 
 
 class AskedTest(Case):
@@ -590,9 +701,9 @@ class ServerUpdateTest(Case):
 
 class UpdateCommandTest(Case):
     """``cad update`` (``cad_server/cli/update.py``): refused for a cad that is no uv tool, the one line with no server,
-    an older server's answer; on POSIX it waits and says how the update ended; on Windows it says it began."""
+    an older server's answer; it waits and says how the update ended, on Windows as everywhere."""
 
-    def typed(self, answer=None, *, windows: bool = False, raises: Exception | None = None, looks=()):
+    def typed(self, answer=None, *, raises: Exception | None = None, looks=()):
         from cad_server.cli import update as typed
 
         out, err = io.StringIO(), io.StringIO()
@@ -600,7 +711,7 @@ class UpdateCommandTest(Case):
         with mock.patch.object(client, "request", return_value=answer, side_effect=raises) as request, \
                 mock.patch.object(typed, "look", side_effect=lambda *_a: next(looks)), \
                 mock.patch.object(typed.time, "sleep"), redirect_stdout(out), redirect_stderr(err):
-            code = typed.main([], windows=windows)
+            code = typed.main([])
         return code, out.getvalue(), err.getvalue(), request
 
     def test_refused_never_started_and_an_older_server_s_answer(self) -> None:
@@ -620,12 +731,7 @@ class UpdateCommandTest(Case):
         self.assertEqual(self.typed({"ok": True, "newest": "0.1.0"})[:3], (0, "cad 0.1.0 is the newest release\n", ""))
         self.assertEqual(self.typed()[3].call_args.args[0], {"op": "update"})
 
-    def test_on_windows_it_says_the_update_began_and_ends(self) -> None:
-        answer = {"ok": True, "updating": "0.2.0", "from": "0.1.0", "since": 5.0}
-        self.assertEqual(self.typed(answer, windows=True)[:3],
-                         (0, "updating cad 0.1.0 to 0.2.0: it takes about a minute\n", ""))
-
-    def test_elsewhere_it_waits_for_the_attempt_and_says_how_it_ended(self) -> None:
+    def test_it_waits_for_the_attempt_and_says_how_it_ended(self) -> None:
         answer = {"ok": True, "updating": "0.2.0", "from": "0.1.0", "since": 5.0}
         underway = {"release": "0.2.0", "at": 5.0, "outcome": "underway"}
         earlier = {"release": "0.1.9", "at": 1.0, "outcome": "installed"}
@@ -658,8 +764,6 @@ class UpdateCommandTest(Case):
                           sleep=lambda _s: None)
         self.assertEqual((code, said), (1, ["the update of cad 0.1.0 is still underway after 10 minutes: run "
                                             "`cad --version` later to see where it ended"]))
-        self.assertTrue(typed.waits(windows=False))
-        self.assertFalse(typed.waits(windows=True))
 
 
 class DoctorTest(Case):

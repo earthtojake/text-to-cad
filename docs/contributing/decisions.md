@@ -61,9 +61,10 @@ installer, uninstaller or launcher of its own.
 **Why.** uv already installs a tool in place, replaces it on update, and removes it cleanly. Code of
 our own that did the same was how earlier releases got into trouble.
 
-**What it costs.** We take uv's behaviour as it is, its bugs included: on Windows, uv can fail to
-replace a running `cad.exe`, so cad's update tries again; and when an install fails after it has
-started, uv removes the tool, so cad's update puts the release it ran back.
+**What it costs.** We take uv's behaviour as it is, its bugs included: on Windows, uv cannot remove a
+running `cad.exe`, so cad's update renames each one aside first and puts a copy back, and tries again
+if uv still fails; and when an install fails after it has started, uv removes the tool, so cad's update
+puts the release it ran back.
 
 ## The feed is the pointer
 

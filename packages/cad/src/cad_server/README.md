@@ -102,8 +102,7 @@ cad_server/
   running, the command writes them itself.
 - **`cad update`**: cad updated to the newest release now, by the server that runs (below), even with
   switch 1 off. It never starts a server, and is refused unless this cad is a uv tool. It waits until the
-  update ends and says how, in one line; on Windows, where a running `cad.exe` of the tool makes uv's install
-  fail, it says the update began and returns.
+  update ends and says how, in one line, on Windows too.
 - **`cad telemetry [status|on|off]`**: the person's answer about usage stats and crash reports.
 
 There is no command that installs or removes cad: that is uv's (`uv tool install cad`,
@@ -136,7 +135,9 @@ is in flight (at a start, at once; otherwise once nothing has run for a minute),
 neither the `cad` executable nor run from cad's environment (`_internal/auto_update_helper.py`) stops the
 server, runs `uv tool install --managed-python --python 3.14 cad==<release>` (tried again on failure, and
 the previous release put back where a failed install left no `cad`), and starts the server with whatever
-cad is there. One release is tried at most twice, never twice within an hour. `cad server start` asks too
+cad is there. On Windows uv cannot remove a `cad.exe` that is running, but it can rename one, so the
+helper renames each `cad.exe` of the tool aside before uv runs and puts a copy back. For that to work, cad
+takes its launcher off `sys.path` as it starts (`__init__.py`), so it never holds the file open. One release is tried at most twice, never twice within an hour. `cad server start` asks too
 when the start fails, so a release whose server cannot start still updates. Forward only: nothing moves
 to an older release, and a start joins a running server of a newer release rather than replacing it. With
 no answer from the feed, nothing happens. `CAD_UPDATE_CHECK=0` in a process's environment turns the check

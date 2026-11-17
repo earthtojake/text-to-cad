@@ -4,11 +4,11 @@ as nothing is in flight (``cad_server._internal.auto_update``: ``asked``, ``begi
 The server does the work, not this command: an agent's shell may not reach the network or change cad's folders, and the
 server, outside that sandbox, may; so the command asks no permission.
 
-Then it waits for the update to end (``waits``) and says how it ended, as the server that answers afterwards tells it
+Then it waits for the update to end and says how it ended, as the server that answers afterwards tells it
 (``{"op": "update", "begin": false}``), else as the attempt's record in the state folder does; ``WAIT_SECONDS`` at
-most. Not on Windows: there a running ``cad.exe`` of the tool makes uv's install fail halfway, and this command is one,
-so it says the update began and ends. Everything the wait uses is imported before the update begins: from then on the
-files of this cad's environment change under it.
+most. On Windows too: this command is a running ``cad.exe`` of the tool, which the update renames aside before uv runs
+(``cad_server._internal.auto_update_helper``). Everything the wait uses is imported before the update begins: from then
+on the files of this cad's environment change under it.
 
 It never starts a server: with none running, the one line every command says. A cad that is no uv tool does not update
 itself, and is refused.
@@ -17,7 +17,6 @@ itself, and is refused.
 from __future__ import annotations
 
 import argparse
-import os
 import threading  # noqa: F401 - the client's bounded request (``client._within``) imports it: before the update begins
 import time
 from collections.abc import Callable, Sequence
@@ -43,14 +42,7 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
         "is newest and, once nothing is running, installs it with uv and starts again. Needs the server running."))
 
 
-def waits(windows: bool = os.name == "nt") -> bool:
-    """Whether ``cad update`` waits for the update to end. Not on Windows: while any ``cad.exe`` of the tool runs,
-    ``uv tool install`` fails halfway and leaves the tool broken until it runs again with none running, and a command
-    that waits is one."""
-    return not windows
-
-
-def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG, windows: bool = os.name == "nt") -> int:
+def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     build_parser(prog).parse_args(argv)
     from cad.engine import client
     from cad_server._internal import auto_update
@@ -72,9 +64,6 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG, windows
     target, was, since = answer.get("updating"), answer.get("from"), answer.get("since")
     if not (isinstance(target, str) and isinstance(was, str) and isinstance(since, (int, float))):
         return write(Failure(f"the cad server's answer was not understood: {answer}"), prog=prog, as_json=False)
-    if not waits(windows):
-        print(f"updating cad {was} to {target}: it takes about a minute")
-        return 0
     return wait(lambda: look(client, auto_update), was, float(since),
                 said=lambda words: write(Failure(words), prog=prog, as_json=False))
 

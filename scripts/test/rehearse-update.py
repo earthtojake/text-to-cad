@@ -15,9 +15,12 @@ stand-in on loopback (``CAD_API_URL``, ``CAD_INSTALL_FEED``). Every computer's s
   the next release, and its server answers; then, the second switch on, the new server runs the install command in
   update mode once, and the release it last ran for is recorded (``installer_ran_for``).
 - ``self-typed``: with switch 1 off (the second on), the feed names the next release and ``cad update`` is typed: the
-  server reads the feed at once and updates cad to it; the command waits and says so (on Windows it says the update
-  began, and the route waits for its record); the uv tool is the next release, its server answers, and the install
-  command runs in update mode once.
+  server reads the feed at once and updates cad to it; the command, a running ``cad`` of the tool, waits and says so;
+  the uv tool is the next release, its server answers, and the install command runs in update mode once.
+- ``self-at-start``: the server stopped, the feed's file already naming the next release, then ``cad server start``:
+  the server it spawns hands its start to the update, and the starter, a running ``cad`` of the tool, waits for the
+  update's server. It exits 0, the uv tool is the next release and serves, and the attempt installed at its first try
+  (on Windows this failed every time until cad's update set the running ``cad.exe`` aside).
 - ``self-off``: with ``cad auto-update off``, the server reads the feed naming the next release, and a start of the
   server starts the same cad: nothing updates.
 - ``self-broken``: an update to a release whose server cannot start (its daemon module raises): cad is that release, its
@@ -52,7 +55,7 @@ Usage::
 
     scripts/test/rehearse-update.py [ROUTE ...] [--old RELEASE] [--wheels DIR] [--uv-cache DIR]
 
-``all`` (the default) is every route; ``self`` the five of cad updating itself; ``bridge`` the seven from a shipped
+``all`` (the default) is every route; ``self`` the six of cad updating itself; ``bridge`` the seven from a shipped
 release. ``--wheels``: this tree's wheels as ``scripts/release/check-wheel-contents.sh`` keeps them; without it they
 are built from the source (``tests/python/support/machine.py``, no packaged runtime: no route opens a page).
 ``--uv-cache``: one folder for uv's cache and Pythons, shared by every computer of the run (default: a new one of the
@@ -517,7 +520,7 @@ def self_typed(box: Box) -> None:
     (box.state / "settings.json").write_text(json.dumps(kept), encoding="utf-8")
     box.feed.latest = NEXT
     done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
-    said = (f"updating cad {NEW} to {NEXT}: it takes about a minute" if WINDOWS else f"cad {NEW} updated to {NEXT}")
+    said = f"cad {NEW} updated to {NEXT}"
     if (done.returncode, done.stdout.strip()) != (0, said):
         raise Failed(f"{box.label}: cad update exited {done.returncode}: {done.stdout}{done.stderr}\n{box.said()}")
     updated(box, NEXT)
@@ -531,6 +534,25 @@ def self_typed(box: Box) -> None:
     say(f"        {NEW} -> {NEXT} by `cad update` with switch 1 off ({said!r}); the install command in update mode "
         "ran once")
     pages(box, NEXT)
+
+
+def self_at_start(box: Box) -> None:
+    box.set_up()
+    box.run([box.cad(), "server", "stop"])
+    # The feed as the server last read it, naming the next release, read within the hour: due at the next start.
+    box.feed.latest = NEXT
+    (box.state / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": NEXT}}),
+                                             encoding="utf-8")
+    done = box.run([box.cad(), "server", "start"], check=False)
+    if done.returncode != 0 or f"cad {NEXT}" not in done.stdout:
+        raise Failed(f"{box.label}: cad server start exited {done.returncode}: {done.stdout}{done.stderr}\n"
+                     f"{box.said()}")
+    record = updated(box, NEXT)
+    if record.get("tries") != 1 or "restored" in record:
+        raise Failed(f"{box.label}: cad's own update at the start: {record}\n{box.said()}")
+    box.tool_serves(NEXT)
+    box.is_tool(NEXT)
+    say(f"        {NEW} -> {NEXT} as `cad server start` started, the starter waiting: {done.stdout.strip()!r}")
 
 
 def self_off(box: Box) -> None:
@@ -741,8 +763,8 @@ def store_typed(box: Box, old: str) -> None:
         f"`cad server start` serves {NEW}")
 
 
-SELF = {"self-update": self_update, "self-typed": self_typed, "self-off": self_off, "self-broken": self_broken,
-        "self-uninstallable": self_uninstallable}
+SELF = {"self-update": self_update, "self-typed": self_typed, "self-at-start": self_at_start, "self-off": self_off,
+        "self-broken": self_broken, "self-uninstallable": self_uninstallable}
 BRIDGE = {"updater": updater, "automatic": automatic, "store-only": store_only, "rollback": rollback,
           "install-command": install_command, "typed": typed, "store-typed": store_typed}
 

@@ -428,8 +428,9 @@ jobs:
 
   # cad's updates rehearsed end to end, each on a private computer of its own (scripts/test/rehearse-update.py): this
   # tree published as releases no index holds (wheels uv reads beside the index, a local version feed), real uv, real
-  # servers and the real install command. cad updating itself as a uv tool (`self`: idle, switched off, to a release
-  # whose server cannot start and on past it, to a release uv cannot install and back); and the bridge from the real
+  # servers and the real install command. cad updating itself as a uv tool (`self`: idle, typed, at a start whose
+  # starter waits for it, switched off, to a release whose server cannot start and on past it, to a release uv cannot
+  # install and back); and the bridge from the real
   # shipped releases on PyPI (`bridge`: 0.11.10's update button and automatic update into this build, through its
   # server's run of the install command in install mode to the uv tool's server; a computer with no receipt of our
   # installer, which gets cad alone; 0.11.10 going back from a build whose server cannot start; the install command
@@ -467,7 +468,7 @@ jobs:
 
       # The rehearsal builds this tree's wheels from the source with the standard library alone
       # (tests/python/support/machine.py): nothing of cad is installed here.
-      - name: cad updating itself (idle, switched off, past a broken server, back from an uninstallable release)
+      - name: cad updating itself (idle, typed, at a start, switched off, past a broken server, back from an uninstallable release)
         timeout-minutes: 20
         run: python scripts/test/rehearse-update.py self --uv-cache "${{ runner.temp }}/uv"
 

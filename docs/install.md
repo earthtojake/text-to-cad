@@ -333,8 +333,8 @@ app, run the update command under its name. To update cad alone, while its serve
 cad update
 ```
 
-It installs the newest release now, even with automatic updates off, and says when it is done (on
-Windows it starts the update and returns; it takes about a minute). Or do the same with uv yourself:
+It installs the newest release now, even with automatic updates off, and says when it is done. Or do
+the same with uv yourself:
 
 ```bash
 cad server stop

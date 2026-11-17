@@ -72,11 +72,13 @@ def _start(args: argparse.Namespace, prog: str) -> int:
     if args.rotate_token:
         _rotate(args, prog.removesuffix(" start"))
     if args.command == "start" and not args.foreground:
+        # Imported before the server is spawned: an update it begins changes this cad's files under this process, and a
+        # start that fails still says its one line.
+        from cad_server._internal import auto_update
+
         try:
             print(client.start(args.port))
         except Exception:
-            from cad_server._internal import auto_update
-
             target = auto_update.after_failed_start()
             if target is not None:
                 print(f"cad: updating cad to {target}, which then starts the server", file=sys.stderr, flush=True)
