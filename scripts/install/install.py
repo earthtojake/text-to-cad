@@ -110,8 +110,6 @@ ASIDE = ".cad.exe.{stamp}.{n}.old"
 # runs): ``make_room``'s names, ``discard``'s trash folders, and ``ASIDE``. A later run deletes them (``tidy``).
 LEFTOVERS = (*(f".{name}.text-to-cad-old" for name in ("cad", "cad.exe", "cad.cmd", "cad-launcher")),
              ".text-to-cad-trash-*", ASIDE.format(stamp="*", n="*"))
-# GetCurrentPackageFullName's answer in a process that runs in no app package (Windows' APPMODEL_ERROR_NO_PACKAGE).
-NO_PACKAGE = 15700
 # How long one app command may take before it is stopped (with every process it started). The slowest is a
 # clone of the `latest` branch (1.4 MB, about a second measured); three minutes is that a hundredfold on a slow
 # line, and a CLI that hangs (a prompt it should not show, a lock) costs the run three minutes, not fifteen.
@@ -1792,20 +1790,6 @@ def put_back(moved: List[Tuple[Path, Path]], done: bool) -> None:
             pass
 
 
-def packaged(here: Here) -> bool:
-    """Windows: whether this runs inside an app's package (the Claude desktop app's, say), where Windows keeps the
-    first folders uv makes under AppData to that app, and uv's first install of Python fails (measured)."""
-    if not here.windows or os.name != "nt":
-        return False
-    try:
-        import ctypes
-
-        length = ctypes.c_uint32(0)
-        return ctypes.windll.kernel32.GetCurrentPackageFullName(ctypes.byref(length), None) != NO_PACKAGE
-    except (AttributeError, ImportError, OSError):
-        return False
-
-
 def on_path(here: Here, uv: str, folder: Path) -> None:
     """Where uv's bin folder is not on this shell's PATH, uv's own ``uv tool update-shell`` puts it there for new
     terminals, as uv's and Codex's installers do for their own folders: on Windows the user's PATH (winget's uv puts
@@ -1981,10 +1965,8 @@ def install_cad(here: Here) -> Cad:
     put_back(aside, not code)
     settle(here, moved, not code)  # the earlier command back where uv's is not in
     if code:
-        where = ("This ran inside an app's package, where Windows keeps uv's first install of Python to that app: run "
-                 "the install command once in a PowerShell window of your own." if packaged(here) else
-                 "Where this ran in an agent's sandbox, run it again in a terminal of your own.")
-        print(f"cad: failed (uv tool install exit status {code}; what uv said is above). {where}", flush=True)
+        print(f"cad: failed (uv tool install exit status {code}; what uv said is above). Where this ran inside an app "
+              "or an agent's sandbox, run it again in a terminal of your own.", flush=True)
         left = uv_tools(here, uv).get("cad") if again else None  # a failed reinstall may leave the tool, or not
         return Cad(left.version if left else None, code)
     tool = uv_tools(here, uv).get("cad")

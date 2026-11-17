@@ -458,7 +458,6 @@ class InstallScriptTests(unittest.TestCase):
         # uv cannot replace a cad.exe that runs (it fails halfway, measured), but one that runs can be renamed: uv's
         # cad.exe and the tool environment's own go aside, into uv's bin folder (never the environment, which uv
         # deletes), under cad's own update's name; back where uv fails, deleted where it is in.
-        here = install.Here(self.environ(), platform="win32")
         folder = self.uv_bin
         env = self.home / "AppData/Roaming/uv/tools/cad"
         mine = [self.write(".local/bin/cad.exe", "uv's"), self.write("AppData/Roaming/uv/tools/cad/Scripts/cad.exe", "env's")]
@@ -475,7 +474,6 @@ class InstallScriptTests(unittest.TestCase):
         theirs = self.write(".local/bin/cad.exe", "another program's")
         self.assertEqual(install.set_aside(folder, None), [])
         self.assertEqual(theirs.read_text(encoding="utf-8"), "another program's")
-        self.assertFalse(install.packaged(here), "no app package off Windows")
 
     def test_uv_s_folder_goes_on_the_path_by_uv_s_own_command_on_every_system(self) -> None:
         # A shell whose PATH lacks uv's bin folder (winget's or Homebrew's uv puts its own folder there): uv's own
@@ -952,8 +950,8 @@ class InstallScriptTests(unittest.TestCase):
         self.no_tools()
         done = self.run_install(FAKE_FAIL="uv:install")
         self.assertEqual(1, done.returncode)
-        self.assertIn("cad: failed (uv tool install exit status 1; what uv said is above). Where this ran in an "
-                      "agent's sandbox, run it again in a terminal of your own.", done.stdout)
+        self.assertIn("cad: failed (uv tool install exit status 1; what uv said is above). Where this ran inside an "
+                      "app or an agent's sandbox, run it again in a terminal of your own.", done.stdout)
         self.assertIn("Gemini CLI: installed", done.stdout)
         self.assertIn("cad itself was not installed", done.stdout)
         self.assertEqual(self.calls("cad"), [], "no cad to switch on")

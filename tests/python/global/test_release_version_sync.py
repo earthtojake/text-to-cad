@@ -122,7 +122,7 @@ class VersionSyncMirrorTests(unittest.TestCase):
             # block's fixed first release of a global install (0.11.11), whatever release is stamped.
             skill = root / "skills/fixture/SKILL.md"
             skill.parent.mkdir(parents=True)
-            fixed = "- `cad` is not found, or older than 0.11.11: run the install line below.\n"
+            fixed = "- `cad` is not found or does not run, or is older than 0.11.11: run the install line below.\n"
             unstamped = ("---\nname: fixture\nallowed-tools: Bash(cad *) Bash(uv tool install cad==*)\n---\n"
                          "This skill was written for `cad==1.0.0`. Run `cad --version`.\n" + fixed +
                          "```bash\nuv tool install --managed-python --python 3.14 cad==0.11.10-dev.1\n```\n"

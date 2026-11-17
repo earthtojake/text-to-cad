@@ -13,6 +13,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import shutil
 import sys
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -179,6 +180,95 @@ class DoctorTests(unittest.TestCase):
         self.assertLessEqual({"trimesh", "kicad", "server"}, set(names))
         self.assertTrue(all(check["status"] in ("ok", "info", "warning", "failed") for check in found["checks"]))
         self.assertEqual([f"  {check['name']:<8} {check['detail']}" for check in found["checks"]], out.splitlines()[1:])
+
+
+class PrivateFolderTests(unittest.TestCase):
+    """On Windows a packaged app keeps a folder made from inside it under AppData in a private copy only it sees. uv's
+    folder there holds a copy of cad that works in that app alone and wins over the real one there, or a failed try's
+    leftovers, where every new Python uv installs from inside that app fails. `cad server start` and `cad doctor` name
+    each such folder with its reason and say to delete it; cad never deletes it. Off Windows they say nothing. A
+    stand-in %LOCALAPPDATA% here, so it runs on every system."""
+
+    def setUp(self) -> None:
+        root = TemporaryDirectory()
+        self.addCleanup(root.cleanup)
+        self.root = Path(root.name).resolve()
+        self.local = self.root / "Local"
+        self.copy = self.local / "Packages/App_1/LocalCache/Roaming/uv"
+        (self.copy / "tools/cad/Scripts").mkdir(parents=True)
+        self.leftover = self.local / "Packages/App_2/LocalCache/Roaming/uv"
+        (self.leftover / "python").mkdir(parents=True)
+        # Not uv's folder in an app's private Roaming: never named.
+        (self.local / "Packages/App_3/LocalCache/Local/uv/tools/cad").mkdir(parents=True)
+        (self.local / "Packages/App_4/LocalCache/Roaming/other").mkdir(parents=True)
+        for patcher in (mock.patch.dict("os.environ", {"CAD_STATE_DIR": str(self.root / "state"),
+                                                       "CAD_CACHE_DIR": str(self.root / "cache"),
+                                                       "CAD_ENGINE_DIR": str(self.root / "engine"),
+                                                       "CAD_UPDATE_CHECK": "0", "LOCALAPPDATA": str(self.local)}),
+                        mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_OK, "/site/OCP.pyd")),
+                        mock.patch.object(doctor, "WINDOWS", True)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def lines(self) -> list[str]:
+        return [doctor.COPY_LINE.format(path=self.copy), doctor.LEFTOVER_LINE.format(path=self.leftover)]
+
+    def start(self) -> tuple[int, str, str]:
+        from cad.engine import client
+        from cad_server.cli import server
+
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(client, "start", return_value="the cad server is running") as started, \
+                redirect_stdout(out), redirect_stderr(err):
+            code = server.main(["start"])
+        started.assert_called_once()
+        return code, out.getvalue(), err.getvalue()
+
+    def test_each_folder_is_named_with_its_reason_by_both_commands_and_never_deleted(self) -> None:
+        copy, leftover = self.lines()
+        self.assertEqual(copy, f"another copy of cad is in an app's private folder: {self.copy}. That app keeps using "
+                               "it instead of this one. Delete that folder so every app uses this cad.")
+        self.assertEqual(leftover, f"uv left files in an app's private folder: {self.leftover}. Inside that app a new "
+                                   "Python lands there and fails to install. Delete that folder.")
+        code, out, err = self.start()
+        self.assertEqual((code, out), (0, "the cad server is running\n"))
+        self.assertEqual(sorted(err.splitlines()), [f"cad: {copy}", f"cad: {leftover}"])
+        code, out, _err = _run([])
+        self.assertEqual(code, 0, "worth a look, never a failure")
+        self.assertIn(f"  private  {copy}\n", out)
+        self.assertIn(f"  private  {leftover}\n", out)
+        private = [check for check in json.loads(_run(["--json"])[1])["checks"] if check["name"] == "private"]
+        self.assertEqual(sorted(check["detail"] for check in private), [copy, leftover])
+        self.assertEqual({check["status"] for check in private}, {"warning"})
+        self.assertTrue(self.copy.is_dir() and self.leftover.is_dir(), "named, never deleted")
+
+    def test_the_folder_this_cad_runs_from_is_not_named(self) -> None:
+        # Inside the app this cad runs from that very folder, by another name: compared as folders, not as words.
+        # Deleting it would remove this cad.
+        with mock.patch.object(sys, "prefix", str(self.copy / "tools/cad/Scripts/..")):
+            self.assertEqual(doctor.private_folders(), self.lines()[1:])
+        self.assertEqual(sorted(doctor.private_folders()), sorted(self.lines()))
+
+    def test_nothing_is_said_off_windows_or_where_there_is_no_folder(self) -> None:
+        with mock.patch.object(doctor, "WINDOWS", False):
+            self.assertEqual(self.start(), (0, "the cad server is running\n", ""))
+            self.assertNotIn("\n  private  ", _run([])[1])
+        shutil.rmtree(self.copy)
+        shutil.rmtree(self.leftover)
+        self.assertEqual(self.start(), (0, "the cad server is running\n", ""))
+        self.assertNotIn("\n  private  ", _run([])[1])
+
+    def test_a_broken_localappdata_never_fails_a_start(self) -> None:
+        file = self.root / "a-file"
+        file.write_text("", encoding="utf-8")
+        for value in ("", str(file), str(self.root / "gone"), "\\\\?\\nowhere"):
+            with mock.patch.dict("os.environ", {"LOCALAPPDATA": value}):
+                self.assertEqual(self.start(), (0, "the cad server is running\n", ""), value)
+        with mock.patch.dict("os.environ"):
+            del os.environ["LOCALAPPDATA"]
+            self.assertEqual(self.start(), (0, "the cad server is running\n", ""))
+        with mock.patch.object(Path, "glob", side_effect=OSError("refused")):
+            self.assertEqual(self.start(), (0, "the cad server is running\n", ""))
 
 
 class KernelProbeTest(unittest.TestCase):

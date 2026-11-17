@@ -7,6 +7,10 @@ Bare ``cad server`` runs the server in this process, as ``cad server start --for
 
 A start that fails asks for cad's own update before it gives up (``auto_update.after_failed_start``): a release whose
 server cannot start still updates.
+
+On Windows a start that ran then names each uv folder in an app's private copy of AppData, a copy of cad that app
+runs instead of this one or uv's leftovers, to delete (``doctor.private_folders``): a line each, on stderr. It never
+deletes one.
 """
 
 from __future__ import annotations
@@ -75,14 +79,17 @@ def _start(args: argparse.Namespace, prog: str) -> int:
         # Imported before the server is spawned: an update it begins changes this cad's files under this process, and a
         # start that fails still says its one line.
         from cad_server._internal import auto_update
+        from cad_server.cli.doctor import private_folders
 
         try:
-            print(client.start(args.port))
+            print(client.start(args.port), flush=True)
         except Exception:
             target = auto_update.after_failed_start()
             if target is not None:
                 print(f"cad: updating cad to {target}, which then starts the server", file=sys.stderr, flush=True)
             raise
+        for line in private_folders():  # Windows: uv's folder in an app's private copy, named, never deleted
+            print(f"cad: {line}", file=sys.stderr, flush=True)
         return 0
     running = client.make_way()
     if running is not None:

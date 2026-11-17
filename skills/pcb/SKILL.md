@@ -14,7 +14,7 @@ metadata:
 This skill was written for `cad==0.11.10`. The first time you use it in a chat, before you write or build
 anything, run `cad --version` as a command by itself and read what it prints. Then:
 
-- `cad` is not found, or older than 0.11.11: run the install line below.
+- `cad` is not found or does not run, or is older than 0.11.11: run the install line below.
 - Older than the version above: run `cad update`.
 - The version above or newer: go on. If cad is a major or minor version ahead, or a command fails
   unexpectedly, tell the person this skill may be out of date.

@@ -3,8 +3,9 @@ folder, its cache folder and how much ``cad cache prune`` would free there, whet
 (``cad_server._internal.base``) and loads -- where it is not, the environment ``cad run`` made for a program that a
 build ran in, if one was (``extras.last_with_kernel``) --, where each integration's operations run, whether the server runs and
 its release, and cad's own update (``cad_server._internal.auto_update``: the switches, whether this cad is a global
-install and by which installer, whether that installer is found, and the last attempt). It repairs, registers, starts,
-writes and deletes nothing: ``--check`` prints the same report.
+install and by which installer, whether that installer is found, and the last attempt); on Windows, uv's folder in
+an app's private copy of AppData, a copy of cad or uv's leftovers, to delete (``private_folders``). It repairs,
+registers, starts, writes and deletes nothing: ``--check`` prints the same report.
 
 The kernel is loaded in a fresh interpreter of its environment (``-P -B``: never this one, never a module of the
 working folder's, no bytecode written), so a refused load is named for what it is: on Windows 11, Smart App Control
@@ -31,6 +32,16 @@ OK, INFO, WARNING, FAILED = "ok", "info", "warning", "failed"
 KERNEL_OK, KERNEL_MISSING, KERNEL_FAILED = "ok", "missing", "failed"
 # How long the server may take to say its status: a server that never answers is reported, never waited on.
 STATUS_SECONDS = 10.0
+# Windows: uv's folder in an app's private copy of AppData, under %LOCALAPPDATA%. A packaged app keeps a folder that
+# something inside it makes under AppData in a private copy only it sees: a cad installed from inside one works in
+# that app alone, and a failed try leaves a folder where every new Python uv installs there fails. cad names such a
+# folder, with the reason, and never deletes it.
+WINDOWS = os.name == "nt"
+PRIVATE = ("Packages/*/LocalCache/Roaming/uv",)
+COPY_LINE = ("another copy of cad is in an app's private folder: {path}. That app keeps using it instead of this one. "
+             "Delete that folder so every app uses this cad.")
+LEFTOVER_LINE = ("uv left files in an app's private folder: {path}. Inside that app a new Python lands there and fails "
+                 "to install. Delete that folder.")
 
 
 def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
@@ -83,9 +94,32 @@ def _report() -> list[dict]:
 
     return [_check("python", INFO, f"{sys.version.split()[0]} ({sys.executable})"),
             _check("install", INFO, str(Path(cad_server.__file__).resolve().parent)),
+            *(_check("private", WARNING, line) for line in private_folders()),
             _check("data", INFO, str(state_dir())), read("cache", _cache), _kernel(),
             *(_check(line.split(" ", 1)[0], status, line.split(" ", 1)[1]) for status, line in _integrations()),
             read("server", _server), read("update", _update), _installer(), read("attempt", _attempt)]
+
+
+def private_folders() -> list[str]:
+    """Windows: a line for each uv folder in an app's private copy of AppData (``PRIVATE``), with what it holds: a copy
+    of cad (``COPY_LINE``) or uv's leftovers (``LEFTOVER_LINE``). Not the one this cad runs from (its ``tools/cad`` the
+    same folder as ``sys.prefix``): deleting it would remove this cad. One glob; never raises, and nothing elsewhere."""
+    if not WINDOWS:
+        return []
+    try:
+        root = os.environ.get("LOCALAPPDATA")
+        lines = []
+        for folder in (path for pattern in PRIVATE for path in Path(root).glob(pattern)) if root else ():
+            cad = folder / "tools" / "cad"
+            try:
+                if os.path.samefile(cad, sys.prefix):
+                    continue
+            except OSError:
+                pass
+            lines.append((COPY_LINE if cad.is_dir() else LEFTOVER_LINE).format(path=folder))
+        return lines
+    except Exception:  # noqa: BLE001 - a hint, never a reason for a command to fail
+        return []
 
 
 def _auto():

@@ -93,10 +93,10 @@ for word, and tests keep the copies from drifting:
   runs it, and in no other. The block names once the cad release the skills were written for, which
   the release script stamps (`scripts/release/sync-version.mjs`); no command carries a version. It has
   the agent run `cad --version` on first use, then:
-  - `cad` is not found, or older than 0.11.11 (a fixed number, never stamped: the first release
-    installed by uv): install it with uv's line, `uv tool install cad`. uv's install page where uv
-    is missing; `--force` where uv says the `cad` executable already exists (the launcher 0.10.0 to
-    0.11.10 wrote).
+  - `cad` is not found or does not run, or is older than 0.11.11 (a fixed number, never stamped:
+    the first release installed by uv): install it with uv's line, `uv tool install cad`. uv's
+    install page where uv is missing; `--force` where uv says the `cad` executable already exists
+    (the launcher 0.10.0 to 0.11.10 wrote).
   - cad is older than the skill: run `cad update`, which updates cad and nothing else.
   - cad is the same or newer: carry on, and tell the person the skill may be out of date when cad
     is a major or minor version ahead or a command fails unexpectedly.
