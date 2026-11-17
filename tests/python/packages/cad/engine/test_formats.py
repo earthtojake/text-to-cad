@@ -650,9 +650,11 @@ class MaterialWithoutBdMaterialsTest(FixtureTest):
     the display properties the file names are the material, built from the file alone (#844)."""
 
     def test_a_3mf_with_a_material_reads_without_bd_materials(self) -> None:
-        reference = formats.read(write_3mf(self.folder / "kit.3mf"))
+        self.maxDiff = None
+        path = write_3mf(self.folder / "kit.3mf")
+        reference = formats.read(path)
         with _without_material_packages():
-            found = formats.read(write_3mf(self.folder / "kit.3mf"))
+            found = formats.read(path)
         self.assertEqual(found.structure, reference.structure)
 
     def test_a_material_reads_the_same_with_and_without_bd_materials(self) -> None:
