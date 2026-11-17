@@ -3,7 +3,7 @@ in this process), ``stop`` and ``status`` (the engine's verbs, ``cad_server.engi
 which replaces the page token, asking first (``cad_server._internal.consent``).
 
 Bare ``cad server`` runs the server in this process, as ``cad server start --foreground`` does: releases 0.10.0 to
-0.11.10 tell an agent in a sandbox to run `cad server` outside it, so it stays, unlisted, until the bridge goes.
+0.11.11 tell an agent in a sandbox to run `cad server` outside it, so it stays, unlisted, until the bridge goes.
 
 A start that fails asks for cad's own update before it gives up (``auto_update.after_failed_start``): a release whose
 server cannot start still updates.

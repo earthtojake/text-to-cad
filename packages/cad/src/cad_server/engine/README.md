@@ -143,7 +143,7 @@ describes the mechanism they constrain and cites them by that README's numbers -
 
 ## Architecture
 
-One server per computer -- reached through one door, which clients of 0.11.10 and earlier find too
+One server per computer -- reached through one door, which clients of 0.11.11 and earlier find too
 (**Starting and updating**) -- owns its processes, run by one supervisor (**Services**), served documents
 and HTTP listener. `cad serve` and `cad viewer` reuse that server and return its URL; where none runs
 they say so in one line.
@@ -251,7 +251,7 @@ system says it (`daemon.port_holder`: `lsof` on macOS, `/proc` on Linux, `netsta
 `another process` where it does not say, and another cad server, by its command line (another
 engine folder's, 0.8's), `another cad-server (<name>, pid N)` (the words the code prints, `cad.engine.said.SERVER`).
 
-**Starting and updating.** One server a device, in one engine folder, whatever release runs it: the layout of 0.11.10
+**Starting and updating.** One server a device, in one engine folder, whatever release runs it: the layout of 0.11.11
 and earlier, kept as it was, with one state folder and one cache folder (`cad.engine.places`). Only `cad server start`
 starts it (and `cad mcp`, which starts it so, then serves the CAD app over stdio): a newer release's start replaces an
 older release's server, an older one joins a newer server that runs (`client.start`, `cad_mcp.shim.start_server`). A
@@ -264,7 +264,7 @@ line where none does (`not_running`). A model's own process -- the library, whic
 environment -- starts none. No client starts another release's engine beside the device's: an engine runs on until
 `cad server stop`, an update, or its door going. Each installation's bytecode is its own (`places.bytecode_tag`).
 
-The clients of 0.11.10 and earlier -- their CAD app's line, their `cad` command, the library in a person's own
+The clients of 0.11.11 and earlier -- their CAD app's line, their `cad` command, the library in a person's own
 Python -- find the same door, and where none answers start the installation `<state>/installations/current` names
 (`cad_server._internal.installations`), by its Python, with `-m cad_server._internal.engine_daemon`: this release's
 server where the bridge pointed it there (below). Such a client's builds are refused only for another worker contract
@@ -297,7 +297,7 @@ install command in install mode (cad as a uv tool, our plugin in every agent app
 at a start, then daily, 30 attempts or 30 days at most; `cad_server._internal.install_script`); once a report says
 cad was installed and nothing is in flight, the records point at the global cad's environment and a helper that is
 not cad stops this server and starts the global cad's. Every server of a global install points `current` and its
-record at itself, so a client of 0.11.10 or earlier that finds no server starts it. On a computer whose agent apps got
+record at itself, so a client of 0.11.11 or earlier that finds no server starts it. On a computer whose agent apps got
 text-to-cad from a store alone (no receipt or plugin folder of our earlier setup) nothing is owed: after the same five
 minutes the server installs cad globally itself (`tool_install`), as it does where install mode's run installed no
 cad, and hands over the same way. A global install's server on a computer our setup set up before, whose `cad plugin
@@ -345,7 +345,7 @@ browser's last use of it, on any port, and a page that lost its engine keeps ask
 and reloads itself when the engine answers again. Whoever holds a live link or session reaches the
 user's folders whenever the engine runs. `cad server --rotate-token` replaces the token, once the person says yes
 (**Consent**, `--yes`), in the state folder every release reads, and tells every running server to take it at once (`{"op": "token"}`, `Daemon.retoken`): every link and session made
-before stops working now, in every server. One that cannot be told (a server of 0.11.10 or earlier) is said, and
+before stops working now, in every server. One that cannot be told (a server of 0.11.11 or earlier) is said, and
 takes the new token as it starts again. `cad server status` says the
 port and where it came from: the default, `--port`, `CAD_ENGINE_PORT`, or `rolled from 3245
 because <name> (pid N) holds it`.
@@ -671,7 +671,7 @@ answers (`base.Making.claim`, `mcp.server._first_report`).
 | `display.py` | the engine's X display on Linux, which a render process is started with (`Service.draws`) and a worker told with an export that draws: the daemon's own `DISPLAY`, else an Xvfb it starts at the first picture and stops with it, else none |
 | `frames.py` | the frames every process of the engine's speaks to the daemon, read and written: the library's, the standard library alone (**Services**, the protocol) |
 | `contract.py` | the worker contract the library and the server both state (`CONTRACT`: the worker protocol's number, the document format, OCP's major.minor), the Python an order comes from (`interpreter`), the one line another contract is refused in (`refusal`) and the update notice of another release (`notice`): **Running a model**; what measures a manufacturing check (`measuring`, from `_measuring.py`, of the standard library alone, which `cad.engine` takes as it is imported) |
-| `places.py` | where things are, for every process alike, with the standard library alone: the user's one state folder and cache folder (`state_dir`, `cache_dir`), the engine folder and its door, lock and port file (`engine_dir`, `folder_refusal`, `lock`), the installation a process belongs to (`installation`, the base's marker as `HOME`) and the current one the clients of 0.11.10 and earlier start (`current`), and how a process of the engine's is started (`windowless`, `detached`, `bytecode`, and the kernel environment, `kernel`, which the server makes as `KERNEL`) |
+| `places.py` | where things are, for every process alike, with the standard library alone: the user's one state folder and cache folder (`state_dir`, `cache_dir`), the engine folder and its door, lock and port file (`engine_dir`, `folder_refusal`, `lock`), the installation a process belongs to (`installation`, the base's marker as `HOME`) and the current one the clients of 0.11.11 and earlier start (`current`), and how a process of the engine's is started (`windowless`, `detached`, `bytecode`, and the kernel environment, `kernel`, which the server makes as `KERNEL`) |
 | `records.py` | the documents' records read, as a model's run reads them in its own process (`Records`, `current`), their one shape (`parse`), the words said of a record (`home`, `rerun`, `command`) and a model document's cache file's name (`FILE`); the registry (the server's) writes them |
 | `said.py` | the words a build, an export and an inspection are said in: the run line and what is under it (`describe`, `reported`), a file written (`written`, `given`), what a robot file holds (`robot`), a size and a measure (`size`, `number`); a model's process says them, and the commands say the same |
 | `weights.py` | what a document weighs as its robot description weighs it, for `inspect`: the description's **Mass** rule over the engine's volumes, with no kernel -- each part's mass, its point masses, which is declared and which computed (`Weights.said`), and the description's refusal in its words |
@@ -1389,7 +1389,7 @@ which also avoids pybind11's unmatched profile events on Python 3.12 and later.
 One engine server (`daemon.py`: a daemon) for the device (**Starting and updating**), started by `cad server
 start` (or `cad mcp`). **No timer stops it**: a
 person may be using a page or the CAD app for hours without a build. It stops in four ways: on
-`cad server stop` (or a terminate); once it has drained, asked by the switch of 0.11.10 and earlier, a newer
+`cad server stop` (or a terminate); once it has drained, asked by the switch of 0.11.11 and earlier, a newer
 release's start or cad's own update (**Starting and updating**); when
 its door is gone -- its folder removed, a
 temporary folder cleaned up, or another file put in the door's place -- so that no one can reach it
@@ -1629,7 +1629,7 @@ server, and the engine it starts), so a port file written there would reach no o
 there, and for one release the engine writes its port file there too (`daemon._mirror`), for a 0.10.0
 CAD app's server still running. 0.8 kept its engines in `cadgen-engine`, so no client of either release reaches the
 other's door. Its door, lock and port file are directly in it (`places.engine_dir`, made this user's alone by
-`places.make_engine_dir`), as in the layout of 0.11.10 and earlier, so every release's client finds the one
+`places.make_engine_dir`), as in the layout of 0.11.11 and earlier, so every release's client finds the one
 engine; its connections' pipes are in the `clients/` folder beside them. The 0.10.0 port file is written by whoever holds the flat one.
 
 - **The door.** The daemon makes one FIFO beside its lock, `engine.door` (`places.door_path`), and

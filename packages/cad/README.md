@@ -202,7 +202,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    its imports use, and the packages it names), regenerable as well (the engine's **Running a model**); and under `homes/` the private settings
    folders a run hands a tool that would otherwise read the person's own (Blender's, for a script that
    imports bpy: `homes/blender`), empty but for what the tool itself writes there. One state folder, one cache
-   folder and one engine folder a user, whatever release of cad runs -- the layout of 0.11.10 and earlier, kept as
+   folder and one engine folder a user, whatever release of cad runs -- the layout of 0.11.11 and earlier, kept as
    it was, so an update keeps the person's settings, records and links, and every path is `cad.engine.places`'
    (`CAD_STATE_DIR`, `CAD_CACHE_DIR` and `CAD_ENGINE_DIR` move them, for a test or an experiment). `cad cache
    prune` removes what this release cannot use, `cad cache clean` all of the cache, and nothing else of cad deletes
@@ -436,7 +436,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     engine's **Document lifetime**).
 
 20. **One engine per computer; tabs select documents at `/<uuid>`.** *Every document.* Every process reaches the
-    one engine, through the one door in the engine folder, whatever release it is -- one of 0.11.10 or earlier
+    one engine, through the one door in the engine folder, whatever release it is -- one of 0.11.11 or earlier
     too. Only `cad server start` and `cad mcp` start it; every other client that finds none says so in one line
     and starts none, and the library never starts a server of its own environment. A start of a newer release
     replaces an older release's engine; an older one joins a newer engine that runs (forward only); a `cad mcp` that

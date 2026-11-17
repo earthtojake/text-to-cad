@@ -1,4 +1,4 @@
-"""The bridge (``cad_server.cli.setup``): what carries a computer a release of 0.10.0 to 0.11.10 updated onto this one.
+"""The bridge (``cad_server.cli.setup``): what carries a computer a release of 0.10.0 to 0.11.11 updated onto this one.
 
 ``--engine-update`` is what those updaters run of a newer release, from the folder they made: it writes the record their
 switch starts its server by, owes install mode (``test_handover`` runs it) and leaves ``current`` and the ``cad`` command
@@ -131,7 +131,7 @@ class Plain(Computer):
         self.ended.assert_called_once_with(Y, "setup", None, "failed", "other", first=False)
 
     def test_an_earlier_release_s_script_that_runs_cad_setup_again_ends_after_one_refusal(self) -> None:
-        # The way the hosted script of 0.10.0 to 0.11.10 ends: `cad setup` of the feed's newest, this release. The
+        # The way the hosted script of 0.10.0 to 0.11.11 ends: `cad setup` of the feed's newest, this release. The
         # stand-in stops itself on its fourth run, so a loop fails here rather than hangs.
         runs, stand_in = self.root / "runs", self.root / "old-install.py"
         stand_in.write_text(
@@ -155,7 +155,7 @@ class Plain(Computer):
 
 class NothingOurs(Computer):
     """Plain ``cad setup`` where our setup never ran: cad alone moves only on a computer that arrives from a shipped
-    release (0.10.0 to 0.11.10, a store's copy alone). Anywhere else only an install script reaches it -- a copy of an
+    release (0.10.0 to 0.11.11, a store's copy alone). Anywhere else only an install script reaches it -- a copy of an
     old one kept, or the hosted one before the site is redeployed --, and the install command runs."""
 
     def setUp(self) -> None:
@@ -179,8 +179,8 @@ class NothingOurs(Computer):
         self.assertEqual([call.args[2:4] for call in self.ended.call_args_list], [(None, "ok"), (None, "failed")])
 
     def test_cad_alone_moves_only_where_it_arrives_from_a_shipped_release(self) -> None:
-        for came, alone in ((None, False), ("0.10.0", True), (OLD, True), ("0.11.11", False), ("0.12.0", False),
-                            ("0.11.10-dev.1", False)):
+        for came, alone in ((None, False), ("0.10.0", True), (OLD, True), ("0.11.11", True), ("0.11.12", False),
+                            ("0.12.0", False), ("0.11.10-dev.1", False)):
             with self.subTest(came=came), mock.patch.dict(os.environ, self.installer()):
                 self.runs.unlink(missing_ok=True)
                 current = self.state / "installations" / "current"
@@ -199,7 +199,7 @@ class NothingOurs(Computer):
         self.assertFalse(self.runs.exists(), "the install command never ran")
 
     def test_an_earlier_release_s_script_kept_and_run_on_an_empty_computer_installs(self) -> None:
-        # A copy of the script 0.10.0 to 0.11.10 offered, which ends in `cad setup` of the feed's newest, this release.
+        # A copy of the script 0.10.0 to 0.11.11 offered, which ends in `cad setup` of the feed's newest, this release.
         old = self.root / "old-install.py"
         old.write_text("import subprocess, sys\n"
                        "sys.exit(subprocess.call([sys.executable, '-m', 'cad_server.cli', 'setup'], "
@@ -638,7 +638,8 @@ class Once(Computer):
 
 
 class Following(Tool):
-    """Step 6: a server of the uv tool points ``current`` and its record at itself, for the clients of 0.11.10."""
+    """Step 6: a server of the uv tool points ``current`` and its record at itself, for the clients of 0.11.11 and
+    earlier."""
 
     def test_it_points_them_where_they_name_another_and_never_past_a_later_release(self) -> None:
         said: list[str] = []
@@ -662,7 +663,7 @@ class Following(Tool):
                 with mock.patch.object(places, "appdata_state_dir", return_value=appdata):
                     self.assertTrue(setup.follow(said.append))
                 self.assertEqual(installations.current_version(Folder(appdata)), Y if followed else named)
-        self.assertEqual(said[0], f"the clients of 0.11.10 and earlier start this cad {Y} where none runs")
+        self.assertEqual(said[0], f"the clients of 0.11.11 and earlier start this cad {Y} where none runs")
 
     def test_a_server_of_pipx_s_cad_is_followed_too(self) -> None:
         installations.point(OLD)

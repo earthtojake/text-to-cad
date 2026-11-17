@@ -9,7 +9,7 @@ It does what the install script does (scripts/install/install.py, whose table of
 checkout as the source instead of PyPI and GitHub:
 
 1. installs the checkout's cad as the ``cad`` uv tool, editable (``uv tool install --managed-python --python 3.14
-   --editable packages/cad``; the cad command of 0.10.0-0.11.10 removed first, as install.py removes it), and
+   --editable packages/cad``; the cad command of 0.10.0-0.11.11 removed first, as install.py removes it), and
    switches cad's automatic updates off: an update would put the release in its place;
 2. writes the plugin from this checkout into ``tmp/dev-plugin/text-to-cad``: its manifests name the version
    ``<VERSION>-dev.<time>`` (so each app takes it as new), Codex's CAD server (the one app given one:

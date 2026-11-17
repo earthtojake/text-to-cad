@@ -13,7 +13,7 @@ person or by cad (``cad plugin install``). It does these things alone:
    at any release, is left as it is: cad updates itself. One that does not start (a tool Windows left half-replaced)
    is installed again, ``uv tool install --reinstall ...``, PyPI's newest. A ``cad`` pipx installed, where uv has none,
    is a global cad too (``pipx_cad``): left as it is where it starts, and installed again by pipx where it does not
-   (``repair_pipx``); uv installs no second cad. First the ``cad`` command 0.10.0-0.11.10 wrote in uv's bin folder goes, where it is
+   (``repair_pipx``); uv installs no second cad. First the ``cad`` command 0.10.0-0.11.11 wrote in uv's bin folder goes, where it is
    provably ours (``old_launcher``); another program's ``cad`` there stops this step, in one line. On Windows a
    ``cad.exe`` that runs is renamed out of uv's way (``set_aside``), never a reason to stop; what a run set aside and
    could not delete, a later run deletes (``tidy``);
@@ -80,7 +80,7 @@ BRANCH = "latest"
 PLUGIN = "text-to-cad"
 CATALOG = "earthtojake"          # the repository's catalog: a GitHub copy is text-to-cad@earthtojake
 DEV_CATALOG = "earthtojake-dev"  # a checkout's development install (dev_install.py)
-LOCAL_CATALOG = "text-to-cad"    # the folder catalog 0.10.0-0.11.10's installer wrote, <state>/plugin
+LOCAL_CATALOG = "text-to-cad"    # the folder catalog 0.10.0-0.11.11's installer wrote, <state>/plugin
 # Every catalog of ours an app may hold. Of these, the one the source installs from is kept and brought up to date;
 # the others are removed with their plugins, once ours is in.
 OUR_CATALOGS = (LOCAL_CATALOG, CATALOG, DEV_CATALOG)
@@ -94,13 +94,13 @@ RETIRED_SKILLS = ("bambu-labs", "dfam-check", "dfm", "dxf", "gcode", "pcb-dfm", 
 # 0.10.0 and later, its front matter's `metadata:` block holds `repository: earthtojake/text-to-cad`; 0.5.0 to
 # 0.8.4, its body has this line, word for word. A skill that merely mentions the repository is not ours.
 PROVENANCE_LINE = "Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad)."
-# Marks earlier installers wrote: in Cursor's plain copy (0.10.0-0.11.10), in a development install's copy.
+# Marks earlier installers wrote: in Cursor's plain copy (0.10.0-0.11.11), in a development install's copy.
 COPY_MARK = ".text-to-cad-copy"
 DEV_MARK = ".text-to-cad-dev"
 # `uv tool install <these> cad`: uv's own Python 3.14, whatever Python the computer has. The line people are given
 # carries no flags; this script is hosted, and may change them any day.
 UV_TOOL_ARGS = ("--managed-python", "--python", "3.14")
-# The mark in the first lines of the `cad` command 0.10.0-0.11.10 wrote in the bin folder, with its revision: `# ` in
+# The mark in the first lines of the `cad` command 0.10.0-0.11.11 wrote in the bin folder, with its revision: `# ` in
 # the sh script and in the `__main__.py` of the zip behind cad.exe's launcher (Windows, 0.11), `rem ` in cad.cmd (0.10).
 OLD_LAUNCHER = re.compile(r"(#|rem) cad proxy: \d+")
 # A cad.exe of uv's tool set aside in uv's bin folder before uv installs cad (``set_aside``): the name cad's own update
@@ -669,7 +669,7 @@ def plugin_command(app: App, here: Here, context: Context) -> Outcome:
 
 # Claude Code and Codex: a plugin is name@catalog. Ours from GitHub is text-to-cad@earthtojake, from the repository's
 # `latest`. Earlier: cad@text-to-cad (0.5.0-0.7.5, the catalog then named text-to-cad, on GitHub), cad@earthtojake
-# (0.7.6), text-to-cad@text-to-cad (0.10.0-0.11.10's installer: a local catalog at <state>/plugin), and a checkout's
+# (0.7.6), text-to-cad@text-to-cad (0.10.0-0.11.11's installer: a local catalog at <state>/plugin), and a checkout's
 # text-to-cad@earthtojake-dev.
 
 
@@ -933,7 +933,7 @@ def clone_problem(here: Here, path: Path) -> Optional[str]:
 def cursor(app: App, here: Here, context: Context) -> Outcome:
     """Cursor: a clone of the ``latest`` branch in its local plugins folder (``~/.cursor/plugins/local``). Where
     Claude Code has our plugin, Cursor loads that one (as earlier releases measured), so its own copy of ours goes.
-    Earlier copies: 0.10.0-0.11.10's plain copy (marked ``.text-to-cad-copy``), a development copy
+    Earlier copies: 0.10.0-0.11.11's plain copy (marked ``.text-to-cad-copy``), a development copy
     (``.text-to-cad-dev``), both deleted once ours is in. A clone is updated or removed only when it has
     nothing of its own (``clone_problem``); a link there is never followed or changed. Verified: docs
     https://cursor.com/docs/plugins (a plugin is a folder in ~/.cursor/plugins/local; a symlink there is skipped).
@@ -1016,7 +1016,7 @@ def gemini(app: App, here: Here, context: Context) -> Outcome:
     """Gemini CLI: its extension, installed from GitHub at ``latest`` (a copy), and installed again to update it:
     ``extensions update`` asks twice (to clone, since GitHub has no release ``latest``; to accept the skills) and
     takes no ``--consent``, so with no one to answer it waits for ever (measured, 0.62.0).
-    0.10.0-0.11.10 linked ``<state>/plugin`` under the same name, which must go for ours to come in: GitHub is
+    0.10.0-0.11.11 linked ``<state>/plugin`` under the same name, which must go for ours to come in: GitHub is
     checked first, the old extension's folder and the enablement file are kept aside, and put back where the new
     one does not install. Read from ``~/.gemini/extensions/text-to-cad/.gemini-extension-install.json`` (``type``,
     ``source``, ``ref``). Verified: `gemini extensions --help` and its subcommands (`install <source> --ref
@@ -1320,7 +1320,7 @@ DESKTOP_NO_CLAUDE = ("install the `claude` command to have the install command a
 
 def claude_desktop(app: App, here: Here, context: Context) -> Outcome:
     """Claude Desktop: nothing is installed in it (its Code tab runs Claude Code, which gets the plugin above).
-    Releases 0.7.6-0.11.10 wrote our server into its config as ``mcpServers.cad``: that one member is taken out where
+    Releases 0.7.6-0.11.11 wrote our server into its config as ``mcpServers.cad``: that one member is taken out where
     it runs text-to-cad, every other byte of the file kept, the file as it was kept beside it under a name no file
     has (``unused_kept_name``); a config that is a link is edited where it points. A ``cad`` that is another
     server's, or a file that is not plain JSON, is left. Where no ``claude`` command was found to install the plugin
@@ -1441,7 +1441,7 @@ def remove_loose_skills(here: Here, context: Context, outcomes: Dict[str, Outcom
     copies into only its retired names (its current ones were replaced in place). A link to ours is unlinked, never
     followed; a copy deleted. The Skills CLI's record of a
     skill (``skills_locks``) goes once no copy is left in ``~/.agents/skills``, only an entry whose source is our
-    repository or the plugin folder 0.10.0-0.11.10 wrote in cad's state folder. No ``npx skills remove``: it removes
+    repository or the plugin folder 0.10.0-0.11.11 wrote in cad's state folder. No ``npx skills remove``: it removes
     by name alone, from folders this does not read, and our names are common words."""
     found = [outcome for outcome in outcomes.values() if outcome is not NOT_FOUND and outcome is not QUIET]
     # A shared folder only after a run over every app (dev_install.py may name a few).
@@ -1643,7 +1643,7 @@ def uv_tools(here: Here, uv: str) -> Dict[str, Tool]:
 
 
 def old_launcher(path: Path) -> bool:
-    """Whether ``path`` is the ``cad`` command 0.10.0-0.11.10 wrote: ``OLD_LAUNCHER`` in its first lines (on Windows,
+    """Whether ``path`` is the ``cad`` command 0.10.0-0.11.11 wrote: ``OLD_LAUNCHER`` in its first lines (on Windows,
     0.11's cad.exe: in the ``__main__.py`` of the zip behind its launcher). A link is never one."""
     if path.is_symlink() or not path.is_file():
         return False
@@ -1660,18 +1660,18 @@ def old_launcher(path: Path) -> bool:
 
 
 def launcher_names(here: Here) -> Tuple[str, ...]:
-    """The names of the ``cad`` command 0.10.0-0.11.10 wrote (on Windows 0.11's cad.exe and 0.10's cad.cmd)."""
+    """The names of the ``cad`` command 0.10.0-0.11.11 wrote (on Windows 0.11's cad.exe and 0.10's cad.cmd)."""
     return ("cad.exe", "cad.cmd") if here.windows else ("cad",)
 
 
 def launcher_folders(here: Here, folder: Path) -> List[Path]:
-    """uv's bin folder ``folder``, and the folder 0.10.0-0.11.10 wrote their ``cad`` command in where that is another
+    """uv's bin folder ``folder``, and the folder 0.10.0-0.11.11 wrote their ``cad`` command in where that is another
     (``CAD_LAUNCHER_DIR``, else ``~/.local/bin``)."""
     return list(dict.fromkeys([folder, Path(here.environ.get("CAD_LAUNCHER_DIR") or here.home / ".local" / "bin")]))
 
 
 def make_room(here: Here, folder: Path, tools: Dict[str, Tool]) -> Tuple[Optional[str], List[Tuple[Path, Path]]]:
-    """The ``cad`` command of 0.10.0-0.11.10 (``old_launcher``) set aside, beside itself under a name no shell runs,
+    """The ``cad`` command of 0.10.0-0.11.11 (``old_launcher``) set aside, beside itself under a name no shell runs,
     in each of ``launcher_folders``; with it, on Windows, 0.10's cad.cmd (a cad.exe that runs can be renamed, not
     deleted), and the Python 0.11's cad.exe ran (``launcher_python``). ``settle`` deletes them once uv's cad is in, and
     puts them back where it is not; one still in use then stays for a later run (``tidy``). Why the
@@ -1739,7 +1739,7 @@ def settle(here: Here, moved: List[Tuple[Path, Path]], done: bool) -> None:
 def tidy(here: Here, folder: Path) -> None:
     """What earlier runs set aside in ``launcher_folders`` and could not delete then (``LEFTOVERS``: Windows keeps a
     file while it runs), deleted where it can be now, quietly; one still in use stays for a later run. Never in a folder
-    where a cad command of 0.10.0-0.11.10 is still there (its install did not happen): what is set aside there may be
+    where a cad command of 0.10.0-0.11.11 is still there (its install did not happen): what is set aside there may be
     what it runs."""
     for where in launcher_folders(here, folder):
         if any(old_launcher(where / name) for name in launcher_names(here)):
@@ -1952,7 +1952,7 @@ def install_cad(here: Here) -> Cad:
         # There, but it does not start (a tool Windows left half-replaced, say): installed again.
         print(f"cad {tool.version} is installed but does not start: installing it again with uv.", flush=True)
         again = True
-    # Windows: a cad.exe that runs (the typed `cad update` of 0.11.0-0.11.10 that ran this, say) is out of uv's way.
+    # Windows: a cad.exe that runs (the typed `cad update` of 0.11.0-0.11.11 that ran this, say) is out of uv's way.
     aside = set_aside(folder, tool) if here.windows else []
     if not again:
         print("Installing cad with uv. The first run downloads it, which takes a minute.", flush=True)

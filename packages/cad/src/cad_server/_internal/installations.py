@@ -1,13 +1,13 @@
-"""BRIDGE-ONLY: the installation records the clients of 0.10.0 to 0.11.10 read, and the ``cad`` command they wrote.
+"""BRIDGE-ONLY: the installation records the clients of 0.10.0 to 0.11.11 read, and the ``cad`` command they wrote.
 
 - ``<state>/installations/<version>.json``, an installation's record: ``version``, the absolute paths of its
   ``python`` and of its console script (``cad``), its environment (``prefix``) and when it registered
-  (``registered``); and ``<state>/installations/current``, the version whose server every client of 0.11.10 and
+  (``registered``); and ``<state>/installations/current``, the version whose server every client of 0.11.11 and
   earlier starts or attaches to (their CAD app's line, the library in a person's own Python, their ``cad``
   command). ``cad setup --engine-update`` and the server of a uv tool write them (``cad_server.cli.setup``): the
   record, and ``current`` pointed at it (``point``), so those clients start this release's server.
 - ``~/.local/bin/cad`` (``CAD_LAUNCHER_DIR`` moves the folder, ``proxy_path``), the ``cad`` command 0.10.0 to
-  0.11.10 wrote: an ``sh`` script (``cad.cmd``, then ``cad.exe`` on Windows) that runs the current installation's
+  0.11.11 wrote: an ``sh`` script (``cad.cmd``, then ``cad.exe`` on Windows) that runs the current installation's
   Python with ``-m cad_server._internal.proxy``. Nothing here writes or removes it: the install command replaces
   it with the uv tool's ``cad``.
 - What 0.8 and 0.10.0 on Windows left of their records (``earlier``, ``appdata``), read only.
@@ -50,7 +50,7 @@ def proxy_folder() -> str:
 
 
 def proxy_path(where: str | None = None, windows: bool = WINDOWS) -> str:
-    """Where 0.10.0 to 0.11.10 wrote the ``cad`` command, and where uv puts the uv tool's."""
+    """Where 0.10.0 to 0.11.11 wrote the ``cad`` command, and where uv puts the uv tool's."""
     return os.path.join(where or proxy_folder(), EXE if windows else "cad")
 
 
@@ -136,7 +136,7 @@ def register(version: str, found: tuple[str, str, str] | None = None, folder=Non
         return path, OK
     record = {"version": version, "python": python, "cad": console, "prefix": prefix,
               "registered": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
-    # One key a line, the python's alone: the sh of 0.10.0 to 0.11.10 reads that line.
+    # One key a line, the python's alone: the sh of 0.10.0 to 0.11.11 reads that line.
     text = json.dumps(record, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
     folder.write(inside, text.encode("utf-8"))
     # An environment holds one cadgen: the record of another version in it (an upgrade in place,
@@ -241,7 +241,7 @@ def current_version(folder=None) -> str | None:
 
 def current(folder=None) -> dict | None:
     """The current installation's record, while its interpreter and console script are there
-    (``alive``): the one every client of 0.11.10 and earlier starts. None with none current, or one that is
+    (``alive``): the one every client of 0.11.11 and earlier starts. None with none current, or one that is
     gone (its folder removed, uv's cache cleaned)."""
     folder = folder or state()
     version = current_version(folder)

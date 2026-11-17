@@ -1,4 +1,4 @@
-"""BRIDGE-ONLY: the module the ``cad`` command of 0.10.0 to 0.11.10 runs: the current installation, run.
+"""BRIDGE-ONLY: the module the ``cad`` command of 0.10.0 to 0.11.11 runs: the current installation, run.
 
 That command (``~/.local/bin/cad``, revisions 9 to 11, which no release writes any more) runs this module with the current installation's
 interpreter (``installations/current``), or with no current one the interpreter registered last, and it runs one

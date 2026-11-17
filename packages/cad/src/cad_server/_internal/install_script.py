@@ -6,7 +6,7 @@ https://texttocad.dev/install.sh | sh``; on Windows PowerShell ``irm https://www
 and, for the bridge, the report that command writes where ``CAD_INSTALL_REPORT`` names a file: whether its cad step
 ended 0 (``setup``) and whether any app's step failed (``apps``). Nothing else of the report is read.
 
-**Install mode** (BRIDGE-ONLY), owed by ``cad setup --engine-update`` (``owe``), which the updaters of 0.10.0 to 0.11.10
+**Install mode** (BRIDGE-ONLY), owed by ``cad setup --engine-update`` (``owe``), which the updaters of 0.10.0 to 0.11.11
 run: the command installs cad as a uv tool and our plugin in every agent app. Done, the server that runs from the
 shipped updater's folder hands over to the uv tool's (``cad_server.cli.setup``).
 
@@ -37,7 +37,7 @@ clock's, in seconds. Each attempt's end, and the end of the run, is one line in 
 (``analytics.arrival``, as the bridge's other steps are).
 
 Every install command cad starts carries ``CAD_INSTALL_BY_CAD=1`` (``environment``), so a ``cad setup`` it reaches runs
-nothing (``cad_server.cli.setup``): the hosted command of 0.10.0 to 0.11.10 runs one, and is served until the site is
+nothing (``cad_server.cli.setup``): the hosted command of 0.10.0 to 0.11.11 runs one, and is served until the site is
 redeployed.
 
 ``CAD_ENGINE_UPDATE_INSTALLER`` names a command to run instead of the hosted one (a test's stand-in), and empty, none:
@@ -76,7 +76,7 @@ OWED, DONE, SUPERSEDED, GAVE_UP = "owed", "done", "superseded", "gave up"
 RUNNING = "running"
 FAILURES = ("no_report", "setup", "app", "other")
 ATTEMPT = "attempt"
-# Install mode's wait before its first attempt: a shipped updater's switch (0.10.0 to 0.11.10, ``switch._started``)
+# Install mode's wait before its first attempt: a shipped updater's switch (0.10.0 to 0.11.11, ``switch._started``)
 # starts the new server waiting up to 60 seconds for its door, then asks its ``status`` and to serve pages on the old
 # port, and goes back where either fails -- seconds after the door answers, with no bound of its own on those two
 # asks --; the server first tends 30 seconds after it starts. Five minutes is that wait, those asks on a slow or busy
@@ -106,15 +106,14 @@ def installer() -> list[str] | str:
     return list(INSTALLER_WINDOWS if os.name == "nt" else INSTALLER)
 
 
-def environment(*, report: Path | None, update: bool = False) -> dict[str, str]:
+def environment(*, report: Path | None) -> dict[str, str]:
     """The environment the command runs in: this process's, without its import path, the version it was told it runs
     as and a ``cad run``'s marks, with the person's own PATH (none of an environment that comes and goes,
     ``installations.lasting``), uv's installer told to leave shell profiles alone, cad's mark (``BY_CAD_ENV``), and the
-    report's file named. ``update`` is no longer read: the install command has no modes (the bridge still passes it)."""
+    report's file named. The install command has no modes: an earlier build's update mode is never passed on."""
     from cad.engine.places import INSTALLATION_ENV, RUN_WITH
     from cad_server._internal.installations import lasting
 
-    del update
     dropped = ("PYTHONPATH", "PYTHONHOME", INSTALLATION_ENV, RUN_WITH, "CAD_UPDATE_PREPARE", REPORT_ENV, UPDATE_ENV)
     found = {key: value for key, value in os.environ.items() if key not in dropped}
     found["PATH"] = lasting(os.environ.get("PATH", os.defpath))

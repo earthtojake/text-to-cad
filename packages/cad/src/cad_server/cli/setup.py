@@ -1,8 +1,8 @@
-"""BRIDGE-ONLY: ``cad setup`` (hidden, undocumented) and what carries a computer that a release of 0.10.0 to 0.11.10
+"""BRIDGE-ONLY: ``cad setup`` (hidden, undocumented) and what carries a computer that a release of 0.10.0 to 0.11.11
 updated onto this one. All of it goes in one change once those releases are gone, with install mode in
 ``cad_server._internal.install_script`` and the ``Tending`` the server holds (``cad_server.engine.daemon``).
 
-The updaters of 0.10.0 to 0.11.10 cannot be changed. They bring a newer release X the old way, and the server then
+The updaters of 0.10.0 to 0.11.11 cannot be changed. They bring a newer release X the old way, and the server then
 takes the computer onto the one-cad design by itself:
 
 1. The old updater makes ``<state>/releases/X`` (``cad-server==X``, which installs cad X) and runs its ``cad setup
@@ -26,21 +26,21 @@ takes the computer onto the one-cad design by itself:
    helper that is not cad (``auto_update_helper``) stops this server and starts the global cad's (``cad server
    start``). From then on it is a normal computer, whose server updates itself.
 6. Every server of a global install, as it starts (``follow``), points ``current`` and its record at its own
-   environment, so a client of 0.11.10 or earlier that finds no server (a store's copy that lags, the library in a
+   environment, so a client of 0.11.11 or earlier that finds no server (a store's copy that lags, the library in a
    person's own Python, the old ``cad`` command) starts it, and never registers its own release again.
 7. A global install's server on a computer where our setup ran before (``ours``) and the person's switch
    ``plugin.auto_update`` was never set -- the new cad arrived by the uv line, typed by a skill or a person, or by an
    app's server line --, at its first quiet tending (``once``): the switch turned on, then the install command run
    once, detached. Not while install mode is owed: that run is the ``Carrier``'s.
 
-On Windows the same holds for 0.10.1 to 0.11.10. 0.10.0 on Windows (``_alone``) keeps its state in the local
+On Windows the same holds for 0.10.1 to 0.11.11. 0.10.0 on Windows (``_alone``) keeps its state in the local
 application data, apart from this release's, so its switch could only go back: there ``--engine-update`` takes over
 (``_take_over``): 0.10.0's server stopped by its own stop command first (where it does not stop, nothing changes), its
 data moved out of the local application data once (``places.adopt_earlier``), the records pointed at this release in
 both state folders, install mode owed, and this release's server started, serving pages on the port and with the token
 it took in.
 
-Plain ``cad setup`` is what ``cad update`` typed on 0.10.0 to 0.11.10 runs of the new release, and what the install
+Plain ``cad setup`` is what ``cad update`` typed on 0.10.0 to 0.11.11 runs of the new release, and what the install
 script of those releases ends in (a copy someone kept, or the hosted one until the site is redeployed): the install
 command in install mode, in the foreground; its exit status. Typed on 0.10.0 on Windows (``_alone``), it first takes
 0.10.0's data over as ``--engine-update`` does (``_adopt``), before anything writes in this release's state folder;
@@ -53,7 +53,7 @@ cad that ``follow`` points ``current`` at, or one that is no plain ``X.Y.Z`` -- 
 ``cad setup``, the person asked for an install, and the install command runs. Such a store-only computer's old release
 still reaches ``--engine-update``: its automatic update runs where its server was started by a ``cad`` command rather
 than by the store's server line (the line's ``CAD_AUTO_UPDATED=1`` reaches only the server it starts), and a typed
-``cad update`` runs plain ``cad setup``. Ours is told by what 0.8 to 0.11.10's own setup leaves once it has put our
+``cad update`` runs plain ``cad setup``. Ours is told by what 0.8 to 0.11.11's own setup leaves once it has put our
 plugin in the apps -- the install command's, an update button's or an automatic update's alike --, and nothing else
 writes: ``install-receipt.json`` or the plugin folder ``plugin/`` in the state folder (or 0.10.0's on Windows). On
 such a computer, where neither is there, cad alone moves: the record the switch starts this release's server by is
@@ -87,7 +87,7 @@ MOVE_RECORD = "handover-move.json"
 ASK_SECONDS = 5.0
 STOP_SECONDS = 60.0
 # The shipped releases whose updaters and install scripts reach this bridge, first and last.
-SHIPPED = ((0, 10, 0), (0, 11, 10))
+SHIPPED = ((0, 10, 0), (0, 11, 11))
 # How long step 4b's install may take (``tool_install.install``).
 CARRY_SECONDS = 600.0
 
@@ -163,8 +163,7 @@ def setup() -> int:
     if not command:
         return 0
     try:
-        code = subprocess.call(command, env=install_script.environment(update=False, report=None),
-                               stdin=subprocess.DEVNULL)
+        code = subprocess.call(command, env=install_script.environment(report=None), stdin=subprocess.DEVNULL)
     except OSError as error:
         _say(f"the install command could not start: {error}")
         code = 1
@@ -193,7 +192,7 @@ def engine_update() -> int:
 
 
 def ours() -> bool:
-    """Whether text-to-cad's own setup (0.8 to 0.11.10) ever put our plugin in this computer's agent apps: its
+    """Whether text-to-cad's own setup (0.8 to 0.11.11) ever put our plugin in this computer's agent apps: its
     receipt or its plugin folder in the state folder, or in 0.10.0's on Windows (see the module)."""
     from cad.engine import places
 
@@ -284,7 +283,7 @@ def _serve(name: str) -> None:
 
     saved = dict(os.environ)
     try:
-        served = {key: value for key, value in install_script.environment(update=False, report=None).items()
+        served = {key: value for key, value in install_script.environment(report=None).items()
                   if key not in ("UV_NO_MODIFY_PATH", install_script.BY_CAD_ENV)}
         os.environ.clear()
         os.environ.update(served)
@@ -424,10 +423,10 @@ def follow(told: Callable[[str], None]) -> bool:
                 current["version"] == version and installations._same_place(current["prefix"], found[2]))):
             return False
         _point(version, found)
-        told(f"the clients of 0.11.10 and earlier start this cad {version} where none runs")
+        told(f"the clients of 0.11.11 and earlier start this cad {version} where none runs")
         return True
     except Exception as error:  # noqa: BLE001 - the records never fail the server
-        told(f"the records the clients of 0.11.10 and earlier read could not be written: {error}")
+        told(f"the records the clients of 0.11.11 and earlier read could not be written: {error}")
         return False
 
 

@@ -44,7 +44,7 @@ class UpdatesTest(unittest.TestCase):
 
     def test_every_release_reads_the_feed_but_a_development_build(self) -> None:
         # A development build -- a development version's name, or a source tree not told the version it runs as --
-        # reads none. CAD_INSTALL_CHANNEL and CAD_AUTO_UPDATED, which configs of 0.11.10 and earlier set, decide nothing.
+        # reads none. CAD_INSTALL_CHANNEL and CAD_AUTO_UPDATED, which configs of 0.11.11 and earlier set, decide nothing.
         for values, source_tree, expected in (
             ({"CAD_INSTALL_CHANNEL": "claude-directory", "CAD_AUTO_UPDATED": "1"}, False, True),
             ({"CAD_INSTALL_CHANNEL": "dev", "CAD_INSTALLATION_VERSION": ""}, False, True),

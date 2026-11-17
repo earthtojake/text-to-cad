@@ -262,13 +262,12 @@ class Defaults(unittest.TestCase):
             os.environ[install_script.INSTALLER_ENV] = ""
             self.assertFalse(install_script.installer(), "empty: nothing")
             self.assertEqual(install_script.run(), 0, "nothing to run")
-            for update in (False, True):  # the bridge still passes it; no mode is asked for either way
-                found = install_script.environment(update=update, report=Path("r.json"))
-                self.assertEqual((found["CAD_INSTALL_REPORT"], found["UV_NO_MODIFY_PATH"]), ("r.json", "1"))
-                self.assertNotIn("PYTHONPATH", found)
-                self.assertNotIn(install_script.UPDATE_ENV, found, "no mode: never inherited, never set")
-                # a `cad setup` the command reaches runs nothing (``cad_server.cli.setup``)
-                self.assertEqual(found[install_script.BY_CAD_ENV], "1")
+            found = install_script.environment(report=Path("r.json"))
+            self.assertEqual((found["CAD_INSTALL_REPORT"], found["UV_NO_MODIFY_PATH"]), ("r.json", "1"))
+            self.assertNotIn("PYTHONPATH", found)
+            self.assertNotIn(install_script.UPDATE_ENV, found, "no mode: never inherited, never set")
+            # a `cad setup` the command reaches runs nothing (``cad_server.cli.setup``)
+            self.assertEqual(found[install_script.BY_CAD_ENV], "1")
             self.assertNotIn(install_script.REPORT_ENV, install_script.environment(report=None))
 
 

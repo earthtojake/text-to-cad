@@ -1,5 +1,5 @@
 """The server's engine process: the daemon, its HTTP application the server's (``cad_server.engine.daemon``,
-``cad_server._internal.engine_host``). ``client.start`` runs it by this name, as releases 0.10.0 to 0.11.10 do.
+``cad_server._internal.engine_host``). ``client.start`` runs it by this name, as releases 0.10.0 to 0.11.11 do.
 
 First, before anything of the server is imported, cad's own update where it is due (``auto_update.at_start``): then
 this process exits ``UPDATING`` and the update starts the server."""

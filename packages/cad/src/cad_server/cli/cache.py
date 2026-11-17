@@ -9,7 +9,7 @@ records, Recents and settings in the state folder, and anything else in the fold
 
 - ``dir``: the cache folder.
 - ``prune``: what this release of cad cannot use: the environments made for another release (their marker names it,
-  ``base.marked``), and the release folders of the layout of 0.11.10 and earlier (``<state>/releases/<release>``,
+  ``base.marked``), and the release folders of the layout of 0.11.11 and earlier (``<state>/releases/<release>``,
   ``releases.root``) but the one ``installations/current`` names, which those releases' server lines still start.
 - ``clean``: all of the cache, and what ``prune`` removes; refused while a server runs, which runs from it.
 
@@ -40,7 +40,7 @@ def build_parser(prog: str = DEFAULT_PROG):
     commands.add_parser("dir", help="print where cad's cache is", description="Print where cad's cache is.")
     commands.add_parser("prune", help="remove what this release of cad cannot use",
                         description="Remove what this release of cad cannot use: environments made for other "
-                                    "releases, and the release folders of 0.11.10 and earlier.")
+                                    "releases, and the release folders of 0.11.11 and earlier.")
     commands.add_parser("clean", help="remove all of cad's cache; cad makes it again as it needs it",
                         description="Remove all of cad's cache, and what prune removes; cad makes it again as it needs "
                                     "it. Refused while the cad server runs.")
@@ -70,7 +70,7 @@ def _inside(path: str, parent: Path) -> bool:
 
 def prunable() -> tuple[list[tuple[Path, str]], list[tuple[Path, str]]]:
     """What ``prune`` removes, each with what it is, and what it keeps of that, each with why: the environments made
-    for another release, and the release folders of 0.11.10 and earlier but ``installations/current``'s; a folder a
+    for another release, and the release folders of 0.11.11 and earlier but ``installations/current``'s; a folder a
     process runs from kept."""
     from cad.engine.places import current
     from cad.engine.previous import version
@@ -85,9 +85,9 @@ def prunable() -> tuple[list[tuple[Path, str]], list[tuple[Path, str]]]:
     record = current()
     for old in _folders(releases.root()):
         if record is not None and _inside(record["prefix"], old):
-            kept.append((old, "the release 0.11.10 and earlier start (installations/current)"))
+            kept.append((old, "the release 0.11.11 and earlier start (installations/current)"))
         else:
-            found.append((old, f"cad {old.name}, of the layout of 0.11.10 and earlier"))
+            found.append((old, f"cad {old.name}, of the layout of 0.11.11 and earlier"))
     return _running(found, kept)
 
 
@@ -185,7 +185,7 @@ def _clean() -> int:
     found = [(env, f"an environment of cad {_release(env) or 'no release it names'}") for env in _folders(envs)]
     found += [(root / name, f"cad's {name}") for name in OWN if name != base.BASE and os.path.lexists(root / name)]
     going, kept = _running(found, [])
-    pruned, also = prunable()  # its release folders of 0.11.10 and earlier: the environments are all above
+    pruned, also = prunable()  # its release folders of 0.11.11 and earlier: the environments are all above
 
     def outside(entries: list[tuple[Path, str]]) -> list[tuple[Path, str]]:
         return [entry for entry in entries if not _inside(str(entry[0]), envs)]

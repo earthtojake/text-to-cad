@@ -1,6 +1,6 @@
-"""BRIDGE-ONLY: the release folders of 0.10.0 to 0.11.10, and whether a process runs from a folder.
+"""BRIDGE-ONLY: the release folders of 0.10.0 to 0.11.11, and whether a process runs from a folder.
 
-``<state>/releases/<version>`` is where 0.11.10 and earlier installed a release: its core in a virtual environment,
+``<state>/releases/<version>`` is where 0.11.11 and earlier installed a release: its core in a virtual environment,
 made by uv, its marker (``cad-release.json``) written last. Those releases' updaters make one for the release they
 move to (an updater of 0.11.10 runs that folder's ``cad setup --engine-update``: ``cad_server.cli.setup``). Nothing of
 cad removes one by itself: ``cad cache prune`` does, when asked, but the one ``installations/current`` names and any a

@@ -387,7 +387,7 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("is another program's cad command", done.stdout)
 
     def test_the_old_cad_command_goes_and_another_program_s_stops_the_cad_step(self) -> None:
-        # 0.10.0-0.11.10 wrote ~/.local/bin/cad, an sh script with our mark: set aside before uv puts its own there,
+        # 0.10.0-0.11.11 wrote ~/.local/bin/cad, an sh script with our mark: set aside before uv puts its own there,
         # and put back where uv fails, so the computer keeps a cad command.
         text = "#!/bin/sh\n# cad proxy: 9\n# The cad command: runs ...\nexit 1\n"
         old = self.write(".local/bin/cad", text)
@@ -537,7 +537,7 @@ class InstallScriptTests(unittest.TestCase):
         self.assertEqual(cad.code, 0)
         self.assertEqual(said.getvalue(), "cad 0.13.0 is installed already: it is left as it is, and updates itself.\n")
         self.assertEqual(sorted(path.name for path in self.uv_bin.iterdir()), [".cad.exe.backup", "cad", "notes.old"])
-        # Where a cad command of 0.10.0-0.11.10 is still there (its install did not happen), nothing set aside goes.
+        # Where a cad command of 0.10.0-0.11.11 is still there (its install did not happen), nothing set aside goes.
         kept = self.write(".local/bin/.cad-launcher.text-to-cad-old/pyvenv.cfg", "home = C:\\Python314\n")
         exe(self.uv_bin / "cad.exe", "# cad proxy: 11\n")
         install.tidy(here, self.uv_bin)
@@ -829,7 +829,7 @@ class InstallScriptTests(unittest.TestCase):
         self.programs("claude", "codex", "gemini", "grok", "npx")
         folder = str(self.state / "plugin")
         github = {"source": "github", "repo": "earthtojake/text-to-cad", "ref": "latest"}
-        # Claude Code: 0.10-0.11.10's local catalog and its plugin, and 0.7.6's cad@earthtojake; someone else's plugin.
+        # Claude Code: 0.10-0.11.11's local catalog and its plugin, and 0.7.6's cad@earthtojake; someone else's plugin.
         self.claude_records({"text-to-cad@text-to-cad": 1, "cad@earthtojake": 1, "other@acme": 1},
                             {"text-to-cad": {"source": "directory", "path": folder}, "earthtojake": github,
                              "acme": {"source": "github", "repo": "acme/plugins"}})
@@ -842,7 +842,7 @@ class InstallScriptTests(unittest.TestCase):
         # Grok Build: the plugin of 0.5-0.7.6, `cad`, from our repository.
         self.write(".grok/installed-plugins/registry.json", {"repos": {"x": {
             "kind": {"type": "Git", "url": install.URL, "git_ref": ""}, "path": "/x", "plugins": {"cad": {}}}}})
-        # Cursor: 0.10-0.11.10's marked plain copy.
+        # Cursor: 0.10-0.11.11's marked plain copy.
         self.write(".cursor/plugins/local/text-to-cad/.text-to-cad-copy", {"from": folder})
         # Loose skills: ours (current and retired, one a link to ours), and someone else's of a retired name.
         self.write(".agents/skills/cad/SKILL.md", OURS.format(name="cad"))

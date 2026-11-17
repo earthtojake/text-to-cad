@@ -119,10 +119,10 @@ class VersionSyncMirrorTests(unittest.TestCase):
                     shutil.copy2(repo_path(relative), root / relative)
             # A skill names the cad it was written for as `cad==X`; nothing else in a skill is stamped: not a
             # pattern (`cad==*`), not another word's `cad`, not a version in prose, not the header, and not the setup
-            # block's fixed first release of a global install (0.11.11), whatever release is stamped.
+            # block's fixed first release of a global install (0.11.12), whatever release is stamped.
             skill = root / "skills/fixture/SKILL.md"
             skill.parent.mkdir(parents=True)
-            fixed = "- `cad` is not found or does not run, or is older than 0.11.11: run the install line below.\n"
+            fixed = "- `cad` is not found or does not run, or is older than 0.11.12: run the install line below.\n"
             unstamped = ("---\nname: fixture\nallowed-tools: Bash(cad *) Bash(uv tool install cad==*)\n---\n"
                          "This skill was written for `cad==1.0.0`. Run `cad --version`.\n" + fixed +
                          "```bash\nuv tool install --managed-python --python 3.14 cad==0.11.10-dev.1\n```\n"
@@ -151,7 +151,7 @@ class VersionSyncMirrorTests(unittest.TestCase):
             self.assertEqual(0, again.returncode, again.stdout + again.stderr)
             self.assertIn("already synced", again.stdout)
             # A release at that fixed number or past it stamps the release and leaves the fixed number alone.
-            for release in ("0.11.11", "0.12.0"):
+            for release in ("0.11.12", "0.12.0"):
                 (root / "VERSION").write_text(f"{release}\n", encoding="utf-8")
                 bumped = subprocess.run(["node", str(root / "scripts/release/sync-version.mjs")],
                                         capture_output=True, text=True, timeout=120)

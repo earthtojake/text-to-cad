@@ -316,7 +316,7 @@ EXEMPT = {
     # name of its own, before uv runs. A rename that fails is skipped on purpose, and the helper's own tries of
     # the install (``WAITS``) are its retry.
     "packages/cad/src/cad_server/_internal/auto_update_helper.py",
-    # BRIDGE-ONLY: the global install moves the cad command of 0.10.0 to 0.11.10 aside before uv runs, and back where
+    # BRIDGE-ONLY: the global install moves the cad command of 0.10.0 to 0.11.11 aside before uv runs, and back where
     # uv failed. Its rename writes no file either. The helper's fallback would copy the command and leave it where it
     # was, so uv would refuse; a rename that fails is skipped, and uv then says why it refused.
     "packages/cad/src/cad_server/_internal/tool_install.py",

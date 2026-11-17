@@ -94,7 +94,7 @@ def start_server() -> str:
 
     Where none is installed and this runs from anywhere else (a project's Python, a development checkout), or this is
     the installed cad: exactly what ``cad server start`` does (``client.start``: a server of an
-    older release, or of 0.11.10 and earlier, told to stop, its work cut short, and this release's started; one of
+    older release, or of 0.11.11 and earlier, told to stop, its work cut short, and this release's started; one of
     this release or a newer one joined), and after it the server running is reached where it is this release's or
     newer.
 

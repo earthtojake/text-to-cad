@@ -323,7 +323,7 @@ SPOOL_BYTES = 256 * 1024
 # sends; a file of its own, which a cadgen from before it never reads, capped as the spool is.
 KEPT = "telemetry-batches.jsonl"
 # Where a process keeps an arrival it counted (``arrival``), beside the settings, for the sender it starts: a file of
-# its own, which no earlier release's sender takes from the folder 0.11.10 and earlier share, capped as the spool is.
+# its own, which no earlier release's sender takes from the folder 0.11.11 and earlier share, capped as the spool is.
 ARRIVALS = "telemetry-arrivals.jsonl"
 HANDED = 16  # the most of each kind one command's counts carry (``Recorder.take``)
 # The page's plumbing: a view's once-a-second sync, its viewer requests (the home's re-reads of its
@@ -494,7 +494,7 @@ CONTROL_SECONDS = 3_600
 # The engine daemon's warm workers: started (each imports the CAD kernel), crashed (died mid-build), recycled
 # (retired over their memory cap), and builds refused for want of memory (none: the engine refuses nothing).
 HEALTH = ("workers", "crashes", "recycles", "refusals")
-# How a computer got to a version (``arrival``, schema 11's): the route -- an updater of 0.10.0 to 0.11.10 running
+# How a computer got to a version (``arrival``, schema 11's): the route -- an updater of 0.10.0 to 0.11.11 running
 # the version's hidden ``cad setup --engine-update`` (``updater``), or ``cad setup`` itself, which the install script
 # runs (``setup``) -- and each step's endings: its setup, its server serving for the first time, and the hand-over
 # that server runs after it until it is done, fails for good, is given up or is overtaken by a later version's.
@@ -1458,7 +1458,7 @@ def arrival(step: str, *, route: str, earlier: str | None, outcome: str, reason:
     ``MAX_ATTEMPTS``). A word outside these, or an ``earlier`` that is no version's name, is not counted.
 
     From a command's process or a server's alike: kept beside this process's settings (``ARRIVALS``: a process of no
-    version's are the state folder's, which 0.11.10 and earlier share) under the answer in force,
+    version's are the state folder's, which 0.11.11 and earlier share) under the answer in force,
     only while sharing is on, as a command's counts are (``spool``), and a sender started at once
     (``telemetry_send.start_now``), so it is sent though no process of this version runs again. A local write and a
     detached start: never the network, never raises. Whether it was kept."""

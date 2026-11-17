@@ -38,7 +38,7 @@ number first: the daemon greets with the number the connection speaks, the lower
 hello's (one it no longer serves: no greeting, the connection closed), and the client speaks that one
 or hangs up. Numbers start at 1: 0.8's door had none (a bare ``<id>\n`` and ``ok\n``), which neither
 side reads, and 0.8's engines keep a folder of their own (``places.default_engine_dir``). The greeting's
-release is such an addition to protocol 1: the servers of 0.11.10 and earlier greet without it, and
+release is such an addition to protocol 1: the servers of 0.11.11 and earlier greet without it, and
 their clients skip it.
 """
 
@@ -128,7 +128,7 @@ def greeted(line: bytes) -> int | None:
 
 def released(line: bytes) -> str | None:
     """The release a greeting says its server runs (the field after its protocol), or None for a
-    greeting that says none -- a server of 0.11.10 or earlier -- and for a line that is no greeting."""
+    greeting that says none -- a server of 0.11.11 or earlier -- and for a line that is no greeting."""
     fields = line.removesuffix(b"\n").split(b" ")
     if greeted(line) is None or len(fields) < 3 or not RELEASE.fullmatch(fields[2]):
         return None
@@ -179,7 +179,7 @@ def answering(door: Path) -> bool:
 class Connection:
     """One connection to the daemon: the lines it reads (``reader``) and writes (``writer``), the
     door protocol it speaks (``protocol``, the greeting's) and the release its server runs (``release``,
-    the greeting's: None for a server of 0.11.10 or earlier)."""
+    the greeting's: None for a server of 0.11.11 or earlier)."""
 
     def __init__(self, reader: BinaryIO, writer: BinaryIO, *closing: Any, protocol: int = DOOR_PROTOCOL,
                  release: str | None = None) -> None:

@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-# Only for the skill text of releases 0.10.0 to 0.11.10, which says `cad stop`: unlisted, and gone with the bridge.
+# Only for the skill text of releases 0.10.0 to 0.11.11, which says `cad stop`: unlisted, and gone with the bridge.
 DEFAULT_PROG = "cad stop"
 ENGINE_VERB = "stop"
 

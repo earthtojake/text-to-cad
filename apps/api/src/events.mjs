@@ -63,7 +63,7 @@
  * `failed` from schema 10 counts the failures the system or the machine caused alone: a script that raised is in its
  * `count`, never `failed`. A schema before it sends none of these, and its rows are read, and keyed, as ever.
  *
- * Schema 11 (text-to-cad 0.11.11 on) describes an install with one field, `app`, the agent app running it, detected
+ * Schema 11 (text-to-cad 0.11.12 on) describes an install with one field, `app`, the agent app running it, detected
  * (`AGENT_APPS`): an open set, checked by its shape and not by a list. It sends no channel, and its rows carry none.
  * A batch of schema 10 or earlier is translated on arrival (`translated`): its rows carry a `channel` and an `app`,
  * worked out from the old combined channel and the MCP client's name, and the old channel as it was sent

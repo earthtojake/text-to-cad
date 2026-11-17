@@ -7,7 +7,7 @@ library's client (`cad.engine.client`).
 
 It holds no tool, view or document: the server does. What it does on its own, in order:
 
-- **Starts the server once, as it starts**. Where cad is installed as a uv tool on this computer and this process
+- **Starts the server once, as it starts**. Where cad is installed globally on this computer and this process
   is another cad (Codex's plugin line runs `cad mcp` from uvx's cache, at the plugin's release), it runs the
   installed cad's own `cad server start` and joins the server that leaves running, whatever the two releases are:
   never a server of its own, which would not be the cad the agent's shell runs and would never update itself; the

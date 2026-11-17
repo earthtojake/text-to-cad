@@ -15,7 +15,7 @@ release, with the Python flags of cad's own uv calls (``launch.PYTHON``: they ch
 is forced, and ``Failed`` carries uv's last line. Bounded: a uv that hangs is stopped (``timeout``). Several at once
 make one install: uv locks its tool folder, the others wait, then find cad installed and say so (exit status 0).
 
-BRIDGE-ONLY, the one exception: the ``cad`` command 0.10.0 to 0.11.10 wrote in uv's bin folder (``old_launcher``),
+BRIDGE-ONLY, the one exception: the ``cad`` command 0.10.0 to 0.11.11 wrote in uv's bin folder (``old_launcher``),
 which uv would refuse to replace. Where uv's bin folder holds it (``uv tool dir --bin``; on Windows its ``cad.exe``),
 it is renamed beside itself first, under the name cad's own update gives a ``cad.exe`` it sets aside
 (``auto_update_helper.ASIDE``). It is deleted once uv ends 0 (one that still runs on Windows stays, harmless, for cad's
@@ -40,7 +40,7 @@ __all__ = ["ASK_SECONDS", "Failed", "command", "find", "from_uv_cache", "install
 
 # How long one ``uv`` question (``uv cache dir``) may take.
 ASK_SECONDS = 15.0
-# BRIDGE-ONLY: the mark in the first lines of the ``cad`` command 0.10.0 to 0.11.10 wrote, with its revision: ``# `` in
+# BRIDGE-ONLY: the mark in the first lines of the ``cad`` command 0.10.0 to 0.11.11 wrote, with its revision: ``# `` in
 # the sh script and in the ``__main__.py`` of the zip behind 0.11's cad.exe (Windows), ``rem `` in 0.10's cad.cmd.
 OLD_LAUNCHER = re.compile(r"(#|rem) cad proxy: \d+")
 
@@ -105,7 +105,7 @@ def command(uv: str) -> list[str]:
 
 
 def old_launcher(path: Path) -> bool:
-    """BRIDGE-ONLY. Whether ``path`` is the ``cad`` command 0.10.0 to 0.11.10 wrote: ``OLD_LAUNCHER`` in its first
+    """BRIDGE-ONLY. Whether ``path`` is the ``cad`` command 0.10.0 to 0.11.11 wrote: ``OLD_LAUNCHER`` in its first
     lines (0.11's cad.exe: in the ``__main__.py`` of the zip behind its launcher). A link is never one."""
     import zipfile
 

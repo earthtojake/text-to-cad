@@ -55,9 +55,9 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "requirement": ("cad_server.cli.requirement", "print the exact cad requirement for a Python of a program's own"),
     "doctor": ("cad_server.cli.doctor", "report this cad, its folders, its kernel and the server; it changes nothing"),
     "cache": ("cad_server.cli.cache", "cad's cache: dir, prune (what this release cannot use), clean (all of it)"),
-    # BRIDGE-ONLY, never listed: what the updaters of 0.10.0 to 0.11.10 run of the release they bring
+    # BRIDGE-ONLY, never listed: what the updaters of 0.10.0 to 0.11.11 run of the release they bring
     # (``cad_server.cli.setup``).
-    "setup": ("cad_server.cli.setup", "the bridge from releases 0.10.0 to 0.11.10"),
+    "setup": ("cad_server.cli.setup", "the bridge from releases 0.10.0 to 0.11.11"),
     # A page of the running server's; the launcher exits.
     "viewer": ("cad_server.cli.viewer", "open a viewer page on the running cad server"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
@@ -65,7 +65,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "update": ("cad_server.cli.update", "update cad to the newest release now"),
     "plugin": ("cad_server.cli.plugin", "the plugin: install, auto-update"),
 }
-# Only for releases 0.10.0 to 0.11.10 -- their skill text (`cad status`, `cad stop`) and their updaters (`cad setup`):
+# Only for releases 0.10.0 to 0.11.11 -- their skill text (`cad status`, `cad stop`) and their updaters (`cad setup`):
 # run, never listed, and gone with the bridge.
 _UNLISTED = frozenset({"status", "stop", "setup"})
 
@@ -339,7 +339,7 @@ def _report(error: Exception) -> None:
 # is another.
 _ANY_RELEASE = frozenset({"server", "status", "stop", "mcp", "doctor", "cache", "auto-update", "update", "plugin"})
 # Commands that never carry the analytics notice: the engine's server and `mcp`, writing nowhere a person reads;
-# `telemetry`, which says it its own way; `setup`, which an updater of 0.11.10 and earlier runs with no person to read
+# `telemetry`, which says it its own way; `setup`, which an updater of 0.11.11 and earlier runs with no person to read
 # it, and `plugin`, which cad's own update runs with none, its output in a log; `run`, which is only the python it runs,
 # as the `cad` command's `run` is; and `requirement`, whose output a program reads.
 _UNTOLD = frozenset({"server", "mcp", "telemetry", "setup", "plugin", "run", "requirement"})

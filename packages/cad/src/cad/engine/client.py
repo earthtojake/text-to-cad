@@ -67,7 +67,7 @@ class OtherRelease(ConnectionError):
 
 
 def _other(theirs: str | None, mine: str) -> str:
-    """``OtherRelease``'s line: this release, the server's -- one of 0.11.10 or earlier names none -- and the ways on."""
+    """``OtherRelease``'s line: this release, the server's -- one of 0.11.11 or earlier names none -- and the ways on."""
     if theirs is None:
         return f"{COMMAND} here is {mine}; the running server is an earlier release's: run `{START}` to run {mine}'s server"
     if newer(theirs, mine):  # a start joins a newer server: installing is the one way on
@@ -259,7 +259,7 @@ def _at_least(theirs: str | None, mine: str) -> bool:
 
 def make_way() -> str | None:
     """Room made for this release's server, as ``start`` makes it, and ``cad server start --foreground`` before it
-    runs one in its own process: a server of an older release -- or one whose greeting names none, of 0.11.10 or
+    runs one in its own process: a server of an older release -- or one whose greeting names none, of 0.11.11 or
     earlier -- told to stop at once, its work cut short, and waited for, ``STOP_SECONDS`` at most (``sweep``). Where a
     server of this release or a newer one answers, nothing is done, and that is said in one line (returned); else None.
     So it is too where one answers by the time of the stop or while the older one goes -- a start at the same moment

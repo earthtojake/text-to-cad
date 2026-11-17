@@ -190,7 +190,7 @@ def _server() -> tuple[str, str]:
     if not isinstance(answer, dict):
         return INFO, f"not running ({where}): run `{client.START}`"
     release = answer.get("version")
-    said = f"running, pid {answer.get('pid')}, cad {release or 'of 0.11.10 or earlier'}, {workers_text(answer)} ({where})"
+    said = f"running, pid {answer.get('pid')}, cad {release or 'of 0.11.11 or earlier'}, {workers_text(answer)} ({where})"
     if release != version():
         return WARNING, f"{said}: not this release; `{client.START}` runs {version()}'s"
     return OK, said

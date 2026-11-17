@@ -27,7 +27,7 @@ SKILL = re.compile(r"\bskills?\b", re.IGNORECASE)
 NOT_MESSAGES = {
     "cad/sdf/_validation.py": None,  # SDF's <plugin> element: the format's word
     "cad/engine/sdf_source.py": None,  # the same element, read
-    # BRIDGE-ONLY: the folder 0.10.0 to 0.11.10's setup left in the state folder, which tells a computer its agent apps
+    # BRIDGE-ONLY: the folder 0.10.0 to 0.11.11's setup left in the state folder, which tells a computer its agent apps
     # got text-to-cad from that setup rather than a store alone (``cli.setup.ours``).
     "cad_server/cli/setup.py": {"plugin"},
     # The command's name, its module and its one-line help in the command table, and the command named among those

@@ -1,7 +1,7 @@
 """The update's handshake between releases, frozen (``update_handshake.json``).
 
-cad has no updater from 0.11.11 on, but the updaters of 0.10.0 to 0.11.10 are frozen on devices: an update
-is release A's code running release B's, and B's reading what A wrote. Such an updater runs B's ``setup
+cad updates itself as a global install from 0.11.12 on, but the updaters of 0.10.0 to 0.11.11 are frozen on devices:
+an update is release A's code running release B's, and B's reading what A wrote. Such an updater runs B's ``setup
 --engine-update`` from the flat release folder it made (with ``CAD_UPDATE_PREPARE=1`` first, for an automatic
 update) and reads its exit status (progress frames on its standard output are optional: it skips any line that is
 none); its helper starts B's engine with the Python the ``current`` mirror's record names, by the daemon module's

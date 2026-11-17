@@ -2,7 +2,7 @@
 # Exercise cad the way a user gets it: built into wheels (cad, and its aliases cad-server and cad-mcp),
 # pip-installed together, run from a directory that is not this repo; installed as the uv tool the install
 # command makes (`uv tool install cad`, the newest release uv is offered); and installed the old way the updaters
-# of 0.10.0 to 0.11.10 still bring a release (`uv pip install cad-server==<release>` into a venv of their own).
+# of 0.10.0 to 0.11.11 still bring a release (`uv pip install cad-server==<release>` into a venv of their own).
 #
 # Every other check in this repo runs against the source tree, where the repo root is on
 # sys.path and the apps' builds sit beside the packages. None of that is true after
@@ -255,7 +255,7 @@ TOOL_DIR="$UV_TOOL_DIR"
 # The steps after this one see no uv tool again: what they check is this install's.
 export UV_TOOL_DIR="$WORK/no-tools" UV_TOOL_BIN_DIR="$WORK/no-tool-bin"
 
-# What the updaters of 0.10.0 to 0.11.10, already on people's computers, do with a release and cannot be changed:
+# What the updaters of 0.10.0 to 0.11.11, already on people's computers, do with a release and cannot be changed:
 # they make an environment with uv (`uv venv`, then `uv pip install cad-server==<release>`), take it as complete once
 # its `bin/cad` is there, and start its engine as `python -P -m cad_server._internal.engine_daemon`; a `cad` command
 # of their layout runs `python -m cad_server._internal.proxy`. The alias cad-server must bring all of that through

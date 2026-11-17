@@ -203,7 +203,7 @@ RULES: tuple[Rule, ...] = (
          select(flags=["installer"])),
     # The update rehearsal (test.yml's update-rehearsal): cad updating itself as a uv tool, and the real shipped
     # releases updating into this tree's build. Beside the packages' suites, the code of this build it runs: cad's own
-    # update and its helper, an updater's setup and the install command its server runs, the layout of 0.11.10 and
+    # update and its helper, an updater's setup and the install command its server runs, the layout of 0.11.11 and
     # earlier and the records its clients read, the server's tending.
     Rule(("scripts/test/rehearse-update.py",), select(flags=["installer"]), final=True),
     # The real install (real-install.yml, which test.yml calls): the install script against the real programs of

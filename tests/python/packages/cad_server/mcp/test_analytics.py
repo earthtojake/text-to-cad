@@ -840,7 +840,7 @@ class SenderTest(_Tmp):
 
 class WhereFromTest(_Tmp):
     """Where a count came from, schema 11's batch field (``analytics._app``): the app, detected -- one batch for each.
-    No batch says a channel: nothing of a server's or a session's names one, and the configs of 0.11.10 and earlier
+    No batch says a channel: nothing of a server's or a session's names one, and the configs of 0.11.11 and earlier
     that set `CAD_INSTALL_CHANNEL` are ignored."""
 
     def setUp(self) -> None:

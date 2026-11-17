@@ -327,7 +327,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertFalse((REPO_ROOT / "GEMINI.md").exists())
 
     def test_no_plugin_file_names_a_channel(self) -> None:
-        # Every copy behaves the same: no line or hook names a channel or who updates the copy (the variables 0.11.10
+        # Every copy behaves the same: no line or hook names a channel or who updates the copy (the variables 0.11.11
         # and earlier read, which a copy of those releases still sets, are ignored).
         for path in (*MANIFESTS, MARKETPLACE_PATH, MUSE_MARKETPLACE_PATH, GEMINI_EXTENSION_PATH, CODEX_MCP_PATH):
             with self.subTest(path=str(path.relative_to(REPO_ROOT))):

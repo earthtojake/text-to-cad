@@ -98,7 +98,7 @@ cad_server/
   kernel is installed and does not load; `--json` gives the report as one document.
 - **`cad cache dir|prune|clean`**, as `uv cache` treats uv's: `dir` prints the cache folder, `prune`
   removes what this release cannot use (environments made for other releases, and the release folders
-  0.11.10 and earlier left), `clean` removes all of it, refused while the server runs. Nothing else of cad
+  0.11.11 and earlier left), `clean` removes all of it, refused while the server runs. Nothing else of cad
   deletes a past release's files.
 - **`cad auto-update [status|on|off]`**: whether cad updates itself (below), on by default. `on` is
   refused unless this cad is a global install, and `status` says when it is not. Where a server runs, it

@@ -177,7 +177,7 @@ class PluginTreeTests(unittest.TestCase):
                 self.assertEqual(missing, [])
 
     def test_every_copy_runs_the_same_server_line_and_names_no_channel(self) -> None:
-        # No copy's config names a channel or who updates the copy (the variables 0.11.10 and earlier read): the
+        # No copy's config names a channel or who updates the copy (the variables 0.11.11 and earlier read): the
         # Codex directory's copy, the ZIP's files, starts the server by main's own line.
         for copy in branch.COPIES:
             tree, errors, _manifest = branch.build(REPO_ROOT, copy)

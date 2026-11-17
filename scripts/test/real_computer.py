@@ -20,7 +20,7 @@ program could write and fails before anything runs where one is not the computer
 person's.
 
 ``Feed`` is the version feed served on loopback: any path ending ``versions`` (``<api>/versions`` of 0.10.0 to
-0.11.10 and of this tree, ``CAD_API_URL``; the install command reads no feed). ``publish`` writes this tree's wheels
+0.11.11 and of this tree, ``CAD_API_URL``; the install command reads no feed). ``publish`` writes this tree's wheels
 again as another release, or a variant of one (a file replaced, its commands taken out), from wheels already built;
 ``stamp`` names that release: this tree's ``VERSION``'s major and minor, a patch far above any real one, so the wheels
 offered to uv (``UV_FIND_LINKS``) are newer than PyPI's newest and the install command's ``uv tool install cad`` takes
@@ -246,7 +246,7 @@ class Computer:
         for name in programs:
             env.update(PROGRAMS[name].environ(home) if name in PROGRAMS else {})
         if "codex" not in programs:
-            # 0.10.0 to 0.11.10 take CODEX_CLI before the Codex app's bundled codex, which they find outside PATH: a
+            # 0.10.0 to 0.11.11 take CODEX_CLI before the Codex app's bundled codex, which they find outside PATH: a
             # path where there is none, so no codex is theirs to find.
             env["CODEX_CLI"] = str(self.work / "no-such" / "codex")
         (home / ".codex").mkdir(exist_ok=True)

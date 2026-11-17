@@ -2,10 +2,10 @@
 same in each.
 
 The block names the cad the skills were written for once, as `cad==<VERSION>`, which the release stamps
-(scripts/release/sync-version.mjs); no command and no install line carries a version. 0.11.11 in its first bullet
+(scripts/release/sync-version.mjs); no command and no install line carries a version. 0.11.12 in its first bullet
 is fixed, not stamped: the first release installed globally by uv. It has the agent check `cad --version` on
-first use; install cad by uv's one line, `uv tool install cad`, where it is missing or older than 0.11.11 (0.10.0
-to 0.11.10 are a launcher, not a global install, and `--force` replaces its file); `cad update` where it is older than
+first use; install cad by uv's one line, `uv tool install cad`, where it is missing or older than 0.11.12 (0.10.0
+to 0.11.11 are a launcher, not a global install, and `--force` replaces its file); `cad update` where it is older than
 the skill, which updates cad and nothing else; and carry on where cad is newer, since cad updates itself ahead of
 the skills, telling the person the skill may be out of date when cad is a major or minor version ahead or a
 command fails unexpectedly. No skill runs our install script: that is how a person installs the plugins, and a
@@ -34,7 +34,7 @@ VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 SETUP = """This skill was written for `cad=={X}`. The first time you use it in a chat, before you write or build
 anything, run `cad --version` as a command by itself and read what it prints. Then:
 
-- `cad` is not found or does not run, or is older than 0.11.11: run the install line below.
+- `cad` is not found or does not run, or is older than 0.11.12: run the install line below.
 - Older than the version above: run `cad update`.
 - The version above or newer: go on. If cad is a major or minor version ahead, or a command fails
   unexpectedly, tell the person this skill may be out of date.

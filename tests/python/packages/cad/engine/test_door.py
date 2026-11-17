@@ -61,7 +61,8 @@ class DoorTest(unittest.TestCase):
                       b"ok\n\n"):
             self.assertIsNone(door.greeted(other), other)
         # The server's release, an addition to protocol 1: every client since 0.10.0 reads this very rule
-        # (``greeted``), skipping it, and this release's reads it (``released``); 0.11.10's servers greet without.
+        # (``greeted``), skipping it, and this release's reads it (``released``); the servers of 0.11.11 and earlier
+        # greet without.
         said = door.greeting(1, "0.11.12")
         self.assertEqual((said, door.greeted(said), door.released(said)), (b"ok 1 0.11.12\n", 1, "0.11.12"))
         for line in (b"ok 1\n", b"ok 1 \n", b"ok 1 two words\n", b"ok\n", b"no 1 0.11.12\n"):

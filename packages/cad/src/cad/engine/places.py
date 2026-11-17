@@ -7,13 +7,13 @@ engine and the same installation by the same rules, from the standard library al
 - **The user's folders**: the state folder (``state_dir``: settings, the documents' records, Recents, the
   installations' records, the page token) and the cache folder (``cache_dir``: each model document's
   bytes, the bytecode the engine's processes compile, the kernel environment). One of each a user, whatever
-  release of cad runs: the layout of 0.11.10 and earlier, kept as it was.
+  release of cad runs: the layout of 0.11.11 and earlier, kept as it was.
 - **The engine folder** (``engine_dir``): the device's one engine's door (a named pipe; on Windows a
   port file), lock, failure note and pages note, in a folder only this user can write (``folder_refusal``), each named
   ``engine`` (``NAME``) whatever release runs it.
 - **The installation** a process belongs to: the version it runs as (``installation``), the base's
   marker naming the installation of a process that runs in the base (``HOME``), and the current one the
-  clients of 0.11.10 and earlier start (``current``).
+  clients of 0.11.11 and earlier start (``current``).
 - **Starting a process** of the engine's: with no window on Windows (``windowless``), outliving its
   starter (``detached``), its bytecode kept in the cache folder (``bytecode``), and on the Python of the
   environment the kernel is in (``kernel``, which the server makes as ``KERNEL``: the installation's base,
@@ -67,7 +67,7 @@ XAUTHORITY = "CAD_ENGINE_XAUTHORITY"
 # (``bytecode_tag``).
 PYCACHE = "pycache"
 # The installations' records in the state folder, and the file naming the current one's version: what the
-# clients of 0.11.10 and earlier start a server by (``current``).
+# clients of 0.11.11 and earlier start a server by (``current``).
 INSTALLATIONS = "installations"
 CURRENT = f"{INSTALLATIONS}/current"
 VERSION = re.compile(r"[0-9][0-9A-Za-z.+_-]*")
@@ -271,7 +271,7 @@ def _cache_dir(name: str, appdata: bool) -> Path:
 
 def engine_dir() -> Path:
     """Where the engine's door and lock live: ``CAD_ENGINE_DIR``, else ``default_engine_dir`` -- the folder every
-    release of cad finds, 0.11.10 and earlier among them. Resolved once, here, for the client and the server
+    release of cad finds, 0.11.11 and earlier among them. Resolved once, here, for the client and the server
     alike (``os.path.realpath``): a ``..``, a symlink or a trailing slash in either spelling names the same
     door, lock and port file. It stays in the temporary (runtime) folder, never under the state folder: a
     sandboxed client must make its pipes there (``door.CLIENTS``), and a sandbox lets it write the temporary
@@ -556,7 +556,7 @@ def _read(path: Path) -> bytes | None:
 def current(state: Path | None = None) -> dict[str, Any] | None:
     """The current installation's record (``installations/current`` names its version), while its
     interpreter and console script are there (``alive``): the installation whose engine every client of
-    0.11.10 and earlier starts or attaches to. None with none current, or one that is gone."""
+    0.11.11 and earlier starts or attaches to. None with none current, or one that is gone."""
     folder = Path(state or state_dir())
     data = _read(folder / CURRENT)
     version = data.decode("utf-8", "replace").strip() if data is not None else ""

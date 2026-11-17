@@ -164,8 +164,8 @@ skills' `cad viewer` link, in the browser pane or the browser.
 
 | Host | CAD's server | Cards |
 | --- | --- | --- |
-| Claude Desktop (Chat and Code tabs) | none: nothing writes an entry in `claude_desktop_config.json`, and the install script (`scripts/install/install.py`'s `claude_desktop`) takes out the `mcpServers.cad` releases 0.7.6 through 0.11.10 wrote there (the rest of the file kept, a copy of the file as it was beside it) | none |
-| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone (the install script removes no `claude mcp add` server). claude.ai's directory's copy (`claude-plugin`) carries the skills alone too; its copies through 0.11.10 name one, which lists no tools when Claude Code starts it | none |
+| Claude Desktop (Chat and Code tabs) | none: nothing writes an entry in `claude_desktop_config.json`, and the install script (`scripts/install/install.py`'s `claude_desktop`) takes out the `mcpServers.cad` releases 0.7.6 through 0.11.11 wrote there (the rest of the file kept, a copy of the file as it was beside it) | none |
+| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone (the install script removes no `claude mcp add` server). claude.ai's directory's copy (`claude-plugin`) carries the skills alone too; its copies through 0.11.11 name one, which lists no tools when Claude Code starts it | none |
 | Claude Code in a terminal | none | it draws none |
 
 The server offers no tools to a Claude host that starts it (a config someone wrote by hand, or an
@@ -173,7 +173,7 @@ older entry until Claude Desktop next starts). What was measured of those hosts,
 
 - **The desktop-config server works in the Code tab.** 2026-10-04: its card drew and `cad_view`
   and `cad_screenshot` answered. 2026-11-09, Claude Desktop 4.23118: the same (the server
-  as releases through 0.11.10 wrote it), and again with `developer_settings.json` at
+  as releases through 0.11.11 wrote it), and again with `developer_settings.json` at
   `"allowDevTools": false`. The first card after the app starts can take a while to connect: a
   `cad_view` about 6 s after `cad_show` said it had not reached CAD's server, and at about 20 s it
   answered.

@@ -79,7 +79,7 @@ the machine caused, where schemas 5 to 9 from 0.8 counted every failure; a build
 in `count` alone. Deploy this receiver before releasing a schema 10 sender, as for schema 9: a schema 9 receiver
 refuses a schema 10 batch whole.
 
-Schema 11 (from 0.11.11) is schema 10 with the install described by one field, `app`, the agent app
+Schema 11 (from 0.11.12) is schema 10 with the install described by one field, `app`, the agent app
 running it (the table above), where schema 10 and earlier sent a combined `channel` (`codex-install`,
 `claude-directory`, ...). A schema 11 batch sends no channel, and its rows carry none: PostHog is given no `channel`
 for them, and none is made up. The older batches are translated as they arrive, as
@@ -91,7 +91,7 @@ the old channel: `claude-desktop` is `claude-desktop`, any other `claude-*` `cla
 `openai-directory` `codex`, `cursor-*` `cursor`, `gemini-*` `gemini`; else `unknown`. A schema 1 batch named no
 channel: its `channel` and `legacy_channel` are `unknown`, and it keeps `source`. Older batches are still checked
 against the old list exactly as before, and their rows keep their ids. Events PostHog already stored keep the values
-they were stored with: a chart by `channel` counts the releases up to 0.11.10, and a chart by `app` every release.
+they were stored with: a chart by `channel` counts the releases up to 0.11.11, and a chart by `app` every release.
 Schema 11 also adds `arrival` (the table above), which no earlier schema sends: an `arrival` in a batch of schema 10
 or earlier is refused. Deploy this receiver before a schema 11 sender reaches anyone: the merge that releases one deploys it. A batch of a schema newer than the deployed receiver reads is answered `503` rather than refused, so a sender that reaches people first keeps its batches until the deploy is live; check that `Deploy API` succeeded after the merge all the same.
 

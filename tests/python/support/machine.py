@@ -1,6 +1,6 @@
 """Releases of this source tree, as wheels, for the rehearsals of the install command and of cad's updates.
 
-``release``: this source tree's library and its alias ``cad-server`` (which the updaters of 0.10.0 to 0.11.10 install a
+``release``: this source tree's library and its alias ``cad-server`` (which the updaters of 0.10.0 to 0.11.11 install a
 release by) as wheels of release ``version`` (the library's ``build123d`` extra naming nothing, and no packaged
 runtime: the kernel's install is uv's, and nothing here serves a page). ``forget`` takes what uv kept of such wheels
 out of its cache again. Used by ``scripts/test/rehearse-update.py`` and ``scripts/test/real-install.py``, whose private
@@ -21,7 +21,7 @@ from pathlib import Path
 from tests.python.support.paths import LIBRARY, REPO_ROOT
 
 # Each release's wheels, by distribution: its project, its packages, and what its wheel carries at its root: cad,
-# and cad-server, its alias, which the updaters of 0.10.0 to 0.11.10 install a release by.
+# and cad-server, its alias, which the updaters of 0.10.0 to 0.11.11 install a release by.
 DISTRIBUTIONS = {"cad": (LIBRARY, ("cad", "cadgen", "cad_server", "cad_mcp"), ("cad-lazy-kernel.pth",)),
                  "cad-server": (REPO_ROOT / "packages" / "aliases" / "cad-server", (), ())}
 

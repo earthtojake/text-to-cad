@@ -1,4 +1,4 @@
-"""The installations' registry and the current one, which the clients of 0.11.10 and earlier read, and the module their
+"""The installations' registry and the current one, which the clients of 0.11.11 and earlier read, and the module their
 ``cad`` command runs (``cad_server._internal.installations``, ``cad_server._internal.proxy``).
 
 Each test writes into temporary folders from fake environments; none touches ~/.local/bin or the

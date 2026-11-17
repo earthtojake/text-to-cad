@@ -1,5 +1,5 @@
 """``cad cache dir | prune | clean`` (``cad_server.cli.cache``): where cad's cache is; what this release cannot use
-removed (environments of other releases, the release folders of 0.11.10 and earlier but the current one); all of it
+removed (environments of other releases, the release folders of 0.11.11 and earlier but the current one); all of it
 removed, refused while a server runs. Data -- the documents the engine keeps there, the state folder -- is never
 touched, nor a folder a process runs from, and each says what it removed and the disk that freed."""
 
@@ -89,13 +89,13 @@ class CacheTest(unittest.TestCase):
         self.assertEqual((code, err), (0, ""))
         self.assertEqual(out.splitlines(), [
             f"removed {theirs} (an environment of cad {OTHER})",
-            f"removed {old} (cad {OTHER}, of the layout of 0.11.10 and earlier)",
-            f"kept {current}: the release 0.11.10 and earlier start (installations/current)",
+            f"removed {old} (cad {OTHER}, of the layout of 0.11.11 and earlier)",
+            f"kept {current}: the release 0.11.11 and earlier start (installations/current)",
             f"kept {running}: a process runs from it",
             "2 removed, 2.0 MB freed"])
         self.assertFalse(theirs.exists() or old.exists())
         self.assertTrue(all(path.exists() for path in (mine, unmarked, current, running, *kept)))
-        self.assertEqual(again, (0, f"kept {current}: the release 0.11.10 and earlier start "
+        self.assertEqual(again, (0, f"kept {current}: the release 0.11.11 and earlier start "
                                             f"(installations/current)\nkept {running}: a process runs from it\n"
                                             "nothing removed\n", ""))
 

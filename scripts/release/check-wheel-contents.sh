@@ -101,7 +101,7 @@ REQUIRED=(
   # automatic update where `cad plugin auto-update` is on, and once by the bridge's install mode.
   "cad_server/_internal/install_script.py"
   "cad_server/cli/plugin.py"
-  # What the updaters and launchers of 0.10.0 to 0.11.10 run in a release they bring: `cad setup
+  # What the updaters and launchers of 0.10.0 to 0.11.11 run in a release they bring: `cad setup
   # --engine-update`, the records their switch starts a server by, and the module their `cad` command runs.
   "cad_server/cli/setup.py"
   "cad_server/_internal/installations.py"

@@ -14,7 +14,7 @@ from pathlib import Path
 # holds it (``state``), so none needs a lock file of its own. Named as cadgen 0.7 names the
 # settings' lock, so a 0.7 still installed and this cadgen changing the settings exclude each other.
 # Its time is when the last telemetry sender was started (``telemetry_send``): a command starts none
-# within a window of it, as in 0.11.10 and earlier, which share the state folder. An arrival's sender
+# within a window of it, as in 0.11.11 and earlier, which share the state folder. An arrival's sender
 # starts at once whatever it says (a lock made a moment ago says nothing of a sender), then sets it.
 STATE_LOCK = "settings.lock"
 

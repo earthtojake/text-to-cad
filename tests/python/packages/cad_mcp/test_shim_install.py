@@ -144,7 +144,7 @@ class Install(unittest.TestCase):
                 tool_install.install(timeout=1)
             self.assertFalse(tool_install.from_uv_cache(sys.prefix))
 
-    # BRIDGE-ONLY: the cad command of 0.10.0 to 0.11.10 in uv's bin folder, which uv would refuse to replace.
+    # BRIDGE-ONLY: the cad command of 0.10.0 to 0.11.11 in uv's bin folder, which uv would refuse to replace.
     OLD = "#!/bin/sh\n# cad proxy: 3\nexec python -m cad_server._internal.proxy \"$@\"\n"
 
     def uv_that(self, code: int, writes: bool) -> str:

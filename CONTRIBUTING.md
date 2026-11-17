@@ -923,7 +923,7 @@ the build when what it replaces is not there exactly once:
 | README's install section | uv's line and one paragraph | no README | the same as `latest` |
 | `.claude-plugin/plugin.json` | as `main` | not shipped | without `documentationUrl`, `privacyPolicyUrl`, `supportUrl` and `termsOfServiceUrl`, which the directory's validation does not know; the README links the same pages |
 
-`CAD_INSTALL_CHANNEL` and `CAD_AUTO_UPDATED`, which the configs of 0.11.10 and earlier set, are
+`CAD_INSTALL_CHANNEL` and `CAD_AUTO_UPDATED`, which the configs of 0.11.11 and earlier set, are
 no longer written and are ignored where an older copy still sets them.
 
 **Dev note — `plugin` and `claude-plugin`.** `plugin`, which Cursor installs

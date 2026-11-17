@@ -61,7 +61,7 @@ sessions: links and cookies outlive a restart, a reboot, a port that moved and
 an upgrade. `cad server --rotate-token` replaces the token once you say yes (it
 asks; `--yes` where it cannot), and with it every link and every session made
 before: it writes the new token, and the running server takes it at once. A server
-of 0.11.10 or earlier reads its token only as it starts, so it takes the new one
+of 0.11.11 or earlier reads its token only as it starts, so it takes the new one
 when it restarts. Behind the credentials:
 
 - A Host check refuses DNS rebinding.
