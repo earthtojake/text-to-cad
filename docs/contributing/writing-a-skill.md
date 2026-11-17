@@ -93,20 +93,21 @@ for word, and tests keep the copies from drifting:
   runs it, and in no other. The block names once the cad release the skills were written for, which
   the release script stamps (`scripts/release/sync-version.mjs`); no command carries a version. It has
   the agent run `cad --version` on first use, then:
-  - `cad` is not found: install it with the install command.
-  - cad is older than the skill: run `cad update`, which has the running server install the newest
-    release with no approval asked, and check again. Still older: stop the server, run the install
-    command, start the server.
-  - cad is the same or newer: carry on.
-  - cad says its server is not running: run `cad server start`.
+  - `cad` is not found, or older than 0.11.11 (a fixed number, never stamped: the first release
+    installed by uv): install it with uv's line, `uv tool install cad`. uv's install page where uv
+    is missing; `--force` where uv says the `cad` executable already exists (the launcher 0.10.0 to
+    0.11.10 wrote).
+  - cad is older than the skill: run `cad update`, which updates cad and nothing else.
+  - cad is the same or newer: carry on, and tell the person the skill may be out of date when cad
+    is a major or minor version ahead or a command fails unexpectedly.
 
-  The block never tells the agent to ask the person to update. Its front matter allows `Bash(cad *)`
-  alone. A plugin store's copy gets the same block with the store's lines in place of the install
-  command: `uv tool install --managed-python --python 3.14 cad@latest`; uv's install page where uv is
-  missing; the same line with `--force` where uv says the `cad` executable already exists (the
-  launcher 0.10.0 to 0.11.10 wrote); then `cad auto-update on` (`scripts/release/plugin_zip.py`,
-  `STORE_LINES`, `store_copy`; a substitution that does not find our text exactly once fails the
-  release). A new skill copies the block from one beside it.
+  No skill runs our install script: it is how a person installs the plugins, and a skill installs
+  cad alone. The block never tells the agent to ask the person to update. Its front matter allows
+  `Bash(cad *)` alone, so the install line is the person's to approve. Every published copy of the
+  skills (`latest`, claude.ai's directory's, Codex's) holds the same block; the directory's copy only
+  drops the `allowed-tools` line (`scripts/release/plugin_branch.py`), and a copy that names our
+  install script or pipes a download to a shell fails the release. A new skill copies the block from
+  one beside it.
 - **Commands that last** (`tests/python/global/test_released_commands_still_parse.py`): every `cad`
   command in the skills of every release from the last 30 days still parses with today's `cad`. So a
   command, an option or a spelling the skills stop using keeps working, hidden if need be, for at

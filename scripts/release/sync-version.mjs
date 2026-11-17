@@ -36,8 +36,8 @@ export const tomlTargets = [
 // The release written into a file the release does not stamp by a version field: cad as a requirement
 // (`cad==X`, with an extra or not: the aliases', each skill's setup block) or as uvx runs it (`cad@X`: Codex's
 // server line). `cad` stands alone (`my-cad==` is another name, `text-to-cad@earthtojake` a plugin) and the
-// version is three dotted numbers, so a pattern such as `Bash(... cad==*)`, or a store copy's `cad@latest`, is never
-// touched.
+// version is three dotted numbers, so a pattern such as `Bash(... cad==*)`, `cad@latest`, or a number with no
+// `cad==` or `cad@` before it (the setup block's fixed "older than 0.11.11") is never touched.
 const releaseName = String.raw`\d+\.\d+\.\d+(?:[0-9A-Za-z.+_-]*[0-9A-Za-z])?`;
 export const pinPattern = new RegExp(String.raw`(?<![\w.-])(cad(?:\[[a-z0-9_,.-]+\])?(?:==|@))(${releaseName})`, "g");
 

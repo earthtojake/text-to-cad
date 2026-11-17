@@ -2,13 +2,17 @@
 same in each.
 
 The block names the cad the skills were written for once, as `cad==<VERSION>`, which the release stamps
-(scripts/release/sync-version.mjs); no command and no install line carries a version. It has the agent check
-`cad --version` on first use; install cad where it is missing; where it is older, `cad update`, which has the
-running server install the newest release with no permission asked, and install only where it is still older;
-carry on where cad is newer, since cad updates itself ahead of a store's copy of the skills; and start the server
-when cad says it is not running. Nothing in it asks the person whether to update: the app's own prompt for
-a command is the only asking. A store's copy gets the same block with the store's install line in place of the
-install script's (scripts/release/plugin_zip.py, `store_copy`). A skill that runs the server any other way -- a
+(scripts/release/sync-version.mjs); no command and no install line carries a version. 0.11.11 in its first bullet
+is fixed, not stamped: the first release installed globally by uv. It has the agent check `cad --version` on
+first use; install cad by uv's one line, `uv tool install cad`, where it is missing or older than 0.11.11 (0.10.0
+to 0.11.10 are a launcher, not a global install, and `--force` replaces its file); `cad update` where it is older than
+the skill, which updates cad and nothing else; and carry on where cad is newer, since cad updates itself ahead of
+the skills, telling the person the skill may be out of date when cad is a major or minor version ahead or a
+command fails unexpectedly. No skill runs our install script: that is how a person installs the plugins, and a
+skill installs only cad. A `cad` command that needs the server and finds none says to run `cad server start`.
+Nothing in the block asks the person whether to update: the app's own prompt for a command is the only asking.
+Every published copy of the skills (`latest`, claude.ai's directory's, Codex's) holds the same block
+(scripts/release/plugin_branch.py). A skill that runs the server any other way -- a
 `pip install -r requirements.txt` into the project's interpreter -- makes a second installation.
 
 Stated as a criterion rather than a list: "uses the server" is what the skill's docs TEACH (a `cad`
@@ -30,36 +34,31 @@ VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 SETUP = """This skill was written for `cad=={X}`. The first time you use it in a chat, before you write or build
 anything, run `cad --version` as a command by itself and read what it prints. Then:
 
-- `cad` is not found: run the install line below.
-- A version older than the one above: run `cad update`, then `cad --version` again. If it is still
-  older, run `cad server stop`, then the install line below, then `cad server start`.
-- The version above or a newer one: go on.
+- `cad` is not found, or older than 0.11.11: run the install line below.
+- Older than the version above: run `cad update`.
+- The version above or newer: go on. If cad is a major or minor version ahead, or a command fails
+  unexpectedly, tell the person this skill may be out of date.
 
-Install line, on macOS and Linux:
+Install line:
 
 ```bash
-curl -fsSL https://texttocad.dev/install.sh | sh
+uv tool install cad
 ```
 
-On Windows, in PowerShell:
+If `uv` is not found, install it as uv's install page says,
+https://docs.astral.sh/uv/getting-started/installation/, then run the line again. If uv says the `cad`
+executable already exists, add `--force` after `install`.
 
-```powershell
-irm https://www.texttocad.dev/install.ps1 | iex
-```
+Run each `cad` command by itself, not joined to others by `;`, `&&` or a pipe.
 
-When a `cad` command prints that the cad server is not running, run `cad server start`, then run the
-command again.
-
-Run models with `cad run`. Run each `cad` command by itself, not joined to others by `;`, `&&` or a pipe.
-
-A project written for an earlier text-to-cad may need changes. The migration guides say what, one per
+A project written for an earlier major or minor version needs changes. The migration guides say what, one per
 version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 """
 
-# What every skill pre-approves in Claude Code: the `cad` commands it runs, the setup block's among them, and
-# nothing else. The install line is not: ours is a download run by a shell (a rule for it would allow any script),
-# and the store copies' uv line runs where the line is ignored (Codex) or refused (claude.ai's directory, whose
-# copy carries no `allowed-tools`: scripts/release/plugin_branch.py).
+# What every skill pre-approves in Claude Code: the `cad` commands it runs, the setup block's `cad --version` and
+# `cad update` among them, and nothing else. The install line is not: it installs software on the person's
+# computer, uv's own command, which the person approves in the app's prompt (and Codex ignores the line, and
+# claude.ai's directory's copy carries no `allowed-tools`: scripts/release/plugin_branch.py).
 ALLOWED_TOOLS = "allowed-tools: Bash(cad *)"
 
 _IMPORT = re.compile(r"^\s*(?:from|import)\s+(?:cad|cadgen|cad_server)\b", re.M)
@@ -116,10 +115,13 @@ class SkillLaunchCommand(unittest.TestCase):
                                      "run node scripts/release/sync-version.mjs to stamp VERSION")
 
     def test_no_skill_names_what_the_software_no_longer_has(self) -> None:
-        # No plugin command, no setup command, no exit codes a pin once added, no repair of apps, no newer-version
-        # notice and no asking the person whether to update (cad updates itself, and `cad update` asks nobody), and
-        # nothing that claims a permission (agents refused the commands it named).
-        gone = re.compile(r"cad(?:\.exe)? (?:plugin|setup)\b|doctor --prune|--add \d|exit code says why"
+        # No plugin command and no setup command (plugins are the person's install script's, never a skill's), no
+        # install script (a skill installs cad by uv's line alone), no switching cad's automatic update (on by
+        # default), no exit codes a pin once added, no repair of apps, no newer-version notice and no asking the
+        # person whether to update (cad updates itself, and `cad update` asks nobody), and nothing that claims a
+        # permission (agents refused the commands it named). `cad update` is the block's own.
+        gone = re.compile(r"cad(?:\.exe)? (?:plugin|setup|auto-update)\b|texttocad\.dev/install"
+                          r"|doctor --prune|--add \d|exit code says why"
                           r"|\.local/bin/cad|unknown command '\+|newer version of cad is available"
                           r"|ask whether to update|without asking", re.I)
         for skill in SKILLS:

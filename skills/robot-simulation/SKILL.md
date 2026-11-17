@@ -50,29 +50,24 @@ There are two routes to one:
 This skill was written for `cad==0.11.10`. The first time you use it in a chat, before you write or build
 anything, run `cad --version` as a command by itself and read what it prints. Then:
 
-- `cad` is not found: run the install line below.
-- A version older than the one above: run `cad update`, then `cad --version` again. If it is still
-  older, run `cad server stop`, then the install line below, then `cad server start`.
-- The version above or a newer one: go on.
+- `cad` is not found, or older than 0.11.11: run the install line below.
+- Older than the version above: run `cad update`.
+- The version above or newer: go on. If cad is a major or minor version ahead, or a command fails
+  unexpectedly, tell the person this skill may be out of date.
 
-Install line, on macOS and Linux:
+Install line:
 
 ```bash
-curl -fsSL https://texttocad.dev/install.sh | sh
+uv tool install cad
 ```
 
-On Windows, in PowerShell:
+If `uv` is not found, install it as uv's install page says,
+https://docs.astral.sh/uv/getting-started/installation/, then run the line again. If uv says the `cad`
+executable already exists, add `--force` after `install`.
 
-```powershell
-irm https://www.texttocad.dev/install.ps1 | iex
-```
+Run each `cad` command by itself, not joined to others by `;`, `&&` or a pipe.
 
-When a `cad` command prints that the cad server is not running, run `cad server start`, then run the
-command again.
-
-Run models with `cad run`. Run each `cad` command by itself, not joined to others by `;`, `&&` or a pipe.
-
-A project written for an earlier text-to-cad may need changes. The migration guides say what, one per
+A project written for an earlier major or minor version needs changes. The migration guides say what, one per
 version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
 A URDF's and an SRDF's validation need nothing beyond the Python standard library; a snapshot and a generated description draw on the CAD

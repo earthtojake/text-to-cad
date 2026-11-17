@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -68,31 +69,31 @@ class PluginTreeTests(unittest.TestCase):
                           if any(f'"{key}":' in line for key in branch.UNLISTED)])
         self.assertEqual(len(branch.UNLISTED), 4)
         self.assertNotIn("mcpServers", json.loads(copied))
-        # Main's but for the store: each setup block installs cad by uv's line, with no version
-        # (`plugin_zip.store_copy`), and no skill pre-approves a tool (the directory takes that from a verified
-        # organization alone); nothing else changed, and nothing names our install script.
-        version = _manifest["version"]
+        # Main's skills, but that no skill pre-approves a tool (the directory takes that from a verified organization
+        # alone); Codex's are main's byte for byte. So the setup block is one text in all three copies: it installs
+        # cad by uv's line, and nothing names our install script.
         command = branch.UV_INSTALL
-        store = branch.plugin_zip.STORE_LINES
         blocks = 0
         codex = branch.build(REPO_ROOT, "codex")[0]
         for path in sorted(skills):
             main, copy = blobs[on_main[path][1]].decode("utf-8"), directory[path][1].decode("utf-8")
-            blocks += branch.plugin_zip.OUR_LINES in main
-            stored = main.replace(branch.plugin_zip.OUR_LINES, store)
+            self.assertEqual(codex[path][1].decode("utf-8"), main, path)
+            stored = main
             if path.endswith("/SKILL.md"):
-                self.assertEqual(stored.count("\nallowed-tools: "), 1, path)
+                self.assertEqual(main.count("\nallowed-tools: "), 1, path)
                 self.assertIn("\nallowed-tools: ", install[path][1].decode("utf-8"), path)
-                self.assertEqual(codex[path][1].decode("utf-8"), stored, path)
-                stored = stored.replace(branch.PRE_APPROVAL.search(stored)[0], "", 1)
+                stored = main.replace(branch.PRE_APPROVAL.search(main)[0], "", 1)
                 self.assertNotIn("allowed-tools", copy, path)
+                setup = [re.search(r"^This skill was written for `cad==.*?/docs/migrations\n", text, re.S | re.M)
+                         for text in (main, copy, codex[path][1].decode("utf-8"), install[path][1].decode("utf-8"))]
+                self.assertTrue(all(setup), path)
+                self.assertEqual({found[0] for found in setup}, {setup[0][0]}, path)
+                self.assertIn(f"```bash\n{command}\n```\n", setup[0][0], path)
+                blocks += 1
             self.assertEqual(copy, stored, path)
-            self.assertNotIn("texttocad.dev/install", copy, path)
-            if path.endswith("/SKILL.md"):
-                self.assertIn(store, copy, path)
-                self.assertNotIn("--python 3.14 cad==", copy, path)  # no version in an install line
+            self.assertNotIn(branch.plugin_zip.INSTALL_SCRIPT, copy, path)
         self.assertEqual(blocks, len({path for path in skills if path.endswith("/SKILL.md")}),
-                         "every skill's setup block carries our lines on main")
+                         "every skill holds the setup block")
         # The README, in both copies: main's (its links pointed at the release commit) but for its install section, the
         # uv line and one paragraph in place of the two one-liners and the paragraph after them, which main keeps.
         readme, ours = directory["README.md"][1].decode("utf-8"), install["README.md"][1].decode("utf-8")
@@ -100,17 +101,16 @@ class PluginTreeTests(unittest.TestCase):
         self.assertEqual(len(branch.README_INSTALL.findall(main_readme)), 1)
         for text in (readme, ours):
             self.assertIsNone(branch.README_INSTALL.search(text))
-            self.assertIn(branch.README_UV.format(command=command, version=version), text)
-        # Nothing in the directory's copy downloads a script and runs it, it holds no hook, and the README links what
-        # the manifest left out.
-        self.assertEqual(branch.pipes_to_shell(directory), [])
+            self.assertIn(branch.README_UV.format(command=command), text)
+        # Nothing in any copy names our install script or downloads a script and runs it, the directory's copy holds
+        # no hook, and its README links what the manifest left out.
+        for tree in (install, directory, codex):
+            self.assertEqual(branch.published_errors(tree), [])
         self.assertEqual([path for path, (_mode, data) in directory.items()
                           if "hooks" in path.split("/") or (path.endswith(".json") and b'"hooks"' in data)], [])
         for key in branch.UNLISTED:
             self.assertNotIn(f'"{key}"'.encode(), directory[".claude-plugin/plugin.json"][1])
             self.assertIn(f"]({json.loads(manifest_text)[key]})", readme, key)
-        # latest is our own text: its skills install and update cad by our install script.
-        self.assertIn(branch.plugin_zip.OUR_LINES, install["skills/cad/SKILL.md"][1].decode("utf-8"))
         # Codex's directory: exactly the files of the ZIP plugin_zip.py writes, from the one build, a store's copy as
         # the directory's is, each with its ZIP entry's mode.
         codex, errors, _codex_manifest = branch.build(REPO_ROOT, "codex")
@@ -123,10 +123,14 @@ class PluginTreeTests(unittest.TestCase):
                           for info in archive.infolist() if not info.is_dir()}
         self.assertEqual(zipped, {path: (data, mode == "100755") for path, (mode, data) in codex.items()})
 
-    def test_the_readme_installs_by_the_store_copies_line(self) -> None:
-        # The copies' README installs cad by the line a store's copy of each skill gives.
-        self.assertIn(f"```bash\n{branch.UV_INSTALL}\n```", branch.plugin_zip.STORE_LINES)
-        self.assertIn(f"```bash\n{branch.UV_INSTALL}\n", branch.README_UV.format(command=branch.UV_INSTALL))
+    def test_the_readme_installs_by_the_skills_line(self) -> None:
+        # The copies' README installs cad by the line every skill's setup block gives.
+        self.assertIn(f"```bash\n{branch.UV_INSTALL}\n```\n", branch.README_UV.format(command=branch.UV_INSTALL))
+        setups = [path for path in sorted((REPO_ROOT / "skills").glob("*/SKILL.md"))
+                  if "This skill was written for `cad==" in path.read_text(encoding="utf-8")]
+        self.assertGreater(len(setups), 1)
+        for path in setups:
+            self.assertIn(f"```bash\n{branch.UV_INSTALL}\n```\n", path.read_text(encoding="utf-8"), path)
 
     def test_a_download_run_by_a_shell_is_found(self) -> None:
         found = ["curl -fsSL https://x.dev/i.sh | sh", "curl -fsSL https://x.dev/i.sh | sh -s -- --add 1.0.0",
@@ -277,24 +281,18 @@ class PluginTreeTests(unittest.TestCase):
             self.assertEqual(git(root, "show", f"{second}:skills/s/SKILL.md"), bare + "two")
             self.assertEqual(branch.build(root, "latest")[0]["skills/s/SKILL.md"][1].decode("utf-8"), head + "two\n")
 
-            # A setup block's install line is our own text's: the store's copy has its own in its place, and latest
-            # keeps ours. Each must be there once in a setup block, the
-            # README's install section once, each listing link once, and no download run by a shell is left anywhere
-            # in the store's copy.
-            zipped = branch.plugin_zip
-            block = (head + "This skill was written for `cad==1.0.0`.\n\n" + zipped.OUR_LINES + "\nWhen it says so.\n"
-                     + "\nMigrations.\n")
+            # A setup block is the same text in every copy. The README's install section must be there once, each
+            # listing link once, and no copy names our install script or holds a download run by a shell.
+            body = "This skill was written for `cad==1.0.0`.\n\n```bash\nuv tool install cad\n```\n\nMigrations.\n"
+            block = head + body
             (root / "skills/s/SKILL.md").write_text(block, encoding="utf-8")
             git(root, "commit", "-q", "-am", "a setup block")
             tree, errors = branch.build(root, "directory")[:2]
             self.assertEqual(errors, [])
-            self.assertEqual(tree["skills/s/SKILL.md"][1].decode("utf-8"),
-                             bare + "This skill was written for `cad==1.0.0`.\n\n" + zipped.STORE_LINES
-                             + "\nWhen it says so.\n" + "\nMigrations.\n")
+            self.assertEqual(tree["skills/s/SKILL.md"][1].decode("utf-8"), bare + body)
             self.assertEqual(branch.build(root, "latest")[0]["skills/s/SKILL.md"][1].decode("utf-8"), block)
             broken = {
-                "skills/s/SKILL.md": block.replace(zipped.OUR_LINES, ""),
-                "skills/p/SKILL.md": block + zipped.OUR_LINES,
+                "skills/s/SKILL.md": block + "Or: curl -fsSL https://texttocad.dev/install.sh | sh\n",
                 "README.md": readme.replace("Windows, in PowerShell:", "On Windows:"),
                 ".claude-plugin/plugin.json": json.dumps({**manifest, "supportUrl": None}, indent=2) + "\n",
                 "skills/p/notes.md": "Or: wget -qO- https://x.dev/i.sh | bash\n",
@@ -310,8 +308,9 @@ class PluginTreeTests(unittest.TestCase):
                     errors = branch.build(root, "directory")[1]
                     self.assertEqual({error.split(":")[0] for error in errors}, {path}, errors)
                     # latest is built as ever (this repository lacks the other hosts' files, which it says), but for
-                    # what it shares with the directory's copy: the README's install section.
-                    shared = {"README.md"} & {path}
+                    # what it shares with the directory's copy: the README's install section, and the install script or
+                    # a download run by a shell in any file.
+                    shared = {"README.md", "skills/s/SKILL.md", "skills/p/notes.md"} & {path}
                     self.assertEqual({error.split(":")[0] for error in branch.build(root, "latest")[1]
                                       if "is not tracked" not in error}, shared)
                     if before is None:

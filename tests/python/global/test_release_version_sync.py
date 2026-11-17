@@ -118,11 +118,13 @@ class VersionSyncMirrorTests(unittest.TestCase):
                     (root / relative).parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(repo_path(relative), root / relative)
             # A skill names the cad it was written for as `cad==X`; nothing else in a skill is stamped: not a
-            # pattern (`cad==*`), not another word's `cad`, not a version in prose, not the header.
+            # pattern (`cad==*`), not another word's `cad`, not a version in prose, not the header, and not the setup
+            # block's fixed first release of a global install (0.11.11), whatever release is stamped.
             skill = root / "skills/fixture/SKILL.md"
             skill.parent.mkdir(parents=True)
+            fixed = "- `cad` is not found, or older than 0.11.11: run the install line below.\n"
             unstamped = ("---\nname: fixture\nallowed-tools: Bash(cad *) Bash(uv tool install cad==*)\n---\n"
-                         "This skill was written for `cad==1.0.0`. Run `cad --version`.\n"
+                         "This skill was written for `cad==1.0.0`. Run `cad --version`.\n" + fixed +
                          "```bash\nuv tool install --managed-python --python 3.14 cad==0.11.10-dev.1\n```\n"
                          "Not the release: cad 1.0.0 in prose, `my-cad==1.2.3`, bpy 5.2.3, cadgen==0.1.0, "
                          "text-to-cad@earthtojake.\n")
@@ -148,6 +150,13 @@ class VersionSyncMirrorTests(unittest.TestCase):
                                    capture_output=True, text=True, timeout=120)
             self.assertEqual(0, again.returncode, again.stdout + again.stderr)
             self.assertIn("already synced", again.stdout)
+            # A release at that fixed number or past it stamps the release and leaves the fixed number alone.
+            for release in ("0.11.11", "0.12.0"):
+                (root / "VERSION").write_text(f"{release}\n", encoding="utf-8")
+                bumped = subprocess.run(["node", str(root / "scripts/release/sync-version.mjs")],
+                                        capture_output=True, text=True, timeout=120)
+                self.assertEqual(0, bumped.returncode, bumped.stdout + bumped.stderr)
+                self.assertEqual(skill.read_text(encoding="utf-8"), stamped.replace("9.9.9", release), release)
             # The README, the docs site's homepage and its policy pages are prose and no pin target: a
             # pin there would never be stamped. The privacy policy's telemetry commands run `cad`.
             self.assertIn("<code>cad telemetry off</code>",

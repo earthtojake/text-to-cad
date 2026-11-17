@@ -25,20 +25,18 @@ Three copies, differing in what they carry:
   built by the one function that builds the ZIP (`plugin_zip.build`), each file's git mode its
   ZIP entry's.
 
-Commands carry no version and no copy names a store. `latest` is our own text, as main has it: each skill's
-setup block installs cad by our install script. A store's copy, the directory's and Codex's, installs it by uv's
-one line with no version, `uv tool install --managed-python --python 3.14 cad@latest`, then `cad auto-update on`,
-and leaves the updates of the plugin to the store (`plugin_zip.store_copy`, strict: what it replaces must be
-there exactly once in each skill). Claude Code's and Cursor's session-start hooks sit in the catalog's entry and in
-Cursor's manifest, so the directory's copy, which holds neither, carries none.
+Commands carry no version and no copy names a store. Every copy's skills say the same, main's text: each setup
+block installs cad by uv's one line, `uv tool install cad`, and none runs our install script, which is how a
+person installs the plugins; a store updates its own copy. Claude Code's and Cursor's session-start hooks sit in
+the catalog's entry and in Cursor's manifest, so the directory's copy, which holds neither, carries none.
 
-No store's copy holds a download piped to a shell (`PIPE_TO_SHELL`): claude.ai's directory flags one as an
-install-time risk. In `latest` and the directory's copy the README installs by uv's line (`UV_INSTALL`) in
-place of the Quickstart's two one-liners and the paragraph after them (`by_uv`, a strict substitution that
-fails the build when what it replaces is not there exactly once). main's README keeps its Quickstart. The
-directory's copy differs once more: its manifest leaves out the listing links the directory's validation
-does not know (`UNLISTED`, also strict); the README, which the directory shows as the listing's description,
-links the same pages.
+No copy names our install script or holds a download piped to a shell (`plugin_zip.text_errors`,
+`PIPE_TO_SHELL`): claude.ai's directory flags one as an install-time risk. In `latest` and the directory's copy
+the README installs by the skills' uv line (`UV_INSTALL`) in place of the Quickstart's two one-liners and the
+paragraph after them (`by_uv`, a strict substitution that fails the build when what it replaces is not there
+exactly once). main's README keeps its Quickstart. The directory's copy differs once more: its manifest leaves
+out the listing links the directory's validation does not know (`UNLISTED`, also strict); the README, which the
+directory shows as the listing's description, links the same pages.
 
 The checks are claude.ai's file rules, the strictest of the directories
 (https://claude.com/docs/plugins/pre-submission-checklist.md): a tree that breaks
@@ -85,9 +83,6 @@ OTHER_APP_FILES = (".antigravity-plugin/plugin.json", ".kimi-plugin/plugin.json"
 
 class Copy(NamedTuple):
     files: tuple[str, ...]
-    # Whether a store delivers the copy: its skills install cad by uv (`plugin_zip.store_copy`), and it holds no
-    # download piped to a shell.
-    store: bool = False
     # Whether the copy holds only what claude.ai's directory accepts from an organization it has not
     # verified: the skills alone, in the file types `type_errors` allows.
     skills_only: bool = False
@@ -104,8 +99,8 @@ class Copy(NamedTuple):
 UNLISTED = ("documentationUrl", "privacyPolicyUrl", "supportUrl", "termsOfServiceUrl")
 COPIES = {
     "latest": Copy(FILES + MARKETPLACE_FILES + GROK_FILES + OTHER_APP_FILES, uv=True),
-    "directory": Copy(DIRECTORY_FILES, store=True, skills_only=True, uv=True, unlisted=UNLISTED),
-    "codex": Copy((), store=True, codex_zip=True),
+    "directory": Copy(DIRECTORY_FILES, skills_only=True, uv=True, unlisted=UNLISTED),
+    "codex": Copy((), codex_zip=True),
 }
 DIRECTORIES = ("skills/",)
 README = "README.md"
@@ -140,11 +135,11 @@ NOT_SKILLS = ("mcpServers", "hooks", "lspServers")
 FRONT_MATTER = re.compile(r"\A---\n.*?^---[ \t]*$", re.S | re.M)
 PRE_APPROVAL = re.compile(r"^allowed-tools:[^\n]*\n", re.M)
 PRE_APPROVAL_KEY = re.compile(r"^(?:allowed-tools|allowedTools)[ \t]*:", re.M)
-# The install script, as main's README runs it, and the uv line the copies' READMEs install by in its place: a
-# store's copy's own install line (`plugin_zip.STORE_LINES`; test_plugin_branch.py holds the two equal).
+# The install script, as main's README runs it, and the uv line the copies' READMEs install by in its place: every
+# skill's own install line (test_plugin_branch.py holds the two equal).
 INSTALL_SCRIPT = "curl -fsSL https://texttocad.dev/install.sh | sh"
 INSTALL_SCRIPT_WINDOWS = "https://www.texttocad.dev/install.ps1"
-UV_INSTALL = "uv tool install --managed-python --python 3.14 cad@latest"
+UV_INSTALL = "uv tool install cad"
 # The README's install section: the Quickstart's two one-liners and the paragraph after them.
 README_INSTALL = re.compile(
     r"^macOS and Linux:\n\n```bash\n" + re.escape(INSTALL_SCRIPT) + r"\n```\n\n"
@@ -152,12 +147,11 @@ README_INSTALL = re.compile(
     r"(?:[^\n]+\n)+", re.M)
 README_UV = """```bash
 {command}
-cad auto-update on
 ```
 
-The skills run the `cad` command. The lines above install cad with [uv](https://docs.astral.sh/uv/) and
-switch on its automatic updates. The first time a skill needs `cad`, your agent runs them, with your
-permission, or you run them yourself.
+The skills run the `cad` command. The line above installs cad with [uv](https://docs.astral.sh/uv/), and cad
+keeps itself up to date from then on. The first time a skill needs `cad`, your agent runs the line, with your
+permission, or you run it yourself.
 """
 # A download piped to a shell or run as a script block: what claude.ai's directory flags (`RUNTIME_FETCH_EXEC`).
 _FETCH = r"(?:irm|iwr|invoke-restmethod|invoke-webrequest)"
@@ -215,17 +209,10 @@ def readme_for_tree(text: str, tree: set[str], repository: set[str], url: str, c
     return LINK.sub(point, text)
 
 
-def store_copy(tree: dict[str, tuple[str, bytes]], version: str) -> tuple[dict[str, tuple[str, bytes]], list[str]]:
-    """The tree as a store delivers it (`plugin_zip.store_copy`), and what fails the build."""
-    files, errors = plugin_zip.store_copy({path: data for path, (_mode, data) in tree.items()}, version)
-    return {path: (mode, files[path]) for path, (mode, _data) in tree.items()}, errors
-
-
-def by_uv(tree: dict[str, tuple[str, bytes]], version: str) -> tuple[dict[str, tuple[str, bytes]], list[str]]:
-    """The tree whose README installs by `UV_INSTALL` for `version` in place of the install script, and what fails
-    the build: the README's install section (`README_INSTALL`) becomes the command and one paragraph, and must be
-    there exactly once."""
-    command = UV_INSTALL.format(version=version)
+def by_uv(tree: dict[str, tuple[str, bytes]]) -> tuple[dict[str, tuple[str, bytes]], list[str]]:
+    """The tree whose README installs by `UV_INSTALL` in place of the install script, and what fails the build: the
+    README's install section (`README_INSTALL`) becomes the command and one paragraph, and must be there exactly
+    once."""
     out, errors = dict(tree), []
     if README in tree:
         text = tree[README][1].decode("utf-8")
@@ -235,7 +222,7 @@ def by_uv(tree: dict[str, tuple[str, bytes]], version: str) -> tuple[dict[str, t
                           f"{len(sections)} times, not once, so the uv line cannot replace them")
         else:
             section = sections[0]
-            text = text[:section.start()] + README_UV.format(command=command, version=version) + text[section.end():]
+            text = text[:section.start()] + README_UV.format(command=UV_INSTALL) + text[section.end():]
             out[README] = (tree[README][0], text.encode("utf-8"))
     return out, errors
 
@@ -274,6 +261,12 @@ def without_pre_approval(tree: dict[str, tuple[str, bytes]]) -> tuple[dict[str, 
             continue
         out[path] = (mode, (cut + text[head.end():]).encode("utf-8"))
     return out, errors
+
+
+def published_errors(tree: dict[str, tuple[str, bytes]]) -> list[str]:
+    """What no copy may hold, each of them checked the same: a text file that is not UTF-8 or names our install
+    script (`plugin_zip.text_errors`), and a download piped to a shell (`pipes_to_shell`)."""
+    return plugin_zip.text_errors({path: data for path, (_mode, data) in tree.items()}) + pipes_to_shell(tree)
 
 
 def pipes_to_shell(tree: dict[str, tuple[str, bytes]]) -> list[str]:
@@ -348,7 +341,7 @@ def rule_errors(tree: dict[str, tuple[str, bytes]]) -> list[str]:
 
 def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str], dict]:
     """A copy's tree as path -> (git mode, bytes), what breaks the directory's rules, and the manifest."""
-    files, store, skills_only, uv, leaves_out, codex_zip = COPIES[copy]
+    files, skills_only, uv, leaves_out, codex_zip = COPIES[copy]
     if codex_zip:
         return codex(root)
     entries = tracked(root)
@@ -374,26 +367,21 @@ def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str
     head = git(root, "rev-parse", "HEAD").decode().strip()
     text = readme_for_tree(text, set(tree), set(entries), url, head, errors)
     tree[README] = ("100644", text.encode("utf-8"))
-    version = manifest.get("version")
-    if (store or uv) and not (isinstance(version, str) and version):
-        return tree, errors + [f"{MANIFEST}: no `version`, so the uv line cannot name the release"], manifest
     if uv:
-        tree, substituting = by_uv(tree, version)
-        errors += substituting
-    if store:
-        tree, substituting = store_copy(tree, version)
+        tree, substituting = by_uv(tree)
         errors += substituting
     if skills_only:
         tree, cutting = without_pre_approval(tree)
         errors += cutting
     tree, leaving = unlisted(tree, leaves_out)
-    errors += leaving + (pipes_to_shell(tree) if store else [])
+    errors += leaving + published_errors(tree)
     return tree, errors + rule_errors(tree) + (type_errors(tree) if skills_only else []), manifest
 
 
 def codex(root: Path) -> tuple[dict[str, tuple[str, bytes]], list[str], dict]:
     """The Codex directory's copy: the files of its ZIP, built and checked by `plugin_zip.build` (so the ZIP and
-    the `codex-plugin` branch cannot differ), each with its ZIP entry's mode."""
+    the `codex-plugin` branch cannot differ), each with its ZIP entry's mode. `plugin_zip.build` has checked its
+    text (`plugin_zip.text_errors`); a download piped to a shell is checked here."""
     package = plugin_zip.build(root)
     tree = {path: ("100755" if executable else "100644", data) for path, (data, executable) in package.files.items()}
     return tree, list(package.errors) + pipes_to_shell(tree), package.manifest

@@ -35,15 +35,13 @@ class PluginZipTests(unittest.TestCase):
             with zipfile.ZipFile(out) as archive:
                 members = archive.namelist()
                 manifest = json.loads(archive.read(".codex-plugin/plugin.json"))
-                # The skills the checkout's but for the store: each setup block installs cad by uv's line, with no
-                # version (`store_copy`); nothing else changed.
+                # The skills are the checkout's, byte for byte: each setup block installs cad by uv's line, the
+                # same in every copy.
                 version = manifest["version"]
                 skills = {name: archive.read(name).decode("utf-8") for name in members
                           if name.startswith("skills/") and not name.endswith("/")}
-                ours = {name: (REPO_ROOT / name).read_text(encoding="utf-8") for name in skills}
-                store = plugin_zip.STORE_LINES
                 changed = [name for name, text in skills.items()
-                           if text != ours[name].replace(plugin_zip.OUR_LINES, store)]
+                           if text != (REPO_ROOT / name).read_text(encoding="utf-8")]
                 server = json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"]
         # Every copy's server line is the repository's: uvx runs cad at the release, as `cad mcp`.
         self.assertEqual(server["args"], json.loads((REPO_ROOT / "codex.mcp.json").read_text(encoding="utf-8"))["mcpServers"]["cad"]["args"])
@@ -56,8 +54,8 @@ class PluginZipTests(unittest.TestCase):
         self.assertIn(".codex-plugin/", members)
         self.assertEqual(changed, [])
         for name in (name for name in skills if name.endswith("/SKILL.md")):
-            self.assertIn(store, skills[name], name)
-            self.assertNotIn("install.sh", skills[name], name)
+            self.assertIn("```bash\nuv tool install cad\n```\n", skills[name], name)
+            self.assertNotIn(plugin_zip.INSTALL_SCRIPT, skills[name], name)
         # Everything tracked under the plugin's roots ships, `.codex-plugin/` icons included,
         # plus exactly the files the archived manifest points at; nothing else from the repo.
         roots = set(git(REPO_ROOT, "ls-files", "--", *plugin_zip.ROOTS).split())
@@ -93,7 +91,7 @@ class PluginZipTests(unittest.TestCase):
             (root / ".codex-plugin").mkdir()
             (root / "skills/demo").mkdir(parents=True)
             block = ("---\nname: demo\ndescription: Demo.\n---\nThis skill was written for `cad==1.0.0`.\n\n"
-                     + plugin_zip.OUR_LINES + "\nWhen it says so.\n")
+                     "```bash\nuv tool install cad\n```\n\nWhen it says so.\n")
             (root / "skills/demo/SKILL.md").write_text(block, encoding="utf-8")
             server = {"command": "uvx", "args": ["cad@1.0.0", "mcp"]}
             (root / "codex.mcp.json").write_text(json.dumps({"mcpServers": {"cad": server}}), encoding="utf-8")
@@ -108,19 +106,13 @@ class PluginZipTests(unittest.TestCase):
             with zipfile.ZipFile(root / "out.zip") as archive:
                 self.assertEqual(json.loads(archive.read(".codex-plugin/plugin.json"))["mcpServers"],
                                  "./.mcp.json")
-                # The server config moves to the root as it is; the skills install cad by uv's line.
+                # The server config moves to the root as it is; the skill is the checkout's as it is.
                 self.assertEqual(json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"], server)
                 self.assertNotIn("codex.mcp.json", archive.namelist())
-                skill = archive.read("skills/demo/SKILL.md").decode("utf-8")
-                self.assertIn(plugin_zip.STORE_LINES + "\nWhen it says so.\n", skill)
-                # No version in the store's install line: cad updates itself past the store's copy.
-                self.assertIn("uv tool install --managed-python --python 3.14 cad@latest\n", skill)
-                self.assertNotIn("cad==1.0.0\n", skill)
-                self.assertNotIn("install.sh", skill)
+                self.assertEqual(archive.read("skills/demo/SKILL.md").decode("utf-8"), block)
 
-            # Ours not there exactly once in a setup block, our install script left anywhere, or a file that is not
-            # UTF-8 fails the package.
-            for name, text in (("SKILL.md", block.replace(plugin_zip.OUR_LINES, "")), ("SKILL.md", block + plugin_zip.OUR_LINES),
+            # Our install script named anywhere, in a skill or beside it, or a file that is not UTF-8 fails the package.
+            for name, text in (("SKILL.md", block + "Or, on Windows: irm https://www.texttocad.dev/install.ps1 | iex\n"),
                                ("notes.md", "Or run curl -fsSL https://texttocad.dev/install.sh | sh"),
                                ("notes.md", "caf\u00e9")):
                 with self.subTest(name=name, text=text[-30:]):
