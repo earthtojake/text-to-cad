@@ -39,11 +39,6 @@ FENCE = re.compile(r"^\s*```")
 # form (what follows a `...` is by definition not written out).
 ELISION = "..."
 
-# The server's own commands, which lane A of the one-cad rework adds (`cad server start|stop|status`): until they
-# land, a form naming one is held to the words alone. Delete this once `cli.resolve` answers them.
-SERVER_COMMANDS = (["server", "start"], ["server", "stop"], ["server", "status"])
-
-
 def _command_forms(text: str) -> list[tuple[list[str], bool]]:
     """The `cad` argv forms inside this document's fenced code blocks.
 
@@ -129,8 +124,6 @@ class DocumentedCommands(unittest.TestCase):
 
     def test_every_documented_form_names_a_real_command(self):
         for source, argv, _elided in _documented_forms():
-            if argv[:2] in SERVER_COMMANDS:
-                continue
             with self.subTest(source=str(source), form=" ".join(argv)):
                 self.assertIsNotNone(
                     _split_command(argv),
@@ -140,7 +133,7 @@ class DocumentedCommands(unittest.TestCase):
     def test_every_documented_form_parses(self):
         for source, argv, elided in _documented_forms():
             split = _split_command(argv)
-            if split is None or elided or argv[:2] in SERVER_COMMANDS:
+            if split is None or elided:
                 continue  # reported by the test above / not a complete invocation / not answered yet
             name, rest = split
             with self.subTest(source=str(source), form=" ".join(argv)):
