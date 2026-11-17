@@ -777,7 +777,8 @@ green: that is the release. `Publish Release`, on the merge commit:
    so a package the portal would refuse stops the release before anything
    irreversible; the ZIP is kept as a workflow artifact
    (`cad-openai-plugin-<version>`). `scripts/release/plugin_branch.py --check`
-   does the same for both copies of the plugin the install branches get. Then
+   does the same for the three copies of the plugin the install branches get (`latest`,
+   `claude-plugin` and `codex-plugin`). Then
    `bundle.sh --clean` — which is where the server's whole runtime comes into
    existence, Viewer client and CAD app alike, because the release
    commit carries none of it; its `CAD_RELEASE` names the version, so
@@ -828,9 +829,9 @@ green: that is the release. `Publish Release`, on the merge commit:
    this release's copies, kept for the record. They install no particular release: run from
    anywhere, `install.sh` and `install.ps1` download the newest `install.py` from
    texttocad.dev (`Deploy Docs` serves it), which installs the newest release.
-   After the branches and `Deploy Docs`, the `feed` job purges the CDN cache in front of the
-   version feed (`api.texttocad.dev`): best effort, and nothing waits on it. The feed names the
-   release only once it has been on PyPI for an hour ([The version feed](#the-version-feed)).
+   Nothing here touches the version feed (`api.texttocad.dev`): it reads PyPI itself and names the
+   release once it has been on PyPI for an hour, its edge keeping an answer five minutes
+   ([The version feed](#the-version-feed)).
 
 `main` has the new version from the merge on, a few minutes before PyPI has the
 wheels. Only an install of `main` itself sees that: a command that names no

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Exercise cad the way a user gets it: built into wheels (cad, and its aliases cad-server and cad-mcp),
 # pip-installed together, run from a directory that is not this repo; installed as the uv tool the install
-# command makes (`uv tool install cad`, the newest release uv is offered); and installed the old way the updaters
+# command makes (`uv tool install cad`, the newest release uv is offered), and as a uv tool by the server's old name
+# (`uv tool install cad-server`, which keeps the cad command); and installed the old way the updaters
 # of 0.10.0 to 0.11.11 still bring a release (`uv pip install cad-server==<release>` into a venv of their own).
 #
 # Every other check in this repo runs against the source tree, where the repo root is on
@@ -252,6 +253,21 @@ grep -q 'name = "cad"' "$UV_TOOL_DIR/cad/uv-receipt.toml" || fail "the tool's re
 ) || exit 1
 echo "   $UV_TOOL_BIN_DIR/cad: cad $STAMP, a global install by uv; cad auto-update on accepted there, refused in a venv"
 TOOL_DIR="$UV_TOOL_DIR"
+
+# Until 0.11.11 cad-server was the server and carried the cad command, so a uv tool may be installed by that name. uv
+# makes a tool only of the commands of the package it names: the alias keeps `cad`, or `uv tool install cad-server`
+# fails ("No executables are provided") and `uv tool upgrade cad-server` takes the command away. Folders of its own.
+step "A uv tool installed as cad-server: uv tool install cad-server gives the cad command"
+(
+  export UV_TOOL_DIR="$WORK/alias-tools" UV_TOOL_BIN_DIR="$WORK/alias-bin"
+  "${UV[@]}" tool install --quiet --managed-python --python 3.14 --find-links "$WORK/stamped" "cad-server==$STAMP" \
+    || fail "uv tool install cad-server"
+  [ -x "$UV_TOOL_BIN_DIR/cad" ] || fail "uv tool install cad-server wrote no cad command in $UV_TOOL_BIN_DIR"
+  cd "$EMPTY"
+  [ "$(CAD_STATE_DIR="$WORK/alias-state" CAD_ENGINE_DIR="$WORK/alias-engine" "$UV_TOOL_BIN_DIR/cad" --version | head -n 1)" = "cad $STAMP" ] \
+    || fail "cad --version of the uv tool cad-server"
+) || exit 1
+echo "   $WORK/alias-bin/cad: cad $STAMP"
 # The steps after this one see no uv tool again: what they check is this install's.
 export UV_TOOL_DIR="$WORK/no-tools" UV_TOOL_BIN_DIR="$WORK/no-tool-bin"
 

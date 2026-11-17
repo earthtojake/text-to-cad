@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Assert the four projects' wheels carry what they must, and only their own packages: cad's (the library,
 # the server and the shim), and its aliases' (cad-server, cad-mcp, cadgen), which carry nothing but cad at
-# the release (and cad-mcp its one command).
+# the release and the commands each shipped until 0.11.11 (cad-server's `cad`, cad-mcp's `cad-mcp`).
 #
 # The server ships JavaScript it serves (the CAD Viewer's built client, the CAD app page) and
 # non-Python data it reads (collation.json); the library ships the page `serve` shows a document
@@ -219,8 +219,9 @@ with zipfile.ZipFile(sys.argv[1]) as zf:
 
 # An alias, packages/aliases/PROJECT: its dist-info alone, and cad at the release (a project that declares
 # the alias gets cad), its extras cad's `build123d` extra under each name it keeps (`build123d`, and for
-# cadgen `kernel` too, its 0.8 spelling), and the commands it keeps (cad-mcp's `cad-mcp`; never `cad`, which
-# is cad's own: two distributions writing one command conflict).
+# cadgen `kernel` too, its 0.8 spelling), and the commands it shipped until 0.11.11, each the entry point cad
+# runs (cad-server's `cad`, which cad declares too, the same script; cad-mcp's `cad-mcp`): uv makes a tool only of
+# the commands of the package it names, so a uv tool installed as cad-server keeps its `cad` at an upgrade.
 check_alias() {
   local project="$1" distribution="$2" extras="$3" scripts="$4"
   check "aliases/$project" "$distribution" ""
@@ -242,14 +243,15 @@ parser = configparser.ConfigParser(delimiters=("=",))
 parser.optionxform = str
 for text in points:
     parser.read_string(text)
-declared = sorted(parser["console_scripts"]) if parser.has_section("console_scripts") else []
-if declared != sorted(scripts):
-    sys.exit(f"{wheel} declares the commands {declared}, not {sorted(scripts)}")
+declared = dict(parser["console_scripts"]) if parser.has_section("console_scripts") else {}
+wanted = dict(script.split("=", 1) for script in scripts)
+if {name: target.strip() for name, target in declared.items()} != wanted:
+    sys.exit(f"{wheel} declares the commands {declared}, not {wanted}")
 PY
 }
 
-check_alias cad-server cad_server "" ""
-check_alias cad-mcp cad_mcp "" "cad-mcp"
+check_alias cad-server cad_server "" "cad=cad_server.cli:main"
+check_alias cad-mcp cad_mcp "" "cad-mcp=cad_mcp.shim:main"
 check_alias cadgen cadgen "build123d kernel" ""
 # cad's last: the runtime checks below read its wheel and listing.
 check cad cad "cad|cadgen|cad_server|cad_mcp|cad-lazy-kernel\.pth" "${REQUIRED[@]}"
