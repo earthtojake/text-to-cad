@@ -1707,7 +1707,8 @@ def make_room(here: Here, folder: Path, tools: Dict[str, Tool]) -> Tuple[Optiona
     """The ``cad`` command of 0.10.0-0.11.10 (``old_launcher``) set aside, beside itself under a name no shell runs,
     in uv's bin folder ``folder`` and in the folder those releases wrote it in where that is another
     (``CAD_LAUNCHER_DIR``, else ``~/.local/bin``); with it, on Windows, 0.10's cad.cmd (a cad.exe that runs can be
-    renamed, not deleted). ``settle`` deletes them once uv's cad is in, and puts them back where it is not. Why the
+    renamed, not deleted), and the Python 0.11's cad.exe ran (``launcher_python``). ``settle`` deletes them once uv's
+    cad is in, and puts them back where it is not. Why the
     install cannot go on, or None: another program's ``cad`` in ``folder``, which uv would not replace (one no tool of
     uv's lists), or ours that cannot be moved; and what was set aside."""
     names = ("cad.exe", "cad.cmd") if here.windows else ("cad",)
@@ -1720,6 +1721,7 @@ def make_room(here: Here, folder: Path, tools: Dict[str, Tool]) -> Tuple[Optiona
                 "replace. Move it away, then run this again."), []
     moved: List[Tuple[Path, Path]] = []
     for path in found:
+        python = launcher_python(path)
         aside = path.with_name(f".{path.name}.text-to-cad-old")
         try:
             os.replace(path, aside)
@@ -1728,7 +1730,29 @@ def make_room(here: Here, folder: Path, tools: Dict[str, Tool]) -> Tuple[Optiona
             return (f"cad: not installed: {here.shown(path)}, an earlier release's cad command, could not be moved "
                     f"({error.strerror or error}): close what runs cad, then run this again."), []
         moved.append((path, aside))
+        if python is not None:
+            try:  # one whose python.exe runs cannot be moved: it stays, harmless, and nothing runs it any more
+                os.replace(python, python.with_name(f".{python.name}.text-to-cad-old"))
+                moved.append((python, python.with_name(f".{python.name}.text-to-cad-old")))
+            except OSError:
+                pass
     return None, moved
+
+
+def launcher_python(path: Path) -> Optional[Path]:
+    """The Python 0.11's cad.exe ran: ``cad-launcher`` beside it, a virtual environment (its ``pyvenv.cfg``) with
+    nothing installed, which uv made for it (v0.11.10 ``installations.py``: ``INTERPRETER``, ``_make_interpreter``).
+    Ours only where the cad.exe beside it is ours (``old_launcher``, checked by the caller) and names it: its shebang,
+    after distlib's launcher, is ``#!<launcher_dir>\\cad-launcher\\Scripts\\python.exe``. None elsewhere."""
+    folder = path.with_name("cad-launcher")
+    if path.name != "cad.exe" or folder.is_symlink() or not (folder / "pyvenv.cfg").is_file():
+        return None
+    try:
+        with open(path, "rb") as handle:
+            named = b"#!<launcher_dir>\\cad-launcher\\Scripts\\python.exe" in handle.read(1 << 20)
+    except OSError:
+        return None
+    return folder if named else None
 
 
 def settle(here: Here, moved: List[Tuple[Path, Path]], done: bool) -> None:
@@ -1736,13 +1760,15 @@ def settle(here: Here, moved: List[Tuple[Path, Path]], done: bool) -> None:
     for path, aside in moved:
         try:
             if done:
-                aside.unlink()
+                discard(aside)
             else:
                 os.replace(aside, path)
         except OSError:
             continue
         if done:
-            print(f"Removed the cad command of an earlier release ({here.shown(path)}).", flush=True)
+            what = ("the Python of an earlier release's cad command" if path.name == "cad-launcher" else
+                    "the cad command of an earlier release")
+            print(f"Removed {what} ({here.shown(path)}).", flush=True)
 
 
 def running_commands() -> List[str]:

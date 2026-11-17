@@ -316,12 +316,32 @@ class InstallScriptTests(unittest.TestCase):
         cmd = self.write(".local/bin/cad.cmd", "@echo off\r\nrem cad proxy: 9\r\nrem The cad command\r\n")
         uv_made = exe(self.root / "uv-cad.exe", "import sys\nfrom cad_server.cli import main\nsys.exit(main())\n")
         self.assertEqual([install.old_launcher(path) for path in (old, cmd, uv_made)], [True, True, False])
+        # And the Python 0.11's cad.exe ran: cad-launcher beside it, a virtual environment its shebang names.
+        self.write(".local/bin/cad-launcher/pyvenv.cfg", "home = C:\\Python314\nuv = 0.9.5\n")
+        self.write(".local/bin/cad-launcher/Scripts/python.exe", "MZ")
         here = install.Here(self.environ(), platform="win32")
+        everything = [".cad.cmd.text-to-cad-old", ".cad.exe.text-to-cad-old", ".cad-launcher.text-to-cad-old"]
         problem, moved = install.make_room(here, bin_, {})
         self.assertIsNone(problem)
-        self.assertEqual(sorted(path.name for path in bin_.iterdir()), [".cad.cmd.text-to-cad-old", ".cad.exe.text-to-cad-old"])
+        self.assertEqual(sorted(path.name for path in bin_.iterdir()), sorted(everything))
+        install.settle(here, moved, False)  # uv's cad did not go in: all of it back as it was
+        self.assertEqual(sorted(path.name for path in bin_.iterdir()), ["cad-launcher", "cad.cmd", "cad.exe"])
+        self.assertTrue((bin_ / "cad-launcher/Scripts/python.exe").is_file())
+        problem, moved = install.make_room(here, bin_, {})
         install.settle(here, moved, True)
         self.assertEqual(sorted(path.name for path in bin_.iterdir()), [])
+        # A cad-launcher that is no virtual environment, or beside a cad.exe of ours that does not name it, stays.
+        for shebang, cfg in ((b"#!<launcher_dir>\\cad-launcher\\Scripts\\python.exe", False),
+                             (b"#!C:\\elsewhere\\python.exe", True)):
+            (bin_ / "cad-launcher").mkdir()
+            if cfg:
+                self.write(".local/bin/cad-launcher/pyvenv.cfg", "home = C:\\Python314\n")
+            exe(bin_ / "cad.exe", "# cad proxy: 11\n").write_bytes(
+                (bin_ / "cad.exe").read_bytes().replace(b"#!<launcher_dir>\\cad-launcher\\Scripts\\python.exe", shebang))
+            problem, moved = install.make_room(here, bin_, {})
+            install.settle(here, moved, True)
+            self.assertEqual(sorted(path.name for path in bin_.iterdir()), ["cad-launcher"], shebang)
+            install.discard(bin_ / "cad-launcher")
         # Someone else's cad.exe stops it; one uv lists as its own does not.
         uv_made.rename(bin_ / "cad.exe")
         self.assertIn("is another program's cad command", install.make_room(here, bin_, {})[0])
@@ -923,6 +943,18 @@ class InstallScriptTests(unittest.TestCase):
             self.assertEqual([argv for argv in self.calls("uv") if argv[1] in ("install", "uninstall")],
                              [["tool", "uninstall", "cad"], ["tool", "install", *install.UV_TOOL_ARGS, "cad"]])
             self.assertFalse(dev_install.editable(str(self.bin / "uv")))
+
+    def test_install_ps1_ends_a_failure_in_a_terminating_error(self) -> None:
+        # Not runnable here: the Windows install jobs run it. `powershell -Command "irm ... | iex"` exits 1 only on a
+        # terminating error; Write-Error left it at 0 (measured on Windows 11), and `exit` closes a person's window.
+        text = (INSTALL / "install.ps1").read_text(encoding="utf-8")
+        self.assertRegex(text, r'\nif \(\$LASTEXITCODE\) \{\n    throw "[^"]+"\n\}\n?$')
+        code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+        self.assertNotIn("Write-Error", code)
+        self.assertNotRegex(code, r"(?m)^\s*exit\b")
+        # Where uv's Python could not be set up (inside an app's package, first time), the person is told what to do.
+        self.assertIn("& $uv python find --no-config --system --managed-python 3.14", text)
+        self.assertIn("open PowerShell from the Start menu, run the install command there once", text)
 
     def test_the_installer_names_no_release(self) -> None:
         # Nothing in the install command changes with a release: no fallback, no pin, nothing a release stamps.

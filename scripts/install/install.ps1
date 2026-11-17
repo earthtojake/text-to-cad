@@ -7,8 +7,8 @@
 # and puts the plugin into every agent app on this computer (install.py says how). Run it again to update. It
 # takes no options, and names no release. Everything happens inside Install-TextToCad, called on the last
 # lines: a download cut short runs nothing, and a failure returns instead of closing the window. Where it fails
-# it writes an error last, so `powershell -Command "irm ... | iex"` exits 1 (its exit status is 1 when the last
-# command failed).
+# it ends by throwing (see the last lines), so every documented way of running it exits 1: `irm ... | iex` in
+# `powershell -Command`, the same through cmd, and `powershell -File install.ps1`.
 
 function Install-TextToCad {
     # 'Continue': a native command's line on stderr is never an error that stops the run (Windows PowerShell 5.1
@@ -106,6 +106,16 @@ function Install-TextToCad {
     try {
         & $uv run --no-config --managed-python --python 3.14 --no-project $script
         $code = $LASTEXITCODE
+        # uv's Python could not be set up, so install.py never ran. Inside an app's package (the Claude app's) on a
+        # computer where uv has never made its Python folder, Windows keeps the new folder to that app and uv fails
+        # ("Missing expected target directory for Python minor version link", measured): once uv has run from an
+        # ordinary window, it works inside the app too.
+        if ($code) {
+            & $uv python find --no-config --system --managed-python 3.14 *> $null  # --system: no venv of the folder it ran in
+            if ($LASTEXITCODE) {
+                Write-Host "uv could not set up Python 3.14 here (what it said is above). If this ran inside an app (the Claude app, say), open PowerShell from the Start menu, run the install command there once, then go back to the app." -ForegroundColor Red
+            }
+        }
         # The window that ran this finds cad at once: uv's bin folder on its PATH. Windows gives the user's PATH to a
         # window or app as it starts, so one open before cad's folder was put there does not see it (measured).
         $bin = & $uv tool dir --bin 2>$null | Select-Object -Last 1
@@ -125,6 +135,15 @@ function Install-TextToCad {
 # Its status is $LASTEXITCODE, which it sets on every path (its output goes to the window as it comes).
 $global:LASTEXITCODE = 0
 Install-TextToCad @args
+# A failure ends in `throw`, a terminating error, the one form that sets the exit status of every way it is run
+# without closing a window a person typed it into:
+# - `powershell -Command "irm ... | iex"` (and through cmd) exits 1 when its command ends in an unhandled terminating
+#   error; Invoke-Expression passes a `throw` in the script on as one. It ignores $LASTEXITCODE, and a Write-Error is
+#   non-terminating: the run it ends still counts as a success (measured on Windows 11: exit 0).
+# - `powershell -File install.ps1` exits 1 on a script that ends in an unhandled terminating error.
+# - Typed in a window (`irm ... | iex`), a throw prints the error and returns to the prompt. `exit` would end that
+#   PowerShell, closing the window (iex runs the script in the window's own session).
+# The exit status is 1 whatever the installer's own was: the message names that one.
 if ($LASTEXITCODE) {
-    Write-Error "text-to-cad's installer did not finish (exit $LASTEXITCODE): see what it said above." -ErrorAction Continue
+    throw "text-to-cad's installer did not finish (exit $LASTEXITCODE): see what it said above."
 }
