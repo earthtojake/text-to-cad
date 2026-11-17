@@ -129,3 +129,32 @@ test("the concepts' clock and a section reach every concept's field", () => {
   assert.equal(drawn.material.uniforms.uClipCount.value, 1);
   assert.deepEqual(concepts.list()[0].file, "slab.gsl");
 });
+
+test("the concepts wear the scene's look: its fill where a body has no colour, its finish, its opacity", () => {
+  const held = instances(SLAB, { ...BLOCK });
+  held[1].instance.color = [0.5, 0.25, 1, 1];
+  const concepts = createXbfConcepts(THREE, { fields: fields(SLAB, BLOCK) }, held);
+  const drawn = at => held[at].carrier.children.find(child => child !== held[at].group).children[0].children[0];
+  const built = drawn(0).material.uniforms.uSurface.value.map(colour => colour.toArray());
+  assert.equal(drawn(0).material.isMeshPhysicalMaterial, true);
+  concepts.look({ authored: false, colorPower: 2, surface: { style: "shaded", opacity: 0.3 },
+    materialSettings: { defaultColor: "#808080", roughness: 0.6, metalness: 0, envMapIntensity: 1, emissiveIntensity: 0 } });
+  // No colour of its own: the look's fill, raised to its power. Its other bodies: the field's, raised too.
+  const fill = new THREE.Color("#808080");
+  const worn = drawn(0).material.uniforms.uSurface.value;
+  assert.deepEqual(worn[1].toArray().map(value => value.toFixed(5)), [fill.r ** 2, fill.g ** 2, fill.b ** 2].map(value => value.toFixed(5)));
+  assert.deepEqual(worn[2].toArray().map(value => value.toFixed(5)), built[2].map(value => (value ** 2).toFixed(5)));
+  // The part's own colour is its first body's.
+  assert.deepEqual(drawn(1).material.uniforms.uSurface.value[1].toArray(), [0.25, 0.0625, 1]);
+  assert.deepEqual([drawn(0).material.roughness, drawn(0).material.opacity, drawn(0).material.transparent, drawn(0).material.depthWrite],
+    [0.6, 0.3, true, false]);
+  // A selection is worn over the look, and the look's colour again after.
+  concepts.ink(new Set(), new Set([0]));
+  assert.notDeepEqual(worn[1].toArray().map(value => value.toFixed(5)), [fill.r ** 2, fill.g ** 2, fill.b ** 2].map(value => value.toFixed(5)));
+  concepts.ink(new Set(), new Set());
+  assert.deepEqual(worn[1].toArray().map(value => value.toFixed(5)), [fill.r ** 2, fill.g ** 2, fill.b ** 2].map(value => value.toFixed(5)));
+  // No look: as built.
+  concepts.look(null);
+  assert.deepEqual(worn.map(colour => colour.toArray()), built);
+  assert.deepEqual([drawn(0).material.opacity, drawn(0).material.transparent], [1, false]);
+});

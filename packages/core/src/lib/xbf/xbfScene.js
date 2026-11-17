@@ -608,8 +608,8 @@ export function createXbfScene(THREE, document) {
     for (const entry of instances) {
       const shown = !hidden.has(entry.index);
       entry.group.visible = shown;
-      // A baked part shown as its concept draws no exact body; a field is never drawn see-through, so
-      // an isolated part's neighbours' concepts are not drawn at all.
+      // A baked part shown as its concept draws no exact body; an isolated part's neighbours' concepts
+      // are not drawn at all.
       const exact = concepts.exactShown(entry.index);
       concepts.show(entry.index, shown && !dimmed(entry.index));
       entry.mesh.visible = shown && surfaceStyle !== "off" && exact;
@@ -633,6 +633,8 @@ export function createXbfScene(THREE, document) {
   const applySurfaces = () => {
     const visible = ids => ids.filter(id => !dimmed(parseXbfElementId(id)?.instance));
     ink.apply(lastLook, { hovered: recordsFor(visible(partInk.hovered)), selected: recordsFor(visible(partInk.selected)) }, clipPlanes);
+    // The concepts wear the look the exact parts were just given.
+    concepts.look(lastLook);
     // Hidden line: the surfaces only hide what is behind them, in no colour of their own.
     if (surfaceStyle === "hidden") {
       for (const entry of instances) entry.mesh.material = Array.isArray(entry.mesh.material) ? entry.mesh.material.map(() => hiddenDepth) : hiddenDepth;

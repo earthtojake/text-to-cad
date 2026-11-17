@@ -6,13 +6,18 @@
 // representation. Either way the concept is drawn as its field (`../render/fieldScene.js`, the scene a
 // `.gsl` shown alone is drawn by), placed where the part's instance stands: an opaque surface that
 // writes its depth, so the frame's depth buffer hides fields and exact parts behind each other with
-// no pass of their own.
+// no pass of their own. It is lit as they are (the field's `lit`): by the stage's lights and
+// environment, wearing what the scene's look gives a part with no finish of its own (`look`), and
+// drawn see-through in X-ray: the first surface along each ray, where an exact part shows its far
+// faces too.
 //
 // A field has no triangles for a ray to meet, so a pick marches it: every shown field along the
 // pointer's ray, each in its own frame, in one draw of one pixel that answers how far along the ray
 // the nearest surface is and whose it is. The scene holds that against its triangles' hit.
 
 import { buildFieldScene, FIELD_CLIP_GLSL, fieldClipUniforms, writeFieldClip } from "../render/fieldScene.js";
+import { SURFACE_BRDFS } from "../viewer/surfaceBrdf.js";
+import { resolveMaterialFillBaseColor, shapeSourceColor } from "../viewer/surfaceMaterials.js";
 
 /** How a baked part is shown: its exact body, the concept it was made from, or both. */
 export const XBF_REPRESENTATIONS = Object.freeze(["exact", "concept", "both"]);
@@ -30,6 +35,11 @@ export function xbfStructureConcepts(structure) {
   }
   return [...found.values()];
 }
+
+const clamp01 = (value, fallback = 0) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(Math.max(number, 0), 1) : fallback;
+};
 
 const PICK_VERTEX = "void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }";
 
@@ -68,7 +78,7 @@ void main() {
 }
 `;
 
-// A lit concept's colour: under the pointer, and selected. A field wears no material of the look's.
+// A lit concept's colour: under the pointer, and selected.
 const HOVERED = [0.62, 0.78, 0.98];
 const SELECTED = [0.36, 0.62, 0.98];
 // How fine the pick's march is, in the scene's unit, and the farthest it answers.
@@ -86,6 +96,7 @@ const PICK_FAR = 1e6;
 export function createXbfConcepts(THREE, document, instances) {
   const fields = document.fields || new Map();
   const held = new Map();
+  const rgb = rgba => (Array.isArray(rgba) ? new THREE.Vector3(Number(rgba[0]) || 0, Number(rgba[1]) || 0, Number(rgba[2]) || 0) : null);
   for (const entry of instances) {
     const concept = entry.prototype.concept;
     if (!concept?.gsl) continue;
@@ -96,7 +107,7 @@ export function createXbfConcepts(THREE, document, instances) {
       if (concept.role === "body") throw new Error(`${named} is the concept ${concept.gsl}, and its field was not read`);
       continue;
     }
-    const field = buildFieldScene(THREE, loaded.payload, loaded.textures || {});
+    const field = buildFieldScene(THREE, loaded.payload, loaded.textures || {}, { lit: true });
     for (const [name, value] of Object.entries(concept.values || {})) {
       if (!field.setParameter(name, Number(value))) {
         field.dispose();
@@ -117,7 +128,11 @@ export function createXbfConcepts(THREE, document, instances) {
     held.set(entry.index, {
       index: entry.index, entry, concept, field, holder, drawn, surface, name: named, role: concept.role,
       payload: loaded.payload,
+      // Each body's colour as the field gives it, and as the look has it worn (`look`).
+      palette: surface.map(colour => colour.clone()),
       colours: surface.map(colour => colour.clone()),
+      // The part's own colour, linear, where the document gives it one: its first body's.
+      own: rgb(entry.instance.color || entry.prototype.color),
       box: new THREE.Box3(new THREE.Vector3(x0, y0, z0), new THREE.Vector3(x1, y1, z1)),
       // A baked part opens as its exact body; a concept that is the part is all there is to show.
       representation: concept.role === "baked" ? "exact" : "concept",
@@ -170,6 +185,12 @@ export function createXbfConcepts(THREE, document, instances) {
   const clearColor = new THREE.Color();
   const last = { key: "", at: 0, hit: null };
   let clipPlanes = [];
+  let inked = { hovered: new Set(), selected: new Set() };
+  const paint = (item) => {
+    const colour = inked.selected.has(item.index) ? SELECTED : inked.hovered.has(item.index) ? HOVERED : null;
+    item.surface.forEach((value, at) => (colour ? value.set(...colour) : value.copy(item.colours[at])));
+  };
+  const asColor = new THREE.Color();
 
   const concepts = {
     /** Whether the document draws any concept. */
@@ -236,9 +257,39 @@ export function createXbfConcepts(THREE, document, instances) {
     },
     /** The concepts lit: under the pointer, and selected, by their instances' indices. */
     ink(hovered, selected) {
+      inked = { hovered, selected };
+      for (const item of held.values()) paint(item);
+    },
+    /**
+     * What the concepts wear under the scene's look (`../viewer/surfaceLook.js`'s, as the scene hands it
+     * to its exact parts): what a part with no finish of its own wears there. A body without a colour
+     * (the field's first) takes the part's colour, else the look's fill, as an uncoloured part does;
+     * the field's other bodies keep theirs as source colours; every colour is raised to the look's
+     * power. The finish, the surface model, "Flat" and the opacity are the look's. Null: as built.
+     */
+    look(next = null) {
+      const settings = next?.materialSettings || {};
+      const power = Number(next?.colorPower) > 0 ? Number(next.colorPower) : 1;
+      const forceFill = Boolean(next) && settings.overrideSourceColors === true;
+      const model = next?.brdf ? SURFACE_BRDFS[next.brdf] : null;
+      model?.prepare(THREE);
       for (const item of held.values()) {
-        const colour = selected.has(item.index) ? SELECTED : hovered.has(item.index) ? HOVERED : null;
-        item.surface.forEach((value, at) => (colour ? value.set(...colour) : value.copy(item.colours[at])));
+        item.colours.forEach((colour, at) => {
+          const source = at > 1 ? item.palette[at] : item.own;
+          if (!next) { colour.copy(source || item.palette[at]); return; }
+          const found = forceFill || !source
+            ? resolveMaterialFillBaseColor(THREE, settings, settings.cycleColors === true ? item.index : 0)
+            : shapeSourceColor(THREE, asColor.setRGB(source.x, source.y, source.z), settings);
+          colour.set(found.r ** power, found.g ** power, found.b ** power);
+        });
+        item.field.setFinish(next ? {
+          roughness: clamp01(settings.roughness), metalness: clamp01(settings.metalness),
+          clearcoat: clamp01(settings.clearcoat), clearcoatRoughness: clamp01(settings.clearcoatRoughness),
+          specularIntensity: settings.specularIntensity === undefined ? 1 : clamp01(settings.specularIntensity),
+          envMapIntensity: Math.max(Number(settings.envMapIntensity) || 0, 0), lift: clamp01(settings.emissiveIntensity),
+          flat: next.surface?.style === "flat", opacity: next.surface ? clamp01(next.surface.opacity, 1) : 1, model
+        } : null);
+        paint(item);
       }
     },
     /**

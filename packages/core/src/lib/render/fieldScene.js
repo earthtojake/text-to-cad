@@ -13,6 +13,12 @@
 //
 // Nothing here knows GSL: the library is taken as it is, and a slider is a
 // number written into the block.
+//
+// A field shown alone shades itself, by one light of its own. One drawn among other surfaces
+// (`lit`: an engine document's concepts, `xbf/xbfConcepts.js`) is lit as they are instead: its
+// material is three's physical one, whose fragment is given the marched point, normal and depth in
+// place of a triangle's, so the stage's lights, its environment, its tone curve and a surface
+// model (`setFinish`) reach it as they reach a mesh, and it is drawn see-through where asked.
 
 export const FIELD_SCHEMA_VERSION = 1;
 
@@ -66,26 +72,28 @@ export function writeFieldClip(THREE, uniforms, planes, toLocal) {
   uniforms.uClipCount.value = given.length;
 }
 
-const FRAGMENT = `
+// The surface this pixel's ray meets, in the scene's frame: where, its normal, the ray's direction
+// and its body. A pixel whose ray meets none is discarded; one that meets it writes its depth.
+const SURFACE = `
 uniform mat4 uProjectionInverse;
 uniform mat4 uCameraToScene;
 uniform mat4 uSceneToClip;
+uniform mat4 uSceneToView;
 uniform vec4 uViewport;
 uniform vec3 uBoxMin;
 uniform vec3 uBoxMax;
 uniform float uOrthographic;
 uniform float uStepScale;
-uniform vec3 uLight;
 uniform vec3 uSurface[8];
 
-void main() {
+void fieldSurface(out vec3 point, out vec3 normal, out vec3 direction, out int shape) {
   vec2 ndc = (gl_FragCoord.xy - uViewport.xy) / uViewport.zw * 2.0 - 1.0;
   vec4 nearView = uProjectionInverse * vec4(ndc, -1.0, 1.0);
   vec4 farView = uProjectionInverse * vec4(ndc, 1.0, 1.0);
   vec3 nearPoint = (uCameraToScene * vec4(nearView.xyz / nearView.w, 1.0)).xyz;
   vec3 farPoint = (uCameraToScene * vec4(farView.xyz / farView.w, 1.0)).xyz;
   vec3 eye = (uCameraToScene * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-  vec3 direction = normalize(farPoint - nearPoint);
+  direction = normalize(farPoint - nearPoint);
   vec3 origin = mix(eye, nearPoint, uOrthographic);
   vec3 a = (uBoxMin - origin) / direction;
   vec3 b = (uBoxMax - origin) / direction;
@@ -97,8 +105,7 @@ void main() {
   vec3 cap;
   if (fieldClipped(origin, direction, tEntry, tExit, cap)) { discard; }
   float t;
-  vec3 normal;
-  int shape = -1;
+  shape = -1;
 #ifdef FIELD_CAPS
   if (cap != vec3(0.0)) {
     // The cut through the solid: the plane itself, facing what was cut away, in its body's colour.
@@ -113,16 +120,98 @@ void main() {
     normal = normalize(hit.gradient);
     shape = int(hit.shapeIndex);
   }
-  vec3 point = origin + direction * t;
+  point = origin + direction * t;
+  vec4 clip = uSceneToClip * vec4(point, 1.0);
+  gl_FragDepth = clamp(clip.z / clip.w * 0.5 + 0.5, 0.0, 1.0);
+}
+`;
+
+// A field shown alone: a plain shading of the surface by its gradient.
+const FRAGMENT = `
+uniform vec3 uLight;
+
+void main() {
+  vec3 point;
+  vec3 normal;
+  vec3 direction;
+  int shape;
+  fieldSurface(point, normal, direction, shape);
   float lit = 0.32 + 0.68 * max(dot(normal, uLight), 0.0);
   float rim = 0.12 * pow(1.0 - max(dot(normal, -direction), 0.0), 3.0);
   gl_FragColor = vec4(uSurface[shape % 8] * (lit + rim), 1.0);
-  vec4 clip = uSceneToClip * vec4(point, 1.0);
-  gl_FragDepth = clamp(clip.z / clip.w * 0.5 + 0.5, 0.0, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
 `;
+
+// A field lit as a mesh is: three's physical program (r187's `meshphysical`), its triangle's
+// position, normal and colour replaced by the marched surface's. Each line is one replacement of
+// three's text, and a three without the text it replaces is refused by name.
+const LIT_UNIFORMS = `
+uniform float uLift;
+uniform float uFlat;
+`;
+const LIT_FRAGMENT = [
+  // The view position is the marched point's, not a varying of the triangle that covers the view.
+  ["varying vec3 vViewPosition;", "vec3 vViewPosition;"],
+  ["void main() {", `void main() {
+  vec3 fieldPoint;
+  vec3 fieldNormal;
+  vec3 fieldDirection;
+  int fieldShape;
+  fieldSurface(fieldPoint, fieldNormal, fieldDirection, fieldShape);
+  vViewPosition = -(uSceneToView * vec4(fieldPoint, 1.0)).xyz;
+  fieldNormal = normalize(mat3(uSceneToView) * fieldNormal);`],
+  ["vec4 diffuseColor = vec4( diffuse, opacity );", "vec4 diffuseColor = vec4( uSurface[fieldShape % 8], opacity );"],
+  // A section cuts the field along its ray (`fieldClipped`), never the triangle.
+  ["#include <clipping_planes_fragment>", ""],
+  // The look's lift: a trace of the surface's own colour (`surfaceLook.js`).
+  ["vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = diffuseColor.rgb * uLift;"],
+  ["#include <normal_fragment_begin>", "float faceDirection = 1.0;\n\tvec3 normal = fieldNormal;\n\tvec3 nonPerturbedNormal = normal;"],
+  // "Flat": colour without shading.
+  ["#include <opaque_fragment>", "if ( uFlat > 0.5 ) { outgoingLight = diffuseColor.rgb; }\n\t#include <opaque_fragment>"]
+];
+const LIT_VERTEX = [
+  ["#include <project_vertex>", "vec4 mvPosition = vec4( transformed, 1.0 );\n\tgl_Position = vec4( position.xy, 0.0, 1.0 );"]
+];
+
+function rewritten(text, replacements) {
+  for (const [found, put] of replacements) {
+    if (!text.includes(found)) throw new Error(`A lit field is drawn by three's physical program, and this three's has no \`${found}\`.`);
+    text = text.replace(found, put);
+  }
+  return text;
+}
+
+let litFields = 0;
+
+// The lit field's material: three's physical one over the field's own uniforms and block.
+function litMaterial(THREE, uniforms, group, library) {
+  const material = new THREE.MeshPhysicalMaterial({ name: "field", side: THREE.FrontSide });
+  const id = (litFields += 1);
+  let model = null;
+  // The field's own uniforms, read as a shader material's are (`xbfConcepts.js`), and its block.
+  material.uniforms = uniforms;
+  material.uniformsGroups = [group];
+  // It dresses itself (`setFinish`): a look that dresses every lit material under a root leaves it alone.
+  material.userData.cadOwnLook = true;
+  material.onBeforeCompile = (shader, renderer) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = rewritten(shader.vertexShader, LIT_VERTEX);
+    shader.fragmentShader = `${library}\n${SURFACE}\n${LIT_UNIFORMS}\n${rewritten(shader.fragmentShader, LIT_FRAGMENT)}`;
+    model?.onBeforeCompile(shader, renderer);
+  };
+  material.customProgramCacheKey = () => `field:${id}:${model ? model.customProgramCacheKey() : ""}`;
+  return {
+    material,
+    /** The surface model its lighting is drawn by (`viewer/surfaceBrdf.js`'s), or three's own for none. */
+    setModel(next = null) {
+      if (model === next) return;
+      model = next;
+      material.needsUpdate = true;
+    }
+  };
+}
 
 // Each body's colour, by its index (0 is no body): the first a neutral grey, as a part with no
 // colour of its own is drawn, the rest told apart.
@@ -167,12 +256,14 @@ function texture3d(THREE, described, bytes) {
  * @param {typeof import("three")} THREE
  * @param {object} payload  `GET .../field`'s answer.
  * @param {Record<string, ArrayBuffer>} [textures]  Each texture's raw texels, by its `name`.
+ * @param {{ lit?: boolean }} [options]  `lit`: lit by the stage as a mesh is, where it stands among
+ *   other surfaces; a field shown alone shades itself.
  * @returns {import("../viewer/sceneContract.js").KitScene & {
  *   parameters: { name: string, value: number, min: number, max: number }[],
  *   parameterValue: (name: string) => number, setParameter: (name: string, value: number) => boolean,
  *   bodyCount: number }}
  */
-export function buildFieldScene(THREE, payload, textures = {}) {
+export function buildFieldScene(THREE, payload, textures = {}, { lit = false } = {}) {
   assertPayload(payload);
   const [x0, y0, z0, x1, y1, z1] = payload.region;
 
@@ -206,6 +297,7 @@ export function buildFieldScene(THREE, payload, textures = {}) {
     uProjectionInverse: { value: new THREE.Matrix4() },
     uCameraToScene: { value: new THREE.Matrix4() },
     uSceneToClip: { value: new THREE.Matrix4() },
+    uSceneToView: { value: new THREE.Matrix4() },
     uViewport: { value: new THREE.Vector4(0, 0, 1, 1) },
     uBoxMin: { value: new THREE.Vector3(x0, y0, z0) },
     uBoxMax: { value: new THREE.Vector3(x1, y1, z1) },
@@ -213,6 +305,8 @@ export function buildFieldScene(THREE, payload, textures = {}) {
     uStepScale: { value: 1 },
     uLight: { value: new THREE.Vector3(0.35, -0.45, 0.82).normalize() },
     uSurface: { value: SURFACES.map((rgb) => new THREE.Vector3(...rgb)) },
+    uLift: { value: 0 },
+    uFlat: { value: 0 },
     ...fieldClipUniforms(THREE)
   };
   let clipPlanes = [];
@@ -227,9 +321,11 @@ export function buildFieldScene(THREE, payload, textures = {}) {
     uniforms[described.uniform] = { value: texture };
   }
 
-  const material = new THREE.ShaderMaterial({
+  const library = `precision highp sampler3D;\n${payload.entry?.field === "gsl_field" ? "#define FIELD_CAPS\n" : ""}${payload.code}\n${FIELD_CLIP_GLSL}`;
+  const dressed = lit ? litMaterial(THREE, uniforms, group, library) : null;
+  const material = dressed ? dressed.material : new THREE.ShaderMaterial({
     name: "field", uniforms, uniformsGroups: [group], vertexShader: VERTEX,
-    fragmentShader: `precision highp sampler3D;\n${payload.entry?.field === "gsl_field" ? "#define FIELD_CAPS\n" : ""}${payload.code}\n${FIELD_CLIP_GLSL}\n${FRAGMENT}`,
+    fragmentShader: `${library}\n${SURFACE}\n${FRAGMENT}`,
     depthTest: true, depthWrite: true, transparent: false, toneMapped: true
   });
   const geometry = new THREE.BufferGeometry();
@@ -255,6 +351,7 @@ export function buildFieldScene(THREE, payload, textures = {}) {
     uniforms.uCameraToScene.value.multiplyMatrices(sceneToWorldInverse, camera.matrixWorld);
     projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     uniforms.uSceneToClip.value.multiplyMatrices(projection, mesh.matrixWorld);
+    uniforms.uSceneToView.value.multiplyMatrices(camera.matrixWorldInverse, mesh.matrixWorld);
     writeFieldClip(THREE, uniforms, clipPlanes, sceneToWorldInverse);
     uniforms.uOrthographic.value = camera.isOrthographicCamera ? 1 : 0;
     renderer.getCurrentViewport(viewport);
@@ -288,7 +385,35 @@ export function buildFieldScene(THREE, payload, textures = {}) {
     setClipPlanes(planes) {
       clipPlanes = Array.isArray(planes) ? planes : [];
     },
-    // The field is shaded by its own fragment and takes no shadow: the host's looks leave it alone.
+    /** Whether the stage lights it (`lit`). */
+    lit,
+    /**
+     * What a lit field wears, as a look dresses a lit mesh (`viewer/surfaceLook.js`): its finish, the
+     * lift of its own colour, `flat` for colour without shading, its `opacity` (below 1 it is drawn
+     * see-through: the first surface along each ray, blended, writing no depth) and the surface
+     * `model` its lighting is drawn by. Null: three's own plain finish. Its bodies' colours are the
+     * material's `uSurface`. Nothing for a field that shades itself.
+     */
+    setFinish(finish = null) {
+      if (!dressed) return;
+      const plain = finish || {};
+      const number = (value, fallback) => (Number.isFinite(Number(value)) && value != null ? Number(value) : fallback);
+      material.roughness = number(plain.roughness, 1);
+      material.metalness = number(plain.metalness, 0);
+      material.clearcoat = number(plain.clearcoat, 0);
+      material.clearcoatRoughness = number(plain.clearcoatRoughness, 0);
+      material.specularIntensity = number(plain.specularIntensity, 1);
+      material.envMapIntensity = number(plain.envMapIntensity, 1);
+      uniforms.uLift.value = number(plain.lift, 0);
+      uniforms.uFlat.value = plain.flat === true ? 1 : 0;
+      const opacity = Math.min(Math.max(number(plain.opacity, 1), 0), 1);
+      const seeThrough = opacity < 0.999;
+      if (material.transparent !== seeThrough) { material.transparent = seeThrough; material.needsUpdate = true; }
+      material.opacity = opacity;
+      material.depthWrite = !seeThrough;
+      dressed.setModel(plain.model || null);
+    },
+    // A field shown alone is shaded by its own fragment, and none takes a shadow: the host's looks leave it alone.
     setSurfaceLook() {},
     setShadowReception() {},
     dispose() {
