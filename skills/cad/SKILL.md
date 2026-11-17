@@ -27,6 +27,7 @@ the page the person has open updates. Files are exports, made when asked.
 | **Find how far each joint can move** | `cad model ranges <id>`, then the ranges in the body. | [Joint stops](#joint-stops) |
 | **Explode, reveal or showcase a model** | `cad.build123d`'s `animation()` in the body. | [Animation](references/animation.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF, GLB or DXF** | Show it to the user. | [Show the model](#show-the-model) |
+| **Model an implicit part in GSL (omega): lattices, infill, blended organic shapes** | A `.gsl` with `@scene(size)`, then `cad omega check part.gsl` after every edit. | [GSL](references/omega-gsl.md) |
 | **Can it be machined, cut and bent, molded or printed?** | The part's model or file, its material and the process the request names or implies; with none, no check. | [Can it be made?](#can-it-be-made) |
 | **Will it hold under a load, how far does it bend?** | The fea skill ($fea), on the model's id or its STEP or xbf. | Its study reference |
 
