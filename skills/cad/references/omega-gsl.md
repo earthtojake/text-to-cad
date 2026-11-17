@@ -108,7 +108,7 @@ return min(skin, infill);
 - Reserved and builtin names are not identifiers: `part`, `map`, `box`, `sphere`, `select`, `chan`, among others.
   The compiler suggests a rename.
 - A shape's `.color` is sRGB `[r, g, b]` in 0..1, or `color.fromHex("#8fa3b8")`; a bare hex string is refused.
-- `shape.dp` is a field's gradient. In omega-core 0.1.2 it does not compile on anything built with `profileXY`.
+- `shape.dp` is a field's gradient.
 - `remap(shape, q)` reads `shape` at the point `q` and drops its bounds; `transform.translate`, `transform.rotateX`
   and the rest move a shape and keep them.
 - `@range(lo, hi) name = value;` makes a top-level number a slider: make a part's driving dimensions sliders.
@@ -193,8 +193,7 @@ so a departure can be named, and what an exact one costs.
   - on a curved seam it runs full: about 0.08 mm for `r = 3` on a 12 mm boss standing square, and up to
     1.7 mm for `r = 12` where a 24 mm pipe leaves a 30 mm one at 30 degrees;
   - it fills any concave gap narrower than `2r`, and can leave a pocket or slivers in one near that width;
-  - `bounds` answers unproven and `certify` indeterminate on a model that uses it;
-  - in omega-core 0.1.2 a slider read inside its closures stops the model from being shown as a field.
+  - `bounds` answers unproven and `certify` indeterminate on a model that uses it.
 - The closing reads both fields' gradients, so it breaks down where the two bodies share a flush face (the sides
   of a part extruded across, a lip's front face): it grows fins and pulls the face back. For a part that is one
   profile extruded, take the closing of the 2D profiles and extrude the result; the flush faces never meet a
@@ -239,15 +238,15 @@ loop leans on, for a plate named `plate`:
   0.5 mm clear of the surface: nearer, and on most lattices anywhere, the verdict is `indeterminate`, which is no
   answer; measure with `eval` and `surface` there.
 - **`volume` catches a gross error only, and slowly.** It needs its `region`. Its bracket is 2 to 4 percent wide
-  on a plain part, and on a blended part or a lattice it is wider and `"converged": false` after about 100
-  seconds (`"relativeTolerance": 0.1` answers in about 20). Leave it out of the loop.
+  on a plain part, and on a blended part or a lattice it is wider: it stops after 10 seconds with the bracket it
+  has, `"converged": false` and `"reason": "time"` (`timeLimit` sets the seconds). Leave it out of the loop.
 - **`bounds` gives the part's box when it answers `"proven": true`.** It takes about a second and needs no
   region. The box holds the whole part, thin walls included, and stands off it by at most `cellSize`: about
   0.02 mm on a plain part, so a box larger than the part by more is material where none was meant (a blend
-  bulging through a face). Read `cellSize` before the box: omega-core 0.1.2 can answer `proven` with one of
-  several millimetres on an axis, where an angle is folded with `atan`, as `map.patternPolarXY` does. Placed by
-  a `map` over a list of positions, the same repeats give a tight box. With `"proven": false` (`reason` says
-  why: a lattice under `normalizeField`, or an exact closing) the box is fitted on a coarse grid and can miss
+  bulging through a face). Where an angle is folded with `atan`, as `map.patternPolarXY` does, it answers
+  `"proven": false` with the reason `loose`; placed by a `map` over a list of positions, the same repeats give a
+  proven, tight box. With `"proven": false` (`reason` says why: `loose`, a lattice under `normalizeField`, or an
+  exact closing) the box is fitted on a coarse grid and can miss
   a wall thinner than a cell: read no size from it, and probe the faces with `eval`.
 
 `"defs"` gives a name another value for that question alone (`"defs": "r = 6.5;"`), so a size is tried without
