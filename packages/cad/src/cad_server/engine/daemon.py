@@ -205,10 +205,10 @@ def _note(said: str, denied: bool = False) -> None:
 # while it is underway (``Daemon.handle``).
 SERVING = frozenset({"serve", "viewer", "http", "read", "warm"})
 # The requests that are no command's, which the last command's time (``Daemon.worked``) never counts
-# (``Daemon.ended``): who answers, a page token read again, an app's hold. Besides these, any request marked
-# ``internal`` (what one server asks another) and an ``http`` that names a port (an updater handing the pages' port
-# on, 0.11.10's among them) are not counted either.
-UNCOUNTED = frozenset({"pid", "token", "hold"})
+# (``Daemon.ended``): who answers, a page token read again, an app's hold, cad's own update switched. Besides these,
+# any request marked ``internal`` (what one server asks another) and an ``http`` that names a port (an updater handing
+# the pages' port on, 0.11.10's among them) are not counted either.
+UNCOUNTED = frozenset({"pid", "token", "hold", "auto_update"})
 # The type a worker answers bytes of a held document that do not read with (``build.Unreadable``),
 # as ``worker.refusal`` names it.
 UNREADABLE = "cad.engine.build:Unreadable"
@@ -528,6 +528,25 @@ def rotate_token(told: Callable[[str], None] = lambda _line: None) -> str | None
         told("the server that runs still admits the token before until it stops (`cad server stop`); it reads the "
              "new one as it starts again")
     return token
+
+
+def switch_auto_update(request: dict[str, Any]) -> dict[str, Any]:
+    """cad's own update switched by the server (``{"op": "auto_update", "on", "installer", "ran_for"}``: ``cad
+    auto-update on|off`` where a server runs), which keeps the switches in the state folder as the command would
+    (``auto_update.change``), so a shell whose sandbox may not write that folder (an agent app's) needs no permission:
+    ``{"ok": true, "switches"}``, or ``{"failed"}`` in one line. Whether the cad that asked may turn it on (a uv tool)
+    is that command's to judge, for the cad it runs from."""
+    from cad_server._internal import auto_update
+
+    on, installer, ran_for = request.get("on"), request.get("installer"), request.get("ran_for")
+    if type(on) is not bool or installer not in (None, True, False) \
+            or not (ran_for is None or (isinstance(ran_for, str) and 0 < len(ran_for) <= 64)):
+        return {"failed": "not a switch of cad's own update: on is true or false, installer true, false or null, "
+                          "ran_for a release or null"}
+    try:
+        return {"ok": True, "switches": auto_update.change(on, installer, ran_for)}
+    except OSError as error:
+        return {"failed": str(error)}
 
 
 def _reportable(report: dict[str, Any]) -> bool:
@@ -1644,6 +1663,8 @@ class Daemon:
         elif op == "token":
             # ``cad server --rotate-token`` (``rotate_token``): the page token read again, taken at once.
             send(self.retoken())
+        elif op == "auto_update":
+            send(switch_auto_update(request))
         elif op == "stop":
             # ``drain``: an update's switch (0.11.10's and earlier's), which waits for what is in flight; else at once.
             send({"ok": True, "draining": True} if request.get("drain") else {"ok": True})

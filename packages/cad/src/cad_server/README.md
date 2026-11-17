@@ -97,7 +97,9 @@ cad_server/
   deletes a past release's files.
 - **`cad auto-update [status|on|off]`**: whether cad updates itself (below). `on` is refused unless this
   cad is a uv tool; `on --installer` also has the install command run again after each update; `off` turns
-  both off.
+  both off. Where a server runs, it keeps the switches (`{"op": "auto_update"}`), as it does every other
+  command's writing, so a shell whose sandbox may not write cad's state folder needs no permission; with none
+  running, the command writes them itself.
 - **`cad telemetry [status|on|off]`**: the person's answer about usage stats and crash reports.
 
 There is no command that installs, updates or removes cad: that is uv's (`uv tool install cad`,

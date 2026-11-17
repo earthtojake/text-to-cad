@@ -117,33 +117,58 @@ class ConnectTest(unittest.TestCase):
 
 class SandboxTest(unittest.TestCase):
     """In a shell whose sandbox refuses the loopback port the engine's HTTP server needs, no engine
-    is started: the start says so at once, and so does one whose daemon could not listen."""
+    is started: the start says so at once, and so does one whose daemon could not listen. Whether it may is asked
+    of the system (a loopback port bound and let go), never read from the sandbox's variables, which an app hands a
+    command it runs outside its sandbox too (Codex's, approved)."""
+
+    SANDBOX = {"CODEX_SANDBOX": "seatbelt", "CODEX_SANDBOX_NETWORK_DISABLED": "1"}
 
     def setUp(self) -> None:
         from unittest import mock
 
-        self.engine = tempfile.mkdtemp(prefix="eng-")
+        self.engine = tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)
         self.addCleanup(shutil.rmtree, self.engine, True)
         cleared = {key: value for key, value in os.environ.items() if not key.startswith("CODEX_SANDBOX")}
         patched = mock.patch.dict(os.environ, {**cleared, "CAD_ENGINE_DIR": self.engine}, clear=True)
         patched.start()
         self.addCleanup(patched.stop)
 
-    def test_no_engine_in_a_sandbox_without_network_is_said_in_one_line_and_starts_none(self) -> None:
+    def test_no_engine_where_the_loopback_port_is_refused_is_said_in_one_line_and_starts_none(self) -> None:
+        import errno
+        import socket
         from unittest import mock
 
         from cad.engine import client
 
-        self.assertIn(("CODEX_SANDBOX_NETWORK_DISABLED", "1"), client.SANDBOXES, "cadgen's host adapter names it")
-        with mock.patch.dict(os.environ, {"CODEX_SANDBOX": "seatbelt", "CODEX_SANDBOX_NETWORK_DISABLED": "1"}), \
-                mock.patch.object(client, "_spawn", side_effect=AssertionError("a daemon was started")):
-            with self.assertRaises(client.NotRunning) as said:
-                client.request({"op": "status"})
-            self.assertEqual(str(said.exception), client.NOT_RUNNING)
-            with self.assertRaises(ConnectionError) as said:
-                client.start()
-        self.assertEqual(str(said.exception), client.SANDBOXED)
+        class Refused(socket.socket):  # the sandbox: Seatbelt refuses the bind
+            def bind(self, address):
+                raise PermissionError(errno.EPERM, "Operation not permitted")
+
+        for variables in (self.SANDBOX, {}):  # the system says so, whatever the variables say
+            with self.subTest(variables=variables), mock.patch.dict(os.environ, variables), \
+                    mock.patch.object(client.socket, "socket", Refused), \
+                    mock.patch.object(client, "_spawn", side_effect=AssertionError("a daemon was started")):
+                with self.assertRaises(client.NotRunning) as said:
+                    client.request({"op": "status"})
+                self.assertEqual(str(said.exception), client.NOT_RUNNING)
+                with self.assertRaises(ConnectionError) as said:
+                    client.start()
+                self.assertEqual(str(said.exception), client.SANDBOXED)
         self.assertNotIn("\n", client.SANDBOXED)
+
+    def test_a_command_run_outside_the_sandbox_with_its_variables_still_set_starts_the_server(self) -> None:
+        """Codex hands a command it approved to run outside its sandbox the sandbox's variables still: ``cad server
+        start`` there starts the server, and every later command finds it."""
+        from unittest import mock
+
+        from cad.engine import api, client
+
+        self.addCleanup(api.stop)  # before the folder goes: this test's engine, where ``setUp`` names it
+        with mock.patch.dict(os.environ, self.SANDBOX):
+            self.assertFalse(client._sandboxed())
+            said = client.start()
+            self.assertEqual(said, f"started the cad server (cad {client.version()})")
+            self.assertEqual(client.request({"op": "pid"})["ok"], True)
 
     def test_a_daemon_that_cannot_listen_leaves_its_reason_and_the_client_says_it_at_once(self) -> None:
         import errno

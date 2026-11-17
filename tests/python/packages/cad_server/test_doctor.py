@@ -121,6 +121,32 @@ class DoctorTests(unittest.TestCase):
         with mock.patch.object(base, "ensure", side_effect=base.Refused("it needs the network once: dns error")):
             self.assertEqual(_run([])[0], 0)
 
+    def test_where_the_builds_ran_in_an_environment_cad_run_made_its_kernel_is_said_not_the_base_s_absence(self) -> None:
+        """A build's worker runs in the environment ``cad run`` made for its program where that is not the base (a
+        setting of uv's from the caller, more than the kernel): doctor says that one's kernel, and the base not made,
+        never "not made" alone after a build that worked."""
+        from cad_server._internal import base
+
+        here = base.Installation.here()
+
+        def made(name: str, inputs: dict, integrations: list[str]) -> Path:
+            env = base.folder() / name
+            base.interpreter(env).parent.mkdir(parents=True)
+            base.interpreter(env).write_text("", encoding="utf-8")
+            (env / base.MARKER).write_text(json.dumps({"schema": base.SCHEMA, "key": name, "inputs": inputs,
+                                                       "integrations": integrations}), encoding="utf-8")
+            return env
+
+        made("kicad0000", base._inputs(here), ["kicad"])  # an integration's: no kernel
+        made("older000", {**base._inputs(here), "release": "0.0.1"}, ["build123d"])  # another release's
+        ran = made("ran00000", base._inputs(here), ["build123d"])
+        with mock.patch.object(base, "ensure", return_value=None):
+            code, out, _err = _run([])
+        self.assertEqual(code, 0)
+        self.assertIn(f"  kernel   OK — OCP at /site/OCP.pyd (the environment `cad run` made for a program, {ran}; the "
+                      f"CAD kernel environment, {base.where()}, made on first need)\n", out)
+        doctor._probe_kernel.assert_called_with(str(base.interpreter(ran)))
+
     def test_a_kernel_that_will_not_load_exits_1_and_the_whole_report_is_on_stdout(self) -> None:
         with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_FAILED, REFUSED)), \
                 mock.patch.object(sys, "platform", "linux"):

@@ -573,6 +573,11 @@ class ThroughTheDaemonTest(unittest.TestCase):
         self.assertEqual(died, analytics.died(3), "its exit status")
         self.assertNotIn("features", json.dumps(counted), "a build's features are usage: not counted")
         # The window, sent as the process ``cli``: no failure of the person's, no reason, no exception but the death.
+        # The engine stopped first: its CAD app's recorders are senders too, each sending what processes kept a moment
+        # after it starts (``Recorder.send_kept``, ``analytics.KEPT_SECONDS``): it takes the kept file aside and puts
+        # back what the receiver did not take, so a read of that file beside it may find none.
+        stopped = self.run_in("-m", "cad_server.engine", "stop")
+        self.assertEqual(stopped.returncode, 0, stopped.stderr)
         env = {**self.env, "CAD_API_URL": "http://127.0.0.1:9"}
         sent = subprocess.run([sys.executable, "-P", "-m", "cad_server._internal.telemetry_send"], env=env,
                               capture_output=True, text=True, timeout=120)

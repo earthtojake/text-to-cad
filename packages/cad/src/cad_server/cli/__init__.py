@@ -330,8 +330,9 @@ def _report(error: Exception) -> None:
 
 # Commands that reach a server of any release (``cad.engine.client.RELEASE``): the server's own -- which start this
 # release's in place of another's, stop whichever runs, and say which runs --, `mcp`, which decides it itself
-# (``cad_mcp.shim.start_server``), and those that only ask whether one runs, and which (`doctor`, `cache`).
-_ANY_RELEASE = frozenset({"server", "status", "stop", "mcp", "doctor", "cache"})
+# (``cad_mcp.shim.start_server``), those that only ask whether one runs, and which (`doctor`, `cache`), and
+# `auto-update`, whose switches are the person's, kept for every release, which any server that knows how keeps.
+_ANY_RELEASE = frozenset({"server", "status", "stop", "mcp", "doctor", "cache", "auto-update"})
 # Commands that never carry the analytics notice: the engine's server and `mcp`, writing nowhere a person reads;
 # `telemetry`, which says it its own way; `setup`, which an updater of 0.11.10 and earlier runs with no person to read
 # it; `run`, which is only the python it runs, as the `cad` command's `run` is; and `requirement`, whose

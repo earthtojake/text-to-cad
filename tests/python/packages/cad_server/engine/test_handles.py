@@ -466,11 +466,11 @@ class UnreachedEngineTest(unittest.TestCase):
         engine = folder / "engine"
         engine.mkdir(mode=0o700)
         (folder / "peg.py").write_text(UNREACHED, encoding="utf-8")
-        from cad.engine.client import NOT_RUNNING, SANDBOXES
+        from cad.engine.client import NOT_RUNNING
 
         env = {**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(engine),
                "CAD_STATE_DIR": str(folder / "state"), "CAD_CACHE_DIR": str(folder / "cache"),
-               **dict(SANDBOXES)}
+               "CODEX_SANDBOX": "seatbelt", "CODEX_SANDBOX_NETWORK_DISABLED": "1"}
         for command in ([sys.executable, "peg.py"], [sys.executable, "-m", "cad_server.cli", "run", "peg.py"]):
             done = engine_daemon.run(command, cwd=folder, env=env)
             self.assertEqual((done.returncode, done.stdout, done.stderr), (1, "", f"cad: {NOT_RUNNING}\n"), command)

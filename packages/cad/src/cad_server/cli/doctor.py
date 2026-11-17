@@ -1,6 +1,7 @@
 """``cad doctor``: one read-only report of this cad -- its release, its Python and where it is installed, its data
 folder, its cache folder and how much ``cad cache prune`` would free there, whether the CAD kernel environment is made
-(``cad_server._internal.base``) and loads, where each integration's operations run, whether the server runs and
+(``cad_server._internal.base``) and loads -- where it is not, the environment ``cad run`` made for a program that a
+build ran in, if one was (``extras.last_with_kernel``) --, where each integration's operations run, whether the server runs and
 its release, and cad's own update (``cad_server._internal.auto_update``: both switches, whether this cad is a uv tool,
 whether uv is found, and the last attempt). It repairs, registers, starts, writes and deletes nothing: ``--check``
 prints the same report.
@@ -158,9 +159,18 @@ def _kernel() -> dict:
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return _check("kernel", WARNING, f"unknown ({type(error).__name__}: {error})")
     if found is None:  # made on first need; a wheel installed --no-deps (the release smoke test) is a correct install
-        return _check("kernel", INFO, f"not made — {base.where()}, made on first need: the first build or view that "
-                                      "needs it")
-    where = "this installation carries it" if found.own else f"the CAD kernel environment, {found.prefix}"
+        from cad_server._internal import extras
+
+        ran = extras.last_with_kernel(base.Installation.here())
+        if ran is None:
+            return _check("kernel", INFO, f"not made — {base.where()}, made on first need: the first build or view "
+                                          "that needs it")
+        # The builds ran where `cad run` made an environment for their program (more than the kernel, or a setting of
+        # uv's from its caller): that one's kernel, said for what it is, and the base said not made yet.
+        found, where = ran, (f"the environment `cad run` made for a program, {ran.prefix}; the CAD kernel environment, "
+                             f"{base.where()}, made on first need")
+    else:
+        where = "this installation carries it" if found.own else f"the CAD kernel environment, {found.prefix}"
     state, detail = _probe_kernel(found.python)
     if state == KERNEL_OK:
         return _check("kernel", OK, f"OK — OCP at {detail} ({where})")

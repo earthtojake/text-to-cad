@@ -11,7 +11,9 @@
   importing every module of it loads no kernel module, not even bound lazily (the build123d extra lives in
   the base: ``cad_server._internal.base``). Of the library it imports the modules that need no kernel.
 - **The shim** (``cad_mcp``): the stdio transport an agent app starts (``cad mcp``): the standard library, the
-  library's engine client (``cad.engine``) and the server's MCP protocol (``cad_server.mcp``), loading no kernel.
+  library's engine client (``cad.engine``), the server's MCP protocol (``cad_server.mcp``) and what cad's own update
+  knows of the uv tool ``cad`` (``cad_server._internal.auto_update``: where it is installed, whose server the shim
+  starts), loading no kernel.
 
 Inside the library, each integration's package (``cad/<integration>/``, ``cad.registry.INTEGRATIONS``)
 imports only its own extra's dependencies, and each document type's (``cad/<type>/``) no third-party
@@ -131,7 +133,7 @@ class SidesTest(unittest.TestCase):
         self.assertEqual(loaded(code), [])
 
     def test_the_shim_imports_the_engine_client_and_the_mcp_protocol_and_no_kernel(self) -> None:
-        allowed = ("cad.engine", "cad_server.mcp")
+        allowed = ("cad.engine", "cad_server.mcp", "cad_server._internal.auto_update")
         offenders = []
         for name, path in modules(SHIM_PACKAGE).items():
             for line, imported in imports(name, path):

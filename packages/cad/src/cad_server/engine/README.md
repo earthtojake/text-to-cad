@@ -254,7 +254,10 @@ engine folder's, 0.8's), `another cad-server (<name>, pid N)` (the words the cod
 **Starting and updating.** One server a device, in one engine folder, whatever release runs it: the layout of 0.11.10
 and earlier, kept as it was, with one state folder and one cache folder (`cad.engine.places`). Only `cad server start`
 starts it (and `cad mcp`, which starts it so, then serves the CAD app over stdio): a newer release's start replaces an
-older release's server, an older one joins a newer server that runs (`client.start`, `cad_mcp.shim.start_server`).
+older release's server, an older one joins a newer server that runs (`client.start`, `cad_mcp.shim.start_server`). A
+`cad mcp` that is not the uv tool `cad` installed on the computer (Codex's plugin line runs it from uvx's cache) starts
+none of its own: it runs the installed cad's `cad server start` and joins the server that leaves, whatever the two
+releases are, so the server is always the one that updates itself.
 Every other command, `cad run` and a model run directly among them, attaches to the one that runs, and says so in one
 line where none does (`not_running`). A model's own process -- the library, which never starts a server of its own
 environment -- starts none. No client starts another release's engine beside the device's: an engine runs on until
@@ -1675,8 +1678,9 @@ engine; its connections' pipes are in the `clients/` folder beside them. The 0.1
 
 **Starting the engine.** Outside a sandbox a client starts the daemon as before and waits for its
 door. Inside one, a daemon could make its door but never bind its HTTP port, and every build
-serves its document: so it starts none. A shell that says it is sandboxed without network (a
-variable the distribution names, `client.SANDBOXES`) and finds no door is refused at once, in one line:
+serves its document: so it starts none. A start that the system refuses a loopback port (`client._sandboxed`: one
+bound and let go, never a variable, since an app hands a command it approved to run outside its sandbox the
+sandbox's variables still) and finds no door is refused at once, in one line:
 no engine runs and this shell's sandbox cannot start one; run the command again outside the sandbox,
 or run `cad server start` outside it (`client.SANDBOXED`). A daemon
 started where it may not bind a loopback port (`daemon._can_listen`, before it makes its door) or

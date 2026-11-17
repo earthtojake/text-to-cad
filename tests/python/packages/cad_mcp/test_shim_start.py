@@ -29,11 +29,15 @@ def refuse(*args, **kwargs):
 
 class StartTest(unittest.TestCase):
     def test_the_start_is_cad_server_start_s_and_holds_later_requests_to_this_release_or_a_newer_one(self) -> None:
-        with mock.patch.object(client, "AT_LEAST", None), mock.patch.object(client, "RELEASE", None), \
-                mock.patch.object(client, "start", return_value="started the cad server") as start:
-            self.assertEqual(shim.start_server(), "started the cad server")
-            self.assertEqual((client.AT_LEAST, client.RELEASE), (version(), None))
-        start.assert_called_once_with()
+        """No uv tool ``cad`` installed, or this process is it: this release's server, as ``cad server start``."""
+        for tool in (None, sys.prefix):
+            with self.subTest(tool=tool), mock.patch.object(shim, "installed_tool", return_value=tool), \
+                    mock.patch.object(shim, "installed", side_effect=AssertionError("the installed cad's start")), \
+                    mock.patch.object(client, "AT_LEAST", None), mock.patch.object(client, "RELEASE", None), \
+                    mock.patch.object(client, "start", return_value="started the cad server") as start:
+                self.assertEqual(shim.start_server(), "started the cad server")
+                self.assertEqual((client.AT_LEAST, client.RELEASE), (version(), None))
+            start.assert_called_once_with()
 
     def test_a_server_of_another_release_found_later_is_said_in_cad_s_one_line(self) -> None:
         other = types.SimpleNamespace(release="0.0.1", close=lambda: None)

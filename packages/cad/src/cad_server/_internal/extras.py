@@ -80,9 +80,9 @@ from typing import Any, Callable, Iterable
 from cad_server._internal import base
 
 __all__ = ["SKIPPED", "Making", "Project", "Refused", "Spec", "admits", "admits_line", "ensure", "fingerprint",
-           "fingerprints", "header", "integration_spec", "integrations", "key", "local_package", "locked_cad",
-           "making", "normalized", "on", "pinned", "project", "python_line", "refusal", "split", "supported", "tell",
-           "uv_config", "uv_settings", "where"]
+           "fingerprints", "header", "integration_spec", "integrations", "key", "last_with_kernel", "local_package",
+           "locked_cad", "making", "normalized", "on", "pinned", "project", "python_line", "refusal", "split",
+           "supported", "tell", "uv_config", "uv_settings", "where"]
 # uv's settings that say how it reaches an index, never what it resolves: a run that differs from the base's
 # only by them still runs in the base, made with the engine's own.
 HOW = frozenset({"UV_NATIVE_TLS", "UV_SYSTEM_CERTS", "UV_HTTP_TIMEOUT", "UV_KEYRING_PROVIDER", "UV_INSECURE_HOST"})
@@ -794,6 +794,34 @@ def ensure(installation: base.Installation, spec: Spec | list[str], *, told: Cal
 def marker(env: base.Environment) -> dict[str, Any]:
     """The marker of an environment ``ensure`` gave (``{}`` for the installation's own)."""
     return base.complete(Path(env.prefix)) or {}
+
+
+def last_with_kernel(installation: base.Installation) -> base.Environment | None:
+    """The environment ``cad run`` made beside the base for a program -- one with more than the build123d integration
+    alone, or a setting of uv's from its caller (a ``UV_FIND_LINKS``, a ``UV_INDEX``): not the base -- with the CAD
+    kernel in it (the build123d integration), of the installation's base's inputs (its release, where it installs from,
+    its Python line and platform), complete; the one used last (its marker's time, ``_used``), or None. What a build's
+    worker ran in where the base itself was never needed (``cad doctor`` says it). Never raises."""
+    inputs = base._inputs(installation)
+    found: list[tuple[float, Path, dict[str, Any]]] = []
+    try:
+        entries = [Path(entry.path) for entry in os.scandir(base.folder()) if entry.is_dir(follow_symlinks=False)]
+    except OSError:
+        return None
+    for env in entries:
+        marker = base.complete(env)
+        integrations = marker.get("integrations") if marker is not None else None
+        if marker is None or marker.get("inputs") != inputs or not isinstance(integrations, list) \
+                or "build123d" not in integrations:
+            continue
+        try:
+            found.append(((env / base.MARKER).stat().st_mtime, env, marker))
+        except OSError:
+            continue
+    if not found:
+        return None
+    _when, env, marker = max(found, key=lambda item: item[0])
+    return base._found(env, marker)
 
 
 def _used(env: Path) -> None:

@@ -223,7 +223,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    or a `cad` command: the daemon, the registry, the CAD Viewer's and the CAD app's servers, every
    verb, the environment makers, telemetry -- imports the library's kernel-free modules, and never
    the kernel or an integration's code (law 28). The shim (`cad_mcp`), the stdio transport
-   an agent app starts, is the standard library alone. The server reaches into the library, never the
+   an agent app starts, is the standard library, the engine's client, the server's MCP protocol and what cad's own
+   update knows of the uv tool `cad` (whose server it starts), and loads no kernel. The server reaches into the library, never the
    other way: its telemetry is an observer the engine calls with plain facts (`engine.api.observers`),
    which the server's commands append.
 4. **A model's document is XCAF; files are explicit.** *Every document.* A model's document is
@@ -429,8 +430,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     one engine, through the one door in the engine folder, whatever release it is -- one of 0.11.10 or earlier
     too. Only `cad server start` and `cad mcp` start it; every other client that finds none says so in one line
     and starts none, and the library never starts a server of its own environment. A start of a newer release
-    replaces an older release's engine; an older one joins a newer engine that runs (forward only); a `cad`
-    command of another release than the engine says so in one line. cad's own update stops the engine, installs
+    replaces an older release's engine; an older one joins a newer engine that runs (forward only); a `cad mcp` that
+    is not the uv tool `cad` installed on the computer runs that tool's own `cad server start` and joins its engine,
+    whatever the two releases are; a `cad` command of another release than the engine says so in one line. cad's own update stops the engine, installs
     the new release and starts it again (the engine's **Starting and updating**). A tab names a model's id, or a file's id after a launcher
     registers it; Python scripts are never documents. A page never replaces or re-executes the engine. Its one page and document reads
     share its authenticated HTTP listener. `serve` and `viewer` reuse it and start none, with no

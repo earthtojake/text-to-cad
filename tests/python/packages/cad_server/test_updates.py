@@ -70,6 +70,15 @@ class UpdatesTest(unittest.TestCase):
         self.assertEqual(len(asked), 2)
         self.assertEqual(updates.feed(get=get, now=start + 2 * updates.CHECK_SECONDS)["latest"], "0.9.1")
 
+    def test_the_feed_is_asked_for_as_cad(self) -> None:
+        """The request names cad, the product (``apps/api`` keys nothing on it)."""
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"latest": "0.9.1"}'
+        with mock.patch("urllib.request.urlopen", return_value=response) as opened:
+            self.assertEqual(updates._get("http://127.0.0.1:9/v1/versions"), {"latest": "0.9.1"})
+        request = opened.call_args.args[0]
+        self.assertEqual((request.get_header("User-agent"), request.get_header("Accept")), ("cad", "application/json"))
+
     def test_a_feed_is_read_for_what_this_cadgen_knows(self) -> None:
         self.assertEqual(updates.parse_feed({"latest": "1.2.3", "minimum": {"claude-directory": "1.0.0"}, "notices": []}),
                          {"latest": "1.2.3"})

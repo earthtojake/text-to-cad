@@ -40,7 +40,12 @@ class Case(unittest.TestCase):
         self.uv = self.bin / ("uv.exe" if os.name == "nt" else "uv")
         self.uv.write_text("", encoding="utf-8")
         self.uv.chmod(0o755)
-        for patch in (mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state), "PATH": str(self.bin)}),
+        # An engine folder of its own, where no server runs: the switches written here (``SwitchesTest``), never by
+        # the server the runner started for this file (``ServerSwitchesTest`` starts one of its own).
+        self.engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None))
+        self.addCleanup(__import__("shutil").rmtree, self.engine, ignore_errors=True)
+        for patch in (mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state), "PATH": str(self.bin),
+                                                   "CAD_ENGINE_DIR": str(self.engine)}),
                       mock.patch.object(sys, "prefix", str(self.tool)),
                       mock.patch.object(cad_server, "__version__", "0.1.0"),
                       mock.patch.object(updates, "checking", return_value=True)):
@@ -86,6 +91,44 @@ class SwitchesTest(Case):
                 self.assertFalse(auto_update.switches()["on"])
         (self.tool / "uv-receipt.toml").write_text('[tool]\nrequirements = ["cad==0.1.0"]\n', encoding="utf-8")
         self.assertEqual(auto_update.uv_tool(), self.tool, "a receipt's requirement as a string")
+
+
+class ServerSwitchesTest(Case):
+    """Where a server runs, ``cad auto-update on|off`` has it keep the switches (``{"op": "auto_update"}``), so a shell
+    whose sandbox may not write the state folder (Codex's: ``settings.lock: Operation not permitted``) needs no
+    permission; whether this cad may turn it on is judged here, for the cad the command runs from."""
+
+    def test_the_server_keeps_the_switches_and_the_uv_tool_rule_is_this_command_s(self) -> None:
+        from tests.python.support import engine_daemon
+
+        env = {**os.environ, "PATH": os.environ.get("PATH", ""), "CAD_UPDATE_CHECK": "0",
+               "CAD_CACHE_DIR": str(self.tmp / "cache")}
+        engine_daemon.start(env, self.addCleanup)
+        sandboxed = mock.patch.object(auto_update, "change", side_effect=PermissionError(1, "Operation not permitted",
+                                                                                          "settings.lock"))
+        with sandboxed:
+            self.assertEqual(self.cli("on", "--installer"), (0, "auto-update: on\ninstaller: on\n", ""))
+            self.assertEqual(auto_update.switches(), {"on": True, "installer": True, "installer_ran_for": "0.1.0"},
+                             "kept by the server, in the state folder: this release the one the installer ran for")
+            self.assertEqual(self.cli("off"), (0, "auto-update: off\ninstaller: off\n", ""))
+            self.assertEqual(auto_update.switches()["on"], False)
+            (self.tool / "uv-receipt.toml").unlink()  # this command's cad is no uv tool: refused before the server
+            code, out, err = self.cli("on")
+        self.assertEqual((code, out), (1, ""))
+        self.assertIn("not a uv tool", err)
+        self.assertFalse(auto_update.switches()["on"])
+
+    def test_with_no_server_or_one_that_does_not_know_how_the_command_writes_them_itself(self) -> None:
+        with mock.patch.object(client, "request", return_value={"failed": "unknown request 'auto_update'"}) as asked:
+            self.assertEqual(self.cli("on"), (0, "auto-update: on\ninstaller: off\n", ""))
+        self.assertEqual(asked.call_args.args[0], {"op": "auto_update", "on": True, "installer": None, "ran_for": None})
+        self.assertEqual(asked.call_args.kwargs["start"], False, "a switch never starts a server")
+        self.assertTrue(json.loads((self.state / "settings.json").read_text(encoding="utf-8"))["auto_update"]["on"])
+        with mock.patch.object(client, "request", return_value={"failed": "could not save it: disk full"}):
+            code, _out, err = self.cli("off")
+        self.assertEqual(code, 1)
+        self.assertIn("could not save the choice: could not save it: disk full", err)
+        self.assertTrue(auto_update.switches()["on"], "the server's failure is said, never written over here")
 
 
 class FindUvTest(Case):
@@ -301,6 +344,39 @@ class HelperTest(unittest.TestCase):
                          ["cad server stop", "uv tool install --managed-python --python 3.14 cad==0.2.0",
                           "cad server start"])
         self.assertEqual(json.loads(record.read_text(encoding="utf-8"))["outcome"], "installed")
+
+    @unittest.skipIf(os.name == "nt", "the stand-in uv and cad are shell scripts")
+    def test_a_helper_run_outside_codex_s_sandbox_with_its_variables_still_set_ends_with_a_running_server(self):
+        """An update begun by a server Codex started outside its sandbox (an approved ``cad server start``) hands the
+        helper the sandbox's variables: its ``cad server start`` starts the server all the same, the system allowing
+        it the loopback port."""
+        from cad.engine import api
+
+        engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp"))
+        self.addCleanup(__import__("shutil").rmtree, engine, ignore_errors=True)
+        state = self.tmp / "state"
+        env = {**os.environ, "CAD_ENGINE_DIR": str(engine), "CAD_STATE_DIR": str(state),
+               "CAD_CACHE_DIR": str(self.tmp / "cache"), "CAD_UPDATE_CHECK": "0",
+               "CODEX_SANDBOX": "seatbelt", "CODEX_SANDBOX_NETWORK_DISABLED": "1"}
+        from tests.python.support.engine_daemon import register
+
+        register(state)
+        self.addCleanup(lambda: mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(engine)})(api.stop)())
+        (self.tmp / "cad").write_text(f'#!/bin/sh\nexec "{sys.executable}" -m cad_server.cli "$@"\n', encoding="utf-8")
+        (self.tmp / "uv").write_text(f"#!/bin/sh\nmv {self.site}/cad-0.1.0.dist-info {self.site}/cad-0.2.0.dist-info\n",
+                                     encoding="utf-8")
+        for name in ("cad", "uv"):
+            (self.tmp / name).chmod(0o755)
+        (self.tmp / "bin").mkdir()
+        (self.tmp / "bin" / "cad").symlink_to(self.tmp / "cad")
+        record = self.tmp / "auto-update.json"
+        line = auto_update.helper_command("0.2.0", now=1.0, version="0.1.0", prefix=str(self.tmp),
+                                          uv=str(self.tmp / "uv"), record=str(record), windows=False)
+        subprocess.run(line, check=True, env=env, cwd=self.tmp, timeout=180)
+        kept = json.loads(record.read_text(encoding="utf-8"))
+        self.assertEqual((kept["outcome"], kept["started"]), ("installed", f"started the cad server (cad {version()})"))
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(engine)}):
+            self.assertEqual(client.request({"op": "pid"}, start=False)["ok"], True, "a server answers")
 
 
 class JoinTest(unittest.TestCase):

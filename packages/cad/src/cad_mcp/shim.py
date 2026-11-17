@@ -1,7 +1,8 @@
 """``cad mcp``: the host's stdio transport, forwarding JSON-RPC to this release's CAD server.
 
-What it does, in order: start this release's server once, as it starts, exactly as ``cad server start`` does
-(``start_server``, on a thread of its own, ``Holder``), and hold it while the host runs; pass the host's requests on to
+What it does, in order: start the server once, as it starts -- the installed uv tool ``cad``'s, by its own ``cad
+server start``, where one is installed and this is not it; else this release's, exactly as ``cad server start`` does
+(``start_server``, on a thread of its own, ``Holder``) -- and hold it while the host runs; pass the host's requests on to
 the server's HTTP endpoint, as its door names it at each request (``call``), and the server's answers back
 (``Proxy``). It installs nothing, and starts no server after its own start: a server stopped later (``cad server
 stop``) stays stopped. Several started at once end with one server (``client.start``: the daemon's lock).
@@ -74,15 +75,75 @@ PRESENTATIONS = ("inline", "tabs", "text")
 
 
 def start_server() -> str:
-    """THE ONE PLACE ``cad mcp`` decides what a server of another release means, so a later release changes the rule
-    here alone. At its own start, exactly what ``cad server start`` does (``client.start``: a server of an older
-    release, or of 0.11.10 and earlier, told to stop, its work cut short, and this release's started; one of this
-    release or a newer one joined). After it, the server running is reached where it is this release's or newer
-    (``client.AT_LEAST``: cad updated itself under this transport): a request that finds an older one is answered
-    with cad's one line saying both (``client.OtherRelease``), as one that finds none is (``client.NotRunning``), and
-    nothing is started again. What the start did, in one line; ``ConnectionError`` in one line where it could not."""
+    """THE ONE PLACE ``cad mcp`` decides which server it starts and what a server of another release means, so a
+    later release changes the rule here alone.
+
+    Where a uv tool ``cad`` is installed on this computer and this is not it (an agent app's plugin line may run ``cad mcp``
+    from uvx's cache, at the plugin's release), the server is the installed cad's, whatever the two releases are: its own
+    ``cad server start`` runs (``installed``: it starts its server, updating first where that is due, or joins one of
+    its release or a newer one, or replaces an older one) and the server it leaves running is joined. Never a server
+    of this process's own, which, not being the uv tool, would never update itself and is not the cad the agent's
+    shell runs. After it, the server running is reached where it is that release's or newer (``client.AT_LEAST``: the
+    installed cad updates itself under this transport).
+
+    Where none is installed, or this is it: exactly what ``cad server start`` does (``client.start``: a server of an
+    older release, or of 0.11.10 and earlier, told to stop, its work cut short, and this release's started; one of
+    this release or a newer one joined), and after it the server running is reached where it is this release's or
+    newer.
+
+    A request that then finds an older server is answered with cad's one line saying both (``client.OtherRelease``), as
+    one that finds none is (``client.NotRunning``), and nothing is started again. What the start did, in one line;
+    ``ConnectionError`` in one line where it could not."""
     client.AT_LEAST = version()
-    return client.start()
+    tool = installed_tool()
+    if tool is None or _same_folder(tool, sys.prefix):
+        return client.start()
+    return installed(tool)
+
+
+def installed_tool():
+    """The installed uv tool ``cad``'s environment (``auto_update.installed_tool``), or None."""
+    from cad_server._internal.auto_update import installed_tool as found
+
+    return found()
+
+
+def _same_folder(one, other) -> bool:
+    return os.path.normcase(os.path.realpath(one)) == os.path.normcase(os.path.realpath(other))
+
+
+# How long the installed cad's ``cad server start`` may take: a server of another release stopped, its own started,
+# and an update before it where one is due (``client.STOP_SECONDS``, ``client.START_SECONDS``), and its start.
+INSTALLED_SECONDS = client.STOP_SECONDS + client.START_SECONDS + 30.0
+
+
+def installed(tool) -> str:
+    """The server of the uv tool ``cad`` in environment ``tool`` started by its own command (``cad server start``,
+    ``auto_update.tool_command``), its output kept off this process's standard output, which is the host's, and in an
+    environment that points at nothing of this one; then joined: reached where it is the release it left running or a
+    newer one. What it said, in one line; ``ConnectionError`` with its last line where it failed."""
+    import subprocess
+
+    import cad_server._internal.auto_update as auto_update
+
+    command = auto_update.tool_command(tool)
+    environment = {name: value for name, value in os.environ.items() if name not in auto_update._UNSET}
+    try:
+        done = subprocess.run([str(command), "server", "start"], stdin=subprocess.DEVNULL, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace", env=environment,
+                              timeout=INSTALLED_SECONDS, creationflags=0x08000000 if os.name == "nt" else 0)
+    except (OSError, subprocess.SubprocessError) as error:
+        raise ConnectionError(f"the installed cad ({command}) could not start its server: {error}") from None
+    said = [line.strip() for line in done.stdout.splitlines() if line.strip()]
+    failed = [line.strip() for line in done.stderr.splitlines() if line.strip()]
+    if done.returncode != 0:
+        raise ConnectionError(failed[-1] if failed else f"{command} server start: exit status {done.returncode}")
+    client.AT_LEAST = None
+    running = client.connect(start=False)
+    if running is not None:
+        running.close()
+        client.AT_LEAST = running.release
+    return f"{said[-1] if said else 'the cad server is running'} (the installed cad's: {command})"
 
 
 def call(method, path, body=b"", headers=None, timeout=None):
@@ -435,7 +496,7 @@ def serve():
         proxy.close()
         # A start under way is finished before this process leaves, never left half done (a server of another
         # release stopped, and this release's not yet started): it is bounded.
-        holder.started.wait(client.STOP_SECONDS + client.START_SECONDS)
+        holder.started.wait(INSTALLED_SECONDS)
     return 0
 
 

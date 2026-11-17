@@ -123,6 +123,38 @@ def uv_tool(prefix: str | None = None) -> Path | None:
     return folder if str(name).lower() == "cad" else None
 
 
+def installed_tool(uv: str | None = None, *, timeout: float = 30.0) -> Path | None:
+    """The environment of the uv tool ``cad`` installed on this computer, wherever this process runs from (uvx's cache,
+    say): where uv says its tools are (``uv tool dir``, which reads ``UV_TOOL_DIR`` as every uv command does), uv
+    found as the update finds it (``find_uv``) else the one cad's own ``uv`` dependency carries, and uv's receipt there
+    names ``cad`` (``uv_tool``) and its own ``cad`` command is there (``tool_command``). None where uv names none, or
+    cannot be asked. Never raises."""
+    try:
+        if uv is None:
+            uv = find_uv()
+        if uv is None:
+            from cad_server._internal.base import find_uv as carried
+
+            uv = carried()
+        done = subprocess.run([uv, "tool", "dir"], stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=timeout,
+                              env={name: value for name, value in os.environ.items() if name not in _UNSET},
+                              creationflags=0x08000000 if os.name == "nt" else 0)  # CREATE_NO_WINDOW
+        lines = [line.strip() for line in done.stdout.splitlines() if line.strip()]
+        if done.returncode != 0 or not lines:
+            return None
+        tool = Path(lines[-1]) / "cad"
+        return tool if uv_tool(str(tool)) is not None and tool_command(tool).is_file() else None
+    except Exception:  # noqa: BLE001 - no uv, or one that cannot answer: no tool found
+        return None
+
+
+def tool_command(tool: Path, windows: bool = os.name == "nt") -> Path:
+    """The ``cad`` command of the uv tool environment ``tool``, its own (``Scripts/cad.exe``, ``bin/cad``): the one cad's
+    update helper runs (``helper_command``)."""
+    return tool / ("Scripts/cad.exe" if windows else "bin/cad")
+
+
 def find_uv(environ: dict[str, str] | None = None, prefix: str | None = None,
             windows: bool = os.name == "nt") -> str | None:
     """uv: on ``PATH``, else where uv's own installer puts it (``UV_INSTALL_DIR`` and its ``bin``, ``XDG_BIN_HOME``,
@@ -198,7 +230,7 @@ def helper_command(target: str, *, now: float, version: str, prefix: str | None 
     """The helper's command line: the Python this environment was made from (``base``: ``sys._base_executable``,
     never this environment's), isolated, running the helper's source, and its one argument."""
     prefix = prefix or sys.prefix
-    cad = str(Path(prefix) / ("Scripts/cad.exe" if windows else "bin/cad"))
+    cad = str(tool_command(Path(prefix), windows))
     told = {"uv": uv, "cad": cad, "target": target, "prefix": prefix, "record": record, "from": version, "at": now,
             "tries": tries}
     python = base or getattr(sys, "_base_executable", None) or sys.executable

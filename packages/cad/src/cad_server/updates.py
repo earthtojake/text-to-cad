@@ -103,7 +103,7 @@ def _get(url: str) -> Any:
     try:
         import urllib.request
 
-        request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "cadgen"})
+        request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "cad"})
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310 - http(s) only (`api_url`)
             return json.loads(response.read(MAX_BYTES))
     except Exception:  # noqa: BLE001 - a check that fails is tried again in an hour

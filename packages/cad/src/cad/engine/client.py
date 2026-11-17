@@ -26,11 +26,6 @@ __all__ = ["hold", "make_way", "request", "start", "sweep"]
 # The module the server runs as: the daemon with its application host installed. Named, never imported: the
 # library's engine imports nothing of the server's (``start`` runs it in this process's own environment).
 DAEMON_MODULE = "cad_server._internal.engine_daemon"
-# The sandboxes known to refuse the loopback port the engine's HTTP server needs, each by a variable
-# and the value it sets in the shells it runs: a daemon started there could never serve a build (an agent
-# app's shell sandbox, in its default mode, with its network disabled). A sandbox none names is found by the
-# daemon that cannot listen (``places.failure_path``), as fast.
-SANDBOXES: tuple[tuple[str, str], ...] = (("CODEX_SANDBOX_NETWORK_DISABLED", "1"),)
 # The words a worker's failure carries its stderr's tail under (``supervisor.Process``): local detail, which
 # no observer's facts carry (``api._error``), even when a startup failure or a broken pipe has no exit
 # status to tell it from a Python traceback.
@@ -153,7 +148,23 @@ def _answering(address: Path, *, stopping: bool = False) -> bool:
 
 
 def _sandboxed() -> bool:
-    return any(os.environ.get(name) == value for name, value in SANDBOXES)
+    """Whether this process may not listen on a loopback port, as the server it would start must: an agent app's
+    shell sandbox with its network off refuses it (macOS Seatbelt the bind, Linux's seccomp the socket), and a server
+    started there could never serve a build. Asked of the system, never read from a variable: an app that runs a
+    command outside its sandbox, approved, may still hand it the sandbox's variables (one that says its network is
+    off). A sandbox that forbids writing the engine's folder is found as its door or
+    folder is (``_denied``). The port is bound and let go, as the daemon's own check does (``daemon._can_listen``)."""
+    try:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    except OSError:
+        return True
+    try:
+        probe.bind(("127.0.0.1", 0))
+    except OSError:
+        return True
+    finally:
+        probe.close()
+    return False
 
 
 def _denied(cause: str) -> ConnectionError:

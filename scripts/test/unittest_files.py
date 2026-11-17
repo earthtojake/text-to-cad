@@ -24,7 +24,8 @@ directory of its own (``CAD_ENGINE_DIR``) and a server started there before it r
 ``cad server start`` starts one: nothing else does): a build it asks for without naming one runs on
 that file's server alone, never on a developer's own, and the server running there is stopped once it
 ends (``stop_engine``). Its ``CAD_CACHE_DIR``,
-``CAD_STATE_DIR`` and ``CAD_LAUNCHER_DIR`` are folders of its own, the state folder holding nothing but
+``CAD_STATE_DIR``, ``CAD_LAUNCHER_DIR`` and uv's ``UV_TOOL_DIR`` (no tool in it) are folders of its own, the state
+folder holding nothing but
 this run's interpreter registered as its current installation (``engine_daemon.register``: the
 installation whose engine a client starts, where with none it starts none), so
 nothing a test starts reaches a developer's cadgen 0.7 store, their registry of documents, their
@@ -582,6 +583,9 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
                        "CAD_STATE_DIR": os.path.join(engines, f"s{index}"),
                        "CAD_CACHE_DIR": os.path.join(engines, f"c{index}"),
                        "CAD_LAUNCHER_DIR": os.path.join(engines, f"l{index}"),
+                       # uv's tools of its own, none: a `cad mcp` a test runs starts the server of the uv tool cad
+                       # installed (``cad_mcp.shim.start_server``), never a developer's.
+                       "UV_TOOL_DIR": os.path.join(engines, f"t{index}"),
                        # A board is drawn as saved, no kicode fetched, but where a suite runs KiCad (test-kicad.sh).
                        "CAD_KICAD_REFILL": os.environ.get("CAD_KICAD_REFILL", "0")}
                 register(env["CAD_STATE_DIR"])
