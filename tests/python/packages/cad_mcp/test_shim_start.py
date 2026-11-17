@@ -112,10 +112,100 @@ class StartingTest(unittest.TestCase):
         self.assertEqual(sent, ["initialize", "notifications/initialized", "tools/list"])
 
 
+class JoinedTest(unittest.TestCase):
+    """A start whose own daemon lost to a start at the same moment says the server is already running, never that
+    it started it (``client.start``)."""
+
+    def start(self, process, pid):
+        answered = types.SimpleNamespace(release=version(), close=lambda: None)
+        with mock.patch.object(client, "make_way", return_value=None), \
+                mock.patch.object(client.places, "make_engine_dir"), \
+                mock.patch.object(client.places, "folder_refusal", return_value=None), \
+                mock.patch.object(client, "_spawn", return_value=process), \
+                mock.patch.object(client, "_connect", return_value=answered), \
+                mock.patch.object(client, "request", return_value={"ok": True, "pid": pid}):
+            return client.start()
+
+    def test_a_start_that_joined_another_s_server_says_it_was_already_running(self) -> None:
+        running = f"the cad server (cad {version()}) is already running"
+        lost = types.SimpleNamespace(pid=10, poll=lambda: 0)  # found the lock taken, and left
+        self.assertEqual(self.start(lost, 11), running)
+        if not client.places.WINDOWS:  # still leaving as the other's server answers
+            self.assertEqual(self.start(types.SimpleNamespace(pid=10, poll=lambda: None), 11), running)
+        self.assertEqual(self.start(types.SimpleNamespace(pid=10, poll=lambda: None), 10),
+                         f"started the cad server (cad {version()})")
+
+
+class UnansweredTest(unittest.TestCase):
+    """A server that takes a request and never answers it: the host's initialize is still answered within its
+    bound, greeted here, and a tool call ends with cad's line, never hanging. A healthy server's slow tool call is
+    not cut by the door's bound."""
+
+    def setUp(self) -> None:
+        import os
+
+        ends: list[int] = []
+        self.addCleanup(lambda: [os.close(end) for end in ends])
+
+        def silent(**_kw):
+            read, write = os.pipe()  # nobody writes: an answer that never comes
+            ends.append(write)
+            return client.Connection(os.fdopen(read, "rb"), open(os.devnull, "wb"))
+
+        self.silent = silent
+
+    def test_a_request_past_its_time_limit_is_unanswered_and_one_within_it_is_answered(self) -> None:
+        with mock.patch.object(client, "connect", side_effect=self.silent), self.assertRaises(client.Unanswered):
+            client.request({"op": "http"}, timeout=0.2)
+        with mock.patch.object(client, "_exchange", return_value={"ok": True}), \
+                mock.patch.object(client, "connect", return_value=object()):
+            self.assertEqual(client.request({"op": "http"}, timeout=5), {"ok": True})
+
+    def test_initialize_is_answered_in_its_bound_and_a_tool_call_ends_with_cad_s_line(self) -> None:
+        import time
+
+        holder = starting()
+        holder.started.set()
+        proxy = shim.Proxy(holder=holder)
+        with mock.patch.object(client, "connect", side_effect=self.silent), \
+                mock.patch.object(shim, "ANSWER_SECONDS", 0.3), mock.patch.object(shim, "DOOR_SECONDS", 0.2):
+            began = time.monotonic()
+            greeting = proxy.handle("initialize", {"protocolVersion": "2025-06-18"}, RequestContext(1, {}))
+            self.assertLess(time.monotonic() - began, 5)
+            self.assertEqual(greeting["serverInfo"]["name"], "cad")
+            answer = proxy.handle("tools/call", {"name": "cad_show"}, RequestContext(2, {}))
+        self.assertEqual(answer, {"content": [{"type": "text", "text": "the cad server did not answer within 0.2 s"}],
+                                  "isError": True})
+
+    def test_a_slow_answer_of_a_healthy_server_s_endpoint_is_not_cut_by_the_door_s_bound(self) -> None:
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        class Slow(BaseHTTPRequestHandler):
+            def do_POST(self):
+                threading.Event().wait(0.5)  # past the door's bound
+                self.send_response(200)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Slow)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        endpoint = {"url": f"http://127.0.0.1:{server.server_address[1]}", "token": "t"}
+        with mock.patch.object(client, "request", return_value=endpoint) as asked, \
+                mock.patch.object(shim, "DOOR_SECONDS", 0.2):
+            self.assertEqual(shim.call("POST", "/mcp", b"{}")[0], 200)
+        self.assertEqual(asked.call_args.kwargs, {"timeout": 0.2})
+
+
 class DeclaredLogTest(unittest.TestCase):
     def test_what_the_app_declared_and_what_it_was_offered_go_to_the_app_s_log(self) -> None:
         # The line to read where an app shows no views: what it said at initialize, and the server's answer.
-        def call(method, path, body=b"", headers=None):
+        def call(method, path, body=b"", headers=None, timeout=None):
             message = json.loads(body)
             if message.get("method") == "initialize":
                 return 200, {"Mcp-Session-Id": "s1"}, json.dumps(

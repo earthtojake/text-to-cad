@@ -73,7 +73,7 @@ class ShimEndpointTest(unittest.TestCase):
         self.names = self.first.endpoint()  # what the server's door says now; None: no server runs
         self.reads = 0
 
-        def read(_message):
+        def read(_message, timeout=None):
             self.reads += 1
             if self.names is None:
                 raise client.NotRunning(client.NOT_RUNNING)

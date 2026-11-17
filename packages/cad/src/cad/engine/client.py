@@ -275,7 +275,25 @@ def start(port: int | None = None) -> str:
     answered.close()
     if answered.release != version():
         raise OtherRelease(_other(answered.release, version()))
+    if _joined(process):
+        return f"the {COMMAND} server ({COMMAND} {version()}) is already running"
     return f"started the {COMMAND} server ({COMMAND} {version()})"
+
+
+def _joined(process: subprocess.Popen) -> bool:
+    """Whether the server that answered a start is another start's, not the one ``process`` is: that process has
+    exited (a daemon that finds the lock taken exits 0), or, on POSIX, where the process started is the server, the
+    server answers with another process id. On Windows the process started may be an environment's launcher whose
+    child serves, so its id says nothing."""
+    if process.poll() is not None:
+        return True
+    if places.WINDOWS:
+        return False
+    try:
+        answer = request({"op": "pid"}, start=False)
+    except ConnectionError:
+        return False
+    return isinstance(answer, dict) and answer.get("pid") not in (None, process.pid)
 
 
 def connect(*, start: bool = True) -> Connection | None:
@@ -342,14 +360,47 @@ def hold(*, start: bool = True, host: Callable[[], str | None] | None = None,
 
 
 def request(message: dict[str, Any], on_log: Callable[[dict[str, Any]], None] = lambda _m: None, *,
-            start: bool = True, on_progress: Callable[[dict[str, Any]], None] | None = None) -> dict[str, Any] | None:
+            start: bool = True, on_progress: Callable[[dict[str, Any]], None] | None = None,
+            timeout: float | None = None) -> dict[str, Any] | None:
     """Send one request; every log line to ``on_log`` and every progress frame of its build to
     ``on_progress`` (``progress.py``); the final answer returned. With no server running, ``NotRunning`` -- or
-    None, with ``start`` false (``connect``)."""
+    None, with ``start`` false (``connect``). ``timeout``: the seconds the whole request, its connection and its
+    answer, may take, past which ``Unanswered`` says so (the request is left to end by itself, on a thread of its
+    own); None, as long as it takes."""
+    if timeout is not None:
+        return _within(timeout, lambda: request(message, on_log, start=start, on_progress=on_progress))
     connection = connect(start=start)
     if connection is None:
         return None
     return _exchange(connection, message, on_log, on_progress)
+
+
+class Unanswered(ConnectionError):
+    """A request the server did not answer within its time limit (``request``'s ``timeout``)."""
+
+
+def _within(seconds: float, work: Callable[[], Any]) -> Any:
+    """What ``work`` returns or raises, run on a thread of its own and waited for ``seconds`` at most: past them,
+    ``Unanswered``."""
+    import threading
+
+    done: list[tuple[bool, Any]] = []
+
+    def run() -> None:
+        try:
+            done.append((True, work()))
+        except BaseException as error:  # noqa: BLE001 - raised again in the caller's thread
+            done.append((False, error))
+
+    thread = threading.Thread(target=run, name="cad-request", daemon=True)
+    thread.start()
+    thread.join(seconds)
+    if not done:
+        raise Unanswered(f"the {COMMAND} server did not answer within {seconds:g} s")
+    answered, value = done[0]
+    if answered:
+        return value
+    raise value
 
 
 def _exchange(connection: Connection, message: dict[str, Any], on_log: Callable[[dict[str, Any]], None] = lambda _m: None,

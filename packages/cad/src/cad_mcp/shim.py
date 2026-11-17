@@ -24,9 +24,11 @@ browser: made here, in the environment the host gave this process, never in the 
   ``resources/templates/list`` an empty list, and ``notifications/tools/list_changed`` (``resources/list_changed``)
   sent once the start is done, so the app asks again; ``tools/call`` a result marked ``isError`` saying the server is
   starting; any other a JSON-RPC error (``UNAVAILABLE``) saying so.
-- Where no server of this release answers (the start failed, the server was stopped since, another release's runs):
-  ``tools/call`` a result marked ``isError`` carrying cad's one line (``client.NotRunning``, ``client.OtherRelease``),
-  which the agent reads and relays; any other request a JSON-RPC error carrying it.
+- Where no server of this release answers (the start failed, the server was stopped since, another release's runs,
+  one that takes the request and never answers it): ``tools/call`` a result marked ``isError`` carrying cad's one line
+  (``client.NotRunning``, ``client.OtherRelease``, ``client.Unanswered``), which the agent reads and relays; any other
+  request a JSON-RPC error carrying it. The host's ``initialize`` is answered within ``ANSWER_SECONDS`` in every case:
+  greeted here, as while the start runs, where the server does not answer in time.
 """
 from __future__ import annotations
 
@@ -39,6 +41,7 @@ import secrets
 import signal
 import sys
 import threading
+import time
 from urllib.parse import urlsplit
 
 from cad.engine import client
@@ -49,9 +52,14 @@ from cad_mcp.protocol import Connection, RequestContext, RpcError, claim_stdin, 
 
 LOG = logging.getLogger("cad_mcp")
 # How long the host's initialize waits for this transport's start of the server, and every other request: within
-# the 30 seconds Codex gives an MCP server to start, past which the request is answered here.
+# the 30 seconds Codex gives an MCP server to start, past which the request is answered here. And how long the
+# initialize may take in all, its session's opening on the server with it (``ANSWER_SECONDS``), and the door's naming
+# of the endpoint for any request (``DOOR_SECONDS``): a server that takes a request and never answers ends it with
+# cad's line, never hangs it. Neither bounds a request the server's endpoint serves (``call``).
 INITIALIZE_SECONDS = 20.0
 READY_SECONDS = 5.0
+ANSWER_SECONDS = 25.0
+DOOR_SECONDS = 20.0
 STARTING = f"the {client.COMMAND} server is starting: try again shortly"
 # The JSON-RPC error a request answered here carries (the server's own -32000, an implementation's).
 UNAVAILABLE = -32000
@@ -76,16 +84,20 @@ def start_server() -> str:
     return client.start()
 
 
-def call(method, path, body=b"", headers=None):
+def call(method, path, body=b"", headers=None, timeout=None):
     """One HTTP request to the MCP endpoint of the server running now, as its door names it at this very call (``op:
-    http``): a loopback port is anyone's once the server has let it go, and every call carries the user's page token,
-    so no endpoint is kept from one call to the next. ``(status, headers, body)``; ``ConnectionError`` in cad's one
-    line where no server of this release runs (``start_server``). It never starts one."""
-    endpoint = client.request({"op": "http"})
+    http``, ``DOOR_SECONDS`` at most): a loopback port is anyone's once the server has let it go, and every call
+    carries the user's page token, so no endpoint is kept from one call to the next. ``(status, headers, body)``;
+    ``ConnectionError`` in cad's one line where no server of this release runs (``start_server``) or its door does
+    not answer (``client.Unanswered``). It never starts one. ``timeout``: the seconds the whole call may take (the
+    host's initialize, ``Proxy.handle``); None, the door's bound and then as long as the endpoint takes."""
+    deadline = None if timeout is None else time.monotonic() + timeout
+    endpoint = client.request({"op": "http"}, timeout=DOOR_SECONDS if timeout is None else min(DOOR_SECONDS, timeout))
     if "failed" in endpoint:
         raise ConnectionError(endpoint["failed"])
     parsed = urlsplit(endpoint["url"])
-    connection = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=600)
+    left = 600 if deadline is None else max(0.1, deadline - time.monotonic())
+    connection = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=left)
     try:
         connection.request(method, path, body=body,
                            headers={**(headers or {}), "Authorization": "Bearer " + endpoint["token"]})
@@ -193,17 +205,18 @@ class Proxy:
         most."""
         return self.holder is None or self.holder.started.wait(wait)
 
-    def _send(self, message, session):
+    def _send(self, message, session, timeout=None):
         if self.holder is not None:
             self.holder.want()
         headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
         if session:
             headers["Mcp-Session-Id"], headers["MCP-Protocol-Version"] = session
-        return self.call("POST", "/mcp", json.dumps(message).encode("utf-8"), headers)
+        bound = {} if timeout is None else {"timeout": timeout}
+        return self.call("POST", "/mcp", json.dumps(message).encode("utf-8"), headers, **bound)
 
-    def _open(self, request_id, params):
+    def _open(self, request_id, params, timeout=None):
         status, reply_headers, data = self._send({"jsonrpc": "2.0", "id": request_id, "method": "initialize",
-                                                  "params": params}, None)
+                                                  "params": params}, None, timeout)
         answer = self._answer(status, data)
         headers = {name.lower(): value for name, value in reply_headers.items()}
         session = (headers["mcp-session-id"], answer["result"]["protocolVersion"])
@@ -265,17 +278,23 @@ class Proxy:
         if method == "ping":
             return {}
         if method == "initialize":
+            arrived = time.monotonic()
             launched = self.launcher()
             _declared(params, launched)
             params = initialize_params(params, launched, self.holder.ident if self.holder is not None else None,
                                        self.app)
             with self.lock:
                 self.initialize = params  # the session opened with it later, where it cannot be now
-            if not self._ready(INITIALIZE_SECONDS):
+            if not self._ready(max(0.0, INITIALIZE_SECONDS - (time.monotonic() - arrived))):
                 LOG.info("the %s server is still starting: the session opens at the app's next request", client.COMMAND)
                 return _greeting(params)
             try:
-                return self._open(context.request_id, params)[0]
+                return self._open(context.request_id, params,
+                                  timeout=max(1.0, ANSWER_SECONDS - (time.monotonic() - arrived)))[0]
+            except (client.Unanswered, TimeoutError):
+                LOG.info("the %s server did not answer in time: the session opens at the app's next request",
+                         client.COMMAND)
+                return _greeting(params)
             except ConnectionError as error:
                 raise RpcError(UNAVAILABLE, str(error)) from None
         if not self._ready(READY_SECONDS):
