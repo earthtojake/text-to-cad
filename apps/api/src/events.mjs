@@ -63,12 +63,13 @@
  * `failed` from schema 10 counts the failures the system or the machine caused alone: a script that raised is in its
  * `count`, never `failed`. A schema before it sends none of these, and its rows are read, and keyed, as ever.
  *
- * Schema 11 (text-to-cad 0.11.11 on) describes an install with two fields: `channel`, who delivers the copy (the
- * channel its commands are pinned to, `default` for none, `dev` for a development build), and `app`, the agent app
- * running it, detected (`AGENT_APPS`). Both are open sets, checked by their shape and not by a list. A batch of
- * schema 10 or earlier is translated on arrival (`translated`): its rows carry the new `channel` and `app`, worked
- * out from the old combined channel and the MCP client's name, and the old channel as it was sent
- * (`legacy_channel`). Every schema before it is still checked as it always was, and its rows keep their ids.
+ * Schema 11 (text-to-cad 0.11.11 on) describes an install with one field, `app`, the agent app running it, detected
+ * (`AGENT_APPS`): an open set, checked by its shape and not by a list. It sends no channel, and its rows carry none.
+ * A batch of schema 10 or earlier is translated on arrival (`translated`): its rows carry a `channel` and an `app`,
+ * worked out from the old combined channel and the MCP client's name, and the old channel as it was sent
+ * (`legacy_channel`). Every schema before it is still checked as it always was, and its rows keep their ids. A
+ * development build's schema 11 batch that still names a channel (no release sent one) is refused, as any batch
+ * with a field its schema lacks.
  * Schema 11 adds `arrival`, which no schema before it sends: whether a computer's update or install reached the
  * version, step by step, so a computer stuck on its way to one is counted.
  */
@@ -102,9 +103,8 @@ const CHANNELS = new Set(['claude-github', 'codex-github', 'cursor-github', 'gem
   'codex-install', 'cursor-install', 'gemini-install', 'claude-desktop', 'claude-directory', 'openai-directory',
   'cursor-marketplace', 'agent-plugins', 'dev', 'unknown']);
 const SOURCES = new Set(['store', 'manual']);
-// Schema 11's: who delivers the copy (a pin's channel as written, `default` for none) and the agent app running it.
-// Open sets, checked by their shape (`cad_server/_internal/pins.py` and `engine_host.py` make them).
-const CHANNEL_11 = /^[a-z0-9][a-z0-9._-]{0,31}$/;
+// Schema 11's: the agent app running the copy. An open set, checked by its shape (`cad_server/_internal/engine_host.py`
+// makes it).
 const APP = /^[a-z0-9][a-z0-9._-]{0,39}$/;
 // The app an MCP client's name stands for, where the name is not the app's own: the same table as the server's
 // (`cad_server/_internal/engine_host.py`: `APPS`). Any other client's name is its own app, made a token (`appOfClient`).
@@ -479,10 +479,11 @@ const SCHEMAS = new Map([
   [10, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_8,
     origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7, parts: true,
     snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_10, toolFailures: FAILURES_10, causes: true }],
-  // Schema 10 with the install described by two fields: the delivery channel and the agent app, each checked by its
-  // shape. Every earlier schema's batch is translated to the two (`translated`). And how a computer got to the version.
-  [11, { fields: ['channel', 'app', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control', 'arrival']), kinds: KINDS_8,
-    origin: batch => ({ channel: matches(batch.channel, CHANNEL_11, 'channel'), app: matches(batch.app, APP, 'app'),
+  // Schema 10 with the install described by the agent app alone, checked by its shape, and no channel: a row of it
+  // carries none (`null`, which no store is sent). Every earlier schema's batch is translated (`translated`). And how a
+  // computer got to the version.
+  [11, { fields: ['app', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control', 'arrival']), kinds: KINDS_8,
+    origin: batch => ({ channel: null, app: matches(batch.app, APP, 'app'),
       legacy_channel: null, source: null, process: oneOf(batch.process, PROCESSES_6, 'process') }),
     current: true, named: true, maxEvents: MAX_EVENTS_7, parts: true,
     snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_10, toolFailures: FAILURES_10, causes: true }],

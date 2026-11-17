@@ -111,11 +111,11 @@ test("a viewer's controls are PostHog's control_used: uses and seconds on, by co
 });
 
 test("how a computer got to a version is PostHog's version_arrival: by version, from, route, step, outcome and reason", async () => {
-  const [failed, handedOver, served] = await at({ ...NAMED, schema: 11, process: 'cli', channel: 'default', app: 'unknown', events: [
+  const [failed, handedOver, served] = await at(JSON.parse(JSON.stringify({ ...NAMED, schema: 11, process: 'cli', channel: undefined, app: 'unknown', events: [
     { name: 'arrival', step: 'setup', route: 'updater', from: '0.11.10', outcome: 'failed', reason: 'network', count: 2 },
     { name: 'arrival', step: 'handover', route: 'updater', from: '0.11.10', outcome: 'gave_up', attempts: 5, count: 1 },
     { name: 'arrival', step: 'serving', route: 'setup', from: 'none', outcome: 'ok', count: 1 },
-  ] });
+  ] })));
   const own = event => Object.fromEntries(['step', 'route', 'from', 'outcome', 'reason', 'attempts', 'count']
     .filter(key => key in event.properties).map(key => [key, event.properties[key]]));
   assert.deepEqual([failed.event, handedOver.event, served.event], ['version_arrival', 'version_arrival', 'version_arrival']);
@@ -123,6 +123,8 @@ test("how a computer got to a version is PostHog's version_arrival: by version, 
   assert.deepEqual(own(handedOver), { step: 'handover', route: 'updater', from: '0.11.10', outcome: 'gave_up', attempts: 5, count: 1 });
   assert.deepEqual(own(served), { step: 'serving', route: 'setup', from: 'none', outcome: 'ok', count: 1 });
   assert.deepEqual([served.properties.version, served.properties.process, served.properties.distinct_id], ['0.8.0', 'cli', INSTALL]);
+  assert.ok(!('channel' in served.properties) && !('legacy_channel' in served.properties), 'schema 11 sends no channel, and none is made up');
+  assert.equal(served.properties.app, 'unknown');
   assert.ok(served.uuid && served.timestamp, 'named, so a batch sent again counts once');
 });
 

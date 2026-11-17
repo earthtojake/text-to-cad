@@ -446,25 +446,24 @@ test("schema 10's crash of no kernel process says which failure it was, a word o
   ]) assert.equal((await send(memory(), 'POST', '/v1/events', bad)).status, 400, JSON.stringify(bad));
 });
 
-// Schema 11: the install as two fields, the delivery channel and the agent app.
-const PINNED = { ...PARTS, schema: 11, channel: 'claude', app: 'claude-code', client: { name: 'claude-code', version: '2.1.0' } };
+// Schema 11: the install as one field, the agent app; no channel.
+const PINNED = { ...PARTS, schema: 11, channel: undefined, app: 'claude-code', client: { name: 'claude-code', version: '2.1.0' } };
 
-test('schema 11 names the delivery channel and the agent app, each checked by its shape, never against a list', async () => {
-  for (const [channel, app] of [['default', 'codex'], ['claude', 'claude-code'], ['codex', 'unknown'], ['dev', 'cursor'],
-    ['someone.else_2', 'visual-studio-code']]) {
+test('schema 11 names the agent app, checked by its shape, never against a list, and no channel', async () => {
+  for (const app of ['codex', 'claude-code', 'unknown', 'cursor', 'visual-studio-code', 'someone.else_2']) {
     const store = memory();
-    assert.equal((await send(store, 'POST', '/v1/events', { ...PINNED, channel, app })).status, 204, `${channel} ${app}`);
-    assert.ok(store.rows.every(row => row.channel === channel && row.app === app && row.legacy_channel === null), `${channel} ${app}`);
+    assert.equal((await send(store, 'POST', '/v1/events', { ...PINNED, app })).status, 204, app);
+    assert.ok(store.rows.every(row => row.app === app && row.channel === null && row.legacy_channel === null), app);
   }
   // Named, so a batch sent again keeps its ids, made as every named schema's are.
   const store = memory();
   await send(store, 'POST', '/v1/events', PINNED);
   assert.equal(store.rows[0].id, idOf(PINNED.batch, `snapshot ${PINNED.events[0].kind}`));
   for (const bad of [
-    { ...PINNED, channel: undefined }, { ...PINNED, app: undefined }, // both, always
-    { ...PINNED, channel: 'Claude' }, { ...PINNED, channel: '-claude' }, { ...PINNED, channel: 'a'.repeat(33) },
-    { ...PINNED, channel: 'claude code' }, { ...PINNED, channel: '' }, { ...PINNED, channel: 7 },
+    { ...PINNED, app: undefined }, // always
     { ...PINNED, app: 'Claude Code' }, { ...PINNED, app: 'a'.repeat(41) }, { ...PINNED, app: '/Users/someone' },
+    { ...PINNED, app: '' }, { ...PINNED, app: 7 },
+    { ...PINNED, channel: 'claude' }, // only a development build sent one, and no release: refused as any unknown field
     { ...PINNED, legacy_channel: 'claude-directory' }, // the receiver's word, never a sender's
     { ...PINNED, source: 'store' },
     { ...PINNED, schema: 10 }, // schema 10 sends no app
@@ -472,7 +471,7 @@ test('schema 11 names the delivery channel and the agent app, each checked by it
 });
 
 // Schema 11's arrival: one step of how a computer got to the sending version, from the sender a command starts.
-const ARRIVING = { ...PINNED, process: 'cli', client: undefined, presentation: undefined, channel: 'default', app: 'unknown' };
+const ARRIVING = { ...PINNED, process: 'cli', client: undefined, presentation: undefined, app: 'unknown' };
 const arrival = fields => ({ name: 'arrival', route: 'updater', from: '0.11.10', count: 1, ...fields });
 
 test('schema 11 counts how a computer got to a version: each step, its ending, and why one failed, in words of its own', async () => {

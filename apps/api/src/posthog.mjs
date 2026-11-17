@@ -31,8 +31,9 @@ const NOT_OURS = new Set(['<user>', '<?>', '<frozen>']);
 // the file alone in a frame, or under `assets/`): a frame there is a library's, never the page's own.
 const VENDOR = /(?:^|\/)vendor-[^/]*$/;
 // What a row says beside its own fields, from the batch it came in.
-// `channel` and `app` as schema 11 names them (an older batch's translated), and `legacy_channel` the channel an
-// older batch sent, as it sent it (events.mjs: `translated`).
+// `app` as schema 11 names it, `channel` and `app` as an older batch's were translated, and `legacy_channel` the
+// channel an older batch sent, as it sent it (events.mjs: `translated`). A schema 11 row has no channel, and a field
+// a row lacks is not sent.
 const CONTEXT = ['process', 'version', 'channel', 'app', 'legacy_channel', 'source', 'platform', 'arch', 'client', 'client_version',
   'presentation'];
 export const SETTINGS = ['POSTHOG_REGION', 'POSTHOG_PROJECT_KEY', 'POSTHOG_PERSONAL_KEY', 'POSTHOG_PROJECT_ID'];
