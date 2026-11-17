@@ -12,11 +12,12 @@ flat, with Pillow), never in a browser. This file holds the laws of all three pa
 Install it as a uv tool, which gives the computer its one `cad`:
 
 ```bash
-uv tool install --managed-python --python 3.14 cad
+uv tool install cad
 ```
 
-`cad server start` starts the server; `cad auto-update on` lets cad update itself; `cad doctor`
-reports what is installed. `cad-server`, `cad-mcp` and `cadgen` are empty aliases of this
+It runs on Python 3.11 and newer. `cad server start` starts the server; cad then updates itself
+(`cad auto-update off` stops that); `cad update` updates it now; `cad doctor` reports what is
+installed. `cad-server`, `cad-mcp` and `cadgen` are empty aliases of this
 distribution, kept so older installs keep working.
 
 A **document** is what a person reviews: one instance of a **document type** (below), either a file read on
@@ -224,7 +225,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    verb, the environment makers, telemetry -- imports the library's kernel-free modules, and never
    the kernel or an integration's code (law 28). The shim (`cad_mcp`), the stdio transport
    an agent app starts, is the standard library, the engine's client, the server's MCP protocol and what cad's own
-   update knows of the uv tool `cad` (whose server it starts), and loads no kernel. The server reaches into the library, never the
+   update knows of the global `cad` (whose server it starts, and which it installs where the computer has none),
+   and loads no kernel. The server reaches into the library, never the
    other way: its telemetry is an observer the engine calls with plain facts (`engine.api.observers`),
    which the server's commands append.
 4. **A model's document is XCAF; files are explicit.** *Every document.* A model's document is
@@ -353,7 +355,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     retains no retired authoring API. The engine's README's **Build closure** describes the conversion.
 
     **Tier 4: protocols where two releases meet while both run** -- the door, the CAD app's server and
-    its page, the hidden `cad setup --engine-update` that the updaters of 0.10.0 to 0.11.10 call, the HTTP API (`/api/v1`), a page's reload probe, the version feed,
+    its page, the hidden `cad setup --engine-update` that the updaters of 0.10.0 to 0.11.11 call, the HTTP API (`/api/v1`), a page's reload probe, the version feed,
     the installation and release records, the analytics schemas, and the PyPI names old pins resolve
     through. Each is numbered or frozen in a golden, so a break is never silent: a change within a
     number is additive, and unknown keys and ops are ignored; a breaking change bumps the number.
@@ -389,15 +391,19 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     counts under a random id, sent by default once a `cad` command has said so -- never its help, nor an
     answer in JSON, which no person reads --, and never
     after the person's no) and the hourly version check (the server's `updates.py`). Both run in the
-    background and fail silently: no start, command, build, request or tool call waits on them -- but `cad
-    update`, typed to get the newest release now, which waits on the feed (5 s at most) and the install, and says
-    in one line when either fails.
-    cad updates itself only where the person turned it on (`cad auto-update on`, for a cad installed as a uv
-    tool, off by default), or asks (`cad update`): its server, at its start or once nothing has run for a minute,
-    hands the update to a detached helper (the server's `_internal/auto_update.py`), which stops it, has uv
-    install the release the feed names and starts it again (where no server runs, `cad update` hands it over
-    itself, and the helper starts none); the server decides from the feed as last read, and nothing waits on the
-    install but a start that would otherwise start the release it replaces.
+    background and fail silently: no start, command, build, request or tool call waits on them -- but three a
+    person or an app asks for by name: `cad update`, typed to get the newest release now, which waits on PyPI
+    (5 s at most) and the install, and says in one line when either fails; `cad plugin install`, the hosted install
+    command in the foreground; and `cad mcp` run from uv's cache on a computer with no global cad, which installs
+    one first (four minutes at most).
+    A global install of cad (`uv tool install cad`) updates itself unless the person turned it off (`cad
+    auto-update off`), and when asked (`cad update`): its server, at its start, after a failed start or once nothing
+    has run for a minute, where the feed as last read names a newer release, hands the update to a detached helper
+    (the server's `_internal/auto_update.py`), which stops it, runs the installer's own upgrade (`uv tool install
+    cad@latest`) and starts it again (where no server runs, `cad update` hands it over itself, and the helper starts
+    none). After an automatic update that succeeded, where `cad plugin auto-update` is on, the helper runs `cad
+    plugin install` once. Nothing waits on the install but a start that would otherwise start the release it
+    replaces.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
     `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
     it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot
@@ -434,8 +440,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     too. Only `cad server start` and `cad mcp` start it; every other client that finds none says so in one line
     and starts none, and the library never starts a server of its own environment. A start of a newer release
     replaces an older release's engine; an older one joins a newer engine that runs (forward only); a `cad mcp` that
-    is not the uv tool `cad` installed on the computer runs that tool's own `cad server start` and joins its engine,
-    whatever the two releases are; a `cad` command of another release than the engine says so in one line. cad's own update stops the engine, installs
+    is not the global `cad` installed on the computer runs that cad's own `cad server start` and joins its engine,
+    whatever the two releases are, and one run from uv's cache on a computer with no global cad installs one first;
+    a `cad` command of another release than the engine says so in one line. cad's own update stops the engine, installs
     the new release and starts it again (the engine's **Starting and updating**). A tab names a model's id, or a file's id after a launcher
     registers it; Python scripts are never documents. A page never replaces or re-executes the engine. Its one page and document reads
     share its authenticated HTTP listener. `serve` and `viewer` reuse it and start none, with no

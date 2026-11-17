@@ -205,9 +205,11 @@ A person installs text-to-cad with the install command
 (`curl -fsSL https://texttocad.dev/install.sh | sh`; on Windows
 `irm https://www.texttocad.dev/install.ps1 | iex`): `scripts/install/install.sh` and `install.ps1`
 make sure uv is there, then download and run `scripts/install/install.py`, which installs cad as a uv
-tool at the release the version feed names, installs the plugin from the `latest` branch in each
-agent app it finds with that app's own command, removes our own older copies, and turns on automatic
-updates. Its `APPS` table is the one list of apps; `docs/install.md` is the same list for people.
+tool (PyPI's newest) only where none is installed or the one there does not start, installs the
+plugin from the `latest` branch in each agent app it finds with that app's own command, removes our
+own older copies, puts cad's folder on the PATH with `uv tool update-shell`, and turns on
+`cad plugin auto-update`. It has no modes and reads no feed: `cad plugin install` runs the same
+script. Its `APPS` table is the one list of apps; `docs/install.md` is the same list for people.
 `tests/python/global/test_install_script.py` runs it against stand-in app commands in a home of its
 own.
 
@@ -606,19 +608,21 @@ by case; the worker contract keeps no window, so a new worker contract always do
 
 ### How a release reaches a computer
 
-- **cad updates itself** where automatic updates are on: off by default, turned on by the install
-  command and by a store's skill (`cad auto-update on`). The server checks the version feed as it
-  starts and about once an hour; when the feed names a newer release and nothing is running, a helper
-  stops the server, runs `uv tool install` for that release and starts the server again
-  (`cad_server/_internal/auto_update.py`). Where the install command set the computer up, the new
-  server then runs the hosted install command once in its update mode, which updates only our plugin
-  copies still in the apps (`cad_server/_internal/install_script.py`). Forward only: nothing installs
-  an older release.
-- **The version feed is the pointer.** It names a release an hour after it is on PyPI, unless the
-  project holds it back ([The version feed](#the-version-feed)).
+- **cad updates itself**: a global install (`uv tool install cad`), on by default, `cad auto-update
+  off` to stop it. The server reads the version feed in the background about once an hour; when the
+  feed names a release newer than its own, as it starts, after a failed start, or once nothing has run
+  for a minute, a helper stops the server, runs the installer's own upgrade (`uv tool install
+  cad@latest`: PyPI's newest) and starts the server again (`cad_server/_internal/auto_update.py`).
+  `cad update` does the same now, asking PyPI rather than the feed. Forward only: nothing installs an
+  older release.
+- **The plugin follows cad.** After an automatic update that succeeded, where `cad plugin
+  auto-update` is on (the install command turns it on), the helper runs `cad plugin install`, the
+  hosted install command, once. A typed `cad update` never does.
+- **The version feed says when.** It names a release an hour after it is on PyPI, unless the project
+  holds it back ([The version feed](#the-version-feed)).
 - **A plugin store** (Codex's directory, claude.ai's) updates the copy it installed. Its skills may be
   older than cad, which the 30-day rule covers.
-- **Releases 0.10.0 to 0.11.10** are carried over once by their own updater
+- **Releases 0.10.0 to 0.11.11** are carried over once by their own updater
   ([No version left behind](#no-version-left-behind)).
 
 The reasons are in [docs/contributing/decisions.md](docs/contributing/decisions.md).
@@ -628,18 +632,23 @@ The reasons are in [docs/contributing/decisions.md](docs/contributing/decisions.
 Everything else may change in any release. These may not, because past releases, their skills and
 the agents running them reach for them, and nothing shipped later can change what they reach for:
 
-1. **`texttocad.dev/install.sh` and `www.texttocad.dev/install.ps1`, run with no options.** Every
-   past release's skills and documents name them, and cad runs them after an update. The Windows line
-   names `www.` because Windows PowerShell 5.1 does not follow the redirect from `texttocad.dev`.
+1. **`texttocad.dev/install.sh` and `www.texttocad.dev/install.ps1`, run with no options.** Past
+   releases' skills and documents name them, and cad runs them (`cad plugin install`, after an
+   automatic update, and the bridge). The Windows line names `www.` because Windows PowerShell 5.1
+   does not follow the redirect from `texttocad.dev`.
 2. **The version feed, `api.texttocad.dev/v1/versions`, and its `latest` field.** Every shipped release
-   reads it to learn of a newer one, and the install command installs the release it names.
-3. **The telemetry address, accepting what older releases send.** They keep sending as long as they
+   reads it to learn of a newer one.
+3. **`uv tool install cad`, with no flags, as the one line that installs cad.** Every skill's Setup
+   block runs it, and the docs give it, so the newest `cad` on PyPI must install a working `cad`
+   command on any Python from the floor up. No upper bound on `requires-python`: a resolver on a
+   newer Python would fall back to an old release without one, which has no `cad` command.
+4. **The telemetry address, accepting what older releases send.** They keep sending as long as they
    run ([The version feed](#the-version-feed)).
-4. **Every release on PyPI, under all four names.** Codex's plugin line runs `cad@<VERSION>` through
-   uvx, and the updaters of 0.10.0 to 0.11.10 ask PyPI for `cad-server` by name: a release removed
+5. **Every release on PyPI, under all four names.** Codex's plugin line runs `cad@<VERSION>` through
+   uvx, and the updaters of 0.10.0 to 0.11.11 ask PyPI for `cad-server` by name: a release removed
    there breaks every copy that names it.
-5. **The hidden `cad setup --engine-update`.** The updaters of 0.10.0 to 0.11.10 call it.
-6. **The repository's address answering, with its `latest`, `claude-plugin` and `codex-plugin` branches
+6. **The hidden `cad setup --engine-update`.** The updaters of 0.10.0 to 0.11.11 call it.
+7. **The repository's address answering, with its `latest`, `claude-plugin` and `codex-plugin` branches
    and a README that tells an agent how to install.** Installs, apps and stores follow the branches by
    name, and the viewers of 0.7 and 0.8 send agents to the README. GitHub keeps an old address
    answering (web links, and `git clone`, `fetch` and `push`) after a rename or a move to an
@@ -662,11 +671,13 @@ install script. Two things that look fixed are instances of the rule:
 
 As many past releases as reasonable can reach the latest one:
 
-- **0.10.0 to 0.11.10** update through their own updater, which installs the newest release the old
-  way and runs its hidden `cad setup --engine-update`. The new cad's server then runs the hosted
-  install command once, which installs cad as a uv tool, installs the plugin in the apps and turns
-  automatic updates on (`cad_server/_internal/install_script.py`, kept apart as bridge code, to be
-  deleted in one change once those releases are gone).
+- **0.10.0 to 0.11.11** update through their own updater, which installs the newest release the old
+  way and runs its hidden `cad setup --engine-update`. Where our install command set that computer up
+  before, the new cad's server then runs the hosted install command once, which installs cad as a uv
+  tool, installs the plugin in the apps and turns `cad plugin auto-update` on; elsewhere, or where
+  that run installed no cad, the server installs cad with uv itself. Either way it then hands over to
+  the global cad's server, which updates itself from then on (`cad_server/cli/setup.py`, kept apart as
+  bridge code, to be deleted in one change once those releases are gone).
 - **Older releases** reach the latest when a person or an agent runs the install command. The script
   removes what each past layout left in the agent apps (`scripts/install/install.py`, the `cleanup` of
   each row of `APPS` and `remove_loose_skills`).
@@ -760,7 +771,7 @@ green: that is the release. `Publish Release`, on the merge commit:
    release commit and publishes only if every job passes. No untested tree is
    published either way.
 3. **Build.** `scripts/release/plugin_zip.py` builds the plugin ZIP from the
-   untouched release commit, a store's copy (each skill's Setup block with the store's lines,
+   untouched release commit (the skills as `main` has them,
    [The install branches](#the-install-branches)), and checks it
    against the portal's package rules,
    so a package the portal would refuse stops the release before anything
@@ -882,13 +893,11 @@ no commit. There are three copies:
   person uploads to OpenAI's portal (below), from the one function that builds
   that ZIP (`plugin_zip.build`), so the branch and the ZIP cannot differ.
 
-A store's copy (`claude-plugin`, `codex-plugin` and the ZIP) is delivered and updated by its store,
-so each skill's Setup block installs cad by uv's line,
-`uv tool install --managed-python --python 3.14 cad@latest` (with `--force` where uv says the `cad`
-executable already exists), then turns on cad's automatic updates (`cad auto-update on`), in place of
-our install command (`scripts/release/plugin_zip.py`, `STORE_LINES` and `store_copy`, which both
-builders use; a substitution that does not find our text exactly once fails the build). No copy names a store in its commands. `main` and
-`latest` keep our own text.
+A store's copy (`claude-plugin`, `codex-plugin` and the ZIP) is delivered and updated by its store.
+Every copy holds the same skills and the same Setup block, `main`'s: it installs cad by uv's line,
+`uv tool install cad`, and no skill names our install command. No copy names our install script or
+pipes a download to a shell anywhere (`plugin_zip.text_errors` and `plugin_branch.PIPE_TO_SHELL`,
+which fail the build). No copy names a store in its commands.
 
 **Installs always work from `main`; `latest` is the preferred install.** A
 command that names no branch installs `main` as it is, so `main` keeps every
@@ -909,9 +918,9 @@ the build when what it replaces is not there exactly once:
 
 | | `latest` | `codex-plugin` and the OpenAI ZIP | `claude-plugin` |
 | --- | --- | --- | --- |
-| Setup block | as `main` | the store's lines | the store's lines |
+| Skills | as `main` | as `main` | as `main`, each without the `allowed-tools` line of its front matter |
 | Codex's server line | as `main`: `uvx ... cad@<VERSION> mcp` in `codex.mcp.json` | the same, in `.mcp.json` | none: no MCP config |
-| README's install section | uv's line, `cad auto-update on` and one paragraph | no README | the same as `latest` |
+| README's install section | uv's line and one paragraph | no README | the same as `latest` |
 | `.claude-plugin/plugin.json` | as `main` | not shipped | without `documentationUrl`, `privacyPolicyUrl`, `supportUrl` and `termsOfServiceUrl`, which the directory's validation does not know; the README links the same pages |
 
 `CAD_INSTALL_CHANNEL` and `CAD_AUTO_UPDATED`, which the configs of 0.11.10 and earlier set, are
@@ -974,13 +983,16 @@ skill and policy scans still run after upload.
 ### The version feed
 
 `api.texttocad.dev/v1/versions` (`apps/api/src/versions.mjs`) names one release, `latest`: the
-newest on PyPI that has been there for at least an hour and is not held back. It is the pointer: the
-install command installs that release, and cad's own update moves to it (`cad_server/updates.py`
-reads it, at most once an hour). To hold a release back, add it to `CAD_HELD_RELEASES`, an
-environment variable of the Vercel project, and redeploy (`gh workflow run deploy-api.yml --ref
-main`); to pull a release from store copies too, which install from PyPI directly, also yank it on
-PyPI. The feed reads the index of `cadgen`, the last of the four projects a release uploads, so a
-release it names is installable under every name. Telemetry passes through the same API to PostHog:
+newest on PyPI that has been there for at least an hour and is not held back. It says when: cad's
+automatic update begins only when the feed names a release newer than the one installed
+(`cad_server/updates.py` reads it, at most once an hour), and the update then installs PyPI's newest
+(`uv tool install cad@latest`). The install command, `cad update`, the plugin's server line and the
+skills' `uv tool install cad` read no feed: they take PyPI's newest. So holding a release back
+(`CAD_HELD_RELEASES`, an environment variable of the Vercel project, then `gh workflow run
+deploy-api.yml --ref main`) stops automatic updates only on computers already on the feed's release;
+to pull a release from everyone, yank it on PyPI. The releases 0.10.0 to 0.11.11 install the release
+the feed names. The feed reads the index of `cadgen`, the last of the four projects a release
+uploads, so a release it names is installable under every name. Telemetry passes through the same API to PostHog:
 a deploy (`Deploy API`, on every change to `apps/api` on `main`) needs the project's PostHog
 settings in Vercel, which `/v1/health` checks (`apps/api/README.md`). A release that sends a new
 telemetry schema carries the receiver that reads it, deployed by its merge: until that deploy is
@@ -1129,7 +1141,7 @@ current release workflow above for future releases.
 ## Decisions
 
 Why text-to-cad is installed, run and updated the way it is -- two layers with one direction of
-knowledge, one cad per computer, the feed as the pointer, who updates which copy, forward only, the
+knowledge, one cad per computer, the feed saying when, who updates which copy, forward only, the
 30-day rule, the install script, the bridge -- is
 [docs/contributing/decisions.md](docs/contributing/decisions.md). Read it before changing the
 install script, cad's update, the manifests or the skills' setup text.

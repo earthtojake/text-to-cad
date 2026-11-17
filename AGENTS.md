@@ -63,14 +63,17 @@ ref without a release. The full flow, the resume path, the rehearsal and the
 local fallbacks are [CONTRIBUTING.md's Releases](CONTRIBUTING.md#releases).
 
 People install text-to-cad with one command, `curl -fsSL https://texttocad.dev/install.sh | sh`
-(Windows: `irm https://www.texttocad.dev/install.ps1 | iex`). It takes no options and carries no
-version: the bootstrap in `scripts/install/` runs `install.py`, which makes sure uv is there, installs
-cad as a uv tool at the release the version feed names, installs the plugin from `latest` in each
-agent app it finds with that app's own command (its `APPS` table is the one list of apps), removes our
-own older copies, and turns on cad's automatic updates. It never starts the server. With automatic
-updates on, cad's server installs the feed's newer release with uv when nothing is running, and then,
-where the install command set the computer up, runs it once in an update mode that updates only our
-plugin copies still there. A store updates its own copy. cad knows no app, plugin or skill
+(Windows: `irm https://www.texttocad.dev/install.ps1 | iex`). It takes no options, carries no
+version and has one behaviour, whoever runs it: the bootstrap in `scripts/install/` makes sure uv is
+there and runs `install.py`, which installs cad as a uv tool only where none is installed or the one
+there does not start, installs the plugin from `latest` in each agent app it finds with that app's own
+command (its `APPS` table is the one list of apps), removes our own older copies, puts cad's folder on
+the PATH with `uv tool update-shell`, and turns on `cad plugin auto-update`. It never starts the
+server. cad alone is installed by one promised line, `uv tool install cad`, which is what every
+skill's Setup block runs; no skill runs the install command. A global install updates itself, on by
+default (`cad auto-update`); `cad update` updates it now. After an automatic update that succeeded,
+where `cad plugin auto-update` is on, cad runs `cad plugin install` (the install command) once. A
+store updates its own copy. cad knows no app or skill, and of plugins only `cad plugin`
 ([decisions](docs/contributing/decisions.md)).
 
 text-to-cad is one Python distribution, `cad`, at one `VERSION`: the library (import `cad`, the CAD
@@ -78,10 +81,11 @@ kernel as its `build123d` extra), the server and the `cad` command (import `cad_
 and its daemon, the commands, the viewer's server) and the stdio transport an agent app starts
 (import `cad_mcp`, run as `cad mcp`), all in `packages/cad/src`. `cad-server`, `cad-mcp` and `cadgen`
 are empty aliases published at every release so older installs keep working; `cadgen` is the
-library's deprecated name. New text and examples name `cad`. A computer has one cad, installed as a
-uv tool, and one server, started only by `cad server start` or `cad mcp` (Codex's plugin line,
-`uvx --no-config --managed-python --python 3.14 cad@<VERSION> mcp`). Skills run plain `cad` commands,
-no version in them. The server installs `cad[build123d]` at its own release, with uv, on first need,
+library's deprecated name. New text and examples name `cad`. A computer has one cad, installed
+globally (`uv tool install cad`), and one server, started only by `cad server start` or `cad mcp`
+(Codex's plugin line, `uvx --no-config --managed-python --python 3.14 cad@<VERSION> mcp`, which
+installs cad globally where the computer has none and uses that cad's server; no server runs from
+uv's cache). cad runs on Python 3.11 and newer. Skills run plain `cad` commands, no version in them. The server installs `cad[build123d]` at its own release, with uv, on first need,
 into the base environment its kernel processes run in (`cad_server._internal.base`); `cad run` is
 `uv run` with the library pinned at that release and the integrations a program's imports use
 (`cad_server._internal.extras`). A test or an experiment gets a server of its own with its own
@@ -189,14 +193,15 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
   repository-root module, and must not add `skills/`, the repository root, or a
   sibling skill directory to `sys.path`, `PYTHONPATH`, `NODE_PATH`, or any other
   runtime lookup path. Skills are independent of each other, not of everything.
-- cad knows no app, plugin or skill: it never names, installs, removes, updates or carries them
-  (the MCP server may read which app connected; after its own update, cad runs the hosted install
-  command once where that command set the computer up). Knowledge of the apps lives in the plugin
-  and `scripts/install/install.py`.
+- cad knows no app or skill: it never names, installs, removes, updates or carries them (the MCP
+  server may read which app connected). Of plugins it knows one command, `cad plugin`, which runs
+  the hosted install command (`cad plugin install`, and once after an automatic update where
+  `cad plugin auto-update` is on). Knowledge of the apps lives in the plugin and
+  `scripts/install/install.py`.
 - Shared runtime comes from the **`cad` distribution**. A skill that uses it runs plain `cad`
   commands, with no version, and says how to get cad in its SKILL.md's Setup block (the same in
   each); no skill installs cad any other way (no `requirements.txt` naming it), because a second
-  installation is one the Setup block never names. A command the skills used keeps working for 30
+  installation is one the Setup block never names, and no skill names or runs the install command. A command the skills used keeps working for 30
   days after they stop using it (`tests/python/global/test_released_commands_still_parse.py`).
   Skills do not vendor cad, and ship no scripts (claude.ai's plugin
   directory refuses a program): what a skill would script is a `cad` command whose parser

@@ -48,12 +48,13 @@ cad_server/
   updates.py             # the hourly read of the version feed, and PyPI asked for `cad update`
   assets.py              # where the bundled runtime is
   _internal/             # the environments models run in (base, extras, scan), cad's own update
-                         #   (auto_update, auto_update_helper), the hosted install command as cad
+                         #   (auto_update, auto_update_helper), cad installed globally by a cad run
+                         #   from uv's cache (tool_install), the hosted install command as cad
                          #   runs it (install_script), the daemon's entry (engine_daemon,
                          #   engine_host), telemetry's sender, file locks, the one parser every command
                          #   reads its options by (cli_parser) and the one failure contract every
                          #   command fails by (cli_errors); and, kept apart for the bridge from
-                         #   0.10.0 to 0.11.10 and deleted with it, what reads that layout
+                         #   0.10.0 to 0.11.11 and deleted with it, what reads that layout
                          #   (installations, releases, proxy, arrival)
   _runtime/              # BUILT: the CAD Viewer client and the CAD app page -- produced when
                          #   the wheel is packaged, never committed, never edited
@@ -77,9 +78,12 @@ cad_server/
   `cad server status` says whether it runs, its release, its workers and what they build.
   `cad server start --foreground` runs it in this process; `cad server --rotate-token` replaces the page
   token. Nothing else starts the server but `cad mcp`. A command that needs it and finds none says so in
-  one line (`the cad server is not running: run cad server start`) and exits 1.
+  one line (`the cad server is not running: run cad server start`) and exits 1. On Windows, `cad server
+  start` names any uv folder in an app's private copy of AppData, and says to delete it.
 - **`cad mcp`**: the CAD app's stdio transport an agent app starts (Codex's plugin line). It starts the
-  server once, as `cad server start` does.
+  server once, as `cad server start` does. Run from uv's cache on a computer with no global cad, it
+  installs one first (`_internal/tool_install.py`) and uses that cad's server
+  ([the transport's README](../cad_mcp/README.md)).
 - **`cad run`**: a program exactly as `uv run` runs it, with cad pinned at this release and the
   integrations its imports use (`_internal/extras.py`, `_internal/scan.py`), in an environment the engine
   makes. `cad requirement [INTEGRATION ...]` prints the exact requirement a Python of a program's own
@@ -89,7 +93,8 @@ cad_server/
 - **`cad doctor`**: one read-only report: this cad's release, its Python and where it is installed, its
   data and cache folders and what `cad cache prune` would free, the CAD kernel environment and whether it
   loads, the integrations, whether the server runs and its release, and cad's own update (the switches,
-  whether this cad is a global install, whether uv is found, the last attempt). It changes nothing. Exit 1 when the
+  whether this cad is a global install and by which installer, whether that installer is found, the last
+  attempt; on Windows, a uv folder in an app's private copy of AppData). It changes nothing. Exit 1 when the
   kernel is installed and does not load; `--json` gives the report as one document.
 - **`cad cache dir|prune|clean`**, as `uv cache` treats uv's: `dir` prints the cache folder, `prune`
   removes what this release cannot use (environments made for other releases, and the release folders
@@ -109,11 +114,12 @@ cad_server/
   is all cad knows of plugins.
 - **`cad telemetry [status|on|off]`**: the person's answer about usage stats and crash reports.
 
-There is no command that installs or removes cad: that is uv's (`uv tool install cad`,
-`uv tool uninstall cad`). Every command that destroys asks first (`cad delete`,
+No command installs or removes cad: that is uv's (`uv tool install cad`, `uv tool uninstall cad`).
+The one exception is `cad mcp` run from uv's cache on a computer with none, which runs that same
+`uv tool install`. Every command that destroys asks first (`cad delete`,
 `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`; `_internal/consent.py`).
 
-Kept only for releases 0.10.0 to 0.11.10, and deleted with that bridge (`cli/setup.py`): `cad setup
+Kept only for releases 0.10.0 to 0.11.11, and deleted with that bridge (`cli/setup.py`): `cad setup
 --engine-update`, which those releases' updater runs on the new release; plain `cad setup`, which a `cad
 update` typed on those releases runs, the install command in install mode; and the hidden short forms
 `cad status` and `cad stop`, which their skill text uses. On a computer whose apps got text-to-cad only

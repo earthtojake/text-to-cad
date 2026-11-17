@@ -12,7 +12,7 @@ On Windows, in PowerShell:
 irm https://www.texttocad.dev/install.ps1 | iex
 ```
 
-It does five things, and nothing else:
+It does six things, and nothing else:
 
 1. Installs [uv](https://docs.astral.sh/uv/) if it is missing. Where uv is older than 0.9.0, it updates
    it, or installs a newer one beside it with uv's own installer.
@@ -22,7 +22,10 @@ It does five things, and nothing else:
 3. Installs or updates the plugin in each agent app it finds, with that app's own command (below),
    all but Kimi Code, which you install by hand. It prints one line per app.
 4. Removes what earlier releases of text-to-cad left in those apps.
-5. Turns on the plugin's automatic updates ([Updating](#updating)).
+5. Where cad's folder is not on your PATH, runs uv's own `uv tool update-shell`, which adds it for
+   new terminals (on macOS and Linux in your shell's profile, on Windows in your user PATH). Setting
+   `UV_NO_MODIFY_PATH` stops that.
+6. Turns on the plugin's automatic updates ([Updating](#updating)).
 
 It takes no options and does not start anything. Run it again at any time to bring the plugin up
 to date in every app.
@@ -35,7 +38,7 @@ Your agent shows each model it makes in a viewer. In the Codex app that is a **C
 thread; every other app opens it in its own browser, or gives you a link to open in yours.
 
 On Windows, run it in Windows Terminal or PowerShell, not in a Windows Store app's shell such as
-the Claude desktop app's: Windows keeps what such an app's commands write inside that app, where no
+the Claude desktop app's: Windows can keep what such an app's commands write inside that app, where no
 terminal and no other app finds it. The command names `www.texttocad.dev` because Windows
 PowerShell 5.1 does not follow the redirect from `texttocad.dev`.
 
@@ -352,12 +355,12 @@ skills may then be older than cad. That is fine: a command the skills used keeps
 
 ### Staying on an older release
 
-Turn automatic updates off, then install the release you want, for example 0.11.11:
+Turn automatic updates off, then install the release you want, for example 0.11.12:
 
 ```bash
 cad auto-update off
 cad server stop
-uv tool install cad==0.11.11
+uv tool install cad==0.11.12
 cad server start
 ```
 
@@ -366,7 +369,7 @@ skills may ask for a newer cad.
 
 ### From an earlier release
 
-A computer on 0.10.0 to 0.11.10 is brought over once, by the updater those releases shipped: it
+A computer on 0.10.0 to 0.11.11 is brought over once, by the updater those releases shipped: it
 installs the new cad with uv. Where the install command was used on that computer, it runs it once
 more and turns on the plugin's automatic updates; where it was not, your apps are left as they are.
 From then on, both update as above. A computer on an older release moves when you run the install

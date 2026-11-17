@@ -255,9 +255,10 @@ engine folder's, 0.8's), `another cad-server (<name>, pid N)` (the words the cod
 and earlier, kept as it was, with one state folder and one cache folder (`cad.engine.places`). Only `cad server start`
 starts it (and `cad mcp`, which starts it so, then serves the CAD app over stdio): a newer release's start replaces an
 older release's server, an older one joins a newer server that runs (`client.start`, `cad_mcp.shim.start_server`). A
-`cad mcp` that is not the uv tool `cad` installed on the computer (Codex's plugin line runs it from uvx's cache) starts
+`cad mcp` that is not the global `cad` installed on the computer (Codex's plugin line runs it from uvx's cache) starts
 none of its own: it runs the installed cad's `cad server start` and joins the server that leaves, whatever the two
-releases are, so the server is always the one that updates itself.
+releases are, so the server is always the one that updates itself. Where no global cad is installed, one run from uv's
+cache installs it first (`cad_server._internal.tool_install`: `uv tool install`, PyPI's newest, never `--force`).
 Every other command, `cad run` and a model run directly among them, attaches to the one that runs, and says so in one
 line where none does (`not_running`). A model's own process -- the library, which never starts a server of its own
 environment -- starts none. No client starts another release's engine beside the device's: an engine runs on until
@@ -286,7 +287,7 @@ automatic update that installed a newer cad, with `cad plugin auto-update` on, t
 `cad plugin install` once (the hosted install command); a typed `cad update` never does. Where no server runs, a
 typed `cad update` begins the update itself (`cli/update.py`), and its helper starts no server after it.
 
-The updaters of 0.10.0 to 0.11.10 are frozen on computers, though, and update by running a newer release's hidden
+The updaters of 0.10.0 to 0.11.11 are frozen on computers, though, and update by running a newer release's hidden
 `cad setup --engine-update` from a flat release folder they made (`<state>/releases/X`). The bridge
 (`cad_server.cli.setup`, all of it to be deleted together once those releases are gone) answers: that run writes the
 installation record their switch starts the server by, naming that folder's environment, owes install mode, and
@@ -294,10 +295,14 @@ changes nothing else; the switch points `installations/current` at X and starts 
 back where it does not answer. Five minutes after it started with `current` naming X, that server runs the hosted
 install command in install mode (cad as a uv tool, our plugin in every agent app), once, retried as it failed (hourly
 at a start, then daily, 30 attempts or 30 days at most; `cad_server._internal.install_script`); once a report says
-cad was installed and nothing is in flight, the records point at the uv tool's environment and a helper that is not
-cad stops this server and starts the uv tool's. Every server of a uv tool points `current` and its record at itself,
-so a client of 0.11.10 or earlier that finds no server starts it. On a computer whose agent apps got text-to-cad from
-a store alone (no receipt or plugin folder of our earlier setup) nothing is owed: cad alone moves. 0.10.0's updater on
+cad was installed and nothing is in flight, the records point at the global cad's environment and a helper that is
+not cad stops this server and starts the global cad's. Every server of a global install points `current` and its
+record at itself, so a client of 0.11.10 or earlier that finds no server starts it. On a computer whose agent apps got
+text-to-cad from a store alone (no receipt or plugin folder of our earlier setup) nothing is owed: after the same five
+minutes the server installs cad globally itself (`tool_install`), as it does where install mode's run installed no
+cad, and hands over the same way. A global install's server on a computer our setup set up before, whose `cad plugin
+auto-update` was never set (the new cad arrived by the uv line), turns that switch on and runs the install command
+once. 0.10.0's updater on
 Windows keeps its state in the local application data, so its switch could only go back: there the run stops 0.10.0's
 server by its own stop command first, moves its data once, points the records in both state folders at X, and starts
 X's server on the port and with the token it took in. Plain `cad setup`, which `cad update` typed on those releases

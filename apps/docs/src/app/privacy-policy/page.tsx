@@ -111,13 +111,15 @@ export default function PrivacyPolicyPage() {
             software on your computer asks api.texttocad.dev which text-to-cad release is the newest. The
             request carries no ID and nothing about you or your work; like any request, it reaches our host
             with your IP address, the time and a user agent that names text-to-cad’s software. It is not
-            made in CI. Where automatic updates are on, and the answer names a newer release than the one you
-            have, text-to-cad downloads that release from the Python Package Index (PyPI) and installs it. If
-            our install command set up your computer, text-to-cad then downloads our install script from this
-            website and runs it, which updates the text-to-cad plugin in your agent apps. Our install command
-            turns automatic updates on; otherwise they are off. When an earlier release that updated itself
-            brings your computer to the current one, text-to-cad runs our install script once in the same way.
-            Section 5 says how to turn the check and the updates off.
+            made in CI. Automatic updates are on unless you turned them off. While they are on, and the answer
+            names a newer release than the one you have, text-to-cad downloads the newest release from the
+            Python Package Index (PyPI) and installs it. Where the plugin’s automatic updates are on (our
+            install command turns them on),
+            text-to-cad then downloads our install script from this website and runs it, which updates the
+            text-to-cad plugin in your agent apps. When an earlier release that updated itself brings your
+            computer to the current one, text-to-cad installs itself from PyPI the same way, and runs our
+            install script once if our install command set up your computer before. Section 5 says how to turn
+            the check and the updates off.
           </li>
           <li>
             <strong>This website:</strong> page views, with the referring page, browser, device type
@@ -165,10 +167,11 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <strong>Services the software contacts directly</strong>, under their own privacy
-            policies. Our install command and automatic updates download text-to-cad from the Python
-            Package Index (PyPI), uv from its makers, Astral, when it is missing, and the plugin from GitHub;
-            some agent apps, such as Codex, also download text-to-cad from PyPI themselves the first time they
-            start it after an install or an update. Skills reach the
+            policies. Our install command and updates download text-to-cad from the Python Package Index
+            (PyPI), uv from its makers, Astral, when it is missing or too old, and the plugin from GitHub;{" "}
+            <code>cad update</code> asks PyPI which release is newest; some agent apps, such as Codex, also
+            download text-to-cad from PyPI themselves the first time they start it after an install or an
+            update, and install it if your computer has none. Skills reach the
             services you ask your agent to use, such as a fabrication service’s public specifications
             or your own printer on your local network. These requests send no personal data of ours;
             each service sees the request’s IP address, time and user agent.
@@ -244,7 +247,8 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             To turn automatic updates off, run <code>cad auto-update off</code>;{" "}
-            <code>cad auto-update on</code> turns them on again. Setting <code>CAD_UPDATE_CHECK=0</code> where
+            <code>cad auto-update on</code> turns them on again. <code>cad plugin auto-update off</code> stops
+            text-to-cad from running our install script after an update. Setting <code>CAD_UPDATE_CHECK=0</code> where
             text-to-cad runs turns the hourly version check, and with it automatic updates, off for that
             process.
           </li>
