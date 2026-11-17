@@ -48,6 +48,11 @@ updater), installed by its own ``cad setup`` through uvx, its server serving pag
   pages: cad a uv tool, the old launcher gone, both switches on; ``cad server start`` then replaces the old server.
 - ``typed``: the shipped release's own ``cad update`` typed (what today's skill text has an agent type where cad is
   older): it brings this build, whose plain ``cad setup`` runs the install command: the end of ``install-command``.
+  On Windows that install cannot finish: the typed command is the shipped release's ``cad.exe``, still running, which
+  Windows lets no one replace, so the install command refuses and says so. The command exits 1, and the computer is
+  left as it was and working: the same release answers ``cad --version`` and serves the pages, ``current`` and the
+  switches unchanged, no uv tool, nothing owed (no ``handover.json``) and no arrival kept. Then the way on every skill
+  names, the install command run with no ``cad.exe`` running: the end of ``install-command``.
 - ``store-typed``: the same on a store-only computer: cad alone moves, as in ``store-only``; ``cad server start`` then
   replaces the old server with this build's.
 
@@ -705,10 +710,9 @@ def rollback(box: Box, old: str) -> None:
         "no install command, no uv tool")
 
 
-def install_command(box: Box, old: str) -> None:
-    box.install_old(old)
-    box.feed.latest = NEW
-    said = box.install_command().stdout
+def by_hand(box: Box, old: str, said: str, how: str) -> None:
+    """The end of the install command a person ran on a computer of ``old`` (``said``: its output): uv's cad, the old
+    launcher removed, and ``cad server start`` replacing the old server; ``how`` says how the computer got there."""
     box.is_tool(NEW)
     if "Removed the cad command of an earlier release" not in said:
         raise Failed(f"{box.label}: the install command did not say it removed {old}'s cad command:\n{said}")
@@ -720,14 +724,62 @@ def install_command(box: Box, old: str) -> None:
     left = box.from_folder(box.old_state / "releases")
     if left:
         raise Failed(f"{box.label}: {old}'s server still runs:\n" + "\n".join(left))
-    say(f"        {old} -> {NEW} by the install command: uv's cad, both switches on, the old server replaced by "
-        f"`cad server start`, current {NEW}")
+    say(f"        {old} -> {NEW} {how}: uv's cad, both switches on, the old server replaced by `cad server start`, "
+        f"current {NEW}")
     pages(box, NEW)
+
+
+def install_command(box: Box, old: str) -> None:
+    box.install_old(old)
+    box.feed.latest = NEW
+    by_hand(box, old, box.install_command().stdout, "by the install command")
+
+
+# What the install command says where a cad.exe runs from cad's own folder (``install.py``: ``cad_running``), as the
+# shipped release's typed ``cad update`` does on Windows while it runs this build's ``cad setup``.
+CAD_EXE_RUNS = "cad.exe is running from cad's own folder, and Windows lets no one replace it while it does"
+# The records a typed update that could not install leaves as they were (the state folder's).
+RECORDS = ("handover.json", "arrival.json", "install-report.json", "auto-update.json", "update.json")
+
+
+def held(box: Box) -> dict:
+    """What a person on a computer of a shipped release relies on, and what would act on it later: for ``typed`` on Windows."""
+    return {"cad": box.version(), "current": box.current(), "tool": box.tool(),
+            "launcher": sorted(path.name for path in box.commands() if launcher(path)),
+            "switches": box.read("settings.json").get("auto_update"),
+            "records": {name: box.read(name) for name in RECORDS},
+            "new release folder": (box.old_state / "releases" / NEW).is_dir()}
+
+
+def typed_on_windows(box: Box, old: str) -> None:
+    """``typed`` on Windows (see the module): the install refused while the typed ``cad.exe`` runs, the computer as it
+    was, then the install command run by hand."""
+    before = held(box)
+    done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 300)
+    words = done.stdout + done.stderr
+    if done.returncode != 1 or CAD_EXE_RUNS not in words or f"text-to-cad {NEW} is out (this is {old})" not in words:
+        raise Failed(f"{box.label}: {old}'s cad update exited {done.returncode}, not 1 with the install command's "
+                     f"refusal:\n{done.stdout}\n{done.stderr}\n{box.said()}")
+    box.until(lambda: box.serving(old), f"{old}'s server still serving the pages' port {box.port} with their token")
+    after = held(box)
+    expected = {**before, "new release folder": True}  # the shipped update made it before it ran this build's setup
+    if after != expected or (after["cad"], after["current"], after["tool"]) != (f"cad {old}", old, None) \
+            or not after["launcher"] or after["records"]["handover.json"] or after["records"]["arrival.json"]:
+        raise Failed(f"{box.label}: after {old}'s cad update was refused: {after}\nbefore it: {before}\n{box.said()}")
+    left = box.from_folder(box.old_state / "releases" / NEW)
+    if left:
+        raise Failed(f"{box.label}: processes of {NEW} still run after {old}'s cad update:\n" + "\n".join(left))
+    say(f"        {old}'s `cad update` exited 1, refused while its cad.exe runs; cad {old} answers and serves the "
+        f"pages, current {old}, no uv tool, nothing owed, no arrival kept")
+    by_hand(box, old, box.install_command().stdout, "then by the install command, with no cad.exe running")
 
 
 def typed(box: Box, old: str) -> None:
     box.install_old(old)
     box.feed.latest = NEW
+    if WINDOWS:
+        typed_on_windows(box, old)
+        return
     box.run([box.cad(), "update"], timeout=SECONDS + 300)
     box.is_tool(NEW)
     started = box.run([box.cad(), "server", "start"]).stdout

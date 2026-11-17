@@ -152,7 +152,11 @@ class Held:
 
 class HolderTest(unittest.TestCase):
     """The transport's start and hold (``shim.Holder``): the server started once, at its start, then held; after
-    the server goes, held again only at the host's next request, and never started again -- a stop is obeyed."""
+    the server goes, held again only at the host's next request, and never started again -- a stop is obeyed.
+
+    A holder's thread lives as long as its process, so one an earlier test made can still be on its way to
+    ``client.hold`` while a later test's fake stands in for it: a fake that counts holds counts only its own
+    holder's (by ``ident``) and answers any other as no server running."""
 
     def until(self, condition) -> None:
         for _ in range(1000):
@@ -164,15 +168,17 @@ class HolderTest(unittest.TestCase):
     def test_it_starts_the_server_once_then_holds_it_and_after_a_stop_starts_none(self) -> None:
         gone, holds, starts = threading.Event(), [], []
         attempts = threading.Semaphore(0)
+        holder = shim.Holder()
 
-        def hold(host=None, holder=None):
-            holds.append(holder)
+        def hold(**said):
+            if said.get("holder") != holder.ident:
+                raise client.NotRunning(client.NOT_RUNNING)  # an earlier test's holder: not this one's to count
+            holds.append(said["holder"])
             attempts.release()
             if len(holds) == 1:
                 return Held(gone)
             raise client.NotRunning(client.NOT_RUNNING)
 
-        holder = shim.Holder()
         with mock.patch.object(shim, "start_server", side_effect=lambda: starts.append(1) or "started"), \
                 mock.patch.object(client, "hold", side_effect=hold):
             holder.start()
