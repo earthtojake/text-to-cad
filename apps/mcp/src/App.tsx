@@ -4,7 +4,6 @@ import { useAnalyticsConsent } from '@cad/ui/consent';
 import { useWhatsNew } from '@cad/ui/whats-new';
 import { translator, useI18n, useLanguage } from '@cad/ui/i18n';
 import { viewerLinks } from '@cad/ui/links';
-import { readNotice, UpdateButton } from '@cad/ui/update';
 import { Button } from '@cad/ui/primitives/button';
 import { TooltipHint } from '@cad/ui/primitives/tooltip';
 import { createTabStore, memoryTabRecord } from '@cad/ui/tab-store';
@@ -12,7 +11,6 @@ import { normalizePath } from '@cad/ui/cad-viewer';
 import { version } from '../package.json';
 import type { Bridge, HostContext } from './host/bridge';
 import { declaresOpenLinks } from './host/channel';
-import { frameClipboard } from './host/clipboard';
 import { hostDisplayName } from './host/hostName';
 import { captureSettled, fitCapture } from './host/capture';
 import { createLiveRegistry, describeView } from './host/live';
@@ -307,21 +305,13 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     if (page) void openBrowserPage({ tunnel, direct: Boolean(direct), bridge, model, page });
   } : undefined, [browsable, pages, tunnel, direct, bridge]);
   const { launch } = showing;
-  // A newer release, as the server's version check last saw it: each launch carries it (`notice`), none for a
-  // session a store's launcher opened (its `--channel`: the store updates that copy). The update nudge, last in
-  // the navbar (the file handler's corner, under Full size), whose popover hands the person a prompt for the
-  // agent: Send to agent posts it as their message where the host takes messages (`ui/message`, as Quick
-  // Edit's Send does), else Copy prompt. Nothing here updates anything.
-  const notice = readNotice(launch.notice);
-  const update = notice ? <UpdateButton notice={notice} copy={text => frameClipboard.writeText(text)}
-    send={chat.send ? text => bridge.request('ui/message', { role: 'user', content: [{ type: 'text', text }] }, { timeoutMs: 30_000 }).then(() => {}) : undefined} /> : null;
   if (superseded) {
     return <Frame bridge={bridge} context={context} insets={insets} inline={inline} floatingComposer={floatingComposer}><Superseded still={still} label={translator(locale)('cad.superseded')} /></Frame>;
   }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} floatingComposer={floatingComposer}
     overlay={lost ? <Banner message={typeof lost === 'string' ? lost : lostNotice(translator(locale), presentation, bridge.hostInfo.name)} /> : null}>
     <ModelView launch={launch} sequence={showing.sequence} alone={alone} bridge={bridge} client={client} tunnel={tunnel}
-      tabStore={tabStore} live={live} links={links} appSettings={appSettings} update={update}
+      tabStore={tabStore} live={live} links={links} appSettings={appSettings}
       whatsNew={presentation === 'tabs' && !lost ? { entry: whatsNew.entry, onDismiss: whatsNew.dismiss } : undefined}
       fullSize={inline && context.availableDisplayModes?.includes('fullscreen') !== false ? <FullSizeButton bridge={bridge} /> : null}
       openInBrowser={openInBrowser} engineOrigin={engineOrigin ?? undefined}

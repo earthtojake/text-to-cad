@@ -326,18 +326,6 @@ export default {
   "home.ageHours": "{n}h ago",
   "home.ageDays": "{n}d ago",
 
-  // The update nudge: a newer version is known; its popover hands the person a prompt for their agent (`@cad/ui/update`).
-  "update.aria": "Update available: v{version}",
-  "update.available": "Update available",
-  "update.close": "Close",
-  "update.description": "A new version of the text-to-cad plugin is available. Send a message to your agent asking it to update:",
-  "update.copy": "Copy",
-  "update.copied": "Copied",
-  "update.copyPrompt": "Copy prompt",
-  "update.sendToAgent": "Send to agent",
-  "update.sendFailed": "It could not be sent to the chat. Copy the prompt instead.",
-  "update.copiedHint": "Copied. Paste it into your agent's chat.",
-  "update.copyFailed": "It could not be copied. Select the prompt above and copy it.",
   // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
   "whatsNew.gotIt": "Got it",
   "whatsNew.title": "What's New (v{version})",

@@ -61,10 +61,6 @@
       "types": "./dist/consent/index.d.ts",
       "import": "./dist/consent/index.js"
     },
-    "./update": {
-      "types": "./dist/update/index.d.ts",
-      "import": "./dist/update/index.js"
-    },
     "./whats-new": {
       "types": "./dist/whats-new/index.d.ts",
       "import": "./dist/whats-new/index.js"

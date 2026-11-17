@@ -49,16 +49,8 @@ export interface CadServerInfo {
   pid?: number;
   /** This start of the engine, a random token: another one answering after the engine was gone is a new engine, which reloads the page. */
   instance?: string;
-  /**
-   * A newer release than this server's, as its last version check saw it (`cad_server/updates.py`); absent
-   * where none is known, the check is off (`CAD_UPDATE_CHECK=0`) or this is a development build. The page's
-   * update nudge, which hands the person a prompt for their agent: nothing here installs anything.
-   */
-  notice?: CadUpdateNotice;
   [key: string]: unknown;
 }
-/** A newer release (`GET /api/v1/server`'s `notice`): the one this server runs, and the newer one. */
-export interface CadUpdateNotice { version: string; latest: string }
 /**
  * A model in the library every CAD view shares (`GET /api/v1/documents`): times in seconds. The API
  * names a row's document kind `kind` and its record's `record`; the client hands the library the

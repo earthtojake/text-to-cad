@@ -236,7 +236,7 @@ the launch's `_meta` first (`host/capability.ts`).
   before, in any view or the web viewer). Back to home, first in the menu the navbar's logo
   opens, goes to it. The sidebar (`cad_home`) and a tab with nothing to show open on it; a
   model opened from it is shown in place. The home has the same navbar (the logo's menu, Back
-  and Forward, Full size and the update nudge; no file, so no ⋯); it starts with its control
+  and Forward, Full size; no file, so no ⋯); it starts with its control
   row, its links the app menu's.
 - **A view browses from its file's folder.** The file name in the navbar opens the name menu:
   Models, and Files, the explorer, starting at the file's folder. A pick shows the file in
@@ -262,7 +262,7 @@ the launch's `_meta` first (`host/capability.ts`).
   view with no navbar (`chrome: "bare"`): no logo or app menu, no name or name menu, no ⋯
   (so no Open in › Browser); what the navbar would carry that it still has is its corner at
   the viewport's top-right (`CardCorner.tsx`, the viewer's `notice`, Quick Edit under it):
-  Full size where the host offers it, then the update nudge while a newer version is known. Preview's bar hides the
+  Full size where the host offers it. Preview's bar hides the
   corner as it hides a navbar. Its launch carries no page (`browser`). The agent reads it
   (`cad_view` lists it) but shows nothing in it: `cad_show` refuses its view, and
   the page ignores a show that reaches it anyway.
@@ -273,9 +273,7 @@ the launch's `_meta` first (`host/capability.ts`).
   the sidebar’s view. A session closing removes its sidebar views; stale views expire
   by the same heartbeat rule as other views.
 - **One request to the network of its own: analytics with consent.** It goes to `api.texttocad.dev`
-  (`apps/api`). The tools say nothing of releases; the page's one word of them is the update nudge (below).
-  A store's copy names its store in its launcher (`--channel NAME`), a label the counts carry, and a session it
-  opens is never told of a release.
+  (`apps/api`). The tools and the page say nothing of releases.
   Codex, given two plugins that each name a server `cad`, lists one, the one of the plugin whose id sorts first
   (`text-to-cad@openai-curated` before `text-to-cad@text-to-cad`; `codex mcp list`, codex-cli 0.153.4 and
   0.169.0-alpha.11.1, measured 2026-11-14, no agent turn). The telemetry: the server
@@ -300,19 +298,6 @@ the launch's `_meta` first (`host/capability.ts`).
   counts; it decides nothing there. No tool of the agent's reads or changes it:
   the person answers in the menu or with `cad telemetry`. Opt-out deletes the
   installation ID and requests deletion of data sent under it.
-- **A newer release is a nudge for the person, and the agent does the update.** Each launch carries
-  `notice` (`{version, latest}`) where the server's version check, as last read, knows a newer release
-  (`cad_server/updates.py`'s `offered`: never with `CAD_UPDATE_CHECK=0`, from a development build, or in a
-  session a store's launcher opened, `--channel`, whose copy the store updates: only the default channel gets
-  the nudge). While the launch shown
-  carries one, the shared update nudge (`@cad/ui/update`'s `UpdateButton`) is last among the navbar's
-  controls, after Full size; in the file handler, which has no navbar, it is in the corner under Full size.
-  Its popover says a new version of the text-to-cad plugin is available, with the prompt for the agent,
-  `A new version of the text-to-cad plugin is available (v<latest>). Update it from
-  https://github.com/earthtojake/text-to-cad`. **Send to agent** posts it as the person's message
-  (`ui/message`, as Quick Edit's Send does) where the host takes messages (`chatReach`'s `send`: Codex's
-  tabs, and an inline host that declares `message`); elsewhere, or when sending fails, **Copy prompt** copies
-  it through the frame's clipboard. The prompt has a copy icon either way. Nothing here installs anything.
 - **Told how it is presented, before it greets the host.** A host that mounts
   views inline is served the page with `<meta name="cad-presentation"
   content="inline">` in its head: the page offers that host `inline` and

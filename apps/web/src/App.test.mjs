@@ -80,8 +80,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   const viewer = () => snapshot();
   try {
     const historyAtStart = window.history.length;
-    // A newer release, as the server's description says it (`main.tsx` reads it first): the nudge draws with the page.
-    await act(() => root.render(createElement(App, { client, server: { start: '/m', pick: true, platform: 'darwin', notice: { version: '0.11.11', latest: '0.11.12' } }, tabStore })));
+    await act(() => root.render(createElement(App, { client, server: { start: '/m', pick: true, platform: 'darwin' }, tabStore })));
     // The document the URL names, as it names it; the host's file menu and links; the tab's store
     // for everything the viewer keeps.
     assert.equal(viewer().file, ONE);
@@ -153,14 +152,9 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     await act(() => viewer().whatsNew.onDismiss());
     assert.equal(viewer().whatsNew.entry, null);
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/settings').at(-1), ['/api/v1/settings', { whats_new: { seen: ['0.11'] } }]);
-    // A newer release is the update nudge, last in the navbar: its popover's prompt is copied (this page
-    // cannot reach the agent's chat), and nothing is read for it.
-    assert.deepEqual([viewer().update.props.notice, viewer().update.props.send], [{ version: '0.11.11', latest: '0.11.12' }, undefined]);
+    // Nothing on the page tells of a newer release: no update nudge, and nothing is read for one.
+    assert.equal(viewer().update, undefined);
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/server' || url.startsWith('/api/v1/local/update')), []);
-    // Coming back to the tab reads the description again: no notice now (the person updated), no nudge.
-    const asked = serverCalls.length;
-    await act(async () => { window.dispatchEvent(new window.Event('focus')); await Promise.resolve(); });
-    assert.deepEqual([serverCalls.slice(asked), viewer().update], [[{ fresh: true }], null]);
     assert.deepEqual(guards, ['1', '1']);
 
     // Showing another file is a navigation, by the file's id: pushed, and undone by Back.

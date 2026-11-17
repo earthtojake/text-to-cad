@@ -129,7 +129,7 @@ selection or a pose, and the formats follow from the file's kind (`export/format
 has nothing to load; it says too whether its scene lies flat on z=0 (`planar`), which adds DXF. The GLB and mesh renderers publish the file shown: its path as the
 document and the catalog hash of the bytes on screen as the revision, which the server checks
 before it converts the file to the other mesh kinds. `FileViewer.navbarActions`, `fileMenuItems` and `overlay` are named
-composition slots: the first is in the navbar's right group, before the host's update nudge (`update`), which is outermost (the CAD app's Full size, its one control now; kept as the host's slot); the second is the end of the file's ⋯ menu,
+composition slots: the first is the navbar's right group, outermost (the CAD app's Full size, its one control now; kept as the host's slot); the second is the end of the file's ⋯ menu,
 after Copy path and Open in (`CadViewer` puts Export's submenu there); the third is in the
 relative viewport below it. The generic FileViewer knows nothing about export jobs.
 
@@ -515,11 +515,11 @@ is the view's navigation hands `"bare"` (the CAD app's file handler, Codex's *Op
 which shows one file alone): no navbar at all, over a file or a page that will not open — no
 logo or app menu, no Back and Forward, no name or name menu, no ⋯, no Export and no Open in
 browser — and what it still adds is its own, as its notice at the viewport's top-right
-(`notice`, the column Quick Edit hangs under: the CAD app's Full size and, while a newer version is known, its update nudge).
+(`notice`, the column Quick Edit hangs under: the CAD app's Full size).
 In Preview, in
 every host, the navbar steps aside for Preview's own bar. Over the home the navbar has only
 the logo and its menu (no Back to home), Back and Forward where the host hands a `history`,
-and the host's actions and update nudge, as they stand over a file; the home's type filter, search and
+and the host's actions, as they stand over a file; the home's type filter, search and
 layout switch stay in its control row, and its links are the app menu's. Left: the text-to-cad
 logo (the "C" mark, 16px, over the home and over a document alike),
 which opens the app menu (`AppMenu`, `file-viewer/navigation/AppMenu.jsx`), then Back and
@@ -534,8 +534,7 @@ plain text where there is neither; the ⋯ offers Copy path and Reveal in Finder
 manager, each where `fileActions` can do it, and is absent where it can do none (no
 right-click on the name). Right, only what a host or a file adds: the renderer's navigation
 actions first, then the host's actions (`navbarActions`: `CadViewer` hands it the host's
-`fullSize`, the CAD app's Full size), and last, outermost, the host's update nudge (`update`, only while a newer
-version is known: nothing at all otherwise, so nothing moves). The navbar holds no settings and none of the view's controls.
+`fullSize`, the CAD app's Full size), outermost. The navbar holds no settings and none of the view's controls.
 
 The app menu is FileViewer's, built from the host's `navigation.home`, `links` and
 `environment.platform` and the person's `FileViewerProps.appSettings` (which `CadViewer`
@@ -590,21 +589,6 @@ it seen for every view, and a write that fails still closes it. A new person is 
 server decides, once, whether a device was updated (`cad_server/whats_new.py`). A host leaves
 `whatsNew` out where a dialog has no room (the CAD app's cards) or while its own notice covers the
 view (the engine gone).
-`@cad/ui/update` is the update nudge both apps share: the one place a viewer tells a person that a newer
-version exists, and all it does is hand them a prompt for their agent. `UpdateButton({ notice, send?, copy })`
-is the blue icon button a host hands the viewer as its `update` (`CadViewerProps.update`, last and outermost of
-the navbar's right-hand controls, over every file and over the home; a host with no navbar puts it in its
-corner, as the CAD app's file handler does), only while the host knows a `notice` (`{ version, latest }`, the
-server's version check as last read: `/api/v1/server`'s, a CAD app launch's). A press opens a stock Popover
-saying an update is available (the title alone: the version is the prompt's), that a new version of the text-to-cad plugin is
-available and to send the agent a message, and the prompt (`updatePrompt(notice)`, one English text in every
-locale: `A new version of the text-to-cad plugin is available (v<latest>). Update it from <repository>`), with a
-copy icon on it and one button: **Send to agent** where the host can post a message to the agent's chat (`send`),
-else **Copy prompt** (`copy`, the host's clipboard); a send that fails falls back to Copy prompt. The popover
-closes as every popover does (Escape, a press away) and with its X, and after a send. It keeps nothing: no
-"don't show again", no count, no toast. Nothing in it installs, downloads or restarts anything: the agent
-updates, when the person asks it to. `readNotice(value)` reads a notice from a server's answer, null for
-anything else.
 The shell handles placement and hides the toolbar in
 Preview; the host owns callbacks and preferences. None of these imply platform
 detection or move application-specific release/network behavior into shared UI.
@@ -629,7 +613,7 @@ left edge, Quick Edit at the top-right, and at the bottom-right the view cube, o
 view's zoom pill. A host's one notice goes through the shell too: `notice` is drawn at the top-right once the
 file is on screen, never while it loads or after it failed to, with Quick Edit stacked under
 it while it stands; the home never shows it. The CAD app's file handler hands its corner (Full
-size, then the update nudge while a newer version is known) as its notice; the web viewer has none.
+size) as its notice; the web viewer has none.
 Quick Edit has no host preference or persisted enable/disable state.
 What Quick Edit offers follows the subscribed destination capability and
 the ports, never an app name: Copy Prompt always, Queue for a composer

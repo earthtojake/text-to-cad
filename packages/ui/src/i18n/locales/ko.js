@@ -312,18 +312,6 @@ export default {
   "home.ageHours": "{n}시간 전",
   "home.ageDays": "{n}일 전",
 
-  // The update nudge (`@cad/ui/update`).
-  "update.aria": "업데이트 가능: v{version}",
-  "update.available": "업데이트 가능",
-  "update.close": "닫기",
-  "update.description": "text-to-cad 플러그인의 새 버전이 나왔습니다. 에이전트에게 업데이트해 달라는 메시지를 보내세요:",
-  "update.copy": "복사",
-  "update.copied": "복사됨",
-  "update.copyPrompt": "프롬프트 복사",
-  "update.sendToAgent": "에이전트에게 보내기",
-  "update.sendFailed": "채팅으로 보낼 수 없습니다. 대신 프롬프트를 복사하세요.",
-  "update.copiedHint": "복사했습니다. 에이전트 채팅에 붙여 넣으세요.",
-  "update.copyFailed": "복사할 수 없습니다. 위의 프롬프트를 선택해 복사하세요.",
   // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
   "whatsNew.gotIt": "확인",
   "whatsNew.title": "새로운 기능 (v{version})",

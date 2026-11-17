@@ -104,15 +104,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   the alert's title), which brings the card back and goes with it — the renderer's one
   navbar action. Then the host's own actions (`actions`): inline, where the host can show the view full size,
   **Full size** (the CAD app's: two diagonal arrows, a ghost icon button) — today the slot's
-  only control. Last and outermost, only while the host knows a newer version (`update`), the
-  **update nudge** (`@cad/ui/update`'s `UpdateButton`): a 24px blue icon button (a download arrow,
-  hinted "Update available", named "Update available: v<latest>") whose stock Popover, aligned to
-  its right edge and 20rem wide, says **Update available** (the title alone, with its X; the version
-  is the prompt's), the line that a new version of the text-to-cad plugin is available and to send the agent a
-  message, the prompt (`text-xs` monospace on the `muted` fill, selectable, a copy icon at its
-  top-right) and one `xs` primary button, **Send to agent** where the host can post to the chat,
-  else **Copy prompt**. It closes as every popover does, with its X, and after a send. With no
-  notice there is nothing at all: no space is kept for it, so nothing in the row moves. Export and Open in are the file menu's, never here. A CAD file publishes no
+  only control. Export and Open in are the file menu's, never here. A CAD file publishes no
   navbar action but that icon. The person's own settings, the theme among them, are never here: they are the app
   menu's.
 
@@ -129,7 +121,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 
   A host's home has the same navbar, with only the logo and its app menu (without Back to
   files) and, where the host keeps the view's history, **Back** and **Forward** at the left
-  (a desktop's alone) and, at the right end, the host's actions and update nudge, when there are any — the same
+  (a desktop's alone) and, at the right end, the host's actions, when there are any — the same
   buttons, sizes and places as over a file. Under it,
   the page, after Figma's Recents, with no hero (no wordmark, tagline or links: GitHub and
   Discord are the app menu's, X its footer's "Made by"; no light/dark button: Theme is the
@@ -179,8 +171,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   over a page that will not open: no logo or app menu, no Back and Forward, no name or name menu,
   no ⋯ (so no Export and no Open in). What it still adds is its corner at the viewport's
   top-right, first in the column of the host's notice and Quick Edit (`ViewportTopRight`): where
-  the host can show the view full size, **Full size**, then the update nudge while a newer version
-  is known. In Preview it is gone with the rest of the column.
+  the host can show the view full size, **Full size**. In Preview it is gone with the rest of the column.
 - **Name menu** is a popover under the file's name, aligned to the name's left edge, 17.5rem
   (280px, the explorer's natural width) wide and never resized: two stock shadcn Tabs on top,
   **Models** and **Files**, in the explorer's type (`text-xs`, a 28px list) and each as wide as its

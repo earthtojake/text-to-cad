@@ -12,8 +12,7 @@ This app is the browser host of `@cad/ui/file-viewer`, not the owner of
 the shared CAD interface.
 
 **Owns:** URL selection (`/<id>`: `src/client/workbench/fileParam.js`), browser history, document title/appearance, browser
-persistence, the file menu's reveal route, and the app menu's links (the update nudge's notice is
-the server's, read from `/api/v1/server`).
+persistence, the file menu's reveal route, and the app menu's links.
 `src/App.tsx` composes an explicit `ViewerHost` and hands it to the shared
 `CadViewer` (`@cad/ui/cad-viewer`), which registers one renderer per file
 family and draws the navbar and the explorer. The catalog exposes CAD
@@ -33,7 +32,7 @@ this app. The Python wheel consumes only the production build.
 src/
   App.tsx               the CadViewer's browser host: URL, history, title, appearance, the file menu and the library
   main.tsx              host/client bootstrap and cleanup
-  host/                 browser clipboard, prompt delivery, the app menu's links, the update notice, reload under a new server
+  host/                 browser clipboard, prompt delivery, the app menu's links, reload under a new server
   persistence/          the tab record in sessionStorage
   client/               appearance control and styling
   shared/               app build/runtime configuration helpers
@@ -202,7 +201,7 @@ File manager) on the script that builds it; where that script was moved or delet
 disabled, its hint "The source was moved or deleted." Open in also lists the apps the server finds
 on this computer for the document's files (`GET /api/v1/local/open-in`, as the menu opens): the
 source's, each export's as "App (file name)", then Default app; a choice is `POST /api/v1/local/open`. The navbar's right end holds only a dismissed alert's
-icon, when there is one, and the update nudge, while a newer version is known. For a model it captures the displayed revision and writes the document as its code built it: every
+icon, when there is one. For a model it captures the displayed revision and writes the document as its code built it: every
 part, as authored. The menu chooses a format alone; a posed or partial file is a function
 in the model's code. A STEP, XBF or held model offers STEP, STL, 3MF, GLB and XBF (an XBF's
 XBF is its own bytes), and DXF where the view draws it flat on z=0; on a GLB, STL or 3MF page Export converts the file shown, at the
@@ -411,7 +410,7 @@ script and exported files kept, and no other model with it; a file's "Delete bra
 engine's record of the file alone. From a file, Back to home in
 the menu the navbar's C logo opens leads back to it. The home has the same navbar, the same C
 logo (one 16px mark on every page) and the same menu (without Back to home, and with GitHub, Discord and X as
-over a file) at the left, and the update nudge at the right while a newer version is known. The home is a step of
+over a file) at the left. The home is a step of
 the browser's history, as a file is: the browser's Back and Forward walk between them (the
 navbar draws no arrows of its own here). A `/<id>` the server knows no file for, and no model the engine
 holds, shows "This model is no longer held" with the engine's words -- the command that builds it
@@ -505,15 +504,7 @@ in Preview the navbar gives way to Preview's own bar. This host
 supplies the links (`src/host/viewerLinks.js`): its version (with its build's id,
 `v0.10.0-dev.b80844940`, for any build but the release's own), the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
-links open in a new tab. A newer release is the update nudge's (`@cad/ui/update`), a blue icon last at the navbar's
-right as in the CAD app, and nothing at all otherwise: the server's version check, `/api/v1/server`'s
-`notice`, read with the server's description as the page starts (`main.tsx`) and again whenever the person
-comes back to the tab (`src/host/useUpdateNotice.ts`). A press opens its popover, whose prompt for the
-person's agent is copied (**Copy prompt**, or the copy icon on it): this page cannot reach the agent's chat.
-Nothing here installs anything; the agent updates when the person sends it the prompt. Only the default channel
-gets the nudge: a store's copy of the plugin opens this same page, which cannot tell who opened it, so the server
-offers `notice` only where a command or a CAD app session on the default channel (no store's name) has used its
-version (`versions.on_default_channel`); a computer with store copies alone, which the stores update, never sees it.
+links open in a new tab. The page never tells of a newer release: cad updates itself, and the agent the rest.
 The browser title is the open file's or model's name alone ("bracket.step", "juno"), and "text-to-cad" on the home.
 Appearance (System, Light, Dark) is the app menu's Theme row, the tab's choice (`colorScheme`,
 over a file and on the home); the page has no light/dark button of its own. The original animated mark remains the shared LoadingIcon

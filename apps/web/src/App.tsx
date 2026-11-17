@@ -11,8 +11,6 @@ import { reloadWhenClean } from './host/reloadWhenClean.js';
 import { useAnalyticsConsent } from '@cad/ui/consent';
 import { english, translator, useLanguage } from '@cad/ui/i18n';
 import { useWhatsNew } from '@cad/ui/whats-new';
-import { UpdateButton } from '@cad/ui/update';
-import { useUpdateNotice } from './host/useUpdateNotice';
 import { createBrowserDownloads } from './host/downloads';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
 import { createWebPromptContext } from './host/promptContext';
@@ -137,12 +135,6 @@ export default function App({ client, server, tabStore, language: chosenLanguage
   // What's new: once after a release with notes is installed, over the home or a file's view, kept
   // seen in the person's settings for every CAD view (`@cad/ui/whats-new`).
   const whatsNew = useWhatsNew(client.whatsNew);
-  // A newer release, as the server's version check last saw it (`/api/v1/server`'s `notice`): the update
-  // nudge, last in the navbar, whose popover hands the person a prompt to paste into their agent's chat
-  // (Copy prompt: this page cannot reach the chat). Nothing here updates anything.
-  const readServer = useCallback(() => client.serverInfo({ fresh: true }), [client]);
-  const notice = useUpdateNotice(readServer, server.notice);
-  const update = useMemo(() => notice ? <UpdateButton notice={notice} copy={text => browserClipboard.writeText(text)} /> : null, [notice]);
   // A person touching the page is use (time spent looking at a model makes no other request): said
   // at most every couple of seconds.
   useEffect(() => {
@@ -178,7 +170,7 @@ export default function App({ client, server, tabStore, language: chosenLanguage
         card among it) is out of reach and unheard until it is back. */}
     <div className="min-h-0 flex-1" inert={engineGone || undefined} aria-hidden={engineGone || undefined}>
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={next => { void show(next); }} onShown={shown}
-      library={library} onThumbnail={client.keepThumbnail} appSettings={appSettings} update={update}
+      library={library} onThumbnail={client.keepThumbnail} appSettings={appSettings}
       colorScheme={colorScheme} language={language}
       whatsNew={engineGone ? undefined : { entry: whatsNew.entry, onDismiss: whatsNew.dismiss }} />
   </div></div>;
