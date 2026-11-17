@@ -11,10 +11,16 @@ It holds no tool, view or document: the server does. What it does on its own, in
   is another cad (Codex's plugin line runs `cad mcp` from uvx's cache, at the plugin's release), it runs the
   installed cad's own `cad server start` and joins the server that leaves running, whatever the two releases are:
   never a server of its own, which would not be the cad the agent's shell runs and would never update itself; the
-  installed cad's own update brings the server forward. Otherwise exactly as `cad server start` does: a server of
-  this release or a newer one left running and joined, one of an older release stopped first, and this release's
-  started. Several started at once end with one server. It installs nothing, and starts no server after that: a
-  server stopped later stays stopped.
+  installed cad's own update brings the server forward. Where no cad is installed and this process runs from uv's
+  cache (its environment is in the folder `uv cache dir` names), it first installs cad, once, with
+  `uv tool install --managed-python --python 3.14 cad` (the newest release; the Python flags are cad's own and may
+  change with any release), within four minutes, and then uses the installed cad's server the same way. It never
+  passes `--force`: where uv refuses or fails, no server is started from the cache, the transport's log says why,
+  and every request is answered with one line, ``cad is not installed: run `uv tool install cad` ``. Run from anywhere else (a
+  project's Python, a development checkout), it installs nothing and does exactly as `cad server start` does: a
+  server of this release or a newer one left running and joined, one of an older release stopped first, and this
+  release's started. Several started at once end with one server and one install (uv locks its tool folder). It
+  starts no server after that: a server stopped later stays stopped.
 - **Answers the handshake in time**: the app's `initialize` waits for the start 20 seconds at most, inside Codex's
   30-second start window, and is answered by this process past that, the server's session opened at the app's next
   request. While the start runs, a tool call is answered with a line saying the server is starting, a tool or

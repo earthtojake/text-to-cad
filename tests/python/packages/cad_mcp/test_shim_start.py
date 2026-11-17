@@ -29,9 +29,11 @@ def refuse(*args, **kwargs):
 
 class StartTest(unittest.TestCase):
     def test_the_start_is_cad_server_start_s_and_holds_later_requests_to_this_release_or_a_newer_one(self) -> None:
-        """No uv tool ``cad`` installed, or this process is it: this release's server, as ``cad server start``."""
+        """No uv tool ``cad`` installed and this process not run from uv's cache, or this process is the tool: this
+        release's server, as ``cad server start`` (the install from uv's cache: ``test_shim_install``)."""
         for tool in (None, sys.prefix):
             with self.subTest(tool=tool), mock.patch.object(shim, "installed_tool", return_value=tool), \
+                    mock.patch.object(shim, "from_uv_cache", return_value=False), \
                     mock.patch.object(shim, "installed", side_effect=AssertionError("the installed cad's start")), \
                     mock.patch.object(client, "AT_LEAST", None), mock.patch.object(client, "RELEASE", None), \
                     mock.patch.object(client, "start", return_value="started the cad server") as start:

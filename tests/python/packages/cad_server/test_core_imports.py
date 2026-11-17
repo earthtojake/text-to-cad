@@ -133,7 +133,8 @@ class SidesTest(unittest.TestCase):
         self.assertEqual(loaded(code), [])
 
     def test_the_shim_imports_the_engine_client_and_the_mcp_protocol_and_no_kernel(self) -> None:
-        allowed = ("cad.engine", "cad_server.mcp", "cad_server._internal.auto_update")
+        allowed = ("cad.engine", "cad_server.mcp", "cad_server._internal.auto_update",
+                   "cad_server._internal.tool_install")
         offenders = []
         for name, path in modules(SHIM_PACKAGE).items():
             for line, imported in imports(name, path):

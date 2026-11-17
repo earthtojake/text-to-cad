@@ -1,11 +1,12 @@
 """``cad mcp``: the host's stdio transport, forwarding JSON-RPC to this release's CAD server.
 
 What it does, in order: start the server once, as it starts -- the installed uv tool ``cad``'s, by its own ``cad
-server start``, where one is installed and this is not it; else this release's, exactly as ``cad server start`` does
-(``start_server``, on a thread of its own, ``Holder``) -- and hold it while the host runs; pass the host's requests on to
-the server's HTTP endpoint, as its door names it at each request (``call``), and the server's answers back
-(``Proxy``). It installs nothing, and starts no server after its own start: a server stopped later (``cad server
-stop``) stays stopped. Several started at once end with one server (``client.start``: the daemon's lock).
+server start``, where one is installed and this is not it, installed first with uv where none is and this runs from
+uv's cache (``install``); else this release's, exactly as ``cad server start`` does (``start_server``, on a thread of
+its own, ``Holder``) -- and hold it while the host runs; pass the host's requests on to the server's HTTP endpoint, as
+its door names it at each request (``call``), and the server's answers back (``Proxy``). It starts no server after its
+own start: a server stopped later (``cad server stop``) stays stopped. Several started at once end with one server
+(``client.start``: the daemon's lock) and one install (uv's lock on its tool folder).
 
 Only connection metadata lives here. Tools, views, pages and document state belong to the server. Host
 capability corrections are made at this boundary: the development switch (``CAD_MCP_PRESENTATION``), and
@@ -29,7 +30,8 @@ browser: made here, in the environment the host gave this process, never in the 
   release's runs, one that takes the request and never answers it): ``tools/call`` a result marked ``isError`` carrying
   cad's one line
   (``client.NotRunning``, ``client.OtherRelease``, ``client.Unanswered``), which the agent reads and relays; any other
-  request a JSON-RPC error carrying it. The host's ``initialize`` is answered within ``ANSWER_SECONDS`` in every case:
+  request a JSON-RPC error carrying it. Where the start could not install cad (``install``), that line is
+  ``NOT_INSTALLED``. The host's ``initialize`` is answered within ``ANSWER_SECONDS`` in every case:
   greeted here, as while the start runs, where the server does not answer in time.
 """
 from __future__ import annotations
@@ -86,7 +88,12 @@ def start_server() -> str:
     shell runs. After it, the server running is reached where it is that release's or newer (``client.AT_LEAST``: the
     installed cad updates itself under this transport).
 
-    Where none is installed, or this is it: exactly what ``cad server start`` does (``client.start``: a server of an
+    Where none is installed and this process runs from uv's cache (``from_uv_cache``: a ``uvx`` run, which installs no
+    ``cad`` command and whose server would never update), cad is installed first, once, with uv (``install``), and
+    its server is then the installed cad's, as above. Where it could not be installed, no server is started.
+
+    Where none is installed and this runs from anywhere else (a project's Python, a development checkout), or this is
+    the installed cad: exactly what ``cad server start`` does (``client.start``: a server of an
     older release, or of 0.11.10 and earlier, told to stop, its work cut short, and this release's started; one of
     this release or a newer one joined), and after it the server running is reached where it is this release's or
     newer.
@@ -96,6 +103,8 @@ def start_server() -> str:
     ``ConnectionError`` in one line where it could not."""
     client.AT_LEAST = version()
     tool = installed_tool()
+    if tool is None and from_uv_cache():
+        tool = install()
     if tool is None or _same_folder(tool, sys.prefix):
         return client.start()
     return installed(tool)
@@ -106,6 +115,44 @@ def installed_tool():
     from cad_server._internal.auto_update import installed_tool as found
 
     return found()
+
+
+def from_uv_cache() -> bool:
+    """Whether this process runs from uv's cache (a ``uvx`` run: ``tool_install.from_uv_cache``)."""
+    from cad_server._internal.tool_install import from_uv_cache as found
+
+    return found()
+
+
+# What a request is answered with where cad could not be installed and no server runs (``install``), and how long the
+# install may take: a uv that hangs is stopped, never holding the start for ever.
+NOT_INSTALLED = f"{client.COMMAND} is not installed: run `uv tool install {client.COMMAND}`"
+INSTALL_SECONDS = 240.0
+
+
+def install():
+    """cad installed globally, once, with uv (``tool_install.install``), where this process runs from uv's cache and
+    no global cad is there: the installed cad's environment (``installed_tool``), whose server is then started and
+    joined (``installed``). What uv said goes to this transport's log. Where it could not be installed (uv refused, a
+    ``cad`` it did not install in the way, no network, past ``INSTALL_SECONDS``), nothing is forced and no server is
+    started from the cache: ``client.NotRunning`` with ``NOT_INSTALLED``, which every later request that finds no server
+    is answered with too (``client.NOT_RUNNING``, for this process)."""
+    import cad_server._internal.tool_install as tool_install
+
+    LOG.info("no global %s is installed on this computer: installing it with uv", client.COMMAND)
+    tool = None
+    try:
+        said = tool_install.install(timeout=INSTALL_SECONDS)
+    except tool_install.Failed as error:
+        LOG.info("could not install %s with uv: %s", client.COMMAND, error)
+    else:
+        for line in said:
+            LOG.info("uv: %s", line)
+        tool = installed_tool()
+    if tool is None:
+        client.NOT_RUNNING = NOT_INSTALLED
+        raise client.NotRunning(NOT_INSTALLED)
+    return tool
 
 
 def _same_folder(one, other) -> bool:
@@ -494,9 +541,9 @@ def serve():
         connection.serve()
     finally:
         proxy.close()
-        # A start under way is finished before this process leaves, never left half done (a server of another
-        # release stopped, and this release's not yet started): it is bounded.
-        holder.started.wait(INSTALLED_SECONDS)
+        # A start under way is finished before this process leaves, never left half done (cad being installed, a
+        # server of another release stopped and this release's not yet started): it is bounded.
+        holder.started.wait(INSTALL_SECONDS + INSTALLED_SECONDS)
     return 0
 
 
