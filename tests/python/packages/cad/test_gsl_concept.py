@@ -189,6 +189,32 @@ class Document(Folder):
         tree = document.collect(pair, "pair")
         self.assertEqual([{"t": 3.0}, {"t": 5.0}], [part.declared["concept"]["values"] for part in tree.parts])
 
+    def test_concepts_that_share_one_empty_shape_stay_parts_of_their_own_in_the_file(self) -> None:
+        # The engine keeps a shape by what it holds, so every part with no shape may come back as one shape:
+        # the file must still hold a part for each, with its own name and concept.
+        import build123d as bd
+
+        from cad import gsl
+        from cad.engine import document
+        from cad.engine.declarations import CONCEPT
+
+        first = gsl.concept(self.slab, label="base")
+        parts = [first]
+        for label, path, values, at in (("lid", self.block, {}, 0), ("knob", self.slab, {"t": 6}, 14)):
+            shared = bd.Compound(first.wrapped).moved(bd.Location((0, 0, at)))
+            shared.label = label
+            shared.__dict__[CONCEPT] = gsl.concept(path, label=label, **values).__dict__[CONCEPT]
+            parts.append(shared)
+        tree = document.collect(bd.Compound(children=parts, label="device"), "device")
+        path = self.folder / "device.xbf"
+        document.save(document.to_xcaf(tree), path, compare=False, tree=tree)
+        read = document.Loaded(path).structure()
+        self.assertEqual([("base", "slab.gsl", None), ("lid", "block.gsl", None), ("knob", "slab.gsl", {"t": 6.0})],
+                         [(read["prototypes"][instance["prototype"]]["name"],
+                           Path(read["prototypes"][instance["prototype"]]["concept"]["gsl"]).name,
+                           read["prototypes"][instance["prototype"]]["concept"].get("values"))
+                          for instance in read["instances"]])
+
     def test_a_step_of_a_document_holding_a_concept_is_refused_by_the_part_s_name(self) -> None:
         from cad.engine import export
 

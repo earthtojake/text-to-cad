@@ -4,6 +4,7 @@ its concept, and the exact part that names the concept it was made from. What ea
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -32,15 +33,17 @@ def _declared(path: Any, role: str, values: dict) -> dict:
 _SHAPELESS = None
 
 
-def _shapeless() -> Any:
-    """A part with no shape: an empty compound, made under the engine's memo so the model that holds it is
-    replayed as any other is (a shape made past it keeps a body from being retained)."""
+def _shapeless(named: str) -> Any:
+    """A part with no shape: an empty compound of its own. Each concept has one to itself (``named``, what it
+    is: its label, file and values): a document holds one part for one shape, so concepts sharing an empty shape
+    would be one part there, the last one's name and concept on all of them. Made under the engine's memo, so
+    the model that holds it is replayed as any other is."""
     global _SHAPELESS
     if _SHAPELESS is None:
         from cad.engine.model import memo
 
         @memo
-        def shapeless() -> Any:
+        def shapeless(named: str) -> Any:
             import build123d as bd
             from OCP.BRep import BRep_Builder
             from OCP.TopoDS import TopoDS_Compound
@@ -50,13 +53,14 @@ def _shapeless() -> Any:
             return bd.Compound(empty)
 
         _SHAPELESS = shapeless
-    return _SHAPELESS()
+    return _SHAPELESS(named)
 
 
 def concept_part(path: Any, label: str | None, values: dict) -> Any:
     declared = _declared(path, "body", values)
-    part = _shapeless()
-    part.label = label or Path(path).stem
+    name = label or Path(path).stem
+    part = _shapeless(json.dumps([name, declared], sort_keys=True))
+    part.label = name
     part.__dict__[CONCEPT] = declared
     return part
 

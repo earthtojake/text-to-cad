@@ -1148,6 +1148,15 @@ def _apart(shape: Any) -> Any:
     from OCP.TopExp import TopExp
     from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
+    if shape.NbChildren() == 0 and int(shape.ShapeType()) == 0:
+        # A compound holding nothing (a part that is a GSL concept, ``cad.gsl.concept``) has no topology for the
+        # copy to make again, and the copy is the shape it was given: an empty compound of its own instead.
+        from OCP.BRep import BRep_Builder
+        from OCP.TopoDS import TopoDS_Compound
+
+        made = TopoDS_Compound()
+        BRep_Builder().MakeCompound(made)
+        return made.Located(shape.Location())
     made = BRepBuilderAPI_Copy(shape, False, False).Shape()
     mapped = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(made, mapped)
