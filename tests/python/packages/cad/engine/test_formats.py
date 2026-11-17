@@ -24,17 +24,20 @@ look makes them again: `CAD_RENDER_GOLDENS=write`.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import json
 import math
 import os
 import shutil
 import struct
+import sys
 import tempfile
 import textwrap
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -595,6 +598,93 @@ class MeshFileTest(FixtureTest):
 
         mesh = Mesh.from_bytes(found.buffers[plate["key"]])
         self.assertAlmostEqual(float(np.ptp(mesh.positions[:, 0])), 60.0, places=4)
+
+    def test_a_3mf_shares_one_vertex_per_position_along_face_seams(self) -> None:
+        """A part is meshed once per face, so a seam vertex reaches the writer once per
+        face that uses it; the 3MF welds those copies, or a slicer reads every seam edge
+        as open (3MF judges an edge by index, not by position)."""
+        import re
+        from collections import Counter
+        from types import SimpleNamespace
+
+        from cad.engine.export import Placed, View, threemf
+        from cad.engine.mesh_format import Mesh
+
+        corners = [(x, y, z) for x in (0, 20) for y in (0, 20) for z in (0, 20)]
+        quads = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+        positions, indices, faces = [], [], []
+        for ordinal, quad in enumerate(quads):
+            base = len(positions)
+            positions.extend(corners[i] for i in quad)
+            indices.extend((base, base + 1, base + 2, base, base + 2, base + 3))
+            faces.append((ordinal, ordinal * 6, 6))
+        empty = np.zeros((0, 4), np.uint32)
+        mesh = Mesh(np.array(positions, np.float32), np.zeros((len(positions), 3), np.float32),
+                    np.array(indices, np.uint32), np.array(faces, np.uint32),
+                    empty, np.zeros((0, 3), np.float32), np.zeros((0, 4), np.float32))
+        source = SimpleNamespace(structure={"prototypes": [{"key": "k0", "name": "box"}]}, meshes={"k0": mesh})
+        view = View(source, "box", [Placed(0, np.eye(4), ["box"], None)], {}, [])
+        path = self.folder / "box.3mf"
+        threemf.write(view, path)
+        model = zipfile.ZipFile(path).read("3D/3dmodel.model").decode()
+        vertices = re.findall(r'<vertex x="([^"]+)" y="([^"]+)" z="([^"]+)"/>', model)
+        triangles = re.findall(r'<triangle v1="(\d+)" v2="(\d+)" v3="(\d+)"', model)
+        uses: Counter = Counter()
+        for a, b, c in ((int(a), int(b), int(c)) for a, b, c in triangles):
+            for edge in (tuple(sorted((a, b))), tuple(sorted((b, c))), tuple(sorted((a, c)))):
+                uses[edge] += 1
+        self.assertEqual(len(vertices), 8, "one vertex per corner, not one per face")
+        self.assertEqual(len(triangles), 12, "no triangle dropped by the weld")
+        self.assertEqual(set(uses.values()), {2}, "every edge used by exactly two triangles")
+
+
+def _without_material_packages() -> contextlib.AbstractContextManager[None]:
+    """``bd_materials`` and ``threejs_materials`` absent, as a mesh-only install has them: an import
+    of either then raises, the way the reporter's ``cad threemf dfm`` environment does."""
+    return mock.patch.dict(sys.modules, {"bd_materials": None, "bd_materials.core": None,
+                                         "threejs_materials": None})
+
+
+class MaterialWithoutBdMaterialsTest(FixtureTest):
+    """A mesh file carrying a ``bd_materials`` material reads where ``bd_materials`` is not installed:
+    the display properties the file names are the material, built from the file alone (#844)."""
+
+    def test_a_3mf_with_a_material_reads_without_bd_materials(self) -> None:
+        self.maxDiff = None
+        path = write_3mf(self.folder / "kit.3mf")
+        reference = formats.read(path)
+        with _without_material_packages():
+            found = formats.read(path)
+        self.assertEqual(found.structure, reference.structure)
+
+    def test_a_material_reads_the_same_with_and_without_bd_materials(self) -> None:
+        from cad.engine.formats.gltf import material_of
+
+        for entry in ({"name": "3MF display properties", "alphaMode": "OPAQUE",
+                       "pbrMetallicRoughness": {"baseColorFactor": (0.5333333333333333, 0.6, 0.6666666666666666, 1.0),
+                                                "metallicFactor": 1.0, "roughnessFactor": 0.3}},
+                      {"name": "clearcoat", "alphaMode": "BLEND",
+                       "pbrMetallicRoughness": {"baseColorFactor": (0.5, 0.5, 0.5, 0.55), "metallicFactor": 0.2,
+                                                "roughnessFactor": 0.4},
+                       "extensions": {"KHR_materials_clearcoat": {"clearcoatFactor": 1,
+                                                                  "clearcoatRoughnessFactor": 0.1},
+                                      "KHR_materials_transmission": {"transmissionFactor": 0.5}}}):
+            reference = material_of(entry)
+            with _without_material_packages():
+                self.assertEqual(material_of(entry), reference)
+
+    def test_a_glb_look_reads_its_colour_without_bd_materials(self) -> None:
+        from cad.engine.export.mesh_file import _look_color
+
+        look = {"type": "RangeMaterial",
+                "material": {"name": "red", "density": None, "family": None, "transparent": False},
+                "pbr": {"id": "red", "name": "red", "source": "glTF", "url": "", "license": "",
+                        "values": {"color": [0.9063317533440594, 0.3491902126282938, 0.3491902126282938],
+                                   "metalness": 0.0, "roughness": 0.5, "ior": 1.5,
+                                   "emissive": [0.0, 0.0, 0.0], "opacity": 1.0}, "textures": {}}}
+        reference = _look_color(look)
+        with _without_material_packages():
+            self.assertEqual(_look_color(look), reference)
 
 
 # --- GLB -------------------------------------------------------------------------------------------

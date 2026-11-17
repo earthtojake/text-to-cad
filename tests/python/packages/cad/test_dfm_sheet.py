@@ -867,6 +867,33 @@ class ModellingMistakeTest(unittest.TestCase):
                         self.assertAlmostEqual(found["flat_area_mm2"], square["flat_area_mm2"], delta=0.05)
                         self.assertIn("sheet.edge_break", {f.code for f in result.findings})
 
+    def test_broken_edges_round_a_bend_are_unrolled_with_it(self) -> None:
+        # a bracket's cut edges broken all round, its ends' too: round a bend the break is a cone or a torus
+        # about its axis, which was read as a face off the sheet's thickness (sheet.uniform_thickness), the
+        # bend's strip stopped short of the cut on both ends (49.4 mm of a 50 mm bend) and the flanges' material
+        # ran on past it (sheet.bend_relief_width, a relief 0 mm wide): FAILED on a part that bends as drawn
+        def broken(part: bd.Part, how, size: float) -> bd.Part:
+            ends = part.faces().filter_by(bd.Axis.Y)
+            return how([e for face in ends for e in face.edges() if abs(e.length - 2.0) > 1e-6], size)
+
+        for name, steps in (("L", [("line", 30), ("bend", 90, 2), ("line", 40)]),
+                            ("U", [("line", 30), ("bend", 90, 2), ("line", 40), ("bend", 90, 2), ("line", 30)]),
+                            ("60 degrees", [("line", 30), ("bend", 60, 2), ("line", 40)])):
+            part = bent(steps, 2.0, 50.0, name)
+            square = checked(part, k_factor=0.4).measurements["parts"]["items"][0]
+            for how in (bd.fillet, bd.chamfer):
+                for size in (0.3, 0.8):
+                    with self.subTest(part=name, how=how.__name__, size=size):
+                        result = checked(broken(part, how, size), k_factor=0.4)
+                        self.assertTrue(result.ok, [f.message for f in result.findings if f.severity == "error"])
+                        found = result.measurements["parts"]["items"][0]
+                        self.assertAlmostEqual(found["flat_area_mm2"], square["flat_area_mm2"], delta=0.05)
+                        self.assertAlmostEqual(found["flat_material_fraction"], 1.0, places=2)
+                        self.assertEqual([b["length_mm"] for b in result.measurements["bends"]["items"]],
+                                         [50.0] * (len(steps) // 2))
+                        self.assertIn("sheet.edge_break", {f.code for f in result.findings})
+                        self.assertEqual(len(sheet.unfold(broken(part, how, size), k_factor=0.4).faces()), 1)
+
     @staticmethod
     def _sunk(size: tuple[float, float, float], top: list[tuple[float, float]], bottom: list[tuple[float, float]],
               hole: float, rim: float) -> bd.Part:

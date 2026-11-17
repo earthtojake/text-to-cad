@@ -534,7 +534,7 @@ def serve():
     proxy.tell = connection.notify
     # A host that ends this process with a signal rather than by closing its input (or both, at once): it
     # leaves as at the input's end, its session ended (``proxy.close``) before it exits.
-    for name in ("SIGTERM", "SIGHUP"):
+    for name in ("SIGTERM", "SIGHUP", "SIGINT"):
         if hasattr(signal, name):
             signal.signal(getattr(signal, name), _leave)
     try:
