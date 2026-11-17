@@ -369,6 +369,11 @@ def device():
   body, the concept, or both (the part's menu), which is where a bake's departure from its concept is seen.
 - The Viewer draws each concept as its field among the exact parts; its ranged names are sliders in the panel's
   Parameters tab, which change the picture and never the file.
+- In the Viewer a part that is a concept has its own glyph in the Model tree. Clip cuts the concepts with the
+  exact parts and caps them. A concept that reads `time` is played by the playbar: with the document's motion
+  where it has one, else by a clip of its own, Time, ten seconds long and looping. A baked part's row has a
+  button for how it is shown, and a concept's menu has **Convert to B-rep**, which starts a Quick Edit note
+  asking the agent to bake it.
 - With the pairs in the document, the checks take the assembly alone: `cad gsl fit "$ID"` holds every exact part
   to each part that is a concept, where the assembly places it and with its values; `cad gsl bake "$ID"` holds
   each baked part to its own concept, alone, and `cad gsl bake "$ID" --stale` says which bakes the concepts have

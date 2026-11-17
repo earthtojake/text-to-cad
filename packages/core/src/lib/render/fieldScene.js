@@ -27,6 +27,45 @@ const VERTEX = "void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }";
 // from its own point on the near plane; `pixelScale` is the size of a pixel a
 // unit from the eye (of every pixel, orthographic), which the march's
 // tolerances follow.
+// A section's planes, for a field: what stands behind one (its negative side) is cut away. A ray is
+// kept to the part of it in front of every plane, and where it enters through a plane into the solid
+// (the field below zero there) the cut itself is what it meets: `cap` is that plane's normal, else zero.
+// The planes are given in the field's own frame (`writeFieldClip`). A library without `gsl_field`
+// (an older gsl's) is cut and not capped.
+export const FIELD_CLIP_PLANES = 4;
+export const FIELD_CLIP_GLSL = `
+uniform vec4 uClip[${FIELD_CLIP_PLANES}];
+uniform int uClipCount;
+bool fieldClipped(vec3 origin, vec3 direction, inout float tEntry, inout float tExit, out vec3 cap) {
+  cap = vec3(0.0);
+  for (int i = 0; i < ${FIELD_CLIP_PLANES}; i++) {
+    if (i >= uClipCount) { break; }
+    float side = dot(uClip[i].xyz, origin) + uClip[i].w;
+    float along = dot(uClip[i].xyz, direction);
+    if (abs(along) < 1e-9) { if (side < 0.0) { return true; } continue; }
+    float t = -side / along;
+    if (along > 0.0) { if (t > tEntry) { tEntry = t; cap = uClip[i].xyz; } } else { tExit = min(tExit, t); }
+  }
+  return uClipCount > 0 && tExit <= tEntry;
+}
+`;
+
+/** The uniforms `FIELD_CLIP_GLSL` reads, none cutting. */
+export function fieldClipUniforms(THREE) {
+  return { uClip: { value: Array.from({ length: FIELD_CLIP_PLANES }, () => new THREE.Vector4()) }, uClipCount: { value: 0 } };
+}
+
+/** Write `planes` (three's, the scene's coordinates) into a field's clip uniforms, in the frame `toLocal` takes the scene to. */
+export function writeFieldClip(THREE, uniforms, planes, toLocal) {
+  const given = (planes || []).slice(0, FIELD_CLIP_PLANES);
+  const normalMatrix = new THREE.Matrix3().getNormalMatrix(toLocal);
+  given.forEach((plane, at) => {
+    const local = plane.clone().applyMatrix4(toLocal, normalMatrix);
+    uniforms.uClip.value[at].set(local.normal.x, local.normal.y, local.normal.z, local.constant);
+  });
+  uniforms.uClipCount.value = given.length;
+}
+
 const FRAGMENT = `
 uniform mat4 uProjectionInverse;
 uniform mat4 uCameraToScene;
@@ -55,13 +94,29 @@ void main() {
   float tEntry = max(max(lower.x, lower.y), lower.z);
   float tExit = min(min(upper.x, upper.y), upper.z);
   float pixelScale = 2.0 * abs(uProjectionInverse[1][1]) / uViewport.w;
-  gsl_hit hit = gsl_march(origin, direction, tEntry, tExit, pixelScale, uOrthographic, uStepScale, vec4(0.0));
-  if (!hit.hit) { discard; }
-  vec3 point = origin + direction * hit.t;
-  vec3 normal = normalize(hit.gradient);
+  vec3 cap;
+  if (fieldClipped(origin, direction, tEntry, tExit, cap)) { discard; }
+  float t;
+  vec3 normal;
+  int shape = -1;
+#ifdef FIELD_CAPS
+  if (cap != vec3(0.0)) {
+    // The cut through the solid: the plane itself, facing what was cut away, in its body's colour.
+    gsl_shape cut = gsl_field(origin + direction * tEntry);
+    if (cut.distance_ < 0.0) { t = tEntry; normal = -cap; shape = int(cut.shapeIndex); }
+  }
+#endif
+  if (shape < 0) {
+    gsl_hit hit = gsl_march(origin, direction, tEntry, tExit, pixelScale, uOrthographic, uStepScale, vec4(0.0));
+    if (!hit.hit) { discard; }
+    t = hit.t;
+    normal = normalize(hit.gradient);
+    shape = int(hit.shapeIndex);
+  }
+  vec3 point = origin + direction * t;
   float lit = 0.32 + 0.68 * max(dot(normal, uLight), 0.0);
   float rim = 0.12 * pow(1.0 - max(dot(normal, -direction), 0.0), 3.0);
-  gl_FragColor = vec4(uSurface[int(hit.shapeIndex) % 8] * (lit + rim), 1.0);
+  gl_FragColor = vec4(uSurface[shape % 8] * (lit + rim), 1.0);
   vec4 clip = uSceneToClip * vec4(point, 1.0);
   gl_FragDepth = clamp(clip.z / clip.w * 0.5 + 0.5, 0.0, 1.0);
   #include <tonemapping_fragment>
@@ -157,8 +212,12 @@ export function buildFieldScene(THREE, payload, textures = {}) {
     uOrthographic: { value: 0 },
     uStepScale: { value: 1 },
     uLight: { value: new THREE.Vector3(0.35, -0.45, 0.82).normalize() },
-    uSurface: { value: SURFACES.map((rgb) => new THREE.Vector3(...rgb)) }
+    uSurface: { value: SURFACES.map((rgb) => new THREE.Vector3(...rgb)) },
+    ...fieldClipUniforms(THREE)
   };
+  let clipPlanes = [];
+  // The model's clock, where its block carries one (`time`): seconds, 0 until something plays it.
+  const clock = members.find(member => !member.slider && member.name === "time") || null;
   const made = [];
   for (const described of payload.textures || []) {
     const bytes = textures[described.name];
@@ -170,7 +229,7 @@ export function buildFieldScene(THREE, payload, textures = {}) {
 
   const material = new THREE.ShaderMaterial({
     name: "field", uniforms, uniformsGroups: [group], vertexShader: VERTEX,
-    fragmentShader: `precision highp sampler3D;\n${payload.code}\n${FRAGMENT}`,
+    fragmentShader: `precision highp sampler3D;\n${payload.entry?.field === "gsl_field" ? "#define FIELD_CAPS\n" : ""}${payload.code}\n${FIELD_CLIP_GLSL}\n${FRAGMENT}`,
     depthTest: true, depthWrite: true, transparent: false, toneMapped: true
   });
   const geometry = new THREE.BufferGeometry();
@@ -196,6 +255,7 @@ export function buildFieldScene(THREE, payload, textures = {}) {
     uniforms.uCameraToScene.value.multiplyMatrices(sceneToWorldInverse, camera.matrixWorld);
     projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     uniforms.uSceneToClip.value.multiplyMatrices(projection, mesh.matrixWorld);
+    writeFieldClip(THREE, uniforms, clipPlanes, sceneToWorldInverse);
     uniforms.uOrthographic.value = camera.isOrthographicCamera ? 1 : 0;
     renderer.getCurrentViewport(viewport);
     uniforms.uViewport.value.copy(viewport);
@@ -215,6 +275,18 @@ export function buildFieldScene(THREE, payload, textures = {}) {
       if (!member || !Number.isFinite(value)) return false;
       member.uniform.value = Math.min(Math.max(value, member.slider.min), member.slider.max);
       return true;
+    },
+    /** Whether the model reads its clock (the engine's word of its source, `timed`): one that does is played. */
+    timed: payload.timed === true && Boolean(clock),
+    /** The model's clock, in seconds. True when the model has one and it moved. */
+    setTime(seconds) {
+      if (!clock || !Number.isFinite(seconds) || clock.uniform.value === seconds) return false;
+      clock.uniform.value = seconds;
+      return true;
+    },
+    /** A section's planes (three's, the scene's coordinates): the field is cut by them, and capped where one cuts its solid. */
+    setClipPlanes(planes) {
+      clipPlanes = Array.isArray(planes) ? planes : [];
     },
     // The field is shaded by its own fragment and takes no shadow: the host's looks leave it alone.
     setSurfaceLook() {},

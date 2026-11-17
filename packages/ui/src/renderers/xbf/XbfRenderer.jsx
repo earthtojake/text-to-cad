@@ -216,7 +216,12 @@ function XbfSurface({ view, data }) {
     if (!values) shellRef.current?.syncSceneBounds?.();
     shellRef.current?.requestRender?.();
   }, []);
-  const motion = useXbfMotion(kinematics, poseFrame);
+  // The concepts' clock (GSL's `time`) runs with the motion; where there is none, by a clip of its own.
+  const conceptClock = useMemo(() => ({
+    timed: scene?.conceptsTimed === true, label: t("playbar.conceptTime"),
+    set: (seconds) => { if (sceneRef.current?.setConceptTime?.(seconds)) shellRef.current?.requestFrame?.(); }
+  }), [scene, t]);
+  const motion = useXbfMotion(kinematics, poseFrame, conceptClock);
   const motionOwns = Boolean(motion?.enabled);
   const motionRef = useRef(motion);
   motionRef.current = motion;
@@ -652,6 +657,7 @@ function XbfSurface({ view, data }) {
   }, [scene, leavesOf]);
   // The GSL concepts the document's parts name (`xbfConcepts.js`), as they are shown now.
   const [shownAs, setShownAs] = useState(0);
+  const [draft, setDraft] = useState(null);
   const concepts = useMemo(() => scene?.concepts?.() || EMPTY, [scene, shownAs]);
   const showAs = useCallback((menu, value) => {
     if (!scene?.setRepresentation(menu.representationId, value)) return;
@@ -691,9 +697,16 @@ function XbfSurface({ view, data }) {
     onSelectTangentEdges: menu => selectTangent("edge", menu.tangentEdgeIds)
   }).map(([name, action]) => [name, (menu) => { usage.used(MENU_CONTROLS[name]); ensureSelect(); return action(menu); }]).concat([
     // How a baked part is shown: no control of the usage vocabulary, so none is counted.
-    ["onShowExact", menu => showAs(menu, "exact")], ["onShowConcept", menu => showAs(menu, "concept")], ["onShowBoth", menu => showAs(menu, "both")]
+    ["onShowExact", menu => showAs(menu, "exact")], ["onShowConcept", menu => showAs(menu, "concept")], ["onShowBoth", menu => showAs(menu, "both")],
+    // A concept handed to the agent to be made exact: the part picked, which opens Quick Edit on it, its note begun.
+    ["onConvertToBrep", (menu) => {
+      ensureSelect();
+      setChosen(() => pickNode(EMPTY, menu.nodeId, false));
+      const concept = scene?.concepts?.().find(found => found.id === tree.nodes.get(menu.nodeId)?.leafPartIds[0]);
+      setDraft({ key: `${menu.nodeId}:${Date.now()}`, text: t("concept.convertPrompt", { name: menu.label, file: concept?.file || "" }) });
+    }]
   ])),
-  [showAs, copy, exitSingleIsolate, isolate, exitIsolate, hideOthers, showAll, hideNodes, selectedNodeIds, revealNodes, toggleExpanded,
+  [showAs, scene, tree, t, copy, exitSingleIsolate, isolate, exitIsolate, hideOthers, showAll, hideNodes, selectedNodeIds, revealNodes, toggleExpanded,
     zoomToSelection, selectTangent, ensureSelect, usage]);
   const contextMenuItems = selectActive ? (press) => {
     const hit = pickAtClient(press.clientX, press.clientY);
@@ -751,8 +764,11 @@ function XbfSurface({ view, data }) {
     onFocusTreeNode: ids => { ensureSelect(); isolate(ids); }, onUnfocusTreeNode: exitSingleIsolate, onExitAllIsolate: exitIsolate,
     onTogglePartVisibility: toggleVisibility, showAllHiddenParts: showAll,
     onHoverTreeNode: id => setHover(id ? { parts: tree.nodes.get(id)?.leafPartIds || EMPTY, element: null } : NO_HOVER),
-    menuForNode, partMenuActions
-  }), [assembly, hiddenIds, isolatedIds, selectableIds, expandedIds, toggleExpanded, revealExpanded, selectTreeNode, ensureSelect, isolate, exitSingleIsolate,
+    menuForNode, partMenuActions,
+    representationOf: node => (node.concept === "baked" && node.leafPartIds?.length === 1
+      ? concepts.find(concept => concept.id === node.leafPartIds[0])?.representation || null : null),
+    onShowAs: (node, value) => showAs({ representationId: node.leafPartIds[0] }, value)
+  }), [concepts, showAs, assembly, hiddenIds, isolatedIds, selectableIds, expandedIds, toggleExpanded, revealExpanded, selectTreeNode, ensureSelect, isolate, exitSingleIsolate,
     exitIsolate, toggleVisibility, showAll, tree, menuForNode, partMenuActions]);
   // The ranged names of a concept, as sliders: the selected part's, else the first concept that has any.
   const tuned = useMemo(() => {
@@ -790,7 +806,7 @@ function XbfSurface({ view, data }) {
 
   return <RendererShell shell={shell} tools={strip} subToolbar={measuring ? <MeasurementsBar measure={measure} /> : null} sidebar={sidebar} previewView={previewView}
     inspect={inspect}
-    references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameReference}
+    references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} quickEditDraft={draft} nameReference={nameReference}
     onClearReferences={() => { setChosen(EMPTY); measure.select([]); }} copySelection={copySelection}
     onSelectPress={measureSelect.press} onSelectHover={measureSelect.hover} selectsAnnotations={selects(selectFilter, "annotation")}
     boxSelect={{ enabled: picking && selectTool === "box", onBox: handleBoxSelect,

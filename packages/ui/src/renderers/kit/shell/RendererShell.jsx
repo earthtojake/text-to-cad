@@ -162,7 +162,7 @@ const DOUBLE_PRESS_MS = 600;
  *   and Preview viewport's `runtimeLifecycle` and `onCameraSettled`. Preview is a view of its own
  *   (`PreviewView.jsx`) over the editor's, which nothing of it reaches.
  */
-export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, references = null, referenceChips = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
+export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, references = null, referenceChips = null, quickEditDraft = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null, previewView = null,
   frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, boxSelect = null, inkTouches = null,
   doubleClickFits = true, zoomToSelection = null, inspect = null }) {
@@ -409,7 +409,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   const updateStatus = { preview: Boolean(frame.loading.preview), onRetry: frame.viewUpdate.retry,
     update: frame.loading.updating && !frame.viewUpdate.status.error ? modelUpdateStatus(frame.loading.progress) : frame.viewUpdate.status };
   const quickEdit = references ? <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden} docked={mobile}
-    resource={frame.resource} references={references} chips={referenceChips} nameReference={nameReference} annotation={annotation} prompt={frame.quickEditPrompt}
+    resource={frame.resource} references={references} chips={referenceChips} nameReference={nameReference} annotation={annotation} prompt={frame.quickEditPrompt} draft={quickEditDraft}
     onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} /> : null;
   // The view's own controls end the strip, after its rule: Projection (the state button), Display (its menu),
   // then Preview. A phone has no room for them on its strip: they are rows of its More, with the zoom.

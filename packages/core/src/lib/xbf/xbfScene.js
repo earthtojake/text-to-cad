@@ -885,6 +885,9 @@ export function createXbfScene(THREE, document) {
     conceptParameterValue: (id, name) => concepts.parameterValue(parseXbfElementId(id)?.instance, name),
     /** Set a ranged name of a part's concept as it is drawn; the file is not changed. True when it took. */
     setConceptParameter: (id, name, value) => !disposed && concepts.setParameter(parseXbfElementId(id)?.instance, name, value),
+    /** Whether a concept reads its clock (GSL's `time`), and the clock itself, in seconds: true when it moved. */
+    conceptsTimed: concepts.timed,
+    setConceptTime: seconds => !disposed && concepts.setTime(seconds),
     /** Show a baked part as "exact", "concept" or "both"; true when that changed what is drawn. */
     setRepresentation(id, value) {
       if (disposed || !concepts.setRepresentation(parseXbfElementId(id)?.instance, value)) return false;
@@ -939,6 +942,7 @@ export function createXbfScene(THREE, document) {
     setClipPlanes(planes) {
       if (disposed) return;
       clipPlanes = Array.isArray(planes) ? planes : [];
+      concepts.setClipPlanes(clipPlanes);
       look.setClipPlanes(clipPlanes);
       syncMaterialClipPlanes(hiddenDepth, clipPlanes);
       for (const line of XBF_EDGE_LINES) syncMaterialClipPlanes(lineMaterials[line], clipPlanes);

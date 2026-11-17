@@ -972,7 +972,11 @@ fix to it lands in every list. In the panel's numbers (216px wide, its body padd
   mask, `ROW_NAME_UNDER_ACTIONS`): nothing is drawn behind the buttons and the row keeps its own
   colour. An assembly row's are **Isolate** then the **Hide/Reveal** eye (a part file has no
   Isolate); while the row is isolated its Isolate is the way out, an X (**Exit isolate**), shown the
-  whole time, and its eye is off; a part's or a net's, and a layer's, the eye alone. A Links row that draws something — a
+  whole time, and its eye is off; a part's or a net's, and a layer's, the eye alone. A part baked from a GSL
+  concept has one more, first: how it is shown, a button that wears what is shown now (its exact body, the
+  concept, both) and goes to the next, shown the whole time while the part is not its exact body, as a hidden
+  row's eye is; the part's menu offers the same (**Show exact**, **Show concept**, **Show both**), and a part
+  that is a concept **Convert to B-rep**, which picks the part and begins Quick Edit's note for the agent. A Links row that draws something — a
   link with visuals, or one visual — has the eye alone, in its search hit too: a link's hides its
   own visuals, never its child links, and on a partly hidden link hides the rest.
 

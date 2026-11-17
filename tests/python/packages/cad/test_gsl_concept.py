@@ -256,6 +256,19 @@ class Document(Folder):
         self.assertGreater(export.translate(str(path), None, self.folder / "knob.step"), 0)
 
 
+class Clock(Folder):
+    def test_a_model_that_reads_time_is_said_to_and_one_that_names_it_in_a_comment_is_not(self) -> None:
+        from cad.omega._shader import _timed
+
+        self.assertFalse(_timed(self.slab))
+        moving = self.folder / "pulse.gsl"
+        moving.write_text("@scene(40)\nr = 5.0 + sin(time);\nreturn length(p) - r;\n", encoding="utf-8")
+        self.assertTrue(_timed(moving))
+        noted = self.folder / "still.gsl"
+        noted.write_text("@scene(40)\n// no time here\n/* nor\n time */\nreturn length(p) - 5.0;\n", encoding="utf-8")
+        self.assertFalse(_timed(noted))
+
+
 class Placing(unittest.TestCase):
     def sampled(self):
         from cad.omega._fit import sample

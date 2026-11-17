@@ -113,3 +113,19 @@ test("a pick answers nothing before the scene was drawn: no renderer to march wi
   const concepts = createXbfConcepts(THREE, { fields: fields(SLAB) }, instances(SLAB));
   assert.equal(concepts.hit(new THREE.Ray(new THREE.Vector3(0, 0, 50), new THREE.Vector3(0, 0, -1))), null);
 });
+
+test("the concepts' clock and a section reach every concept's field", () => {
+  const timedFields = new Map([[xbfConceptKey(SLAB), { payload: { ...payload(), timed: true }, textures: {} }]]);
+  const held = instances(SLAB);
+  const concepts = createXbfConcepts(THREE, { fields: timedFields }, held);
+  assert.equal(concepts.timed, true);
+  assert.equal(createXbfConcepts(THREE, { fields: fields(SLAB) }, instances(SLAB)).timed, false);
+  const drawn = held[0].carrier.children.find(child => child !== held[0].group).children[0].children[0];
+  assert.equal(concepts.setTime(2), true);
+  assert.equal(drawn.material.uniformsGroups[0].uniforms[0].value, 2);
+  assert.equal(concepts.setTime(2), false);
+  concepts.setClipPlanes([new THREE.Plane(new THREE.Vector3(1, 0, 0), 0)]);
+  drawn.onBeforeRender({ getCurrentViewport: target => target.set(0, 0, 10, 10) }, null, new THREE.PerspectiveCamera());
+  assert.equal(drawn.material.uniforms.uClipCount.value, 1);
+  assert.deepEqual(concepts.list()[0].file, "slab.gsl");
+});

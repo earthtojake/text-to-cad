@@ -64,7 +64,17 @@ def payload(model: Path, out_dir: Path) -> dict[str, Any]:
         named["file"] = Path(str(texture.get("path", ""))).name
         textures.append(named)
     return {key: answer.get(key) for key in ("target", "code", "entry", "uniformBlock", "blockBytes", "uniforms",
-                                             "sliders", "bodies", "region")} | {"textures": textures}
+                                             "sliders", "bodies", "region")} | {"textures": textures,
+                                                                                "timed": _timed(model)}
+
+
+def _timed(model: Path) -> bool:
+    """Whether the model's own text reads ``time`` (outside a comment): what a page plays, where one that does
+    not is a still. A file it imports is not read for it."""
+    import re
+
+    text = re.sub(r"//[^\n]*|/\*.*?\*/", "", model.read_text(encoding="utf-8", errors="replace"), flags=re.S)
+    return re.search(r"\btime\b", text) is not None
 
 
 def main(argv: list[str] | None = None) -> int:

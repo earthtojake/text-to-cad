@@ -63,6 +63,8 @@ export function xbfPartMenu({ tree, nodeId, assembly, hiddenIds, isolatedIds, se
   return {
     nodeId, label: node.label, zoomSelectionAvailable, selected, hidden, focused, actionNodeIds,
     representation: baked?.representation || null, representationId: baked?.id || null,
+    // A part that is a concept can be handed to the agent to be made exact.
+    convertible: node.concept === "body",
     actionCount: actionNodeIds.length || 1, copyText,
     selectDisabled: !selected && hidden,
     showIsolate: assembly, isolateDisabled: false,

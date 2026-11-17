@@ -12,7 +12,7 @@
 // pointer's ray, each in its own frame, in one draw of one pixel that answers how far along the ray
 // the nearest surface is and whose it is. The scene holds that against its triangles' hit.
 
-import { buildFieldScene } from "../render/fieldScene.js";
+import { buildFieldScene, FIELD_CLIP_GLSL, fieldClipUniforms, writeFieldClip } from "../render/fieldScene.js";
 
 /** How a baked part is shown: its exact body, the concept it was made from, or both. */
 export const XBF_REPRESENTATIONS = Object.freeze(["exact", "concept", "both"]);
@@ -51,10 +51,20 @@ void main() {
   float tEntry = max(max(max(lower.x, lower.y), lower.z), 0.0);
   float tExit = min(min(upper.x, upper.y), upper.z);
   if (tExit <= tEntry) { discard; }
-  gsl_hit hit = gsl_march(uOrigin, uDirection, tEntry, tExit, uPixel, 1.0, 1.0, vec4(0.0));
-  if (!hit.hit) { discard; }
-  gl_FragDepth = clamp(hit.t / uFar, 0.0, 1.0);
-  gl_FragColor = vec4(hit.t, uConcept, 0.0, 1.0);
+  // A section cuts what is picked as it cuts what is drawn: the cut's own face where it is through the solid.
+  vec3 cap;
+  if (fieldClipped(uOrigin, uDirection, tEntry, tExit, cap)) { discard; }
+  float t = -1.0;
+#ifdef FIELD_CAPS
+  if (cap != vec3(0.0) && gsl_field(uOrigin + uDirection * tEntry).distance_ < 0.0) { t = tEntry; }
+#endif
+  if (t < 0.0) {
+    gsl_hit hit = gsl_march(uOrigin, uDirection, tEntry, tExit, uPixel, 1.0, 1.0, vec4(0.0));
+    if (!hit.hit) { discard; }
+    t = hit.t;
+  }
+  gl_FragDepth = clamp(t / uFar, 0.0, 1.0);
+  gl_FragColor = vec4(t, uConcept, 0.0, 1.0);
 }
 `;
 
@@ -106,6 +116,7 @@ export function createXbfConcepts(THREE, document, instances) {
     const [x0, y0, z0, x1, y1, z1] = loaded.payload.region;
     held.set(entry.index, {
       index: entry.index, entry, concept, field, holder, drawn, surface, name: named, role: concept.role,
+      payload: loaded.payload,
       colours: surface.map(colour => colour.clone()),
       box: new THREE.Box3(new THREE.Vector3(x0, y0, z0), new THREE.Vector3(x1, y1, z1)),
       // A baked part opens as its exact body; a concept that is the part is all there is to show.
@@ -132,14 +143,15 @@ export function createXbfConcepts(THREE, document, instances) {
     byOrdinal[ordinal] = item;
     item.pick = new THREE.Mesh(triangle, new THREE.ShaderMaterial({
       name: "concept pick", vertexShader: PICK_VERTEX,
-      fragmentShader: `precision highp sampler3D;\n${fields.get(xbfConceptKey(item.concept)).payload.code}\n${PICK_FRAGMENT}`,
+      fragmentShader: `precision highp sampler3D;\n${item.payload.entry?.field === "gsl_field" ? "#define FIELD_CAPS\n" : ""}${item.payload.code}\n${FIELD_CLIP_GLSL}\n${PICK_FRAGMENT}`,
       // The concept's own block of time and sliders, and its textures: the field picked is the field drawn.
       uniformsGroups: item.drawn.material.uniformsGroups,
       uniforms: {
         ...Object.fromEntries(Object.entries(item.drawn.material.uniforms).filter(([, uniform]) => uniform.value?.isTexture)),
         uOrigin: { value: new THREE.Vector3() }, uDirection: { value: new THREE.Vector3() },
         uBoxMin: { value: item.box.min.clone() }, uBoxMax: { value: item.box.max.clone() },
-        uPixel: { value: PICK_PIXEL }, uFar: { value: PICK_FAR }, uConcept: { value: ordinal }
+        uPixel: { value: PICK_PIXEL }, uFar: { value: PICK_FAR }, uConcept: { value: ordinal },
+        ...fieldClipUniforms(THREE)
       },
       depthTest: true, depthWrite: true, toneMapped: false, blending: THREE.NoBlending
     }));
@@ -157,12 +169,14 @@ export function createXbfConcepts(THREE, document, instances) {
   const texel = new Float32Array(4);
   const clearColor = new THREE.Color();
   const last = { key: "", at: 0, hit: null };
+  let clipPlanes = [];
 
   const concepts = {
     /** Whether the document draws any concept. */
     any: held.size > 0,
     /** Each concept drawn: its instance's index, the part's name, its role and the names it lets the view set. */
     list: () => [...held.values()].map(item => ({ index: item.index, name: item.name, role: item.role,
+      file: item.concept.gsl.split("/").pop(),
       representation: item.representation, parameters: item.field.parameters })),
     has: index => held.has(index),
     parameterValue: (index, name) => held.get(index)?.field.parameterValue(name),
@@ -191,6 +205,21 @@ export function createXbfConcepts(THREE, document, instances) {
       if (!item || item.shown === shown) return;
       item.shown = shown;
       item.holder.visible = visible(item);
+      last.key = "";
+    },
+    /** Whether any concept reads its clock: one that does is played with the document's motion, or by a clip of its own. */
+    timed: [...held.values()].some(item => item.field.timed),
+    /** Every concept's clock, in seconds. True when one moved. */
+    setTime(seconds) {
+      let moved = false;
+      for (const item of held.values()) moved = item.field.setTime(seconds) || moved;
+      if (moved) last.key = "";
+      return moved;
+    },
+    /** A section's planes: every concept is cut by them as the exact parts are, and picked as cut. */
+    setClipPlanes(planes) {
+      clipPlanes = Array.isArray(planes) ? planes : [];
+      for (const item of held.values()) item.field.setClipPlanes(clipPlanes);
       last.key = "";
     },
     /** Each concept back where its instance's placed group stands (a pose moved it). */
@@ -229,6 +258,7 @@ export function createXbfConcepts(THREE, document, instances) {
         any = true;
         placedNow(item);
         inverse.copy(item.holder.matrixWorld).invert();
+        writeFieldClip(THREE, item.pick.material.uniforms, clipPlanes, inverse);
         item.pick.material.uniforms.uOrigin.value.copy(ray.origin).applyMatrix4(inverse);
         item.pick.material.uniforms.uDirection.value.copy(ray.direction).transformDirection(inverse);
       }
