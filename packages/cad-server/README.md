@@ -139,16 +139,11 @@ in and the printer named as compatible, for OrcaSlicer's own command line (the `
 operations, which take preset names and no FILE). Its code is the library's, the standard library alone, so
 they always run in this process: no engine, no environment made. `cad serve`,
 `status`, `stop`, `delete` and `server` are the engine's process control, each acting on one version's server
-(the pinned one, or the newest's); `cad doctor` the health of the version it runs as and its repair (the `cad`
-command written where it is missing or older, the installation registered where none is current, whether the CAD
-kernel environment is made and the integrations' -- never made there --, the engine started: the whole report on
-stdout, exit 1 when the kernel is installed and does not load; `--check` the report alone, which registers, writes
-and starts nothing, what a bug report wants; `--json` it as one document, each check's name, status and detail) and
-the one command that reads every version installed: where each is, whether its server runs and on which port, when
-an agent last used it, and when the newest one's cleanup removes it; what is left of the layout of 0.11.10 and earlier
-and whether it can go yet; and what earlier releases left behind that nothing of this one uses (`_internal/leftovers.py`: engine records of an older
-format, the bytecode of installations no longer registered, cache folders no record names, the launchers earlier
-releases published beside the `cad` command, 0.8's `cadgen` proxy among them), which nothing removes but the person;
+(the pinned one, or the newest's); `cad doctor` one read-only report (its release, its data and cache folders and what `cad cache prune` would free,
+the CAD kernel environment and whether it loads, the integrations', whether the server runs and its release:
+exit 1 when the kernel is installed and does not load; `--check` the same; `--json` it as one document); `cad cache`
+`dir`, `prune` (environments of other releases, the release folders of 0.11.10 and earlier) and `clean` (all of
+it, refused while a server runs): nothing else of cad removes its cache or a past release's folders;
 `cad run` a
 program exactly as `uv run` runs it -- uv run's
 options, a script's `# /// script` header, a project -- with cad pinned at this release and the
@@ -188,10 +183,7 @@ apart from every later release's, so its switch could only go back: there the ru
 command before it takes anything of 0.10.0's in (and takes nothing in where it would not stop), then takes the
 computer over as the install command's route does, 0.10.0's own records pointed at the version too. cad has no
 updater: the version check (`updates.py`) only knows the
-latest release, and says so (**The update notice**). `cad uninstall` removes cad from this computer: every version,
-each one's server stopped first (and, on Windows, waited for until its processes have ended), the state folder and
-the cache folder of 0.11.10 and earlier where they hold a mark only cad writes, what its servers kept in the engines'
-folder (cad's entries alone), and the `cad` command; nothing is kept and nothing else is touched. It asks first, as every command that destroys does (`cad
+latest release, and says so (**The update notice**). `uv tool uninstall cad` removes cad, as any uv tool. Every command that destroys asks first (`cad
 delete`, `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`;
 `_internal/consent.py`); and `cad telemetry` the person's answer, whose no, wherever it is said
 (`cad telemetry off`, the app menu's switch), is said in every version on the device

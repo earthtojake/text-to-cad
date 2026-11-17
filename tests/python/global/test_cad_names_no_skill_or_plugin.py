@@ -3,8 +3,7 @@
 text-to-cad's distribution (``packages/cad``: the library, the server and the shim) knows nothing of the
 skills or the plugin that use them: the plugin side knows cad, never the other way. So no string a package can print
 or return -- every string literal in its sources but a docstring -- says "skill" or "plugin". The words a format
-uses for its own elements (SDF's ``<plugin>``) and the folder names earlier releases left in the state folder,
-which ``cad uninstall`` recognises as its own, are not messages.
+uses for its own elements (SDF's ``<plugin>``) are not messages.
 """
 
 from __future__ import annotations
@@ -20,7 +19,6 @@ WORDS = re.compile(r"\b(skills?|plugins?)\b", re.IGNORECASE)
 NOT_MESSAGES = {
     "cad/sdf/_validation.py": None,  # SDF's <plugin> element: the format's word
     "cad/engine/sdf_source.py": None,  # the same element, read
-    "cad_server/cli/uninstall.py": {"plugin", "plugin.lock"},  # folder names earlier releases left
 }
 
 

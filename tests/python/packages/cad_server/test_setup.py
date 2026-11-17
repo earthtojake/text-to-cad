@@ -1,4 +1,4 @@
-"""``cad setup``, its hidden ``--engine-update``, and ``cad uninstall`` (``cad_server.cli.setup``, ``uninstall``).
+"""``cad setup`` and its hidden ``--engine-update`` (``cad_server.cli.setup``).
 
 ``cad setup`` sets up the version that runs it -- its folder, its server, the check that it runs, its kernel, its
 marker, and the ``cad`` command --, then starts that version's server (a real one in ``Serving``; elsewhere the start
@@ -7,8 +7,6 @@ of their commands on PATH, which record any call. ``--engine-update`` is what th
 of a newer release, from the flat folder they made (its prepare run first, for an automatic update): it sets the
 version up, writes the record their switch starts its server by, leaves ``installations/current`` and the ``cad``
 command to them, and owes the install script's run, which the version's server carries out (``test_handover``).
-``cad uninstall`` removes every version (a real server running, stopped first), the state and cache folders and the
-``cad`` command, and nothing else.
 
 The device is ``test_versions``'s (uv stood in for: each version a real virtual environment of this Python naming
 this checkout's sources); the real servers are ``test_version_servers``'s. A real 0.11.10 updating into this build
@@ -30,7 +28,7 @@ from tests.python.packages.cad_server.test_versions import OLD, Device
 
 from cad.engine import client, places
 from cad_server._internal import arrival, imports, install_script, installations, legacy, versions
-from cad_server.cli import setup, uninstall
+from cad_server.cli import setup
 
 X, Y = "0.12.0", "0.12.1"
 DEV = f"{X}-dev.20261114000000"
@@ -449,54 +447,6 @@ class Serving(Servers, Computer):
         self.assertEqual(code, 0, out + err)
         self.assertEqual(out, f"cad {X} is installed now: {places.version_dir(X)}\n")
         self.assertIn(f"cad {X}'s server is not running: the engine server did not start", err)
-
-
-class Uninstall(Servers, Computer):
-    def test_everything_of_cad_goes_its_server_stopped_first_and_nothing_else(self) -> None:
-        self.legacy()  # what 0.11.10 left: its records, its flat release, its cache
-        self.version(X)
-        self.start(X)
-        self.assertIn(installations.write_proxy()[1], (installations.MISSING, installations.STALE))
-        beside = self.state.parent / "kept.txt"
-        beside.write_text("not cad's", encoding="utf-8")
-        others = self.engines / "someone-else.txt"  # the engines' folder a variable named: only cad's entries go
-        others.write_text("not cad's", encoding="utf-8")
-        self.assertTrue((self.engines / X).is_dir())
-        code, out, err = self.main(uninstall, ["--yes"])
-        self.assertEqual(code, 0, out + err)
-        self.assertIsNone(versions.ask(X, {"op": "pid"}, seconds=2.0), "its server stopped")
-        for gone in (self.state, self.cache, Path(installations.proxy_path()), self.engines / X):
-            self.assertFalse(gone.exists(), gone)
-        self.assertEqual(os.listdir(self.engines), [others.name])
-        self.assertTrue(beside.exists())
-        self.no_app_touched()
-        code, out, _err = self.main(uninstall, ["--yes"])
-        self.assertEqual((code, out), (0, "cad is not installed on this computer: nothing to remove.\n"))
-
-    def test_folders_of_cad_s_names_with_no_mark_of_cad_s_are_another_program_s(self) -> None:
-        # A state and a cache folder of the same names, another program's: generic names alone, nothing only cad writes.
-        (self.state / "documents").mkdir(parents=True)
-        (self.state / "settings.json").write_text('{"theme": "dark"}', encoding="utf-8")
-        (self.cache / "documents").mkdir(parents=True)
-        (self.cache / "downloads").mkdir()
-        before = snapshot(self.root)
-        code, out, _err = self.main(uninstall, ["--yes"])
-        self.assertEqual((code, out), (0, "cad is not installed on this computer: nothing to remove.\n"))
-        self.assertEqual(snapshot(self.root), before)
-        self.assertTrue((self.state / "documents").is_dir() and (self.cache / "downloads").is_dir())
-        # cad's settings are a mark of cad's: that folder is cad's.
-        (self.state / "settings.json").write_text('{"telemetry": {"choice": "off"}}', encoding="utf-8")
-        code, out, err = self.main(uninstall, ["--yes"])
-        self.assertEqual(code, 0, out + err)
-        self.assertFalse(self.state.exists())
-        self.assertTrue((self.cache / "downloads").is_dir(), "the cache folder holds what cad's never does")
-
-    def test_nobody_to_ask_and_no_yes_changes_nothing(self) -> None:
-        self.version(X)
-        with mock.patch.object(sys, "stdin", io.StringIO()):
-            code, _out, err = self.main(uninstall, [])
-        self.assertEqual(code, 2, err)
-        self.assertTrue(places.version_dir(X).is_dir())
 
 
 if __name__ == "__main__":

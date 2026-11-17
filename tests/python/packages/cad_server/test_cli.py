@@ -83,14 +83,13 @@ class Dispatch(unittest.TestCase):
             code, out, _ = self._run(["--version"])
         self.assertEqual((code, out.strip()), (0, "cad 0.8.0-dev.20261025032350"))
 
-    def test_doctor_adopts_the_earlier_state_folder_before_its_notice_writes_this_one(self):
-        # `doctor` registers, as `setup` does (which says no notice); any other command adopts nothing. Help
-        # does neither, and an answer in JSON says no notice.
+    def test_only_a_command_that_does_work_says_the_notice_and_none_adopts_an_earlier_state_folder(self):
+        # `doctor` is a report: it writes nothing, as help does not; an answer in JSON says no notice.
         from unittest import mock
 
         from cad.engine import places
 
-        for argv, expected in ((["doctor"], ["adopt", "tell"]), (["status"], ["tell"]), (["doctor", "--help"], []),
+        for argv, expected in ((["doctor"], []), (["status"], ["tell"]), (["doctor", "--help"], []),
                                (["status", "-h"], []), (["help", "doctor"], []), (["xbf", "export", "--help"], []),
                                (["xbf", "help"], []), (["status", "--json"], []), (["run", "a.py", "--help"], [])):
             with self.subTest(argv=argv):

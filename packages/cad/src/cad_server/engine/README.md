@@ -299,9 +299,7 @@ server, each on its own port (the second rolls from the first's, below); nothing
 - **The version check** (`cad_server.updates`): each version's server reads the version feed in the background at
   most once an hour as it tends itself (`updates.refresh`), never waited on; a `cad` command says a newer release
   after its own output (`cad_server.cli`).
-- `cad stop` and `cad status` act on one version's server: the pinned one, or the newest's with no pin. Only `cad
-  doctor` reads every version (`cli/doctor.py`'s `_versions`): each version, where it is, its server and port
-  (asked of its door: nothing made or taken), when it was last used, and when the newest one's cleanup removes it.
+- `cad stop` and `cad status` act on one version's server: the pinned one, or the newest's with no pin.
 
 A process with no version (a checkout, a test's device, a release of 0.11.10 and earlier) keeps that layout: the
 device's one engine is the current installation's, `<state>/installations/current` names it
@@ -310,7 +308,7 @@ server, whatever release its plugin pins; a skill's `cad` command; `cad run`; a 
 that installation's, with its Python (`places.engine`, `client._start`); one running is attached to, whatever
 its release. On a
 device with no current installation, the CAD app's server makes its own installation current, once
-(`installations.bootstrap`), as `cad doctor` does. A model's own process -- the library,
+(`installations.bootstrap`). A model's own process -- the library,
 which never starts a server of its own environment -- starts none there, but in a base or an environment
 of a model's packages an installation made (`places.HOME`, `cad run`'s), whose installation's engine it
 starts; elsewhere it says, in one
@@ -590,9 +588,8 @@ folder, which goes with it -- and the one an
 edit to its local packages superseded, but one a process runs from (`releases.running`: named on a
 process's command line, as written or by a link to it), which a later making removes
 (`extras._collect`; the bases are their versions', removed with them, `versions.clean`). The environments of other
-sets stay, one per set a program named, and go with their version's folder; in the cache folder of 0.11.10 and
-earlier `cad doctor` reports those unused for a week (each use marks its marker, `leftovers.package_environments`),
-and they go with that layout (`legacy.remove`). After an update,
+sets stay, one per set a program named, and go with their version's folder; `cad cache prune` removes those made for
+other releases and `cad cache clean` all of them (`cli/cache.py`); nothing else removes another release's. After an update,
 a new release's environments are made as its runs ask for them, from uv's cache.
 
 **An integration built for one Python** (`extras.on`). The registry says what only a tool decides of its
@@ -892,7 +889,7 @@ the help on stdout and exits 0, and does nothing else: it moves no earlier relea
 and says no telemetry notice. Nor does a command whose answer is JSON say the notice: it waits for a run a
 person reads, and nothing is sent by default until it is said.
 
-**Consent.** A command that destroys -- `cad uninstall`, `cad delete`, `cad server --rotate-token` -- says its plan first, what it removes and how many (`cad delete --dry-run`
+**Consent.** A command that destroys -- `cad delete`, `cad server --rotate-token` -- says its plan first, what it removes and how many (`cad delete --dry-run`
 says it alone), and then asks: at a terminal, `... (y/N)` on stderr, anything but `y` or `yes` changing
 nothing (`declined`, exit 1); where no one can be asked (no terminal, `--json`, CI), it changes nothing
 without `-y`/`--yes`, failing `confirmation_required` (exit 2) with the exact command with `--yes`
@@ -1676,8 +1673,7 @@ row says `script`; `retired: part.xbf's renderer (RSS) 2m ago`). The `documents:
 document, its state and, for one not held, the command that builds it again (**Document
 lifetime**), and a held one where it is held: in memory, on disk (the cache), or both. The
 `cache` line is the cache folder, the documents and bytes in it -- no cap: they stay until a person
-deletes them -- and the last save that failed (`cad doctor` says the same line, counted from the
-folder, with no engine asked). `--json` lists the documents as `models`, the cache as
+deletes them -- and the last save that failed. `--json` lists the documents as `models`, the cache as
 `cache`, and `serving.documents` the files served, each `held` or `evicted` (out of memory for its
 budget: read again from its file when asked), with the bytes it holds. It
 also says its `version` (its release), its `installation` (the version it runs as) and what uses it -- `holders`, `watched` (the documents pages watch), `busy`
@@ -1927,8 +1923,8 @@ derived from its bytes go under it, keyed by them: a KiCad board's plot, refille
 (`Registry.delete` removes `documents/<id>` whole); so are a manufacturing check's kept results, a model's and a
 file's (`documents/<id>/checks/`, `checks.Disk`). The folder is shared with any 0.7 install's
 store: the engine's cache reads, writes, sizes and removes only under `documents/` (its processes'
-bytecode is under `pycache/`), and lists, counts and removes nothing else there (`cad doctor` reports
-0.7's store, which nothing removes but the person). It is written never on the run path:
+bytecode is under `pycache/`), and lists, counts and removes nothing else there (0.7's store among
+it, which nothing removes but the person; `cad cache clean` neither). It is written never on the run path:
 
 - after `CACHE_IDLE_SECONDS` (10 s) with no build and no read of the document: the daemon asks the
   worker that holds it to save it (its `save`, `Process.tell`), which the worker does only when no request waits

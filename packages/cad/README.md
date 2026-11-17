@@ -554,7 +554,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     does, says the files it wrote.
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
     --help` groups the commands: the document types, the integrations with operations of their own, the rest. The commands that are no document's -- setup, update,
-    uninstall, doctor, plugin, viewer, status, stop, server, telemetry, run, serve and delete -- stay
+    doctor, cache, plugin, viewer, status, stop, server, telemetry, run, serve and delete -- stay
     top-level.
 
 28. **An integration runs where its extra is installed.** *The package.* An integration's code runs

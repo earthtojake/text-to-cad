@@ -684,21 +684,17 @@ class FromEight(Device):
 
 
 class ReadOnly(Device):
-    """Whether a version's server runs is asked, never made or taken (``versions.serves``): ``cad doctor --check``
-    writes nothing, and never holds a lock a server starting that instant needs."""
+    """Whether a version's server runs is asked, never made or taken (``versions.serves``): asking writes
+    nothing, and never holds a lock a server starting that instant needs."""
 
     REAL_SERVERS = True
 
     def test_asking_whether_a_server_runs_makes_and_takes_nothing(self) -> None:
-        from cad_server.cli import doctor
-
         self.legacy()
         self.data(X)
-        self.assertFalse(versions.serves(X))
         with mock.patch.object(places, "lock", side_effect=AssertionError("a lock taken")):
-            said = doctor._versions()
+            self.assertFalse(versions.serves(X))
         self.assertFalse(self.engines.exists(), "no engine folder made")
-        self.assertTrue(any(line.startswith("legacy ") for line in said), said)
         folder = places.engine_dir(X)
         folder.mkdir(parents=True)
         (folder / "engine.lock").write_text("", encoding="utf-8")  # a lock file and no door: no server answers
@@ -861,36 +857,6 @@ class TelemetryAcrossVersions(Device):
         with mock.patch.object(places, "versioned", return_value=X):
             analytics.choose(True, by="cli")
         self.assertTrue(self.sharing(X))
-
-
-class DoctorReadsEveryVersion(Device):
-    """``cad doctor`` is the one command that reads every version installed."""
-
-    def test_each_version_its_server_its_last_use_and_when_the_cleanup_takes_it(self) -> None:
-        from cad_server.cli import doctor
-
-        now = time.time()
-        for name in (X, Y, Z):
-            self.data(name)
-        self.aged(X, installed=now - 30 * DAY, used=now - 3 * DAY)
-        self.aged(Y, installed=now - 30 * DAY, used=now - 60)
-        (places.code_dir("0.11.99")).mkdir(parents=True)  # an install cut short
-        self.serving(Z)
-        with mock.patch.object(versions, "serving", return_value=4000):
-            said = doctor._versions()
-
-        def line(start: str) -> str:
-            found = [each for each in said if each.startswith(start)]
-            self.assertEqual(len(found), 1, said)
-            return found[0]
-
-        self.assertIn("not completely installed", line("version  cad 0.11.99 "))
-        self.assertIn("its server is not running; last used ", line(f"version  cad {X} "))
-        self.assertIn("(at its next cleanup)", line(f"version  cad {X} "))
-        self.assertIn(f"cad {Z}'s server removes it once it has gone unused for 2 days (in ",
-                      line(f"version  cad {Y} "))
-        self.assertIn("its server runs, pages on port 4000", line(f"version  cad {Z} "))
-        self.assertIn("the newest: a command with no pin runs it", line(f"version  cad {Z} "))
 
 
 if __name__ == "__main__":

@@ -105,10 +105,10 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "delete": frozenset({"documents", "dry_run", "yes", "json"}),
     # The server's commands (start, stop, status), and the page token replaced, asking first.
     "server": frozenset({"command", "start", "stop", "status", "port", "rotate_token", "yes"}),
-    # This version installed on this computer (and the hidden flag the updaters of 0.10.0 to 0.11.10 run); and
-    # `uninstall`, which removes it all, asking first.
+    # This version installed on this computer (and the hidden flag the updaters of 0.10.0 to 0.11.10 run).
     "setup": frozenset({"engine_update"}),
-    "uninstall": frozenset({"yes"}),
+    # cad's cache: where it is, what this release cannot use removed, all of it removed.
+    "cache": frozenset({"command", "dir", "prune", "clean"}),
     # The exact cad requirement for a Python of a program's own: its integrations, and --json.
     "requirement": frozenset({"integrations", "json"}),
 }
@@ -116,6 +116,8 @@ ADAPTERS: dict[str, frozenset[str]] = {
 # Commands that own their parser outright and mirror no function.
 UNCLASSIFIED = {
     "doctor",
+    # Only for the text of releases 0.10.0 to 0.11.10: one line, whatever it is given (``cli.retired``).
+    "uninstall",
     # uv run's options and a program's arguments, whatever they are: no parser of its own (uv judges them).
     "run",
     # The viewer launcher owns its parser: the launch contract (reuse, replace or start on its

@@ -7,7 +7,7 @@ integration's, for its tool's own files, which are no document type, which cad c
 shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations``: ``cad mujoco check``,
 ``cad orcaslicer presets``), only for the integrations the registry gives operations. And the commands that are no file's: the server's (``server``: ``start``,
 ``stop``, ``status``), the CAD app an agent app starts (``mcp``), the engine's verbs (``serve``, ``delete``), ``run``,
-and the installation's (``setup``, ``uninstall``, ``doctor``, ``viewer``, ``telemetry``).
+and the installation's (``setup``, ``doctor``, ``cache``, ``viewer``, ``telemetry``).
 
 A command that reaches the server holds it to its own release (``cad.engine.client.RELEASE``): one of another
 release is refused in one line. The server's own commands are not held to it (``_ANY_RELEASE``).
@@ -61,17 +61,19 @@ _COMMANDS: dict[str, tuple[str, str]] = {
                                   "with the integrations its imports use"),
     # The installation: the requirement a Python of a program's own installs this device's cad by.
     "requirement": ("cad_server.cli.requirement", "print the exact cad requirement for a Python of a program's own"),
-    "doctor": ("cad_server.cli.doctor", "set the server up and report it (--check: report only)"),
-    # This version installed on this computer, and the cad command with it; and all of it removed.
+    "doctor": ("cad_server.cli.doctor", "report this cad, its folders, its kernel and the server; it changes nothing"),
+    "cache": ("cad_server.cli.cache", "cad's cache: dir, prune (what this release cannot use), clean (all of it)"),
+    # This version installed on this computer, and the cad command with it.
     "setup": ("cad_server.cli.setup", "install this version of cad on this computer"),
-    "uninstall": ("cad_server.cli.uninstall", "remove cad from this computer"),
+    # Only for the text of releases 0.10.0 to 0.11.10: one line naming what removes cad now (``retired``).
+    "uninstall": ("cad_server.cli.retired", "`uv tool uninstall cad`"),
     # A page of the running server's; the launcher exits.
     "viewer": ("cad_server.cli.viewer", "open a viewer page on the running cad server"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
 }
-# Only for the skill text of releases 0.10.0 to 0.11.10 (`cad status`, `cad stop`): run, never listed, and gone with
-# the bridge.
-_UNLISTED = frozenset({"status", "stop"})
+# Only for the skill text of releases 0.10.0 to 0.11.10 (`cad status`, `cad stop`, `cad uninstall`): run, never
+# listed, and gone with the bridge.
+_UNLISTED = frozenset({"status", "stop", "uninstall"})
 
 # Each document type's command, by its id: ``cad <type> <operation>`` (``cad_server.cli.document_types``).
 TYPE_COMMANDS: dict[str, str] = {document_type: f"cad_server.cli.{document_type}" for document_type in DOCUMENT_TYPES}
@@ -287,17 +289,10 @@ def _main(argv: list[str]) -> int:
     if entry is None:
         return _unknown(command, rest)
 
-    # Help does no work: it writes nothing and says nothing but the help. Nor does a report asked for read-only
-    # (`cad doctor --check`).
-    from cad_server._internal.cli_errors import options
-
-    helping = _asks_help(command, rest) or (command in _REGISTERS and "--check" in options(rest))
+    # Help does no work: it writes nothing and says nothing but the help. Nor does a report (`cad doctor`).
+    helping = _asks_help(command, rest) or command in _READ_ONLY
     if not helping and command not in _UNUSED and _maybe_a_version():
         _first_run(default_channel=pin is None or pin.channel is None)
-    # `doctor` registers this installation, as `setup` does: on a device an earlier release set up, what
-    # this release keeps of its state folder moves into its own first, before the notice below writes there.
-    if command in _REGISTERS and not helping:
-        _adopt()
     # What a command says, once and before its work, is what CAD sends by default (`cad_server/analytics.py`)
     # -- to a person: an answer in JSON is a program's, so the notice waits for a later run a person reads, and
     # nothing is sent by default until it is said.
@@ -449,25 +444,23 @@ def _notice(*, daily: bool) -> None:
 NOTICE = "update-notice"
 NOTICE_SECONDS = 24 * 60 * 60.0
 # Commands whose run records no use and copies no data first (``_first_run``): setup makes the version and copies
-# its data itself, uninstall takes everything out.
+# its data itself; uninstall is a line.
 _UNUSED = frozenset({"setup", "uninstall"})
 # Commands after which no notice is said (``_notice``): the server's, run by an agent app as a session starts or in
 # the foreground until it stops; `mcp`, which an agent app runs; setup, which an updater of 0.11.10 and earlier runs
 # with no person to read it; uninstall.
 _UNNOTICED = frozenset({"server", "mcp", "setup", "uninstall"})
 # Commands that reach a server of any release (``cad.engine.client.RELEASE``): the server's own -- which start this
-# release's in place of another's, stop whichever runs, and say which runs -- and `mcp`, which decides it itself
-# (``cad_mcp.shim.start_server``).
-_ANY_RELEASE = frozenset({"server", "status", "stop", "mcp"})
+# release's in place of another's, stop whichever runs, and say which runs --, `mcp`, which decides it itself
+# (``cad_mcp.shim.start_server``), and those that only ask whether one runs, and which (`doctor`, `cache`).
+_ANY_RELEASE = frozenset({"server", "status", "stop", "mcp", "doctor", "cache"})
 # Commands that never carry the analytics notice: the engine's server and `mcp`, writing nowhere a person reads;
 # `telemetry`, which says it its own way; `setup`, which an updater of 0.11.10 and earlier runs with no person to read
 # it; `uninstall`; `run`, which is only the python it runs, as the `cad` command's `run` is; and `requirement`, whose
 # output a program reads.
 _UNTOLD = frozenset({"server", "mcp", "telemetry", "setup", "uninstall", "run", "requirement"})
-
-
-# The told commands that register this installation (``cad_server._internal.installations.setup``).
-_REGISTERS = frozenset({"doctor"})
+# Commands that only report, and so write nothing a command's run writes (``_first_run``, ``_tell``, ``_notice``).
+_READ_ONLY = frozenset({"doctor"})
 
 
 def _asks_help(command: str, rest: list[str]) -> bool:
@@ -481,17 +474,6 @@ def _asks_help(command: str, rest: list[str]) -> bool:
     if (command in TYPE_COMMANDS or command in INTEGRATION_COMMANDS) and rest[:1] == ["help"]:
         return True
     return bool({"-h", "--help"} & set(options(rest)))
-
-
-def _adopt() -> None:
-    """What this release keeps of an earlier release's state folder, moved into its own
-    (``cad.engine.places.adopt_earlier``): never in a command's way."""
-    try:
-        from cad.engine.places import adopt_earlier
-
-        adopt_earlier()
-    except Exception:  # noqa: BLE001 - registration tries again, and says what it could not write
-        return
 
 
 def _tell() -> None:
