@@ -101,6 +101,9 @@ export CAD_API_URL="http://127.0.0.1:9" CAD_UPDATE_CHECK=0 DO_NOT_TRACK=1 CAD_TE
 CAD_ENGINE_DEFAULT_PORT="$("$PYTHON_BIN" -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
 export CAD_ENGINE_DEFAULT_PORT
 unset CAD_INSTALLATION_VERSION CAD_VERSION
+# No uv tool cad, unless a step installs one: a cad that is not the uv tool hands its server to an installed one
+# (`cad mcp`), and a developer's own, in uv's real tool folder, is never this run's.
+export UV_TOOL_DIR="$WORK/no-tools" UV_TOOL_BIN_DIR="$WORK/no-tool-bin"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 step() { printf '\n== %s\n' "$*"; }
@@ -239,6 +242,9 @@ grep -q 'name = "cad"' "$UV_TOOL_DIR/cad/uv-receipt.toml" || fail "the tool's re
   grep -q "not a uv tool" "$WORK/refused.log" || { cat "$WORK/refused.log" >&2; fail "the refusal does not say why"; }
 ) || exit 1
 echo "   $UV_TOOL_BIN_DIR/cad: cad $STAMP, a uv tool; cad auto-update on accepted there, refused in a venv"
+TOOL_DIR="$UV_TOOL_DIR"
+# The steps after this one see no uv tool again: what they check is this install's.
+export UV_TOOL_DIR="$WORK/no-tools" UV_TOOL_BIN_DIR="$WORK/no-tool-bin"
 
 # What the updaters of 0.10.0 to 0.11.10, already on people's computers, do with a release and cannot be changed:
 # they make an environment with uv (`uv venv`, then `uv pip install cad-server==<release>`), take it as complete once
@@ -282,11 +288,10 @@ CAD_STATE_DIR="$WORK/bridge-state" CAD_ENGINE_DIR="$BRIDGE_ENGINE" "$BRIDGE/bin/
 echo "   bin/cad, cad_server._internal.proxy and cad_server._internal.engine_daemon of cad $STAMP"
 
 # The CAD app as an agent host starts it: the cad-mcp alias's command starts the server as `cad server start` does,
-# then serves MCP on stdio.
+# then serves MCP on stdio. The host: the command, a folder, and the release whose server must serve the model.
 step "Serve the CAD app over MCP through the shim, as an agent host starts it"
-"$VENV/bin/python" - "$VENV/bin/$SHIM_COMMAND" "$WORK" <<'PY' || exit 1
+cat >"$WORK/host.py" <<'PY'
 import json, os, subprocess, sys, threading
-import cad_server
 
 # Served cards through the development switch (CAD_MCP_PRESENTATION): a host that is not the Codex app is
 # offered no tools, and cards show the page and its launch with no tab to wait for.
@@ -324,13 +329,13 @@ page = call(3, "resources/read", {"uri": uri})["contents"][0]["text"]
 # The page is package data: a wheel without it serves a placeholder that says so.
 if "missing from this install" in page or "<script" not in page:
     sys.exit(f"FAIL: {uri} is not the packaged CAD app")
-# Showing a model mounts a view whose launch says which server serves it: this install's.
+# Showing a model mounts a view whose launch says which server serves it: the release expected.
 mesh = os.path.join(sys.argv[2], "shown.stl")
 with open(mesh, "w", encoding="utf-8") as handle:
     handle.write("solid t\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid t\n")
 shown = call(4, "tools/call", {"name": "cad_show", "arguments": {"source": mesh}})
 launch = (shown.get("structuredContent") or {}).get("launch") or {}
-if shown.get("isError") or launch.get("version") != cad_server.__version__ or launch.get("model") != os.path.abspath(mesh):
+if shown.get("isError") or launch.get("version") != sys.argv[3] or launch.get("model") != os.path.abspath(mesh):
     sys.exit(f"FAIL: cad_show answered {shown}")
 server.stdin.close()
 if server.wait(30) != 0:
@@ -338,6 +343,17 @@ if server.wait(30) != 0:
 watchdog.cancel()
 print(f"   {len(tools)} tools; the app is {len(page) // 1024} KiB at {uri}")
 PY
+"$VENV/bin/python" "$WORK/host.py" "$VENV/bin/$SHIM_COMMAND" "$WORK" "$RELEASE" || exit 1
+# With a uv tool cad installed, this shim, which is not it, serves from the tool's server: the tool's release. Its
+# server stopped at once, in folders of its own.
+(
+  export UV_TOOL_DIR="$TOOL_DIR" UV_TOOL_BIN_DIR="$WORK/tool-bin" CAD_STATE_DIR="$WORK/tool-state" \
+    CAD_ENGINE_DIR="$WORK/tool-engine"
+  status=0
+  "$VENV/bin/python" "$WORK/host.py" "$VENV/bin/$SHIM_COMMAND" "$WORK" "$STAMP" || status=$?
+  "$WORK/tool-bin/cad" server stop >/dev/null 2>&1 || true
+  exit "$status"
+) || exit 1
 
 step "Build a real model with no repo in sight"
 mkdir -p "$EMPTY/models"
