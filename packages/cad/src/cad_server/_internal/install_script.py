@@ -1,143 +1,149 @@
-"""The hand-over a version owes the computer a shipped updater brought it to: the hosted install script, run by the
-version's own server until it has worked.
+"""The install command run again by cad's server: in update mode after cad's own update, and in install mode once for
+a computer a shipped updater brought (the bridge).
 
-The updaters of 0.10.0 to 0.11.10 bring a computer cad alone (``cad setup --engine-update``, ``cad_server.cli.setup``);
-the rest of what the install command does on a computer comes only with the hosted install script. So
-``--engine-update`` owes that run: it writes the record ``handover.json`` in the version's data folder (``owe``) and
-starts nothing. The version's own server carries it out, from its tending (``Carrier``, ``cad_server.engine.daemon``):
+cad knows no app, plugin or skill. What it knows is one fixed public command, the hosted install command (``curl -fsSL
+https://texttocad.dev/install.sh | sh``; on Windows PowerShell ``irm https://www.texttocad.dev/install.ps1 | iex``),
+and the report that command writes where ``CAD_INSTALL_REPORT`` names a file: whether its cad step ended 0 (``setup``)
+and whether any app's step failed (``apps``). Nothing else of the report is read. Two runs are owed:
 
-- **When** (``plan``): only while ``installations/current`` names the version. The shipped updater's switch points it
-  there once the version's server answers on the pages' port, and back at the release before when it does not, so a
-  version whose server cannot start, or that its updater went back from, never runs the script. One attempt at a time
-  on the computer: ``handover.lock`` in the state folder, held by the attempt as long as it runs. The first once the
-  server has run ``FIRST_SECONDS`` (five minutes): longer than any shipped switch can still be deciding whether this
-  server took over -- its check of the new server can end, and go back, after the server's first tending --; after one
-  that failed, at the server's next start but not sooner
-  than ``RETRY_SECONDS`` (an hour) after it began, then once every ``DAY_SECONDS`` while the server runs, by the wall
-  clock or by the server's own monotonic one (a clock set back stalls nothing); at most ``ATTEMPTS`` (30) attempts,
-  and none once ``GIVE_UP_SECONDS`` (30 days) have passed since the first: then it gives up for good (``gave up``).
-  A newer version that ``current`` names has taken over: the hand-over is over (``superseded``).
-- **An attempt** (``main``): a program of the version's Python, started detached, its output nowhere, never waited
-  on. It waits until the site's ``install.py`` -- what the hosted ``install.sh`` and ``install.ps1`` download and run
-  -- names this release or a later one as its fallback (``wait``: about an hour; the site is deployed after the
-  version feed names a release), then runs the hosted install script (``installer``: ``curl -fsSL
-  https://texttocad.dev/install.sh | sh``, on Windows PowerShell ``irm https://www.texttocad.dev/install.ps1 | iex``)
-  with ``CAD_INSTALL_REPORT`` naming ``install-report.json`` in the version's data folder, in the server's own
-  environment and ``PATH``.
-- **Its outcome** (``judge``): ``done`` when the script wrote that report during the attempt, its ``cad setup``
-  exited 0 and no step it reports failed. Anything else is a failed attempt, by why: ``no_report`` (the script never
-  ran, could not be fetched, was stopped -- after ``RUN_SECONDS`` at most --, or writes no report), ``setup`` (its
-  ``cad setup`` failed), ``app`` (a step it reports failed) or ``other`` (the site never named the release within the
-  wait, or ``current`` moved on before the script ran). Nothing else of the report is read.
+- **Update mode** (``CAD_INSTALL_UPDATE=1``: the command updates our plugin copies still there, adds nothing and leaves
+  cad alone), owed while the person's second switch is on (``auto_update.switches``: ``installer``), this cad is the uv
+  tool, the update check is not turned off for this process (``updates.checking``), and the release the command last
+  ran for (``installer_ran_for``) is older than this cad: after cad's own update. Done, that release becomes this one.
+- **Install mode** (BRIDGE-ONLY), owed by ``cad setup --engine-update`` (``owe``), which the updaters of 0.10.0 to
+  0.11.10 run: the command installs cad as a uv tool, our plugin in every agent app, and turns both switches on. Done,
+  the server that runs from the shipped updater's folder hands over to the uv tool's (``cad_server.cli.setup``).
 
-The record: ``schema``, ``version``, ``state`` (``owed``, ``done``, ``superseded``, ``gave up``), ``owed`` (when),
-``attempts``, ``first`` and ``last`` (when the first and the last attempt began), ``outcome`` (the last attempt's:
-``running`` while it runs, then as above), ``told`` (the attempts whose end the server has told) and ``ended``;
-times are the wall clock's, in seconds. The server tells each attempt's end once, and the end of the hand-over
-(``ended``: counted, and one line in the server's log).
+**When** (``plan``): update mode at the server's first tending (it touches nothing of cad, so it waits for nothing);
+install mode's first attempt once the server has run ``FIRST_SECONDS`` (five minutes) while ``installations/current``
+names the release it is owed for -- longer than a shipped updater's switch can still be deciding to go back from this
+server: its check can end, and go back, after the server's first tending; ``current`` naming a newer release first
+ends it (``superseded``). After an attempt that failed, either mode: at a server's start but not sooner than
+``RETRY_SECONDS`` (an hour) after the last began, then once every ``DAY_SECONDS`` while the server runs, by the wall
+clock or the server's own monotonic one (a clock set back stalls nothing); at most ``ATTEMPTS`` (30) attempts, and
+none once ``GIVE_UP_SECONDS`` (30 days) have passed since the first (``gave up``). Nothing of it blocks, delays or
+undoes cad's own update, which the server asks for first.
 
-``CAD_ENGINE_UPDATE_INSTALLER`` names a command to run instead of the hosted script (a test's stand-in), and empty,
-none: nothing is attempted. ``CAD_ENGINE_UPDATE_FIRST_SECONDS`` sets how long a server runs before its first attempt
-(a test's computers). ``CAD_ENGINE_UPDATE_INSTALL_PY`` names the ``install.py`` an attempt waits for (a test's
-own server), and empty, none, as a command ``CAD_ENGINE_UPDATE_INSTALLER`` names waits for none unless it is set.
+**An attempt** (``Carrier.begin``): the command started by the server itself, detached (a session or process group of
+its own, no window), its output nowhere, ``CAD_INSTALL_REPORT`` naming ``install-report.json`` in the data folder and
+uv's own installer told to leave shell profiles alone (``UV_NO_MODIFY_PATH``). No process of cad's waits on it: a
+server that stops leaves it running, and the next server judges its report. It is stopped, with what it started,
+after ``RUN_SECONDS``; one the server that started it no longer watches is taken as failed then.
+
+**Its outcome** (``judge``): ``done`` when the report says the cad step ended 0 and no app's step failed; else failed,
+by why: ``no_report`` (none written: the command could not be fetched, was stopped, or writes none), ``setup`` (its cad
+step failed), ``app`` (an app's step failed: cad itself was installed) or ``other`` (the command could not start).
+
+The record, ``handover.json`` in the data folder, one at a time: ``schema``, ``mode`` (``install``, ``update``),
+``version`` (the release it is owed for), ``state`` (``owed``, ``done``, ``superseded``, ``gave up``), ``owed``
+(when), ``attempts``, ``first`` and ``last`` (when the first and the last attempt began), ``outcome`` (the last
+attempt's: ``running`` while it runs), ``installed`` (true once an attempt's report said cad was installed) and
+``ended``; times are the wall clock's, in seconds. Each attempt's end, and the end of an install mode's run, is one
+line in the server's log; install mode's are counted too (``analytics.arrival``, as the bridge's other steps are).
+
+``CAD_ENGINE_UPDATE_INSTALLER`` names a command to run instead of the hosted one (a test's stand-in), and empty, none:
+nothing is attempted. ``CAD_ENGINE_UPDATE_FIRST_SECONDS`` sets install mode's wait (a test's computers).
 """
 
 from __future__ import annotations
 
 import json
 import os
-import re
 import shlex
 import signal
 import subprocess
-import sys
 import time
-import urllib.error
-import urllib.request
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-# The program the hosted install script downloads and runs, whose fallback release says which release it installs.
-URL = "https://www.texttocad.dev/install.py"
-# The delays between asks of the site, in seconds: growing, about an hour in all, then the attempt gives up.
-DELAYS = (15.0, 30.0, 60.0, 120.0, 240.0, 480.0, 600.0, 600.0, 600.0, 600.0)
-ASK_SECONDS = 20.0
-MOST_BYTES = 1 << 20
-FALLBACK = re.compile(r'^FALLBACK = "([0-9][0-9A-Za-z.+_-]*)"[ \t]*$', re.M)
 # What an attempt runs: a command line, split as a shell splits it; empty runs nothing.
 INSTALLER_ENV = "CAD_ENGINE_UPDATE_INSTALLER"
 INSTALLER = ("sh", "-c", "curl -fsSL https://texttocad.dev/install.sh | sh")
 INSTALLER_WINDOWS = ("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
                      "irm https://www.texttocad.dev/install.ps1 | iex")
-# The ``install.py`` an attempt waits for, once it names this release: its address.
-INSTALL_PY_ENV = "CAD_ENGINE_UPDATE_INSTALL_PY"
-# Where the hosted install script writes what it did: a report, of what it installed, ``cad setup``'s exit status and
-# each step's status (``judge`` reads the setup's status and whether any step failed).
+# What the command reads: where to write its report, and that it runs in update mode.
 REPORT_ENV = "CAD_INSTALL_REPORT"
+UPDATE_ENV = "CAD_INSTALL_UPDATE"
 
 RECORD = "handover.json"
 REPORT = "install-report.json"
-LOCK = "handover.lock"
-SCHEMA = "cad hand-over/1"
+SCHEMA = "cad hand-over/2"
+INSTALL, UPDATE = "install", "update"
 OWED, DONE, SUPERSEDED, GAVE_UP = "owed", "done", "superseded", "gave up"
-# An attempt's outcome: running, done, or why it failed.
 RUNNING = "running"
 FAILURES = ("no_report", "setup", "app", "other")
-# ``plan``'s answer for an attempt now.
 ATTEMPT = "attempt"
-# How long a server runs before its first attempt: a shipped updater's switch (0.10.0 to 0.11.10, ``switch._started``)
-# starts the new server waiting up to ``START_SECONDS`` (60) for its door, then asks its ``status`` and to serve pages
-# on the old port, and goes back where either fails -- seconds after the door answers, with no bound of its own on
-# those two asks --; the server first tends ``TEND_SECONDS`` (30) after it starts. Five minutes is that wait, those
-# asks on a slow or busy computer, and a margin. ``CAD_ENGINE_UPDATE_FIRST_SECONDS`` sets it for a test's computers.
+# Install mode's wait before its first attempt: a shipped updater's switch (0.10.0 to 0.11.10, ``switch._started``)
+# starts the new server waiting up to 60 seconds for its door, then asks its ``status`` and to serve pages on the old
+# port, and goes back where either fails -- seconds after the door answers, with no bound of its own on those two
+# asks --; the server first tends 30 seconds after it starts. Five minutes is that wait, those asks on a slow or busy
+# computer, and a margin.
 FIRST_SECONDS = 5 * 60.0
 FIRST_ENV = "CAD_ENGINE_UPDATE_FIRST_SECONDS"
 ATTEMPTS = 30
 GIVE_UP_SECONDS = 30 * 24 * 60 * 60.0
 RETRY_SECONDS = 60 * 60.0
 DAY_SECONDS = 24 * 60 * 60.0
-# How long the install script may run before it is stopped, with what it started: it takes a minute or two, a few
-# more on a slow line; one that hangs (a prompt it should not show) would hold the lock and stop every later attempt.
+# How long the command may run before it is stopped, with what it started: a minute or two, a few more on a slow line;
+# one that hangs (a prompt it should not show) would hold every later attempt.
 RUN_SECONDS = 2 * 60 * 60.0
-# How often an attempt waiting for the site looks whether ``installations/current`` still names its version.
-LOOK_SECONDS = 1.0
 
 
 # --- the record ---------------------------------------------------------------------------------------------------
 
 
-def _path(name: str) -> Path:
+def _folder() -> Path:
     from cad.engine import places
 
-    return places.data_dir(name) / RECORD
+    return places.data_dir()
 
 
-def read(name: str) -> dict[str, Any] | None:
-    """Version ``name``'s hand-over record, or None where there is none of this schema."""
+def read() -> dict[str, Any] | None:
+    """The record, or None where there is none of this schema."""
     try:
-        found = json.loads(_path(name).read_text(encoding="utf-8"))
+        found = json.loads((_folder() / RECORD).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    return found if isinstance(found, dict) and found.get("schema") == SCHEMA else None
+    ok = isinstance(found, dict) and found.get("schema") == SCHEMA and found.get("mode") in (INSTALL, UPDATE)
+    return found if ok and isinstance(found.get("version"), str) else None
 
 
-def _write(name: str, record: dict[str, Any]) -> None:
+def _write(record: dict[str, Any]) -> None:
     from cad._internal.atomic_replace import write_bytes_atomic
 
-    path = _path(name)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    write_bytes_atomic(path, (json.dumps(record, indent=1, sort_keys=True) + "\n").encode("utf-8"))
+    folder = _folder()
+    folder.mkdir(parents=True, exist_ok=True)
+    write_bytes_atomic(folder / RECORD, (json.dumps(record, indent=1, sort_keys=True) + "\n").encode("utf-8"))
 
 
-def owe(name: str, *, now: float | None = None) -> None:
-    """The hand-over owed for version ``name`` (``--engine-update``): its record written, unless one is owed already
-    (an updater's second run keeps the attempts counted). ``OSError`` when it cannot be."""
-    found = read(name)
-    if found is not None and found.get("state") == OWED:
+def _new(mode: str, version: str, now: float) -> dict[str, Any]:
+    return {"schema": SCHEMA, "mode": mode, "version": version, "state": OWED, "owed": now, "attempts": 0,
+            "first": None, "last": None, "outcome": None, "installed": False, "ended": None}
+
+
+def owe(version: str, *, now: float | None = None) -> None:
+    """BRIDGE-ONLY. Install mode owed for release ``version`` (``cad setup --engine-update``), unless it is owed for it
+    already (an updater's second run keeps the attempts counted). ``OSError`` when it cannot be written."""
+    found = read()
+    if found is not None and (found["mode"], found["version"], found.get("state")) == (INSTALL, version, OWED):
         return
-    _write(name, {"schema": SCHEMA, "version": name, "state": OWED, "owed": time.time() if now is None else now,
-                  "attempts": 0, "first": None, "last": None, "outcome": None, "told": 0, "ended": None})
+    _write(_new(INSTALL, version, time.time() if now is None else now))
+
+
+def update_owed(version: str) -> bool:
+    """Whether update mode is owed by this cad, release ``version`` (see the module). Never raises."""
+    try:
+        from cad_server import updates
+        from cad_server._internal import auto_update
+
+        found = auto_update.switches()
+        if not found["installer"] or auto_update.uv_tool() is None or not updates.checking():
+            return False
+        ran = found["installer_ran_for"]
+        return ran is None or auto_update.newer(version, ran)
+    except Exception:  # noqa: BLE001 - a run that cannot be decided is none
+        return False
 
 
 def _count(value: Any) -> int:
@@ -148,25 +154,39 @@ def _time(value: Any) -> float | None:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
+def _later(one: str | None, other: str) -> bool:
+    """Whether release ``one`` is later than ``other`` by its numbers (a development build ``X.Y.Z-dev.<stamp>`` is
+    its release's)."""
+    import re
+
+    def numbers(text: str | None) -> tuple[int, ...]:
+        found = re.match(r"[0-9]+(?:\.[0-9]+)*", text or "")
+        return tuple(int(part) for part in found.group().split(".")) if found else ()
+
+    a, b = numbers(one), numbers(other)
+    size = max(len(a), len(b))
+    return bool(a) and bool(b) and a + (0,) * (size - len(a)) > b + (0,) * (size - len(b))
+
+
 # --- when ---------------------------------------------------------------------------------------------------------
 
 
-def plan(record: dict[str, Any] | None, name: str, current: str | None, *, wall: float, mono: float, began: float,
+def plan(record: dict[str, Any] | None, current: str | None, *, wall: float, mono: float, began: float,
          tried: float | None) -> str | None:
-    """What version ``name``'s server does now with its hand-over ``record`` (see the module): ``ATTEMPT``,
-    ``SUPERSEDED``, ``GAVE_UP``, or None (nothing). ``current``: the version ``installations/current`` names;
-    ``wall`` and ``mono``: now, by the wall clock and the monotonic one; ``began``: when the server started, ``tried``:
-    when it last started an attempt, or None (monotonic). The caller has made sure no attempt is in flight."""
-    from cad_server._internal import versions
-
+    """What the server does now with ``record`` (see the module): ``ATTEMPT``, ``SUPERSEDED``, ``GAVE_UP``, or None.
+    ``current``: the release ``installations/current`` names; ``wall`` and ``mono``: now, by the wall clock and the
+    monotonic one; ``began``: when the server started, ``tried``: when it last began an attempt, or None (monotonic).
+    The caller has made sure no attempt is in flight."""
     if record is None or record.get("state") != OWED:
-        return None
-    if current is not None and current != name and versions.older(name, current):
-        return SUPERSEDED
-    if current != name:  # switched back to the release before, or not switched yet
         return None
     attempts, first, last = _count(record.get("attempts")), _time(record.get("first")), _time(record.get("last"))
     if attempts == 0 or last is None:
+        if record["mode"] == UPDATE:
+            return ATTEMPT
+        if current is not None and _later(current, record["version"]):
+            return SUPERSEDED
+        if current != record["version"]:  # switched back to the release before, or not switched yet
+            return None
         return ATTEMPT if mono - began >= first_seconds() else None
     if attempts >= ATTEMPTS or (first is not None and wall - first >= GIVE_UP_SECONDS):
         return GAVE_UP
@@ -175,33 +195,16 @@ def plan(record: dict[str, Any] | None, name: str, current: str | None, *, wall:
 
 
 def first_seconds() -> float:
-    """How long a server runs before its first attempt: ``FIRST_SECONDS``, or what ``CAD_ENGINE_UPDATE_FIRST_SECONDS``
-    names (a test's computers)."""
+    """Install mode's wait: ``FIRST_SECONDS``, or what ``CAD_ENGINE_UPDATE_FIRST_SECONDS`` names (a test's)."""
     try:
         return max(0.0, float(os.environ[FIRST_ENV]))
     except (KeyError, ValueError):
         return FIRST_SECONDS
 
 
-def _lock() -> Path:
-    from cad.engine import places
-
-    folder = places.state_dir()
-    folder.mkdir(parents=True, exist_ok=True)
-    return folder / LOCK
-
-
-def in_flight() -> bool:
-    """Whether an attempt holds the computer's hand-over lock now: looked at, never waited for."""
-    from cad_server._internal.file_lock import attempt
-
-    with attempt(_lock()) as free:
-        return not free
-
-
 def installer() -> list[str] | str:
     """What an attempt runs: ``CAD_ENGINE_UPDATE_INSTALLER``'s command where it is set (empty: none), else the hosted
-    install script for this computer. On Windows the variable's command line is run as it is written, one string that
+    install command for this computer. On Windows the variable's command line is run as it is written, one string that
     Windows splits as its programs do: ``shlex`` there keeps a quoted word's quotes, naming a program that is not
     there."""
     if INSTALLER_ENV in os.environ:
@@ -210,17 +213,56 @@ def installer() -> list[str] | str:
     return list(INSTALLER_WINDOWS if os.name == "nt" else INSTALLER)
 
 
-def install_py() -> str | None:
-    """The ``install.py`` whose fallback release an attempt waits for: ``CAD_ENGINE_UPDATE_INSTALL_PY``'s where it is
-    set (empty: none), else none for a command ``CAD_ENGINE_UPDATE_INSTALLER`` names, else the site's."""
-    if INSTALL_PY_ENV in os.environ:
-        return os.environ[INSTALL_PY_ENV].strip() or None
-    return None if INSTALLER_ENV in os.environ else URL
+def environment(*, update: bool, report: Path | None) -> dict[str, str]:
+    """The environment the command runs in: this process's, without its import path, the version it was told it runs
+    as and a ``cad run``'s marks, with the person's own PATH (none of an environment that comes and goes,
+    ``installations.lasting``), uv's installer told to leave shell profiles alone, and the report's file and the mode
+    named."""
+    from cad.engine.places import INSTALLATION_ENV, RUN_WITH
+    from cad_server._internal.installations import lasting
+
+    dropped = ("PYTHONPATH", "PYTHONHOME", INSTALLATION_ENV, RUN_WITH, "CAD_UPDATE_PREPARE", REPORT_ENV, UPDATE_ENV)
+    found = {key: value for key, value in os.environ.items() if key not in dropped}
+    found["PATH"] = lasting(os.environ.get("PATH", os.defpath))
+    found["UV_NO_MODIFY_PATH"] = "1"
+    if report is not None:
+        found[REPORT_ENV] = str(report)
+    if update:
+        found[UPDATE_ENV] = "1"
+    return found
+
+
+def judge(report: Path) -> tuple[str, bool]:
+    """An attempt's outcome by the report at ``report`` (see the module) -- ``done``, ``no_report``, ``setup`` or
+    ``app`` -- and whether it says cad was installed (its cad step ended 0)."""
+    try:
+        found = json.loads(report.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "no_report", False
+    steps = found.get("apps") if isinstance(found, dict) else None
+    if not isinstance(steps, dict):
+        return "no_report", False
+    if found.get("setup") != 0 or isinstance(found.get("setup"), bool):
+        return "setup", False
+    return ("app" if any(status == "failed" for status in steps.values()) else DONE), True
+
+
+def _stop(process: subprocess.Popen) -> None:
+    """``process`` stopped with every process it started (its own session, or process group on Windows)."""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(process.pid)], stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, check=False)
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
+            pass
+    process.wait()
 
 
 class Carrier:
-    """A version's server's side of its hand-over, at each tending (``tend``): the attempt it started last (its
-    process), when it started it and when the server started (monotonic)."""
+    """The server's side, at each tending (``tend``): the attempt it began last (its process) and when (monotonic),
+    and when the server started."""
 
     def __init__(self, began: float) -> None:
         self.began = began
@@ -229,238 +271,107 @@ class Carrier:
 
     def tend(self, name: str, told: Callable[[str], None], *, mono: float | None = None,
              wall: float | None = None) -> str | None:
-        """Version ``name``'s hand-over looked after: nothing while an attempt runs; an attempt's end told once
-        (``ended``), one that was stopped before it said its outcome taken as ``no_report``; then what ``plan`` says,
-        done -- an attempt started (``start``), or the hand-over ended as superseded or given up. What it did: ``plan``'s
+        """The runs this server, release ``name``, owes looked after: its own attempt watched, and judged as it ends;
+        one an earlier server began judged once its report is there, or ``RUN_SECONDS`` have passed; then update mode
+        owed where it is (``update_owed``) and no install mode is; then what ``plan`` says done. What it did: ``plan``'s
         answer, or None."""
-        if self.process is not None:
-            if self.process.poll() is None:
-                return None
-            self.process = None
-        record = read(name)
-        if record is None or not installer():
-            return None
-        attempts = _count(record.get("attempts"))
-        if (record.get("state") != OWED and attempts <= _count(record.get("told"))) or in_flight():
-            return None
         mono = time.monotonic() if mono is None else mono
         wall = time.time() if wall is None else wall
-        if attempts > _count(record.get("told")):
-            if record.get("outcome") not in (DONE, *FAILURES):  # running, with no attempt holding the lock: stopped
-                record["outcome"] = "no_report"
-            record["told"] = attempts
-            _write(name, record)
-            outcome = record["outcome"]
-            ended(name, DONE if outcome == DONE else "failed", attempts, told,
-                  why=None if outcome == DONE else outcome)
+        report = _folder() / REPORT
+        if self.process is not None:
+            if self.process.poll() is None:
+                if self.tried is None or mono - self.tried < RUN_SECONDS:
+                    return None
+                _stop(self.process)
+            self.process = None
+            record = read()
+            if record is not None and record.get("outcome") == RUNNING:
+                self.end(record, *judge(report), told, wall)
+        record = read()
+        if record is not None and record.get("outcome") == RUNNING:  # an earlier server's attempt
+            if not report.exists() and wall - (_time(record.get("last")) or 0.0) < RUN_SECONDS:
+                return None
+            self.end(record, *judge(report), told, wall)
+            record = read()
+        owed_install = record is not None and record["mode"] == INSTALL and record.get("state") == OWED
+        if not owed_install and update_owed(name) and not (
+                record is not None and (record["mode"], record["version"], record.get("state")) == (UPDATE, name, OWED)):
+            record = _new(UPDATE, name, wall)
+            _write(record)
+        if record is None or not installer() or (record["mode"] == UPDATE and record["version"] != name):
+            return None
+        if record["mode"] == INSTALL and _later(record["version"], name):
+            return None  # owed for a later release than this server's: that release's server carries it out
         from cad_server._internal import installations
 
-        step = plan(record, name, installations.current_version(), wall=wall, mono=mono, began=self.began,
-                    tried=self.tried)
+        step = plan(record, installations.current_version(), wall=wall, mono=mono, began=self.began, tried=self.tried)
         if step in (SUPERSEDED, GAVE_UP):
             record.update(state=step, ended=wall)
-            _write(name, record)
-            ended(name, "superseded" if step == SUPERSEDED else "gave_up", attempts, told)
+            _write(record)
+            ended(record, "superseded" if step == SUPERSEDED else "gave_up", told)
         elif step == ATTEMPT:
-            self.tried = mono
-            self.process = start(name, told)
+            self.begin(record, report, told, wall, mono)
         return step
 
+    def begin(self, record: dict[str, Any], report: Path, told: Callable[[str], None], wall: float,
+              mono: float) -> None:
+        """An attempt begun (see the module): recorded, then the command started; one that cannot start is failed
+        (``other``) at once."""
+        from cad.engine.places import detached
 
-def ended(name: str, outcome: str, attempts: int, told: Callable[[str], None], *, why: str | None = None) -> None:
-    """Version ``name``'s hand-over: an attempt ended (``outcome`` ``done``, or ``failed`` and ``why``: ``no_report``,
-    ``setup``, ``app`` or ``other``), or the hand-over did (``gave_up``, ``superseded``), after ``attempts`` attempts.
-    Called once for each (``Carrier.tend``): counted (``analytics.arrival``, in the server's own process, by the route
-    and the version it came from its arrival record keeps), and one line to ``told`` (the server's log), counts
-    only."""
+        self.tried = mono
+        record.update(attempts=_count(record.get("attempts")) + 1, last=wall,
+                      first=_time(record.get("first")) or wall, outcome=RUNNING)
+        try:
+            report.unlink(missing_ok=True)
+            _write(record)
+            self.process = subprocess.Popen(installer(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                            stderr=subprocess.DEVNULL, env=environment(
+                                                update=record["mode"] == UPDATE, report=report), **detached())
+        except (OSError, ValueError) as error:
+            told(f"the install command could not start: {error}")
+            self.end(record, "other", False, told, wall)
+
+    def end(self, record: dict[str, Any], outcome: str, installed: bool, told: Callable[[str], None],
+            wall: float) -> None:
+        """An attempt's ``outcome`` kept and told; done, the run is over, and in update mode its release is the one the
+        install command last ran for (``installer_ran_for``)."""
+        record["outcome"] = outcome
+        record["installed"] = bool(record.get("installed")) or installed
+        if outcome == DONE:
+            record.update(state=DONE, ended=wall)
+        _write(record)
+        if outcome == DONE and record["mode"] == UPDATE:
+            from cad_server._internal.auto_update import SECTION
+            from cad_server.settings import update_section
+
+            try:
+                update_section(SECTION, lambda kept: {**kept, "installer_ran_for": record["version"]})
+            except OSError as error:
+                told(f"the install command ran, but that could not be kept: {error}")
+        ended(record, DONE if outcome == DONE else "failed", told, why=None if outcome == DONE else outcome)
+
+
+def ended(record: dict[str, Any], outcome: str, told: Callable[[str], None], *, why: str | None = None) -> None:
+    """An attempt ended (``outcome`` ``done``, or ``failed`` and ``why``), or the run did (``gave_up``,
+    ``superseded``): one line to ``told`` (the server's log), and install mode's counted (``analytics.arrival``, by
+    the version it came from its arrival record keeps)."""
+    name, attempts = record["version"], _count(record.get("attempts"))
+    what = (f"the install command, owed for cad {name}" if record["mode"] == INSTALL
+            else f"the install command, after cad's update to {name}")
+    if outcome == DONE:
+        told(f"{what}: done (attempt {attempts})")
+    elif outcome == "failed":
+        told(f"{what}: attempt {attempts} of at most {ATTEMPTS} failed ({why}); it runs again later")
+    elif outcome == "gave_up":
+        told(f"{what}: given up after {attempts} attempts")
+    else:
+        told(f"{what}: a later cad took over, after {attempts} attempts")
+    if record["mode"] != INSTALL:
+        return
     from cad_server import analytics
     from cad_server._internal import arrival
 
     came = (arrival.read(name) or {}).get("from")
     analytics.arrival("handover", route=arrival.UPDATER, earlier=came if isinstance(came, str) else None,
                       outcome=outcome, reason=why, attempts=attempts)
-    if outcome == DONE:
-        line = f"the install script ran for cad {name}'s hand-over: done (attempt {attempts})"
-    elif outcome == "failed":
-        line = (f"the install script ran for cad {name}'s hand-over: attempt {attempts} of at most {ATTEMPTS} failed "
-                f"({why}); it runs again later")
-    elif outcome == "gave_up":
-        line = f"cad {name}'s hand-over gave up after {attempts} attempts: the install script is not run again"
-    else:
-        line = f"a newer cad has taken over: cad {name}'s hand-over ends after {attempts} attempts"
-    told(line)
-
-
-def start(name: str, told: Callable[[str], None]) -> subprocess.Popen | None:
-    """An attempt for version ``name`` started (``main``): a program of this Python, detached -- a session of its own,
-    its output nowhere -- in the environment setup gives the programs it starts. Its process, or None where it could
-    not start (said)."""
-    from cad.engine.places import detached
-    from cad_server.cli.setup import _environment
-
-    try:
-        return subprocess.Popen([sys.executable, "-P", "-m", "cad_server._internal.install_script", name],
-                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                env=_environment(), close_fds=True, **detached())
-    except OSError as error:
-        told(f"cad {name}'s hand-over could not start the install script: {error}")
-        return None
-
-
-# --- an attempt ---------------------------------------------------------------------------------------------------
-
-
-def release(version: str) -> tuple[int, ...] | None:
-    """The release numbers ``version`` starts with (``0.11.11`` of ``0.11.11`` and of a development build of it,
-    ``0.11.11-dev.<stamp>``), or None for a name that starts with none. A release is always ``X.Y.Z``."""
-    found = re.match(r"[0-9]+(?:\.[0-9]+)*", version or "")
-    return tuple(int(part) for part in found.group().split(".")) if found else None
-
-
-def _padded(numbers: tuple[int, ...], size: int) -> tuple[int, ...]:
-    return numbers + (0,) * (size - len(numbers))
-
-
-def serves(url: str, version: str, *, seconds: float = ASK_SECONDS) -> bool:
-    """Whether the ``install.py`` at ``url`` names ``version``'s release, or a later one, as its fallback. False for
-    one that cannot be read, or names none."""
-    wanted = release(version)
-    if wanted is None:
-        return False
-    try:
-        request = urllib.request.Request(url, headers={"User-Agent": "cad-engine-update", "Cache-Control": "no-cache"})
-        with urllib.request.urlopen(request, timeout=seconds) as answer:
-            text = answer.read(MOST_BYTES).decode("utf-8", "replace")
-    except urllib.error.HTTPError as error:  # not found, or not yet: its body closed
-        error.close()
-        return False
-    except (OSError, ValueError):
-        return False
-    found = FALLBACK.search(text)
-    named = release(found.group(1)) if found else None
-    if named is None:
-        return False
-    size = max(len(named), len(wanted))
-    return _padded(named, size) >= _padded(wanted, size)
-
-
-def wait(url: str, version: str, *, delays: Sequence[float] = DELAYS, sleep: Callable[[float], None] = time.sleep,
-         still: Callable[[], bool] = lambda: True) -> bool:
-    """Whether the site at ``url`` serves ``version``'s install script (``serves``): asked at once, then after each of
-    ``delays``; False once they are spent, or as soon as ``still()`` is not true (looked at every ``LOOK_SECONDS``
-    of a delay)."""
-    if serves(url, version):
-        return True
-    for delay in delays:
-        left = delay
-        while left > 0:
-            step = min(LOOK_SECONDS, left)
-            sleep(step)
-            left -= step
-            if not still():
-                return False
-        if serves(url, version):
-            return True
-    return False
-
-
-def run(command: list[str] | str, report: Path, *, seconds: float = RUN_SECONDS) -> int | None:
-    """``command`` (``installer``'s: on Windows a command line a test names is one string, run as it is written) run
-    once with ``CAD_INSTALL_REPORT`` naming ``report``, its output nowhere, and stopped with every process it started
-    after ``seconds``: its exit status, or None where it could not start or was stopped. uv's own
-    installer, which the hosted script runs where it finds no uv, is told to leave the person's shell profiles alone
-    (``UV_NO_MODIFY_PATH``): no one is there to be asked."""
-    environment = {**os.environ, REPORT_ENV: str(report), "UV_NO_MODIFY_PATH": "1"}
-    group = ({"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)} if os.name == "nt"
-             else {"start_new_session": True})
-    try:
-        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                   stderr=subprocess.DEVNULL, env=environment, **group)
-    except (OSError, ValueError):
-        return None
-    try:
-        return process.wait(timeout=seconds)
-    except subprocess.TimeoutExpired:
-        if os.name == "nt":
-            subprocess.run(["taskkill", "/T", "/F", "/PID", str(process.pid)], stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL, check=False)
-        else:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except OSError:
-                pass
-        process.wait()
-        return None
-
-
-def judge(report: Path) -> str:
-    """An attempt's outcome by the report its script wrote at ``report`` (see the module): ``done``, ``no_report``,
-    ``setup`` or ``app``. Of the report only its ``setup`` exit status and whether any step's status is ``failed`` are
-    read."""
-    try:
-        found = json.loads(report.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return "no_report"
-    steps = found.get("apps") if isinstance(found, dict) else None
-    if not isinstance(steps, dict):
-        return "no_report"
-    if found.get("setup") != 0 or isinstance(found.get("setup"), bool):
-        return "setup"
-    return "app" if any(status == "failed" for status in steps.values()) else DONE
-
-
-def attempt(name: str, *, sleep: Callable[[float], None] = time.sleep) -> str | None:
-    """One attempt for version ``name`` (see the module), under the computer's hand-over lock, recorded as it begins
-    and as it ends: its outcome, or None where none was made (another attempt holds the lock, nothing is owed,
-    ``installations/current`` does not name ``name``, or there is no command to run)."""
-    from cad.engine import places
-    from cad_server._internal import installations
-    from cad_server._internal.file_lock import attempt as hold
-
-    command = installer()
-    if not command:
-        return None
-    with hold(_lock()) as mine:
-        record = read(name) if mine else None
-        if record is None or record.get("state") != OWED or installations.current_version() != name:
-            return None
-        began = time.time()
-        record.update(attempts=_count(record.get("attempts")) + 1, last=began,
-                      first=_time(record.get("first")) or began, outcome=RUNNING)
-        _write(name, record)
-        report = places.data_dir(name) / REPORT
-        still = lambda: installations.current_version() == name  # noqa: E731
-        url = install_py()
-        try:
-            report.unlink(missing_ok=True)
-        except OSError:
-            outcome = "other"
-        else:
-            if (url and not wait(url, name, sleep=sleep, still=still)) or not still():
-                outcome = "other"
-            else:
-                run(command, report)
-                outcome = judge(report)
-        record = read(name) or record
-        record["outcome"] = outcome
-        if outcome == DONE:
-            record.update(state=DONE, ended=time.time())
-        _write(name, record)
-        return outcome
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    """``python -m cad_server._internal.install_script VERSION``: one attempt of version ``VERSION``'s hand-over
-    (``attempt``). Always 0: no one waits on this program."""
-    words = list(sys.argv[1:] if argv is None else argv)
-    if len(words) != 1:
-        return 0
-    try:
-        attempt(words[0])
-    except Exception:  # noqa: BLE001 - nothing reads this program's output; the server tells what the record says
-        pass
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

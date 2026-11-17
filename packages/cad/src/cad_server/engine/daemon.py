@@ -605,10 +605,13 @@ class Daemon:
         self.builders: dict[str, Process] = {}
         self.renders = None  # the served documents' pictures, by their render processes (``renders.Renders``)
         self.serving = threading.Lock()
-        # The hand-over its release owes the computer a shipped updater brought it to (``install_script.Carrier``).
+        # The install command's runs this server owes (``install_script.Carrier``), and the bridge's part of the tending
+        # (BRIDGE-ONLY, ``cli.setup.Tending``).
         from cad_server._internal.install_script import Carrier
+        from cad_server.cli.setup import Tending
 
         self.handover = Carrier(time.monotonic())
+        self.bridge = Tending()
         from cad_server.engine.models import Models
 
         self.models = Models(self)
@@ -1760,9 +1763,10 @@ class Daemon:
         first, to the cache, as they are loaded (``serve.Server.trim``); telemetry's spool is handed to a sender
         once it has waited a window (``_send_counts``); the version check's feed is read in the background where it
         is due (``updates.refresh``), and cad updated where that is due and nothing is in flight
-        (``auto_update.tend``: the update stops this server and starts the next); and the hand-over a shipped updater left this release owing the computer is
-        carried out (``install_script.Carrier``: the hosted install script, run once by a detached program of its
-        own). The engine stops on ``stop``, a terminate, another installation's
+        (``auto_update.tend``: the update stops this server and starts the next); then the install command run again
+        where it is owed (``install_script.Carrier``: after cad's own update, or once for a computer a shipped updater
+        brought), and the bridge's part (``cli.setup.Tending``: such a server, once that run installed cad as a uv
+        tool, hands over to the uv tool's). The engine stops on ``stop``, a terminate, another installation's
         retiring it (``bind``), and here when its door is gone (its folder removed, a temporary
         folder cleaned up) or another's: no one can reach it, so it stops as ``stop`` does, saving
         what it holds to the cache."""
@@ -1780,15 +1784,16 @@ class Daemon:
         from cad_server._internal import auto_update
 
         updates.refresh()
-        if auto_update.tend(working=self.working(), ran=self.worked != self.began,
-                            quiet_for=time.monotonic() - self.worked):
+        working, ran, quiet_for = self.working(), self.worked != self.began, time.monotonic() - self.worked
+        if auto_update.tend(working=working, ran=ran, quiet_for=quiet_for):
             print("cad: updating cad: this server stops, and the update starts the next", file=sys.stderr, flush=True)
             return
+        told = lambda line: print(f"cad: {line}", file=sys.stderr, flush=True)  # noqa: E731
         try:
-            self.handover.tend(version(), lambda line: print(f"cad: {line}", file=sys.stderr, flush=True))
-        except Exception as error:  # noqa: BLE001 - the engine's tending never fails for the hand-over
-            print(f"cad: the hand-over could not be looked after: {type(error).__name__}: {error}", file=sys.stderr,
-                  flush=True)
+            self.handover.tend(version(), told)
+            self.bridge.tend(version(), told, quiet=not working and (not ran or quiet_for >= auto_update.IDLE_SECONDS))
+        except Exception as error:  # noqa: BLE001 - the engine's tending never fails for the install command
+            told(f"the install command's run could not be looked after: {type(error).__name__}: {error}")
 
     def working(self) -> bool:
         """Whether anything an update's drain waits for is in flight: a build, a draw, an export, a

@@ -266,8 +266,7 @@ server, each on its own port (the second rolls from the first's, below); nothing
   client of 0.11.10 and earlier finds (their launchers, their updater, their library) and every process with no
   version (a person's own environment running `python model.py`); `installations/current` and its record name
   that version's server environment (the record written by `cad setup --engine-update` and `current` pointed by the
-  shipped updater's switch after it; both by a plain `cad setup` where `current` names nothing -- a new computer, one coming from 0.8, so a person's own Python finds a
-  server --, a release of that layout, a version no longer installed or an older one: `legacy.hand_over`), so such a
+  shipped updater's switch after it; both by a server of the uv tool, `cli.setup.follow`), so such a
   client that finds no server starts that version's, which takes the flat door as it starts (a second start of a
   version whose server runs asks that server to, `daemon._front`). It is let go as soon as `current` names another,
   and taken by that one's server at its next tending (`{"op": "bridge"}` asks at once). A drain no process of this
@@ -327,61 +326,34 @@ there. A server that hands its start over exits `UPDATING`, and its starter wait
 start` that fails asks for the update before it gives up; a start never replaces a newer server, it joins it
 (`client.start`, `cad_mcp.shim.start_server`). Otherwise an engine only knows, from the version feed read in the
 background (`cad_server.updates`), the latest release, and a command says so in one line that names no command (the
-package's README, **The update notice**). The updaters of 0.10.0 to 0.11.10 are frozen on computers,
-though, and update by running a newer release's `cad setup --engine-update` (`cad_server.cli.setup`) from a flat
-release folder they made: that run makes the release present in `versions/` (its data imported from their layout)
-and runs again from there, and its setup then hands over from their layout (`installations.register`: the
-installation record naming the version's server environment) and owes the computer the hosted install script's run
-(below). It leaves `installations/current` and the `cad` command alone: the updater reads `current` after it as the
-release to go back to, then drains its own server and has its helper point `current` at the new release and start
-its server through that record and the flat door, on the same port; where that server does not answer there, the
-helper points `current` back and starts the old release's server again (so a release whose server cannot start
-leaves the computer as it was, its `cad` command, which runs what `current` names, included). Its helper's last
-step, `cad plugin --refresh`, fails (there is no such command) and is only logged. 0.10.0's updater on Windows keeps
-its state in the local application data, apart from every later release's, so its switch never finds the version and
-could only go back: there the run from its flat folder stops 0.10.0's server by its own stop command first (taking
-nothing in where it would not stop), and the version's own run takes the computer over as a plain setup does, the
-records 0.10.0's clients read pointed at the version too (`cad_server.cli.setup`'s `_take_over`). A server asked for `{"op": "http",
+package's README, **The update notice**). After its own update, with the second switch on (`cad auto-update on --installer`), the server runs the hosted
+install command once in update mode, which updates only the copies of our plugin still in the agent apps
+(`cad_server._internal.install_script`): owed whenever the release it last ran for is older than this cad, begun at
+the server's first tending, detached, its report read as it ends; a failure is tried again an hour later at the next
+start, then daily, 30 attempts or 30 days at most, and never blocks cad's own update.
+
+The updaters of 0.10.0 to 0.11.10 are frozen on computers, though, and update by running a newer release's hidden
+`cad setup --engine-update` from a flat release folder they made (`<state>/releases/X`). The bridge
+(`cad_server.cli.setup`, all of it to be deleted together once those releases are gone) answers: that run writes the
+installation record their switch starts the server by, naming that folder's environment, owes install mode, and
+changes nothing else; the switch points `installations/current` at X and starts X's server from that folder, and goes
+back where it does not answer. Five minutes after it started with `current` naming X, that server runs the hosted
+install command in install mode (cad as a uv tool, our plugin in every agent app, both switches on); once a report says
+cad was installed and nothing is in flight, the records point at the uv tool's environment and a helper that is not
+cad stops this server and starts the uv tool's. Every server of a uv tool points `current` and its record at itself,
+so a client of 0.11.10 or earlier that finds no server starts it. On a computer whose agent apps got text-to-cad from
+a store alone (no receipt or plugin folder of our earlier setup) nothing is owed: cad alone moves. 0.10.0's updater on
+Windows keeps its state in the local application data, so its switch could only go back: there the run stops 0.10.0's
+server by its own stop command first, moves its data once, points the records in both state folders at X, and starts
+X's server on the port and with the token it took in. Plain `cad setup`, which `cad update` typed on those releases
+runs, is the install command in install mode. Nothing of a past release is deleted by cad: the release folders stay
+until `cad cache prune`. A server asked for `{"op": "http",
 "port": P}` while it serves pages on another port Q -- an updater handing the pages' port on, 0.11.10's switch helper
 among them, to a server that started while 0.11.10 still held P -- takes P too, a second listener of the same
 application and token, and P is its own from then on (what `status` says, what its record keeps for the next start,
 the port a later update hands on), Q kept as well; where P cannot be taken it answers with where it serves, never
 `failed`. Any other request naming another port (`cad viewer --port`) is refused as before. Every page keeps its link
-through it, and reloads once its server answers with another release or start (`release`, `instance`). The flat
-folders, and every other part of the layout of 0.11.10 and earlier, go once nothing runs from them, by the newest
-version's cleanup (`cad_server._internal.legacy`).
-
-The install script's run `--engine-update` owes (`cad_server._internal.install_script`) is carried out by the
-version's own server, from its tending (`Daemon.versions`), and only while `installations/current` names its version:
-so only by a server that really serves. One attempt at a time on the computer (a lock the attempt holds while it
-runs), each a detached program of the version's Python that waits until the site's `install.py` names this release
-or a later one as its fallback (a release reaches the version feed, and so these updaters, before the docs site
-serving the new script is deployed, and the script of the release before would set up cad alone), then runs the
-hosted script, which writes a report of what it did (`CAD_INSTALL_REPORT`). The first attempt once the server has
-run five minutes, longer than a shipped switch can still be deciding to go back from it (`FIRST_SECONDS`); after one
-that failed, an hour later at the next start and then daily; done once a report says the
-script's `cad setup` exited 0 and nothing failed; given up after 30 attempts or 30 days; over once a newer version is
-current. Each attempt's end is one line in the server's log. The first time a version's server serves after its
-setup is said once too (`cad_server._internal.arrival`).
-
-A computer reaches this release by the install command instead (0.7 and 0.8, which have no updater, and any release
-whose person runs it): its plain `cad setup` hands over what the earlier release left running (`legacy.stop_earlier`,
-before the data is copied in, so a 0.8 server writes nothing after the copy; `legacy.hand_over`). A server of 0.11.10 or earlier at the flat door is asked to stop once nothing is in flight there
-(the drain), never waited for, and the mirror names this version, so the next client -- this release's or an old
-one's -- starts this version's server, which takes the page token and port it imported. A 0.8 server is stopped by
-0.8's own `cadgen stop`, run from the installation record 0.8 keeps, with its telemetry off: 0.8 has no updater, and
-its server stops on no timer. On Windows 0.10.0's is stopped by its own `cad stop` only where nothing answers at its
-port file or 0.10.0's own server does: a server of 0.11.x and this layout's default server write a copy of their own
-port file there, and 0.10.0's stop stops whatever answers. An updater's `cad setup --engine-update` stops no earlier
-server at all (the one that answers may be the updater's own, before its switch); a 0.8 server left running is
-stopped by the plain setup the hand-over runs.
-
-Every plain `cad setup` then starts its version's server, detached, where none runs (`cad_server.cli.setup`'s
-`_serve`, through `client.connect` as that version's own client), so a later session whose shell a sandbox keeps
-from starting one finds it running; it binds its HTTP port only at the first request that serves, as any server a
-client starts. Where it just asked a server of 0.11.10 or earlier to stop once idle it starts none: that server
-still holds the pages' port, and the next command starts this version's once it is free. `cad setup
---engine-update` starts none, and nothing else: the updater's own switch starts the server.
+through it, and reloads once its server answers with another release or start (`release`, `instance`).
 
 An engine asks no other process anything, another engine no more than any program: 0.8's server on
 the port is rolled from as above, or refused where the port is named, as below.

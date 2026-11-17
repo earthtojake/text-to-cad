@@ -82,7 +82,7 @@ def surface() -> dict:
     """The handshake as this source tree has it."""
     from cad_server._internal import installations, releases
     from cad_server.cli import setup as setup_cli
-    from cad.engine import client, places
+    from cad.engine import client
     from cad_server.engine import daemon, registry
     from cad_server.viewer.engine_app import EngineApp
 
@@ -119,8 +119,6 @@ def surface() -> dict:
     return {
         "setup": {"command": "setup", "engine_update_flag": "--engine-update", "prepare_env": setup_cli.PREPARE_ENV,
                   "flags": _flags(setup_cli.build_parser())},
-        "marker": {"path": f"{places.VERSIONS}/<version>/{places.CODE}/{places.VERSION_MARKER}",
-                   "keys": ["cad", "prefix", "python", "schema", "version"], "schema": places.VERSION_SCHEMA},
         "daemon": {"arguments": started[1:], "module": client.DAEMON_MODULE},
         "http": http_surface(),
         "ops": {"status": sorted(key for key in ("ok", "pid", "prefix", "serving", "installation", "version")

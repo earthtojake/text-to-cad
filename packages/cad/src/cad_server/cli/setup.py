@@ -1,66 +1,53 @@
-"""``cad setup``: this version of cad installed on this computer, and nothing else.
+"""BRIDGE-ONLY: ``cad setup`` (hidden, undocumented) and what carries a computer that a release of 0.10.0 to 0.11.10
+updated onto this one. All of it goes in one change once those releases are gone, with install mode in
+``cad_server._internal.install_script`` and the ``Tending`` the server holds (``cad_server.engine.daemon``).
 
-It is run as ``uvx --no-config --managed-python --python 3.14 --from cad-server==<version> cad setup`` (or by the
-version's own ``cad``), and sets up the version that runs it, in six steps, each skipped where it is done already,
-so running it again is quick and changes nothing:
+The updaters of 0.10.0 to 0.11.10 cannot be changed. They bring a newer release X the old way, and the server then
+takes the computer onto the one-cad design by itself:
 
-1. the version's folder, ``versions/<version>`` in the state folder (``cad_server._internal.versions``);
-2. its server installed into it (``code/server``: ``cad-server==<version>``, or, for this process's own version,
-   from where this process's server came);
-3. a check that it runs: its own Python asked which version it is;
-4. the CAD kernel installed into it (``cad[build123d]`` at the version);
-5. its "complete" marker written (``code/cad-version.json``);
-6. the ``cad`` command, ``~/.local/bin/cad``, written where it is missing or was written by an older release
-   (``cad_server._internal.installations.write_proxy``).
+1. The old updater makes ``<state>/releases/X`` (``cad-server==X``, which installs cad X) and runs its ``cad setup
+   --engine-update``, an automatic update first with ``CAD_UPDATE_PREPARE=1`` (nothing to prepare: 0).
+2. ``--engine-update`` (``engine_update``) writes the record the old switch starts a server by,
+   ``installations/X.json`` naming this environment, owes install mode (``install_script.owe``), keeps how X arrived
+   (``arrival.keep``) and exits 0. Nothing else: not ``installations/current``, which the switch reads afterwards as
+   the release to go back to, not the ``cad`` command, no server.
+3. The old switch points ``current`` at X and starts X's server from ``releases/X`` (``python -P -m
+   cad_server._internal.engine_daemon``); where it does not answer, it goes back, and the owed run stays inert
+   (``current`` never names X).
+4. X's server, five minutes after it started with ``current`` naming X, runs the hosted install command in install
+   mode (``install_script``): cad as a uv tool, our plugin in every agent app, both switches on.
+5. Once a report said cad was installed, and nothing is in flight (``Tending``, ``move``): ``installations/current``
+   and its record name the uv tool's environment, and a detached helper that is not cad (``auto_update_helper``) stops
+   this server and starts the uv tool's (``cad server start``). From then on it is a normal computer, whose server
+   updates itself.
+6. Every server of a uv tool, as it starts (``follow``), points ``current`` and its record at its own environment, so
+   a client of 0.11.10 or earlier that finds no server (a store's copy that lags, the library in a person's own Python,
+   the old ``cad`` command) starts it, and never registers its own release again.
 
-Steps 1 to 5 are ``versions.make_present``. The first setup of a version also gives it its own settings and store,
-copied ONCE from the newest older installed version, or, on a computer coming from 0.11.10 and earlier, from that
-layout, what 0.7 and 0.8 kept in their own folder taken into it first (``cad_server._internal.imports.ensure``;
-nothing once they are there). On a computer an earlier release ran on, what it left running is handed over
-(``cad_server._internal.legacy``: ``stop_earlier``, ``hand_over``): 0.8's server (and 0.10.0's on Windows, where it
-is 0.10.0's own server that answers at its port file) stopped by its own stop command BEFORE that copy, so nothing it
-writes after it is lost, and a server of 0.11.10 or earlier asked to stop once idle. The records a process with no version starts a server by (``installations/current`` and the
-record it names: a client of 0.11.10 and earlier, the library in a person's own Python) are written for this version
-where they name nothing yet, a version not installed, or an older one (``legacy.hand_over``).
+On Windows the same holds for 0.10.1 to 0.11.10. 0.10.0 on Windows (``_alone``) keeps its state in the local
+application data, apart from this release's, so its switch could only go back: there ``--engine-update`` takes over
+(``_take_over``): 0.10.0's server stopped by its own stop command first (where it does not stop, nothing changes), its
+data moved out of the local application data once (``places.adopt_earlier``), the records pointed at this release in
+both state folders, install mode owed, and this release's server started, serving pages on the port and with the token
+it took in.
 
-Last, setup starts the version's own server, detached, where none runs (``_serve``): setup always runs outside an
-agent's sandbox, since it installs, and a sandboxed shell cannot start a server, so every later session -- an agent's
-sandboxed ``cad`` command among them -- finds it running (a server never stops on a timer). Waited for only until its
-door answers; a server that cannot start is said, and never fails the setup. Where a server of 0.11.10 or earlier
-still holds the flat door and was just asked to stop once idle (``legacy.hand_over``), none is started: its pages'
-port is still taken, and the next command starts this version's server once it is free, as before. Nothing else on
-the computer is changed.
+Plain ``cad setup`` is what ``cad update`` typed on 0.10.x and 0.11.x runs of the new release: the install command in
+install mode, in the foreground; its exit status.
 
-``--engine-update`` (hidden, absent from the help) is how releases 0.10.0 to 0.11.10 update themselves: their
-updater makes a flat folder of the newer release and runs its ``cad setup --engine-update``, reading its exit status
-(0: go on and switch the computer's server to it). It then reads the release ``installations/current`` names as the
-one to go back to, and its switch points ``current`` at the newer release, starts that release's server through the
-records and the door of its own layout, checks it answers on the pages' port, and points ``current`` back and starts
-its own server again where it does not: so this run starts no server and leaves ``current`` and the ``cad`` command
-as they are -- the shipped release's command runs what ``current`` names, so it follows the switch either way. It does
-steps 1 to 5 (from the flat folder, the version made present and the same command run again from the version's own
-``cad``; with ``CAD_UPDATE_PREPARE=1``, an automatic update's first half, it stops once the version is present), then
-the hand-over from that layout (the installation record naming the version's server, which the switch starts once it
-has pointed ``current`` at it: ``installations.register``), and last owes the computer the hosted install script's
-run (``cad_server._internal.install_script.owe``): the version's own server runs it once it serves, and again until it
-has worked. It starts nothing, and stops no earlier release's server: 0.10.0's own stop on Windows stops whatever
-answers at its port file, which a server of 0.11.x writes a copy of its own to -- the updater running this, before its
-switch --, and a 0.8 server left running is stopped by the plain setup the hand-over runs.
+Never on a computer whose agent apps got text-to-cad from a store alone (``ours``): there install mode would add our
+plugin to apps the person never asked us into. Such a computer's old release still reaches ``--engine-update``: its
+automatic update runs where its server was started by a ``cad`` command rather than by the store's server line (the
+line's ``CAD_AUTO_UPDATED=1`` reaches only the server it starts), and a typed ``cad update`` runs plain ``cad setup``.
+Ours is told by what 0.8 to 0.11.10's own setup leaves once it has put our plugin in the apps -- the install command's,
+an update button's or an automatic update's alike --, and nothing else writes: ``install-receipt.json`` or the plugin
+folder ``plugin/`` in the state folder (or 0.10.0's on Windows). Where neither is there, cad alone moves: the record the
+switch starts this release's server by is written (and ``current`` pointed at it by a plain ``cad setup``), and
+nothing is owed; the store's next copy brings the rest.
 
-But for one updater, whose switch cannot start this version: 0.10.0 on Windows keeps its state, the records its switch
-starts a server by among it, in the local application data, apart from this version's, so its switch would only go
-back to 0.10.0 (``_alone``: the flat folder is there). There the run from the flat folder first stops 0.10.0's server
-by its own stop command -- the updater that runs it among it -- and takes nothing in where it would not stop, so
-0.10.0 runs on with what it has; then, once the version is present with what it took in from 0.10.0, the version's own
-run takes the computer over as a plain setup does (``_take_over``): the ``cad`` command, the records clients find a
-server by, in this layout and in 0.10.0's own state folder, so none of its clients starts it again, the install
-script's run owed, and this version's server started and serving pages on the port and with the token it took in.
+Nothing here deletes anything of a past release: ``releases/`` stays until ``cad cache prune``. The module names
+``cad_server._internal.engine_daemon`` and ``cad_server._internal.proxy`` stay too: shipped releases start them.
 
-How a version arrived -- by which route, from which version -- is kept for its server, and each run's end is told
-once (``cad_server._internal.arrival``: ``keep``, ``setup_ended``).
-
-Exit status: 0 done; 1 a step failed; 2 bad arguments; 3 this version cannot be installed from this shell (no uv, no
-network for what uv's cache lacks, a folder it may not write: an agent's sandbox).
+Exit status of ``--engine-update``: 0 done; 1 failed (the updater stays on its own release).
 """
 
 from __future__ import annotations
@@ -68,19 +55,19 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from collections.abc import Sequence
-from typing import NamedTuple
+import time
+from collections.abc import Callable, Sequence
+from pathlib import Path
 
 DEFAULT_PROG = "cad setup"
-# Set by the updater of 0.11.x for an automatic update's first run of ``--engine-update``: the version made present,
-# and nothing else; it runs ``--engine-update`` again, without it, once its server is idle.
+# Set by the updater of 0.11.x for an automatic update's first run of ``--engine-update``; it runs it again, without
+# it, once its server is idle.
 PREPARE_ENV = "CAD_UPDATE_PREPARE"
-# Set by a run of ``--engine-update`` from the flat folder of an updater that cannot switch to this version (``_alone``:
-# 0.10.0 on Windows) for the version's own run it hands on to, which then takes the computer over (``_take_over``).
-ALONE_ENV = "CAD_ENGINE_UPDATE_ALONE"
-# How long setup waits for the server it started to answer at its door (``_serve``): a server answers there within a
-# second or two of starting; its kernel processes start with its first build, never here.
-SERVE_SECONDS = 30.0
+# The helper's record of the move to the uv tool's server, in the data folder.
+MOVE_RECORD = "handover-move.json"
+# How long a server of 0.10.0 is given to say what it is, and its own stop to run.
+ASK_SECONDS = 5.0
+STOP_SECONDS = 60.0
 
 
 def build_parser(prog: str = DEFAULT_PROG):
@@ -88,31 +75,15 @@ def build_parser(prog: str = DEFAULT_PROG):
 
     from cad_server._internal.cli_parser import parser as command_parser
 
-    parser = command_parser(
-        prog=prog,
-        allow_abbrev=False,
-        description="Install this version of cad on this computer: its own folder, its server and the CAD "
-                    "kernel, and the cad command (~/.local/bin/cad) where it is missing or older. Nothing else is "
-                    "changed. Running it again is quick and harmless.",
-    )
+    parser = command_parser(prog=prog, allow_abbrev=False,
+                            description="Run the install command once more.")
     parser.add_argument("--engine-update", action="store_true", help=argparse.SUPPRESS)
     return parser
 
 
-class Failed(NamedTuple):
-    """A run's step that failed, said already: the exit status, and why, for a count of it
-    (``arrival.setup_ended``): ``uv``, ``network`` or ``denied`` where the version cannot be made from this shell
-    (``versions.CANNOT``), else ``other``."""
-
-    code: int
-    reason: str = "other"
-
-
 def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG) -> int:
     args = build_parser(prog).parse_args(argv)
-    if args.engine_update:
-        return engine_update()
-    return setup()
+    return engine_update() if args.engine_update else setup()
 
 
 def _say(line: str) -> None:
@@ -124,199 +95,98 @@ def _say(line: str) -> None:
         pass
 
 
-def _name() -> str | None:
-    """The version this process sets up: the one it is told it runs as (a development version), else its release;
-    None for a source tree that was not told one."""
+def _name() -> str:
+    """The release this process is: the one it is told it runs as (a development version), else its own."""
     import cad_server
     from cad.engine import places
-    from cad_server._internal import installations
 
-    told = os.environ.get(places.INSTALLATION_ENV)
-    if told:
-        return told
-    if installations.editable():
-        return None
-    return cad_server.__version__
+    return os.environ.get(places.INSTALLATION_ENV) or cad_server.__version__
 
 
-def _no_name(route: str) -> int:
-    """A source tree that was not told its version: said, and its end told; 1."""
+def _ended(name: str, route: str, came: str | None, failed: bool, *, first: bool = False) -> int:
+    """The run's end counted (``arrival.setup_ended``): its exit status."""
+    from cad_server._internal import arrival
+
+    arrival.setup_ended(name, route, came, arrival.FAILED if failed else arrival.OK, "other" if failed else None,
+                        first=first)
+    return 1 if failed else 0
+
+
+def setup() -> int:
+    """Plain ``cad setup``: the install command in install mode, its output this command's (see the module)."""
+    from cad_server._internal import arrival, install_script
+
+    name = _name()
+    came = arrival.came_from(name)
+    if not ours():
+        from cad_server._internal import installations
+
+        try:
+            installations.register(name)
+            installations.point(name)
+        except (OSError, ValueError) as error:
+            _say(f"cad {name} could not be set up: {error}")
+            return _ended(name, arrival.SETUP, came, True)
+        _say(f"cad {name} runs from the next start of the cad server")
+        return _ended(name, arrival.SETUP, came, False)
+    command = install_script.installer()
+    if not command:
+        return 0
+    try:
+        code = subprocess.call(command, env=install_script.environment(update=False, report=None),
+                               stdin=subprocess.DEVNULL)
+    except OSError as error:
+        _say(f"the install command could not start: {error}")
+        code = 1
+    _ended(name, arrival.SETUP, came, code != 0)
+    return code
+
+
+def engine_update() -> int:
+    """``cad setup --engine-update`` (see the module, steps 1 and 2, and 0.10.0 on Windows)."""
+    from cad_server._internal import arrival, install_script, installations
+
+    name = _name()
+    if os.environ.get(PREPARE_ENV) == "1":
+        return 0
+    came = arrival.came_from(name)
+    if _alone():
+        return _take_over(name, came)
+    try:
+        installations.register(name)
+        if ours():
+            install_script.owe(name)
+    except (OSError, ValueError) as error:
+        _say(f"cad {name} could not take over: {error}")
+        return _ended(name, arrival.UPDATER, came, True)
+    return _ended(name, arrival.UPDATER, came, False, first=_keep(name, came))
+
+
+def ours() -> bool:
+    """Whether text-to-cad's own setup (0.8 to 0.11.10) ever put our plugin in this computer's agent apps: its
+    receipt or its plugin folder in the state folder, or in 0.10.0's on Windows (see the module)."""
     from cad.engine import places
-    from cad_server._internal import arrival
-    from cad_server._internal.cli_errors import FAILED
 
-    _say("this cad-server is a source tree: it is set up only as a version it is named "
-         f"({places.INSTALLATION_ENV})")
-    arrival.setup_ended("", route, None, arrival.FAILED, "other")
-    return FAILED
+    return any(folder is not None and ((folder / "install-receipt.json").is_file() or (folder / "plugin").is_dir())
+               for folder in (places.state_dir(), places.appdata_state_dir()))
 
 
-def _ended(name: str, route: str, came: str | None, failed: Failed | None, *, first: bool = False) -> int:
-    """The run's end told (``arrival.setup_ended``; ``first``: this run kept the version's arrival record): its exit
-    status."""
-    from cad_server._internal import arrival
-
-    arrival.setup_ended(name, route, came, arrival.OK if failed is None else arrival.FAILED,
-                        None if failed is None else failed.reason, first=first)
-    return 0 if failed is None else failed.code
-
-
-def _keep(name: str, route: str, came: str | None) -> bool:
-    """How version ``name`` arrived, kept for its server where nothing is kept yet (``arrival.keep``): whether this
-    run kept it. A folder it cannot write keeps nothing, and fails nothing."""
+def _keep(name: str, came: str | None) -> bool:
     from cad_server._internal import arrival
 
     try:
-        return arrival.keep(name, route, came)
+        return arrival.keep(name, arrival.UPDATER, came)
     except OSError:
         return False
 
 
-def _present(name: str) -> Failed | None:
-    """Steps 1 to 5 for ``name``, then its data copied in once (``imports.ensure``): None once it is present, else
-    what failed, said."""
-    from cad_server._internal import imports, versions
-    from cad_server._internal.cli_errors import FAILED, REASONS
-
-    found = versions.make_present(name, told=_say)
-    if not found.ok:
-        if found.cannot is not None:
-            _say(f"cad {name} could not be installed from this shell: {found.error}. Run this command again "
-                 "outside the sandbox.")
-            return Failed(REASONS["cannot_install_here"],
-                          found.cannot if found.cannot in versions.CANNOT else "other")
-        _say(f"cad {name} could not be installed: {found.error}")
-        return Failed(FAILED)
-    try:
-        copied = imports.ensure(name, told=_say)
-    except OSError as error:  # never a failed setup: the version's server imports at its first start
-        _say(f"cad {name}'s settings and store were not copied in yet: {error.strerror or error}")
-        return None
-    if copied.done and copied.source is not None:
-        _say(f"cad {name} took its settings and store from {copied.source.words()}")
-    return None
-
-
-def _command(name: str) -> Failed | None:
-    """Step 6: the ``cad`` command written where it is missing or older. None when it is there; else what failed,
-    said."""
-    from cad_server._internal import installations
-    from cad_server._internal.cli_errors import FAILED
-
-    path, status, error = installations.write_proxy()
-    if error is not None or status == installations.FOREIGN:
-        why = error or "a file of that name there is not cad's, and is left alone"
-        _say(f"cad {name} is installed, but the cad command could not be written at {path}: {why}")
-        return Failed(FAILED)
-    return None
-
-
-def setup() -> int:
-    """``cad setup``: the six steps (see the module), said in a line or two."""
-    from cad.engine import places
-    from cad_server._internal import arrival
-
-    name = _name()
-    if name is None:
-        return _no_name(arrival.SETUP)
-    came = arrival.came_from(name)
-    was = places.version_record(name) is not None
-    _stop_earlier()
-    failed = _present(name) or _command(name)
-    if failed is not None:
-        return _ended(name, arrival.SETUP, came, failed)
-    first = _keep(name, arrival.SETUP, came)
-    handing_over = _arrive(name)
-    _out(f"cad {name} is {'installed' if was else 'installed now'}: {places.version_dir(name)}")
-    if not handing_over:  # else said: this version's server starts at the next command (``legacy.hand_over``)
-        _serve(name)
-    return _ended(name, arrival.SETUP, came, None, first=first)
-
-
-def _out(line: str) -> None:
-    """A line on stdout; never a failure where no one reads it any more (an updater that went)."""
-    try:
-        sys.stdout.write(f"{line}\n")
-        sys.stdout.flush()
-    except (OSError, ValueError):
-        pass
-
-
-def _serve(name: str, *, pages: bool = False) -> None:
-    """Version ``name``'s own server started, detached, where none runs (see the module), the way its ``cad``
-    starts it (``cad.engine.client.connect``, with this version's name and the environment another program runs
-    in, ``_environment``), waited for only until its door answers: one line, said. ``pages``: then asked to serve
-    pages (``{"op": "http"}``), on the port and with the token it took in, as a page's link asks it, so a page an
-    earlier release served finds it there. Never a failed setup."""
-    from cad.engine import client, places
-
-    saved, environment = dict(os.environ), {**_environment(), places.INSTALLATION_ENV: name}
-    try:
-        os.environ.clear()
-        os.environ.update(environment)
-        connection = client.connect()  # starts none: `cad server start` alone does (`client.start`)
-        if connection is not None:
-            connection.close()
-        if pages:
-            client.request({"op": "http"}, start=False)
-    except (ConnectionError, OSError, ValueError) as error:
-        _say(f"cad {name}'s server is not running: {error}")
-        return
-    finally:
-        os.environ.clear()
-        os.environ.update(saved)
-    _out(f"cad {name}'s server is running")
-
-
-# --- --engine-update --------------------------------------------------------------------------------------------
-
-
-def engine_update() -> int:
-    """``cad setup --engine-update``: steps 1 to 5, the hand-over from the layout of 0.11.10 and earlier, and the
-    install script's run owed (see the module). Its end is told once: by the run that fails, or by the version's own
-    whole run; a prepare run that succeeds and a run from the flat folder that hands on tell none."""
-    from cad.engine import places
-    from cad_server._internal import arrival
-
-    name = _name()
-    if name is None:
-        return _no_name(arrival.UPDATER)
-    came = arrival.came_from(name)
-    prepare = os.environ.get(PREPARE_ENV) == "1"
-    alone = os.environ.pop(ALONE_ENV, "") == "1"
-    if places.versioned() is None and not os.environ.get(places.INSTALLATION_ENV):
-        # Run from the flat folder an updater of 0.11.10 or earlier made (or by uvx): the version made present,
-        # then this command run again from the version's own code, which the hand-over runs from (it removes the
-        # flat folders of that layout once nothing runs from them). An updater whose switch cannot start this
-        # version (``_alone``) has its server stopped first, before its data is taken in: the run takes over.
-        alone = _alone()
-        failed = _stop_alone(name) if alone else None
-        failed = failed or _present(name)
-        if failed is not None:
-            return _ended(name, arrival.UPDATER, came, failed)
-        if prepare:
-            return 0
-        record = places.version_record(name)
-        assert record is not None
-        return _again(record["cad"], alone=alone)
-    failed = _present(name)
-    if prepare:
-        return 0 if failed is None else _ended(name, arrival.UPDATER, came, failed)
-    if alone:
-        return _ended(name, arrival.UPDATER, came, failed, first=failed is None and _take_over(name, came))
-    # No earlier release's server is stopped here: 0.10.0's own stop on Windows stops whatever answers at its port
-    # file, which a server of 0.11.x mirrors -- the updater running this run among them, before its switch. A 0.8
-    # server left running is stopped by the plain setup the hand-over's install script runs.
-    failed = failed or _hand_over(name) or _owe(name)
-    first = failed is None and _keep(name, arrival.UPDATER, came)
-    return _ended(name, arrival.UPDATER, came, failed, first=first)
+# --- 0.10.0 on Windows ------------------------------------------------------------------------------------------
 
 
 def _alone() -> bool:
-    """Whether the updater that runs this ``--engine-update`` from its flat folder cannot switch the computer to this
-    version: 0.10.0 on Windows, which keeps its state -- the records its switch starts a server by among it -- in the
-    local application data (``places.appdata_state_dir``), apart from this version's, so its switch never finds this
-    version, and goes back to 0.10.0. Told by where that flat folder is: its ``releases`` there."""
+    """Whether the updater that runs this ``--engine-update`` cannot switch the computer to this release: 0.10.0 on
+    Windows, whose state -- the records its switch starts a server by -- is in the local application data
+    (``places.appdata_state_dir``). Told by where its folder for this release is: its ``releases`` there."""
     from cad.engine import places
 
     folder = places.appdata_state_dir()
@@ -326,135 +196,270 @@ def _alone() -> bool:
     return os.path.normcase(os.path.realpath(sys.prefix)).startswith(inside)
 
 
-def _stop_alone(name: str) -> Failed | None:
-    """0.10.0's servers on Windows stopped by its own stop command (``legacy.stop_appdata``), the updater that runs
-    this among them, before anything of 0.10.0's is taken in: None when none runs; else what failed, said, and nothing
-    taken in, so 0.10.0 runs on with what it has."""
-    from cad_server._internal import legacy
-    from cad_server._internal.cli_errors import FAILED
-
-    if legacy.stop_appdata(_say):
-        return None
-    _say(f"cad {name} did not take over: the server of cad-server 0.10.0 did not stop, and keeps what it has")
-    return Failed(FAILED)
-
-
-def _take_over(name: str, came: str | None) -> bool:
-    """The whole run of ``--engine-update`` for an updater that cannot switch to version ``name`` (``_alone``: 0.10.0
-    on Windows, whose server its run from the flat folder stopped before 0.10.0's data was taken in): the computer
-    taken over as a plain ``cad setup`` takes it over -- the ``cad`` command (a file it cannot write is said, and the
-    run goes on: 0.10.0's data is this version's now), the records clients start a server by (``legacy.hand_over``),
-    and the same records in 0.10.0's own state folder (``installations.mirror``), so none of its clients starts 0.10.0
-    again --, the install script's run owed, and this version's server started and serving pages on the port and
-    with the token it took in. Whether this run kept the version's arrival record. Never a failure: what could not be
-    done is said."""
+def _take_over(name: str, came: str | None) -> int:
+    """``--engine-update`` for 0.10.0 on Windows (see the module): its exit status."""
     from cad.engine import places
-    from cad_server._internal import arrival, installations
+    from cad_server._internal import arrival, install_script, installations
+
+    if not stop_appdata(_say):
+        _say(f"cad {name} did not take over: the server of cad-server 0.10.0 did not stop, and keeps what it has")
+        return _ended(name, arrival.UPDATER, came, True)
+    try:
+        places.adopt_earlier()
+        found = installations.targets()
+        _point(name, found, take_over=True)
+        if ours():
+            install_script.owe(name)
+    except (OSError, ValueError) as error:
+        _say(f"cad {name} could not take over: {error}")
+        return _ended(name, arrival.UPDATER, came, True)
+    first = _keep(name, came)
+    _serve(name)
+    return _ended(name, arrival.UPDATER, came, False, first=first)
+
+
+def _serve(name: str) -> None:
+    """This release's server started from this environment (``client.start``) and asked to serve pages, on the port
+    and with the token it took in, so a page 0.10.0 served finds it there. Never a failed run."""
+    from cad.engine import client
+    from cad_server._internal import install_script
+
+    saved = dict(os.environ)
+    try:
+        os.environ.clear()
+        os.environ.update({key: value for key, value in install_script.environment(update=False, report=None).items()
+                           if key != "UV_NO_MODIFY_PATH"})
+        client.start()
+        client.request({"op": "http"}, start=False)
+    except (ConnectionError, OSError, ValueError) as error:
+        _say(f"cad {name}'s server is not running: {error}")
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
+
+
+def stop_appdata(told: Callable[[str], None]) -> bool:
+    """0.10.0's servers on Windows stopped by 0.10.0's own ``cad stop --json``, found by its installation records in
+    the local application data, run in its own environment with its telemetry off: whether every one held (ran and
+    exited 0, which for 0.10.0 means its server is gone), or there was none. 0.10.0's stop stops whatever answers at its
+    port file, which every later server writes a copy of its own to (``daemon._mirror``): it runs only where nothing
+    answers there, or 0.10.0's own server does (``_appdata_serving``)."""
+    import json
+
+    from cad_server._internal import installations
+
+    environment = {key: value for key, value in os.environ.items() if key not in ("PYTHONPATH", "PYTHONHOME")}
+    environment.update({"CADGEN_TELEMETRY": "0", "CAD_TELEMETRY": "0"})
+    held, serving = True, []
+    for record in installations.appdata():
+        console = record.get("cad")
+        if not (isinstance(console, str) and os.path.isfile(record["python"]) and os.path.isfile(console)):
+            continue
+        if not serving:  # asked once, where there is a 0.10.0 to stop
+            serving.append(_appdata_serving())
+        if serving[0] is not None and not installations._same_place(serving[0], record["prefix"]):
+            continue  # another release's server answers there: never stopped by 0.10.0's stop
+        try:
+            done = subprocess.run([console, "stop", "--json"], env=environment, stdin=subprocess.DEVNULL,
+                                  capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                  timeout=STOP_SECONDS)
+        except (OSError, subprocess.SubprocessError) as error:
+            told(f"cad-server {record['version']}'s `cad stop` could not run ({error}): its server may still run")
+            held = False
+            continue
+        if done.returncode != 0:
+            told(f"cad-server {record['version']}'s `cad stop` failed (exit status {done.returncode}): its server "
+                 "may still run")
+            held = False
+            continue
+        try:
+            stopped = json.loads(done.stdout).get("stopped")
+        except (ValueError, AttributeError):
+            stopped = None
+        if stopped:
+            told(f"stopped cad-server {record['version']}'s server (its own `cad stop`)")
+    return held
+
+
+def _appdata_serving() -> str | None:
+    """The environment of the server that answers where 0.10.0's clients look for one on Windows (the port file in
+    ``places.appdata_engine_dir``; where ``CAD_ENGINE_DIR`` names the engines' folder, its own port file), as its
+    ``status`` says (``prefix``); None where none answers."""
+    import threading
+
+    from cad.engine import client, places
+
+    folder = places.appdata_engine_dir()
+    if folder is None and places.WINDOWS and os.environ.get("CAD_ENGINE_DIR"):
+        folder = places.engines_dir()
+    if folder is None:
+        return None
+    door = folder / f"{places.NAME}.port"
+    answers: list = []
+
+    def ask() -> None:
+        try:
+            connection = client._connect(door)
+            if connection is not None:
+                answers.append(client._exchange(connection, {"op": "status", "internal": True}, address=door))
+        except (OSError, ValueError, ConnectionError, IndexError):
+            pass
+
+    asking = threading.Thread(target=ask, daemon=True)
+    asking.start()
+    asking.join(ASK_SECONDS)
+    prefix = answers[0].get("prefix") if answers and isinstance(answers[0], dict) else None
+    return prefix if isinstance(prefix, str) and prefix else None
+
+
+# --- the records old clients start a server by ------------------------------------------------------------------
+
+
+def _appdata_ours():
+    """0.10.0's state folder on Windows as a ``Folder`` where its ``installations/current`` names a release after
+    0.10 (one ``_take_over`` pointed it at), else None."""
+    from cad.engine import places
+    from cad_server._internal import installations
     from cad_server.engine.registry import Folder
 
-    _command(name)
-    first = _keep(name, arrival.UPDATER, came)
-    _arrive(name)
-    try:
-        installations.mirror(name, Folder(places.appdata_state_dir()))
-    except (OSError, TypeError, ValueError) as error:
-        _say(f"the records cad-server 0.10.0's clients read could not be written: {error}")
-    _owe(name)
-    _serve(name, pages=True)
-    return first
+    folder = places.appdata_state_dir()
+    if folder is None:
+        return None
+    named = installations.current_version(Folder(folder))
+    return Folder(folder) if named is not None and _later(named, "0.10.99") else None
 
 
-def _owe(name: str) -> Failed | None:
-    """The hosted install script's run owed for version ``name``, which its server carries out
-    (``install_script.owe``): None when it is recorded; else what failed, said: the updater then stays on its own
-    release, and tries again."""
-    from cad_server._internal import install_script
-    from cad_server._internal.cli_errors import FAILED
-
-    try:
-        install_script.owe(name)
-    except OSError as error:
-        _say(f"cad {name} could not record what it still owes this computer: {error.strerror or error}")
-        return Failed(FAILED)
-    return None
-
-
-def _stop_earlier() -> None:
-    """The servers of 0.8 (and of 0.10.0 on Windows) stopped by their own stop command (``legacy.stop_earlier``),
-    before this version's data is copied in: what such a server wrote after the copy would be lost. Never a failed
-    setup."""
-    from cad_server._internal import legacy
-
-    try:
-        legacy.stop_earlier(_say)
-    except Exception as error:  # noqa: BLE001 - what an earlier release left never fails this version's setup
-        _say(f"what an earlier release left running was not stopped: {type(error).__name__}: {error}")
-
-
-def _arrive(name: str) -> bool:
-    """What earlier releases left running, handed over to version ``name`` by the install command's route (not an
-    updater's, whose own switch stops its server: ``legacy.hand_over``): the mirror written where it names nothing, a
-    version not installed or an older one, and a server of 0.11.10 or earlier at the flat door asked to stop once idle.
-    Whether such a server was asked to stop (it still runs). Never a failed setup."""
-    from cad_server._internal import legacy
-
-    try:
-        return legacy.hand_over(name, _say)
-    except Exception as error:  # noqa: BLE001 - what an earlier release left never fails this version's setup
-        _say(f"what an earlier release left running was not handed over: {type(error).__name__}: {error}")
-    return False
-
-
-def _environment() -> dict[str, str]:
-    """The environment another program runs in from here: this one's, without this process's import path, its
-    version's name, its channel, the automatic update's first half, the take-over's mark (``ALONE_ENV``), and with the
-    person's own PATH (uvx puts its
-    own environment's folder first on PATH for the command it runs)."""
-    from cad.engine.places import INSTALLATION_ENV, RUN_WITH
-    from cad_server._internal.installations import lasting
-
-    environment = {key: value for key, value in os.environ.items()
-                   if key not in ("PYTHONPATH", "PYTHONHOME", INSTALLATION_ENV, RUN_WITH, PREPARE_ENV, ALONE_ENV)}
-    environment["PATH"] = lasting(os.environ.get("PATH", os.defpath))
-    return environment
-
-
-def _again(cad: str, *, alone: bool = False) -> int:
-    """``cad setup --engine-update`` run again by the version's own ``cad``, its exit status this run's (``alone``:
-    told so, ``ALONE_ENV``)."""
-    run = [cad, "setup", "--engine-update"]
-    environment = {**_environment(), **({ALONE_ENV: "1"} if alone else {})}
-    if os.name == "nt":
-        return subprocess.call(run, env=environment, stdin=subprocess.DEVNULL)
-    try:
-        sys.stdout.flush()
-        sys.stderr.flush()
-    except (OSError, ValueError):
-        pass
-    os.execve(run[0], run, environment)
-    return 1  # not reached
-
-
-def _hand_over(name: str) -> Failed | None:
-    """The hand-over from the layout of 0.11.10 and earlier to version ``name``: the installation record that layout's
-    switch starts a server by, written for the version's server environment (``installations.register``). Not
-    ``installations/current``: the switch reads it after this run as the release to go back to should this version's
-    server not answer, then points it here itself, under its engine's lock. None when done; else what failed, said:
-    the updater then stays on its own release."""
-    from cad.engine.places import version_record
+def _point(version: str, found: tuple[str, str, str] | None, *, take_over: bool = False) -> None:
+    """``installations/<version>.json`` naming ``found`` (console script, python, environment) and ``current`` naming
+    it, in the state folder and in 0.10.0's where ours (``_appdata_ours``), or by a take-over. ``OSError``,
+    ``ValueError``."""
+    from cad.engine import places
     from cad_server._internal import installations
-    from cad_server._internal.cli_errors import FAILED
+    from cad_server.engine.registry import Folder
 
-    record = version_record(name)
+    appdata = places.appdata_state_dir() if take_over else None
+    for folder in (Folder(places.state_dir()), Folder(appdata) if appdata is not None else _appdata_ours()):
+        if folder is not None:
+            installations.register(version, found, folder)
+            installations.point(version, folder)
+
+
+def _later(one: str, other: str) -> bool:
+    from cad_server._internal.install_script import _later as later
+
+    return later(one, other)
+
+
+def follow(told: Callable[[str], None]) -> bool:
+    """Step 6 (see the module): where this server is the uv tool's, ``current`` and its record pointed at its
+    environment unless they name it already, or a later release. Whether they were. Never raises."""
     try:
-        if record is not None:
-            installations.register(name, (record["cad"], record["python"], record["prefix"]))
-            return None
-        why = "it is not installed"
+        from cad_server._internal import auto_update, installations
+
+        found = installations.targets()
+        if auto_update.uv_tool() is None or found is None:
+            return False
+        version = _name()
+        current = installations.current()
+        if current is not None and (_later(current["version"], version) or (
+                current["version"] == version and installations._same_place(current["prefix"], found[2]))):
+            return False
+        _point(version, found)
+        told(f"the clients of 0.11.10 and earlier start this cad {version} where none runs")
+        return True
+    except Exception as error:  # noqa: BLE001 - the records never fail the server
+        told(f"the records the clients of 0.11.10 and earlier read could not be written: {error}")
+        return False
+
+
+def tool() -> tuple[str, Path, str] | None:
+    """The uv tool ``cad`` on this computer: ``(uv, its environment, its release)``, or None where there is none
+    (``uv tool dir``, then uv's receipt there naming ``cad``)."""
+    from cad.engine.places import windowless
+    from cad_server._internal import auto_update
+    from cad_server._internal.auto_update_helper import installed
+
+    uv = auto_update.find_uv()
+    if uv is None:
+        return None
+    try:
+        done = subprocess.run([uv, "tool", "dir"], stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=60, **windowless())
+    except (OSError, subprocess.SubprocessError):
+        return None
+    lines = [line.strip() for line in done.stdout.splitlines() if line.strip()]
+    if done.returncode != 0 or not lines:
+        return None
+    environment = Path(lines[-1]) / "cad"
+    held = installed(str(environment)) if auto_update.uv_tool(str(environment)) is not None else None
+    return (uv, environment, ".".join(map(str, held))) if held is not None else None
+
+
+def move(name: str, told: Callable[[str], None]) -> bool:
+    """Step 5 (see the module), from this server of release ``name`` that is not the uv tool's: whether the helper
+    started. Never older: a uv tool cad older than this release stays where it is, and this server runs on."""
+    from cad.engine.places import data_dir, detached
+    from cad_server._internal import auto_update
+
+    found = tool()
+    if found is None:
+        told("no cad installed as a uv tool was found: this server runs on")
+        return False
+    uv, environment, release = found
+    if _later(name, release):
+        told(f"the uv tool's cad {release} is older than this cad {name}: this server runs on")
+        return False
+    windows = os.name == "nt"
+    scripts = environment / ("Scripts" if windows else "bin")
+    try:
+        _point(release, (str(scripts / ("cad.exe" if windows else "cad")),
+                         str(scripts / ("python.exe" if windows else "python")), str(environment)))
+        command = auto_update.helper_command(release, now=time.time(), version=name, prefix=str(environment), uv=uv,
+                                             record=str(data_dir() / MOVE_RECORD))
+        inside = os.path.normcase(os.path.realpath(sys.prefix)).rstrip(os.sep) + os.sep
+        if os.path.normcase(os.path.realpath(command[0])).startswith(inside):
+            told("no Python outside this environment to hand over with: this server runs on")
+            return False
+        _start(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         env={key: value for key, value in os.environ.items() if key not in auto_update._UNSET},
+                         cwd=str(data_dir()), **detached())
     except (OSError, ValueError) as error:
-        why = str(error)
-    _say(f"cad {name} could not take over: {why}")
-    return Failed(FAILED)
+        told(f"could not hand over to the uv tool's cad {release}: {error}")
+        return False
+    told(f"handing over to the uv tool's cad {release}: this server stops, and that cad starts the next")
+    return True
+
+
+def _start(command: list[str], **options) -> None:
+    """The helper started (a seam for a test, which records it instead)."""
+    subprocess.Popen(command, **options)
+
+
+class Tending:
+    """The bridge's part of a server's tending (``daemon.Daemon.tend``): ``follow`` once, at the first; ``move``
+    once, where install mode's report said cad was installed, no attempt runs and nothing is in flight."""
+
+    def __init__(self) -> None:
+        self.followed = False
+        self.moved = False
+
+    def tend(self, name: str, told: Callable[[str], None], *, quiet: bool) -> None:
+        from cad_server._internal import install_script
+
+        if not self.followed:
+            self.followed = True
+            follow(told)
+        if self.moved or not quiet:
+            return
+        record = install_script.read()
+        if (record is None or record["mode"] != install_script.INSTALL or not record.get("installed")
+                or record.get("outcome") == install_script.RUNNING or record["version"] != name):
+            return
+        from cad_server._internal import auto_update
+
+        self.moved = True
+        if auto_update.uv_tool() is None:
+            move(name, told)
 
 
 if __name__ == "__main__":

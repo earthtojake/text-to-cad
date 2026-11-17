@@ -309,7 +309,7 @@ def appdata() -> list[dict]:
     """0.10.0's installations on Windows, each by its record in the state folder it kept in the local
     application data (``cad.engine.places.appdata_state_dir``), as ``earlier`` reads 0.8's -- never the record of a
     version of this layout that a take-over wrote there for 0.10.0's clients (``cli.setup._take_over``). Read to stop
-    0.10.0's servers by their own stop command (``legacy.stop_earlier``, ``stop_appdata``) and for its releases' What's
+    0.10.0's servers by their own stop command (``cad_server.cli.setup.stop_appdata``) and for its releases' What's
     new (``whats_new``)."""
     from cad.engine.places import appdata_state_dir
 
@@ -338,7 +338,7 @@ def earlier(folder: Path | None = None, console: str = EARLIER_CONSOLE) -> list[
     (``EARLIER_CONSOLE``) and environment (``prefix``), with its file (``path``). No record of a version of this
     layout is one (``_this_layout``), though one be there: 0.10.0's folder holds the record a take-over wrote for its
     clients (``mirror``). Read only to tell what 0.8 and 0.10.0 left: the launchers 0.8 published
-    (``legacy_launchers``), the servers to stop by their own stop command (``legacy.stop_earlier``), and their
+    (``legacy_launchers``), 0.10.0's servers to stop by their own stop command (``cli.setup.stop_appdata``), and their
     releases' What's new (``whats_new``)."""
     from cad.engine.places import earlier_state_dir
 
@@ -518,7 +518,7 @@ def mirror(version: str, folder=None) -> bool:
     record naming its server environment (its code marker's interpreter, console script and environment), and
     ``current`` naming it, so such a client starts or finds that version's server (``versions.flat``), as does a
     process with no version (the library in a person's own Python). Written by ``cad setup`` where ``current`` names
-    nothing, a version not installed or an older one (``legacy.hand_over``). Never by ``--engine-update``, which
+    nothing, a version not installed or an older one. Never by ``--engine-update``, which
     writes the record alone: the shipped updater's switch reads ``current`` after it as the release to go back to. Whether it was written (False: ``version`` is not
     installed). ``OSError`` when it cannot be."""
     from cad.engine.places import version_record

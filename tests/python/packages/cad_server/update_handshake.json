@@ -76,16 +76,5 @@
    "--help",
    "-h"
   ]
- },
- "marker": {
-  "path": "versions/<version>/code/cad-version.json",
-  "keys": [
-   "cad",
-   "prefix",
-   "python",
-   "schema",
-   "version"
-  ],
-  "schema": "cad version/1"
  }
 }
