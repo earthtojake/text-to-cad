@@ -851,6 +851,45 @@ def windows_images() -> list[tuple[int, str]] | None:
         return None
 
 
+def windows_command_line(pid: int) -> str | None:
+    """Windows: the command line of process ``pid``, read through the Win32 API in this process (no WMI):
+    ``NtQueryInformationProcess``'s ProcessCommandLineInformation (60), Windows 8.1 and later. None where it cannot be
+    read, or elsewhere."""
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class Text(ctypes.Structure):  # UNICODE_STRING, at the start of what the call returns
+            _fields_ = [("length", wintypes.USHORT), ("maximum", wintypes.USHORT), ("buffer", ctypes.c_void_p)]
+
+        kernel, ntdll = ctypes.WinDLL("kernel32", use_last_error=True), ctypes.WinDLL("ntdll")
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        query = ntdll.NtQueryInformationProcess
+        query.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.ULONG,
+                          ctypes.POINTER(wintypes.ULONG)]
+        query.restype = ctypes.c_long
+        process = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not process:
+            return None
+        try:
+            size = wintypes.ULONG(0)
+            query(process, 60, None, 0, ctypes.byref(size))  # the size it needs
+            if not size.value:
+                return None
+            buffer = ctypes.create_string_buffer(size.value)
+            if query(process, 60, buffer, size, ctypes.byref(size)) != 0:
+                return None
+            text = Text.from_buffer(buffer)
+            return ctypes.wstring_at(text.buffer, text.length // 2) if text.buffer else None
+        finally:
+            kernel.CloseHandle(process)
+    except (AttributeError, OSError, ValueError):
+        return None
+
+
 def cad_commands(folder: Path, windows: bool = WINDOWS) -> list[Path]:
     """The ``cad`` commands in the bin folder ``folder``, in the order a shell runs them: ``cad`` on macOS and Linux;
     on Windows ``cad.exe`` (uv's, and 0.11's launcher) before ``cad.cmd`` (0.10's)."""

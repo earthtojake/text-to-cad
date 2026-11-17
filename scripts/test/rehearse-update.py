@@ -113,6 +113,7 @@ import http.server
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -161,16 +162,41 @@ def say(line: str = "") -> None:
     print(line, flush=True)
 
 
-def installer_command(counted: Path | None = None) -> str:
-    """The install command as cad runs it, but this tree's (``CAD_ENGINE_UPDATE_INSTALLER``); with ``counted``, each
-    run first adds a line to that file."""
-    if WINDOWS:
-        count = f"Add-Content -LiteralPath '{counted}' -Value ran; " if counted else ""
-        return (f'powershell -NoProfile -ExecutionPolicy Bypass -Command "{count}Get-Content -Raw \'{INSTALL_PS1}\' | '
-                'Invoke-Expression"')
-    if counted:
-        return f"""sh -c 'echo ran >> "$0"; exec sh "$1"' '{counted}' '{INSTALL_SH}'"""
-    return f"sh '{INSTALL_SH}'"
+# What the install command's runs printed, every stream, and how each ended, in a computer's folder (``WRAPPER``).
+OUTPUT = "install-command-output.log"
+# The install command cad runs on a computer: a wrapper, run by this run's own Python (``-I``), that adds a line to the
+# file that counts the runs, runs this tree's install command, and passes on everything it prints (as one stream)
+# while it copies it, and its exit status, to ``OUTPUT``. Its exit status is the command's. The server throws an
+# install mode run's output away; the failure dump shows this file. Its first line names the run's values.
+WRAPPER = """import subprocess, sys
+if counted:
+    with open(counted, "a", encoding="utf-8") as runs:
+        runs.write("ran\\n")
+with open(output, "ab") as kept:
+    kept.write(b"--- the install command\\n")
+    kept.flush()
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    for line in process.stdout:
+        sys.stdout.buffer.write(line)
+        sys.stdout.buffer.flush()
+        kept.write(line)
+        kept.flush()
+    code = process.wait()
+    kept.write(f"--- exit {code}\\n".encode())
+sys.exit(code)
+"""
+
+
+def installer_command(work: Path, counted: Path | None = None) -> str:
+    """The install command as cad runs it, but this tree's (``CAD_ENGINE_UPDATE_INSTALLER``), by ``WRAPPER``, written
+    into ``work``; with ``counted``, each run first adds a line to that file."""
+    command = (["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+                f"Get-Content -Raw '{INSTALL_PS1}' | Invoke-Expression"] if WINDOWS else ["sh", str(INSTALL_SH)])
+    wrapper = work / "install-command.py"
+    wrapper.write_text(f"counted, output, command = {str(counted or '')!r}, {str(work / OUTPUT)!r}, {command!r}\n"
+                       + WRAPPER, encoding="utf-8")
+    argv = [sys.executable, "-I", str(wrapper)]
+    return subprocess.list2cmdline(argv) if WINDOWS else shlex.join(argv)
 
 
 class PyPI(http.server.ThreadingHTTPServer):
@@ -224,7 +250,7 @@ class Box:
         env.update({
             # The install command cad runs: this tree's, through its test hooks; its first run in install mode at
             # the server's first tending (a shipped switch here decides in seconds).
-            "CAD_ENGINE_UPDATE_INSTALLER": installer_command(self.counted), "CAD_INSTALL_PY": str(INSTALL_PY),
+            "CAD_ENGINE_UPDATE_INSTALLER": installer_command(work, self.counted), "CAD_INSTALL_PY": str(INSTALL_PY),
             "CAD_ENGINE_UPDATE_FIRST_SECONDS": "0",
             # This build's servers tend themselves every TEND_SECONDS, not every half minute (the shipped releases'
             # servers do not read it).
@@ -245,6 +271,7 @@ class Box:
         self.env = env
         self.token = ""
         self.pythons: list[Path] = []  # the shipped release's Python, which stops its server at the end
+        self.launchers: list[str] = []  # the names of the cad commands the shipped release wrote
 
     def out(self, version: str) -> None:
         """``version`` out: the feed and PyPI name it, and uv finds it in the computer's folder of releases (a shipped
@@ -330,6 +357,9 @@ class Box:
         if (self.state / "install-command.log").is_file():
             parts.append("  install-command.log:\n"
                          + (self.state / "install-command.log").read_text(encoding="utf-8", errors="replace")[-3000:])
+        if (self.work / OUTPUT).is_file():  # every run of the install command cad started, its output and its end
+            parts.append(f"  {OUTPUT}:\n"
+                         + (self.work / OUTPUT).read_text(encoding="utf-8", errors="replace")[-4000:])
         # The engine folder, and why the last server started there could not take its lock or listen (the daemon's
         # failure note, ``places.failure_path``: ``engine.failed``), where it said.
         parts.append(f"  engine: {listing(self.work / 'engine')}")
@@ -345,11 +375,13 @@ class Box:
         return "\n".join(parts)
 
     def running(self) -> str:
-        """The computer's processes, one a line (on Windows, each one's program); said where it could not look."""
+        """The computer's processes, one a line with its command line (on Windows, each one's program, then its command
+        line where it can be read); said where it could not look."""
         found = self.computer.processes()
         if not self.computer.looked:
             return "(this system did not let the run list its processes)"
-        return "\n".join(f"{pid} {command}" for pid, command in found)
+        return "\n".join(f"{pid} {command}" + (f"\n      {rc.windows_command_line(pid) or '(command line not read)'}"
+                                               if WINDOWS else "") for pid, command in found)
 
     def from_folder(self, folder: Path) -> list[str]:
         """The computer's processes that run from ``folder`` (by their command line; on Windows, their program)."""
@@ -492,15 +524,15 @@ class Box:
             raise Failed(f"{self.label}: cad server start said {started!r}")
         self.token = (self.ask(rc.interpreter(Path(self.tool()["env"])), "http") or {}).get("token", "")
 
-    def is_tool(self, version: str) -> dict:
-        """uv's tool ``cad`` at ``version``, its command in uv's bin folder (never the shipped launcher), and that
-        command saying ``cad <version>``: the tool."""
+    def is_tool(self, version: str, *, kept: tuple[str, ...] = ()) -> dict:
+        """uv's tool ``cad`` at ``version``, its command in uv's bin folder (never the shipped launcher, but one named
+        in ``kept`` that may stay), and that command saying ``cad <version>``: the tool."""
         tool = self.tool()
         if tool is None or tool["version"] != version:
             raise Failed(f"{self.label}: uv's cad tool is {tool}, not {version}\n{self.said()}")
         if os.path.realpath(Path(tool["command"]).parent) != os.path.realpath(self.bin):
             raise Failed(f"{self.label}: the tool's cad command is not in uv's bin folder {self.bin}: {tool}")
-        stale = [path for path in self.commands() if launcher(path)]
+        stale = [path for path in self.commands() if launcher(path) and path.name not in kept]
         if stale:
             raise Failed(f"{self.label}: a shipped release's launcher is still in uv's bin folder: {stale}")
         if self.version() != f"cad {version}":
@@ -542,7 +574,8 @@ class Box:
         if int(answer["port"]) != self.port:
             raise Failed(f"{self.label}: {old}'s server took port {answer['port']}, not the computer's {self.port}")
         self.until(lambda: self.serving(old), f"{old}'s server on port {self.port} with the page token")
-        if not any(launcher(path) for path in self.commands()):
+        self.launchers = [path.name for path in self.commands() if launcher(path)]
+        if not self.launchers:
             raise Failed(f"{self.label}: {old}'s setup wrote no cad command in {self.bin}: {self.commands()}")
         return python
 
@@ -953,7 +986,7 @@ def on_the_tool(box: Box, old: str) -> dict:
     The tool."""
     handed_over(box)
     box.tool_serves(NEW)
-    tool = box.is_tool(NEW)
+    tool = box.is_tool(NEW, kept=kept_launchers(box))
     current = box.current()
     entry = json.loads((box.state / "installations" / f"{current}.json").read_text(encoding="utf-8")) if current else {}
     if current != NEW or not rc._within(Path(entry.get("prefix") or "/nowhere"), Path(tool["env"])):
@@ -968,6 +1001,18 @@ def on_the_tool(box: Box, old: str) -> dict:
     if left:
         raise Failed(f"{box.label}: processes still run from the release folders:\n" + "\n".join(left))
     return tool
+
+
+def kept_launchers(box: Box) -> tuple[str, ...]:
+    """The shipped launcher the bridge's own install leaves in uv's bin folder: 0.10's ``cad.cmd`` on Windows, which
+    is in uv's way of nothing (Windows finds uv's ``cad.exe`` first) and which nothing renames (a ``cmd.exe`` running
+    it would break). Nothing else: 0.11's ``cad.exe`` is set aside, and a leftover one fails the route."""
+    return ("cad.cmd",) if WINDOWS and "cad.cmd" in box.launchers else ()
+
+
+def stays(box: Box) -> str:
+    """The route's line about ``kept_launchers``."""
+    return "; 0.10's cad.cmd stays, as Windows finds uv's cad.exe first" if kept_launchers(box) else ""
 
 
 def no_plugin(box: Box) -> dict:
@@ -1018,7 +1063,7 @@ def store_only(box: Box, old: str) -> None:
     tool = on_the_tool(box, old)
     no_plugin(box)
     say(f"        {old} -> {NEW}: this build's server installed uv's cad ({tool['env']}) and handed over; the install "
-        "command never ran: nothing owed, no plugin folder, no plugin switch")
+        f"command never ran: nothing owed, no plugin folder, no plugin switch{stays(box)}")
     pages(box, NEW)
 
 
@@ -1037,7 +1082,7 @@ def updater_fallback(box: Box, old: str) -> None:
         raise Failed(f"{box.label}: install mode after the bridge's own install: {owed}, ran {box.runs()} times\n"
                      f"{box.said()}")
     say(f"        {old} -> {NEW}: install mode failed (no_report), this build's server installed uv's cad "
-        f"({tool['env']}) and handed over; install mode still owed after 1 attempt")
+        f"({tool['env']}) and handed over; install mode still owed after 1 attempt{stays(box)}")
     pages(box, NEW)
 
 
@@ -1151,7 +1196,7 @@ def store_typed(box: Box, old: str) -> None:
     tool = on_the_tool(box, old)
     no_plugin(box)
     say(f"        {old} -> {NEW} by {old}'s `cad update`, cad alone; `cad server start` started {NEW}, whose server "
-        f"installed uv's cad ({tool['env']}) and handed over; the install command never ran")
+        f"installed uv's cad ({tool['env']}) and handed over; the install command never ran{stays(box)}")
     pages(box, NEW)
 
 
