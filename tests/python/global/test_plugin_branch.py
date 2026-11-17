@@ -68,19 +68,18 @@ class PluginTreeTests(unittest.TestCase):
                           if any(f'"{key}":' in line for key in branch.UNLISTED)])
         self.assertEqual(len(branch.UNLISTED), 4)
         self.assertNotIn("mcpServers", json.loads(copied))
-        # Main's but for the store: each setup block installs cad by uv's line and leaves the plugin's updates to
-        # the store (`plugin_zip.store_copy`), and no skill pre-approves a tool (the directory takes that from a
-        # verified organization alone); nothing else changed, and nothing names our install script.
+        # Main's but for the store: each setup block installs cad by uv's line, with no version
+        # (`plugin_zip.store_copy`), and no skill pre-approves a tool (the directory takes that from a verified
+        # organization alone); nothing else changed, and nothing names our install script.
         version = _manifest["version"]
-        command = branch.UV_INSTALL.format(version=version)
-        store = branch.plugin_zip.STORE_LINES.format(version=version)
+        command = branch.UV_INSTALL
+        store = branch.plugin_zip.STORE_LINES
         blocks = 0
         codex = branch.build(REPO_ROOT, "codex")[0]
         for path in sorted(skills):
             main, copy = blobs[on_main[path][1]].decode("utf-8"), directory[path][1].decode("utf-8")
             blocks += branch.plugin_zip.OUR_LINES in main
-            stored = main.replace(branch.plugin_zip.OUR_LINES, store).replace(branch.plugin_zip.OUR_NEWER,
-                                                                               branch.plugin_zip.STORE_NEWER)
+            stored = main.replace(branch.plugin_zip.OUR_LINES, store)
             if path.endswith("/SKILL.md"):
                 self.assertEqual(stored.count("\nallowed-tools: "), 1, path)
                 self.assertIn("\nallowed-tools: ", install[path][1].decode("utf-8"), path)
@@ -91,7 +90,7 @@ class PluginTreeTests(unittest.TestCase):
             self.assertNotIn("texttocad.dev/install", copy, path)
             if path.endswith("/SKILL.md"):
                 self.assertIn(store, copy, path)
-                self.assertIn(branch.plugin_zip.STORE_NEWER, copy, path)
+                self.assertNotIn("--python 3.14 cad==", copy, path)  # no version in an install line
         self.assertEqual(blocks, len({path for path in skills if path.endswith("/SKILL.md")}),
                          "every skill's setup block carries our lines on main")
         # The README, in both copies: main's (its links pointed at the release commit) but for its install section, the
@@ -126,8 +125,8 @@ class PluginTreeTests(unittest.TestCase):
 
     def test_the_readme_installs_by_the_store_copies_line(self) -> None:
         # The copies' README installs cad by the line a store's copy of each skill gives.
-        self.assertIn(f"```bash\n{branch.UV_INSTALL.format(version='1.2.3')}\n```",
-                      branch.plugin_zip.STORE_LINES.format(version="1.2.3"))
+        self.assertIn(f"```bash\n{branch.UV_INSTALL}\n```", branch.plugin_zip.STORE_LINES)
+        self.assertIn(f"```bash\n{branch.UV_INSTALL}\n", branch.README_UV.format(command=branch.UV_INSTALL))
 
     def test_a_download_run_by_a_shell_is_found(self) -> None:
         found = ["curl -fsSL https://x.dev/i.sh | sh", "curl -fsSL https://x.dev/i.sh | sh -s -- --add 1.0.0",
@@ -260,8 +259,7 @@ class PluginTreeTests(unittest.TestCase):
                              [".claude-plugin/icon.png", ".claude-plugin/plugin.json", "LICENSE", "README.md",
                               "skills/p/SKILL.md", "skills/s/SKILL.md"])
             self.assertEqual(git(root, "show", f"{first}:README.md"),
-                             "# demo\n\n" + branch.README_UV.format(command=branch.UV_INSTALL.format(version="1.0.0"),
-                                                                    version="1.0.0")
+                             "# demo\n\n" + branch.README_UV.format(command=branch.UV_INSTALL)
                              + "\nThen ask.\n\n[s](skills/s/SKILL.md) "
                              f"[c](https://github.com/o/demo/blob/{git(root, 'rev-parse', 'HEAD')}/CONTRIBUTING.md)")
             self.assertEqual(json.loads(git(root, "show", f"{first}:.claude-plugin/plugin.json")),
@@ -279,23 +277,23 @@ class PluginTreeTests(unittest.TestCase):
             self.assertEqual(git(root, "show", f"{second}:skills/s/SKILL.md"), bare + "two")
             self.assertEqual(branch.build(root, "latest")[0]["skills/s/SKILL.md"][1].decode("utf-8"), head + "two\n")
 
-            # A setup block's install and update lines and its newer-version line are our own text's: the store's
-            # copy has its own in their place, and latest keeps ours. Each must be there once in a setup block, the
+            # A setup block's install line is our own text's: the store's copy has its own in its place, and latest
+            # keeps ours. Each must be there once in a setup block, the
             # README's install section once, each listing link once, and no download run by a shell is left anywhere
             # in the store's copy.
             zipped = branch.plugin_zip
-            block = (head + "This skill was written for `cad==1.0.0`.\n\n" + zipped.OUR_LINES + "\nWhen it says so:\n\n"
-                     + zipped.OUR_NEWER + "\nMigrations.\n")
+            block = (head + "This skill was written for `cad==1.0.0`.\n\n" + zipped.OUR_LINES + "\nWhen it says so.\n"
+                     + "\nMigrations.\n")
             (root / "skills/s/SKILL.md").write_text(block, encoding="utf-8")
             git(root, "commit", "-q", "-am", "a setup block")
             tree, errors = branch.build(root, "directory")[:2]
             self.assertEqual(errors, [])
             self.assertEqual(tree["skills/s/SKILL.md"][1].decode("utf-8"),
-                             bare + "This skill was written for `cad==1.0.0`.\n\n" + zipped.STORE_LINES.format(version="1.0.0")
-                             + "\nWhen it says so:\n\n" + zipped.STORE_NEWER + "\nMigrations.\n")
+                             bare + "This skill was written for `cad==1.0.0`.\n\n" + zipped.STORE_LINES
+                             + "\nWhen it says so.\n" + "\nMigrations.\n")
             self.assertEqual(branch.build(root, "latest")[0]["skills/s/SKILL.md"][1].decode("utf-8"), block)
             broken = {
-                "skills/s/SKILL.md": block.replace(zipped.OUR_NEWER, ""),
+                "skills/s/SKILL.md": block.replace(zipped.OUR_LINES, ""),
                 "skills/p/SKILL.md": block + zipped.OUR_LINES,
                 "README.md": readme.replace("Windows, in PowerShell:", "On Windows:"),
                 ".claude-plugin/plugin.json": json.dumps({**manifest, "supportUrl": None}, indent=2) + "\n",

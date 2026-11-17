@@ -17,11 +17,12 @@ that `mcpServers` "must resolve to the root `.mcp.json`". A server config kept
 under another name (a root `.mcp.json` is one Claude Code would load too) goes
 into the archive as `.mcp.json`, and the archived manifest points there.
 
-The package is a store's copy: OpenAI's directory delivers it and updates it. So each skill's setup block
-installs cad by uv's one line, `uv tool install --managed-python --python 3.14 cad==<VERSION>`, in place of our
-install script, and says that the store updates the plugin (`store_copy`, the routine claude.ai's directory
-branch uses too: each substitution is strict, and a copy that still names the install script fails). Its
-server line is the repository's, as every copy's: `uvx ... cad@<VERSION> mcp`.
+The package is a store's copy: OpenAI's directory delivers it and updates it, later than our releases. So each
+skill's setup block installs cad by uv's one line, `uv tool install --managed-python --python 3.14 cad@latest`
+(no version: cad updates itself from then on, and runs ahead of the store's skills), then `cad auto-update on`,
+in place of our install script (`store_copy`, the routine claude.ai's directory branch uses too: each
+substitution is strict, and a copy that still names the install script fails). Its server line is the
+repository's, as every copy's.
 
 The checks are the package rules the portal documents, named by its error codes
 (https://developers.openai.com/plugins/deploy/submission-errors). Listing limits
@@ -49,10 +50,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ".codex-plugin/plugin.json"
 ROOTS = (".codex-plugin", "skills", "LICENSE")
 MCP_CONFIG = ".mcp.json"
-# A store's copy (this package, and claude.ai's directory's: plugin_branch.py) differs from our own text in two
-# places of each skill's setup block (tests/python/global/test_skill_requirements.py holds ours): how cad is
-# installed and updated, and what to do when cad says a newer version is out. Ours runs our install script;
-# a store's never names it.
+# A store's copy (this package, and claude.ai's directory's: plugin_branch.py) differs from our own text in one
+# place of each skill's setup block (tests/python/global/test_skill_requirements.py holds ours): the install line.
+# Ours runs our install script, which installs cad and switches its automatic update on; a store's never names it,
+# and installs cad by uv, with no version, then switches the update on itself. `cad@latest`, not `cad`: the same
+# where no cad is installed, and where one is, plain `cad` leaves it as it is (uv takes it as satisfied), so a cad
+# still older than the skill would never move. `--force` only where uv refuses to replace a `cad` it did not
+# install: the plain launcher file releases 0.10.0 to 0.11.10 wrote to uv's bin folder (uv: "Executable already
+# exists: cad (use `--force` to overwrite)"). Our install command handles that file itself.
 OUR_LINES = """Install line, on macOS and Linux:
 
 ```bash
@@ -64,45 +69,20 @@ On Windows, in PowerShell:
 ```powershell
 irm https://www.texttocad.dev/install.ps1 | iex
 ```
-
-Update line, on macOS and Linux:
-
-```bash
-cad server stop && curl -fsSL https://texttocad.dev/install.sh | sh && cad server start
-```
-
-On Windows, in PowerShell:
-
-```powershell
-cad server stop; irm https://www.texttocad.dev/install.ps1 | iex; cad server start
-```
 """
 STORE_LINES = """Install line:
 
 ```bash
-uv tool install --managed-python --python 3.14 cad=={version}
-```
-
-Update line, on macOS and Linux:
-
-```bash
-cad server stop && uv tool install --managed-python --python 3.14 cad=={version} && cad server start
-```
-
-On Windows, in PowerShell:
-
-```powershell
-cad server stop; uv tool install --managed-python --python 3.14 cad=={version}; cad server start
+uv tool install --managed-python --python 3.14 cad@latest
 ```
 
 If `uv` is not found, install it as uv's install page says,
-https://docs.astral.sh/uv/getting-started/installation/, then run the line again.
+https://docs.astral.sh/uv/getting-started/installation/, then run the line again. If uv says the `cad`
+executable already exists, run `uv tool install --force --managed-python --python 3.14 cad@latest`. Once cad
+is installed, run `cad auto-update on`.
 """
-OUR_NEWER = """- a newer version of cad is available: tell the person and ask whether to update. If they say yes, run
-  the update line above.
-"""
-STORE_NEWER = """- a newer version of cad is available: carry on. The store that installed this plugin updates it.
-"""
+# Each passage of ours and the store's in its place, in the order `store_copy` replaces them.
+SUBSTITUTIONS = ((OUR_LINES, STORE_LINES),)
 # A setup block opens with this sentence: each SKILL.md that has one holds our two passages exactly once.
 SETUP_OPENS = "This skill was written for `cad=="
 INSTALL_SCRIPT = "texttocad.dev/install"
@@ -228,10 +208,10 @@ def collect(root: Path) -> Package:
 
 
 def store_copy(files: dict[str, bytes], version: str) -> tuple[dict[str, bytes], list[str]]:
-    """A store's copy of `files` (path -> bytes): each skill's setup block with the store's lines for `version`
-    (`STORE_LINES`, `STORE_NEWER`) in place of ours, and what fails the build: a setup block where ours are not
-    there exactly once, a text file that is not UTF-8, or one that still names our install script. Images pass as
-    they are."""
+    """A store's copy of `files` (path -> bytes): each skill's setup block with the store's lines (`SUBSTITUTIONS`)
+    in place of ours, and what fails the build: a setup block where ours are not there exactly once, a text file
+    that is not UTF-8, or one that still names our install script. Images pass as they are. `version` is the
+    release's; no store line names it, and it is kept for the callers."""
     out, errors = {}, []
     for path, data in files.items():
         if path.lower().endswith(IMAGE_SUFFIXES):
@@ -244,11 +224,11 @@ def store_copy(files: dict[str, bytes], version: str) -> tuple[dict[str, bytes],
             out[path] = data
             continue
         if re.fullmatch(r"skills/[^/]+/SKILL\.md", path) and SETUP_OPENS in text:
-            for ours, store in ((OUR_LINES, STORE_LINES), (OUR_NEWER, STORE_NEWER)):
+            for ours, store in SUBSTITUTIONS:
                 if text.count(ours) != 1:
                     errors.append(f"{path}: its setup block holds {ours.splitlines()[0]!r} {text.count(ours)} times, "
                                   "not once, so the store's lines cannot replace it")
-                text = text.replace(ours, store.format(version=version))
+                text = text.replace(ours, store)
         if INSTALL_SCRIPT in text:
             errors.append(f"{path}: names our install script ({INSTALL_SCRIPT}); a store's copy installs cad by uv")
         out[path] = text.encode("utf-8")

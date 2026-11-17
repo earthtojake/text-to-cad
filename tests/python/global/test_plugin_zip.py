@@ -35,16 +35,15 @@ class PluginZipTests(unittest.TestCase):
             with zipfile.ZipFile(out) as archive:
                 members = archive.namelist()
                 manifest = json.loads(archive.read(".codex-plugin/plugin.json"))
-                # The skills the checkout's but for the store: each setup block installs cad by uv's line and leaves the
-                # plugin's updates to the store (`store_copy`); nothing else changed.
+                # The skills the checkout's but for the store: each setup block installs cad by uv's line, with no
+                # version (`store_copy`); nothing else changed.
                 version = manifest["version"]
                 skills = {name: archive.read(name).decode("utf-8") for name in members
                           if name.startswith("skills/") and not name.endswith("/")}
                 ours = {name: (REPO_ROOT / name).read_text(encoding="utf-8") for name in skills}
-                store = plugin_zip.STORE_LINES.format(version=version)
+                store = plugin_zip.STORE_LINES
                 changed = [name for name, text in skills.items()
-                           if text != ours[name].replace(plugin_zip.OUR_LINES, store)
-                           .replace(plugin_zip.OUR_NEWER, plugin_zip.STORE_NEWER)]
+                           if text != ours[name].replace(plugin_zip.OUR_LINES, store)]
                 server = json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"]
         # Every copy's server line is the repository's: uvx runs cad at the release, as `cad mcp`.
         self.assertEqual(server["args"], json.loads((REPO_ROOT / "codex.mcp.json").read_text(encoding="utf-8"))["mcpServers"]["cad"]["args"])
@@ -94,7 +93,7 @@ class PluginZipTests(unittest.TestCase):
             (root / ".codex-plugin").mkdir()
             (root / "skills/demo").mkdir(parents=True)
             block = ("---\nname: demo\ndescription: Demo.\n---\nThis skill was written for `cad==1.0.0`.\n\n"
-                     + plugin_zip.OUR_LINES + "\n" + plugin_zip.OUR_NEWER)
+                     + plugin_zip.OUR_LINES + "\nWhen it says so.\n")
             (root / "skills/demo/SKILL.md").write_text(block, encoding="utf-8")
             server = {"command": "uvx", "args": ["cad@1.0.0", "mcp"]}
             (root / "codex.mcp.json").write_text(json.dumps({"mcpServers": {"cad": server}}), encoding="utf-8")
@@ -113,13 +112,15 @@ class PluginZipTests(unittest.TestCase):
                 self.assertEqual(json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"], server)
                 self.assertNotIn("codex.mcp.json", archive.namelist())
                 skill = archive.read("skills/demo/SKILL.md").decode("utf-8")
-                self.assertIn(plugin_zip.STORE_LINES.format(version="1.0.0") + "\n" + plugin_zip.STORE_NEWER, skill)
-                self.assertIn("uv tool install --managed-python --python 3.14 cad==1.0.0\n", skill)
+                self.assertIn(plugin_zip.STORE_LINES + "\nWhen it says so.\n", skill)
+                # No version in the store's install line: cad updates itself past the store's copy.
+                self.assertIn("uv tool install --managed-python --python 3.14 cad@latest\n", skill)
+                self.assertNotIn("cad==1.0.0\n", skill)
                 self.assertNotIn("install.sh", skill)
 
             # Ours not there exactly once in a setup block, our install script left anywhere, or a file that is not
             # UTF-8 fails the package.
-            for name, text in (("SKILL.md", block.replace(plugin_zip.OUR_NEWER, "")), ("SKILL.md", block + plugin_zip.OUR_LINES),
+            for name, text in (("SKILL.md", block.replace(plugin_zip.OUR_LINES, "")), ("SKILL.md", block + plugin_zip.OUR_LINES),
                                ("notes.md", "Or run curl -fsSL https://texttocad.dev/install.sh | sh"),
                                ("notes.md", "caf\u00e9")):
                 with self.subTest(name=name, text=text[-30:]):

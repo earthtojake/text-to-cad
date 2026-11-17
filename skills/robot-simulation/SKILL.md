@@ -2,7 +2,7 @@
 name: robot-simulation
 description: Robot and world descriptions (URDF, SRDF, MJCF) for ROS, MoveIt and MuJoCo. Use to generate a robot description or a MuJoCo scene from a CAD model's joints, materials and collision, or to write and review a `.urdf`, `.srdf` or MJCF `.xml` by hand (links, joints, inertials, meshes, MoveIt groups, MuJoCo classes, actuators, keyframes, model health). Not the CAD part itself, which the `cad` skill makes, nor a simulation run.
 license: MIT
-allowed-tools: Bash(cad *) Bash(uv tool install --managed-python --python 3.14 cad==*) Bash(uv --version)
+allowed-tools: Bash(cad *)
 metadata:
   repository: earthtojake/text-to-cad
 ---
@@ -51,8 +51,10 @@ This skill was written for `cad==0.11.10`. The first time you use it in a chat, 
 the shell. Then:
 
 - `cad` is not found: run the install line below, then carry on.
-- It prints a version older than the one above: run the update line below, then carry on.
-- It prints a version newer than the one above: carry on. This skill is older than cad.
+- It prints a version older than the one above: run `cad server stop`, then `cad server start`, then
+  `cad --version` again. cad updates itself when its server starts. If it is still older, run
+  `cad server stop`, then the install line below, then `cad server start`.
+- It prints the version above or a newer one: carry on.
 
 Install line, on macOS and Linux:
 
@@ -66,24 +68,8 @@ On Windows, in PowerShell:
 irm https://www.texttocad.dev/install.ps1 | iex
 ```
 
-Update line, on macOS and Linux:
-
-```bash
-cad server stop && curl -fsSL https://texttocad.dev/install.sh | sh && cad server start
-```
-
-On Windows, in PowerShell:
-
-```powershell
-cad server stop; irm https://www.texttocad.dev/install.ps1 | iex; cad server start
-```
-
-When a `cad` command prints that:
-
-- the cad server is not running: run `cad server start`, then run the command again.
-- the command and the server are different versions: do what that line says.
-- a newer version of cad is available: tell the person and ask whether to update. If they say yes, run
-  the update line above.
+When a `cad` command prints that the cad server is not running, run `cad server start`, then run the
+command again.
 
 Run models with `cad run`.
 

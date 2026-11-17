@@ -2,12 +2,14 @@
 same in each.
 
 The block names the cad the skills were written for once, as `cad==<VERSION>`, which the release stamps
-(scripts/release/sync-version.mjs); no command carries a version. It has the agent check `cad --version`
-on first use, install or update cad when it is missing or older, start the server when cad says it is not
-running, and, in our own copies, update on the person's yes when cad says a newer version is out. A store's
-copy gets the same block with the store's lines in place of the install script's (scripts/release/plugin_zip.py,
-`store_copy`). A skill that runs the server any other way -- a `pip install -r requirements.txt` into the
-project's interpreter -- makes a second installation.
+(scripts/release/sync-version.mjs); no command and no install line carries a version. It has the agent check
+`cad --version` on first use; install cad where it is missing; where it is older, restart the server, which
+updates cad first (cad's automatic update, which the install switches on), and install only where it is still
+older; carry on where cad is newer, since cad updates itself ahead of a store's copy of the skills; and start the
+server when cad says it is not running. Nothing in it asks the person whether to update: the app's own prompt for
+a command is the only asking. A store's copy gets the same block with the store's install line in place of the
+install script's (scripts/release/plugin_zip.py, `store_copy`). A skill that runs the server any other way -- a
+`pip install -r requirements.txt` into the project's interpreter -- makes a second installation.
 
 Stated as a criterion rather than a list: "uses the server" is what the skill's docs TEACH (a `cad`
 command in a code block) or what its own Python imports. A skill that never touches it carries no
@@ -29,8 +31,10 @@ SETUP = """This skill was written for `cad=={X}`. The first time you use it in a
 the shell. Then:
 
 - `cad` is not found: run the install line below, then carry on.
-- It prints a version older than the one above: run the update line below, then carry on.
-- It prints a version newer than the one above: carry on. This skill is older than cad.
+- It prints a version older than the one above: run `cad server stop`, then `cad server start`, then
+  `cad --version` again. cad updates itself when its server starts. If it is still older, run
+  `cad server stop`, then the install line below, then `cad server start`.
+- It prints the version above or a newer one: carry on.
 
 Install line, on macOS and Linux:
 
@@ -44,24 +48,8 @@ On Windows, in PowerShell:
 irm https://www.texttocad.dev/install.ps1 | iex
 ```
 
-Update line, on macOS and Linux:
-
-```bash
-cad server stop && curl -fsSL https://texttocad.dev/install.sh | sh && cad server start
-```
-
-On Windows, in PowerShell:
-
-```powershell
-cad server stop; irm https://www.texttocad.dev/install.ps1 | iex; cad server start
-```
-
-When a `cad` command prints that:
-
-- the cad server is not running: run `cad server start`, then run the command again.
-- the command and the server are different versions: do what that line says.
-- a newer version of cad is available: tell the person and ask whether to update. If they say yes, run
-  the update line above.
+When a `cad` command prints that the cad server is not running, run `cad server start`, then run the
+command again.
 
 Run models with `cad run`.
 
@@ -69,9 +57,11 @@ A project written for an earlier text-to-cad may need changes. The migration gui
 version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 """
 
-# What every skill pre-approves in Claude Code: its own `cad` commands and the store copies' one install line.
-ALLOWED_TOOLS = ("allowed-tools: Bash(cad *) Bash(uv tool install --managed-python --python 3.14 cad==*) "
-                 "Bash(uv --version)")
+# What every skill pre-approves in Claude Code: the `cad` commands it runs, the setup block's among them, and
+# nothing else. The install line is not: ours is a download run by a shell (a rule for it would allow any script),
+# and the store copies' uv line runs where the line is ignored (Codex) or refused (claude.ai's directory, whose
+# copy carries no `allowed-tools`: scripts/release/plugin_branch.py).
+ALLOWED_TOOLS = "allowed-tools: Bash(cad *)"
 
 _IMPORT = re.compile(r"^\s*(?:from|import)\s+(?:cad|cadgen|cad_server)\b", re.M)
 _INVOCATION = re.compile(r"(?:^|[`\s])cad(?:\.exe)?\s+[a-z]", re.M)
@@ -127,9 +117,12 @@ class SkillLaunchCommand(unittest.TestCase):
                                      "run node scripts/release/sync-version.mjs to stamp VERSION")
 
     def test_no_skill_names_what_the_software_no_longer_has(self) -> None:
-        # No updater, no plugin command, no setup command, no exit codes a pin once added, no repair of apps.
+        # No updater, no plugin command, no setup command, no exit codes a pin once added, no repair of apps, no
+        # newer-version notice and no asking the person whether to update (cad updates itself), and nothing that
+        # claims a permission (agents refused the commands it named).
         gone = re.compile(r"cad(?:\.exe)? (?:update|plugin|setup)\b|doctor --prune|--add \d|exit code says why"
-                          r"|\.local/bin/cad|unknown command '\+")
+                          r"|\.local/bin/cad|unknown command '\+|newer version of cad is available"
+                          r"|ask whether to update|without asking", re.I)
         for skill in SKILLS:
             for path in _docs(skill):
                 with self.subTest(path=str(path.relative_to(REPO_ROOT))):

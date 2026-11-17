@@ -26,10 +26,10 @@ Three copies, differing in what they carry:
   ZIP entry's.
 
 Commands carry no version and no copy names a store. `latest` is our own text, as main has it: each skill's
-setup block installs and updates cad by our install script. A store's copy, the directory's and Codex's,
-installs it by uv's one line, `uv tool install --managed-python --python 3.14 cad==<VERSION>`, and leaves the
-updates of the plugin to the store (`plugin_zip.store_copy`, strict: what it replaces must be there exactly
-once in each skill). Claude Code's and Cursor's session-start hooks sit in the catalog's entry and in
+setup block installs cad by our install script. A store's copy, the directory's and Codex's, installs it by uv's
+one line with no version, `uv tool install --managed-python --python 3.14 cad@latest`, then `cad auto-update on`,
+and leaves the updates of the plugin to the store (`plugin_zip.store_copy`, strict: what it replaces must be
+there exactly once in each skill). Claude Code's and Cursor's session-start hooks sit in the catalog's entry and in
 Cursor's manifest, so the directory's copy, which holds neither, carries none.
 
 No store's copy holds a download piped to a shell (`PIPE_TO_SHELL`): claude.ai's directory flags one as an
@@ -144,7 +144,7 @@ PRE_APPROVAL_KEY = re.compile(r"^(?:allowed-tools|allowedTools)[ \t]*:", re.M)
 # store's copy's own install line (`plugin_zip.STORE_LINES`; test_plugin_branch.py holds the two equal).
 INSTALL_SCRIPT = "curl -fsSL https://texttocad.dev/install.sh | sh"
 INSTALL_SCRIPT_WINDOWS = "https://www.texttocad.dev/install.ps1"
-UV_INSTALL = "uv tool install --managed-python --python 3.14 cad=={version}"
+UV_INSTALL = "uv tool install --managed-python --python 3.14 cad@latest"
 # The README's install section: the Quickstart's two one-liners and the paragraph after them.
 README_INSTALL = re.compile(
     r"^macOS and Linux:\n\n```bash\n" + re.escape(INSTALL_SCRIPT) + r"\n```\n\n"
@@ -152,11 +152,12 @@ README_INSTALL = re.compile(
     r"(?:[^\n]+\n)+", re.M)
 README_UV = """```bash
 {command}
+cad auto-update on
 ```
 
-The skills run the `cad` command. The line above installs cad {version} with
-[uv](https://docs.astral.sh/uv/). The first time a skill needs `cad`, your agent runs the line, with your
-permission, or you run it yourself.
+The skills run the `cad` command. The lines above install cad with [uv](https://docs.astral.sh/uv/) and
+switch on its automatic updates. The first time a skill needs `cad`, your agent runs them, with your
+permission, or you run them yourself.
 """
 # A download piped to a shell or run as a script block: what claude.ai's directory flags (`RUNTIME_FETCH_EXEC`).
 _FETCH = r"(?:irm|iwr|invoke-restmethod|invoke-webrequest)"
