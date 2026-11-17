@@ -136,6 +136,27 @@ class JoinedTest(unittest.TestCase):
                          f"started the cad server (cad {version()})")
 
 
+class StoppingTest(unittest.TestCase):
+    """Starts at the same moment that replace a server of another release both tell it to stop: the one whose
+    connection the server, stopping already, closes unanswered finds it gone as asked, and carries on
+    (``client.sweep``, through ``make_way``)."""
+
+    def test_a_server_that_closes_the_connection_as_it_is_told_to_stop_is_waited_for_and_gone(self) -> None:
+        import io
+
+        endpoint = client.places.Endpoint(client.places.address(), client.places.lock_path())
+        closing = client.Connection(io.BytesIO(b""), io.BytesIO())  # takes the stop, then its end of file: no answer
+        older = types.SimpleNamespace(release="0.0.1", close=lambda: None)
+        with mock.patch.object(client.places, "endpoints", return_value=[endpoint]), \
+                mock.patch.object(client, "_answering", return_value=True), \
+                mock.patch.object(client, "_connect", side_effect=[older, closing]), \
+                mock.patch.object(client, "wait_gone", return_value=True) as waited, \
+                mock.patch.object(client, "_remove_dead", return_value=[]), \
+                mock.patch.object(client, "_sandboxed", return_value=False):
+            self.assertIsNone(client.make_way())
+        waited.assert_called_once_with(client.STOP_SECONDS, endpoint=endpoint)
+
+
 class UnansweredTest(unittest.TestCase):
     """A server that takes a request and never answers it: the host's initialize is still answered within its
     bound, greeted here, and a tool call ends with cad's line, never hanging. A healthy server's slow tool call is

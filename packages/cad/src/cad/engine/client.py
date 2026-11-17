@@ -455,7 +455,10 @@ def sweep(*, stop: bool, seconds: float = 60.0) -> dict[str, list[str]]:
             connection = _connect(endpoint.address)
             if connection is None:
                 continue  # it went meanwhile: gone, as asked
-            _exchange(connection, {"op": "stop"}, address=endpoint.address)
+            try:
+                _exchange(connection, {"op": "stop"}, address=endpoint.address)
+            except ConnectionError:
+                pass  # it closed the connection unanswered: stopping already (another start told it), as asked
             if not wait_gone(seconds, endpoint=endpoint):
                 raise ConnectionError(f"the engine server at {endpoint.address} did not exit")
             found["stopped"].append(str(endpoint.address))
