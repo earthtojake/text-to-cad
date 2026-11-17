@@ -318,9 +318,16 @@ client starts its own release's engine beside the device's, and none stops an en
 another: an engine runs on until `cad stop`, an update, or its door going.
 Each installation's bytecode is its own (`places.bytecode_tag`).
 
-cad has no updater: an engine only knows, from the version feed read in the background (`cad_server.updates`), the
-latest release, and a command says so in one line that names no command (the package's README, **The update
-notice**). The updaters of 0.10.0 to 0.11.10 are frozen on computers,
+cad updates itself only where the person turned it on (`cad auto-update on`, a cad installed as a uv tool alone;
+`cad_server._internal.auto_update`): first thing as a server starts, before its door opens, and as it tends itself
+once nothing has run for a minute (or nothing since it started), where the version feed as last read names a newer
+release, a detached helper that is not cad (`auto_update_helper`, run by the Python cad's environment was made from)
+stops the server, has uv install that release, tried again on failure, and starts the server with whatever cad is
+there. A server that hands its start over exits `UPDATING`, and its starter waits for the next one; a `cad server
+start` that fails asks for the update before it gives up; a start never replaces a newer server, it joins it
+(`client.start`, `cad_mcp.shim.start_server`). Otherwise an engine only knows, from the version feed read in the
+background (`cad_server.updates`), the latest release, and a command says so in one line that names no command (the
+package's README, **The update notice**). The updaters of 0.10.0 to 0.11.10 are frozen on computers,
 though, and update by running a newer release's `cad setup --engine-update` (`cad_server.cli.setup`) from a flat
 release folder they made: that run makes the release present in `versions/` (its data imported from their layout)
 and runs again from there, and its setup then hands over from their layout (`installations.register`: the

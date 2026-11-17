@@ -581,7 +581,7 @@ class Daemon:
         self.busy_lock = threading.Lock()
         # When the last command ended (monotonic): a build, draw, export or request that serves, any other request
         # through a door but the server's own asks (``ended``), an agent's tool call (``stamp``).
-        self.worked = self.last
+        self.worked = self.began = self.last
         self.stopping = threading.Event()
         # The connections that hold the engine (``hold``: an agent host's MCP server, while the host
         # runs), which ``status`` counts.
@@ -1759,7 +1759,8 @@ class Daemon:
         first, so they stay held); the memory budget sends unwatched documents out of memory, least recently used
         first, to the cache, as they are loaded (``serve.Server.trim``); telemetry's spool is handed to a sender
         once it has waited a window (``_send_counts``); the version check's feed is read in the background where it
-        is due (``updates.refresh``); and the hand-over a shipped updater left this release owing the computer is
+        is due (``updates.refresh``), and cad updated where that is due and nothing is in flight
+        (``auto_update.tend``: the update stops this server and starts the next); and the hand-over a shipped updater left this release owing the computer is
         carried out (``install_script.Carrier``: the hosted install script, run once by a detached program of its
         own). The engine stops on ``stop``, a terminate, another installation's
         retiring it (``bind``), and here when its door is gone (its folder removed, a temporary
@@ -1776,8 +1777,13 @@ class Daemon:
         if self.draining or self.stopping.is_set():
             return
         from cad_server import updates
+        from cad_server._internal import auto_update
 
         updates.refresh()
+        if auto_update.tend(working=self.working(), ran=self.worked != self.began,
+                            quiet_for=time.monotonic() - self.worked):
+            print("cad: updating cad: this server stops, and the update starts the next", file=sys.stderr, flush=True)
+            return
         try:
             self.handover.tend(version(), lambda line: print(f"cad: {line}", file=sys.stderr, flush=True))
         except Exception as error:  # noqa: BLE001 - the engine's tending never fails for the hand-over

@@ -4,6 +4,9 @@ which replaces the page token, asking first (``cad_server._internal.consent``).
 
 Bare ``cad server`` runs the server in this process, as ``cad server start --foreground`` does: releases 0.10.0 to
 0.11.10 tell an agent in a sandbox to run `cad server` outside it, so it stays, unlisted, until the bridge goes.
+
+A start that fails asks for cad's own update before it gives up (``auto_update.after_failed_start``): a release whose
+server cannot start still updates.
 """
 
 from __future__ import annotations
@@ -67,7 +70,15 @@ def _start(args: argparse.Namespace, prog: str) -> int:
     if args.rotate_token:
         _rotate(args, prog.removesuffix(" start"))
     if args.command == "start" and not args.foreground:
-        print(client.start(args.port))
+        try:
+            print(client.start(args.port))
+        except Exception:
+            from cad_server._internal import auto_update
+
+            target = auto_update.after_failed_start()
+            if target is not None:
+                print(f"cad: updating cad to {target}, which then starts the server", file=sys.stderr, flush=True)
+            raise
         return 0
     running = client.make_way()
     if running is not None:

@@ -1,6 +1,6 @@
 """``cad mcp`` starts this release's server once, as ``cad server start`` does (``shim.start_server``), answers every
 request within its bound while that start runs, and after it reaches the server running only where it is this
-release's: none, or another release's, is said in cad's one line. Nothing is started for real."""
+release's or a newer one's: none, or another release's, is said in cad's one line. Nothing is started for real."""
 
 from __future__ import annotations
 
@@ -28,11 +28,11 @@ def refuse(*args, **kwargs):
 
 
 class StartTest(unittest.TestCase):
-    def test_the_start_is_cad_server_start_s_and_holds_later_requests_to_this_release(self) -> None:
-        with mock.patch.object(client, "RELEASE", None), \
+    def test_the_start_is_cad_server_start_s_and_holds_later_requests_to_this_release_or_a_newer_one(self) -> None:
+        with mock.patch.object(client, "AT_LEAST", None), mock.patch.object(client, "RELEASE", None), \
                 mock.patch.object(client, "start", return_value="started the cad server") as start:
             self.assertEqual(shim.start_server(), "started the cad server")
-            self.assertEqual(client.RELEASE, version())
+            self.assertEqual((client.AT_LEAST, client.RELEASE), (version(), None))
         start.assert_called_once_with()
 
     def test_a_server_of_another_release_found_later_is_said_in_cad_s_one_line(self) -> None:

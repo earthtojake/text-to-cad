@@ -1,7 +1,9 @@
 """``cad doctor``: one read-only report of this cad -- its release, its Python and where it is installed, its data
 folder, its cache folder and how much ``cad cache prune`` would free there, whether the CAD kernel environment is made
-(``cad_server._internal.base``) and loads, where each integration's operations run, and whether the server runs and
-its release. It repairs, registers, starts, writes and deletes nothing: ``--check`` prints the same report.
+(``cad_server._internal.base``) and loads, where each integration's operations run, whether the server runs and
+its release, and cad's own update (``cad_server._internal.auto_update``: both switches, whether this cad is a uv tool,
+whether uv is found, and the last attempt). It repairs, registers, starts, writes and deletes nothing: ``--check``
+prints the same report.
 
 The kernel is loaded in a fresh interpreter of its environment (``-P -B``: never this one, never a module of the
 working folder's, no bytecode written), so a refused load is named for what it is: on Windows 11, Smart App Control
@@ -82,7 +84,36 @@ def _report() -> list[dict]:
             _check("install", INFO, str(Path(cad_server.__file__).resolve().parent)),
             _check("data", INFO, str(state_dir())), read("cache", _cache), _kernel(),
             *(_check(line.split(" ", 1)[0], status, line.split(" ", 1)[1]) for status, line in _integrations()),
-            read("server", _server)]
+            read("server", _server), read("update", _update),
+            read("uv", lambda: (INFO, _auto().find_uv() or "not found")), read("attempt", _attempt)]
+
+
+def _auto():
+    from cad_server._internal import auto_update
+
+    return auto_update
+
+
+def _update() -> tuple[str, str]:
+    """cad's own update: both switches, and whether this cad is a uv tool, the one kind that updates itself."""
+    switches, tool = _auto().switches(), _auto().uv_tool()
+    word = {True: "on", False: "off"}
+    return INFO, (f"auto-update {word[switches['on']]}, installer {word[switches['installer']]}; "
+                  + (f"a uv tool ({tool})" if tool else "not a uv tool, so it never updates itself"))
+
+
+def _attempt() -> tuple[str, str]:
+    """The last update attempt: from which release to which, when, and its outcome (a failure's last line)."""
+    import time
+
+    last = _auto().last()
+    if last is None:
+        return INFO, "none"
+    when = time.strftime("%Y-%m-%d %H:%M", time.localtime(last["at"]))
+    failed = last.get("outcome") == "failed" and last.get("detail")
+    restored = {True: f"; {last.get('from')} put back", False: f"; {last.get('from')} not put back: cad is missing"}
+    return INFO, (f"{last.get('from')} to {last['release']} on {when}: {last.get('outcome')}"
+                  + (f" ({last['detail']})" if failed else "") + restored.get(last.get("restored"), ""))
 
 
 def _cache() -> tuple[str, str]:

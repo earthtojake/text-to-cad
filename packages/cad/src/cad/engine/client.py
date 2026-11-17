@@ -1,6 +1,7 @@
 """Reaching the server: connect through its door (on Windows, its loopback port). Nothing here starts one but
 ``start`` (``cad server start``, ``cad mcp``): a client that finds none is told so in one line (``NotRunning``), and a
-``cad`` command that finds one of another release is too (``OtherRelease``, ``RELEASE``)."""
+``cad`` command that finds one of another release is too (``OtherRelease``, ``RELEASE``). A start never replaces a
+server newer than itself: it joins it (forward only)."""
 
 from __future__ import annotations
 
@@ -47,6 +48,19 @@ START_SECONDS = 60.0
 # (``cad_server.cli``). None, every other process's -- a person's own Python, a model ``cad run`` runs, a worker --
 # reaches a server of any release, whose builds the worker contract alone refuses (``contract.refusal``).
 RELEASE: str | None = None
+# The release a process reaches a server of, or of a newer one (``cad mcp``, which joins a newer server).
+AT_LEAST: str | None = None
+# The exit status of a server that handed its start to cad's own update (``cad_server._internal.auto_update``): its
+# starter waits for the server the update starts, never starts another.
+UPDATING = 75
+
+
+def newer(theirs: str | None, mine: str) -> bool:
+    """Whether release ``theirs`` is later than ``mine``, each a plain ``X.Y.Z``; False for anything else."""
+    import re
+
+    found = [re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", value or "") for value in (theirs, mine)]
+    return all(found) and tuple(map(int, found[0].groups())) > tuple(map(int, found[1].groups()))
 
 
 class NotRunning(ConnectionError):
@@ -61,8 +75,17 @@ def _other(theirs: str | None, mine: str) -> str:
     """``OtherRelease``'s line: this release, the server's -- one of 0.11.10 or earlier names none -- and the ways on."""
     if theirs is None:
         return f"{COMMAND} here is {mine}; the running server is an earlier release's: run `{START}` to run {mine}'s server"
+    if newer(theirs, mine):  # a start joins a newer server: installing is the one way on
+        return f"{COMMAND} here is {mine}; the running server is {theirs}: install {COMMAND} {theirs}"
     return (f"{COMMAND} here is {mine}; the running server is {theirs}: install {COMMAND} {theirs}, or run `{START}` "
             f"to run {mine}'s server")
+
+
+def _joined(release: str | None) -> str:
+    """What a start says that found a server running and left it: this release's, or a newer one's."""
+    if release == version():
+        return f"the {COMMAND} server ({COMMAND} {version()}) is already running"
+    return f"the {COMMAND} server ({COMMAND} {release}, newer than this {COMMAND} {version()}) is already running"
 
 
 def _connect(address: Path | None = None, *, stopping: bool = False) -> Connection | None:
@@ -222,14 +245,14 @@ def make_way() -> str | None:
     """Room made for this release's server, as ``start`` makes it, and ``cad server start --foreground`` before it
     runs one in its own process: a server of another release -- or one whose greeting names none, of 0.11.10 or
     earlier -- told to stop at once, its work cut short, and waited for, ``STOP_SECONDS`` at most (``sweep``). Where a
-    server of this release answers, nothing is done, and that is said in one line (returned); else None.
+    server of this release or a newer one answers, nothing is done, and that is said in one line (returned); else None.
     ``ConnectionError`` in one line where room cannot be made: in a shell whose sandbox refuses the loopback port a
     server needs (``SANDBOXED``), before anything is stopped, and where the server told to stop did not go."""
     found = _connect()
     if found is not None:
         found.close()
-        if found.release == version():
-            return f"the {COMMAND} server ({COMMAND} {version()}) is already running"
+        if found.release == version() or newer(found.release, version()):
+            return _joined(found.release)
     if _sandboxed():
         raise ConnectionError(SANDBOXED)
     if found is not None:
@@ -240,10 +263,11 @@ def make_way() -> str | None:
 def start(port: int | None = None) -> str:
     """This release's server running: the one function that starts a server (``cad server start``, ``cad mcp``),
     once room is made for it (``make_way``) -- started (``_spawn``; ``port``, the HTTP port it must take) and waited
-    for until its door answers. Starts at the same moment end with one server, by the daemon's lock. What was done,
-    in one line. ``ConnectionError`` in one line where it could not be: room not made (``make_way``), a server that
-    did not start (its note, ``places.failure_path``), and one of another release that a start at the same moment
-    started (``OtherRelease``)."""
+    for until its door answers. Starts at the same moment end with one server, by the daemon's lock. A server that
+    hands its start to cad's own update (``UPDATING``) is not started again: the update's server is waited for, and
+    joined where it is newer. What was done, in one line. ``ConnectionError`` in one line where it could not be: room
+    not made (``make_way``), a server that did not start (its note, ``places.failure_path``), and one of an older
+    release that a start at the same moment started (``OtherRelease``)."""
     running = make_way()
     if running is not None:
         return running
@@ -261,26 +285,33 @@ def start(port: int | None = None) -> str:
     process = _spawn(port)
     began = time.monotonic()
     deadline = began + START_SECONDS
+    updating = False
     while (answered := _connect()) is None:
         if time.monotonic() > deadline:
-            raise ConnectionError("the engine server did not start")
+            raise ConnectionError(f"the engine server did not start{': cad is updating' if updating else ''}")
         time.sleep(0.02)
-        if process.poll():  # it could not take its lock or listen: said now, not after the timeout
-            raise _not_started(process.returncode)
-        if time.monotonic() - began > 1.0 and process.poll() == 0:
+        if updating:
+            continue
+        code = process.poll()
+        updating = code == UPDATING
+        if code and not updating:  # it could not take its lock or listen: said now, not after the timeout
+            raise _not_started(code)
+        if code == 0 and time.monotonic() - began > 1.0:
             # A daemon that is stopping still holds the lock, and the one just started left at once: started
             # again once the lock is free.
             process = _spawn(port)
             began = time.monotonic()
     answered.close()
+    if newer(answered.release, version()):
+        return _joined(answered.release)
     if answered.release != version():
         raise OtherRelease(_other(answered.release, version()))
-    if _joined(process):
-        return f"the {COMMAND} server ({COMMAND} {version()}) is already running"
+    if _another_s(process):
+        return _joined(version())
     return f"started the {COMMAND} server ({COMMAND} {version()})"
 
 
-def _joined(process: subprocess.Popen) -> bool:
+def _another_s(process: subprocess.Popen) -> bool:
     """Whether the server that answered a start is another start's, not the one ``process`` is: that process has
     exited (a daemon that finds the lock taken exits 0), or, on POSIX, where the process started is the server, the
     server answers with another process id. On Windows the process started may be an environment's launcher whose
@@ -309,6 +340,9 @@ def connect(*, start: bool = True) -> Connection | None:
     if RELEASE is not None and found.release != RELEASE:
         found.close()
         raise OtherRelease(_other(found.release, RELEASE))
+    if AT_LEAST is not None and found.release != AT_LEAST and not newer(found.release, AT_LEAST):
+        found.close()
+        raise OtherRelease(_other(found.release, AT_LEAST))
     return found
 
 

@@ -97,8 +97,9 @@ class ConnectTest(unittest.TestCase):
                 client.request({"op": "status"})
             self.assertEqual(str(said.exception), "the cad server is not running: run `cad server start`")
             self.assertIsNone(client.request({"op": "status"}, start=False))
-        for release, words in (("0.11.13", "the running server is 0.11.13: install cad 0.11.13, or run `cad server "
+        for release, words in (("0.11.11", "the running server is 0.11.11: install cad 0.11.11, or run `cad server "
                                             "start` to run 0.11.12's server"),
+                               ("0.11.13", "the running server is 0.11.13: install cad 0.11.13"),
                                (None, "the running server is an earlier release's: run `cad server start` to run "
                                       "0.11.12's server")):
             patch, connection = answering(release)
@@ -874,16 +875,22 @@ class SweepTest(unittest.TestCase):
 
 class TendTest(unittest.TestCase):
     def test_every_server_reads_the_version_feed_and_looks_after_the_hand_over_as_it_tends_itself(self) -> None:
-        # The "newer version" line is said from the feed the server reads (``updates.refresh``), whoever runs it.
+        # The "newer version" line is said from the feed the server reads (``updates.refresh``), whoever runs it; and
+        # cad's own update is asked with what is in flight and what has run (``auto_update.tend``).
         from cad.engine.previous import version
         from cad_server import updates
+        from cad_server._internal import auto_update
         from cad_server.engine import daemon
 
-        engine = mock.Mock(address=None, door=None, draining=False)
+        engine = mock.Mock(address=None, door=None, draining=False, worked=5.0, began=5.0)
         engine.stopping.is_set.return_value = False
-        with mock.patch.object(updates, "refresh") as refresh, mock.patch.object(daemon, "_send_counts"):
+        engine.working.return_value = False
+        with mock.patch.object(updates, "refresh") as refresh, mock.patch.object(daemon, "_send_counts"), \
+                mock.patch.object(auto_update, "tend", return_value=False) as tended:
             daemon.Daemon.tend(engine)
         refresh.assert_called_once_with()
+        self.assertEqual(tended.call_args.kwargs["working"], False)
+        self.assertEqual(tended.call_args.kwargs["ran"], False, "nothing has run since the server started")
         self.assertEqual(engine.handover.tend.call_args.args[0], version(), "the bridge's, named by this release")
 
 

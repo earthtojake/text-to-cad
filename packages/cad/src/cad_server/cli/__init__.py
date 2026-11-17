@@ -7,7 +7,7 @@ integration's, for its tool's own files, which are no document type, which cad c
 shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations``: ``cad mujoco check``,
 ``cad orcaslicer presets``), only for the integrations the registry gives operations. And the commands that are no file's: the server's (``server``: ``start``,
 ``stop``, ``status``), the CAD app an agent app starts (``mcp``), the engine's verbs (``serve``, ``delete``), ``run``,
-and the installation's (``setup``, ``doctor``, ``cache``, ``viewer``, ``telemetry``).
+and the installation's (``setup``, ``doctor``, ``cache``, ``viewer``, ``telemetry``, ``auto-update``).
 
 A command that reaches the server holds it to its own release (``cad.engine.client.RELEASE``): one of another
 release is refused in one line. The server's own commands are not held to it (``_ANY_RELEASE``).
@@ -68,6 +68,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # A page of the running server's; the launcher exits.
     "viewer": ("cad_server.cli.viewer", "open a viewer page on the running cad server"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
+    "auto-update": ("cad_server.cli.auto_update", "show or change whether cad updates itself: status, on, off"),
 }
 # Only for the skill text of releases 0.10.0 to 0.11.10 (`cad status`, `cad stop`): run, never listed, and gone with
 # the bridge.

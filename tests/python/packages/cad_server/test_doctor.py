@@ -69,7 +69,8 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual([line.split()[0] for line in out.splitlines()[1:5]], ["python", "install", "data", "cache"])
         self.assertIn(f"  data     {self.root / 'state'}\n", out)
         self.assertIn(f"  cache    {self.root / 'cache'}: nothing for `cad cache prune` to remove\n", out)
-        self.assertRegex(out, r"  server   not running \(.+\): run `cad server start`\n$")
+        self.assertRegex(out, r"  server   not running \(.+\): run `cad server start`\n"
+                              r"  update   auto-update off, installer off; .+\n  uv       .+\n  attempt  none\n$")
 
     def test_the_cache_line_says_what_cad_cache_prune_would_free(self) -> None:
         from cad_server._internal import base

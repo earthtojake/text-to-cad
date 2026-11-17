@@ -24,8 +24,9 @@ browser: made here, in the environment the host gave this process, never in the 
   ``resources/templates/list`` an empty list, and ``notifications/tools/list_changed`` (``resources/list_changed``)
   sent once the start is done, so the app asks again; ``tools/call`` a result marked ``isError`` saying the server is
   starting; any other a JSON-RPC error (``UNAVAILABLE``) saying so.
-- Where no server of this release answers (the start failed, the server was stopped since, another release's runs,
-  one that takes the request and never answers it): ``tools/call`` a result marked ``isError`` carrying cad's one line
+- Where no server of this release or a newer one answers (the start failed, the server was stopped since, an older
+  release's runs, one that takes the request and never answers it): ``tools/call`` a result marked ``isError`` carrying
+  cad's one line
   (``client.NotRunning``, ``client.OtherRelease``, ``client.Unanswered``), which the agent reads and relays; any other
   request a JSON-RPC error carrying it. The host's ``initialize`` is answered within ``ANSWER_SECONDS`` in every case:
   greeted here, as while the start runs, where the server does not answer in time.
@@ -74,13 +75,13 @@ PRESENTATIONS = ("inline", "tabs", "text")
 
 def start_server() -> str:
     """THE ONE PLACE ``cad mcp`` decides what a server of another release means, so a later release changes the rule
-    here alone. At its own start, exactly what ``cad server start`` does (``client.start``: a server of another
+    here alone. At its own start, exactly what ``cad server start`` does (``client.start``: a server of an older
     release, or of 0.11.10 and earlier, told to stop, its work cut short, and this release's started; one of this
-    release left running). After it, the server running is reached only where it is this release's
-    (``client.RELEASE``): a request that finds another release's is answered with cad's one line saying both
-    (``client.OtherRelease``), as one that finds none is (``client.NotRunning``), and nothing is started again. What
-    the start did, in one line; ``ConnectionError`` in one line where it could not."""
-    client.RELEASE = version()
+    release or a newer one joined). After it, the server running is reached where it is this release's or newer
+    (``client.AT_LEAST``: cad updated itself under this transport): a request that finds an older one is answered
+    with cad's one line saying both (``client.OtherRelease``), as one that finds none is (``client.NotRunning``), and
+    nothing is started again. What the start did, in one line; ``ConnectionError`` in one line where it could not."""
+    client.AT_LEAST = version()
     return client.start()
 
 

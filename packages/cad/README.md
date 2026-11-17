@@ -388,8 +388,11 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     answer in JSON, which no person reads --, and never
     after the person's no) and the hourly version check (the server's `updates.py`). Both run in the
     background and fail silently: no start, command, build, request or tool call waits on them.
-    cad updates nothing by itself: a newer release is installed when a person or an agent asks for it,
-    and that install waits on the network because it was asked to.
+    cad updates itself only where the person turned it on (`cad auto-update on`, for a cad installed as a uv
+    tool, off by default): its server, at its start or once nothing has run for a minute, hands the update to a
+    detached helper (the server's `_internal/auto_update.py`), which stops it, has uv install the release the
+    feed names and starts it again; the server decides from the feed as last read, and nothing waits on the
+    install but a start that would otherwise start the release it replaces.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
     `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
     it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot
@@ -553,8 +556,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     names of a tool's presets of one kind; `complete` writes chosen presets complete and, as `export`
     does, says the files it wrote.
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
-    --help` groups the commands: the document types, the integrations with operations of their own, the rest. The commands that are no document's -- setup, update,
-    doctor, cache, plugin, viewer, status, stop, server, telemetry, run, serve and delete -- stay
+    --help` groups the commands: the document types, the integrations with operations of their own, the rest. The commands that are no document's -- setup,
+    doctor, cache, viewer, status, stop, server, telemetry, auto-update, run, serve and delete -- stay
     top-level.
 
 28. **An integration runs where its extra is installed.** *The package.* An integration's code runs
