@@ -49,11 +49,11 @@ def _box_step(folder: Path, notes: bool) -> Path:
     path = folder / ("noted.step" if notes else "plain.step")
     bd.export_step(bd.Box(10, 20, 5), str(path))
     if notes:
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         pd, ctx = _shape_of(text), _context_of(text)
         definition = re.search(r"#(\d+)\s*=\s*PRODUCT_DEFINITION\(", text).group(1)
         block = NOTES.format(pd=f"#{pd}", definition=f"#{definition}", ctx=f"#{ctx}")
-        path.write_text(text.replace("ENDSEC;\nEND-ISO", block + "ENDSEC;\nEND-ISO", 1))
+        path.write_text(text.replace("ENDSEC;\nEND-ISO", block + "ENDSEC;\nEND-ISO", 1), encoding="utf-8")
     return path
 
 
@@ -86,10 +86,10 @@ class StepNotesTest(unittest.TestCase):
 
         path = _box_step(self.folder, notes=True)
         kept = [line for line in NOTES.splitlines() if line.split("=")[0] in {"#9005", "#9006", "#9007", "#9008"}]
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         start, end = text.index("#9001="), text.index("ENDSEC;\nEND-ISO")
         path.write_text(text[:start] + "\n".join(kept).format(pd="#" + _shape_of(text), ctx="#" + _context_of(text))
-                        + "\n" + text[end:])
+                        + "\n" + text[end:], encoding="utf-8")
         structure = Loaded(path).structure()
         self.assertNotIn("pmi", structure)
 
