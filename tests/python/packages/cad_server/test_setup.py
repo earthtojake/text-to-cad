@@ -392,7 +392,10 @@ class Moving(Tool):
     def setUp(self) -> None:
         super().setUp()
         self.started: list = []
-        for patch in (mock.patch.dict(os.environ, {"PATH": str(self.root / "bin")}),
+        # The Python a server's environment was made from, outside it, as a uv tool's or a shipped updater's
+        # environment has: the suite's own may be a system Python, with nothing outside it (CI's Linux jobs).
+        for patch in (mock.patch.object(sys, "_base_executable", str(self.root / "python3"), create=True),
+                      mock.patch.dict(os.environ, {"PATH": str(self.root / "bin")}),
                       mock.patch.object(setup, "_start", side_effect=lambda *a, **k: self.started.append(a)),
                       mock.patch.object(auto_update, "uv_tool", side_effect=lambda prefix=None: Path(prefix)
                                         if prefix and Path(prefix, "uv-receipt.toml").exists() else None)):

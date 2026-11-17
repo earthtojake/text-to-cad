@@ -133,7 +133,8 @@ class ServerSwitchesTest(Case):
 
 class FindUvTest(Case):
     def test_path_first_then_the_installers_folders_and_never_this_environment_s(self) -> None:
-        self.assertEqual(auto_update.find_uv(), str(self.uv))
+        # On Windows ``shutil.which`` names the file with PATHEXT's case (``uv.EXE``): the same file.
+        self.assertEqual(os.path.normcase(auto_update.find_uv() or ""), os.path.normcase(self.uv))
         home = self.tmp / "home"
         for folder, environ in ((home / ".local" / "bin", {}), (home / ".cargo" / "bin", {}),
                                 (self.tmp / "xdg", {"XDG_BIN_HOME": str(self.tmp / "xdg")}),
@@ -237,7 +238,7 @@ class HelperCommandTest(Case):
             self.assertTrue(auto_update.trigger("0.2.0"))
         (line,), options = popen.call_args
         self.assertEqual(line[0], str(base))
-        self.assertEqual(json.loads(line[5])["uv"], str(self.uv))
+        self.assertEqual(os.path.normcase(json.loads(line[5])["uv"]), os.path.normcase(self.uv))
         self.assertNotIn("PYTHONPATH", options["env"])
         self.assertNotIn("VIRTUAL_ENV", options["env"])
         self.assertEqual(options["env"]["KEEP"], "1")

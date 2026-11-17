@@ -837,7 +837,10 @@ class SweepTest(unittest.TestCase):
             self.assertEqual(cad(*words), (0, f"{NOT_RUNNING}\n", ""))
         self.assertEqual(cad("server", "status", "--json")[:2], (0, "null\n"))
         self.assertEqual(cad("serve", unknown), (1, "", f"cad serve: {NOT_RUNNING}\n"))
-        code, out, _err = cad("viewer", unknown, "--json")
+        # A client build of its own: a checkout's apps/web is built on one computer and not on another (CI).
+        (own / "dist").mkdir()
+        (own / "dist" / "index.html").write_text("<!doctype html>\n", encoding="utf-8")
+        code, out, _err = cad("viewer", unknown, "--json", "--dist", str(own / "dist"))
         self.assertEqual((code, json.loads(out)), (1, {"ok": False, "error": NOT_RUNNING, "reason": "not_running",
                                                        "next": ["cad server start"]}))
         self.assertEqual(list(self.state.iterdir()), [], "nothing started a server")
@@ -881,8 +884,9 @@ class SweepTest(unittest.TestCase):
         self.assertEqual(theirs.stdout.split(), [str(older.pid)], "a person's own Python reaches it")
         starts = [subprocess.Popen([sys.executable, "-m", "cad_server.cli", "server", "start"], env=self.env,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(3)]
-        said = {starting.communicate(timeout=120)[0] for starting in starts}
-        self.assertEqual([starting.returncode for starting in starts], [0, 0, 0])
+        outputs = [starting.communicate(timeout=120) for starting in starts]
+        said = {out for out, _err in outputs}
+        self.assertEqual([starting.returncode for starting in starts], [0, 0, 0], [err for _out, err in outputs])
         self.assertLessEqual(said, {f"started the cad server (cad {version()})\n",
                                     f"the cad server (cad {version()}) is already running\n"})
         self.assertEqual(older.wait(timeout=60), 0, "the older server stopped")

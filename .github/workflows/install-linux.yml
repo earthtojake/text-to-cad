@@ -135,6 +135,8 @@ jobs:
             UV_FIND_LINKS=$PWD/stamped
             export CAD_INSTALL_PY CAD_INSTALL_FEED UV_FIND_LINKS
             sh < scripts/install/install.sh
+            # The kernel's environment is made on first need, by a later step: it takes the same wheels.
+            echo "UV_FIND_LINKS=$UV_FIND_LINKS" >> "$GITHUB_ENV"
           fi
           echo "CAD_RELEASE=$release" >> "$GITHUB_ENV"
 

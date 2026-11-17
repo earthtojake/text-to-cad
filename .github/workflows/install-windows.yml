@@ -470,7 +470,7 @@ jobs:
           Set-Location $dir
           $r = Invoke-Cad run box.py
           Need $r 'cad run box.py, accented state folder' @('(?m)^(built|took) \S+', 'bounds 40\D+20\D+6 mm')
-          if (-not (Test-Path -LiteralPath (Join-Path $env:CAD_STATE_DIR 'settings.json'))) {
+          if (-not (Test-Path -LiteralPath (Join-Path $env:CAD_STATE_DIR 'engines\token'))) {
             Fail "the server kept nothing in the accented state folder"
           }
           $r = Invoke-Cad server stop
