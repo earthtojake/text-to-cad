@@ -42,7 +42,7 @@ number on a drawing a shop will make the part to.
 
 Ask every question you could not answer at once, with your question tool (Claude Code's
 `AskUserQuestion`, Codex's `request_user_input`): one question per unknown, up to four together.
-Studio shows them in the question panel above the message box. Write each as Specify's `prompt`, with
+Write each as Specify's `prompt`, with
 up to three options from its `suggestions` or `options` (the likeliest for this part and process
 first; a hole's `choices` carry words for each, "A bolt passes through" for `clearance`), a short
 header (`Material`), and its `why` where it helps. The person can always type their
