@@ -1785,6 +1785,11 @@ def _read(path: Path) -> Any:
                 raise ValueError(f"cannot read {path}")
             correct_step_densities(doc, path)
             forget_step_attributes(doc, path)
+            from cad.engine import step_notes
+
+            notes = step_notes.read_general_notes(reader, path)
+            step_notes.keep(doc, notes)
+            step_notes.name_materials(doc, notes)
             from cad.engine.step_style import read_visual_styles
 
             read_visual_styles(reader, doc)

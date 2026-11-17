@@ -1793,7 +1793,8 @@ _NOT_LINKED = "the file links it to no face, edge or point of a part"
 def records_of_document(doc: Any, prototypes: list[Any], root: str) -> list[dict[str, Any]]:
     """A document's annotations as records (``entries``' input): every GD&T object its tool holds,
     datums, dimensions and geometric tolerances in the tool's order, then the notes the code made
-    in the notes tool's (a note another system wrote is not read), each resolved as the document
+    in the notes tool's (a note another system wrote is not read, but for a STEP's general notes, the
+    AP242 properties ``step_notes`` reads, listed last), each resolved as the document
     is now. One the code made (its engine attribute) is resolved as its build resolved it
     (``_resolved``, against its part's faces and their names): its status is derived, never read.
     One another system wrote is resolved by the elements the file links it to, and what this module
@@ -1811,8 +1812,11 @@ def records_of_document(doc: Any, prototypes: list[Any], root: str) -> list[dict
     dimensions = {XCAFDimTolObjects_DimensionType_Size_Diameter: "diameter",
                   XCAFDimTolObjects_DimensionType_Location_LinearDistance: "distance"}
     characteristics = {xcaf: name for name, xcaf in _xcaf_characteristics().items()}
+    from cad.engine import step_notes
+
     tool, notes_tool = _tool(doc), _notes_tool(doc)
-    if tool is None and notes_tool is None:
+    general = step_notes.held(doc)
+    if tool is None and notes_tool is None and not general:
         return []
     by_entry = {prototype.entry: prototype for prototype in prototypes}
     maps: dict[tuple[int, str], Any] = {}
@@ -1914,6 +1918,12 @@ def records_of_document(doc: Any, prototypes: list[Any], root: str) -> list[dict
                                                    "general_tolerance": held.get("general_tolerance")},
                         "targets": [], "extra": held, "entry": _entry(label), "xcaf_type": NOTE_TYPE,
                         "reason": None, "part": _part_of(label, by_entry)})
+    # A STEP's general notes as another system wrote them, AP242 properties of the part (``step_notes``):
+    # each the file's words, on no face, of its one part where it has one.
+    for text in general:
+        records.append({"kind": "note", "values": {"text": text, "annotations": [], "general_tolerance": None},
+                        "targets": [], "extra": None, "entry": _entry(doc.Main()), "xcaf_type": None, "reason": None,
+                        "part": 0 if len(prototypes) == 1 else None, "status": "ok", "problem": None, "refs": []})
     # The code's annotations resolved as their build resolved them, each part's together (its general
     # profile covers what the others leave): the same faces again, from the document alone.
     of_part: dict[int, list[dict[str, Any]]] = {}
@@ -2195,7 +2205,7 @@ def entries(records: list[dict[str, Any]], structure: dict[str, Any]) -> list[di
         elif kind == "note":
             numbers[record["part"]] = numbers.get(record["part"], 0) + 1
             entry["note"] = {"number": numbers[record["part"]], "text": values["text"],
-                             "general": not extra["refs"] and not values["annotations"],
+                             "general": not (extra or {}).get("refs") and not values["annotations"],
                              "annotations": list(values["annotations"]),
                              "general_tolerance": values.get("general_tolerance")}
         else:

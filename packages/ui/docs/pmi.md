@@ -43,6 +43,12 @@ requirements that cannot both hold (`coverage`). An entry is one of:
   true, to its datums) is its Note 1; its refs are the faces it covers this build.
 - A **note** (`note`): its number, its words, and a **flag note**'s faces and the annotations it
   names (a general note names neither).
+- A STEP's **general notes** as another system wrote them, AP242 properties of the part rather
+  than notes (Specify's: `material property`, `default tolerances`, a `surface_condition` in
+  micrometres, `semantic text`): each a general note of the part in the file's words, "Material:
+  Aluminium 6082-T6", "General tolerance: ISO 2768-m", "Surface finish: Ra 3.2", "Edges: Break sharp
+  edges 0.2 max" (`cad.engine.step_notes`, read as the file is read). The part's material is the one
+  the file declares there, where OCCT's reader took another property's words for it.
 - Anything else the document holds (a STEP's cylindricity, an angle) is an entry the viewer
   does not draw: listed, saying why (`unsupported`: the engine's `reason` where it gives one, else
   the viewer's own, with its XCAF type), never dropped. Whether it is drawn is the viewer's to say;
