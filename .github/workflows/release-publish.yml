@@ -317,7 +317,7 @@ jobs:
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad" --help >/dev/null)
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad" viewer --help >/dev/null)
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad-mcp" --help >/dev/null)
-          "$RUNNER_TEMP/install-test/bin/cad" doctor --no-server
+          "$RUNNER_TEMP/install-test/bin/cad" doctor
           scripts/test/test-installed.sh --wheels dist
 
       # The paranoid half of the same question check-wheel-contents.sh answers, asked of

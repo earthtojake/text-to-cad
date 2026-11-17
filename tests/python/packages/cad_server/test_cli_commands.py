@@ -38,7 +38,7 @@ TYPES = {
     "kicad_sch": ("export", "snapshot", "inspect", "erc"),
 }
 COMMANDS = ("serve", "status", "stop", "delete", "server", "mcp", "run", "requirement", "doctor", "cache", "setup",
-            "uninstall", "viewer", "telemetry")
+            "viewer", "telemetry")
 
 
 def _run(argv: list[str]) -> tuple[int, str, str]:

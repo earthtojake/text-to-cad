@@ -55,8 +55,7 @@ it as in any other; a platform its tool has no build for is refused in one line 
 
 **Its releases**: environments are tied to the release (cad is pinned in each). cad removes none of another
 release's: when one is made, only the one its local packages' edit superseded goes (``_collect``), but one a
-process runs from, which goes at a later making. Each use marks its marker, which ``cad doctor`` reads
-(``leftovers``). Nothing is made ahead of a run: after an update, a new release's environments are made as its
+process runs from, which goes at a later making. Each use marks its marker. Nothing is made ahead of a run: after an update, a new release's environments are made as its
 runs ask for them, from uv's cache.
 """
 
@@ -798,8 +797,7 @@ def marker(env: base.Environment) -> dict[str, Any]:
 
 
 def _used(env: Path) -> None:
-    """The environment's marker marked used now (its modification time), which ``cad doctor`` reads: one
-    unused for a week is a leftover (``leftovers.package_environments``). Where the cache folder cannot be
+    """The environment's marker marked used now (its modification time). Where the cache folder cannot be
     written (an agent's sandbox), nothing is marked."""
     try:
         os.utime(env / base.MARKER)

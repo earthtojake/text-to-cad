@@ -69,8 +69,7 @@ src/cad_server/
                          #   module the command of 0.11.10 and earlier ran (proxy), the flat release
                          #   folders of 0.11.10 and earlier (releases), the versions installed in their own
                          #   folders, their use and their cleanup (versions), a version's data copied in
-                         #   once (imports), the layout of 0.11.10 and earlier (legacy), what earlier
-                         #   releases left behind (leftovers), the daemon's entry
+                         #   once (imports), the layout of 0.11.10 and earlier (legacy), the daemon's entry
                          #   (engine_daemon) and what it is composed of (engine_host), the
                          #   server's observer of the engine and the telemetry sender, where
                          #   an event comes from and who is told of a new release (channel), file locks (the data folder's one lock:

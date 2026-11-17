@@ -149,11 +149,11 @@ class PublishGate(unittest.TestCase):
 
     def test_the_wheel_s_smoke_check_starts_no_engine(self):
         # CI runs doctor on the built wheel to prove it answers; an engine it started would linger in
-        # the job, so the check says whether one runs and never starts it (``doctor --no-server``).
+        # the job. Doctor asks whether one runs and never starts it, and takes no option to say so.
         doctors = [line.strip() for line in WORKFLOW.splitlines() if re.search(r"\bcad\"? doctor\b", line)]
         self.assertTrue(doctors, "the release smoke-tests doctor")
         for line in doctors:
-            self.assertIn("doctor --no-server", line)
+            self.assertRegex(line, r"\bdoctor$")
 
     def test_the_release_builds_the_four_projects_and_installs_its_three_wheels_together(self):
         publish = JOBS["publish"]

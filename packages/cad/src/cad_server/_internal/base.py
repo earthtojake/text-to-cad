@@ -291,7 +291,7 @@ def marked(env: Path) -> dict[str, Any] | None:
     """The marker of the environment at ``env`` when one was made there -- written last, of this schema and
     its key -- whether or not its Python is there still, else None. One whose Python is gone (a Python uv
     managed, uninstalled or its cache wiped) is dead: made again where it is needed, and collected as any
-    other where it is not (``extras._collect``, ``leftovers.package_environments``)."""
+    other where it is not (``extras._collect``)."""
     try:
         marker = json.loads((env / MARKER).read_text(encoding="utf-8"))
     except (OSError, ValueError):

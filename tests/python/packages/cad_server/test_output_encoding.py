@@ -86,7 +86,7 @@ class CommandTest(unittest.TestCase):
 
     def test_a_command_s_output_in_a_pipe_is_utf_8_with_the_folder_s_name_intact(self) -> None:
         # The report alone: no server, nothing written. Its status is the report's, not this test's.
-        _, out, err = self.cad("doctor", "--check", "--no-server")
+        _, out, err = self.cad("doctor", "--check")
         self.assertIn(NAME, unicodedata.normalize("NFC", out), f"the cache folder, as the report names it\n{out}{err}")
 
     def test_what_cad_run_s_program_writes_to_a_pipe_is_utf_8(self) -> None:

@@ -1,4 +1,4 @@
-"""Consent for a command that destroys: ``cad uninstall``, ``cad delete`` and ``cad server --rotate-token``
+"""Consent for a command that destroys: ``cad delete`` and ``cad server --rotate-token``
 (``cad setup`` asks nothing: installing is what was asked).
 
 Each says its plan first -- what it removes, with counts -- and then:

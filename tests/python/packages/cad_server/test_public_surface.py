@@ -116,8 +116,6 @@ ADAPTERS: dict[str, frozenset[str]] = {
 # Commands that own their parser outright and mirror no function.
 UNCLASSIFIED = {
     "doctor",
-    # Only for the text of releases 0.10.0 to 0.11.10: one line, whatever it is given (``cli.retired``).
-    "uninstall",
     # uv run's options and a program's arguments, whatever they are: no parser of its own (uv judges them).
     "run",
     # The viewer launcher owns its parser: the launch contract (reuse, replace or start on its
@@ -188,14 +186,14 @@ class Manifest(unittest.TestCase):
         for command in ("build", "step build", "step compile", "stl build", "3mf build", "3mf snapshot", "glb build",
                         "store", "daemon", "daemon status", "where", "install", "export", "snapshot", "inspect",
                         "urdf check", "sdf check", "srdf check", "stl check", "xbf check", "kicad_pcb check",
-                        "kicad_sch check", "pcb drc", "mjcf validate", "mjcf snapshot", "mjcf"):
+                        "kicad_sch check", "pcb drc", "mjcf validate", "mjcf snapshot", "mjcf", "uninstall"):
             self.assertNotIn(command, _commands())
         for module in ("cad_server.cli.build", "cad.engine.shape_input", "cad_server.cli.step_build", "cad_server.cli.step_snapshot", "cad_server.cli.stl_build",
                        "cad_server.cli.where", "cad_server.cli.store", "cad_server.cli.daemon", "cad_server.cli.daemon_status", "cadgen.store", "cadgen.daemon",
                        "cad_server.cli.install", "cad_server.cli.mcp", "cad_server.cli.export", "cad_server.cli.snapshot",
                        "cad_server.cli.inspect", "cad_server.cli.urdf_validate", "cad_server.cli.sdf_validate",
                        "cad_server.cli.srdf_validate", "cad_server.kicad.schematic", "cad_server.cli.mjcf", "cad.mjcf",
-                       "cad.engine.mjcf_source"):
+                       "cad.engine.mjcf_source", "cad_server.cli.retired", "cad_server._internal.leftovers"):
             with self.subTest(module=module), self.assertRaises(ModuleNotFoundError), warnings.catch_warnings():
                 warnings.simplefilter("ignore", FutureWarning)  # cadgen's deprecation, not this test's subject
                 importlib.import_module(module)

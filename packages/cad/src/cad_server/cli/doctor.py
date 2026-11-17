@@ -32,7 +32,6 @@ STATUS_SECONDS = 10.0
 
 def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
     from cad_server._internal.cli_parser import parser as command_parser
-    from cad_server.cli import retired
 
     parser = command_parser(prog=prog, description="Report this cad: its release, its data and cache folders and what "
                                                    "`cad cache prune` would free, the CAD kernel environment and the "
@@ -41,7 +40,6 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
     parser.add_argument("--check", action="store_true", help="the same report")
     parser.add_argument("--json", action="store_true", help="the report as one JSON document: each check's name, "
                                                             "status (ok, info, warning, failed) and detail")
-    retired.doctor_options(parser)
     args = parser.parse_args(argv)
 
     from cad.engine.previous import version
@@ -60,8 +58,6 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
         sys.stdout.write(f"  {found['name']:<8} {found['detail']}\n")
         for hint in found.get("more") or ():
             sys.stdout.write(f"           {hint}\n")
-    if args.prune:
-        sys.stdout.write(retired.PRUNE + "\n")
     return status
 
 

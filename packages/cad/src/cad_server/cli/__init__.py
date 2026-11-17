@@ -65,15 +65,13 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "cache": ("cad_server.cli.cache", "cad's cache: dir, prune (what this release cannot use), clean (all of it)"),
     # This version installed on this computer, and the cad command with it.
     "setup": ("cad_server.cli.setup", "install this version of cad on this computer"),
-    # Only for the text of releases 0.10.0 to 0.11.10: one line naming what removes cad now (``retired``).
-    "uninstall": ("cad_server.cli.retired", "`uv tool uninstall cad`"),
     # A page of the running server's; the launcher exits.
     "viewer": ("cad_server.cli.viewer", "open a viewer page on the running cad server"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
 }
-# Only for the skill text of releases 0.10.0 to 0.11.10 (`cad status`, `cad stop`, `cad uninstall`): run, never
-# listed, and gone with the bridge.
-_UNLISTED = frozenset({"status", "stop", "uninstall"})
+# Only for the skill text of releases 0.10.0 to 0.11.10 (`cad status`, `cad stop`): run, never listed, and gone with
+# the bridge.
+_UNLISTED = frozenset({"status", "stop"})
 
 # Each document type's command, by its id: ``cad <type> <operation>`` (``cad_server.cli.document_types``).
 TYPE_COMMANDS: dict[str, str] = {document_type: f"cad_server.cli.{document_type}" for document_type in DOCUMENT_TYPES}
@@ -444,21 +442,21 @@ def _notice(*, daily: bool) -> None:
 NOTICE = "update-notice"
 NOTICE_SECONDS = 24 * 60 * 60.0
 # Commands whose run records no use and copies no data first (``_first_run``): setup makes the version and copies
-# its data itself; uninstall is a line.
-_UNUSED = frozenset({"setup", "uninstall"})
+# its data itself.
+_UNUSED = frozenset({"setup"})
 # Commands after which no notice is said (``_notice``): the server's, run by an agent app as a session starts or in
 # the foreground until it stops; `mcp`, which an agent app runs; setup, which an updater of 0.11.10 and earlier runs
-# with no person to read it; uninstall.
-_UNNOTICED = frozenset({"server", "mcp", "setup", "uninstall"})
+# with no person to read it.
+_UNNOTICED = frozenset({"server", "mcp", "setup"})
 # Commands that reach a server of any release (``cad.engine.client.RELEASE``): the server's own -- which start this
 # release's in place of another's, stop whichever runs, and say which runs --, `mcp`, which decides it itself
 # (``cad_mcp.shim.start_server``), and those that only ask whether one runs, and which (`doctor`, `cache`).
 _ANY_RELEASE = frozenset({"server", "status", "stop", "mcp", "doctor", "cache"})
 # Commands that never carry the analytics notice: the engine's server and `mcp`, writing nowhere a person reads;
 # `telemetry`, which says it its own way; `setup`, which an updater of 0.11.10 and earlier runs with no person to read
-# it; `uninstall`; `run`, which is only the python it runs, as the `cad` command's `run` is; and `requirement`, whose
+# it; `run`, which is only the python it runs, as the `cad` command's `run` is; and `requirement`, whose
 # output a program reads.
-_UNTOLD = frozenset({"server", "mcp", "telemetry", "setup", "uninstall", "run", "requirement"})
+_UNTOLD = frozenset({"server", "mcp", "telemetry", "setup", "run", "requirement"})
 # Commands that only report, and so write nothing a command's run writes (``_first_run``, ``_tell``, ``_notice``).
 _READ_ONLY = frozenset({"doctor"})
 

@@ -4,9 +4,6 @@ server runs and its release (asked, never started). It writes, registers, starts
 the same report, ``--json`` it as one document. Exit 0, or 1 when the kernel is installed and does not load -- naming
 Smart App Control on Windows, where a refused ``OCP`` load is otherwise a bare ImportError.
 
-And the bridge's two pieces (``cad_server.cli.retired``): the old ``doctor`` options taken and changing nothing, and
-``cad uninstall`` one line, exit 2, removing nothing.
-
 The kernel probe is a fresh-interpreter ``import OCP``; it is stubbed here so the contract tests cost no kernel load,
 and exercised once for real.
 """
@@ -28,7 +25,7 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cad/src")
 
 from cad.engine.previous import version  # noqa: E402
-from cad_server.cli import doctor, retired  # noqa: E402
+from cad_server.cli import doctor  # noqa: E402
 
 
 def _run(argv: list[str]) -> tuple[int, str, str]:
@@ -154,38 +151,6 @@ class DoctorTests(unittest.TestCase):
         self.assertLessEqual({"trimesh", "kicad", "server"}, set(names))
         self.assertTrue(all(check["status"] in ("ok", "info", "warning", "failed") for check in found["checks"]))
         self.assertEqual([f"  {check['name']:<8} {check['detail']}" for check in found["checks"]], out.splitlines()[1:])
-
-
-class RetiredTest(unittest.TestCase):
-    """BRIDGE ONLY (``cad_server.cli.retired``), deleted with it: what released text still types."""
-
-    def test_the_old_doctor_options_are_taken_and_change_nothing_and_prune_names_cad_cache_prune(self) -> None:
-        with mock.patch.object(doctor, "_report", return_value=[]):
-            self.assertEqual(_run(["--no-server"]), (0, f"cad {version()}\n", ""))
-            self.assertEqual(_run(["--check", "--no-server"]), (0, f"cad {version()}\n", ""))
-            self.assertEqual(_run(["--prune", "--all-versions", "--yes"]), (0, f"cad {version()}\n{retired.PRUNE}\n", ""))
-        with redirect_stderr(io.StringIO()) as err, redirect_stdout(io.StringIO()):
-            help_code = None
-            try:
-                doctor.main(["--help"])
-            except SystemExit as leaving:
-                help_code = leaving.code
-        self.assertEqual(help_code, 0)
-        self.assertEqual(err.getvalue(), "")
-
-    def test_cad_uninstall_is_one_line_naming_uv_and_exits_2_removing_nothing(self) -> None:
-        from cad_server import cli
-
-        with TemporaryDirectory() as folder, mock.patch.dict("os.environ", {"CAD_STATE_DIR": folder}):
-            Path(folder, "settings.json").write_text("{}", encoding="utf-8")
-            err = io.StringIO()
-            with redirect_stderr(err), redirect_stdout(io.StringIO()) as out:
-                code = cli.main(["uninstall", "--yes"])
-            self.assertEqual(os.listdir(folder), ["settings.json"])
-        self.assertEqual((code, out.getvalue(), err.getvalue()), (2, "", f"cad uninstall: {retired.UNINSTALL}\n"))
-        self.assertIn("`cad server stop`", retired.UNINSTALL)
-        self.assertIn("`uv tool uninstall cad`", retired.UNINSTALL)
-        self.assertNotIn("uninstall", cli._usage(), "never listed")
 
 
 class KernelProbeTest(unittest.TestCase):
