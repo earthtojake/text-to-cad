@@ -13,8 +13,11 @@ of the part, as the file says it and never guessed:
 - ``semantic text``, each item by its name: ``Edges: Break sharp edges 0.2 max`` for an
   ``edge condition``, any other ``<Name>: <words>``.
 
-A file without these properties is not looked through: its bytes are asked first, since walking a
-STEP's entities from Python costs about a quarter of a millisecond each.
+The material is a note only beside the others: a file that declares a material and nothing else (OCCT's
+writer declares one for every part with a material, this engine's STEP export among its users) has
+its material as the part's, and no notes. A file without these properties is not looked through: its
+bytes are asked first, since walking a STEP's entities from Python costs about a quarter of a
+millisecond each.
 """
 from __future__ import annotations
 
@@ -100,6 +103,10 @@ def read_general_notes(reader: Any, path: Any) -> list[str]:
         elif name == "semantic text":
             semantic += [f"{_SEMANTIC.get(item, item[:1].upper() + item[1:])}: {words}" for item, words in items if words]
     finish = _surface_finish(model) if b"'surface_condition'" in Path(path).read_bytes() else []
+    if not (tolerance or finish or semantic):
+        # A material alone is the part's material, not a drawing's notes: OCCT's writer (this engine's
+        # STEP export among its users) declares one for every part that has a material.
+        return []
     return ([f"Material: {named}" for named in material] + [f"General tolerance: {named}" for named in tolerance]
             + [f"Surface finish: {named}" for named in finish] + semantic)
 

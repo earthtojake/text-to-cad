@@ -35,6 +35,14 @@ NOTES = """#9001=DESCRIPTIVE_REPRESENTATION_ITEM('tolerance class','ISO 2768-m')
 """
 
 
+def _shape_of(text: str) -> str:
+    return re.search(r"#(\d+)\s*=\s*PRODUCT_DEFINITION_SHAPE\(", text).group(1)
+
+
+def _context_of(text: str) -> str:
+    return re.search(r"ADVANCED_BREP_SHAPE_REPRESENTATION\([^;]*?,\s*#(\d+)\s*\)\s*;", text, re.S).group(1)
+
+
 def _box_step(folder: Path, notes: bool) -> Path:
     import build123d as bd
 
@@ -42,9 +50,8 @@ def _box_step(folder: Path, notes: bool) -> Path:
     bd.export_step(bd.Box(10, 20, 5), str(path))
     if notes:
         text = path.read_text()
-        pd = re.search(r"#(\d+)\s*=\s*PRODUCT_DEFINITION_SHAPE\(", text).group(1)
+        pd, ctx = _shape_of(text), _context_of(text)
         definition = re.search(r"#(\d+)\s*=\s*PRODUCT_DEFINITION\(", text).group(1)
-        ctx = re.search(r"ADVANCED_BREP_SHAPE_REPRESENTATION\([^;]*?,\s*#(\d+)\s*\)\s*;", text, re.S).group(1)
         block = NOTES.format(pd=f"#{pd}", definition=f"#{definition}", ctx=f"#{ctx}")
         path.write_text(text.replace("ENDSEC;\nEND-ISO", block + "ENDSEC;\nEND-ISO", 1))
     return path
@@ -72,6 +79,19 @@ class StepNotesTest(unittest.TestCase):
 
         self.assertNotIn("pmi", Loaded(_box_step(self.folder, notes=False)).structure())
 
+    def test_a_material_alone_is_the_parts_material_and_no_note(self) -> None:
+        # OCCT's writer declares a material for every part with one (this engine's STEP among them):
+        # the file's own material property, and none of the rest.
+        from cad.engine.document import Loaded
+
+        path = _box_step(self.folder, notes=True)
+        kept = [line for line in NOTES.splitlines() if line.split("=")[0] in {"#9005", "#9006", "#9007", "#9008"}]
+        text = path.read_text()
+        start, end = text.index("#9001="), text.index("ENDSEC;\nEND-ISO")
+        path.write_text(text[:start] + "\n".join(kept).format(pd="#" + _shape_of(text), ctx="#" + _context_of(text))
+                        + "\n" + text[end:])
+        structure = Loaded(path).structure()
+        self.assertNotIn("pmi", structure)
 
 if __name__ == "__main__":
     unittest.main()
