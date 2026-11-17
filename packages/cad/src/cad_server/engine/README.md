@@ -311,7 +311,13 @@ the port is rolled from as above, or refused where the port is named, as below.
 
 A named port another process holds is refused in one line naming the holder (`daemon.PortHeld`).
 `cad server` binds at its start, so the command fails at once with that line on stderr and exits
-1, no engine left. An engine a client starts binds on the first request that serves. A port that
+1, no engine left. An engine a client starts binds on the first request that serves, but for one that replaces
+a server that served pages: a client that stops a server (`client.sweep`: `cad server stop`, which cad's own update
+and the bridge's move run before they start the next, and a start that replaces an older server) first asks it where
+it serves pages, any release's server alike, and notes the port (`places.pages_path`); the next server to start takes
+the note and serves pages there at once with the user's token (`daemon.resumed`, `Daemon.resume`), so a page open in a
+browser reconnects with nobody doing anything. A port named (`--port`, `CAD_ENGINE_PORT`) comes first; where the port noted is taken,
+that server runs as one with no pages before, and its log says so. A port that
 request names (`cad viewer --port`) refuses that request alone, with the line: the engine runs
 on, unbound, for its other clients' builds and the next request that serves. Its own port held
 (`CAD_ENGINE_PORT` in the environment it started in) fails that request with the line, and the

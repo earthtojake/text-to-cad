@@ -7,6 +7,7 @@ started as ``cad server start`` starts one, with the environment the test gives 
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import shutil
@@ -15,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import types
 import unittest
 from pathlib import Path
 from typing import Any
@@ -334,10 +336,41 @@ class EnginePortTest(unittest.TestCase):
         self.assertTrue(said.startswith(f"cad: the engine serves on port {port} and keeps it for its links: "
                                         f"{default} is in use by "), said)
         if os.name != "nt":  # the system names the holder by its command line
-            self.assertIn("another cad-server (", said)
+            self.assertIn("another cad server (", said)
             self.assertIn(f"pid {theirs.pid})", said)
         self.assertIsNone(theirs.poll(), "never asked to stop: it runs on")
         self.assertTrue(listening(default))
+
+    def test_a_server_that_replaces_one_serving_pages_serves_them_there_by_itself(self) -> None:
+        """cad's own update and the bridge's move stop the server (``cad server stop``) and start the next (``cad
+        server start``), a failed update's release put back alike: the page open before answers on its port, with its
+        token, from the next server, which nothing asked for a page. One that served none is followed by one that
+        serves none until asked; the port taken meanwhile by another program, the next runs as one with none."""
+        self.assertEqual(self.cad("server", "start").returncode, 0)
+        self.stop()
+        self.assertEqual(self.cad("server", "start").returncode, 0)
+        self.assertFalse(listening(self.default), "no pages before: none bound")
+        first = self.launch()
+        before = json.loads(self.ask(first["port"], "/api/v1/server", Authorization=f"Bearer {first['token']}")[2])
+        self.stop()
+        self.assertFalse(listening(first["port"]))
+        begun = self.cad("server", "start")
+        self.assertEqual(begun.returncode, 0, begun.stderr)
+        status, _, body = self.ask(first["port"], "/api/v1/server", Authorization=f"Bearer {first['token']}")
+        self.assertEqual(status, 200, body)
+        self.assertNotEqual(json.loads(body)["instance"], before["instance"], "the next server's")
+        self.assertIn(f"serving http://127.0.0.1:{first['port']} (the default port)", self.cli("status").stdout)
+        self.assertFalse((self.root / "engine" / "engine.pages").exists(), "the note taken")
+        self.stop()
+        holder = socket.socket()  # the port taken by another program before the next server starts
+        self.addCleanup(holder.close)
+        holder.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        holder.bind(("127.0.0.1", first["port"]))
+        holder.listen(1)
+        begun = self.cad("server", "start")
+        self.assertEqual(begun.returncode, 0, begun.stderr)
+        self.assertNotIn("serving http", self.cli("status").stdout, "it runs as one with no pages before")
+        self.assertNotEqual(self.launch()["port"], first["port"], "and binds as any start does when asked")
 
     def test_a_named_port_wins_and_rotate_token_replaces_the_token(self) -> None:
         named = free_port()
@@ -486,6 +519,84 @@ class PortHolderTest(unittest.TestCase):
             said["netstat"] = None
             self.assertEqual(daemon.port_holder(3245), (None, None, None))
 
+
+
+class PagesNoteTest(unittest.TestCase):
+    """The pages' port carried from a server to the one that replaces it (``places.pages_path``), in process."""
+
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="pages-", dir="/tmp" if os.name != "nt" else None)).resolve()
+        self.addCleanup(shutil.rmtree, self.root, True)
+        patch = mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.root)})
+        patch.start()
+        self.addCleanup(patch.stop)
+        from cad.engine import places
+
+        self.note = places.pages_path()
+
+    def swept(self, answer: Any, ops: tuple[str, ...] = ("status", "stop")) -> None:
+        """``client.sweep(stop=True)`` of a server, of any release, whose ``status`` is ``answer``: what it was asked
+        (``ops``)."""
+        from cad.engine import client
+
+        connection = types.SimpleNamespace(close=lambda: None, release="0.11.10")
+        asked: list[dict] = []
+
+        def exchange(_connection, message, *args, **kwargs):
+            asked.append(message)
+            return answer if message["op"] == "status" else {"ok": True}
+
+        with mock.patch.object(client, "_answering", return_value=True), \
+                mock.patch.object(client, "_connect", return_value=connection), \
+                mock.patch.object(client, "_exchange", side_effect=exchange), \
+                mock.patch.object(client, "wait_gone", return_value=True), \
+                mock.patch.object(client, "_remove_dead", return_value=[]):
+            self.assertEqual(len(client.sweep(stop=True)["stopped"]), 1)
+        self.assertEqual(tuple(message["op"] for message in asked), ops, "asked before it is told to stop")
+        self.assertIs(asked[0].get("internal") or ops == ("stop",), True, "as no command")
+
+    def test_a_stop_notes_where_the_server_served_pages_and_the_next_server_takes_it(self) -> None:
+        from cad_server.engine import daemon
+
+        self.swept({"ok": True, "serving": {"url": "http://127.0.0.1:3247", "port": 3247}})
+        self.assertEqual(json.loads(self.note.read_text(encoding="utf-8")), {"port": 3247})
+        self.assertEqual(daemon.resumed(), 3247)
+        self.assertFalse(self.note.exists(), "taken by the server that starts")
+        self.assertIsNone(daemon.resumed())
+
+    def test_a_server_serving_no_pages_or_saying_nothing_leaves_no_note(self) -> None:
+        from cad.engine import client
+        from cad_server.engine import daemon
+
+        for answer in ({"ok": True, "serving": None}, {"failed": "unknown request 'status'"}, None,
+                       {"ok": True, "serving": {"port": True}}):
+            with self.subTest(answer=answer):
+                self.swept(answer)
+                self.assertFalse(self.note.exists())
+        with mock.patch.object(client, "_within", side_effect=client.Unanswered("not within 5 s")):
+            self.swept(None, ("stop",))  # a server too busy to say: stopped all the same
+        self.assertFalse(self.note.exists())
+        for kept in ("not json", '{"port": 70000}', '["port"]'):
+            self.note.write_text(kept, encoding="utf-8")
+            self.assertIsNone(daemon.resumed())
+            self.assertFalse(self.note.exists(), "removed all the same")
+
+    def test_a_port_another_program_took_leaves_the_server_unbound_and_its_log_says_why(self) -> None:
+        from cad_server.engine import daemon
+
+        held = daemon.PortHeld("port 3247 is held by another process: stop it, or pass another --port", "another")
+        engine = types.SimpleNamespace(serve=mock.Mock(side_effect=held), port_source="")
+        err = io.StringIO()
+        with mock.patch.object(sys, "stderr", err):
+            self.assertFalse(daemon.Daemon.resume(engine, 3247))
+        engine.serve.assert_called_once_with({"port": 3247})
+        self.assertEqual(err.getvalue(), "cad: pages were on port 3247 before this server started, and are not served "
+                                         "there again: port 3247 is held by another process: stop it, or pass another "
+                                         "--port\n")
+        self.assertEqual(engine.port_source, "")
+        engine.serve = mock.Mock(return_value=object())
+        self.assertTrue(daemon.Daemon.resume(engine, 3247))
+        self.assertEqual(engine.port_source, "handed")
 
 
 class MirroredPortFileTest(unittest.TestCase):

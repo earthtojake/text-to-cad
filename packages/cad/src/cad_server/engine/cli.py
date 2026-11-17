@@ -869,7 +869,7 @@ def _port(serving: dict[str, Any]) -> str:
     if source == "rolled":
         return f" (rolled from {default} because {serving.get('portBecause') or 'another process'} holds it)"
     return " (" + {"--port": "the port --port named", "CAD_ENGINE_PORT": "the port CAD_ENGINE_PORT names",
-                   "handed": "the port pages were on before the update"}.get(source, f"not the default {default}") + ")"
+                   "handed": "the port pages were on before this server started"}.get(source, f"not the default {default}") + ")"
 
 
 def cache_text(root: Any, documents: Any, size: Any) -> str:
@@ -904,10 +904,10 @@ def status_text(answer: dict[str, Any]) -> str:
     resident = answer.get("rssMb")
     memory = (f"RSS {_gb(resident)} of {_gb(cap)}" if resident is not None else f"RSS cap {_gb(cap)}") if cap \
         else "no RSS cap"
-    from cad_server._internal.launch import SERVER
+    from cad_server._internal.launch import COMMAND
 
     version = answer.get("installation") or answer.get("version")  # the installation's: two are told apart
-    lines = [" · ".join([f"engine server {answer.get('pid')}" + (f" ({SERVER} {version})" if version else "")
+    lines = [" · ".join([f"engine server {answer.get('pid')}" + (f" ({COMMAND} {version})" if version else "")
                          + f", up {_span(answer.get('up'))}", workers_text(answer),
                          *([f"held by {answer['holders']} app server{'' if answer['holders'] == 1 else 's'}"]
                            if answer.get("holders") else []),

@@ -1,4 +1,4 @@
-"""Where cadgen's things are on this computer, and how a process of the engine's is started.
+"""Where cad's things are on this computer, and how a process of the engine's is started.
 
 Every process reads this: a model's script and its worker, in the CAD kernel environment where only the
 library is installed; the engine's server; each client of it. So each finds the same folders, the same
@@ -9,7 +9,7 @@ engine and the same installation by the same rules, from the standard library al
   bytes, the bytecode the engine's processes compile, the kernel environment). One of each a user, whatever
   release of cad runs: the layout of 0.11.10 and earlier, kept as it was.
 - **The engine folder** (``engine_dir``): the device's one engine's door (a named pipe; on Windows a
-  port file), lock and failure note, in a folder only this user can write (``folder_refusal``), each named
+  port file), lock, failure note and pages note, in a folder only this user can write (``folder_refusal``), each named
   ``engine`` (``NAME``) whatever release runs it.
 - **The installation** a process belongs to: the version it runs as (``installation``), the base's
   marker naming the installation of a process that runs in the base (``HOME``), and the current one the
@@ -383,6 +383,13 @@ def failure_path() -> Path:
     ``denied`` when the system refused it (a sandbox that forbids a local port). Its stderr goes
     nowhere, so this is what the client that started it reads when it exits at once."""
     return engine_dir() / f"{NAME}.failed"
+
+
+def pages_path() -> Path:
+    """The port the last server stopped here served pages on, as JSON (``{"port": N}``): noted by the client that
+    stopped it (``client.sweep``), taken by the next server as it starts, which serves pages there at once
+    (``daemon.resumed``), so a page open in a browser reconnects to the server that replaced its own."""
+    return engine_dir() / f"{NAME}.pages"
 
 
 @dataclass(frozen=True)

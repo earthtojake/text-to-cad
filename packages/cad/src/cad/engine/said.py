@@ -17,9 +17,9 @@ from typing import Any
 __all__ = ["COMMAND", "SERVER", "describe", "files", "given", "log", "number", "reported", "robot", "shown", "size",
            "weighed", "written"]
 
-# The server's distribution and its command, as every line of the library names them: one place to
-# rename either (the server names them in its own, ``cad_server._internal.launch``).
-SERVER, COMMAND = "cad-server", "cad"
+# The server and the command, as every line of the library names them: one place to rename either. Both are cad's,
+# one package (the server names its command in its own, ``cad_server._internal.launch``).
+SERVER, COMMAND = "the cad server", "cad"
 
 
 def log(text: str) -> None:

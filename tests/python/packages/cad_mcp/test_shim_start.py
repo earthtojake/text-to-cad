@@ -146,10 +146,12 @@ class StoppingTest(unittest.TestCase):
 
         endpoint = client.places.Endpoint(client.places.address(), client.places.lock_path())
         closing = client.Connection(io.BytesIO(b""), io.BytesIO())  # takes the stop, then its end of file: no answer
+        # Asked first where it serves pages (``_note_pages``), it says nothing either: nothing is noted, and it stops.
+        silent = client.Connection(io.BytesIO(b""), io.BytesIO())
         older = types.SimpleNamespace(release="0.0.1", close=lambda: None)
         with mock.patch.object(client.places, "endpoints", return_value=[endpoint]), \
                 mock.patch.object(client, "_answering", return_value=True), \
-                mock.patch.object(client, "_connect", side_effect=[older, closing]), \
+                mock.patch.object(client, "_connect", side_effect=[older, silent, closing]), \
                 mock.patch.object(client, "wait_gone", return_value=True) as waited, \
                 mock.patch.object(client, "_remove_dead", return_value=[]), \
                 mock.patch.object(client, "_sandboxed", return_value=False):

@@ -215,7 +215,7 @@ class StatusTextTest(unittest.TestCase):
         text = status_text({"pid": 1, "up": 5, "cap": 4, "workers": [], "models": [],
                             "serving": {"url": "http://127.0.0.1:3246", "port": 3246, "defaultPort": 3245,
                                         "portSource": "handed", "also": [3300], "documents": []}})
-        self.assertIn("serving http://127.0.0.1:3246 (the port pages were on before the update), and on port 3300 too: "
+        self.assertIn("serving http://127.0.0.1:3246 (the port pages were on before this server started), and on port 3300 too: "
                       "0 documents opened by a page or a command", text.splitlines())
 
     def test_a_shape_handed_over_is_worded_as_one_with_no_script_to_rerun(self) -> None:

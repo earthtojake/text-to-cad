@@ -37,8 +37,10 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     add_yes(parser, "with --rotate-token, replace the token")
     commands = parser.add_subparsers(dest="command", metavar="{" + ",".join(COMMANDS) + "}")
     start = commands.add_parser("start", help="start the cad server where it is not running",
-                                description="Start the cad server, detached, where it is not running: one of another "
-                                            "release is stopped first, its work cut short.")
+                                description="Start the cad server, detached, where it is not running: one of an "
+                                            "older release is replaced (stopped first, its work cut short), and one "
+                                            "of a newer release is joined, left running. Pages open on the server "
+                                            "replaced are served on the same port by the one that starts.")
     _port(start, "the HTTP port the server takes, refused when another process holds it (else CAD_ENGINE_PORT, else "
                  "3245 or the port it rolled to); 0 takes any free port")
     start.add_argument("--foreground", action="store_true",

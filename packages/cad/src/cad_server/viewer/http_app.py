@@ -155,7 +155,7 @@ def _update_identity_digest(digest, base_dir, *, suffix: str = "") -> None:
 
 
 # What a page's address answers where no client is built (``_serve_dist``): the sentence ``cad viewer`` says.
-NOT_BUILT = "CAD Viewer client is not built; build apps/web or install the cad-server wheel"
+NOT_BUILT = "CAD Viewer client is not built; build apps/web or install the cad wheel"
 
 
 def identity_token(dist_dir: str) -> str:
@@ -565,10 +565,10 @@ class CadApp:
 
             code = cad_app_code()
             if code is None:
-                from cad_server._internal.launch import launch_command
+                from cad_server._internal.launch import reinstall_command
 
                 send_json(response, 404, {"error": "this install has no CAD app build",
-                                          "hint": f"install this version again: `{launch_command('cad setup')}`"})
+                                          "hint": f"install this version again: `{reinstall_command()}`"})
             else:
                 response.send_bytes(200, code, "text/javascript; charset=utf-8")
             return

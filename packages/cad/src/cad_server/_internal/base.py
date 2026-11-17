@@ -729,9 +729,9 @@ def _cannot(what: str, error: OSError, environment: str = WHAT) -> str:
     """That ``what`` (a file or folder of ``environment``) cannot be written, in one line: a denial as a
     sandbox's, which this once outside it, or with its permission, makes."""
     if isinstance(error, PermissionError):
-        from cad_server._internal.launch import SERVER
+        from cad_server._internal.launch import COMMAND
 
-        return (f"the system denies {SERVER} {what} ({error.strerror or error}); a sandbox that forbids it does: "
+        return (f"the system denies {COMMAND} {what} ({error.strerror or error}); a sandbox that forbids it does: "
                 "run this once outside it, or with its permission")
     return f"cannot write {what}: {error.strerror or error}"
 

@@ -99,7 +99,7 @@ from cad.engine.door import DOOR_PROTOCOL
 from cad.engine.frames import failed_type
 from cad.engine.ids import canonical, is_id
 from cad.engine.places import (NAME, WINDOWS, bytecode, door_path, engine_dir, engine_root, failure_path, installation,
-                               lock, lock_path, names, port_path)
+                               lock, lock_path, names, pages_path, port_path)
 from cad_server.engine import display
 from cad_server.engine.services import SERVICES
 from cad_server.engine.supervisor import Gone, Process, Supervisor
@@ -409,14 +409,14 @@ def _holder(port: int, source: str) -> PortHeld:
 
 
 def _who(port: int) -> str:
-    """Who holds ``port``, in words, as the system names it (``port_holder``): another cad-server by its
-    command line (``_CADGEN``), else its name and pid, else another process."""
-    from cad_server._internal.launch import SERVER
+    """Who holds ``port``, in words, as the system names it (``port_holder``): another cad server, of any release, by
+    its command line (``_CADGEN``), else its name and pid, else another process."""
+    from cad_server._internal.launch import COMMAND
 
     pid, name, command = port_holder(port)
     if pid is None:
         return "another process"
-    return f"another {SERVER} ({name}, pid {pid})" if _CADGEN.search(command or "") else f"{name or 'a process'} (pid {pid})"
+    return f"another {COMMAND} server ({name}, pid {pid})" if _CADGEN.search(command or "") else f"{name or 'a process'} (pid {pid})"
 
 
 # A command line that runs a server's engine or viewer, this release's or an earlier one's: ``-m cad_server.…``
@@ -1014,6 +1014,20 @@ class Daemon:
         if started:
             self.models.attach(server)  # the documents taken up from the cache before it ran: registered with it
         return server
+
+    def resume(self, port: int) -> bool:
+        """Pages served at once on ``port``, where the server this one replaced served them (``resumed``), with the
+        user's page token, so a page open in a browser reconnects by itself. Where ``port`` cannot be taken (another
+        process took it), nothing is bound -- the engine binds on the first request that serves, as any start does --
+        and its log says why. Whether it was."""
+        try:
+            self.serve({"port": port})
+        except Exception as error:  # noqa: BLE001 - a start never fails for it: it runs as one with no pages before
+            print(f"cad: pages were on port {port} before this server started, and are not served there again: {error}",
+                  file=sys.stderr, flush=True)
+            return False
+        self.port_source = "handed"
+        return True
 
     def _take_port(self, port: int) -> None:
         """Under ``serving``, the server serving pages on another port already: ``port`` taken too, a second listener
@@ -2162,13 +2176,30 @@ def _identity(path: Path) -> tuple[int, int] | None:
     return found.st_dev, found.st_ino
 
 
+def resumed() -> int | None:
+    """The port the server before this one served pages on, as the client that stopped it noted it
+    (``places.pages_path``, ``client.sweep``): read and removed by the daemon that holds the lock now. None where none
+    was noted."""
+    path = pages_path()
+    try:
+        port = json.loads(path.read_text(encoding="utf-8")).get("port")
+    except (OSError, ValueError, AttributeError):
+        port = None
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+    return port if type(port) is int and 0 < port < 65536 else None
+
+
 def main(argv: list[str] | None = None, *, port: int | None = None, foreground: bool = False,
          rotated: bool = False) -> int:
     """Run the engine here. ``port``: the HTTP port it must take (``cad server start --port``, which hands a server
     it starts ``--port N`` in ``argv``); ``foreground`` (``cad server start --foreground``): its HTTP server bound
     before anything else, so a port another process holds fails the command at once (``bind``). One started
-    detached binds on the first request that serves, which may name its own port (``cad viewer --port``). The
-    release it starts as is recorded (``started``)."""
+    detached binds on the first request that serves, which may name its own port (``cad viewer --port``) -- but where
+    the server it replaced served pages (``resumed``), it serves them there at once, as one in the foreground does,
+    unless a port is named (``Daemon.resume``). The release it starts as is recorded (``started``)."""
     from cad.engine.serve import Pressure
 
     if argv:
@@ -2227,7 +2258,13 @@ def main(argv: list[str] | None = None, *, port: int | None = None, foreground: 
         daemon.identity = {"filled": 0, "moved": 0, "skipped": [f"the pass failed: {type(error).__name__}: {error}"]}
         print(f"cad: identity migration failed: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
     daemon.stand()
-    if foreground:
+    pages = resumed()  # taken whatever this start does with it: the next start's is the next stop's
+    try:  # a port named comes first (``--port``, else ``CAD_ENGINE_PORT``): the pages' port where it is that one
+        named = port if port is not None else environment_port()
+    except ValueError:
+        named = -1  # a CAD_ENGINE_PORT that names no port: refused as it binds, as before
+    served = pages is not None and named in (None, pages) and daemon.resume(pages)
+    if foreground and not served:
         try:
             daemon.serve({})
         except ValueError as error:  # a port held (``PortHeld``, noted by ``serve``) or refused

@@ -27,8 +27,8 @@ each version's server is reached by its own version's processes alone, and by th
 release number. Equal contracts of different releases build, and the
 script then says once which package to update for the other's fixes (``notice``). The library's side is
 the cad package in the caller's environment, and no installer is named: the person or the agent has
-their own way. The server's side is ``cad-server``, installed on the computer as a version of its own:
-installing it into a project's environment neither registers nor moves the device's server.
+their own way. The server's side is the computer's cad, whose server it is (the uv tool ``cad``): installing cad
+into a project's environment neither replaces nor moves the computer's.
 """
 
 from __future__ import annotations
@@ -103,9 +103,9 @@ def refusal(named: Any, *, ours: dict[str, Any] | None = None, server: str | Non
     """The one line the server refuses an order with when the contract its caller names
     (``interpreter``'s) is not the server's own (``ours``, by default this library's, of the release
     ``server``): which package to update, and to what release -- the cad package in the caller's
-    environment to the server's release, never naming an installer; or ``cad-server`` to the caller's,
-    installed as a version of its own (installing it in a project's environment neither registers nor moves the
-    device's server); no installer named. None when they speak one contract, whatever their releases."""
+    environment to the server's release, never naming an installer; or the computer's cad, which runs the server, to
+    the caller's (installing cad in a project's environment neither replaces nor moves the computer's); no installer
+    named. None when they speak one contract, whatever their releases."""
     ours = CONTRACT if ours is None else ours
     server = release() if server is None else server
     named = named if isinstance(named, dict) else {}
@@ -142,16 +142,15 @@ def notice(server: Any, here: str | None = None) -> str | None:
 
 
 def _library_to(release: str) -> str:
-    """The library's side updated: the cad package, said so, so no one reads it as the server's
-    ``cad setup``, which installs the server and leaves the library behind; no installer named."""
+    """The library's side updated: the cad package in this environment, said so, so no one reads it as the
+    computer's cad, which runs the server and leaves this environment's library behind; no installer named."""
     return f"update the cad package in this environment to {release}"
 
 
 def _server_to(release: str) -> str:
-    """The server's side updated: ``cad-server`` at ``release``, installed on the computer as a version of its own
-    (installing it into a project's environment neither registers nor moves the device's server); no installer
-    named."""
-    return f"update {SERVER} to {release}"
+    """The server's side updated: the computer's cad, which runs the server, at ``release`` (installing cad into a
+    project's environment neither replaces nor moves the computer's); no installer named."""
+    return f"update this computer's {COMMAND}, which runs the server, to {release}"
 
 
 # A release as PEP 440 spells one (its normal forms and their spellings): an epoch, the release, a

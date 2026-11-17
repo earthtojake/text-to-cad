@@ -54,16 +54,17 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "requirement": ("cad_server.cli.requirement", "print the exact cad requirement for a Python of a program's own"),
     "doctor": ("cad_server.cli.doctor", "report this cad, its folders, its kernel and the server; it changes nothing"),
     "cache": ("cad_server.cli.cache", "cad's cache: dir, prune (what this release cannot use), clean (all of it)"),
-    # This version installed on this computer, and the cad command with it.
-    "setup": ("cad_server.cli.setup", "install this version of cad on this computer"),
+    # BRIDGE-ONLY, never listed: what the updaters of 0.10.0 to 0.11.10 run of the release they bring
+    # (``cad_server.cli.setup``).
+    "setup": ("cad_server.cli.setup", "the bridge from releases 0.10.0 to 0.11.10"),
     # A page of the running server's; the launcher exits.
     "viewer": ("cad_server.cli.viewer", "open a viewer page on the running cad server"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
     "auto-update": ("cad_server.cli.auto_update", "show or change whether cad updates itself: status, on, off"),
 }
-# Only for the skill text of releases 0.10.0 to 0.11.10 (`cad status`, `cad stop`): run, never listed, and gone with
-# the bridge.
-_UNLISTED = frozenset({"status", "stop"})
+# Only for releases 0.10.0 to 0.11.10 -- their skill text (`cad status`, `cad stop`) and their updaters (`cad setup`):
+# run, never listed, and gone with the bridge.
+_UNLISTED = frozenset({"status", "stop", "setup"})
 
 # Each document type's command, by its id: ``cad <type> <operation>`` (``cad_server.cli.document_types``).
 TYPE_COMMANDS: dict[str, str] = {document_type: f"cad_server.cli.{document_type}" for document_type in DOCUMENT_TYPES}

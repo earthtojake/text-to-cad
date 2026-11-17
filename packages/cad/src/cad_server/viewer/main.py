@@ -96,7 +96,7 @@ def main(argv=None, *, prog=DEFAULT_PROG):
         options['dist'] = resolve_dist_dir(options['dist'])
         if not options['dist']:
             return _failed(options, prog, ValueError('CAD Viewer client is not built; build apps/web or install the '
-                                                     'cad-server wheel'))
+                                                     'cad wheel'))
     from cad_server._internal.cli_errors import REASONS, Failure
 
     try:

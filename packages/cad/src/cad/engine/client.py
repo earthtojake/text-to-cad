@@ -474,18 +474,51 @@ def _notice(notice: str | None) -> None:
     sys.stderr.flush()
 
 
+def _note_pages(address: Path) -> None:
+    """Where the server at ``address`` serves pages, noted before it is told to stop (``places.pages_path``), for the
+    server that comes next to serve them there at once (``daemon.resumed``): a page open in a browser then reconnects
+    by itself, whichever way its server was replaced -- cad's own update and the bridge's move (``cad server stop``,
+    then ``cad server start``), a start that replaces an older server (``make_way``). Asked as no command
+    (``internal``), of a server of any release (0.11.10's ``status`` says it too), ``PAGES_SECONDS`` at most; nothing
+    noted where it serves no pages or does not say, and nothing here ever fails the stop."""
+    try:
+        connection = _connect(address)
+        if connection is None:
+            return
+        answer = _within(PAGES_SECONDS, lambda: _exchange(connection, {"op": "status", "internal": True},
+                                                          address=address))
+        serving = answer.get("serving") if isinstance(answer, dict) else None
+        port = serving.get("port") if isinstance(serving, dict) else None
+        if type(port) is not int or not 0 < port < 65536:
+            return
+        from cad.engine.atomic_replace import replace_atomic
+
+        path = places.pages_path()
+        temporary = path.with_suffix(".pages-tmp")
+        temporary.write_text(json.dumps({"port": port}), encoding="utf-8")
+        replace_atomic(temporary, path)
+    except (ConnectionError, OSError, ValueError):
+        pass
+
+
+# How long a stop waits to hear where the server serves pages (``_note_pages``).
+PAGES_SECONDS = 5.0
+
+
 def sweep(*, stop: bool, seconds: float = 60.0) -> dict[str, list[str]]:
     """The engine of this engine folder (``places.endpoints``): with ``stop``, stopped if it lives and
-    waited for until gone, ``seconds`` at most (``stopped``, its door or port file); a live one left running
-    listed in ``running``. The door and lock files of a dead one -- nothing answers there and nobody holds its
-    lock -- are removed (``removed``). A daemon starting or stopping holds its lock before it listens
-    and until it has left, so its files are never taken."""
+    waited for until gone, ``seconds`` at most (``stopped``, its door or port file), the port it served pages on
+    noted first for the next server (``_note_pages``); a live one left running listed in ``running``. The door and
+    lock files of a dead one -- nothing answers there and nobody holds its lock -- are removed (``removed``). A
+    daemon starting or stopping holds its lock before it listens and until it has left, so its files are never
+    taken."""
     found: dict[str, list[str]] = {"stopped": [], "running": [], "removed": []}
     for endpoint in places.endpoints():
         if _answering(endpoint.address):
             if not stop:
                 found["running"].append(str(endpoint.address))
                 continue
+            _note_pages(endpoint.address)
             connection = _connect(endpoint.address)
             if connection is None:
                 continue  # it went meanwhile: gone, as asked
