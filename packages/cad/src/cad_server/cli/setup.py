@@ -113,11 +113,17 @@ def _ended(name: str, route: str, came: str | None, failed: bool, *, first: bool
 
 
 def setup() -> int:
-    """Plain ``cad setup``: the install command in install mode, its output this command's (see the module)."""
+    """Plain ``cad setup``: the install command in install mode, its output this command's (see the module). Where an
+    install command cad started runs it (``install_script.BY_CAD_ENV``), that command is an earlier release's script,
+    which would run this again, and so on: nothing runs, a failure."""
     from cad_server._internal import arrival, install_script
 
     name = _name()
     came = arrival.came_from(name)
+    if os.environ.get(install_script.BY_CAD_ENV) == "1":
+        _say("the install command online is not yet this release's, so nothing was installed: run the install command "
+             "again in a few minutes")
+        return _ended(name, arrival.SETUP, came, True)
     if not ours():
         from cad_server._internal import installations
 
@@ -229,7 +235,7 @@ def _serve(name: str) -> None:
     saved = dict(os.environ)
     try:
         served = {key: value for key, value in install_script.environment(update=False, report=None).items()
-                  if key != "UV_NO_MODIFY_PATH"}
+                  if key not in ("UV_NO_MODIFY_PATH", install_script.BY_CAD_ENV)}
         os.environ.clear()
         os.environ.update(served)
         client.start()

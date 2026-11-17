@@ -8,12 +8,13 @@ name: Publish Release
 # ships untested.
 #
 # The publish job builds what ships from that commit -- the plugin ZIP, the runtime bundle, and
-# the wheel and sdist of each of the release's four projects on PyPI (the library `cad`, the
-# server `cad-server`, the shim `cad-mcp`, and the alias `cadgen`) --
-# and installs and exercises the three wheels together. The pypi job alone uploads them, in the
-# `release` environment, which deploys from main only and is the one each project's trusted publisher
-# names: one project at a time, the library first, each listed by PyPI's index before the next goes
-# (the server and the alias pin the library at their own release). Only then does anything that
+# the wheel and sdist of each of the release's four projects on PyPI (the one distribution `cad`, and
+# `cad-server`, `cad-mcp` and `cadgen`, empty aliases that each require `cad` at the same release) --
+# and installs and exercises the wheels of `cad`, `cad-server` and `cad-mcp` together. The pypi job
+# alone uploads them, in the `release` environment, which deploys from main only and is the one each
+# project's trusted publisher names: one project at a time, `cad` first, each listed by PyPI's index
+# before the next goes
+# (each alias requires `cad` at its own release). Only then does anything that
 # installers follow name it: the
 # `latest` branch, claude.ai's `claude-plugin` and Codex's `codex-plugin` get the plugin alone
 # (scripts/release/plugin_branch.py); after them, the docs deploy moves the site's header

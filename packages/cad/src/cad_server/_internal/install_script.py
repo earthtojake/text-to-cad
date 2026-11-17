@@ -41,6 +41,10 @@ attempt's: ``running`` while it runs), ``installed`` (true once an attempt's rep
 ``ended``; times are the wall clock's, in seconds. Each attempt's end, and the end of an install mode's run, is one
 line in the server's log; install mode's are counted too (``analytics.arrival``, as the bridge's other steps are).
 
+Every install command cad starts carries ``CAD_INSTALL_BY_CAD=1`` (``environment``), so a ``cad setup`` it reaches runs
+nothing (``cad_server.cli.setup``): the hosted command of 0.10.0 to 0.11.10 runs one, and is served until the site is
+redeployed.
+
 ``CAD_ENGINE_UPDATE_INSTALLER`` names a command to run instead of the hosted one (a test's stand-in), and empty, none:
 nothing is attempted. ``CAD_ENGINE_UPDATE_FIRST_SECONDS`` sets install mode's wait (a test's computers).
 """
@@ -65,6 +69,8 @@ INSTALLER_WINDOWS = ("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "
 # What the command reads: where to write its report, and that it runs in update mode.
 REPORT_ENV = "CAD_INSTALL_REPORT"
 UPDATE_ENV = "CAD_INSTALL_UPDATE"
+# The mark of a command cad started (``environment``): a ``cad setup`` it reaches runs nothing (BRIDGE-ONLY).
+BY_CAD_ENV = "CAD_INSTALL_BY_CAD"
 
 RECORD = "handover.json"
 REPORT = "install-report.json"
@@ -216,8 +222,8 @@ def installer() -> list[str] | str:
 def environment(*, update: bool, report: Path | None) -> dict[str, str]:
     """The environment the command runs in: this process's, without its import path, the version it was told it runs
     as and a ``cad run``'s marks, with the person's own PATH (none of an environment that comes and goes,
-    ``installations.lasting``), uv's installer told to leave shell profiles alone, and the report's file and the mode
-    named."""
+    ``installations.lasting``), uv's installer told to leave shell profiles alone, cad's mark (``BY_CAD_ENV``), and the
+    report's file and the mode named."""
     from cad.engine.places import INSTALLATION_ENV, RUN_WITH
     from cad_server._internal.installations import lasting
 
@@ -225,6 +231,7 @@ def environment(*, update: bool, report: Path | None) -> dict[str, str]:
     found = {key: value for key, value in os.environ.items() if key not in dropped}
     found["PATH"] = lasting(os.environ.get("PATH", os.defpath))
     found["UV_NO_MODIFY_PATH"] = "1"
+    found[BY_CAD_ENV] = "1"
     if report is not None:
         found[REPORT_ENV] = str(report)
     if update:

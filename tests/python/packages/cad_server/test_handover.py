@@ -296,6 +296,8 @@ class Defaults(unittest.TestCase):
             self.assertNotIn("PYTHONPATH", found)
             self.assertNotIn(install_script.UPDATE_ENV, found, "install mode: never inherited")
             self.assertEqual(install_script.environment(update=True, report=None)[install_script.UPDATE_ENV], "1")
+            for update in (False, True):  # a `cad setup` the command reaches runs nothing (``cad_server.cli.setup``)
+                self.assertEqual(install_script.environment(update=update, report=None)[install_script.BY_CAD_ENV], "1")
 
 
 class Counted(State):

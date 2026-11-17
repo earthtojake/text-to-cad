@@ -16,6 +16,7 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -28,6 +29,8 @@ from cad_server.cli import setup
 from cad_server.engine.registry import Folder
 
 OLD, Y = "0.11.10", "0.12.1"
+REFUSED = ("the install command online is not yet this release's, so nothing was installed: run the install command "
+           "again in a few minutes")
 
 
 class Computer(unittest.TestCase):
@@ -115,6 +118,37 @@ class Plain(Computer):
                 self.assertEqual(self.main([])[0], code)
                 self.assertEqual(noted.read_text(encoding="utf-8"), "None", "install mode")
         self.assertEqual([call.args[3] for call in self.ended.call_args_list], ["ok", "failed"])
+
+    def test_run_by_an_install_command_cad_started_it_runs_nothing(self) -> None:
+        # That command is an earlier release's script (the site not yet redeployed), which runs `cad setup` again.
+        ran = self.root / "ran"
+        with mock.patch.dict(os.environ, {install_script.BY_CAD_ENV: "1", install_script.INSTALLER_ENV:
+                                          f'"{sys.executable}" -c "open(r\'{ran}\', \'w\')"'}):
+            self.assertEqual(self.main([]), (1, "", f"cad: {REFUSED}\n"))
+        self.assertFalse(ran.exists(), "the install command never ran")
+        self.ended.assert_called_once_with(Y, "setup", None, "failed", "other", first=False)
+
+    def test_an_earlier_release_s_script_that_runs_cad_setup_again_ends_after_one_refusal(self) -> None:
+        # The way the hosted script of 0.10.0 to 0.11.10 ends: `cad setup` of the feed's newest, this release. The
+        # stand-in stops itself on its fourth run, so a loop fails here rather than hangs.
+        runs, stand_in = self.root / "runs", self.root / "old-install.py"
+        stand_in.write_text(
+            "import os, subprocess, sys\n"
+            "with open(sys.argv[1], 'a', encoding='utf-8') as runs:\n"
+            "    runs.write('ran\\n')\n"
+            "if len(open(sys.argv[1], encoding='utf-8').read().split()) > 3:\n"
+            "    sys.exit(2)\n"
+            "sys.exit(subprocess.call([sys.executable, '-m', 'cad_server.cli', 'setup'], stdin=subprocess.DEVNULL,\n"
+            "                         env={**os.environ, 'PYTHONPATH': sys.argv[2]}))\n", encoding="utf-8")
+        source = str(Path(setup.__file__).resolve().parents[2])
+        env = {**os.environ, "CAD_ENGINE_DIR": str(self.root / "engine"), "CAD_CACHE_DIR": str(self.root / "cache"),
+               "CAD_TELEMETRY": "0", "DO_NOT_TRACK": "1", "CAD_API_URL": "http://127.0.0.1:9", "PYTHONPATH": source,
+               install_script.INSTALLER_ENV: f'"{sys.executable}" "{stand_in}" "{runs}" "{source}"'}
+        done = subprocess.run([sys.executable, "-m", "cad_server.cli", "setup"], env=env, stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertEqual(runs.read_text(encoding="utf-8"), "ran\n", "the earlier script ran once")
+        self.assertEqual(done.stderr.count(REFUSED), 1, done.stderr)
 
 
 class StoreOnly(Computer):
@@ -216,7 +250,8 @@ class Serving(Computer):
 
     def test_the_server_gets_this_process_s_environment_less_the_run_s_own_and_it_is_put_back(self) -> None:
         kept = {"CAD_ENGINE_DIR": str(self.root / "engine"), "CAD_BRIDGE_MARK": "kept"}
-        dropped = {"PYTHONPATH": str(self.root / "src"), setup.PREPARE_ENV: "1", "UV_NO_MODIFY_PATH": "1"}
+        dropped = {"PYTHONPATH": str(self.root / "src"), setup.PREPARE_ENV: "1", "UV_NO_MODIFY_PATH": "1",
+                   install_script.BY_CAD_ENV: "1"}
         with mock.patch.dict(os.environ, {**kept, **dropped}):
             before = dict(os.environ)
             for failing in (False, True):
