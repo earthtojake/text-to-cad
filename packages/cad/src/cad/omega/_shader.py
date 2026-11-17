@@ -1,7 +1,7 @@
 """A GSL model's field as the page draws it: the shader library omega's ``gsl`` writes of it, as the CAD Viewer's
 ``field`` route answers (``cad_server.viewer.fields``).
 
-A field is shown by marching it, with no mesh. ``gsl eval``'s ``shader`` (omega-core after 0.1.2) writes what a
+A field is shown by marching it, with no mesh. ``gsl eval``'s ``shader`` (omega-core 0.1.2 or later) writes what a
 page needs for that, in GLSL ES 3.00 for WebGL2: a library with no entry point that defines ``gsl_field(p)`` and
 ``gsl_march(...)`` (the first surface along a ray, as omega's own viewer marches), one uniform block carrying
 time and the model's sliders, each with the byte it sits at, and the textures the field reads, as raw texels
@@ -56,7 +56,7 @@ def payload(model: Path, out_dir: Path) -> dict[str, Any]:
         said = str(error)
         if 'op "shader"' in said and "one of" in said:
             raise ShaderRefused(f"this gsl's eval has no shader ({gsl}), so the field cannot be drawn: set CAD_GSL "
-                                "to the gsl of an omega-core after 0.1.2") from None
+                                "to the gsl of omega-core 0.1.2 or later") from None
         raise ShaderRefused(said) from None
     textures = []
     for texture in answer.get("textures") or ():
