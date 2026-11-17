@@ -12,15 +12,22 @@ On Windows, in PowerShell:
 irm https://www.texttocad.dev/install.ps1 | iex
 ```
 
-It installs [uv](https://docs.astral.sh/uv/) if it is missing (or updates it, where it is older
-than 0.9.0), installs the newest release of text-to-cad and the `cad` command, then installs the
-plugin in each agent app it finds, with that app's own command (below), all but Kimi Code, which
-you install by hand. It prints one line per app. Run it again to update. It takes no options.
-It also starts cad's server, which later sessions use.
+It does five things, and nothing else:
 
-Once the new copy is in an app, it removes what earlier releases of text-to-cad left there, and
-nothing else: a skill counts as ours only where its `SKILL.md` says it comes from text-to-cad's
-repository, so a skill of yours with the same name is left as it is.
+1. Installs [uv](https://docs.astral.sh/uv/) if it is missing. Where uv is older than 0.9.0, it updates
+   it, or says how.
+2. Installs `cad`, the command text-to-cad runs on, as a uv tool, at the newest release.
+3. Installs the plugin in each agent app it finds, with that app's own command (below), all but Kimi
+   Code, which you install by hand. It prints one line per app.
+4. Removes what earlier releases of text-to-cad left in those apps.
+5. Turns on automatic updates ([Updating](#updating)).
+
+It takes no options and does not start anything. Run it again at any time: it brings cad and the
+plugin up to date, and never installs an older cad than the one you have.
+
+It removes only what is ours: a skill counts as ours only where its `SKILL.md` says it comes from
+text-to-cad's repository, so a skill of yours with the same name is left as it is. A copy from a
+plugin store (Codex's or Claude's) is never touched.
 
 Your agent shows each model it makes in a viewer. In the Codex app that is a **CAD** tab beside the
 thread; every other app opens it in its own browser, or gives you a link to open in yours.
@@ -32,17 +39,23 @@ PowerShell 5.1 does not follow the redirect from `texttocad.dev`.
 
 ## Install by hand
 
-Install the plugin in each app with the commands under its name. Install it once per app: two
-copies show every skill twice. Restart the app afterwards.
-
-The plugin's skills run text-to-cad through the `cad` command. The first time a skill needs it and
-it is missing, the agent installs it with the line in the skill's setup, which needs uv:
+First install cad, which needs uv:
 
 ```bash
-uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.10 cad setup
+uv tool install --managed-python --python 3.14 cad
+```
+
+To have it update itself, as the install command sets up, run:
+
+```bash
+cad auto-update on
 ```
 
 The runtime supports Python 3.13+; the commands use uv-managed Python 3.14.
+
+Then install the plugin in each app with the commands under its name. Install it once per app: two
+copies show every skill twice. Restart the app afterwards. The plugin's skills run text-to-cad
+through the `cad` command; when it is missing, the skill tells your agent how to install it.
 
 The commands take the `latest` branch: the plugin alone, moved to each release once it is on PyPI.
 Devin CLI, Antigravity and Factory Droid cannot name a branch here and install `main`, where
@@ -284,16 +297,69 @@ Zed and GitHub Copilot in VS Code are not supported yet. No route for your agent
 
 ## Updating
 
-Run the install command again: it installs the newest release and updates the plugin in every app
-it finds. To update one app, run the update command under its name. A copy from a plugin directory
-is updated by that directory.
+### Automatic updates
 
-text-to-cad does not update itself. When a newer release is out, `cad` says so after a command's
-output, in one line: `A new version of cad is available: X -> Y`. It names no command; the plugin's
-skills tell your agent to install the new version of the plugin from this repository, with the
-install command above. A chat that is
-already open keeps working: the release its commands name stays installed until no agent has used it
-for two days. A new chat uses the new one.
+The install command turns automatic updates on. With them on, cad checks for a new release when its
+server starts, and about once an hour while it runs. When there is one and nothing is running, cad
+stops its server, installs the new release with uv, and starts it again. Then, where the install
+command set it up, cad runs the install command once more, in a mode that only updates the copies of
+our plugin still in your apps: it adds none, and changes nothing else.
+
+cad learns of a release from the project's version feed, which names a release only once it is an
+hour old. cad only ever moves forward: it never installs an older release than the one it runs.
+
+To see whether automatic updates are on:
+
+```bash
+cad auto-update
+```
+
+To turn them off:
+
+```bash
+cad auto-update off
+```
+
+`cad auto-update on` turns them back on. Only a cad installed as a uv tool updates itself; one
+installed another way, such as with pip into a project's own Python, never does. Setting
+`CAD_UPDATE_CHECK=0` where cad runs turns the check off for that process.
+
+### Updating by hand
+
+Run the install command again. It updates cad and the plugin in every app it finds. To update one
+app, run the update command under its name. To update cad alone:
+
+```bash
+cad server stop
+uv tool install --managed-python --python 3.14 cad@latest
+cad server start
+```
+
+A copy from a plugin store (Codex's or Claude's) is updated by that store, on its own schedule. Its
+skills may then be older than cad. That is fine: a command the skills used keeps working for at least
+30 days after the skills stop using it.
+
+### Staying on an older release
+
+Turn automatic updates off, then install the release you want, for example 0.11.10:
+
+```bash
+cad auto-update off
+cad server stop
+uv tool install --managed-python --python 3.14 cad==0.11.10
+cad server start
+```
+
+Do not run the install command afterwards: it installs the newest release and turns automatic
+updates back on.
+
+### From an earlier release
+
+A computer on 0.10.0 to 0.11.10 is brought over once, by the updater those releases shipped: it
+installs the new cad, which then runs the install command once. From then on, cad updates as above.
+Where the agent apps got text-to-cad only from a plugin store, the new cad comes alone, and the
+store's next copy of the plugin installs cad as a uv tool. A computer on an older release moves
+when you run the install command.
 
 ## Removing
 
@@ -315,20 +381,29 @@ Remove the plugin from each app with that app's own command:
 | Kimi Code, Muse | remove text-to-cad in the app's plugin manager |
 | Other agents | delete our skills from the agent's skills folder |
 
-Then remove text-to-cad itself:
+Then stop cad's server and remove cad:
 
 ```bash
-cad uninstall
+cad server stop
+uv tool uninstall cad
 ```
 
-It removes every release of text-to-cad on your computer, its settings and data, and the `cad`
-command. It asks first; where nothing can ask, add `--yes`. It changes no app. What uv downloaded
-stays in uv's cache until you run `uv cache prune`.
+That removes the program. Your settings, Recents and the records of your models stay in two
+folders, which you can delete by hand:
+
+| | Data | Cache |
+| --- | --- | --- |
+| macOS | `~/Library/Application Support/cad` | `~/.cache/cad` |
+| Linux | `~/.local/state/cad` | `~/.cache/cad` |
+| Windows | `%USERPROFILE%\.local\state\cad` | `%USERPROFILE%\.cache\cad` |
+
+`cad doctor` and `cad cache dir` print where they are on your computer; run them before you remove
+cad. What uv downloaded stays in uv's cache until you run `uv cache prune`.
 
 ## What it needs
 
-- A network connection the first time a release is installed. A release takes about 240 MB to
-  download and about 620 MB on disk, most of it the CAD kernel (OCP and build123d).
+- A network connection to install cad, and again the first time a model is built, when cad fetches
+  the CAD kernel (OCP and build123d). cad itself is about 110 MB on disk; the kernel about 620 MB.
 - On Linux, the system's OpenGL library, `libGL.so.1` (the `libgl1` package on Debian and Ubuntu).
 - On Windows 11, Smart App Control turned off, or WSL. The CAD kernel's wheel ships an unsigned
   native module, which Smart App Control blocks: every `cad` command and `import build123d` then

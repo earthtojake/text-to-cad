@@ -49,7 +49,7 @@ and assets, so the app does not scan another package's source.
 - **One boundary**: the app imports shared packages through public exports.
   The root dependency checker prevents app-to-app and package-to-app imports.
   The backend is not here: its code, its tests and its laws live with the server
-  (`cad-server`).
+  (`cad_server`, in the `cad` distribution).
 - **Document boundary**: everything renders from the file. A STEP and an `.xbf`
   render from what the engine serves of them — the structure (names,
   colours, materials, the mechanism) and one buffer per part, read through the
@@ -111,21 +111,22 @@ export CAD_VIEWER_DIST="$PWD/apps/web/dist"
 cad viewer --host 127.0.0.1 --json [FILE ...]
 ```
 
-The launcher ensures this installation's engine and its one page, registers each FILE (an
+The launcher reaches the running engine and its one page (where none runs it says so in one line,
+naming `cad server start`), registers each FILE (an
 on-disk CAD file, or a document id the engine holds) by its id, prints its page's URL
 (`/<id>`, a line each; the home's, `/`, with none), opens the first in the browser, and exits. `--json` prints the launch
 record without opening a browser; `--no-open` prints only the URL. A FILE that is not there (`not_found`), or that is
 no CAD file -- a model's script among them, which `cad run` builds and prints the page of (`wrong_type`) -- is refused
 before the engine is asked, exit 2, as an id the engine does not hold is (`not_found`); under `--json` a failure is
 the `cad` command's one `{"ok": false, "error", "reason"}` document on stdout. There is no
-foreground viewer server and no `--detach` or `viewer stop`. `cad stop` stops
-the installation's engine and all its clients; never stop an engine you did not start.
+foreground viewer server and no `--detach` or `viewer stop`. `cad server stop` stops
+the engine and all its clients; never stop an engine you did not start.
 
-`cad serve DOC` also starts or reuses this engine, prints the document URL and
+`cad serve DOC` also reuses this engine, prints the document URL and
 exits. It has no `--foreground` or standalone server mode.
 
 The engine binds loopback on 3245, or, when another program holds it, the next free
-port, which the installation keeps (`cad status` says which and why). `--port N`
+port, which it keeps (`cad server status` says which and why). `--port N`
 pins its HTTP port and `--host ADDRESS` pins its bind address. If the running engine has a different
 port or address, the launch fails with that conflict; it never replaces a server
 or starts a second engine. A taken port that `--port` names fails, naming its holder. There are no page sessions: every launch
@@ -157,8 +158,8 @@ language, over the page until a read answers again. One whose engine runs and re
 viewer` and open the link it prints; it keeps asking, never reloads for the refusal, and heals
 once that link, opened beside it, has left the new cookie.
 
-A page closing never stops the engine, and no timer does: it runs until `cad stop`, or
-until a newer installation's engine retires it while nothing uses it.
+A page closing never stops the engine, and no timer does: it runs until `cad server stop`, or
+until cad's own update restarts it on a newer release while nothing uses it.
 Code changes in a checkout require
 restarting an engine you own, then rerunning the launcher. Vite handles client HMR.
 

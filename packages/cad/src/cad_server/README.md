@@ -1,0 +1,174 @@
+# cad_server
+
+The CAD server and the `cad` command, part of the `cad` distribution: the daemon that builds, keeps and
+serves CAD documents, one per computer; the CAD Viewer and the CAD app's MCP endpoint on its listener; the
+environment the CAD kernel runs in; cad's own update; and the command that runs them all.
+
+Models are written against the library, `cad`, which the server imports without its CAD kernel: the kernel
+lives in the environments the server makes, on first need, for models and its own kernel processes,
+`cad[build123d]` at the server's own release. `cad run` runs a program as `uv run` does, with cad pinned at
+the server's release and the integrations its imports use; a tool's own command an integration declares
+(`cad run kicad-cli …`) gets that integration and runs headless; a script that imports `bpy` gets the
+blender integration, its environment made on Python 3.13, the one Blender is built for.
+
+The mechanisms its laws constrain are [`engine/README.md`](engine/README.md).
+
+## The shape of the package
+
+```
+cad_server/
+  engine/                # the engine's server half: the daemon, its supervisor and the services it
+                         #   declares (its workers, its render processes), its registry of documents,
+                         #   the live models' book, the document cache, the verbs as commands
+                         #   (cli), and the engine's README, the mechanisms the laws constrain
+  cli/                   # the `cad` command: a module per command and per document type
+                         #   (`cad <type> <operation>`: document_types, from the library's
+                         #   registry), each a shell over the function or parser that does the work
+  viewer/                # the engine's HTTP application (engine_app), launcher (main), routes
+                         #   (http_app: /api/v1, its document kinds in kinds), files by
+                         #   absolute path (backend), a file's catalog row (scanner), the explorer's reads (folders), the model library
+                         #   every CAD view shares (recents), a STEP's and an .xbf's serve
+                         #   by the engine and in-process document reads (documents), a DXF's
+                         #   payload (drawings), a KiCad board's or schematic's plot (plots), a robot's
+                         #   (robots), Quick Edit's packets (prompt_files)
+  mcp/                   # the engine's MCP endpoint: its JSON-RPC vocabulary (protocol),
+                         #   engine sessions (http), tools and launches (server), which apps are
+                         #   offered tools and how (host: the Codex app alone), open views (views),
+                         #   sidebar views shared in memory (sidebar), the viewer routes in-process
+                         #   (tunnel), the page (ui), and the CAD Viewer link for a call that shows no
+                         #   view (browser)
+  robot_payload.py       # a robot description resolved for the viewer's page
+  drawing_payload.py     # a DXF flattened by ezdxf for the viewer's pane
+  jobs.py                # the viewer exports' admission, progress, waiting and cancellation
+  analytics.py           # telemetry: usage counts and crash reports, on by default once
+                         #   a command has said so, never after a no
+  settings.py            # the person's settings: settings.json in the data folder
+  language.py            # the language the person chose for the CAD views
+  whats_new.py           # the releases whose What's new the person has seen
+  updates.py             # the hourly read of the version feed: the release it names
+  assets.py              # where the bundled runtime is
+  _internal/             # the environments models run in (base, extras, scan), cad's own update
+                         #   (auto_update, auto_update_helper), the hosted install command run after
+                         #   an update (install_script), the daemon's entry (engine_daemon,
+                         #   engine_host), telemetry's sender, file locks, the one parser every command
+                         #   reads its options by (cli_parser) and the one failure contract every
+                         #   command fails by (cli_errors); and, kept apart for the bridge from
+                         #   0.10.0 to 0.11.10 and deleted with it, what reads that layout
+                         #   (installations, releases, proxy, arrival)
+  _runtime/              # BUILT: the CAD Viewer client and the CAD app page -- produced when
+                         #   the wheel is packaged, never committed, never edited
+```
+
+## Commands
+
+`cad --help` lists them all.
+
+- **Document types**: `cad <document_type> <operation> <file>`, one id per type as the library's registry
+  names it: `cad model export <id>`, `cad xbf export`, `cad step snapshot`, `cad glb inspect`,
+  `cad urdf validate`. `model` is a model the engine holds, by its document id, with no file. `export`,
+  `snapshot` and `inspect` are shared by every type that has them; every other operation is named for
+  what it does -- `dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate` -- each a check whose
+  findings carry a severity, a code and a location (`--json`). `cad <type> --help` lists a type's
+  operations, `cad <type> <operation> --help` its options, and a file of another type is refused by name
+  (`cli/document_types.py`, each type's module `cli/<type>.py`).
+- **Integrations**, for a tool's own files that are no document type: `cad mujoco check MODEL.xml`,
+  `cad orcaslicer presets KIND`, `cad orcaslicer complete` (`cli/integrations.py`).
+- **The server**: `cad server start` starts it, detached, and says so; `cad server stop` stops it;
+  `cad server status` says whether it runs, its release, its workers and what they build.
+  `cad server start --foreground` runs it in this process; `cad server --rotate-token` replaces the page
+  token. Nothing else starts the server but `cad mcp`. A command that needs it and finds none says so in
+  one line (`the cad server is not running: run cad server start`) and exits 1.
+- **`cad mcp`**: the CAD app's stdio transport an agent app starts (Codex's plugin line). It starts the
+  server once, as `cad server start` does.
+- **`cad run`**: a program exactly as `uv run` runs it, with cad pinned at this release and the
+  integrations its imports use (`_internal/extras.py`, `_internal/scan.py`), in an environment the engine
+  makes. `cad requirement [INTEGRATION ...]` prints the exact requirement a Python of a program's own
+  installs this release's cad by (`cad[build123d]==<release>`).
+- **`cad viewer`** opens a page of the running server; `cad serve` serves a document and prints its URL;
+  `cad delete` deletes documents.
+- **`cad doctor`**: one read-only report: this cad's release, its Python and where it is installed, its
+  data and cache folders and what `cad cache prune` would free, the CAD kernel environment and whether it
+  loads, the integrations, whether the server runs and its release, and cad's own update (both switches,
+  whether this cad is a uv tool, whether uv is found, the last attempt). It changes nothing. Exit 1 when the
+  kernel is installed and does not load; `--json` gives the report as one document.
+- **`cad cache dir|prune|clean`**, as `uv cache` treats uv's: `dir` prints the cache folder, `prune`
+  removes what this release cannot use (environments made for other releases, and the release folders
+  0.11.10 and earlier left), `clean` removes all of it, refused while the server runs. Nothing else of cad
+  deletes a past release's files.
+- **`cad auto-update [status|on|off]`**: whether cad updates itself (below). `on` is refused unless this
+  cad is a uv tool; `on --installer` also has the install command run again after each update; `off` turns
+  both off.
+- **`cad telemetry [status|on|off]`**: the person's answer about usage stats and crash reports.
+
+There is no command that installs, updates or removes cad: that is uv's (`uv tool install cad`,
+`uv tool uninstall cad`). Every command that destroys asks first (`cad delete`,
+`cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`; `_internal/consent.py`).
+
+Kept only for releases 0.10.0 to 0.11.10, and deleted with that bridge (`cli/setup.py`): `cad setup
+--engine-update`, which those releases' updater runs on the new release; plain `cad setup`, which a `cad
+update` typed on those releases runs, the install command in install mode; and the hidden short forms
+`cad status` and `cad stop`, which their skill text uses. On a computer whose apps got text-to-cad only
+from a store, the bridge moves cad alone and runs no install command.
+
+A command the skills used keeps working for at least 30 days after the skills stop using it.
+
+On Windows, what a command writes to a pipe or a file is UTF-8, and so is what the program `cad run` runs
+writes (a console is left as it is, as is every stream elsewhere); Windows PowerShell 5.1 decodes a
+program's piped output with the console's code page (`[Console]::OutputEncoding`), so an accent in a
+PowerShell pipeline is still wrong there, and that is PowerShell's to set.
+
+## cad's own update
+
+`_internal/auto_update.py`. Two switches in the person's settings, both off by default: whether cad updates
+itself, and whether the install command runs again after an update. `cad auto-update` changes them; the
+install command turns both on.
+
+The server reads the version feed (`updates.py`, at most once an hour, in the background; never waited on).
+It asks whether to update as it starts, and as it tends itself: switch 1 on, this cad the uv tool `cad`
+(uv's receipt in its environment), uv found, the feed's release newer than this one. Then, once nothing
+is in flight (at a start, at once; otherwise once nothing has run for a minute), a detached helper that is
+neither the `cad` executable nor run from cad's environment (`_internal/auto_update_helper.py`) stops the
+server, runs `uv tool install --managed-python --python 3.14 cad==<release>` (tried again on failure, and
+the previous release put back where a failed install left no `cad`), and starts the server with whatever
+cad is there. One release is tried at most twice, never twice within an hour. `cad server start` asks too
+when the start fails, so a release whose server cannot start still updates. Forward only: nothing moves
+to an older release, and a start joins a running server of a newer release rather than replacing it. With
+no answer from the feed, nothing happens. `CAD_UPDATE_CHECK=0` in a process's environment turns the check
+off for it. A cad that is not a uv tool never updates itself.
+
+After an update, with switch 2 on, the new server runs the hosted install command once in its update
+mode, which updates only the copies of the plugin it installed that are still there
+(`_internal/install_script.py`). A failure is tried again later and never undoes the update.
+
+## Folders
+
+The data folder (the state folder, `cad.engine.places.state_dir`) is `cad` in the platform's place for state (`~/Library/Application Support/cad` on macOS,
+`~/.local/state/cad` on Linux and Windows) or the folder `CAD_STATE_DIR` names: settings, Recents, the
+documents' records, the page token and port, the telemetry spool and the feed's last answer. The cache
+folder is `~/.cache/cad`, on Windows too, or the folder `CAD_CACHE_DIR` names: the documents' bytes, the
+environments, bytecode and the integrations' private homes, all made again on demand. On Windows neither
+is in the local application data, which Windows virtualizes for every process an app package (the Claude
+desktop app) starts. A release reads what the release before wrote and migrates it on first touch, once
+(`cad.engine.identity.migrate`); nothing in the cache is converted.
+
+Coming from 0.7 or 0.8 (named cadgen): their caches (`~/.cache/cadgen`, `%LOCALAPPDATA%\cadgen`) and the
+state files only they wrote are not read or removed by anything here; `cad doctor` says where they are,
+with their size, and the person deletes them once no such release is left.
+
+## Telemetry
+
+`analytics.py` describes each batch by the release that counted it and `app`, the agent app that ran it,
+detected (the MCP handshake's client name, else the markers an app sets in its shell, else `unknown`). A
+no, wherever it is said (`cad telemetry off`, the app menu's switch), is kept in the settings and asks the
+receiver to delete what was sent under the install id.
+
+## HTTP
+
+The engine's HTTP API is `/api/v1` (`viewer/http_app.py`, its document kinds `viewer/kinds.py`; the routes
+are listed in the engine README's **Wire format**): the pages are at the root, and every route they call
+is under it.
+
+The viewer exposes `POST /api/v1/local/clipboard` for explicit viewport PNG copies. It uses the same host
+and custom-header gates as other mutation routes, limits images to 20 MiB, and delegates native delivery
+to `viewer/clipboard.py`. It never reads the clipboard. Unsupported desktop clipboard environments return
+an error.

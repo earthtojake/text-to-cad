@@ -52,17 +52,11 @@ enough. Every other job runs on the changes that reach it. The two there now:
   so no release ships unrehearsed. They also run on a change to the installers themselves.
 - The update rehearsal (`update-rehearsal`, `scripts/test/rehearse-update.py`) installs real releases
   from PyPI on private computers and brings each to this tree's build by the route it takes, on Linux,
-  macOS and Windows: 0.11.10's and 0.10.4's own updater (`cad setup --engine-update`, then the install
-  script the new server owes run by it), 0.11.10's automatic update, the hand-over running the real install
-  script on stand-ins of two apps and trying again after a failure (POSIX alone), 0.11.10 going back from a
-  build whose server cannot start, the install script on a computer of 0.11.10, and the install script on a
-  computer of 0.8.4, which has no updater; and on Windows 0.10.0's updater, which this build's setup takes
-  over from. The automatic update runs on Linux alone (the button's switch, reached by the old release's
-  own timers), the hand-over on Linux and macOS (its stand-ins of the apps are POSIX scripts). About 8
-  minutes on macOS and 10 on Linux (measured on macOS on 2026-11-15: `updater` 40 s, `automatic` 130 s,
-  `handover` 73 s, `rollback` 226 s, `install-script` 42 s, `from-0.8` 48 s, `updater --old 0.10.4` 47 s). It is the one test of the migration every computer makes, unattended or by the install command. It runs
-  with the installer rehearsals, and on a change to the rehearsal itself. A route runs alone too, as
-  `scripts/test/rehearse-update.py from-0.8`.
+  macOS and Windows: the updater of 0.11.10 and 0.10.4 (`cad setup --engine-update`, then the install
+  command the new server runs once), cad's own automatic update, and the install command on a computer
+  of 0.11.10 and of 0.8.4, which has no updater. It is the one test of the move every computer makes,
+  unattended or by the install command. It runs with the installer rehearsals, and on a change to the
+  rehearsal itself. A route runs alone too, as `scripts/test/rehearse-update.py from-0.8`.
 - The real install (`real install`, `real-install.yml`, `scripts/test/real-install.py`) runs the install script
   against the real `claude`, `codex` and `gemini` on Windows, macOS and Linux, each on a private computer: the
   one test of the half of the script that touches agent apps on Windows, where its unit tests (stand-in
@@ -194,8 +188,7 @@ every rule it matches. Selection is by path, never by what a file says: a commen
 in a module selects what the module's code would, and no rule reads a file to
 decide which tests reach it. The components:
 
-- **The packages** (`packages/cad`, `packages/cad-server`, `packages/cad-mcp`,
-  `packages/aliases`, `scripts/bundle`): their suites whole on Linux and Windows,
+- **The packages** (`packages/cad`, `packages/aliases`, `scripts/bundle`): their suites whole on Linux and Windows,
   `skills`, `packaging`, `viewer-e2e`, and the jobs that run them with a tool
   installed or on the third C library (`fea`, `kicad`, `blender`,
   `routing (macOS)`: minutes together, never the longest job).
@@ -338,15 +331,13 @@ Read the failing job, not the run: `CI` names the jobs that failed, and each job
 
 ## Other ways to test
 
-**The type check.** With the development environment active, check the three distributions' Python sources with:
+**The type check.** With the development environment active, check the distribution's Python sources with:
 
 ```sh
-for project in cad cad-server cad-mcp; do
-  python -m pyrefly check --config "packages/$project/pyproject.toml"
-done
+python -m pyrefly check --config packages/cad/pyproject.toml
 ```
 
-Pyrefly is pinned in `requirements-dev.txt`. Each package's `[tool.pyrefly]`
+Pyrefly is pinned in `requirements-dev.txt`. The package's `[tool.pyrefly]`
 configuration uses the [basic preset](https://pyrefly.org/en/docs/configuration/#preset-basic)
 over its own `src`. It checks a limited set of diagnostics, including
 undefined names in annotations, and skips unannotated function bodies and broader
@@ -414,7 +405,7 @@ that removes a cache or a performance mechanism first lists what it made faster.
 #478 removed a kernel-op memo for correctness and slowed re-runs (f1's
 `power_unit` forced rebuild went from 24 s to 102 s); that cost sat deep in a long
 PR body instead of being approved as a trade-off. The engine's memo
-(`packages/cad-server/src/cad_server/engine/README.md`, **Body retention**) is keyed by
+(`packages/cad/src/cad_server/engine/README.md`, **Body retention**) is keyed by
 each operation's parameters and the keys of the shapes it was given, and answers
 a hit with the live object the first run made; its pressure tests are
 `tests/python/packages/cad/engine/test_memo.py` and `test_bodies.py`, and a

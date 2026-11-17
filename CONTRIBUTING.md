@@ -36,7 +36,7 @@ Push the branch to `origin` and open the pull request against
 
 Choose the setup for the environment where the tools and tests will run. Use
 Python 3.14, the Python the server's installations run on; the packages' floor is 3.13
-(`requires-python`), which CI holds with the library's, the server's and the shim's suites on
+(`requires-python`), which CI holds with the library's, the server's and the transport's suites on
 it before a release ships ([CI](docs/contributing/testing.md#ci), the release tier). Install Node.js 22 for the
 packaged runtime, Viewer, `@cad/core`, or documentation site; Python-only work
 can defer Node until a selected test needs a generated runtime stage.
@@ -108,13 +108,12 @@ focused test, so the file builds on an engine daemon of its own:
 
 ### Development dependencies
 
-`requirements-dev.txt` installs the source packages from `packages/` and the
-repository's own tooling. It installs the
-library, the server and the shim editable, the library with its `build123d` extra (OCP,
-build123d and the rest; the library's required dependency is numpy alone), so the
+`requirements-dev.txt` installs the source package from `packages/cad` and the
+repository's own tooling. It installs `cad` editable, with its `build123d` extra (OCP,
+build123d and the rest), so the
 checkout's `.venv` carries the CAD kernel and is its own base environment: the server
-makes no base for it (`cad_server/_internal/base.py`; an installed version makes its own when
-it is installed). The library comes with its `trimesh` extra too, so `cad
+makes no base for it (`cad_server/_internal/base.py`; an installed cad makes its own on first
+need). The library comes with its `trimesh` extra too, so `cad
 <type> dfm --process` measures in the `.venv` and the server makes no `cad[trimesh]` environment for
 it (`cad_server/_internal/integration_env.py`). `cad run` of a program whose imports use another set of
 cad's integrations than build123d alone (none, or kicad), or that names packages of its own, runs in an
@@ -131,20 +130,12 @@ dist-info by design — it is release-grained, so dev code is always newer than
 its number — and nothing behavioral consults it, but stale metadata makes the
 reported number drift further from the code than it has to.
 
-Skills run the server as `cad` through `~/.local/bin/cad` (`cad_server/_internal/installations.py`),
-which reads only its first word. Every command a skill runs pins its release, `cad +<VERSION>[@<store>]
-<verb>`, and the `cad` command runs exactly that version's own `cad` from
-`<state>/versions/<VERSION>`, or says that version is not installed (`cad_server/_internal/pins.py`). A
-store's copy of the plugin names its store (`@claude`, `@codex`), stamped by the release; that name
-only labels the delivery. A command with no pin runs the newest installed version. A model script
-starts no server of its own environment: it reaches its version's engine, and on a device with
-none it says ``cad-server is not installed on this computer: install cad-server and run `cad doctor`
-once, then run this again``. To run your working copy, install it as a version:
-`scripts/install/dev_install.py` installs it as `<VERSION>-dev.<time>` (see
-[Test In Agent Apps](#test-in-agent-apps)). A checkout's editable server, run as no version, keeps
-the layout of 0.11.10 and earlier: the flat door and `installations/current`.
+Skills run plain `cad` commands, with no version in them, through the `cad` command uv installs.
+A model script starts no server of its own: it reaches the computer's one server, and where none
+runs it says so in one line. To run your working copy in the agent apps, install it as the `cad`
+tool with `scripts/install/dev_install.py` (see [Test In Agent Apps](#test-in-agent-apps)).
 
-`packages/cad-server/src/cad_server/_runtime/` is BUILT, not committed — the whole
+`packages/cad/src/cad_server/_runtime/` is BUILT, not committed — the whole
 directory is gitignored, and the wheel is the only place those files ship. A
 fresh clone therefore has no Viewer client or CAD app page until
 `scripts/bundle/bundle.sh` runs, and the server says so by name the
@@ -159,50 +150,46 @@ npm run build:packages
 
 ### The engine server
 
-Every build, export and snapshot runs in the engine server, a daemon: one per
-installed version, in that version's engine folder (`<engines>/<version>`), started by the first
-command of that version that needs it and running until `cad stop`, or until its version is
-removed (no timer stops it). One server also holds the flat door releases before 0.11.11 reach. A checkout's `.venv`, run as no version, reaches the
-flat door like any client of that layout: to run a worktree's own engine, give it its own
-`CAD_ENGINE_DIR` and `CAD_STATE_DIR`. The engine folder, its doors (named pipes; on Windows, port
-files) and locks live in `cad-engine`
-in `$XDG_RUNTIME_DIR`, else in the per-user temporary folder (on macOS the system's
-`/var/folders/...` one, whatever `$TMPDIR` a sandbox sets; else a per-user `$TMPDIR`), else in `/tmp/cad-<uid>`
-(Windows: the temporary folder); `CAD_ENGINE_DIR` moves them, which gives a
-test, a benchmark or an experiment a daemon to itself. `cad status` lists its
-workers, one per model script, each with its memo, and what each is building;
-`cad stop` stops it (`cad server` runs one in the foreground); a running `cad-mcp` holds it
-until its host quits. A running daemon keeps the engine code it started with:
-after editing the library or the server (`packages/cad/src/cad`,
-`packages/cad-server/src/cad_server`), stop the daemon you started so the next
-build runs the new code. Never stop one you did not start.
+Every build, export and snapshot runs in the engine server, a daemon: one per computer, started by
+`cad server start` (or `cad mcp`, which Codex's plugin line runs) and running until
+`cad server stop` (no timer stops it). A command that needs it and finds none says so in one line.
+A checkout's `.venv` reaches the same server as any client: to run a worktree's own engine, give it
+its own `CAD_ENGINE_DIR` and `CAD_STATE_DIR`. The engine folder, its door (a named pipe; on Windows,
+a port file) and lock live in `cad-engine` in `$XDG_RUNTIME_DIR`, else in the per-user temporary
+folder (on macOS the system's `/var/folders/...` one, whatever `$TMPDIR` a sandbox sets; else a
+per-user `$TMPDIR`), else in `/tmp/cad-<uid>` (Windows: the temporary folder); `CAD_ENGINE_DIR` moves
+them, which gives a test, a benchmark or an experiment a daemon to itself. `cad server status` lists
+its workers, one per model script, each with its memo, and what each is building; `cad server stop`
+stops it (`cad server start --foreground` runs one in the foreground); a running `cad mcp` holds it
+until its host quits. A running daemon keeps the engine code it started with: after editing
+`packages/cad/src`, stop the daemon you started so the next build runs the new code. Never stop one
+you did not start. Set `CAD_UPDATE_CHECK=0` for a server you start by hand, so it never updates
+itself.
 
 The engine's switches are environment variables, never script options (the
 engine's README, **The engine server and its workers** and **Body retention**):
 `CAD_ENGINE_WORKERS`, `CAD_ENGINE_WORKER_RSS_MB` (the workers' memory cap, together; no timer
 retires a worker), `CAD_ENGINE_CHECKS` (how many checks processes measure manufacturing checks at once:
 by default half the cores, one to four; a value is held to one to the cores, and the engine says so in `cad
-status`), `CAD_ENGINE_CHECK_SECONDS` and `CAD_ENGINE_CHECK_RSS_MB` (what one check may take before the engine
+server status`), `CAD_ENGINE_CHECK_SECONDS` and `CAD_ENGINE_CHECK_RSS_MB` (what one check may take before the engine
 stops it: half an hour, and the workers' memory cap, by default; `0` for no limit),
 `CAD_ENGINE_MEMORY_MB` (the daemon's one memory budget,
 **Document lifetime**), `CAD_ENGINE_CACHE_IDLE` (the document cache's idle seconds, the
 tests' seam), `CAD_ENGINE_PORT` (its HTTP port,
-`0` for any free one, refused when held; unset, 3245, else the next free port, kept per installation), `CAD_ENGINE_MEMO=0` (no memo
+`0` for any free one, refused when held; unset, 3245, else the next free port, kept), `CAD_ENGINE_MEMO=0` (no memo
 hits), `CAD_ENGINE_BODIES=0` (no body replay), `CAD_ENGINE_MESH=processes|inline` and
 `CAD_VIEWER_WARM=0` (no engine warm-up at `cad viewer`'s launch). What the
 engine builds is written beside a project only as the files models declare or a command
-exports. An installed version keeps what follows in its own folder: the records and settings in
-`versions/<VERSION>/data`, the caches in `versions/<VERSION>/data/cache`, its environments and
-bytecode in `versions/<VERSION>/code`. A process with no version (a checkout's, a test's) keeps them
-where releases before 0.11.11 did, as follows. Beside the person's settings, in the state folder, it
-keeps one record per model or opened file (`documents/<uuid>/document.json`: the script and function that build it, or
-the file's path; never geometry). In the cache folder (`CAD_CACHE_DIR`, else the platform's:
-`~/.cache/cad`) it keeps each model document's bytes as last built,
-`documents/<uuid>/document.xbf`, regenerable and wiped at no loss, so a restart reopens
-every document without a build, under `pycache/` the bytecode the daemon and its
-workers compile of the libraries they load (`PYTHONPYCACHEPREFIX`), and under `homes/` the private
-settings folders `cad run` hands Blender's module in place of a person's own; it touches nothing else in
-that folder but the environments it makes (`base/`). Releases before 0.10 kept theirs in `~/.cache/cadgen`, which no build reads. Tests point both folders at temporary ones
+exports. Beside the person's settings, in the data folder (`CAD_STATE_DIR`, else `cad` in the
+platform's place for state), it keeps one record per model or opened file
+(`documents/<uuid>/document.json`: the script and function that build it, or the file's path; never
+geometry). In the cache folder (`CAD_CACHE_DIR`, else the platform's: `~/.cache/cad`) it keeps each
+model document's bytes as last built, `documents/<uuid>/document.xbf`, regenerable and wiped at no
+loss, so a restart reopens every document without a build, under `pycache/` the bytecode the daemon
+and its workers compile of the libraries they load (`PYTHONPYCACHEPREFIX`), and under `homes/` the
+private settings folders `cad run` hands Blender's module in place of a person's own; it touches
+nothing else in that folder but the environments it makes (`base/`). `cad cache dir|prune|clean`
+manages that folder; nothing else of cad deletes a past release's files. Releases before 0.10 kept theirs in `~/.cache/cadgen`, which no build reads. Tests point both folders at temporary ones
 (`scripts/test/unittest_files.py` does).
 
 The skills ship no launcher scripts: every operational verb is a `cad`
@@ -214,18 +201,19 @@ by `cad urdf|sdf|srdf validate`, so they need the server like everything else.
 
 ## Test In Agent Apps
 
-A person installs and updates text-to-cad with the install command
+A person installs text-to-cad with the install command
 (`curl -fsSL https://texttocad.dev/install.sh | sh`; on Windows
 `irm https://www.texttocad.dev/install.ps1 | iex`): `scripts/install/install.sh` and `install.ps1`
-download and run `scripts/install/install.py`, which runs the newest release's `cad setup` through
-uvx, removes what earlier releases left behind, and installs the plugin from the `latest` branch in
-each agent app it finds, with that app's own command. Its `APPS` table is the one list of apps;
-`docs/install.md` is the same list for people. `tests/python/global/test_install_script.py` runs it
-against stand-in app commands in a home of its own.
+make sure uv is there, then download and run `scripts/install/install.py`, which installs cad as a uv
+tool at the release the version feed names, installs the plugin from the `latest` branch in each
+agent app it finds with that app's own command, removes our own older copies, and turns on automatic
+updates. Its `APPS` table is the one list of apps; `docs/install.md` is the same list for people.
+`tests/python/global/test_install_script.py` runs it against stand-in app commands in a home of its
+own.
 
 Test the skills the way users get them: as the plugin, with CAD's server. One script installs
 this checkout into the agent apps, with the same table and each app's own command, the checkout
-in place of GitHub:
+in place of PyPI and GitHub:
 
 ```bash
 scripts/install/dev_install.py                 # every app found here
@@ -233,29 +221,25 @@ scripts/install/dev_install.py claude codex    # these apps alone (install.py's 
 scripts/install/dev_install.py --release       # back to the published release, in every app
 ```
 
-It registers the checkout's `.venv` as a version of its own, `<VERSION>-dev.<time>`
-(`versions/<name>` in the state folder, whose code marker names the `.venv`: nothing is copied),
-and writes the `cad` command. It writes the plugin into `tmp/dev-plugin/text-to-cad`: every
-command in its skills pins that version (`cad +<VERSION>-dev.<time> ...`), Codex's CAD server (the
-one app given one) runs `cad_mcp` with the `.venv` (`CAD_PYTHON` overrides it) through `uv run`, a
-bare command as the published `uvx` (Codex has dropped a server whose command is a path, with no
-error), and its catalog is `earthtojake-dev`. Then it replaces our copy in each app with that folder. Run it again after a
-change, and start a new session in the app. Run `npm ci` and `scripts/bundle/bundle.sh` once
-first: the viewer's page and the CAD app's page come from the bundle (without it a model's link
-answers 404). An app that cannot install from a folder is skipped and says so; Claude Code's copy
-also serves Cursor and Grok Build, which load Claude Code's plugins.
+It installs the checkout's cad as the `cad` uv tool, editable, and turns cad's automatic updates
+off, since an update would put the release in its place. It writes the plugin into
+`tmp/dev-plugin/text-to-cad`: its manifests name the version `<VERSION>-dev.<time>`, so each app
+takes it as new; Codex's CAD server (the one app given one) runs `cad mcp`, the editable tool's
+command; and its catalog is `earthtojake-dev`. Then it installs that folder in each app and only then
+removes the published copy of ours there. Run it again after a change, and start a new session in
+the app. Run `npm ci` and `scripts/bundle/bundle.sh` once first: the viewer's page and the CAD app's
+page come from the bundle (without it a model's link answers 404). An app that cannot install from a
+folder is skipped and says so; Claude Code's copy also serves Cursor and Grok Build, which load
+Claude Code's plugins.
 
-`--release` first removes every development version, its server stopped where nothing is in
-flight there: a development version sorts after its release, so left installed it would stay the
-newest, the one a `cad` command with no pin runs. Then it runs the install script as it is: the
-newest release, every app moved back to the GitHub copy, the development copies among the old ones
-it removes.
+`--release` uninstalls the editable tool, then runs the install script as it is: the newest release
+of cad, every app moved back to the GitHub copy (the development copies among the old ones it
+removes), automatic updates on.
 
 A running server keeps the Python it started with and outlives the app: after a Python-only change
-run `cad stop`, and the next command starts it with the new code. The app menu of every view says
-which build it shows: any build but the release's own reads `v<VERSION>-dev.<commit>` (`-dirty`
-when the checkout had uncommitted changes). A development version is never told about a newer
-release, and its telemetry reports the channel `dev`.
+run `cad server stop`, and the next `cad server start` runs the new code. The app menu of every view
+says which build it shows: any build but the release's own reads `v<VERSION>-dev.<commit>` (`-dirty`
+when the checkout had uncommitted changes).
 
 Keep one copy of the plugin per app: two copies show every skill twice. The scripts replace only
 our own copies; a copy from a plugin store (Codex's directory, claude.ai's) is never touched, so
@@ -303,41 +287,39 @@ must not put `skills/`, the repository root, or a sibling skill directory on
 `sys.path`, `PYTHONPATH`, `NODE_PATH`, or any similar lookup path. Skills are
 independent of *each other*.
 
-They are not independent of the server, `cad-server`. Each skill that uses it runs it
-through the `cad` command its installation writes, and a skill's `scripts/<tool>` is a thin
-entrypoint whose parser and behaviour live in `cad_server.cli` — so what a published skill
-needs is an install, not a copy. Skills used to vendor the runtime and its JavaScript builders into
+They are not independent of cad. Each skill that uses it runs the `cad` command, and what a
+skill would script is a `cad` command whose parser and behaviour live in `cad_server.cli` — so
+what a published skill needs is an install, not a copy. Skills used to vendor the runtime and its JavaScript builders into
 `skills/*/scripts/packages/`; six copies of one runtime is what that cost, and it
 is gone. The server now carries the JavaScript it executes as well as the Python.
 
 Canonical source directories are:
 
-- `skills/*` for skill instructions, references, and the thin entrypoints.
+- `skills/*` for skill instructions and references.
 - `apps/web/` for the CAD Viewer's React client. Its backend is
-  `cad_server.viewer` (in `packages/cad-server`), and its built `dist/` ships inside the
-  server's wheel as `cad_server/_runtime/viewer` — built at release time, never
+  `cad_server.viewer` (in `packages/cad`), and its built `dist/` ships inside the
+  wheel as `cad_server/_runtime/viewer` — built at release time, never
   committed.
 - `apps/mcp/` for the CAD app agent hosts render (MCP Apps: the Codex app's tabs). Its
-  server is the engine's MCP endpoint (`cad_server/mcp` in `packages/cad-server`), which
-  `cad-mcp` (`packages/cad-mcp`) carries a host's requests to, and its one-file
-  build ships inside the server's wheel as `cad_server/_runtime/mcp` — built at
+  server is the engine's MCP endpoint (`cad_server/mcp`), which `cad mcp` (`cad_mcp`)
+  carries a host's requests to, and its one-file
+  build ships inside the wheel as `cad_server/_runtime/mcp` — built at
   release time, never committed.
 - `apps/docs/` for the site.
 - `apps/api/` for `api.texttocad.dev`, the version feed and the telemetry receiver
   the server talks to: a Vercel project of its own, with no dependencies.
-- `packages/cad/`, `packages/cad-server/` and `packages/cad-mcp/` for the three
-  Python distributions (the library, the server with its bundled runtime assets, and the shim), and
-  `packages/aliases/` for `cadgen`, the library's deprecated alias, which every release still
-  publishes and which installs `cad` at the same release.
+- `packages/cad/` for the one Python distribution, `cad`: the library (`src/cad`), the server and
+  the `cad` command with its bundled runtime assets (`src/cad_server`), and the transport an agent
+  app starts (`src/cad_mcp`); and `packages/aliases/` for `cad-server`, `cad-mcp` and `cadgen`, empty
+  aliases every release still publishes, each installing `cad` at the same release.
 - `packages/core/` for non-React CAD/client code.
 - `packages/ui/` for FileViewer, renderers, controls and shared styles.
 
-Three source trees ship whole and must each work in isolation outside this repo — the
+The distributions ship whole and must each work in isolation outside this repo — the
 ships-alone law, enforced by the markdown-isolation check in
-`tests/python/global/test_package_boundaries.py`: `packages/cad`,
-`packages/cad-server` (with @cad/core and the viewer client bundled in at build
-time) and `packages/cad-mcp` each build into a PyPI wheel whose README is its long
-description. Markdown under it must be true and
+`tests/python/global/test_package_boundaries.py`: `packages/cad` (with @cad/core and the viewer
+client bundled in at build time) and each alias under `packages/aliases` build into a PyPI wheel
+whose README is its long description. Markdown under it must be true and
 actionable with this repo gone: name the bundled thing ("the @cad/core runtime
 bundled at build time"), never the repo path to its source, and keep commands
 relative to the package itself. Repo-development guidance belongs here, not in
@@ -409,12 +391,12 @@ URL/history and browser preferences. FileViewer
 state is scoped by file and renderer; each CAD render session owns its
 cache provider and worker lease.
 
-`cad viewer [FILE ...]` ensures the device's engine, opens its one page -- each
-FILE's at `/<id>`, else the home -- and exits. `--json` prints the authenticated launch record
+`cad viewer [FILE ...]` reaches the running engine (`cad server start` starts it), opens its one
+page -- each FILE's at `/<id>`, else the home -- and exits. `--json` prints the authenticated launch record
 without opening a browser. Each launch's folder becomes the folder the home shows.
 An explicit `--host` or `--port` pins the engine listener; a conflict with an
 already-running engine fails. The engine's default port is 3245, rolled past when another
-program holds it (`cad status` says which); there is no viewer process of its own.
+program holds it (`cad server status` says which); there is no viewer process of its own.
 A checkout serves its local web build; `CAD_VIEWER_DIST` and
 `CAD_MCP_APP_DIR` are explicit asset overrides. A wheel resolves its
 bundled assets without the repository. Run `scripts/bundle/bundle.sh` after
@@ -445,10 +427,9 @@ kinematics are the `packages/ui` browser specs' on every PR). Backend tests live
 `scripts/test/test-python.sh --select viewer`. Client tests do not cover them.
 Nothing in `cad_server.viewer` imports the CAD kernel at module scope.
 
-The engine is keyed by the Python installation, so the CLI, page and each host's
-stdio shim share it. Different installations have different engines. There is one page per
-engine, every document at `/<id>`, and no page sessions. Python
-source edits require restarting your test engine with `cad stop`; it does not
+There is one engine per computer (or per `CAD_ENGINE_DIR`), so the CLI, the page and each host's
+`cad mcp` share it. There is one page per engine, every document at `/<id>`, and no page sessions. Python
+source edits require restarting your test engine with `cad server stop`; it does not
 re-execute under active pages. Never stop an instance you did not start. See
 `apps/web/README.md` for the launcher contract and catalog/link behavior.
 
@@ -498,10 +479,11 @@ on every push:
   and break there. `tests/python/global/test_skill_self_containment.py` and
   `test_package_boundaries.py` hold the same law.
 
-Every pin of the release's own in the tree — the four `pyproject.toml`s, the plugin server
-configs and every skill command's pin (`cad +<VERSION> <verb>`) — names `VERSION`. `scripts/release/bump-version.sh` stamps them with the
-bump (`sync-version.mjs`), and `scripts/release/check-version.sh` asserts every
-skill pin equals `VERSION` — so a stale pin fails the `static` job's version check.
+Every mention of the release's own in the tree — the four `pyproject.toml`s and the aliases'
+`cad==` pins, Codex's server line (`cad@<VERSION>`) and the release each skill's Setup block names —
+names `VERSION`. `scripts/release/bump-version.sh` stamps them with the bump (`sync-version.mjs`),
+and `scripts/release/check-version.sh` asserts they all equal `VERSION` — so a stale one fails the
+`static` job's version check.
 
 The `Test` workflow runs on PRs against `main` and pushes to it, selecting
 the jobs each change can break ([CI](docs/contributing/testing.md#ci)); a push whose tree its pull request
@@ -518,10 +500,10 @@ metadata derived from `VERSION`, asserted by the `static` job's version check
 
 A pull request that changes `VERSION` is a release: merging it starts `Publish
 Release`, which uploads the release's four projects to PyPI and only then moves the branches
-installers follow, so the canonical repo version, the skill pins, the Git tag,
+installers follow, so the canonical repo version, the stamped versions, the Git tag,
 the PyPI wheels and the GitHub Release all describe one commit. Normal
 development PRs leave `VERSION` alone. A PR that touches release state must keep
-`VERSION`, the derived metadata and the pins valid; `Test`'s `static` job
+`VERSION`, the derived metadata and the stamped versions valid; `Test`'s `static` job
 checks all three, apart from the code tests, so those still run when they are
 wrong.
 
@@ -541,7 +523,7 @@ Where the built things live instead:
 - **The wheel** is the release artifact. `Publish Release` bundles, builds the
   wheel and sdist, asserts the wheel carries `_runtime/`, installs and
   exercises it, keeps the distribution as a workflow artifact, uploads it to
-  PyPI (the install channel every skill pins against), and attaches that same
+  PyPI (where uv installs it from), and attaches that same
   wheel and sdist to the GitHub Release as the provenance copy of what shipped.
 - **The plugin ZIP** (`cad-openai-plugin-<version>.zip`) is the plugin in the
   layout OpenAI's plugin submission portal takes. It is built from the release
@@ -557,7 +539,7 @@ Where the built things live instead:
 
 ### Versions a release cannot take
 
-The PyPI project `cad` (the library's distribution) was transferred to this project on
+The PyPI project `cad` was transferred to this project on
 2026-10-31, and its previous owner published these versions before the transfer: `0.8.0`, `0.8.1`, `0.8.2`, `0.8.3`, `0.8.4`, `0.8.5`, `0.9.0`, `0.9.1`, `0.9.5`, `0.9.6`, `0.9.7`, `0.9.8`, `0.9.9.1`, `0.9.9.3`, `1.0`, `1.0.1`, `1.0.2`, `1.0.3`, `1.0.4`, `1.1.1`, `1.1.2`.
 PyPI never accepts a filename again, yanked or deleted or not, so no release of text-to-cad can
 carry any of them (`VERSION` is one number for every distribution, which is why the release that
@@ -579,12 +561,14 @@ major from 1.0 and, below 1.0, which the standard leaves to the project, the min
 | An addition, or a deprecation (a rename that keeps the old name working) | the patch: `0.11.4` to `0.11.5` | the minor: `1.4.2` to `1.5.0` |
 | A fix | the patch | the patch: `1.4.2` to `1.4.3` |
 
-**A command, option or tool may change or go in any release.** Every command a skill runs names its
-release (`cad +<VERSION> <verb>`), so a skill only ever meets the commands of the release it was
-written for. Removing or renaming a `cad` command, an option, a `--json` key, an exit status, an MCP
-tool or its arguments breaks no skill, and is not a breaking change: it is a hard cutover, with no
-alias, shim or error that explains the old spelling (law 15, tier 1). A person's own script that runs
-`cad` commands may need an edit after an update; the release notes say what changed.
+**A command the skills used keeps working for 30 days.** cad moves to the newest release on every
+computer, and a store's copy of the skills can be weeks older. So a `cad` command, an option, a
+`--json` key, an exit status, an MCP tool or its arguments that the skills of any release in the last
+30 days use keeps working, hidden if need be; CI checks every release against that skill text
+(`tests/python/global/test_released_commands_still_parse.py`). Past that window it may change or go
+in any release, and that is not a breaking change: it is a hard cutover (law 15, tier 1). A person's
+own script that runs `cad` commands may need an edit after an update; the release notes say what
+changed.
 
 What breaks is what a person keeps from one release to the next: a Python name a model script imports,
 removed or with its contract changed (tier 2); data a release can no longer read (tier 3); a protocol
@@ -602,7 +586,7 @@ keeps; it is the one statement of them. This table says which slot a change in e
 
 | Law 15's tier | Breaks nothing: the patch below 1.0, the minor or patch from 1.0 | Breaking: the breaking slot, with a migration guide |
 | --- | --- | --- |
-| 1. What an agent reads each session: the skills, the `cad` command's verbs and options, the CAD tools | any change, in any release, as a hard cutover | nothing: every skill command names its release |
+| 1. What an agent reads each session: the skills, the `cad` command's verbs and options, the CAD tools | any change, in any release, once no skill text of the last 30 days uses what it removes | nothing: the 30-day rule keeps what released skills use |
 | 2. The library's public imports | an addition; a rename or a move whose earlier spelling stays an alias of the same object, its interface unchanged (a deprecation, which bumps the minor from 1.0) | the alias's removal; a change to a name's contract (what it takes or returns), including a spelling kept by something that is not the same object with the same interface |
 | 3. A person's data | a new form, with the previous shipped release's read and migrated on first touch | a release that cannot read what the previous shipped release wrote, or reads it as meaning something else |
 | 4. Protocols where two releases meet while both run | an addition within a number; a new number whose newer side keeps answering the previous one | a new number whose newer side stops answering the previous one |
@@ -620,23 +604,24 @@ interface. In tier 4 the number is the protocol's, not the release's: a new one 
 breaking one only where the newer side stops answering the previous number, which the law decides case
 by case; the worker contract keeps no window, so a new worker contract always does.
 
-### Nothing installs itself
+### How a release reaches a computer
 
-cad has no updater and updates nothing by itself, whatever number a release bumps. A release reaches a
-computer in one of two ways:
+- **cad updates itself** where automatic updates are on: off by default, turned on by the install
+  command and by a store's skill (`cad auto-update on`). The server checks the version feed as it
+  starts and about once an hour; when the feed names a newer release and nothing is running, a helper
+  stops the server, runs `uv tool install` for that release and starts the server again
+  (`cad_server/_internal/auto_update.py`). Where the install command set the computer up, the new
+  server then runs the hosted install command once in its update mode, which updates only our plugin
+  copies still in the apps (`cad_server/_internal/install_script.py`). Forward only: nothing installs
+  an older release.
+- **The version feed is the pointer.** It names a release an hour after it is on PyPI, unless the
+  project holds it back ([The version feed](#the-version-feed)).
+- **A plugin store** (Codex's directory, claude.ai's) updates the copy it installed. Its skills may be
+  older than cad, which the 30-day rule covers.
+- **Releases 0.10.0 to 0.11.10** are carried over once by their own updater
+  ([No version left behind](#no-version-left-behind)).
 
-- **A plugin store** (Codex's directory, claude.ai's) updates the copy it installed. Its skills name
-  the release, and install it the first time they run.
-- **An agent or a person runs the install command.** When a newer release is out, `cad` says so after
-  a command's output, in one line that names no command (`A new version of cad is available: X -> Y`):
-  cad knows nothing of the plugin, and the install command installs the plugin too. The skills of a
-  manual install tell the agent to install the new version of the plugin from the repository, whose
-  README gives the install command, and to tell the person. A new chat then uses the new release; a chat already open keeps
-  working, since the release its commands name stays installed until no agent has used it for two days.
-
-Releases 0.10.0 to 0.11.10 are the exception: they shipped an updater of their own, which still installs
-newer releases ([No version left behind](#no-version-left-behind)). The reasons are in
-[docs/contributing/decisions.md](docs/contributing/decisions.md).
+The reasons are in [docs/contributing/decisions.md](docs/contributing/decisions.md).
 
 ### What must stay the same
 
@@ -644,14 +629,15 @@ Everything else may change in any release. These may not, because past releases,
 the agents running them reach for them, and nothing shipped later can change what they reach for:
 
 1. **`texttocad.dev/install.sh` and `www.texttocad.dev/install.ps1`, run with no options.** Every
-   past release's skills, notices and documents name them. The Windows line names `www.` because
-   Windows PowerShell 5.1 does not follow the redirect from `texttocad.dev`.
+   past release's skills and documents name them, and cad runs them after an update. The Windows line
+   names `www.` because Windows PowerShell 5.1 does not follow the redirect from `texttocad.dev`.
 2. **The version feed, `api.texttocad.dev/v1/versions`, and its `latest` field.** Every shipped release
-   reads it to learn of a newer one.
+   reads it to learn of a newer one, and the install command installs the release it names.
 3. **The telemetry address, accepting what older releases send.** They keep sending as long as they
    run ([The version feed](#the-version-feed)).
-4. **Every release on PyPI.** Every skill command pins its release, and uvx resolves the pin through
-   PyPI: a release removed there breaks every copy of the skills that names it.
+4. **Every release on PyPI, under all four names.** Codex's plugin line runs `cad@<VERSION>` through
+   uvx, and the updaters of 0.10.0 to 0.11.10 ask PyPI for `cad-server` by name: a release removed
+   there breaks every copy that names it.
 5. **The hidden `cad setup --engine-update`.** The updaters of 0.10.0 to 0.11.10 call it.
 6. **The repository's address answering, with its `latest`, `claude-plugin` and `codex-plugin` branches
    and a README that tells an agent how to install.** Installs, apps and stores follow the branches by
@@ -662,42 +648,31 @@ the agents running them reach for them, and nothing shipped later can change wha
 
 **Everything else follows one rule: a new release carries the old ones, and an old release never needs
 to know a new one.** A name, a place or a layout may change in any release, on the condition that the
-release that changes it brings along every computer an earlier one is on, by its own setup or by the
-install script. Three things that look fixed are instances of the rule:
+release that changes it brings along every computer an earlier one is on, by its own code or by the
+install script. Two things that look fixed are instances of the rule:
 
 - **The names `text-to-cad` (the plugin) and `earthtojake` (the catalog).** They are words in our own
   manifests, not GitHub's: moving the repository changes neither. A new name is carried by the install
   script, which removes the copies under the old one, as it does for four older names; a copy the
   script never runs on stays under the old name.
-- **`~/.local/bin/cad` and the `cad +<version>` form.** A skill whose `cad` is missing, or does not know
-  its pin, has the agent install it, and each version's setup writes the command it needs, so the place
-  can change. What must never be left behind is a `cad` on the path that no longer understands
-  `cad +<version>`: the skills of earlier releases would install again and again.
-- **Where versions are kept** (`versions/<version>` in the state folder). This release changed the layout
-  of 0.11.10 and earlier and carries it along; a later one may do the same.
+- **Where cad keeps its data** (one folder per user). A later release may move it, carrying the old
+  folder along.
 
 ### No version left behind
 
 As many past releases as reasonable can reach the latest one:
 
-- **0.10.0 to 0.11.10** update through their own updater, which installs the newest release and runs its
-  `cad setup --engine-update`. That option, hidden from help and documents, sets the release up, writes
-  the record their switch starts its server by, and owes the computer a run of the hosted install
-  script, which brings each app's plugin up to date. The release's own server runs it once it has run
-  five minutes (longer than their switch can still go back from it), while their switch has left it
-  current: each attempt waits until the site's `install.py` names the
-  release (up to about an hour), and a failed one is tried again (an hour later at the next start, then
-  daily, for at most 30 attempts or 30 days); a release whose server cannot start, which their switch
-  goes back from, never runs it. 0.10.0's updater on Windows, whose switch cannot find a later release
-  (it keeps its state apart), is taken over from by the release's own setup. `Publish Release` purges the version feed only once the install
-  branches are written and `Deploy Docs` has run: the release before's script would leave the apps as
-  they were.
+- **0.10.0 to 0.11.10** update through their own updater, which installs the newest release the old
+  way and runs its hidden `cad setup --engine-update`. The new cad's server then runs the hosted
+  install command once, which installs cad as a uv tool, installs the plugin in the apps and turns
+  automatic updates on (`cad_server/_internal/install_script.py`, kept apart as bridge code, to be
+  deleted in one change once those releases are gone).
 - **Older releases** reach the latest when a person or an agent runs the install command. The script
   removes what each past layout left in the agent apps (`scripts/install/install.py`, the `cleanup` of
   each row of `APPS` and `remove_loose_skills`).
 
-Check a change to the install script, to `cad setup` or to the list above against both paths before
-it ships.
+Check a change to the install script, to cad's update or to the list above against both paths
+before it ships.
 
 ### Shipping a release
 
@@ -705,7 +680,7 @@ Merging a pull request that changes `VERSION` releases it: `Publish Release`
 (`release-publish.yml`) runs on that merge. Installers never take `main` as the
 plugin: they follow the `latest` branch (see
 [The install branches](#the-install-branches)), which `Publish Release` moves
-only once PyPI serves the release's wheels. A pin of the release's must never reach
+only once PyPI serves the release's wheels. A mention of the release must never reach
 anything an installer tracks before PyPI has its wheel. When installers took `main`, anyone
 who updated between a release's merge and its upload got a CAD server that would
 not start (`uvx … --from cadgen==0.7.14` → "there is no version"), for the 25
@@ -744,11 +719,10 @@ scripts/release/bump-version.sh patch           # or minor, major, or an exact X
 ```
 
 `bump-version.sh` sets `VERSION`
-past `main`'s and stamps the derived metadata and every pin of the release's own
-(`sync-version.mjs`: package, plugin and lockfile versions, the four
-`pyproject.toml`s and their `cad==` pins, the plugin server configs'
-`cad-mcp==`, the installers' `cad-server==` fallback, and the `cad +<VERSION>` that
-starts every command in the skills, and the install script's `FALLBACK`).
+past `main`'s and stamps the derived metadata and every mention of the release's own
+(`sync-version.mjs`: package, plugin and lockfile versions, the four `pyproject.toml`s and the
+aliases' `cad==` pins, Codex's server line, `cad@<VERSION>`, and the release each skill's Setup
+block names). The install script carries no version.
 It works from `main`'s version, not the branch's, so running it twice
 changes nothing and running it again after `main` moves moves the bump with it;
 it refuses a branch that does not contain `main` yet, whose stamps would conflict.
@@ -786,9 +760,8 @@ green: that is the release. `Publish Release`, on the merge commit:
    release commit and publishes only if every job passes. No untested tree is
    published either way.
 3. **Build.** `scripts/release/plugin_zip.py` builds the plugin ZIP from the
-   untouched release commit, every pin in its skills stamped with its channel
-   (`cad +<VERSION>@codex`) and its launcher started with `--startup-timeout 300 --channel codex` (the
-   timeout is the repository's config's own, its `startup_timeout_sec`), and checks it
+   untouched release commit, a store's copy (each skill's Setup block with the store's lines,
+   [The install branches](#the-install-branches)), and checks it
    against the portal's package rules,
    so a package the portal would refuse stops the release before anything
    irreversible; the ZIP is kept as a workflow artifact
@@ -800,18 +773,17 @@ green: that is the release. `Publish Release`, on the merge commit:
    the Viewer and the CAD app show `v<VERSION>` where every other build shows
    `v<VERSION>-dev.<commit>` (`@cad/ui/build-id`) — `check-builds.sh`,
    the wheel-contents check, `python -m build` of the release's four projects on
-   PyPI into one folder (the library `cad`, the server `cad-server`, the
-   shim `cad-mcp`, and the deprecated alias `cadgen`, a wheel and an
-   sdist each, and nothing else at any other version), and an `unzip -l` assertion
-   that the server's wheel about to ship really holds `_runtime/viewer` and
+   PyPI into one folder (`cad`, and its empty aliases `cad-server`, `cad-mcp` and `cadgen`, a wheel
+   and an sdist each, and nothing else at any other version), and an `unzip -l` assertion
+   that the `cad` wheel about to ship really holds `_runtime/viewer` and
    `_runtime/mcp`. The pages' source maps, which the bundle
    builds and the wheel leaves out, are gathered too
    (`scripts/release/sourcemaps.py`): every chunk a crash on the CAD Viewer or
    the CAD app can name, by the debug id its build stamped on it, with its map
    -- a page whose maps PostHog could not use stops the release here.
-4. **Install test.** The library's, the server's and the shim's wheels together
+4. **Install test.** The `cad`, `cad-server` and `cad-mcp` wheels together
    into a fresh venv — `cad --help`, `cad viewer --help`, `cad-mcp --help`,
-   `cad doctor --no-server` — then
+   `cad doctor` — then
    `scripts/test/test-installed.sh --wheels <the built folder>`; the distributions
    are uploaded as a workflow artifact (`dist-<version>`).
 5. **Source maps, then PyPI** (on `main` only). The maps go to PostHog first
@@ -822,9 +794,8 @@ green: that is the release. `Publish Release`, on the merge commit:
    overwrites another's, and a later release that ships the same chunk and map
    uploads it once. Then the `pypi` job uploads the four projects, one at a time:
    the only job that may mint a PyPI token, in the `release` environment (below,
-   "Repository settings"). The library goes first, since the server and the alias
-   pin it at their own release, then the server, the shim and `cadgen`, whose index the
-   version feed reads (`PROJECTS` in
+   "Repository settings"). `cad` goes first, since each alias pins it at its own release, then
+   `cad-server`, `cad-mcp` and `cadgen`, whose index the version feed reads (`PROJECTS` in
    `scripts/release/pypi_release.py`); each is listed by PyPI's simple index, which
    uv resolves a pin through, before the next goes up (`--wait`: usually seconds).
    It uploads only what PyPI does not hold yet, so a resumed release uploads nothing
@@ -832,9 +803,7 @@ green: that is the release. `Publish Release`, on the merge commit:
    sha256 for the GitHub Release to attach; a file PyPI holds that the run did not
    build stops the release.
 6. **Install branches** (on `main` only). `plugin_branch.py` commits the plugin
-   alone onto `latest`, `claude-plugin` (every pin in its skills stamped
-   `@claude`, and its install line the `uvx` command) and `codex-plugin` (the
-   ZIP's files, every pin stamped `@codex`: [The install
+   alone onto `latest`, `claude-plugin` and `codex-plugin` (the ZIP's files: [The install
    branches](#the-install-branches)), in one atomic push. Only now does
    an installer see the version.
 7. **Announce** (on `main` only), after the branches: `Deploy Docs`, whose
@@ -848,16 +817,11 @@ green: that is the release. `Publish Release`, on the merge commit:
    this release's copies, kept for the record. They install no particular release: run from
    anywhere, `install.sh` and `install.ps1` download the newest `install.py` from
    texttocad.dev (`Deploy Docs` serves it), which installs the newest release.
-   After the branches and `Deploy Docs`, the `feed` job purges the CDN cache that keeps the version
-   feed's answer an hour (`api.texttocad.dev`), five minutes after them, when no
-   instance of the feed's function still holds what it read from PyPI before: best
-   effort, and nothing waits on it. It waits for the docs because an updater of 0.10.0 to
-   0.11.10 that reads the feed runs the release's `cad setup --engine-update`, after which
-   the release's own server runs the hosted install script; each of its attempts
-   (`cad_server._internal.install_script`) also waits, up to about an hour, until the site's
-   `install.py` names the release, and a failed one is tried again later.
+   After the branches and `Deploy Docs`, the `feed` job purges the CDN cache in front of the
+   version feed (`api.texttocad.dev`): best effort, and nothing waits on it. The feed names the
+   release only once it has been on PyPI for an hour ([The version feed](#the-version-feed)).
 
-`main` has the new pins from the merge on, a few minutes before PyPI has the
+`main` has the new version from the merge on, a few minutes before PyPI has the
 wheels. Only an install of `main` itself sees that: a command that names no
 branch, and a marketplace added in Cursor, should Cursor fetch the repository in those minutes.
 
@@ -873,7 +837,7 @@ Installers clone a branch and take its tree as the plugin. On `main` that tree
 is the monorepo: a Claude Code install copied all of it into its plugin cache
 and ran an npm install of the workspace, 1 GB per install, and claude.ai's
 directory would hold its workflows, lockfile and binaries for a reviewer. `main`
-also has a release's pins from the merge on, before PyPI has the wheel. So
+also names a release from the merge on, before PyPI has the wheel. So
 installers follow branches only `Publish Release` writes, once the release is on
 PyPI: one commit per release whose tree is only the plugin
 (`scripts/release/plugin_branch.py`). A release whose plugin did not change adds
@@ -892,16 +856,16 @@ no commit. There are three copies:
   Agent Plugin, whose server comes from the second alone, and never reads
   `codex.mcp.json` ([apps/mcp/README.md](apps/mcp/README.md), "Which config Codex
   reads"). It is our own text, as `main` has it, but for the README's install
-  section, which installs by the skills' own `uvx` line in place of the
-  Quickstart's one-liners, as `claude-plugin`'s does, so no copy holds a
-  download piped to a shell (`plugin_branch.py` checks every copy).
+  section, which installs cad by uv's line in place of the Quickstart's
+  one-liners, as `claude-plugin`'s does, so no README of a copy holds a download
+  piped to a shell.
 - `claude-plugin`, which claude.ai's directory listing tracks: the skills alone.
   `.claude-plugin/plugin.json` (main's less four listing links, naming no MCP
   server and no hooks) and `icon.png`, `skills/`, `LICENSE` and `README.md`, and
   nothing another app reads. The directory flags a download piped to a shell
-  (`curl ... | sh`) as an install-time risk, so this copy's README installs by
-  the skills' own `uvx` line in place of the Quickstart's one-liners, and the
-  copy holds no pipe-to-shell download anywhere. The directory refuses an MCP
+  (`curl ... | sh`) as an install-time risk, so this copy's README installs cad
+  by uv's line in place of the Quickstart's one-liners, and the copy holds no
+  pipe-to-shell download anywhere. The directory refuses an MCP
   server that runs on the user's computer, and every file type but Markdown,
   text, JSON, YAML and PNG, JPEG, GIF, WebP or ICO images, from an organization
   it has not verified, so the builder checks each file of this copy against
@@ -918,16 +882,13 @@ no commit. There are three copies:
   person uploads to OpenAI's portal (below), from the one function that builds
   that ZIP (`plugin_zip.build`), so the branch and the ZIP cannot differ.
 
-A store's copy (`claude-plugin`, `codex-plugin` and the ZIP) names its store in
-every pin (`cad +<VERSION>@claude`, `@codex`), so `cad` prints no update notice
-for its commands, and leaves out each skill's update paragraph, the lines
-between `<!-- manual-copy-update: start -->` and `<!-- manual-copy-update: end
--->` in the setup block: the store updates its copy, the person updates ours
-(`scripts/release/channel_stamp.py`, used by both builders; a setup block whose
-paragraph is not marked exactly once, or a marker left over, fails the build).
-`main` and `latest` name no store and keep the paragraph. Every copy installs
-`cad` by the skills' one line,
-`uvx --no-config --managed-python --python 3.14 --from cad-server==<VERSION> cad setup`.
+A store's copy (`claude-plugin`, `codex-plugin` and the ZIP) is delivered and updated by its store,
+so each skill's Setup block installs cad by uv's line,
+`uv tool install --managed-python --python 3.14 cad@latest` (with `--force` where uv says the `cad`
+executable already exists), then turns on cad's automatic updates (`cad auto-update on`), in place of
+our install command (`scripts/release/plugin_zip.py`, `STORE_LINES` and `store_copy`, which both
+builders use; a substitution that does not find our text exactly once fails the build). No copy names a store in its commands. `main` and
+`latest` keep our own text.
 
 **Installs always work from `main`; `latest` is the preferred install.** A
 command that names no branch installs `main` as it is, so `main` keeps every
@@ -948,10 +909,9 @@ the build when what it replaces is not there exactly once:
 
 | | `latest` | `codex-plugin` and the OpenAI ZIP | `claude-plugin` |
 | --- | --- | --- | --- |
-| Pins | as `main` | `@codex` | `@claude` |
-| Setup block's update paragraph | as `main` | left out | left out |
-| Launcher | as `main`: `cad-mcp --startup-timeout 300` in `codex.mcp.json` (the number its `startup_timeout_sec`) | `cad-mcp --startup-timeout 300 --channel codex` in `.mcp.json` | none: no MCP config |
-| README's install section | the `uvx` command and one paragraph | no README | the `uvx` command and one paragraph |
+| Setup block | as `main` | the store's lines | the store's lines |
+| Codex's server line | as `main`: `uvx ... cad@<VERSION> mcp` in `codex.mcp.json` | the same, in `.mcp.json` | none: no MCP config |
+| README's install section | uv's line, `cad auto-update on` and one paragraph | no README | the same as `latest` |
 | `.claude-plugin/plugin.json` | as `main` | not shipped | without `documentationUrl`, `privacyPolicyUrl`, `supportUrl` and `termsOfServiceUrl`, which the directory's validation does not know; the README links the same pages |
 
 `CAD_INSTALL_CHANNEL` and `CAD_AUTO_UPDATED`, which the configs of 0.11.10 and earlier set, are
@@ -976,12 +936,9 @@ each folder with its own entry: `.codex-plugin/` (manifest and icons), `skills/`
 first ZIP, one top-level `cad/` folder with no directory entry of its own, as
 holding no plugin.) The portal requires `mcpServers` to resolve to a root
 `.mcp.json`, so a server config the checkout keeps under another name is
-archived as `.mcp.json`, and the archived manifest points there. That config
-starts the launcher with its channel as an argument, `cad-mcp --channel codex`, and
-Codex's startup timeout, the config's own `startup_timeout_sec`, as `--startup-timeout 300` (kept from the
-repository's `codex.mcp.json`, which tells it so for `latest` and `main` too; the
-launcher holds a first start's `initialize` for 80% of it, the rest of it left to uvx starting the launcher before the `initialize` arrives and to the server's start and its own answer after the version is ready: Codex acts on no
-`tools/list_changed` within a turn, `apps/mcp/README.md`), and sets no environment.
+archived as `.mcp.json`, and the archived manifest points there. That config is
+the repository's `codex.mcp.json` as it is: `uvx ... cad@<VERSION> mcp`, Codex's
+startup timeout (`startup_timeout_sec`), and no environment.
 
 For each release, a person with the access below:
 
@@ -1016,20 +973,19 @@ skill and policy scans still run after upload.
 
 ### The version feed
 
-The version check (at most once an hour) reads `api.texttocad.dev/v1/versions`
-(`apps/api/src/versions.mjs`): `latest` is the newest release PyPI's simple
-index lists, the index uv resolves every pin through, so the feed names a
-release the moment it can be installed (Vercel's edge keeps a reply an hour, which
-`Publish Release`'s `feed` job purges once the install branches are written and `Deploy Docs` has run, on `main` only), and no release
-deploys it. The install command reads it too, for the release to install. cad reads it
-only to say that a newer release is out, after a command's output, with the install command
-to run; a command that names a store (`cad +X@codex`) is never told, since its store
-updates it. Telemetry passes through the same API to PostHog: a deploy (`Deploy API`,
-on every change to `apps/api` on `main`) needs the project's PostHog settings in Vercel,
-which `/v1/health` checks (`apps/api/README.md`). A release that sends a new telemetry
-schema carries the receiver that reads it, deployed by its merge: until that deploy is
-live, the receiver answers the new schema's batches "try later" (503) and the senders keep
-them, so check that `Deploy API` succeeded after the merge.
+`api.texttocad.dev/v1/versions` (`apps/api/src/versions.mjs`) names one release, `latest`: the
+newest on PyPI that has been there for at least an hour and is not held back. It is the pointer: the
+install command installs that release, and cad's own update moves to it (`cad_server/updates.py`
+reads it, at most once an hour). To hold a release back, add it to `CAD_HELD_RELEASES`, an
+environment variable of the Vercel project, and redeploy (`gh workflow run deploy-api.yml --ref
+main`); to pull a release from store copies too, which install from PyPI directly, also yank it on
+PyPI. The feed reads the index of `cadgen`, the last of the four projects a release uploads, so a
+release it names is installable under every name. Telemetry passes through the same API to PostHog:
+a deploy (`Deploy API`, on every change to `apps/api` on `main`) needs the project's PostHog
+settings in Vercel, which `/v1/health` checks (`apps/api/README.md`). A release that sends a new
+telemetry schema carries the receiver that reads it, deployed by its merge: until that deploy is
+live, the receiver answers the new schema's batches "try later" (503) and the senders keep them, so
+check that `Deploy API` succeeded after the merge.
 
 ### Resuming and republishing
 
@@ -1173,9 +1129,10 @@ current release workflow above for future releases.
 ## Decisions
 
 Why text-to-cad is installed, run and updated the way it is -- two layers with one direction of
-knowledge, versions side by side, who updates what, the install script, no version left behind --
-is [docs/contributing/decisions.md](docs/contributing/decisions.md). Read it before changing the
-install script, `cad setup`, the manifests or the skills' setup text.
+knowledge, one cad per computer, the feed as the pointer, who updates which copy, forward only, the
+30-day rule, the install script, the bridge -- is
+[docs/contributing/decisions.md](docs/contributing/decisions.md). Read it before changing the
+install script, cad's update, the manifests or the skills' setup text.
 
 ## Writing A Skill
 

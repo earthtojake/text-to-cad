@@ -1,15 +1,23 @@
 # cad
 
 The library: CAD models written as Python, imported as `cad`, built by the engine (`cad.engine`) into live XCAF documents and the files those models
-declare (XBF, STEP, GLB, STL, 3MF, DXF). It is one of three distributions released together, at one
-version: the library; the server, `cad-server` (imported as `cad_server`), the computer's one
-daemon that builds, keeps and serves the documents, with the CAD Viewer, the CAD app's MCP endpoint
-and the command that runs them all; and the shim, `cad-mcp` (`cad_mcp`), the stdio transport
-an agent app starts. The server ships what is not Python: the CAD Viewer's client and the CAD app
-page, which it serves, built from their JavaScript packages and bundled in at build time (the JS
-*source* never ships). Snapshots are drawn by OCCT (a KiCad board's flat, with Pillow), never in a
-browser. This file holds the laws of
-all three.
+declare (XBF, STEP, GLB, STL, 3MF, DXF). The same distribution, `cad`, holds the server (imported as
+`cad_server`), the computer's one daemon that builds, keeps and serves the documents, with the CAD
+Viewer, the CAD app's MCP endpoint and the `cad` command that runs them all; and the stdio transport
+an agent app starts (`cad_mcp`, run as `cad mcp`). The server ships what is not Python: the CAD
+Viewer's client and the CAD app page, which it serves, built from their JavaScript packages and
+bundled in at build time (the JS *source* never ships). Snapshots are drawn by OCCT (a KiCad board's
+flat, with Pillow), never in a browser. This file holds the laws of all three parts.
+
+Install it as a uv tool, which gives the computer its one `cad`:
+
+```bash
+uv tool install --managed-python --python 3.14 cad
+```
+
+`cad server start` starts the server; `cad auto-update on` lets cad update itself; `cad doctor`
+reports what is installed. `cad-server`, `cad-mcp` and `cadgen` are empty aliases of this
+distribution, kept so older installs keep working.
 
 A **document** is what a person reviews: one instance of a **document type** (below), either a file read on
 its own or one built from code -- a model, built by the engine. Documents exist so that a person can review the
@@ -91,7 +99,7 @@ its operations and what writes it.
 **PURPOSE** — the engine and its command surface: models built in a warm worker whose memo
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
-launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
+launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a MuJoCo model's
 check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); OrcaSlicer's
 presets written complete for its command line (`cad.orcaslicer`); a 3D
@@ -125,9 +133,9 @@ build123d integration: a
 third-party technology and the application layer over it are an integration, named for the
 technology, and its extra carries the same name.
 
-**DEPENDED ON BY** — the server, `cad-server`, which pins it at its own release, and through
-the server every skill that runs `cad`; the deprecated alias `cadgen`, which installs it at the same
-release.
+**DEPENDED ON BY** — the server and the `cad` command (`cad_server`), in the same distribution, and
+through them every skill that runs `cad`; the empty aliases `cad-server`, `cad-mcp` and `cadgen`,
+which install it at the same release.
 The CAD Viewer is the server's: it serves `cad_server.viewer`’s client, HTTP application and
 every STEP and `.xbf` a page opens on one authenticated listener, without a relay.
 
@@ -138,7 +146,9 @@ the two disagree, the engine's README is right.
 
 | Document | What it is for | Go there when |
 |---|---|---|
-| The engine's README, `cad_server/engine/README.md` in the server's distribution (`cad-server`) | The engine: models and decorators, the engine server and its workers, the door, progress, the viewer and the snapshot, exports, kinematics, couplings and configuration sequences, materials, imports, placements, the mesh and its wire format, element names, references, body retention, queries, memo functions and the build closure | changing anything a build, an export, a snapshot or a served document does |
+| The server's README, `src/cad_server/README.md` | The server's shape, its commands, cad's own update and where it keeps things | changing a command, the server's folders or the update |
+| The transport's README, `src/cad_mcp/README.md` | What `cad mcp` does between an agent app and the server | changing how an agent app reaches the server |
+| The engine's README, `src/cad_server/engine/README.md` | The engine: models and decorators, the engine server and its workers, the door, progress, the viewer and the snapshot, exports, kinematics, couplings and configuration sequences, materials, imports, placements, the mesh and its wire format, element names, references, body retention, queries, memo functions and the build closure | changing anything a build, an export, a snapshot or a served document does |
 
 ## The design laws
 
@@ -173,11 +183,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    state in the user's state folder (`cad`): settings, Recents' small previews, and the registry of the
    documents it has built, been handed or opened, one record each that points at its script or
    file, the user's one page token, the engine's record (the port it rolled to while 3245 is another
-   program's; both this user's alone), each registered installation's record
-   (`installations/<version>.json`: its python, its console script, its environment) and which one
-   is current (`installations/current`: the release whose engine the device runs), and the
-   releases an update installed (`releases/<version>`: each one's environment, made by uv from its
-   cache; the one before the current kept as the way back);
+   program's; both this user's alone);
    never geometry and never source. In the
    platform's cache folder (`~/.cache/cad`, on Windows too) it keeps, under `documents/`, the
    engine's cache for documents, and nowhere else there: each model document's bytes as it last
@@ -188,17 +194,18 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    `documents/<id>/kicad/<key>/`), so a changed file is a new entry and nothing stale is served --
    every one regenerable, kept until the document is deleted (`cad delete`, the home's Delete), which
    deletes it with them -- nothing evicts it; under `pycache/` the bytecode its own processes compile of the libraries they load
-   (`PYTHONPYCACHEPREFIX`, a folder per installation), regenerable too, so nothing is written
-   beside a library or a model; and under `base/` the environment the engine's kernel processes run in, an
-   installation's base, `cad[build123d]` at its release, made by uv from its cache on first need, and
+   (`PYTHONPYCACHEPREFIX`), regenerable too, so nothing is written
+   beside a library or a model; and under `base/` the environment the engine's kernel processes run in, the
+   base, `cad[build123d]` at its release, made by uv from its cache on first need, and
    beside it each environment a program's run made (`cad run`: the library pinned with the integrations
-   its imports use, and the packages it names), regenerable as well, those of the release before the
-   current kept as the way back (the engine's **Running a model**); and under `homes/` the private settings
+   its imports use, and the packages it names), regenerable as well (the engine's **Running a model**); and under `homes/` the private settings
    folders a run hands a tool that would otherwise read the person's own (Blender's, for a script that
    imports bpy: `homes/blender`), empty but for what the tool itself writes there. One state folder, one cache
    folder and one engine folder a user, whatever release of cad runs -- the layout of 0.11.10 and earlier, kept as
    it was, so an update keeps the person's settings, records and links, and every path is `cad.engine.places`'
-   (`CAD_STATE_DIR`, `CAD_CACHE_DIR` and `CAD_ENGINE_DIR` move them, for a test or an experiment). The code stays the only source of truth: a document is what its
+   (`CAD_STATE_DIR`, `CAD_CACHE_DIR` and `CAD_ENGINE_DIR` move them, for a test or an experiment). `cad cache
+   prune` removes what this release cannot use, `cad cache clean` all of the cache, and nothing else of cad deletes
+   a past release's files. The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
    sidecar, record of a build beside a model, index, memo, mesh or parsed document (but the file
@@ -295,25 +302,26 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     (`mechanism_state_representation`), `configuration_sequence`
     (`interpolated_configuration_sequence`), and `gear_pair`, `rack_and_pinion_pair` and
     `screw_pair`, each refusing a joint its pair does not relate.
-14. **Each distribution ships alone.** *The package.* An installed distribution is the whole world: its Python,
+14. **The distribution ships alone.** *The package.* An installed distribution is the whole world: its Python,
     what it bundles (the server's `_runtime/`), and its documents. It works with the repository it
     was built from gone -- and its markdown must read that way, referring to nothing outside its
-    own distribution, another one's files included.
-    *Pressure-test*: every sentence in a distribution's markdown must be true and actionable for
-    someone who only ran `pip install cad==<release>` (or `cad-server`, or `cad-mcp`). Naming a bundled thing ("the JavaScript runtime
+    own distribution.
+    *Pressure-test*: every sentence in the distribution's markdown must be true and actionable for
+    someone who only ran `uv tool install cad` or `pip install cad==<release>`. Naming a bundled thing ("the JavaScript runtime
     bundled at build time") passes; a repository path to its source, a repository script, or a
-    repository workflow does not. This README also holds the laws of all three distributions, so a
-    law may name another distribution's file, said as that distribution's ("the server's
-    `updates.py`").
+    repository workflow does not. A law may name a file of the server's or the transport's, said as
+    theirs ("the server's `updates.py`").
 15. **Compatibility, by who pays for a break.** *The package.* A change is judged by who absorbs it and whether
     they can. Four tiers:
 
     **Tier 1: what an agent reads each session** -- the skills, the `cad` command's verbs and flags,
-    the CAD tools' arguments, the wording of docs. Hard cutovers only, in any release: a command the skills stopped
-    using keeps working for 30 days, checked against the skill text released in that time, and removing or renaming
-    one after that is not a breaking change and needs no migration guide. A retired
-    surface does not exist: no alias, no shim, and no error that recognizes its old spelling to
-    explain what replaced it. A removed command, flag, argument, key, module or name gets what the
+    the CAD tools' arguments, the wording of docs. cad moves to the newest release on every computer
+    while a store's copy of the skills may be weeks older, so a command, flag or tool the skills used
+    keeps working for 30 days after the release whose skills stopped using it, hidden if need be; CI
+    checks each release against the skill text released in the last 30 days. Past that window, hard
+    cutovers only, in any release: removing or renaming one is not a breaking change and needs no
+    migration guide. A retired surface does not exist: no alias, no shim, and no error that
+    recognizes its old spelling to explain what replaced it. A removed command, flag, argument, key, module or name gets what the
     current contract's ordinary validation says -- an unknown command, an unrecognized argument, an
     unknown key, an `ImportError`, an `AttributeError`.
     *Pressure-test*: use a removed spelling; the error must read exactly as it would for a name that
@@ -351,9 +359,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     Whether the newer side keeps answering the previous number is decided case by case, by what a
     mismatch would strand and whether the stranded side can say what to do. Where it does not, the
     side that meets a number it does not speak says so in one line and names which package to update,
-    and to what release, never how to install it: the person or the agent has their own way; for the
-    server, installing `cad-server` into a project's environment neither registers nor moves the device's
-    server. The analytics receiver
+    and to what release, never how to install it: the person or the agent has their own way; installing
+    `cad` into a project's environment neither replaces nor moves the computer's cad. The analytics receiver
     keeps every schema a released client sends. The worker contract (`cad.engine.contract`: the worker
     protocol's number, the document format, the kernel), by which a script run with a Python of its
     own and the server meet, is decided so: a contract the server does not speak is refused before any
@@ -418,13 +425,15 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     document out of memory, for the engine's cache to give back, only when nothing watches it (the
     engine's **Document lifetime**).
 
-20. **One engine per device; tabs select documents at `/<uuid>`.** *Every document.* Every process reaches the one
-    engine, through the one door in the engine folder, whatever release it is -- one of 0.11.10 or earlier too --
-    and only `cad server start` (and `cad mcp`, which starts it so) starts it where none answers: the library never
-    starts a server of its own environment. A start of a newer release replaces an older release's engine; an older
-    one joins a newer engine that runs (the engine's **Starting and updating**). A tab names a model's id, or a file's id after a launcher
+20. **One engine per computer; tabs select documents at `/<uuid>`.** *Every document.* Every process reaches the
+    one engine, through the one door in the engine folder, whatever release it is -- one of 0.11.10 or earlier
+    too. Only `cad server start` and `cad mcp` start it; every other client that finds none says so in one line
+    and starts none, and the library never starts a server of its own environment. A start of a newer release
+    replaces an older release's engine; an older one joins a newer engine that runs (forward only); a `cad`
+    command of another release than the engine says so in one line. cad's own update stops the engine, installs
+    the new release and starts it again (the engine's **Starting and updating**). A tab names a model's id, or a file's id after a launcher
     registers it; Python scripts are never documents. A page never replaces or re-executes the engine. Its one page and document reads
-    share its authenticated HTTP listener. `serve` and `viewer` always start or reuse it, with no
+    share its authenticated HTTP listener. `serve` and `viewer` reuse it and start none, with no
     standalone serving mode, and no Python function starts, stops or serves it (law 21). Launchers
     exit; clients closing never stop it. Kernel operations run in child processes, never in the
     engine's request threads. There are no page sessions: the explorer opens where it was last, else
@@ -466,7 +475,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     migration**): it hashes existing scripts once for older records, without importing them or
     reading or writing an XBF.
     *Pressure-test*: build a model, then edit its script, its modules and the files its bodies
-    read, without running it: every page, the home, every verb and tool and `cad status` answer
+    read, without running it: every page, the home, every verb and tool and `cad server status` answer
     as they did before the edit, and no process of the engine has opened a file of the model's code
     since its run.
 
@@ -563,7 +572,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     an integration like any other, its extra installing it only there: the registry names that Python, the
     platforms it has builds for and the folders its settings are read from, an environment with it is
     made on that Python with the library pinned in it, and a run's settings folders are private. That is
-    why the library's floor is Python 3.13 while the server's installations run on a newer one.
+    why the library's floor is Python 3.13 while cad itself, installed as a uv tool, runs on a newer one.
 
 29. **cad wraps a tool only where it adds something.** *The package.* Nothing is a superficial wrapper:
     a helper in the library and a typed command alike are added because something is missing without
@@ -710,8 +719,8 @@ src/cadgen/              # the deprecated import alias: every name and every mod
                          #   own (law 15's earlier name)
 ```
 
-The server, `cad-server`, and the shim, `cad-mcp`, say their own shapes and commands in
-their own READMEs.
+The server and the transport say their own shapes and commands in their own READMEs,
+`src/cad_server/README.md` and `src/cad_mcp/README.md`.
 
 ## Native KiCad files
 

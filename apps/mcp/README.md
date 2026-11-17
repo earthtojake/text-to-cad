@@ -3,9 +3,10 @@
 The page an agent host renders for CAD: the same `@cad/ui` FileViewer and
 renderers `apps/web` composes (`cadRenderers`: every format the viewer opens, a KiCad board and
 schematic among them, and the file handler's extensions with them: `cad_server/mcp/server.py`'s
-`EXTENSIONS`), behind a different host — an MCP Apps bridge instead of an HTTP origin. The installation's engine serves its tools, page resource and HTTP routes.
-`cad-mcp` is the stateless stdio shim that agent hosts launch: it ensures that
-engine, then forwards JSON-RPC to `/mcp` using its installation token. Each shim
+`EXTENSIONS`), behind a different host — an MCP Apps bridge instead of an HTTP origin. The computer's engine serves its tools, page resource and HTTP routes.
+`cad mcp` is the stateless stdio shim that agent hosts launch (Codex's plugin line runs it as
+`uvx --no-config --managed-python --python 3.14 cad@<VERSION> mcp`): it starts that
+engine once, as `cad server start` does, then forwards JSON-RPC to `/mcp` using its token. Each shim
 negotiates a separate MCP session. Closing a shim releases that session and leaves
 the engine, its workers and other clients alive.
 
@@ -52,7 +53,7 @@ to `host.presentation`, in one change.
   data URL of at most 8192 characters (or an `https:` URL), so never the tools' `currentColor` SVG. The agent opens a tab once
   (`cad_open`) and drives it (`cad_show`). These remain separate because the host mounts
   the UI from static tool metadata: adding that metadata to `cad_show` would mount a new
-  view on updates too. A conditional server result cannot promise host-side tab reuse. Codex starts one `cad-mcp` shim per
+  view on updates too. A conditional server result cannot promise host-side tab reuse. Codex starts one `cad mcp` shim per
   thread. Each connects to a separate engine session, so an unnamed view belongs to that thread.
 - **Inline (no app: the development switch alone).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
@@ -76,7 +77,7 @@ server's binary sends) never loads this page: its `cad_show` and `cad_open` open
 machine's CAD Viewer, `/<id>` (the file registered by its id, as a launch registers it), started if none runs
 (`cad_server/mcp/browser.py`), in the person's browser through an owner-only redirect file
 (`cad_mcp/browser.py`), and answer with the page's URL for the agent to give the person: "opened in your
-browser at <url>". The host's stdio process (`cad-mcp`) makes that open, in the agent's own environment (its
+browser at <url>". The host's stdio process (`cad mcp`) makes that open, in the agent's own environment (its
 `BROWSER`, its display), from the page the engine's answer names (`_meta["dev.texttocad/open"]`, stripped
 before the host sees it), and tells the engine whether it opened before the host has the answer
 (`notifications/dev.texttocad/opened`); the engine, which runs in the environment of whatever started it,
@@ -96,7 +97,7 @@ tab opens in this thread, give the user this link too, to open the model in thei
 Codex app known by its launcher gets the tab alone. A `cad_show` right after a `cad_open` never waits for
 that tab: it says the tab is still opening, and the tab shows the model as it first syncs. A host that
 renders apps never has a browser opened by a tool.
-`CAD_MCP_PRESENTATION=inline|tabs|text` in `cad-mcp`'s environment is the development switch: it forces that
+`CAD_MCP_PRESENTATION=inline|tabs|text` in `cad mcp`'s environment is the development switch: it forces that
 presentation on any client, to test the page's cards (`inline`, as with the reference host `basic-host`),
 its tabs outside Codex, or no tools.
 
@@ -129,23 +130,21 @@ Codex alone: a card is small and scrolls away with the chat, and only Codex's ta
 | ChatGPT and OpenAI's other hosts | `inline`, `fullscreen` | not verified |
 | Goose | `inline`, `fullscreen`, `pip` | not verified |
 
-## Starting: how long a host waits for `cad-mcp`
+## Starting: how long a host waits for `cad mcp`
 
-A thread's first start on a computer without its version installs it (30 seconds to minutes), so
-how long the host waits for `initialize`, and what it does with a late tool list, decide whether
-that thread gets CAD's tools.
+The first start of a release on a computer has uvx fetch it from PyPI, so how long the
+host waits for `initialize`, and what it does with a late tool list, decide whether that thread gets
+CAD's tools.
 
 | Host | Startup timeout | A late `initialize` | `tools/list_changed` |
 | --- | --- | --- | --- |
 | Codex (codex-cli 0.169.0-alpha.11.1, measured 2026-11-14) | 30 s where the server config sets no `startup_timeout_sec`; ours (`codex.mcp.json`, and the OpenAI directory's ZIP made from it) sets 300 | a turn never waits for MCP servers; a server answered late (9 s and 25 s tried) has its tools added to the running turn | not acted on for the rest of a turn: a list answered empty stays empty in that turn |
 
-So `cad-mcp` holds `initialize` for its version as long as the host waits: 20 seconds by default
-(inside Codex's 30), and 80% of the startup timeout where the server config says it as
-`cad-mcp --startup-timeout N` (a day at most). The other 20% is what the host's timeout counts
-besides: uvx fetching and starting `cad-mcp` before the `initialize` arrives, and the server's
-start and its own answer to the `initialize` after the version is ready. The repository's `codex.mcp.json` says it
-(`--startup-timeout 300`, its own `startup_timeout_sec`), so the copies from `latest` and `main` and the OpenAI ZIP
-(`scripts/release/plugin_zip.py`, which checks the two agree and adds `--channel codex`) all do.
+So `cad mcp` answers `initialize` within 20 seconds, inside Codex's 30, whether or not the server has
+finished starting; a tool call made before it has is answered with a line saying it is starting. The
+repository's `codex.mcp.json` sets `startup_timeout_sec` to 300, so the copies from `latest` and `main`
+and the OpenAI ZIP (`scripts/release/plugin_zip.py`) leave uvx time for a first fetch. An older
+release's `--startup-timeout N` is taken and ignored.
 
 Which config Codex reads (measured 2026-11-15, Codex CLI 0.153.4 and 0.169.0-alpha.11.1, `codex mcp get
 cad --json` in a private `CODEX_HOME`): a folder with the Agent Plugins standard's root `plugin.json` is
@@ -236,7 +235,7 @@ the launch's `_meta` first (`host/capability.ts`).
   before, in any view or the web viewer). Back to home, first in the menu the navbar's logo
   opens, goes to it. The sidebar (`cad_home`) and a tab with nothing to show open on it; a
   model opened from it is shown in place. The home has the same navbar (the logo's menu, Back
-  and Forward, Full size; no file, so no ⋯); it starts with its control
+  and Forward and Full size; no file, so no ⋯); it starts with its control
   row, its links the app menu's.
 - **A view browses from its file's folder.** The file name in the navbar opens the name menu:
   Models, and Files, the explorer, starting at the file's folder. A pick shows the file in
@@ -294,8 +293,7 @@ the launch's `_meta` first (`host/capability.ts`).
   id of the unedited chunk the CAD Viewer may ship. It is on by default once
   a `cad` command has said so, once, and nothing asks. The app menu's **Telemetry**
   switch (`appSettings`, through `/api/v1/settings`' `telemetry`) changes the answer, one answer for
-  this app and the browser viewer. The channel is reported with the
-  counts; it decides nothing there. No tool of the agent's reads or changes it:
+  this app and the browser viewer. No tool of the agent's reads or changes it:
   the person answers in the menu or with `cad telemetry`. Opt-out deletes the
   installation ID and requests deletion of data sent under it.
 - **Told how it is presented, before it greets the host.** A host that mounts
@@ -551,7 +549,7 @@ session at their next call. Only a view from before the host restarted the shim 
 no session takes.
 Host-specific capability corrections live in the stdio transport (`cad_mcp/shim.py`). Version polls use `wait=0`
 in the page’s tunnel so they never occupy a host call slot. The engine has no such
-host-specific timing rule. The manifests continue to launch `cad-mcp`.
+host-specific timing rule. Codex's manifest launches `cad mcp`.
 
 ## Develop
 
@@ -559,14 +557,14 @@ host-specific timing rule. The manifests continue to launch `cad-mcp`.
 npm run build:mcp                             # packages, then this app
 npm --prefix apps/mcp run typecheck          # tsc over src/ (the Vite build checks no types)
 npm --prefix apps/mcp run test               # jsdom units
-scripts/install/dev_install.py codex --restart  # run it in the Codex app
+scripts/install/dev_install.py codex          # run it in the Codex app
 ```
 
 `scripts/test/test-js.sh --select mcp` is what CI runs: the type check, the tests,
 then the build. A build names itself in the app menu (`vite.config.mjs`, through
 `@cad/ui/build-id`): the release's own build shows `v<VERSION>`, any other
 `v<VERSION>-dev.<commit>`, the commit of the checkout it was built from. Every host
-`dev_install.py` takes is in CONTRIBUTING.md ("Test In Agent Apps"). A checkout's `cad-mcp` serves `apps/mcp/dist` when it exists
+`dev_install.py` takes is in CONTRIBUTING.md ("Test In Agent Apps"). A checkout's `cad mcp` serves `apps/mcp/dist` when it exists
 (`CAD_MCP_APP_DIR` overrides it); a wheel serves `cad_server/_runtime/mcp`,
 built by `scripts/bundle/bundle.sh`.
 

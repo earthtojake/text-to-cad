@@ -143,10 +143,10 @@ describes the mechanism they constrain and cites them by that README's numbers -
 
 ## Architecture
 
-One server per installed version in use -- each reached through its own door, the one `installations/current` names
-also through the flat door clients of 0.11.10 and earlier find (**Starting and updating**) -- owns its
-processes, run by one supervisor (**Services**), served documents and HTTP listener.
-`cad serve` and `cad viewer` launch or reuse that server and return its URL.
+One server per computer -- reached through one door, which clients of 0.11.10 and earlier find too
+(**Starting and updating**) -- owns its processes, run by one supervisor (**Services**), served documents
+and HTTP listener. `cad serve` and `cad viewer` reuse that server and return its URL; where none runs
+they say so in one line.
 The background process is implemented in `daemon.py`; warm workers remain separate.
 Every successful build registers its document by id and gives it a URL, `/<id>`; registration does not mesh it.
 A model's worker is a separate process, holding its memo and live kernel objects; the daemon holds
@@ -241,15 +241,15 @@ Vite, Jupyter and Next.js take theirs; when another program holds it, the next f
 (`daemon.PORTS_TRIED` above it, then any), which the engine remembers in its record and takes at
 every later start, whatever release it runs, so its links stay what they were. The start that rolls says so once, on the
 stderr of the client whose request bound the port (a build's, when its page bound it; or `cad
-server`'s) and in `cad status`, as a fact with nothing to act on (the engine works on the port it
+server start`'s) and in `cad server status`, as a fact with nothing to act on (the engine works on the port it
 took, and whatever holds 3245 -- another installation's server, a test's -- is left running):
 `the engine serves on port 3246 and keeps it for its links: 3245 is in use by <name> (pid N)`. A remembered port
 that is free is used, and one held is rolled from the same way. When 3245 is free again at a start,
 the engine takes it back and forgets the port it rolled to: `back on the default port 3245: links
 made on 3246 no longer work` -- the one time a link changes. Who holds a port is named as the
 system says it (`daemon.port_holder`: `lsof` on macOS, `/proc` on Linux, `netstat` on Windows), or
-`another process` where it does not say, and another cad-server, by its command line (another
-engine folder's, 0.8's), `another cad-server (<name>, pid N)`.
+`another process` where it does not say, and another cad server, by its command line (another
+engine folder's, 0.8's), `another cad-server (<name>, pid N)` (the words the code prints, `cad.engine.said.SERVER`).
 
 **Starting and updating.** One server a device, in one engine folder, whatever release runs it: the layout of 0.11.10
 and earlier, kept as it was, with one state folder and one cache folder (`cad.engine.places`). Only `cad server start`
@@ -325,13 +325,13 @@ its own `registry.ENGINE_SCHEMA`), and the token is the user's one file beside i
 which every release's engine serves with (`registry.Registry.token`; both this user's alone, 0600), so a link
 outlives an update too. So a page link
 -- the `cad viewer` output, a model's `view:` line, the CAD app's card -- works across `cad
-stop`, a crash, a reboot and an update until the token is rotated, the session it left in a browser for 30 days past that
+server stop`, a crash, a reboot and an update until the token is rotated, the session it left in a browser for 30 days past that
 browser's last use of it, on any port, and a page that lost its engine keeps asking the same address
 and reloads itself when the engine answers again. Whoever holds a live link or session reaches the
 user's folders whenever the engine runs. `cad server --rotate-token` replaces the token, once the person says yes
 (**Consent**, `--yes`), in the state folder every release reads, and tells every running server to take it at once (`{"op": "token"}`, `Daemon.retoken`): every link and session made
 before stops working now, in every server. One that cannot be told (a server of 0.11.10 or earlier) is said, and
-takes the new token as it starts again. `cad status` says the
+takes the new token as it starts again. `cad server status` says the
 port and where it came from: the default, `--port`, `CAD_ENGINE_PORT`, or `rolled from 3245
 because <name> (pid N) holds it`.
 
@@ -389,14 +389,14 @@ only, and a file's id is derived again from its path after a restart.
 
 ## Running a model
 
-A model runs where the CAD kernel is. The server (`cad-server`: the engine's daemon, the `cad`
+A model runs where the CAD kernel is. The server (`cad_server`, in the `cad` distribution: the engine's daemon, the `cad`
 command, the viewer's server, and the numpy, ezdxf and Pillow they read meshes, drawings and
 pictures with) depends on the library (`cad`) without its kernel, and the CAD kernel (OCP,
 build123d and the rest) is the library's `build123d` extra. The library's layer over it (the model
 API, `kernel/`'s memo, naming and determinism settings) is the build123d integration, named for its
 technology as its extra is; each of cad's integrations is an extra, listed with the modules, the
 distributions and the decorators that are it in one table (`cad._internal.integrations`). So the
-installation the install command and the `cad` command run (the server, as uvx installs it) runs no
+cad the install command installs (a uv tool) runs no
 model itself: it makes environments with uv, and every process that loads the kernel starts from one.
 
 **The base** is the environment of the build123d integration alone: `cad[build123d]` at the engine's
@@ -504,7 +504,7 @@ the base (`places.SEPARATE`) -- names its Python in its orders, with how `cad ru
 environment (`places.RUN_WITH`: the options and requirements its command line was given, one word
 an option, and the script whose header named the rest); the engine builds the script in a warm
 worker of that Python, as for **a Python of the script's own** below, of one release with the
-engine, so no update notice is said. A header's `requires-python` the Python does not meet is refused
+engine, so no notice of another release is said. A header's `requires-python` the Python does not meet is refused
 in one line (read as PEP 440 reads it, `>=3.11.0rc1` too): before anything is made for the engine's
 Python, once the environment is made for one `--python` named.
 
@@ -583,8 +583,9 @@ changes what a worker and the server say to each other), the document format the
 line naming which package to update and to what release (`contract.refusal`): `cad here is 0.10.0,
 worker contract 1 (xbf/9, OCP 8.0); cad-server 0.10.2 speaks contract 2 (xbf/9, OCP 8.0): update the
 cad package in this environment to 0.10.2` -- the library's side, which names no installer -- or, for a
-library newer than the server, `...: update cad-server to 0.10.3` -- installed on the computer as a version of its
-own: installing cad-server into a project's environment neither registers nor moves the device's server. One contract of two releases builds, and the build's answer carries the server's release
+library newer than the server, `...: update cad-server to 0.10.3` (cad's messages still name the server
+`cad-server`, its alias) -- updating the computer's cad: installing cad into a project's environment neither replaces nor
+moves the computer's cad. One contract of two releases builds, and the build's answer carries the server's release
 (`release`): the script's run then says once, on stderr after its report, which package to update for
 the other's fixes (`contract.notice`, `api.say_notice`): `cad here is 0.10.0; cad-server is 0.10.2:
 update the cad package in this environment to 0.10.2 for its fixes and features`, or `cad here is
@@ -770,7 +771,7 @@ cad kicad_sch inspect SCHEMATIC [REF] [--json]
                                              #sheet:/Power/, #wire:<uuid>), what that names
 cad kicad_sch snapshot SCHEMATIC OUT.png [--sheet PATH] [--border] [--display JSON] [...]
                                              one sheet drawn flat (the root unless --sheet names another)
-cad status [--json] | stop [--json] | server [--port N] [--rotate-token [--yes]]
+cad server start [--port N] [--foreground] | stop [--json] | status [--json]; cad server --rotate-token [--yes]
 cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]
                                              each document deleted: its record, its document in the engine's
                                              cache and what the engine holds of it (**Delete**); never a
@@ -902,8 +903,8 @@ mtime and its size, so a same-length edit inside the second another tool compile
 otherwise run that tool's code. The libraries a worker loads are another matter: the daemon and
 its workers cache their bytecode under `pycache/<installation>` in the cache folder (`places.bytecode`, `PYTHONPYCACHEPREFIX`; one given is honoured, a caller's
 `PYTHONDONTWRITEBYTECODE` is not, as the daemon serves every later client), never beside a
-library or a model. A uvx installation compiles nothing on install, so without it every worker's
-start compiled build123d and the pure-Python libraries it loads: measured on a fresh uvx
+library or a model. A uv installation compiles nothing on install, so without it every worker's
+start compiled build123d and the pure-Python libraries it loads: measured on a fresh
 environment of the wheel, a fresh daemon's first build of a one-body model took 5.2-6.2 s with
 none cached and 2.4-2.9 s cached. A folder no daemon started in 30 days goes (`PYCACHE_UNUSED_DAYS`). With no cache folder that is this user's alone, nothing is written.
 The daemon's standby (**The engine server and its workers**) loads the kernel once the base exists:
@@ -1135,7 +1136,7 @@ but a pair went unmeasured; `ok` only with none of either. A caller of another r
 processes' is not measured for (`Unanswered`): there is no measuring in the caller.
 
 The checks processes are a small pool (`checks.Pool`): `CAD_ENGINE_CHECKS` of them (held to one to the machine's
-cores, which `cad status` says), else half the machine's cores, one at least and four at most, each a kernel
+cores, which `cad server status` says), else half the machine's cores, one at least and four at most, each a kernel
 process of its own key (`checks`, `checks-2`, ...), with the daemon's environment, outside the count cap,
 measuring one check at a time, so a file's check never retires a person's idle worker for its slot. A check
 takes a free slot whose process last measured its document (what it read is still held there), else one whose
@@ -1159,7 +1160,7 @@ lets the process go; a checks process holds nothing of anyone's). A check that d
 result: it fails with one word for why (`reason`, `api.EngineError.reason`), for its caller to tell from a part
 that fails its rules:
 
-- `stopped`: the engine stopped under it -- an update's drain, which waits for no check, or `cad stop` -- every
+- `stopped`: the engine stopped under it -- an update's drain, which waits for no check, or `cad server stop` -- every
   check waiting or measuring at once, and one asked meanwhile (`api.Stopped`, from the engine's answer or its
   connection closing): run it again;
 - `cancelled`: every caller of it had gone -- its own and each attached since, each connection watched for its
@@ -1222,8 +1223,8 @@ document's unreadable cache file) leaves the list as it is asked for; and a cach
 keeps nothing there, each result trying its own write. Each is written under the registry's lock of its
 document, which its deletion holds (`Registry.lock`, `FORGOTTEN`): a deleted document's results leave memory and
 the index, and a check of it that began before keeps nothing.
-`cad status` lists each check asked and not ended: its process, its document or file, where it measures or that it
-waits, for how long and whether its caller is gone; and `cad status --json` counts the store (`checks`: held,
+`cad server status` lists each check asked and not ended: its process, its document or file, where it measures or that it
+waits, for how long and whether its caller is gone; and `cad server status --json` counts the store (`checks`: held,
 bytes, measured, reused, restored: those reused from disk; read: the documents a process read for a check;
 waited: those that waited for the same check; asked: those not ended; disk: held and bytes on disk, once listed;
 pool: its size, how many are busy, each checks process, and the line said where `CAD_ENGINE_CHECKS` was held to its
@@ -1474,7 +1475,7 @@ for each request, its `log`, `notice` and `progress` frames, which go to whoever
 answer, which may say `rssMb` and `retire`. A line before a frame that is no JSON object is skipped
 (a banner). A child that answers side requests while a request runs (a worker's `where`) reads its
 stdin on a thread of its own. It exits when its stdin closes. The supervisor holds it from its spawn:
-`cad stop` kills one still being started, which reads nothing until it is ready (the standby loading
+`cad server stop` kills one still being started, which reads nothing until it is ready (the standby loading
 the kernel), so none outlives the engine. Its memory is what it says (`rssMb`):
 a child that cannot measure itself is never retired for memory.
 
@@ -1557,7 +1558,7 @@ the kernel reads neither; a model that starts a program finds it on its caller's
 agent's shell may give each turn its own `PATH` (Codex puts a temporary folder of its own on it,
 `~/.codex/tmp/arg0/codex-arg0…`, new with each Codex process): one warm worker serves every turn.
 
-`cad status` says what the server holds (`--json`: the same as data, `api.status()`):
+`cad server status` says what the server holds (`--json`: the same as data, `api.status()`):
 
 ```
 engine server 98307, up 2h10m · workers 3/10 with the standby · held by 1 app server · RSS 4.7 GB of 16.0 GB
@@ -1612,11 +1613,9 @@ data, which Windows virtualizes for every process an app package starts (the Cla
 server, and the engine it starts), so a port file written there would reach no other app. 0.10.0's was
 there, and for one release the engine writes its port file there too (`daemon._mirror`), for a 0.10.0
 CAD app's server still running. 0.8 kept its engines in `cadgen-engine`, so no client of either release reaches the
-other's door. In it each installed version's engine has a folder of its own, `<version>` (`places.engine_dir`),
-made this user's alone with the one above it (`places.make_engine_dir`); its door, lock and port file directly
-in it are the flat ones of the layout of 0.11.10 and earlier: an engine with no version's, or the second door, for
-those releases' clients, of the server of the version `installations/current` names (`daemon.Bridge`), its connections' pipes in the
-`clients/` folder beside it. The 0.10.0 port file is written by whoever holds the flat one.
+other's door. Its door, lock and port file are directly in it (`places.engine_dir`, made this user's alone by
+`places.make_engine_dir`), as in the layout of 0.11.10 and earlier, so every release's client finds the one
+engine; its connections' pipes are in the `clients/` folder beside them. The 0.10.0 port file is written by whoever holds the flat one.
 
 - **The door.** The daemon makes one FIFO beside its lock, `engine.door` (`places.door_path`), and
   holds it open for reading, and for writing too, so it never reads as closed. A door nobody reads
@@ -1640,8 +1639,7 @@ those releases' clients, of the server of the version `installations/current` na
   to the hello, the greeting and the operations -- each a field at the end of its line, which a
   reader of that number skips; a removal or a rename takes a new number. Each side reads the other's
   number first: the daemon greets with the number the connection speaks, the lower of its own and
-  the hello's, and the client speaks that one or hangs up (`door.greeted`; `cad-mcp` keeps a copy,
-  as it imports nothing of the library's). Numbers start at 1: 0.8's door had none (a bare `<id>\n`
+  the hello's, and the client speaks that one or hangs up (`door.greeted`). Numbers start at 1: 0.8's door had none (a bare `<id>\n`
   and `ok\n`), which neither side reads, and 0.8's engines keep their own folder. On Windows the hello
   goes first on the loopback connection, the port file's token where a pair's id goes, and the
   greeting comes back on it; a connection that says no such hello is refused before its request is
@@ -1653,8 +1651,8 @@ those releases' clients, of the server of the version `installations/current` na
   workers have stopped it removes the rest of its files -- its port file, its failure note (but a
   failure's, which its client reads) and last its lock, removed while still held (`daemon.let_go`)
   -- whether it stopped on `stop`, a terminate, a retirement or its door gone. An engine killed
-  leaves its files: the next to start takes its lock and makes its door anew, and `cad status` and
-  `cad stop` remove them, its lock free and nothing answering at its door (`client.sweep`). A lock is
+  leaves its files: the next to start takes its lock and makes its door anew, and `cad server status` and
+  `cad server stop` remove them, its lock free and nothing answering at its door (`client.sweep`). A lock is
   taken on the file its name names (`places.lock`), so a lock file removed under a daemon starting
   is never two daemons' lock.
 - **Reads.** What a client used to ask of the loopback port, `inspect`'s document reads, goes
@@ -1679,15 +1677,15 @@ started where it may not bind a loopback port (`daemon._can_listen`, before it m
 take its lock writes why beside its lock (`engine.failed`, `places.failure_path`) and exits 1;
 the client that started it says that reason at once, never after a timeout.
 
-**A hold.** `cad-mcp`, the stdio peer an agent host starts, connects to the engine as it starts
-(starting it when none runs) and holds it (`client.hold`, `{"op": "hold"}`: a connection the
+**A hold.** `cad mcp`, the stdio peer an agent host starts, connects to the engine as it starts
+(starting it once, as `cad server start` does) and holds it (`client.hold`, `{"op": "hold"}`: a connection the
 daemon answers and keeps until its client goes) for as long as the host runs it. While any hold
 is open, the engine runs: an update's drain does not wait on a hold, and the host's next request
 holds the new release's engine (**Starting and updating**). So a sandboxed shell an agent host runs
 finds an engine whenever the host runs. An engine that goes while
-held (`cad stop`, a crash) is held again at the host's next request, never at once: a stop is
-obeyed. A hold names the host it serves (`{"op": "hold", "host": "codex"}`, as `cad_server.mcp.host.family`
-names it), and `cad status --json` says how many hold it (`holders`), per host (`hosts`), and the
+held (`cad server stop`, a crash) is held again at the host's next request where one of its release
+or a newer one runs, and never started again: a stop is obeyed. A hold names the host it serves (`{"op": "hold", "host": "codex"}`, as `cad_server.mcp.host.family`
+names it), and `cad server status --json` says how many hold it (`holders`), per host (`hosts`), and the
 environment it runs in (`prefix`): the current installation's, which `cad doctor` names.
 
 ## Document lifetime
@@ -1697,7 +1695,7 @@ until a person deletes it (**Delete**; [models.py](models.py), the library's `ca
 engine knows of a model comes from a run alone (law 22): a run of its script pushes the model's
 code, its key and its document, and outside a run the engine reads and watches no script and runs
 nothing -- a file document's bytes, which are the disk, and the registry's records, which runs
-wrote, are no model's code. A document's state (`models.STATES`, what `cad status` lists):
+wrote, are no model's code. A document's state (`models.STATES`, what `cad server status` lists):
 
 - `live`: a live worker holds it, with its memo and its trace.
 - `held`: no worker holds it and the engine answers it all the same: in memory, on disk (**The
@@ -1809,7 +1807,7 @@ once given a key: its calling scope and its name). It reads JSON and, only to fi
 find a moved record's line, a script's bytes: it imports no kernel and parses or rewrites no XBF. A second pass writes nothing. A
 record that does not read, or whose new id another record holds, is skipped, never deleted, and
 listed in the pass's one log line (`identity migration: filled N, moved N, skipped N`, then each
-skipped record and why), which `cad status` says too while that engine runs (a started engine's
+skipped record and why), which `cad server status` says too while that engine runs (a started engine's
 stderr is no one's); a pass with nothing to do says nothing, and a pass that fails never keeps the
 engine from starting.
 
@@ -1846,7 +1844,7 @@ it, which nothing removes but the person; `cad cache clean` neither). It is writ
   the file's write 2-6 ms, and a warm build landing 50 ms into the save took 150-170 ms against
   120-140 ms alone. A document no worker holds is written from the bytes the daemon holds;
 - at retirement, from the bytes the drain takes;
-- at shutdown (`cad stop`, a terminate), best effort within 10 s (`cache.SHUTDOWN_SECONDS`), for
+- at shutdown (`cad server stop`, a terminate), best effort within 10 s (`cache.SHUTDOWN_SECONDS`), for
   the documents built or read in the last idle window.
 
 Once per revision: the record gains `cache: {revision, bytes}`, and a document
@@ -1892,7 +1890,7 @@ nothing reruns on its own. What the engine knows from its own last run it says: 
 last run failed is served as its previous good build, and every verb that reads it by its id
 (`export`, `snapshot`, `inspect`, with a ref or without) says so once on stderr (`cli.told_state`,
 from `model_info`) -- "the last run of turbine failed; exporting its previous good build; fix it
-and run `cad run …/turbine.py` to update it" -- and goes on: a notice, never a refusal. `cad
+and run `cad run …/turbine.py` to update it" -- and goes on: a notice, never a refusal. `cad server
 status` ends that document's line with "serving its previous good build"; an `unsaved` one's with
 the command that builds it again (**The rebuild command**).
 
@@ -1901,7 +1899,7 @@ least recently used and no age, and keeps every model document -- a shape handed
 model's -- until a person deletes it, its record and its file together (**Delete**). The one other
 removal is a corrupt file whose bytes do not read: it goes, its record kept without `cache`,
 and the next build writes it again (`Models.unreadable`). An unsupported document format or a
-failed saved-format conversion preserves the cache file and record (**Document compatibility**). A save that fails is logged and listed by `cad
+failed saved-format conversion preserves the cache file and record (**Document compatibility**). A save that fails is logged and listed by `cad server
 status`, never raised: with the cache folder read-only, or not writable at all, the engine saves
 nothing and does everything else as it would.
 
@@ -1977,13 +1975,13 @@ the path; a word holding a `%` is quoted between each one, `"C:\my"%"20dir"`, si
 not run showed it, and that only running that program again hands it over again. A child model's is its own script too. The page
 reads it from its document's 404 (`GET /api/v1/documents/<id>`: `{"error", "hint", "state"}`; a read of
 its kind's, `{"error", "state", "rebuild", "hint"}`),
-`cad <type> inspect` and `cad_show` of its id refuse with it, and `cad status` lists it. The engine never runs it: no access, no start
+`cad <type> inspect` and `cad_show` of its id refuse with it, and `cad server status` lists it. The engine never runs it: no access, no start
 and no restart runs code to bring a document back.
 Asked of the server, a document it does not hold is a refusal (`serve.NotHeld`): the server answers
 its type, state and command with its words (`daemon.refused`) and the caller raises it as that
 type (`api._failed`), so `cad <type> inspect`, `export`, `snapshot` and `serve` of such an id exit 2.
 
-`cad stop` stops the engine, whatever release runs it (`places.endpoints()`: its one door).
+`cad server stop` stops the engine, whatever release runs it (`places.endpoints()`: its one door).
 Both `stop` and `status` remove the door and lock of a dead server (nothing reads the door and nobody
 holds its lock) and say so on stderr. `stop` prints a line per server it stopped
 (`stopped the engine server at DOOR`), or `no engine server is running`; `--json` prints
@@ -2015,7 +2013,7 @@ page first opens), an export, a snapshot, or a measurement (`inspect`'s summary,
 - `elapsedMs`: since the job began.
 
 The stages, in the order a job passes them, with the words the engine gives them (`progress.words`,
-what a terminal and `cad status` print); a page says each in its own language by the key
+what a terminal and `cad server status` print); a page says each in its own language by the key
 `progress.<kind>.<stage>`:
 
 | `kind` | `stage` | words | counted |
@@ -2069,7 +2067,7 @@ the daemon:
   `python model.py` draws a bar on stderr when it is a terminal -- each
   stage finished a line with its time, the one in flight repainted in place -- and nothing when
   it is not (`progress.Bar`; `api.build_script(progress=)` takes the frames instead, `False` none);
-- keeps a busy worker's last, which `cad status` shows (**The engine server and its workers**);
+- keeps a busy worker's last, which `cad server status` shows (**The engine server and its workers**);
 - wakes the pages waiting on the model document it builds (below); a file among the frame's
   `outputs`, a declared xbf among them, is no document of the build's: its page hears nothing of
   the run and follows the file's bytes;

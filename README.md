@@ -32,9 +32,9 @@ Windows, in PowerShell:
 irm https://www.texttocad.dev/install.ps1 | iex
 ```
 
-It installs uv if it is missing, installs the newest release of text-to-cad and the
-`cad` command, then installs the plugin in each agent app it finds on your computer, with
-that app's own command (Kimi Code you install by hand). Run it again to update.
+It installs uv if it is missing, then `cad`, the command text-to-cad runs on, then
+the plugin in each agent app it finds on your computer, with that app's own command
+(Kimi Code you install by hand), and turns on automatic updates.
 
 Then ask your agent for a part or an assembly: it writes the model as a Python
 script, runs it to build the model and shows it in the CAD viewer.
@@ -64,7 +64,7 @@ The text-to-cad plugin gives your agent local workflows to generate 3D models as
 text-to-cad is MIT-licensed and built in the open.
 
 - **Bugs and plugin requests**: [open an issue](https://github.com/earthtojake/text-to-cad/issues/new).
-  A bug report with the model script and the output of `cad doctor --check` is the
+  A bug report with the model script and the output of `cad doctor` is the
   fastest to fix, and an agent app without a plugin gets one on request. A
   security problem is reported privately, as [SECURITY.md](SECURITY.md) says.
 - **Questions, ideas and what you made**: the [Discord](https://discord.gg/5FGB9DwJYU).

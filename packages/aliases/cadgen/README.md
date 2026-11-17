@@ -9,6 +9,5 @@ process: `CadDeprecationWarning: cadgen is deprecated; use cad`.
 `cadgen[build123d]` installs the library with its CAD kernel, as `cad[build123d]` does;
 `cadgen[kernel]`, its 0.8 spelling, installs the same.
 
-New projects declare `cad`, pinned to the release they run (`cad==<release>`). The CAD server, the
-CAD Viewer and the command that runs models are `cad-server`'s, installed by the install
-command at https://texttocad.dev.
+New projects declare `cad`. The CAD server, the CAD Viewer and the `cad` command are `cad`'s too;
+the install command at https://texttocad.dev installs them.

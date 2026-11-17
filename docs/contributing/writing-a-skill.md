@@ -38,7 +38,6 @@ their descriptions and stop triggering.
 skills/<name>/
   SKILL.md            the entry point, under 500 lines
   references/*.md     one level deep, each read only when SKILL.md sends the agent there
-  scripts/            thin entrypoints, when the skill has any (their behaviour lives in cad_server.cli)
   agents/openai.yaml  the Codex listing
   LICENSE
 ```
@@ -51,20 +50,10 @@ skills/<name>/
   deeper. Everything an agent needs on most runs is in SKILL.md; everything else is a reference.
 - **References** are one level deep. A reference that sends the agent to another reference gets read
   partially or not at all.
-- **No runtime of its own.** A skill that uses the server runs the `cad` command, every command
-  pinned to the skill's release: `cad +<VERSION> <verb>`, written with the current `VERSION`, which the
-  release script stamps (`scripts/release/sync-version.mjs`). It installs nothing: no `requirements.txt`, no vendored packages. Code a skill needs is
-  the library's or the server's, reached by a command or an import. Its SKILL.md carries the setup block
-  every such skill carries, word for word (`tests/python/global/test_skill_requirements.py`): the `uvx`
-  line that installs `cad` at the skill's release and, in the manual copy only, the paragraph between
-  `<!-- manual-copy-update: start -->` and `<!-- manual-copy-update: end -->` that tells the agent to keep
-  the install up to date: check `cad +<VERSION> --version` at a session's start and, when `cad` says a
-  new version of cad is available, install the new version of the plugin from the repository.
-  `cad` names no command, and the skill quotes none: it links the repository, so the skill carries no
-  download piped to a shell (a store's install scan flags one). The store builders
-  give each pin the store's name and leave that paragraph out, and a marker the builder does not find
-  exactly once fails the release
-  ([The install branches](../../CONTRIBUTING.md#the-install-branches)).
+- **No runtime of its own.** A skill that uses the server runs the plain `cad` command, with no
+  version in it. It installs nothing itself: no `requirements.txt`, no vendored packages, no scripts.
+  Code a skill needs is cad's, reached by a command or an import, and what a skill would script is a
+  `cad` command. Its SKILL.md carries the Setup block (below).
 - **Independent of other skills.** A skill never imports another, and never puts `skills/` or the
   repository root on a lookup path. The install script copies each alone into an agent's skills folder.
 
@@ -100,14 +89,29 @@ section named for each.
 Each skill installs on its own, so the few things every skill must say are copied into each, word
 for word, and tests keep the copies from drifting:
 
-- **Setup** (`tests/python/global/test_skill_requirements.py`): how to get the `cad` command at the
-  skill's release, in every skill that runs the server, and in no other.
-- **Pins** (`tests/python/global/test_skill_commands_pin_their_release.py`): every `cad` command in a
-  code block or span, placeholders such as `cad +<VERSION> <type> inspect` too, starts `cad +<VERSION>`.
-  These pins are stamped by the release script (`scripts/release/sync-version.mjs`) and never edited
-  by hand; a new skill copies them from one beside it, and its header names no version.
-  The source never names a store: the release adds one to every pin of a store's copy as it builds it
-  (`cad +<VERSION>@claude` for claude.ai's directory, `@codex` for OpenAI's).
+- **Setup** (`tests/python/global/test_skill_requirements.py`): how to get cad, in every skill that
+  runs it, and in no other. The block names once the cad release the skills were written for, which
+  the release script stamps (`scripts/release/sync-version.mjs`); no command carries a version. It has
+  the agent run `cad --version` on first use, then:
+  - `cad` is not found: install it with the install command.
+  - cad is older than the skill: run `cad server stop` and `cad server start`, since cad updates itself
+    as its server starts, and check again. Still older: stop the server, run the install command,
+    start the server.
+  - cad is the same or newer: carry on.
+  - cad says its server is not running: run `cad server start`.
+
+  The block never tells the agent to ask the person to update. Its front matter allows `Bash(cad *)`
+  alone. A plugin store's copy gets the same block with the store's lines in place of the install
+  command: `uv tool install --managed-python --python 3.14 cad@latest`; uv's install page where uv is
+  missing; the same line with `--force` where uv says the `cad` executable already exists (the
+  launcher 0.10.0 to 0.11.10 wrote); then `cad auto-update on` (`scripts/release/plugin_zip.py`,
+  `STORE_LINES`, `store_copy`; a substitution that does not find our text exactly once fails the
+  release). A new skill copies the block from one beside it.
+- **Commands that last** (`tests/python/global/test_released_commands_still_parse.py`): every `cad`
+  command in the skills of every release from the last 30 days still parses with today's `cad`. So a
+  command, an option or a spelling the skills stop using keeps working, hidden if need be, for at
+  least 30 days after the release that stopped using it. Remove it only once no release in that window
+  uses it, and say so in the pull request.
 - **Show the model** (`tests/python/global/test_skill_show_the_model.py`): how to show the person what
   was made, in every skill that makes something they look at.
 
@@ -124,7 +128,8 @@ tool's description, which only agents that have the tool read, never in a skill.
 - [ ] SKILL.md is under 500 lines, opens with the "Start with the task" table, and every reference is
       one level deep.
 - [ ] It has a **Check each change** section, and every method it teaches has a check.
-- [ ] The setup and Show the model blocks are the shared text, word for word, where they apply.
+- [ ] The Setup and Show the model blocks are the shared text, word for word, where they apply.
+- [ ] A command the skill stops using still works for 30 days ([The shared blocks](#the-shared-blocks)).
 - [ ] It installs nothing and imports no other skill.
 - [ ] A feature in README.md's Features and the docs site's (`features` in
       `apps/docs/src/lib/content.ts`, the same list) links it, and `.muse-plugin/plugin.json`, which

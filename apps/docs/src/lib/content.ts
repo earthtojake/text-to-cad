@@ -11,15 +11,15 @@ export const pluginDescription =
   "The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services.";
 
 // The install: one command per system, which sets up text-to-cad in every agent app on the computer
-// and, run again, updates it (the README's Quickstart, which says the same, word for word).
+// (the README's Quickstart, which says the same, word for word).
 export const installCommands = [
   { system: "macOS and Linux", language: "bash", command: "curl -fsSL https://texttocad.dev/install.sh | sh" },
   { system: "Windows, in PowerShell", language: "powershell", command: "irm https://www.texttocad.dev/install.ps1 | iex" },
 ];
-// What the command does, and that running it again is the update, under the commands. The command
-// name is in backticks, which the page sets as code.
+// What the command does, under the commands. The command name is in backticks, which the page sets as
+// code.
 export const installSummary =
-  "It installs uv if it is missing, installs the newest release of text-to-cad and the `cad` command, then installs the plugin in each agent app it finds on your computer, with that app's own command (Kimi Code you install by hand). Run it again to update.";
+  "It installs uv if it is missing, then `cad`, the command text-to-cad runs on, then the plugin in each agent app it finds on your computer, with that app's own command (Kimi Code you install by hand), and turns on automatic updates.";
 // Installing by hand, each app's own commands, updating and removing: a page in the repository (the
 // README's Quickstart links it too), which the site does not repeat.
 export const manualInstall = { label: "Installing by hand, app by app, updating and removing", path: "docs/install.md" };
@@ -64,7 +64,7 @@ export const contributing = {
   items: [
     {
       title: "Bugs and plugin requests",
-      body: "A bug report with the model script and the output of `cad doctor --check` is the fastest to fix, and an agent app without a plugin gets one on request. A security problem is reported privately, as SECURITY.md says.",
+      body: "A bug report with the model script and the output of `cad doctor` is the fastest to fix, and an agent app without a plugin gets one on request. A security problem is reported privately, as SECURITY.md says.",
       links: [
         { text: "Open an issue", href: `${siteConfig.repository}/issues/new` },
         { text: "Request a plugin", href: pluginRequestUrl },

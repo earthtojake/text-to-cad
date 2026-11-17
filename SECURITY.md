@@ -2,18 +2,16 @@
 
 ## Scope
 
-text-to-cad is a local development tool: agent skills and the text-to-cad server,
-`cad-server` (with the library models import, `cad`, and the CAD app's
-transport, `cad-mcp`), which builds, views and exports CAD models on your own machine.
-Everything below runs as you, with your files.
+text-to-cad is a local development tool: agent skills and `cad`, one package that holds the
+library models import, the `cad` command and the server that builds, views and exports CAD models
+on your own machine. Everything below runs as you, with your files.
 
-**The server.** A warm server daemon on your computer does the building,
-viewing and exporting: one for each installed version of text-to-cad (usually
-one; two when a plugin directory's copy runs another release beside yours). Its
-clients reach it through its door, a named pipe with a pair of pipes per
-connection, that only you can open (on Windows, a loopback port and a token in a
-file only you can read). Each version's door lives in its own folder inside the
-servers' folder (`CAD_ENGINE_DIR`, by default
+**The server.** One warm server daemon on your computer does the building,
+viewing and exporting. It starts only when asked (`cad server start`, or the CAD
+app an agent app starts). Its clients reach it through its door, a named pipe with
+a pair of pipes per connection, that only you can open (on Windows, a loopback
+port and a token in a file only you can read). The door lives in the servers'
+folder (`CAD_ENGINE_DIR`, by default
 `cad-engine` in `$XDG_RUNTIME_DIR`, else in a temporary folder that is yours alone (on macOS
 the system's per-user one, else `$TMPDIR`),
 else `/tmp/cad-<uid>`). The client and the daemon refuse a folder that
@@ -28,13 +26,12 @@ the server), so the boundary is your user account, not the sandbox.
 **The CAD Viewer and the MCP endpoint.** The server serves the CAD Viewer and
 the CAD app's MCP endpoint over HTTP on `127.0.0.1` (port 3245 unless you name
 another; when another program holds it, the next free port, which your
-installation keeps and names in `cad status`). Every route needs one of three
+installation keeps and names in `cad server status`). Every route needs one of three
 credentials, all made from one token:
 
 - **The token** is yours, not one server's: made once, kept in a file only you
-  can read in your state folder (`engines/token` in each version's data folder,
-  copied to the next version when you update), and served by every version's
-  server at every start until you rotate it. No URL carries it,
+  can read in cad's data folder (`engines/token`), and served by the server at
+  every start, through updates, until you rotate it. No URL carries it,
   and only `cad viewer --api-only --json` prints it, for the development
   client's proxy. Your own clients read it through the server's door and send
   it as a Bearer header.
@@ -43,7 +40,7 @@ credentials, all made from one token:
   browser): `?token=` with an expiry and the token's signature of it. It works
   until you rotate the token (`cad server --rotate-token`, which ends every link
   and every session at once), as a Jupyter server's URL token does; the token is
-  kept in your state folder and survives restarts, reboots and updates, and so do
+  kept in cad's data folder and survives restarts, reboots and updates, and so do
   links. Every link of one token is the same text, whenever it is printed (its
   expiry is one fixed date, the start of the year 3000), until the token is rotated. It stays in the page's address (a page opened without one is given
   one), so the address copied into another browser on this machine opens the
@@ -63,9 +60,9 @@ A server checks a link or a cookie by signing it again, so it keeps no
 sessions: links and cookies outlive a restart, a reboot, a port that moved and
 an upgrade. `cad server --rotate-token` replaces the token once you say yes (it
 asks; `--yes` where it cannot), and with it every link and every session made
-before: it writes the new token into every installed version, and every running
-server takes it at once. A server of 0.11.10 or earlier reads its token only as it
-starts, so it takes the new one when it restarts. Behind the credentials:
+before: it writes the new token, and the running server takes it at once. A server
+of 0.11.10 or earlier reads its token only as it starts, so it takes the new one
+when it restarts. Behind the credentials:
 
 - A Host check refuses DNS rebinding.
 - A request the cookie alone admits must come from the server's own pages or
@@ -114,17 +111,41 @@ names at most 512 distinct models, each STEP at most 64 MiB and all of them at m
 reference only when asked (`--gz-remote`).
 
 **The install command.** `curl -fsSL https://texttocad.dev/install.sh | sh` (on
-Windows `irm https://www.texttocad.dev/install.ps1 | iex`) runs the script the docs
-site serves over HTTPS, as you, with no sudo and nothing asked: it installs uv with
-uv's own installer when uv is missing, then runs one Python file served beside it, `install.py`, which
-sets up the newest release of the server, `cad-server`, from PyPI through uvx (`cad setup`), installs the
-plugin in each agent app it finds with that app's own command from this repository's `latest` branch,
-and removes what earlier releases left behind, among them the CAD server they wrote into Claude
-Desktop's config (keeping a `.bak`). To read the script first, or to keep to one release, take the
-copy attached to that release on GitHub and check it against the release's `SHA256SUMS`. A skill
-installs its own release with no script:
-`uvx --no-config --managed-python --python 3.14 --from cad-server==<release> cad setup` installs that
-release from PyPI and writes the `cad` command, and changes nothing else.
+Windows `irm https://www.texttocad.dev/install.ps1 | iex`) runs, as you, with no sudo
+and nothing asked:
+
+- `install.sh` or `install.ps1`, served by texttocad.dev over HTTPS. Where uv is
+  missing, it downloads and runs uv's own installer from `astral.sh`.
+- `install.py`, downloaded from texttocad.dev and run with uv's Python. It asks
+  the version feed, `api.texttocad.dev/v1/versions`, for the newest release, and
+  installs `cad` at that release from PyPI with `uv tool install`.
+- The plugin, from this repository's `latest` branch on GitHub, installed in each
+  agent app it finds with that app's own command. It removes what earlier releases
+  left there, among them the CAD server they wrote into Claude Desktop's config
+  (keeping a `.bak`).
+- `cad auto-update on --installer`, which turns on automatic updates (below).
+
+It starts no server. To read the scripts first, take the copies attached to a
+release on GitHub and check them against the release's `SHA256SUMS`; they install
+the newest release, not that one.
+
+**Automatic updates.** Where they are on, cad installs new releases by itself,
+with no one asked. The install command turns them on; `cad auto-update off` turns
+them off. Only a cad installed as a uv tool updates itself. At most once an hour,
+and as its server starts, cad asks `api.texttocad.dev/v1/versions` which release is
+newest. The feed names a release only once it has been on PyPI for an hour, and we
+can hold a release back from it. When the feed names a newer release and nothing is
+running, cad stops its server, runs `uv tool install` for that release, which
+downloads it from PyPI, and starts the server again. It never installs an older
+release. Then, where the install command set the computer up, cad downloads and
+runs the hosted install command, unattended, in a mode that only updates the copies
+of the plugin it installed: it fetches `install.sh` or `install.ps1` and
+`install.py` from texttocad.dev, and the plugin from GitHub. So with automatic
+updates on, whoever controls `api.texttocad.dev`, `texttocad.dev`, the `cad`
+project on PyPI or this repository's `latest` branch can run code as you. A
+computer that the updater of 0.10.0 to 0.11.10 brought to this release runs the
+hosted install command once the same way, unattended, in its full install mode,
+where our install command or an earlier release's update had put our plugin there.
 
 ### What we treat as a vulnerability
 
@@ -136,10 +157,14 @@ release from PyPI and writes the `cad` command, and changes nothing else.
   that makes the server do unbounded work or hold unbounded memory.
 - An MCP tool that the model can use to act as the CAD app's page, or a frame
   that can act as its host.
-- A way to publish to PyPI or the install branches (`latest`, `claude-plugin`)
-  other than a merged release.
+- A way to publish to PyPI or the install branches (`latest`, `claude-plugin`,
+  `codex-plugin`) other than a merged release, or to change what texttocad.dev
+  serves as the install scripts.
+- A way to make cad install, by itself, anything but a release the version feed
+  names, from PyPI, or to make it move to an older release.
 - `api.texttocad.dev`: anything beyond its documented behaviour (version feed,
-  consented analytics).
+  consented analytics), including a way to make the feed name a release it should
+  not.
 
 Out of scope: what someone who already has your token, a link or
 your session cookie, or already runs code as you, can do; and effects on your

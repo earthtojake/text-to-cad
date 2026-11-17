@@ -2,7 +2,7 @@
 
 The browser host talks to `cad_server.viewer`, the HTTP application hosted by the engine in the
 `cad-server` Python distribution. Its source lives in
-`packages/cad-server/src/cad_server/viewer/`; this app owns the React host and its build.
+`packages/cad/src/cad_server/viewer/`; this app owns the React host and its build.
 The wheel includes that build at `cad_server/_runtime/viewer`, beside the CAD app's one-file
 page (`cad_server/_runtime/mcp`); the engine's snapshots are OCCT's and need no browser. Skills
 invoke the installed distribution.
@@ -17,7 +17,7 @@ reads, meshes and measures it in processes of its own.
 ## Launching
 
 The engine serves every CAD file by absolute path on port 3245, or the port this
-installation rolled to when another program held it (`cad status` says which and why),
+engine rolled to when another program held it (`cad server status` says which and why),
 or the one `--port N` or `CAD_ENGINE_PORT` names. Run the installed CLI from anywhere:
 
 ```bash
@@ -49,7 +49,7 @@ including its token query; the browser is given a same-site HTTP-only cookie for
 stays in the address, which the page gives one where it has none (`GET /api/v1/local/link`). The
 link is the same text at every launch until the token is rotated.
 
-`cad stop` stops the installation's whole engine, including its workers and
+`cad server stop` stops the whole engine, including its workers and
 MCP sessions. Closing a page, a Vite process or a host's stdio shim does not stop it.
 Python source edits require restarting your own test engine. There is no viewer
 server process, source re-exec, detached launch log or per-port shutdown route.
