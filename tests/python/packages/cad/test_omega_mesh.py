@@ -6,7 +6,7 @@ mesh is held to the field before anyone is handed it, and a mesh that passed is 
 model with the same values is never meshed twice.
 
 What reads a GLB and names a mesh's key is numpy and the standard library, tested everywhere. What runs ``gsl``
-needs one whose ``eval`` meshes (omega-core after 0.1.2; ``CAD_GSL`` names a newer one than the extra's): those
+needs one whose ``eval`` meshes (omega-core 0.1.2 or later; ``CAD_GSL`` names another than the extra's): those
 tests skip, by name, where the ``gsl`` found does not. Every model is written by the test into a temporary folder.
 """
 
@@ -48,7 +48,7 @@ def _gsl_meshes() -> bool:
 
 
 MESHES = _gsl_meshes()
-NEEDS_MESH = "needs a gsl whose eval meshes (omega-core after 0.1.2: set CAD_GSL)"
+NEEDS_MESH = "needs a gsl whose eval meshes (omega-core 0.1.2 or later: set CAD_GSL)"
 
 
 def write_glb(path: Path, bodies: list[tuple[np.ndarray, np.ndarray]]) -> Path:
