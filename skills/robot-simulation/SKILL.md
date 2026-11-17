@@ -47,7 +47,7 @@ There are two routes to one:
 
 ## Setup
 
-This skill was written for `cad==0.11.11`. The first time you use it in a chat, before you write or build
+This skill was written for `cad==0.11.12`. The first time you use it in a chat, before you write or build
 anything, run `cad --version` as a command by itself and read what it prints. Then:
 
 - `cad` is not found or does not run, or is older than 0.11.12: run the install line below.
