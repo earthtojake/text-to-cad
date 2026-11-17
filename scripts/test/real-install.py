@@ -4,24 +4,23 @@ uv tools and folders, the real command-line programs of Claude Code (``claude``)
 (``gemini``) each told its configuration folder there, nothing of this machine's home read or written.
 
 The command runs the way a person runs it (macOS and Linux: ``install.sh`` piped to ``sh``; Windows: ``install.ps1``
-handed to ``Invoke-Expression`` by Windows PowerShell 5.1), with this tree's ``install.py`` (``CAD_INSTALL_PY``), the
-version feed a local stand-in naming this tree's wheels written again as a release no index holds (``CAD_INSTALL_FEED``,
-``UV_FIND_LINKS``), and the apps looked for on PATH alone (``CAD_INSTALL_PATH_ONLY``). The plugin comes from this
+handed to ``Invoke-Expression`` by Windows PowerShell 5.1), with this tree's ``install.py`` (``CAD_INSTALL_PY``), this
+tree's wheels written again as a release no index holds, above PyPI's newest, and offered to uv (``UV_FIND_LINKS``):
+uv installs the newest release it is offered, which is that one. The apps are looked for on PATH alone
+(``CAD_INSTALL_PATH_ONLY``). The plugin comes from this
 tree through each program's own GitHub route: the ``latest`` copy built as Publish Release builds it, in a local
 repository the computer's git reads for every address of ours on GitHub. Gemini CLI asks GitHub's API for a release
 named ``latest`` before it clones (there is none: it clones); that one request reaches GitHub.
 
-1. install: exit 0 and every line the app phase prints; cad installed as a uv tool at the feed's release, its command
-   in uv's bin folder; ``cad --version``; both of cad's switches on (``cad auto-update``); no server started by the
-   install; each program holds our plugin (``text-to-cad@earthtojake``; Gemini CLI: the extension ``text-to-cad`` from
+1. install: exit 0 and every line the app phase prints; cad installed as a uv tool at this run's release, its command
+   in uv's bin folder; ``cad --version``; cad's automatic updates on (``cad auto-update``) and the plugin's turned on
+   by the install (``cad plugin auto-update``); no server started by the install; each program holds our plugin (``text-to-cad@earthtojake``; Gemini CLI: the extension ``text-to-cad`` from
    GitHub at ``latest``) exactly once, copied from the local repository.
 2. cad: ``cad server start``; a box built by ``cad run`` and its page link answering with its token, refused without;
    a file shown by ``cad viewer`` the same way; ``cad doctor`` exit 0.
-3. again: the local repository moved on as a release moves it; the command again: "installed already", each app
-   ``updated``, one copy each, the new commit's.
-4. update mode (``CAD_INSTALL_UPDATE=1``, as cad runs it after its own update): our plugin first removed from one
-   program by its own command; the command updates the others and adds nothing to that one, and leaves cad alone.
-5. migrate: each program left as 0.11.10's installer left it (``<state>/plugin`` made from the v0.11.10 tree by that
+3. again: the local repository moved on as a release moves it; the command again: cad "installed already" and left
+   alone, each app ``updated``, one copy each, the new commit's.
+4. migrate: each program left as 0.11.10's installer left it (``<state>/plugin`` made from the v0.11.10 tree by that
    release's own ``plugin.tree``, added as the catalog ``text-to-cad`` and ``text-to-cad@text-to-cad`` installed from
    it; Gemini CLI: the folder linked); the command again: each app ends with the new plugin alone.
 
@@ -70,6 +69,8 @@ PLUGIN_VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 OLD = "v0.11.10"
 CATALOG, OLD_CATALOG, PLUGIN = "earthtojake", "text-to-cad", "text-to-cad"
 OURS, OLD_OURS = f"{PLUGIN}@{CATALOG}", f"{PLUGIN}@{OLD_CATALOG}"
+# What `cad plugin auto-update on` and `status` print, the install command passing it on.
+PLUGIN_SWITCH = "plugin auto-update: on"
 GITHUB = f"https://github.com/{rc.REPOSITORY}"
 CI = rc.CI
 BOX = '''from cad import model
@@ -126,9 +127,8 @@ class Run:
 
     # --- the install script, as a person runs it --------------------------------------------------------------
 
-    def script(self, label: str, *, update: bool = False) -> rc.Ran:
-        hooks = {"CAD_INSTALL_PY": str(self.installer), "CAD_INSTALL_PATH_ONLY": "1",
-                 **({"CAD_INSTALL_UPDATE": "1"} if update else {})}
+    def script(self, label: str) -> rc.Ran:
+        hooks = {"CAD_INSTALL_PY": str(self.installer), "CAD_INSTALL_PATH_ONLY": "1"}
         if rc.WINDOWS:
             script = REPO_ROOT / "scripts" / "install" / "install.ps1"
             argv = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
@@ -152,9 +152,7 @@ class Run:
         """Every line of the app phase: one per program, matching ``wanted`` (program -> pattern), the count of the
         apps not found, and the closing line; nothing else."""
         lines = ran.lines()
-        heads = ("Setting up the plugin in each agent app found here:",
-                 "Updating text-to-cad's plugin in each agent app that has it:")
-        start = next(index for index, line in enumerate(lines) if line in heads) + 1
+        start = lines.index("Setting up the plugin in each agent app found here:") + 1
         phase = [line for line in lines[start:] if line.strip()]
         expected = {rc.PROGRAMS[name].name: pattern for name, pattern in wanted.items()}
         unexpected, seen = [], set()
@@ -163,9 +161,7 @@ class Run:
             if app in expected and re.fullmatch(expected[app], line):
                 seen.add(app)
             elif not (re.fullmatch(r"\d+ other supported apps were not found here\.", line)
-                      or re.fullmatch(r"\d+ apps found here have no copy of ours to update: nothing was added to them\.",
-                                      line)
-                      or line in ("auto-update: on", "installer: on")
+                      or line == PLUGIN_SWITCH
                       or line == "Start a new session in each app to use it."):
                 unexpected.append(line)
         missing = sorted(set(expected) - seen)
@@ -241,11 +237,11 @@ class Run:
         return self.computer.must([self.cad_path, *argv], cwd=cwd)
 
     def installed(self, ran: rc.Ran) -> None:
-        """What the install command's cad step left (step 1, see the module): cad a uv tool at the feed's release, its
+        """What the install command's cad step left (step 1, see the module): cad a uv tool at this run's release, its
         command in uv's bin folder, its environment this run's wheel, both switches on, and no server started."""
         c = self.computer
-        if f"Installing cad {VERSION} with uv. The first run downloads it, which takes a minute." not in ran.lines():
-            raise rc.Failed(f"the install command did not install cad {VERSION}")
+        if "Installing cad with uv. The first run downloads it, which takes a minute." not in ran.lines():
+            raise rc.Failed("the install command did not install cad")
         tool = self.tool()
         if tool is None or tool["version"] != VERSION or not rc._within(Path(tool["env"]), c.uv_tools):
             raise rc.Failed(f"uv lists no cad tool {VERSION} in the computer's tool folder: {tool}")
@@ -263,9 +259,9 @@ class Run:
         said = self.cad("--version").lines()[:1]
         if said != [f"cad {VERSION}"]:
             raise rc.Failed(f"cad --version said {said}")
-        switches = self.cad("auto-update", "status").lines()
-        if switches[-2:] != ["auto-update: on", "installer: on"]:
-            raise rc.Failed(f"cad auto-update status said {switches}")
+        switches = self.cad("auto-update", "status").lines() + self.cad("plugin", "auto-update", "status").lines()
+        if switches[-2:] != ["auto-update: on", PLUGIN_SWITCH]:
+            raise rc.Failed(f"cad auto-update status and cad plugin auto-update status said {switches}")
         status = self.cad("server", "status", "--json").out.strip().splitlines()[-1:]
         if status != ["null"]:
             raise rc.Failed(f"the install command started a server: {status}")
@@ -332,9 +328,9 @@ class Run:
         doctor = self.computer.run([self.cad_path, "doctor"])
         if doctor.code:
             raise rc.Failed(f"cad doctor exited {doctor.code}:\n{doctor.out}")
-        if not re.search(r"auto-update on, installer on; a uv tool", doctor.out):
-            raise rc.Failed(f"cad doctor does not say both switches are on and cad is a uv tool:\n{doctor.out}")
-        say("ok    cad doctor: exit 0, both switches on, a uv tool")
+        if not re.search(r"auto-update on\b.*; a uv tool", doctor.out):
+            raise rc.Failed(f"cad doctor does not say automatic updates are on and cad is a uv tool:\n{doctor.out}")
+        say("ok    cad doctor: exit 0, automatic updates on, a uv tool")
 
     # --- 0.11.10's installer's state ------------------------------------------------------------------------------
 
@@ -464,30 +460,13 @@ def steps(run: Run, migrate: bool = True) -> None:
     major, minor, patch = PLUGIN_VERSION.split(".")[:3]
     c.advance(PLUGIN_VERSION, f"{major}.{minor}.{int(patch) + 1}")
     ran = run.script("again")
-    if f"cad {VERSION} is installed already." not in ran.lines():
+    if f"cad {VERSION} is installed already: it is left as it is, and updates itself." not in ran.lines():
         raise rc.Failed(f"the install command again did not find cad {VERSION} installed already")
+    if any(line.startswith("Installing cad") for line in ran.lines()) or run.tool()["version"] != VERSION:
+        raise rc.Failed(f"the install command again changed cad: {run.tool()}")
     run.app_lines(ran, "again", {name: rf"{re.escape(rc.PROGRAMS[name].name)}: updated" for name in names})
     run.ours_alone("again")
-    say(f"ok    the install command again: cad {VERSION} is installed already")
-
-    # The update mode: one program without our copy (removed by its own command), the others with it.
-    left_out, kept = names[0], names[1:]
-    run.remove(left_out)
-    c.advance(f"{major}.{minor}.{int(patch) + 1}", f"{major}.{minor}.{int(patch) + 2}")
-    ran = run.script("update mode", update=True)
-    if any(line.startswith(("Installing cad", "cad ")) for line in ran.lines()):
-        raise rc.Failed("the install command in update mode touched cad")
-    if not any(re.fullmatch(r"\d+ apps found here have no copy of ours to update: nothing was added to them\.", line)
-               for line in ran.lines()):
-        raise rc.Failed("the install command in update mode did not say an app had no copy of ours to update")
-    run.app_lines(ran, "update mode", {name: rf"{re.escape(rc.PROGRAMS[name].name)}: updated" for name in kept})
-    run.ours_alone("update mode", kept)
-    held = run.listed(left_out)
-    if held["plugins"] or held["catalogs"]:
-        raise rc.Failed(f"the install command in update mode added ours to {left_out}: {held['plugins']}")
-    if run.tool()["version"] != VERSION:
-        raise rc.Failed(f"the install command in update mode changed cad: {run.tool()}")
-    say(f"ok    update mode: {', '.join(kept) or 'no program'} updated; nothing added to {left_out}; cad left alone")
+    say(f"ok    the install command again: cad {VERSION} is installed already, left alone")
 
     if not migrate:
         say(f"skip  migrate: the tag {OLD} is not in this checkout (git fetch --depth 1 origin tag {OLD})")

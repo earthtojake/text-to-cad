@@ -4,28 +4,26 @@ run with uv's Python (the standard library alone, nothing imported from this rep
     curl -fsSL https://texttocad.dev/install.sh | sh          # macOS and Linux
     irm https://www.texttocad.dev/install.ps1 | iex           # Windows PowerShell
 
-It takes no options, carries no release of cad (nothing in it changes with one), and does these things alone:
+It takes no options, carries no release of cad (nothing in it changes with one), and has one behaviour, run by a
+person or by cad (``cad plugin install``). It does these things alone:
 
 1. (``install.sh``, ``install.ps1``) makes sure uv is here;
-2. installs the ``cad`` command as a uv tool, ``uv tool install --managed-python --python 3.14 cad==<pointer>``,
-   the pointer being the release the version feed names ``latest`` (``install_cad``); with no answer from the
-   feed, ``cad`` alone (PyPI's newest). Never a downgrade: a ``cad`` tool at the pointer or newer stays (run
-   again where it does not start). First the ``cad`` command 0.10.0-0.11.10 wrote in uv's bin folder goes, where
-   it is provably ours (``old_launcher``); another program's ``cad`` there stops this step, in one line;
+2. installs the ``cad`` command only where uv has no ``cad`` tool (``install_cad``): ``uv tool install
+   --managed-python --python 3.14 cad``, PyPI's newest. A ``cad`` tool that is here and starts (``cad --version``),
+   at any release, is left as it is: cad updates itself. One that does not start (a tool Windows left half-replaced)
+   is installed again, ``uv tool install --reinstall ...``, PyPI's newest. First the ``cad`` command 0.10.0-0.11.10 wrote in uv's bin folder goes, where it is
+   provably ours (``old_launcher``); another program's ``cad`` there stops this step, in one line;
 3. installs or updates the plugin in each agent app it finds, with that app's own command, from the GitHub
    repository's ``latest`` branch, or copies the skills into the agent's own skills folder;
 4. only then removes what earlier releases left in that app (each row of ``APPS``), Claude Desktop's server,
    and the loose copies of our skills (``remove_loose_skills``): the new copy is in place before an old one
    goes, so a failed download or a GitHub outage leaves every app with what it had;
-5. switches on cad's automatic updates with the cad it installed (``cad auto-update on --installer``; a cad
-   that has no such command says so in one line, and the install has not failed).
+5. turns on ``cad plugin auto-update`` with the cad on this computer (``switch_on``), so the plugin follows cad's
+   automatic updates; a cad that has no such command says so in one line, and the install has not failed.
 
 It prints one line per app as it finishes. One app failing, even with an error no row foresaw, never stops the
-others. It exits nonzero when cad was not installed or every app it found failed. It never starts cad's server.
-
-``CAD_INSTALL_UPDATE=1`` (set by cad when it runs this after updating itself) is the update mode: steps 2 and 5
-are skipped, and in step 3 only the copies of ours still there, found by our fixed names, are updated
-(``Context.update``): nothing is added to any app (``NOT_THERE``). Step 4 is as in an install.
+others; where the cad step failed, the apps are still done. It exits nonzero when cad was needed and could not be
+installed, or every app it found failed. It never starts cad's server.
 
 What it removes is only what is provably ours: our names AND a sign that it is ours (our catalog, a path in
 cad's state folder, a git origin naming our repository, a SKILL.md whose front matter or provenance line
@@ -39,17 +37,18 @@ there are found and removed. A correction is one row. Each row's comment says ho
 checked: by the vendor's documentation (its address), by the CLI's own ``--help``, by superpowers'
 practice, or not at all.
 
-Test hooks, never documented to people: ``CAD_INSTALL_FEED`` (the version feed's address; a rehearsal serves its
-own, and installs its own wheels through uv's ``UV_FIND_LINKS``), ``CODEX_CLI`` (the codex command, as earlier
-installers took it), ``CAD_INSTALL_PATH_ONLY`` (look for the apps' commands on PATH and in ``~/.local/bin`` alone:
-never in Homebrew's or npm's folders or an app's bundle, where a test would find a real CLI).
+Test hooks, never documented to people: ``CODEX_CLI`` (the codex command, as earlier installers took it),
+``CAD_INSTALL_PATH_ONLY`` (look for the apps' commands on PATH and in ``~/.local/bin`` alone: never in Homebrew's or
+npm's folders or an app's bundle, where a test would find a real CLI). uv runs with this process's environment, so a
+rehearsal offers its own wheels through uv's ``UV_FIND_LINKS``: uv installs the newest release it is offered, its
+own or PyPI's.
 
 ``CAD_INSTALL_REPORT`` names a file where the run says what it did (``write_report``), for cad's own hand-over
 (``cad_server._internal.install_script``, which sets it): ``{"schema": "text-to-cad install report/1", "release":
-<the cad this computer has after the run, else the one it tried; null in the update mode>, "setup": <the cad step's
-exit status: 0 where cad was installed or stayed, and in the update mode>, "apps": {<APPS key>: "installed" |
-"updated" | "removed" | "skipped" | "failed" | "not found"}}``, written whole (a file beside it, renamed into place)
-as the run ends. Writing it never fails the run, and nothing is printed about it.
+<the cad this computer has after the run; null where it has none>, "setup": <the cad step's exit status: 0 where cad
+was installed, installed again, or was here already and starts>, "apps": {<APPS key>: "installed" | "updated" | "removed" | "skipped" | "failed" |
+"not found"}}``, written whole (a file beside it, renamed into place) as the run ends. Writing it never fails the
+run, and nothing is printed about it.
 """
 
 from __future__ import annotations
@@ -71,7 +70,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-FEED = "https://api.texttocad.dev/v1/versions"
 REPOSITORY = "earthtojake/text-to-cad"
 URL = f"https://github.com/{REPOSITORY}"
 BRANCH = "latest"
@@ -95,7 +93,8 @@ PROVENANCE_LINE = "Provenance: maintained in [earthtojake/text-to-cad](https://g
 # Marks earlier installers wrote: in Cursor's plain copy (0.10.0-0.11.10), in a development install's copy.
 COPY_MARK = ".text-to-cad-copy"
 DEV_MARK = ".text-to-cad-dev"
-# `uv tool install <these> cad==<pointer>`: the line the skills give a store's copy too.
+# `uv tool install <these> cad`: uv's own Python 3.14, whatever Python the computer has. The line people are given
+# carries no flags; this script is hosted, and may change them any day.
 UV_TOOL_ARGS = ("--managed-python", "--python", "3.14")
 # The mark in the first lines of the `cad` command 0.10.0-0.11.10 wrote in the bin folder, with its revision: `# ` in
 # the sh script and in the `__main__.py` of the zip behind cad.exe's launcher (Windows, 0.11), `rem ` in cad.cmd (0.10).
@@ -111,7 +110,6 @@ COMMAND_SECONDS = 180
 HOMEBREW = ("/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin")
 # The CLI the Codex app bundles (macOS).
 CODEX_BUNDLED = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"
-_VERSION = re.compile(r"[0-9]+(\.[0-9]+)*([.+-][0-9A-Za-z.+-]*)?")
 
 
 # --- the computer ---------------------------------------------------------------------------------
@@ -552,12 +550,10 @@ class Source:
 
 @dataclass
 class Context:
-    """What one run knows as it goes: the source, whether it is the update mode (``update``: an app is changed only
-    where a copy of ours is still there, ``NOT_THERE`` where none is), and whether Claude Code now has our plugin
-    (Cursor and Grok Build load Claude Code's plugins, so they then need none of their own)."""
+    """What one run knows as it goes: the source, and whether Claude Code now has our plugin (Cursor and Grok Build
+    load Claude Code's plugins, so they then need none of their own)."""
 
     source: Source
-    update: bool = False
     claude_has_ours: bool = False
     claude_found: bool = False
 
@@ -584,7 +580,6 @@ class Outcome:
 
 NOT_FOUND = Outcome("skipped", "not found")
 QUIET = Outcome("skipped")  # nothing to do and nothing worth a line (Claude Desktop with nothing of ours)
-NOT_THERE = Outcome("skipped", "no copy of ours to update")  # the update mode, in an app without one: nothing added
 
 
 def fill(templates: Sequence[Sequence[str]], source: Source, here: Optional[Here] = None) -> List[List[str]]:
@@ -631,18 +626,6 @@ def plugin_command(app: App, here: Here, context: Context) -> Outcome:
     if not cli:
         return NOT_FOUND
     source = context.source
-    if context.update:
-        # Ours where its record says so (Qwen Code, Pi); elsewhere its own update command names our plugin, and fails
-        # where the app has no copy of that name: never installed.
-        if (app.installed is not None and not app.installed(here)) or not app.update:
-            return NOT_THERE
-        for argv in fill(app.update, source, here):
-            ran = here.run([cli, *argv])
-            if not ran.ok:
-                if app.installed is not None:
-                    raise Failed(ran.last())
-                return NOT_THERE
-        return Outcome("updated")
     if source.local:
         if not app.local:
             return Outcome("skipped", "no install from a local folder")
@@ -725,10 +708,6 @@ def marketplace_app(app: App, here: Here, context: Context, cli: Optional[str], 
     def ids(name: str) -> List[str]:
         return [plugin for plugin in plugins if plugin.endswith(f"@{name}") and plugin.split("@")[0] in OUR_PLUGINS]
 
-    # The update mode: a plugin of ours from a release (GitHub's catalog, or 0.10.0-0.11.10's), whose catalog is ours.
-    if context.update and not any(ids(name) and (name not in catalogs or catalogs[name].ours(here))
-                                  for name in (CATALOG, LOCAL_CATALOG)):
-        return NOT_THERE
     present = catalogs.get(target)
     if present is not None and not present.ours(here):
         raise Failed(f"the {target} catalog is another source's ({present.where or present.kind}): left alone")
@@ -997,8 +976,6 @@ def cursor(app: App, here: Here, context: Context) -> Outcome:
         clear(local / PLUGIN)
         return Outcome("installed", "; ".join([f"a copy of {source.folder}", *notes]), removed)
     what, why = kind(target)
-    if context.update and what in ("absent", "other"):
-        return NOT_THERE
     git = here.which("git")
     if what == "link":
         return Outcome("skipped", f"{why} (Cursor does not load a link: put a clone there to use it)")
@@ -1068,8 +1045,6 @@ def gemini(app: App, here: Here, context: Context) -> Outcome:
         return run(["extensions", "install", URL, "--ref", BRANCH, "--consent"])
 
     if not (folder.exists() or folder.is_symlink()):
-        if context.update:
-            return NOT_THERE
         ran = put_in()
         if not ran.ok and not ours_now():
             raise Failed(ran.last())
@@ -1080,8 +1055,6 @@ def gemini(app: App, here: Here, context: Context) -> Outcome:
         return Outcome("updated", f"linked to {source.folder}")
     linked = found.get("type") == "link" and our_folder(here, found.get("source"))
     if not (same or linked or our_repository(found.get("source"))):
-        if context.update:
-            return NOT_THERE
         raise Failed(f"another extension named {PLUGIN} is installed (from {found.get('source') or 'elsewhere'}): "
                      "left alone")
     source.reachable(here)
@@ -1149,8 +1122,6 @@ def grok(app: App, here: Here, context: Context) -> Outcome:
             old_cad = True
         elif plugin["name"] == PLUGIN:
             if not ours:
-                if context.update:
-                    return NOT_THERE
                 raise Failed(f"another plugin named {PLUGIN} is installed (from {plugin['source']}): left alone")
             current = (same_path(plugin["source"], source.folder) if source.local
                        else our_repository(plugin["source"]) and plugin["ref"] == BRANCH)
@@ -1168,8 +1139,6 @@ def grok(app: App, here: Here, context: Context) -> Outcome:
                 removed.append(PLUGIN)
         drop_cad()
         return Outcome("skipped", "it loads Claude Code's plugin", removed, has_ours=True)
-    if context.update and not (old_cad or mine or other):
-        return NOT_THERE
     if mine is not None:
         here.must([cli, "plugin", "update", PLUGIN])
         drop_cad()
@@ -1224,8 +1193,6 @@ def antigravity(app: App, here: Here, context: Context) -> Outcome:
     mine = next((entry for entry in listed or () if entry.get("name") == PLUGIN), None)
     theirs = mine is not None and not (our_repository(mine.get("source")) or our_folder(here, mine.get("source"))
                                        or our_folder(here, mine.get("path")))
-    if context.update and (mine is None or theirs):
-        return NOT_THERE
     if theirs:
         raise Failed(f"another plugin named {PLUGIN} is installed (from {mine.get('source') or 'elsewhere'}): left alone")
     ran = here.run(install)
@@ -1386,15 +1353,7 @@ def copy_skills(app: App, here: Here, context: Context) -> Outcome:
     folder of that name that is someone else's stays)."""
     if not any(path.exists() for path in (app.marks(here) if app.marks else [])):
         return NOT_FOUND
-    if context.update and not has_our_skills(app.folder(here)):
-        return NOT_THERE
     return put_skills(app.folder(here), here, context)
-
-
-def has_our_skills(folder: Path) -> bool:
-    """Whether a skills folder holds a skill of ours (``our_skill``, current or retired): the update mode's sign that
-    our copy is there."""
-    return any(our_skill(folder / name) for name in (*SKILLS, *RETIRED_SKILLS))
 
 
 def put_skills(target: Path, here: Here, context: Context) -> Outcome:
@@ -1549,8 +1508,6 @@ def hermes(app: App, here: Here, context: Context) -> Outcome:
     plugin = home / "plugins" / PLUGIN
     entry = table(table(read_json(home / "plugins" / ".install-metadata.json")).get(PLUGIN))
     old = plugin.is_dir() and (our_repository(entry.get("source")) or our_folder(here, plugin))
-    if context.update and not (old or has_our_skills(home / "skills")):
-        return NOT_THERE
     outcome = put_skills(home / "skills", here, context)
     if old:
         removal = here.run([cli, "plugins", "remove", PLUGIN]) if cli else None
@@ -1651,16 +1608,6 @@ APPS: Tuple[App, ...] = (
 
 
 # --- cad ----------------------------------------------------------------------------------------------
-
-
-def latest(here: Here) -> Optional[str]:
-    """The pointer: the release the version feed names ``latest``; None where it cannot be read or names none."""
-    try:
-        with urllib.request.urlopen(here.environ.get("CAD_INSTALL_FEED") or FEED, timeout=5) as answer:
-            named = json.loads(answer.read().decode("utf-8")).get("latest")
-    except Exception:  # noqa: BLE001 - any failure to read the feed means no pointer
-        return None
-    return named if isinstance(named, str) and _VERSION.fullmatch(named) else None
 
 
 @dataclass
@@ -1860,8 +1807,8 @@ def on_path(here: Here, uv: str, folder: Path) -> None:
 
 @dataclass
 class Cad:
-    """What the cad step left: the cad this computer has (else the release it tried), the step's exit status (0:
-    installed, or it stayed), and its ``cad`` command."""
+    """What the cad step left: the cad this computer has (None where it has none), the step's exit status (0: cad
+    installed, or here already), and its ``cad`` command."""
 
     release: Optional[str] = None
     code: int = 0
@@ -1869,87 +1816,73 @@ class Cad:
 
 
 def install_cad(here: Here) -> Cad:
-    """Step 2 (see the module): the ``cad`` command, a uv tool at the pointer, never a downgrade; uv's output shown as
-    it runs."""
+    """Step 2 (see the module): the ``cad`` command, a uv tool at PyPI's newest release, only where uv has no ``cad``
+    tool, or one whose command does not start (installed again); one that starts, at any release, is left as it is.
+    uv's output shown as it runs."""
     uv = here.environ.get("UV") or here.which("uv")  # `uv run` names itself in UV
     if not uv:
         print("cad: failed: uv was not found (install uv: https://docs.astral.sh/uv/)", flush=True)
         return Cad(code=127)
-    pointer = latest(here)
     said = here.run([uv, "tool", "dir", "--bin"], timeout=60)
     lines = said.out.strip().splitlines() if said.ok else []
     folder = Path(lines[-1].strip()) if lines else here.home / ".local" / "bin"
+    command = str(folder / ("cad.exe" if here.windows else "cad"))
     tools = uv_tools(here, uv)
     problem, moved = make_room(here, folder, tools)
     if problem:
         print(problem, flush=True)
-        return Cad(pointer, 1)
+        return Cad(None, 1)
     tool = tools.get("cad")
-    have, command = (tool.version, tool.commands.get("cad")) if tool else (None, None)
-    target, again = pointer, False
-    if have and (pointer is None or version_key(have) >= version_key(pointer)):
-        if command and here.run([command, "--version"], timeout=120).ok:
+    again = False
+    if tool is not None:
+        tool_command = tool.commands.get("cad") or command
+        if here.run([tool_command, "--version"], timeout=60).ok:
             settle(here, moved, True)
-            print(f"The version feed could not be read: cad {have} stays as it is." if pointer is None else
-                  f"cad {have} is installed already." if version_key(have) == version_key(pointer) else
-                  f"cad {have} is installed, newer than the release the version feed names ({pointer}): it stays.",
-                  flush=True)
-            return Cad(have, 0, command)
-        target, again = have, True  # there, but its command does not start: installed again, never older
+            print(f"cad {tool.version} is installed already: it is left as it is, and updates itself.", flush=True)
+            return Cad(tool.version, 0, tool_command)
+        # There, but it does not start (a tool Windows left half-replaced, say): installed again.
+        print(f"cad {tool.version} is installed but does not start: installing it again with uv.", flush=True)
+        again = True
     if here.windows and cad_running(folder, tool):
         settle(here, moved, False)
         print("cad: not installed: cad.exe is running from cad's own folder, and Windows lets no one replace it while "
               "it does. Close the apps and terminals that use cad, then run this again.", flush=True)
-        return Cad(target or have, 1)
-    print(f"Installing cad {target} with uv. The first run downloads it, which takes a minute." if target else
-          "The version feed could not be read: installing the newest cad with uv. The first run downloads it, which "
-          "takes a minute.", flush=True)
-    # The release the feed names may have no cad command to install (0.11.10 and earlier, which the feed names for up
-    # to an hour after a release of this design): then PyPI's newest, never older than the cad that was here; then
-    # that cad again, which uv took away with the failed attempt (measured: it removes the whole tool).
-    attempts = list(dict.fromkeys([*([f"cad=={target}"] if target else []), f"cad>={have}" if have else "cad",
-                                   *([f"cad=={have}"] if have else [])]))
-    code = 127
-    for number, requirement in enumerate(attempts):
-        if number and requirement.startswith("cad=="):
-            print(f"Putting back cad {have}, which was here before.", flush=True)
-        elif number:
-            print((f"cad {target}, the release the version feed names," if target == pointer else f"cad {target}")
-                  + " could not be installed: installing the newest cad instead.", flush=True)
-        argv = [uv, "tool", "install", *UV_TOOL_ARGS, *(["--reinstall"] if again else []), requirement]
-        try:
-            code = subprocess.call(argv, env=here.environ, stdin=subprocess.DEVNULL)
-        except OSError as error:
-            code = 127
-            print(f"cad: failed: {error}", flush=True)
-        if not code:
-            break
+        return Cad(tool.version if tool else None, 1)
+    if not again:
+        print("Installing cad with uv. The first run downloads it, which takes a minute.", flush=True)
+    try:
+        code = subprocess.call([uv, "tool", "install", *(["--reinstall"] if again else []), *UV_TOOL_ARGS, "cad"],
+                               env=here.environ, stdin=subprocess.DEVNULL)
+    except OSError as error:
+        code = 127
+        print(f"cad: failed: {error}", flush=True)
     settle(here, moved, not code)  # the earlier command back where uv's is not in
     if code:
         where = ("This ran inside an app's package, where Windows keeps uv's first install of Python to that app: run "
                  "the install command once in a PowerShell window of your own." if packaged(here) else
                  "Where this ran in an agent's sandbox, run it again in a terminal of your own.")
         print(f"cad: failed (uv tool install exit status {code}; what uv said is above). {where}", flush=True)
-        return Cad(target, code)
+        left = uv_tools(here, uv).get("cad") if again else None  # a failed reinstall may leave the tool, or not
+        return Cad(left.version if left else None, code)
     tool = uv_tools(here, uv).get("cad")
     on_path(here, uv, folder)
-    return Cad(tool.version if tool else target, 0,
-               (tool.commands.get("cad") if tool else None) or str(folder / ("cad.exe" if here.windows else "cad")))
+    return Cad(tool.version if tool else None, 0, (tool.commands.get("cad") if tool else None) or command)
 
 
 def switch_on(here: Here, cad: Cad) -> None:
-    """Step 5: automatic updates switched on by the cad just installed. Whatever it answers, the install is done."""
-    ran = here.run([cad.command, "auto-update", "on", "--installer"], timeout=120)
+    """Step 5: ``cad plugin auto-update on``, by the cad on this computer, so the plugin follows cad's automatic
+    updates. Whatever it answers, the install is done."""
+    ran = here.run([cad.command, "plugin", "auto-update", "on"], timeout=120)
     if ran.ok:
         for line in ran.out.splitlines():
             if line.strip():
                 print(line, flush=True)
     elif ran.code == 2:  # a usage error: a cad that has no such command
-        print(f"cad {cad.release} has no automatic updates (no `cad auto-update`): run this command again to update "
-              "it.", flush=True)
+        print(f"{f'cad {cad.release}' if cad.release else 'This cad'} has no `cad plugin auto-update`: the plugin will "
+              "not follow cad's updates. Run this command again to update the plugin.", flush=True)
     else:
-        print(f"Automatic updates were not switched on (cad said: {ran.last()}): run this command again to update "
-              "cad.", flush=True)
+        print(f"The plugin's automatic updates were not turned on (cad said: {ran.last()}). Run this command again to "
+              "update the plugin.", flush=True)
 
 
 # --- the run ------------------------------------------------------------------------------------------
@@ -1979,14 +1912,13 @@ class Report:
 
 
 def install_apps(here: Here, source: Source, apps: Sequence[App] = APPS,
-                 say: Callable[[str], None] = lambda line: print(line, flush=True), update: bool = False) -> Report:
-    """Steps 3 and 4 for ``apps``: ours in (in the update mode, only where a copy of ours is: ``Context.update``),
-    then old copies out, each app's line said as it finishes; one line for the loose skills, one counting the apps
-    not found, one counting those with no copy of ours to update."""
-    context = Context(source, update=update)
+                 say: Callable[[str], None] = lambda line: print(line, flush=True)) -> Report:
+    """Steps 3 and 4 for ``apps``: ours in, then old copies out, each app's line said as it finishes; one line for
+    the loose skills, one counting the apps not found."""
+    context = Context(source)
     lines: List[str] = []
     outcomes: Dict[str, Outcome] = {}
-    missing, without = [], []
+    missing = []
 
     def tell(line: str) -> None:
         lines.append(line)
@@ -2005,8 +1937,6 @@ def install_apps(here: Here, source: Source, apps: Sequence[App] = APPS,
         outcomes[app.key] = outcome
         if outcome is NOT_FOUND:
             missing.append(app.name)
-        elif outcome is NOT_THERE:
-            without.append(app.name)
         elif outcome is not QUIET:
             tell(outcome.line(app.name))
     try:
@@ -2015,8 +1945,6 @@ def install_apps(here: Here, source: Source, apps: Sequence[App] = APPS,
         loose = Outcome("failed", f"{type(error).__name__}: {error}")
     if loose is not QUIET:
         tell(loose.line("Loose skills"))
-    if without:
-        tell(f"{len(without)} apps found here have no copy of ours to update: nothing was added to them.")
     if missing:
         tell(f"{len(missing)} other supported apps were not found here.")
     return Report(lines, outcomes)
@@ -2079,21 +2007,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
               "command.", file=sys.stderr)
         return 2
     here = Here()
-    update = here.environ.get("CAD_INSTALL_UPDATE") == "1"
-    if update:
-        cad = Cad()
-        print("Updating text-to-cad's plugin in each agent app that has it:", flush=True)
-    else:
-        cad = install_cad(here)
-        print("", flush=True)
-        print("Setting up the plugin in each agent app found here:", flush=True)
+    cad = install_cad(here)
+    print("", flush=True)
+    print("Setting up the plugin in each agent app found here:", flush=True)
     source = Source()
     try:
-        report = install_apps(here, source, update=update)
+        report = install_apps(here, source)
     finally:
         source.close()
     print("", flush=True)
-    if cad.command and not update:
+    if cad.command:
         switch_on(here, cad)
     if cad.code:
         print("cad itself was not installed (what went wrong is above), and the plugin's skills need it: run this "

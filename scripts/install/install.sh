@@ -5,8 +5,8 @@
 #
 # It makes sure uv is here and new enough (installing it with uv's own installer when it is not), downloads
 # install.py from beside this script and runs it with uv's Python: that installs the cad command as a uv tool
-# and puts the plugin into every agent app on this computer (install.py says how). Run it again to update. It
-# takes no options, and names no release. Everything happens inside main, called on the last line, so a
+# where there is none (a cad that is here updates itself), and puts the plugin into every agent app on this
+# computer (install.py says how). Run it again to update the plugin. It takes no options, and names no release. Everything happens inside main, called on the last line, so a
 # download cut short runs nothing.
 
 set -eu

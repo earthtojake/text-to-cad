@@ -4,8 +4,8 @@
 #
 # It makes sure uv is here and new enough (installing it with uv's own installer when it is not), downloads
 # install.py from beside this script and runs it with uv's Python: that installs the cad command as a uv tool
-# and puts the plugin into every agent app on this computer (install.py says how). Run it again to update. It
-# takes no options, and names no release. Everything happens inside Install-TextToCad, called on the last
+# where there is none (a cad that is here updates itself), and puts the plugin into every agent app on this
+# computer (install.py says how). Run it again to update the plugin. It takes no options, and names no release. Everything happens inside Install-TextToCad, called on the last
 # lines: a download cut short runs nothing, and a failure returns instead of closing the window. Where it fails
 # it ends by throwing (see the last lines), so every documented way of running it exits 1: `irm ... | iex` in
 # `powershell -Command`, the same through cmd, and `powershell -File install.ps1`.

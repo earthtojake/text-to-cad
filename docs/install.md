@@ -16,14 +16,16 @@ It does five things, and nothing else:
 
 1. Installs [uv](https://docs.astral.sh/uv/) if it is missing. Where uv is older than 0.9.0, it updates
    it, or says how.
-2. Installs `cad`, the command text-to-cad runs on, as a uv tool, at the newest release.
-3. Installs the plugin in each agent app it finds, with that app's own command (below), all but Kimi
-   Code, which you install by hand. It prints one line per app.
+2. Installs `cad`, the command text-to-cad runs on, as a uv tool, at the newest release. Where cad
+   is installed already, it leaves it as it is: cad updates itself. Where that cad does not start,
+   it installs it again.
+3. Installs or updates the plugin in each agent app it finds, with that app's own command (below),
+   all but Kimi Code, which you install by hand. It prints one line per app.
 4. Removes what earlier releases of text-to-cad left in those apps.
-5. Turns on automatic updates ([Updating](#updating)).
+5. Turns on the plugin's automatic updates ([Updating](#updating)).
 
-It takes no options and does not start anything. Run it again at any time: it brings cad and the
-plugin up to date, and never installs an older cad than the one you have.
+It takes no options and does not start anything. Run it again at any time to bring the plugin up
+to date in every app.
 
 It removes only what is ours: a skill counts as ours only where its `SKILL.md` says it comes from
 text-to-cad's repository, so a skill of yours with the same name is left as it is. A copy from a
@@ -42,16 +44,11 @@ PowerShell 5.1 does not follow the redirect from `texttocad.dev`.
 First install cad, which needs uv:
 
 ```bash
-uv tool install --managed-python --python 3.14 cad
+uv tool install cad
 ```
 
-To have it update itself, as the install command sets up, run:
-
-```bash
-cad auto-update on
-```
-
-The runtime supports Python 3.13+; the commands use uv-managed Python 3.14.
+If uv says the `cad` executable already exists, add `--force` after `install`. cad updates itself
+([Updating](#updating)). The runtime supports Python 3.13+.
 
 Then install the plugin in each app with the commands under its name. Install it once per app: two
 copies show every skill twice. Restart the app afterwards. The plugin's skills run text-to-cad
@@ -297,50 +294,57 @@ Zed and GitHub Copilot in VS Code are not supported yet. No route for your agent
 
 ## Updating
 
-### Automatic updates
+cad and the plugin update separately.
 
-The install command turns automatic updates on. With them on, cad checks for a new release when its
-server starts, and about once an hour while it runs. When there is one and nothing is running, cad
-stops its server, installs the new release with uv, and starts it again. Then, where the install
-command set it up, cad runs the install command once more, in a mode that only updates the copies of
-our plugin still in your apps: it adds none, and changes nothing else.
+### cad
 
-cad learns of a release from the project's version feed, which names a release only once it is an
-hour old. cad only ever moves forward: it never installs an older release than the one it runs.
-
-To see whether automatic updates are on:
-
-```bash
-cad auto-update
-```
-
-To turn them off:
-
-```bash
-cad auto-update off
-```
-
-`cad auto-update on` turns them back on. Only a cad installed as a uv tool updates itself; one
-installed another way, such as with pip into a project's own Python, never does. Setting
-`CAD_UPDATE_CHECK=0` where cad runs turns the check off for that process.
-
-### Updating by hand
-
-Run the install command again. It updates cad and the plugin in every app it finds. To update one
-app, run the update command under its name. To update cad alone, while its server runs:
+cad updates itself. While its server runs, it looks for a new release about once an hour, and
+installs it once nothing has run for a minute. To update it now, while its server runs:
 
 ```bash
 cad update
 ```
 
-It installs the newest release now, even with automatic updates off, and says when it is done. Or do
-the same with uv yourself:
+That updates cad alone. Automatic updates are on unless you turn them off. To see whether they are
+on, or to turn them off or on:
+
+```bash
+cad auto-update        # says whether they are on
+cad auto-update off
+cad auto-update on
+```
+
+Only a cad installed with `uv tool install` updates itself; one installed another way, such as with
+pip into a project's own Python, never does. Setting `CAD_UPDATE_CHECK=0` where cad runs turns the
+check off for that process. You can also update cad with uv yourself:
 
 ```bash
 cad server stop
-uv tool install --managed-python --python 3.14 cad@latest
+uv tool upgrade cad
 cad server start
 ```
+
+### The plugin
+
+The install command turns on the plugin's automatic updates: each time cad updates itself, it then
+runs the install command once, which puts the newest plugin in every agent app it finds. An update
+you start with `cad update` does not. To update the plugin now, run the install command again, or:
+
+```bash
+cad plugin install
+```
+
+To update one app alone, run the update command under its name. To see whether the plugin's
+automatic updates are on, or to turn them off or on:
+
+```bash
+cad plugin auto-update        # says whether they are on
+cad plugin auto-update off
+cad plugin auto-update on
+```
+
+They are off until the install command turns them on: cad never changes your apps where you did not
+run it.
 
 A copy from a plugin store (Codex's or Claude's) is updated by that store, on its own schedule. Its
 skills may then be older than cad. That is fine: a command the skills used keeps working for at least
@@ -348,25 +352,25 @@ skills may then be older than cad. That is fine: a command the skills used keeps
 
 ### Staying on an older release
 
-Turn automatic updates off, then install the release you want, for example 0.11.10:
+Turn automatic updates off, then install the release you want, for example 0.11.11:
 
 ```bash
 cad auto-update off
 cad server stop
-uv tool install --managed-python --python 3.14 cad==0.11.10
+uv tool install cad==0.11.11
 cad server start
 ```
 
-Do not run the install command afterwards: it installs the newest release and turns automatic
-updates back on.
+The install command leaves that cad as it is. It still puts the newest plugin in your apps, and its
+skills may ask for a newer cad.
 
 ### From an earlier release
 
 A computer on 0.10.0 to 0.11.10 is brought over once, by the updater those releases shipped: it
-installs the new cad, which then runs the install command once. From then on, cad updates as above.
-Where the agent apps got text-to-cad only from a plugin store, the new cad comes alone, and the
-store's next copy of the plugin installs cad as a uv tool. A computer on an older release moves
-when you run the install command.
+installs the new cad with uv. Where the install command was used on that computer, it runs it once
+more and turns on the plugin's automatic updates; where it was not, your apps are left as they are.
+From then on, both update as above. A computer on an older release moves when you run the install
+command.
 
 ## Removing
 
