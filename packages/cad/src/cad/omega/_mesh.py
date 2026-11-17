@@ -18,7 +18,7 @@ Three things make the mesh one that can be trusted and is not paid for twice:
   what made it: the model's bytes, the bytes of the files it imports, the values, the depth and the ``gsl``.
   Asked for again with nothing changed, it is copied, not meshed.
 
-Meshing is ``gsl eval``'s ``mesh`` (omega-core after 0.1.2): one indexed GLB, a node for each of the model's
+Meshing is ``gsl eval``'s ``mesh`` (omega-core 0.1.2 or later): one indexed GLB, a node for each of the model's
 returns, a normal at every vertex from the field's gradient. A ``gsl`` that has no such question is said so, with
 what to do.
 """
@@ -230,7 +230,7 @@ def mesh(path: Path, out: Path | None = None, *, define: tuple[str, ...] = (), d
                 if 'op "mesh"' in said and "one of" in said:
                     findings.add("error", "gsl_cannot_mesh", f"this gsl's eval has no mesh ({gsl}): it is older "
                                  "than the one cad omega mesh needs", path=where,
-                                 hint="set CAD_GSL to the gsl of an omega-core after 0.1.2; `cad omega check` meshes "
+                                 hint="set CAD_GSL to the gsl of omega-core 0.1.2 or later; `cad omega check` meshes "
                                       "with this one")
                 else:
                     findings.add("error", "compile_failed", f"gsl refused the model: {said}", path=where)
