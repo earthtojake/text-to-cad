@@ -99,9 +99,10 @@ cad_server/
   refused unless this cad is a global install, and `status` says when it is not. Where a server runs, it
   keeps the switch (`{"op": "auto_update"}`), as it does every other command's writing, so a shell whose
   sandbox may not write cad's state folder needs no permission; with none running, the command writes it.
-- **`cad update`**: cad, and only cad, updated to the newest release on PyPI now, by the server that runs
-  (below), even with automatic updates off. It never starts a server, and is refused unless this cad is a
-  global install. It waits until the update ends and says how, in one line, on Windows too.
+- **`cad update`**: cad, and only cad, updated to the newest release on PyPI now, by the server that runs,
+  or by the command itself where none runs (below), even with automatic updates off. It never starts a
+  server, and is refused unless this cad is a global install. It waits until the update ends and says how, in
+  one line, on Windows too.
 - **`cad plugin install`**: the hosted install command run in the foreground, its output and exit status the
   command's (`_internal/install_script.py`). **`cad plugin auto-update [status|on|off]`**: whether an
   automatic update of cad runs it after it, off by default, kept by the server as `cad auto-update` is. That
@@ -160,7 +161,10 @@ permission): it asks PyPI which release is newest (`updates.newest`, 5 s at most
 stand-in), says `cad X is the newest release` where none is newer, and otherwise begins the same update as
 soon as nothing is in flight, with the switch off too and past the limits on automatic tries (it counts as a
 try all the same), or joins the one underway. Where PyPI cannot be reached it runs the upgrade all the same
-and says what it got. It updates cad alone: it never runs the install command.
+and says what it got. It updates cad alone: it never runs the install command. Where no server runs, the
+command judges and begins the update itself, in its own process, and the helper starts no server after it:
+an update typed with none running leaves none running. In a shell whose sandbox cannot start a server, it
+says so and updates nothing.
 
 ## Folders
 

@@ -283,7 +283,8 @@ again on failure, and starts the server with whatever cad is there. A server tha
 `UPDATING`, and its starter waits for the next one; a `cad server start` that fails asks for the update before it
 gives up; a start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). After an
 automatic update that installed a newer cad, with `cad plugin auto-update` on, the helper runs the new cad's
-`cad plugin install` once (the hosted install command); a typed `cad update` never does.
+`cad plugin install` once (the hosted install command); a typed `cad update` never does. Where no server runs, a
+typed `cad update` begins the update itself (`cli/update.py`), and its helper starts no server after it.
 
 The updaters of 0.10.0 to 0.11.10 are frozen on computers, though, and update by running a newer release's hidden
 `cad setup --engine-update` from a flat release folder they made (`<state>/releases/X`). The bridge

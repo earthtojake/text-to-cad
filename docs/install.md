@@ -299,7 +299,7 @@ cad and the plugin update separately.
 ### cad
 
 cad updates itself. While its server runs, it looks for a new release about once an hour, and
-installs it once nothing has run for a minute. To update it now, while its server runs:
+installs it once nothing has run for a minute. To update it now:
 
 ```bash
 cad update

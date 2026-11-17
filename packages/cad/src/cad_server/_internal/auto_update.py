@@ -36,7 +36,8 @@ because cad takes its launcher off ``sys.path`` as it starts (``cad_server/__ini
 that installed a newer cad, with ``plugin.auto_update`` on, the helper then runs the new cad's ``cad plugin install``
 once (``INSTALL_LOG``: its output). The attempt is kept in the state folder (``RECORD``), which ``cad doctor`` shows.
 
-**Asked for** (``cad update``, which the server it asks judges, ``asked``, and begins, ``begin``): PyPI asked now which
+**Asked for** (``cad update``, which the server it asks judges, ``asked``, and begins, ``begin``; with no server
+running, the command itself, whose helper then starts none): PyPI asked now which
 release is newest (``updates.newest``); the switch, ``TRIES`` and ``RETRY_SECONDS`` do not apply (a typed update always
 updates); where PyPI cannot be reached, the upgrade runs all the same, and says what it got; the update begun as soon as
 nothing is in flight, not after the idle minute, or joined where one is underway. Counted in the record as any attempt
@@ -466,29 +467,30 @@ def due(*, fetch: bool = False, now: float | None = None) -> str | None:
 
 def helper_command(target: str | None, *, now: float, version: str, prefix: str | None = None, uv: str = "uv",
                    base: str | None = None, record: str = RECORD, tries: int = 1, then_install: bool = False,
-                   windows: bool = os.name == "nt", install: Global | None = None) -> list[str]:
+                   windows: bool = os.name == "nt", install: Global | None = None, start: bool = True) -> list[str]:
     """The helper's command line: the Python this environment was made from (``base``: ``sys._base_executable``,
     never this environment's), isolated, running the helper's source, and its one argument: the commands of
     ``install``'s installer (by default uv's, its program ``uv``, for the environment ``prefix``), whose variables
     (``Installer.environ``) the trigger sets in the helper's environment; ``target``, the
     release asked for (None: whatever the upgrade gets); ``then_install``, whether ``cad plugin install`` runs after
-    an update that installed a newer cad, its output in ``INSTALL_LOG`` beside ``record``."""
+    an update that installed a newer cad, its output in ``INSTALL_LOG`` beside ``record``; ``start``, whether it starts
+    the server after the update."""
     prefix = str(install.prefix) if install is not None else prefix or sys.prefix
     installer, program = (install.installer, install.program or [uv]) if install is not None else (UV, [uv])
     told = {"cad": str(tool_command(Path(prefix), windows)), "target": target, "prefix": prefix, "record": record,
             "from": version, "at": now, "tries": tries, "upgrade": installer.upgrade(program),
             "put_back": installer.put_back(program, version), "launchers": installer.launchers(program),
-            "then_install": then_install, "install_log": str(Path(record).with_name(INSTALL_LOG))}
+            "then_install": then_install, "install_log": str(Path(record).with_name(INSTALL_LOG)), "start": start}
     python = base or getattr(sys, "_base_executable", None) or sys.executable
     return [python, "-I", "-S", "-c", HELPER.read_text(encoding="utf-8"), json.dumps(told)]
 
 
-def trigger(target: str | None, *, automatic: bool = True) -> bool:
+def trigger(target: str | None, *, automatic: bool = True, start: bool = True) -> bool:
     """The update to ``target`` (None: whatever the upgrade gets) begun: its attempt kept (``RECORD``, outcome
     ``underway``), and the helper started, detached, with no window, in an environment that points at nothing of this
     one (``_UNSET``) and holds the installer's variables (``Installer.environ``); ``automatic``, the server's own
-    update, runs ``cad plugin install`` after it where ``plugin.auto_update`` is on. Whether it started; never
-    raises."""
+    update, runs ``cad plugin install`` after it where ``plugin.auto_update`` is on; ``start``, the helper starts the
+    server after it (false: none ran when it began). Whether it started; never raises."""
     try:
         from cad.engine.places import detached
 
@@ -499,7 +501,7 @@ def trigger(target: str | None, *, automatic: bool = True) -> bool:
         now, version, record, tries = time.time(), _version(), _data() / RECORD, _tries(named) + 1
         found = Global(found.installer, found.prefix, outside_copy(found.program, str(found.prefix)))
         command = helper_command(target, now=now, version=version, record=str(record), tries=tries,
-                                 then_install=automatic and plugin_switch(), install=found)
+                                 then_install=automatic and plugin_switch(), install=found, start=start)
         inside = os.path.normcase(os.path.realpath(sys.prefix)).rstrip(os.sep) + os.sep
         if os.path.normcase(os.path.realpath(command[0])).startswith(inside):
             return False  # no Python outside this environment to run it with
@@ -595,15 +597,16 @@ def underway(now: float | None = None) -> dict[str, Any] | None:
     return found if 0 <= (time.time() if now is None else now) - float(found["at"]) < RETRY_SECONDS else None
 
 
-def begin(target: str | None) -> dict[str, Any] | None:
+def begin(target: str | None, *, start: bool = True) -> dict[str, Any] | None:
     """The update to ``target`` (None: whatever the upgrade gets) that ``cad update`` asked for, begun now -- or the
     attempt underway joined, whatever its release (``underway``): never a second at once. Never the install command
-    after it. The attempt's record (``release``, ``at``), or None where it could not begin."""
+    after it. ``start``: the helper starts the server after it (false where ``cad update`` found none running). The
+    attempt's record (``release``, ``at``), or None where it could not begin."""
     with _BEGIN:
         found = underway()
         if found is not None:
             return found
-        if not trigger(target, automatic=False):
+        if not trigger(target, automatic=False, start=start):
             return None
         found = last()
         return found if found is not None and found["release"] == (target or LATEST) else None

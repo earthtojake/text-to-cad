@@ -393,9 +393,10 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     update`, typed to get the newest release now, which waits on the feed (5 s at most) and the install, and says
     in one line when either fails.
     cad updates itself only where the person turned it on (`cad auto-update on`, for a cad installed as a uv
-    tool, off by default), or asks (`cad update`): its server, at its start or once nothing has run for a minute, hands the update to a
-    detached helper (the server's `_internal/auto_update.py`), which stops it, has uv install the release the
-    feed names and starts it again; the server decides from the feed as last read, and nothing waits on the
+    tool, off by default), or asks (`cad update`): its server, at its start or once nothing has run for a minute,
+    hands the update to a detached helper (the server's `_internal/auto_update.py`), which stops it, has uv
+    install the release the feed names and starts it again (where no server runs, `cad update` hands it over
+    itself, and the helper starts none); the server decides from the feed as last read, and nothing waits on the
     install but a start that would otherwise start the release it replaces.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
     `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs

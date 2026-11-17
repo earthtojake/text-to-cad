@@ -549,7 +549,7 @@ class HelperCommandTest(Case):
                     "from": "0.1.0", "at": 5.0, "tries": 1, "upgrade": ["/u/uv", "tool", "install", "cad@latest"],
                     "put_back": ["/u/uv", "tool", "install", "--managed-python", "--python", "3.14", "cad==0.1.0"],
                     "launchers": ["/u/uv", "tool", "dir", "--bin"], "then_install": False,
-                    "install_log": str(Path("/s/install-command.log"))})
+                    "install_log": str(Path("/s/install-command.log")), "start": True})
 
     def triggered(self, **options) -> tuple[list[str], dict]:
         base = self.tmp / "python" / "bin" / "python3"
@@ -586,7 +586,11 @@ class HelperCommandTest(Case):
                 mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True), \
                 mock.patch.object(auto_update, "trigger", wraps=auto_update.trigger) as trigger:
             auto_update.begin("0.2.0")
-        trigger.assert_called_once_with("0.2.0", automatic=False)
+        trigger.assert_called_once_with("0.2.0", automatic=False, start=True)
+
+    def test_the_helper_is_told_whether_to_start_the_server_after_it(self) -> None:
+        self.assertTrue(json.loads(self.triggered()[0][5])["start"], "a server ran: it starts again")
+        self.assertFalse(json.loads(self.triggered(automatic=False, start=False)[0][5])["start"])
 
 
 class HelperTest(unittest.TestCase):
@@ -675,6 +679,13 @@ class HelperTest(unittest.TestCase):
         ran, run = self.fake([1] * len(helper.WAITS))  # a failure that left the tool as it was: nothing put back
         self.assertNotIn("restored", helper.update(self.told, run=run, sleep=lambda _s: None, windows=False))
         self.assertEqual(ran[-2:], [["--version"], ["server", "start"]])
+
+    def test_told_no_server_ran_it_starts_none(self) -> None:
+        ran, run = self.fake([0])
+        found = helper.update({**self.told, "start": False}, run=run, sleep=lambda _s: None, windows=False)
+        self.assertEqual(ran, [["server", "stop"], ["install", "cad@latest"]])
+        self.assertEqual((found["outcome"], found["start"]), ("installed", False))
+        self.assertNotIn("started", found)
 
     def test_forward_only_an_environment_at_the_target_or_newer_is_left_alone(self) -> None:
         (self.site / "cad-0.1.0.dist-info").rename(self.site / "cad-0.3.0.dist-info")
@@ -1150,8 +1161,11 @@ class UpdateCommandTest(Case):
         self.assertEqual((code, out, err), (1, "", f"cad update: {typed.NOT_A_TOOL}\n"))
         request.assert_not_called()
         (self.tool / "uv-receipt.toml").write_text(RECEIPT, encoding="utf-8")
-        self.assertEqual(self.typed(raises=client.NotRunning(client.NOT_RUNNING))[:3],
-                         (1, "", "cad update: the cad server is not running: run `cad server start`\n"))
+        with mock.patch.object(client, "_sandboxed", return_value=True), \
+                mock.patch.object(auto_update, "asked") as asked:
+            self.assertEqual(self.typed(raises=client.NotRunning(client.NOT_RUNNING))[:3],
+                             (1, "", f"cad update: {client.SANDBOXED}\n"), "a sandbox: no server, and no update here")
+        asked.assert_not_called()
         self.assertEqual(self.typed({"failed": "unknown request 'update'"})[:3],
                          (1, "", f"cad update: {typed.OLD_SERVER}\n"))
         self.assertEqual(self.typed({"failed": auto_update.CHECK_OFF})[:3],
@@ -1181,6 +1195,41 @@ class UpdateCommandTest(Case):
                       self.typed(answer, looks=[(None, failed, None, False)])[2])
         self.assertEqual(self.typed(answer, looks=[("0.1.0", earlier, None, True)])[:3],
                          (1, "", "cad update: the update could not begin, so cad 0.1.0 stays as it is\n"))
+
+    def test_with_no_server_it_updates_here_and_leaves_none_running(self) -> None:
+        auto_update.change_plugin(True)  # the switch on: a typed update still never runs the install command
+        none = client.NotRunning(client.NOT_RUNNING)
+        with mock.patch.object(client, "_sandboxed", return_value=False), \
+                mock.patch.object(updates, "newest", return_value="0.1.0"):
+            self.assertEqual(self.typed(raises=none)[:3], (0, "cad 0.1.0 is the newest release\n", ""))
+        self.assertIsNone(auto_update.last(), "nothing begun")
+
+        def looks():
+            begun = auto_update.last()
+            yield None, begun, None, False
+            yield None, {**begun, "outcome": "installed", "start": False}, None, False
+
+        with mock.patch.object(client, "_sandboxed", return_value=False), \
+                mock.patch.object(updates, "newest", return_value="0.2.0"), \
+                mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True), \
+                mock.patch.object(auto_update.subprocess, "Popen") as popen:
+            seen = looks()
+            self.assertEqual(self.typed(raises=none, looks=seen)[:3],
+                             (0, "cad 0.1.0 updated to 0.2.0\n", ""))
+        told = json.loads(popen.call_args.args[0][5])
+        self.assertEqual((told["target"], told["start"], told["then_install"]), ("0.2.0", False, False),
+                         "no server started after it, and never the install command")
+        record = {"release": "0.2.0", "at": 5.0, "outcome": "failed", "detail": "uv said no", "start": False}
+        self.assertEqual(self.typed({"ok": True, "updating": "0.2.0", "from": "0.1.0", "since": 5.0},
+                                    looks=[(None, record, None, False)])[:3],
+                         (1, "", "cad update: could not update cad 0.1.0 to 0.2.0: uv said no\n"),
+                         "nothing said of a server none asked for")
+        judged = {"ok": True, "updating": "0.2.0", "from": "0.1.0"}
+        with mock.patch.object(client, "_sandboxed", return_value=False), \
+                mock.patch.object(auto_update, "asked", return_value=judged), \
+                mock.patch.object(auto_update, "begin", return_value=None):
+            self.assertEqual(self.typed(raises=none)[:3],
+                             (1, "", "cad update: the update could not begin, so cad 0.1.0 stays as it is\n"))
 
     def test_without_pypi_s_answer_it_says_what_the_upgrade_got(self) -> None:
         answer = {"ok": True, "updating": None, "from": "0.1.0", "since": 5.0}

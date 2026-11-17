@@ -2,8 +2,13 @@
 ``Daemon.update``): it asks PyPI which release is newest and, where a newer one is out, begins cad's own update as soon
 as nothing is in flight (``cad_server._internal.auto_update``: ``asked``, ``begin``), even with automatic updates off.
 Where PyPI cannot be reached, the update runs all the same, and says what it got. It never runs the install command.
-The server does the work, not this command: an agent's shell may not reach the network or change cad's folders, and
-the server, outside that sandbox, may; so the command asks no permission.
+The server does the work where one runs: an agent's shell may not reach the network or change cad's folders, and the
+server, outside that sandbox, may; so the command asks no permission.
+
+Where no server runs, the command judges and begins the update itself, in this process, the same way. Its helper then
+starts no server: an update typed with none running leaves none running. In a shell whose sandbox cannot start a server
+(``client._sandboxed``) it does not try, and says so in the one line ``client.SANDBOXED``. It never starts a server
+first to update through it: a start may begin an automatic update, which can run the install command.
 
 Then it waits for the update to end and says how it ended, as the server that answers afterwards tells it
 (``{"op": "update", "begin": false}``), else as the attempt's record in the state folder does; ``WAIT_SECONDS`` at
@@ -11,8 +16,7 @@ most. On Windows too: this command is a running ``cad.exe`` of the tool, which t
 installer runs (``cad_server._internal.auto_update_helper``). Everything the wait uses is imported before the update
 begins: from then on the files of this cad's environment change under it.
 
-It never starts a server: with none running, the one line every command says. A cad that is no global install does not
-update itself, and is refused.
+A cad that is no global install does not update itself, and is refused.
 """
 
 from __future__ import annotations
@@ -39,8 +43,9 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     from cad_server._internal.cli_parser import parser as command_parser
 
     return command_parser(prog=prog, description=(
-        "Update cad to the newest release now, even with automatic updates off. The cad server asks PyPI which "
-        "release is newest and, once nothing is running, installs it and starts again. Needs the server running."))
+        "Update cad to the newest release now, even with automatic updates off. cad asks PyPI which release is "
+        "newest and, once nothing is running, installs it. A cad server that was running starts again; with none "
+        "running, none is started."))
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
@@ -52,7 +57,11 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     if auto_update.global_install() is None:  # this command's own cad
         return write(Failure(NOT_A_TOOL), prog=prog, as_json=False)
     try:
-        answer = client.request({"op": "update"}, timeout=ASK_SECONDS)  # never starts one: none running, said
+        answer = client.request({"op": "update"}, timeout=ASK_SECONDS)  # never starts one
+    except client.NotRunning:
+        if client._sandboxed():  # noqa: SLF001 - nor can it update cad
+            return write(classify(client.NotRunning(client.SANDBOXED)), prog=prog, as_json=False)
+        answer = here(auto_update)
     except ConnectionError as error:
         return write(classify(error), prog=prog, as_json=False)
     failed = answer.get("failed") if isinstance(answer, dict) else "the cad server gave no answer"
@@ -68,6 +77,18 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
         return write(Failure(f"the cad server's answer was not understood: {answer}"), prog=prog, as_json=False)
     return wait(lambda: look(client, auto_update), was, float(since),
                 said=lambda words: write(Failure(words), prog=prog, as_json=False))
+
+
+def here(auto_update: Any) -> dict[str, Any]:
+    """The update judged and begun in this process, where no server runs: the server's answer to ``{"op": "update"}``
+    in shape (``Daemon.update``), ``since`` the attempt's own ``at``. The helper is told to start no server."""
+    judged = auto_update.asked()
+    if "updating" not in judged:
+        return judged
+    found = auto_update.begin(judged["updating"], start=False)
+    if found is None:
+        return {"failed": f"the update could not begin, so cad {judged['from']} stays as it is"}
+    return {**judged, "updating": found["release"], "since": found["at"]}
 
 
 def look(client: Any, auto_update: Any) -> tuple[str | None, Any, Any, bool]:
@@ -115,7 +136,8 @@ def wait(looked: Callable[[], tuple[str | None, Any, Any, bool]], was: str, sinc
 
 def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable[[str], int]) -> int:
     """An attempt that ended, said in one line: its exit status. The release it names is the one installed, where it
-    ended well (an update begun without PyPI's answer finds out only then)."""
+    ended well (an update begun without PyPI's answer finds out only then). Of an attempt that was to start no server
+    (``"start": false``: none ran when it began), nothing is said of the server."""
     target = attempt.get("release")
     if attempt.get("outcome") in ("installed", "current"):
         done = f"cad {target} is the newest release" if target == was else f"cad {was} updated to {target}"
@@ -123,9 +145,12 @@ def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable
             return said(f"{done}, but the cad server did not start again: run `cad server start`")
         print(done)
         return 0
-    serving = f"cad {running} is running" if running else "no cad server is running: run `cad server start`"
+    if running:
+        serving = f"; cad {running} is running"
+    else:
+        serving = "" if attempt.get("start") is False else "; no cad server is running: run `cad server start`"
     newest = "the newest release" if target == "latest" else target
-    return said(f"could not update cad {was} to {newest}: {attempt.get('detail') or 'no reason given'}; {serving}")
+    return said(f"could not update cad {was} to {newest}: {attempt.get('detail') or 'no reason given'}{serving}")
 
 
 if __name__ == "__main__":
