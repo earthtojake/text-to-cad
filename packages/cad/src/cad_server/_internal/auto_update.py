@@ -1,6 +1,6 @@
 """cad's own update: the two switches, the check, and its trigger.
 
-**The switches** are the person's, in cad's settings (``settings.json`` in the data folder, section ``auto_update``),
+**The switches** are the person's, in cad's settings (``settings.json`` in the state folder, section ``auto_update``),
 both off by default: ``on``, whether cad updates itself, and ``installer``, whether the install command runs again after
 it (``installer_ran_for``: the release it last ran for; another part of cad reads it). ``cad auto-update`` changes
 them; ``on`` only for a cad that is a uv tool.
@@ -18,7 +18,7 @@ the feed read when due): a release whose server cannot start still updates.
 ``IDLE_SECONDS``, or nothing has run since the server started: a detached helper, never the ``cad`` executable and
 never run from cad's environment (``auto_update_helper``, run by the Python that environment was made from), stops the
 server, installs ``cad==<latest>`` with uv, and starts the server with whatever cad is there. The attempt is kept in the
-data folder (``RECORD``), which ``cad doctor`` shows.
+state folder (``RECORD``), which ``cad doctor`` shows.
 
 Imports the standard library alone; what it asks of cad it imports as it asks: ``cad.engine.places`` (the folders),
 ``cad_server.updates`` (the feed), ``cad._internal.atomic_replace`` (the attempt kept) and, to change a switch,
@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import Any
 
 SECTION = "auto_update"
-RECORD = "auto-update.json"  # the last attempt, in the data folder
+RECORD = "auto-update.json"  # the last attempt, in the state folder
 IDLE_SECONDS = 60.0
 TRIES = 2  # how many times one release is tried: once, and once more at a later check
 RETRY_SECONDS = 60 * 60.0  # how long after an attempt (underway, or ended) its release may be tried again
@@ -62,9 +62,9 @@ def newer(theirs: Any, mine: Any) -> bool:
 
 
 def _data() -> Path:
-    from cad.engine.places import data_dir
+    from cad.engine.places import state_dir
 
-    return data_dir()
+    return state_dir()
 
 
 def _version() -> str:
@@ -89,7 +89,7 @@ def switches(path: Path | None = None) -> dict[str, Any]:
 
 
 def change(on: bool, installer: bool | None = None, ran_for: str | None = None) -> dict[str, Any]:
-    """The switches changed under the data folder's lock (``settings.update_section``): ``on``; ``installer`` where
+    """The switches changed under the state folder's lock (``settings.update_section``): ``on``; ``installer`` where
     given; ``ran_for`` kept as the release the installer last ran for. ``OSError`` where they cannot be written."""
     from cad_server.settings import update_section
 

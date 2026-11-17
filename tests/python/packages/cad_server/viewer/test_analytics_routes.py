@@ -20,7 +20,7 @@ from cad_server.analytics import PRIVACY_URL, Recorder
 from cad_server.viewer import handler as handler_module
 from cad_server.viewer.http_app import create_cad_app
 # A release's process: a checkout is a development build, never told of a release and sending nothing by default,
-# unless it is told the version it runs as (``cad_server/_internal/channel.py``).
+# unless it is told the version it runs as (``cad_server/_internal/editable.py``).
 RELEASE = __import__("cad_server").__version__
 
 STL = b"solid t\nendsolid t\n"

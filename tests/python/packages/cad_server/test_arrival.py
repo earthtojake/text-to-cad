@@ -148,16 +148,6 @@ class ArrivalTest(unittest.TestCase):
         self.assertFalse(arrive())
         self.assertEqual(self.sent(), [])
 
-    def test_a_version_that_leaves_hands_its_arrivals_on_with_its_spool(self) -> None:
-        self.tell()
-        self.assertTrue(analytics.arrival("setup", route="updater", earlier="0.11.10", outcome="ok"))
-        target = self.tmp / "versions" / "next" / "settings.json"
-        target.parent.mkdir(parents=True)
-        self.assertEqual(analytics.hand_on(self.settings, target), 1)
-        self.assertEqual(self.kept(), [])
-        [moved] = [json.loads(line) for line in target.with_name(analytics.ARRIVALS).read_text(encoding="utf-8").splitlines()]
-        self.assertEqual((moved["arrival"]["step"], moved["source"]["version"]), ("setup", RELEASE))
-
     def test_each_arrival_starts_a_sender_at_once_and_a_command_none_more_that_window(self) -> None:
         window = analytics.FLUSH_SECONDS
         self.tell()  # the last sender started long ago

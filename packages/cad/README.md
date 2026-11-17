@@ -195,16 +195,10 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    its imports use, and the packages it names), regenerable as well, those of the release before the
    current kept as the way back (the engine's **Running a model**); and under `homes/` the private settings
    folders a run hands a tool that would otherwise read the person's own (Blender's, for a script that
-   imports bpy: `homes/blender`), empty but for what the tool itself writes there. That is the layout of 0.11.10 and
-   earlier, which a process with no version keeps (a checkout or a test under `CAD_STATE_DIR`,
-   `CAD_ENGINE_DIR` and `CAD_CACHE_DIR`; a release installed flat). An installed version keeps all of
-   its own in one folder, `versions/<version>` in the state folder: its data in `data/` (the settings,
-   Recents, the registry, the page token and port, and the caches above under `data/cache/`), its
-   environments and bytecode in `code/` (the base and each run's under `code/base/`, bytecode under
-   `code/pycache/`), and its door in `<version>` in the engine folder; the state folder itself holds only
-   the device's globals (the installations' records and the mirror clients of 0.11.10 and earlier read; the install
-   lock; and the settings file of 0.11.10 and earlier, which also keeps a telemetry no for every version).
-   Which a process is, and so every path, is `cad.engine.places`' one rule (`versioned`). The code stays the only source of truth: a document is what its
+   imports bpy: `homes/blender`), empty but for what the tool itself writes there. One state folder, one cache
+   folder and one engine folder a user, whatever release of cad runs -- the layout of 0.11.10 and earlier, kept as
+   it was, so an update keeps the person's settings, records and links, and every path is `cad.engine.places`'
+   (`CAD_STATE_DIR`, `CAD_CACHE_DIR` and `CAD_ENGINE_DIR` move them, for a test or an experiment). The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
    sidecar, record of a build beside a model, index, memo, mesh or parsed document (but the file
@@ -315,9 +309,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     they can. Four tiers:
 
     **Tier 1: what an agent reads each session** -- the skills, the `cad` command's verbs and flags,
-    the CAD tools' arguments, the wording of docs. Hard cutovers only, in any release: every command a skill runs
-    names its release (`cad +X`), so a skill only ever meets its own release's surface, and removing or renaming one
-    is not a breaking change and needs no migration guide. A retired
+    the CAD tools' arguments, the wording of docs. Hard cutovers only, in any release: a command the skills stopped
+    using keeps working for 30 days, checked against the skill text released in that time, and removing or renaming
+    one after that is not a breaking change and needs no migration guide. A retired
     surface does not exist: no alias, no shim, and no error that recognizes its old spelling to
     explain what replaced it. A removed command, flag, argument, key, module or name gets what the
     current contract's ordinary validation says -- an unknown command, an unrecognized argument, an
@@ -405,10 +399,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     and the viewer's background sends take, and a command or the daemon that finds it has waited more
     than a window, with no other process sending, starts a sender detached that sends it and exits
     (the server's `_internal/telemetry_send.py`). A process that exits sends nothing either: its last batch is
-    kept beside the settings, and the next process that sends sends it, in the background. A version that
-    leaves the device sends nothing as it goes: what it kept unsent -- each row saying the version, channel and
-    app that counted it, each kept batch under its own id -- is moved, a local file, to the version that sends
-    next (the server's `analytics.hand_on`), and a resend of a batch counts once. One
+    kept beside the settings, and the next process that sends sends it, in the background -- each row saying the
+    version and app that counted it, each kept batch under its own id, so a resend of a batch counts once. One
     wait remains, bounded: `cad telemetry off`, which waits for the deletion it asks for.
     The pages load nothing from the internet: everything they show ships in the wheel.
     *Pressure-test*: with an installed server, each integration's environment made by its first
@@ -426,16 +418,11 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     document out of memory, for the engine's cache to give back, only when nothing watches it (the
     engine's **Document lifetime**).
 
-20. **One engine per installed version in use; tabs select documents at `/<uuid>`.** *Every document.* A
-    process of a version reaches that version's engine alone, through its own door, and starts that one
-    where none answers; a process with no version (a person's own environment, a release of 0.11.10 or
-    earlier) reaches the engine of the version the installation records of that layout name, which alone holds
-    the flat door those find -- a client with no installation registered starts none: the library never starts a
-    server of its own environment. Versions sit side by side, each its own engine on its own port; nothing moves an
-    engine from one version to another. The newest installed version's engine stops an older version's, once
-    nothing is in flight there, as it removes that version no agent has used for two days; an earlier release's
-    engine is stopped by the setup that brings the computer to this one, once it is idle (the engine's
-    **Starting and updating**). A tab names a model's id, or a file's id after a launcher
+20. **One engine per device; tabs select documents at `/<uuid>`.** *Every document.* Every process reaches the one
+    engine, through the one door in the engine folder, whatever release it is -- one of 0.11.10 or earlier too --
+    and only `cad server start` (and `cad mcp`, which starts it so) starts it where none answers: the library never
+    starts a server of its own environment. A start of a newer release replaces an older release's engine; an older
+    one joins a newer engine that runs (the engine's **Starting and updating**). A tab names a model's id, or a file's id after a launcher
     registers it; Python scripts are never documents. A page never replaces or re-executes the engine. Its one page and document reads
     share its authenticated HTTP listener. `serve` and `viewer` always start or reuse it, with no
     standalone serving mode, and no Python function starts, stops or serves it (law 21). Launchers

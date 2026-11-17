@@ -1,31 +1,21 @@
-"""The flat release folders of 0.11.10 and earlier, and the recipe a version's server environment is made by.
+"""BRIDGE-ONLY: the release folders of 0.10.0 to 0.11.10, and whether a process runs from a folder.
 
 ``<state>/releases/<version>`` is where 0.11.10 and earlier installed a release: its core in a virtual environment,
 made by uv, its marker (``cad-release.json``) written last. Those releases' updaters make one for the release they
-move to (an updater of 0.11.10 runs that folder's ``cad setup --engine-update``: ``cad_server.cli.setup``). From
-the first pinned release on, a release lives in ``versions/<version>`` (``cad_server._internal.versions``), whose server environment is
-made by the same recipe (``recipe``) and carries the same marker; the flat folders are the layout of 0.11.10 and
-earlier, removed with it once nothing runs from them (``cad_server._internal.legacy``), and by ``cad uninstall``.
-
-What is made from where: a release on the index as ``cad-server==<version>`` (the library without its kernel comes
-with it, at the same release); one this installation was installed from as a wheel (``--from`` a file,
-``direct_url.json``) from that wheel again. A folder of wheels a test names is read beside the index
-(``base.FIND_LINKS_ENV``).
+move to (an updater of 0.11.10 runs that folder's ``cad setup --engine-update``: ``cad_server.cli.setup``). Nothing of
+cad removes one by itself: ``cad cache prune`` does, when asked, but the one ``installations/current`` names and any a
+process runs from (``running``).
 """
 
 from __future__ import annotations
 
-import json
 import os
-import platform
 import subprocess
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
-from cad_server._internal import base
+from cad_server._internal import base  # noqa: F401 - a release folder's Python is ``base.interpreter``'s
 
-__all__ = ["FOLDER", "MARKER", "SCHEMA", "complete", "console", "exits", "listing", "processes", "recipe", "root", "running"]
+__all__ = ["FOLDER", "MARKER", "SCHEMA", "console", "processes", "root", "running"]
 
 FOLDER = "releases"
 MARKER = "cad-release.json"
@@ -42,47 +32,6 @@ def root() -> Path:
 def console(env: Path) -> Path:
     """The ``cad`` command of the environment at ``env``."""
     return env / ("Scripts/cad.exe" if os.name == "nt" else "bin/cad")
-
-
-def complete(env: Path) -> dict[str, Any] | None:
-    """The marker of the release folder at ``env`` when it is complete -- written last, of its version,
-    its Python and its command there -- else None."""
-    try:
-        marker = json.loads((env / MARKER).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    if (isinstance(marker, dict) and marker.get("schema") == SCHEMA and marker.get("version") == env.name
-            and base.interpreter(env).exists() and console(env).exists()):
-        return marker
-    return None
-
-
-def recipe(version: str, python: str, source: str | None) -> base.Recipe:
-    """How release ``version``'s folder is made, on the interpreter ``python``: its server from the index
-    -- the library at the same release comes with it --, or from ``source``, the server's source tree
-    (editable) or the wheel it was installed from, when that is no release: one distribution, the library's,
-    which carries the server."""
-    if source is None:
-        requirement: tuple[str, ...] = (f"{base.SERVER}=={version}",)
-    elif os.path.isdir(source):
-        requirement = ("-e", source)
-    else:
-        requirement = (f"{base.LIBRARY} @ {source}",)
-    return base.Recipe(what=f"cad-server {version}", python=python, requirement=requirement, release=version,
-                       source=source, making=f"installing cad-server {version} on Python {platform.python_version()}",
-                       downloading=f"downloading cad-server {version}")
-
-
-def listing() -> list[dict[str, Any]]:
-    """Every release folder on this device: its ``version``, its ``path`` and whether it is ``complete``,
-    oldest made first."""
-    try:
-        entries = sorted((entry for entry in os.scandir(root()) if entry.is_dir(follow_symlinks=False)),
-                         key=lambda entry: entry.stat(follow_symlinks=False).st_mtime)
-    except OSError:
-        return []
-    return [{"version": entry.name, "path": entry.path, "complete": complete(Path(entry.path)) is not None}
-            for entry in entries]
 
 
 def running(folder: Path | str, *, besides: int | None = None, asking: int | None = None) -> bool:
@@ -232,41 +181,3 @@ def _windows_rows() -> list[tuple[int, int, str]] | None:
                 kernel32.CloseHandle(handle)
         named.append((pid, parent, image))
     return named
-
-
-def exits(pid: int) -> Callable[[float], bool]:
-    """A wait for process ``pid`` to end, opened now (on Windows a handle to it, so the wait is for that process
-    and never another given its id later): called with a number of seconds, whether it has ended within them. On
-    POSIX, and for a process that cannot be opened (gone already, another user's), a wait that ends at once: POSIX
-    removes a folder a process runs from, and every process of a version's is waited for by ``versions.quiet``."""
-    if os.name != "nt":
-        return lambda _seconds: True
-    try:
-        import ctypes
-        from ctypes import wintypes
-
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel32.OpenProcess.restype = wintypes.HANDLE
-        kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-        kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
-        kernel32.WaitForSingleObject.restype = wintypes.DWORD
-        kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
-        handle = kernel32.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
-    except (ImportError, OSError, AttributeError):
-        return lambda _seconds: True
-    if not handle:
-        return lambda _seconds: True
-
-    ended: list[bool] = []
-
-    def wait(seconds: float) -> bool:
-        if ended:  # the handle is closed once the wait has been asked: what it found then
-            return ended[0]
-        try:
-            # WAIT_OBJECT_0: it ended; WAIT_TIMEOUT (0x102) or WAIT_FAILED: it did not, as far as can be told.
-            ended.append(kernel32.WaitForSingleObject(handle, max(0, int(seconds * 1000))) == 0)
-        finally:
-            kernel32.CloseHandle(handle)
-        return ended[0]
-
-    return wait

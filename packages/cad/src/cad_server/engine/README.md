@@ -228,11 +228,10 @@ keeps a session (`viewer.engine_app`: `EngineApp.link`, `sign`, `standing`). A r
 one cross-origin read answered, for the origin that sent it and with no credentials, as is its
 preflight (`EngineApp.preflight`); the cookie, a link in a URL, the token and `/mcp` never are. All routes
 retain the application's Host and cross-site mutation checks. Explicit host/port
-requests must match an existing listener. Every client reaches the engine of its own version's engine
-folder, `<engines>/<version>`, and a process with no version the flat one (**Starting and updating**): its
-door, lock and port file are named `engine` (`places.NAME`), and a client that finds none running starts its
-version's. What outlives an engine -- the port it rolled to -- is the engine's record in its version's data,
-`engines/engine.json`, which a version imports from the one it replaces with the page token.
+requests must match an existing listener. Every client reaches the one engine of the device, in the engine
+folder (`places.engine_dir`; **Starting and updating**): its door, lock and port file are named `engine`
+(`places.NAME`). What outlives an engine -- the port it rolled to -- is the engine's record in the state folder,
+`engines/engine.json`, beside the page token, which every release reads.
 
 **A link outlives its engine.** The port is the device's and the page token the user's, not one
 engine's (`daemon.bind`). A port named -- `--port` (`cad server --port`, or a `serve`/`viewer`
@@ -252,70 +251,24 @@ system says it (`daemon.port_holder`: `lsof` on macOS, `/proc` on Linux, `netsta
 `another process` where it does not say, and another cad-server, by its command line (another
 engine folder's, 0.8's), `another cad-server (<name>, pid N)`.
 
-**Starting and updating.** One server per installed version in use (`cad_server._internal.versions`): a
-process of version X -- a pinned `cad +X` command, `cad run` and the model it runs, X's worker, X's launcher
-(`cad-mcp==X`) -- reaches X's server through X's own door, `<engines>/X` (`places.engine_dir`), and starts X's
-from X's own Python where none answers (`places.engine`, `client._start`), never another version's. A version's
-server copies its settings and store in before it serves anything where its setup did not (`daemon._first_start`,
-`imports.ensure`: once, from the newest older installed version). Versions sit side by side, each with its own
-server, each on its own port (the second rolls from the first's, below); nothing moves between them.
+**Starting and updating.** One server a device, in one engine folder, whatever release runs it: the layout of 0.11.10
+and earlier, kept as it was, with one state folder and one cache folder (`cad.engine.places`). Only `cad server start`
+starts it (and `cad mcp`, which starts it so, then serves the CAD app over stdio): a newer release's start replaces an
+older release's server, an older one joins a newer server that runs (`client.start`, `cad_mcp.shim.start_server`).
+Every other command, `cad run` and a model run directly among them, attaches to the one that runs, and says so in one
+line where none does (`not_running`). A model's own process -- the library, which never starts a server of its own
+environment -- starts none. No client starts another release's engine beside the device's: an engine runs on until
+`cad server stop`, an update, or its door going. Each installation's bytecode is its own (`places.bytecode_tag`).
 
-- **The flat door** (`daemon.Bridge`, the one code for releases before this one): the server of the version
-  `installations/current` names (`versions.flat`) also holds the flat lock and door in the engines' folder itself
-  -- on Windows the flat port file, naming its own port and token, and 0.10.0's (`daemon._mirror`) --, which every
-  client of 0.11.10 and earlier finds (their launchers, their updater, their library) and every process with no
-  version (a person's own environment running `python model.py`); `installations/current` and its record name
-  that version's server environment (the record written by `cad setup --engine-update` and `current` pointed by the
-  shipped updater's switch after it; both by a server of the uv tool, `cli.setup.follow`), so such a
-  client that finds no server starts that version's, which takes the flat door as it starts (a second start of a
-  version whose server runs asks that server to, `daemon._front`). It is let go as soon as `current` names another,
-  and taken by that one's server at its next tending (`{"op": "bridge"}` asks at once). A drain no process of this
-  release asked (`{"op": "stop", "drain": true}` without the `internal` mark: a shipped updater's switch, which knows
-  only this door) lets the flat door alone go (`Bridge.step_aside`), left free by the tending for 15 seconds so that
-  switch goes on; the version's own server and sessions run on. The tending never retries faster: taking the door
-  the moment a shipped server lets it go would fail that release's switch, which waits for the door to go quiet. Such a client's builds are
-  refused only for another worker contract (`contract.refusal`, naming `cad run`).
-- **Use** (`versions.used`): each version records its own last use by an agent, `versions/<version>/used`, its
-  time: a `cad` command run for it (`cad_server.cli`), a request its server takes from a command or an app (never
-  one marked `internal`, `daemon._used`), an MCP tool call other than the page's own (`mcp/http.py`). At most once an
-  hour; a sandbox's command that cannot write it leaves it to its server.
-- **The cleanup** (`Daemon.versions`, at each tending; `versions.clean`): the server of the newest installed version,
-  as it starts and then every 24 hours (`versions.due`), removes every older installed version no agent has used for
-  2 days (never used: 2 days from its install, its code marker's time): where nothing is in flight on it
-  (`versions.connected`: a build, a draw, an export, a request that serves, an agent's tool call; never an idle app's
-  hold or an open page) its server is asked to stop over its own door (the drain), and its folder is renamed aside
-  and removed, its data with it: Recents entries and cached records written to that version after the newer one's
-  one-time copy go with it (files in a person's own project are never touched). With work in flight, a process
-  running from its folder (`releases.running`, the server's own processes aside, on Windows with the environment's
-  `python.exe` launcher that started it: on POSIX by its command line, on Windows by its program's path), or a folder the system will not move (Windows: a file in use), it stays for the
-  next cleanup, which looks once and never waits. The 2 days are counted by the wall clock: a clock set days
-  forward removes the older versions at the next cleanup, a cost accepted (a guard by the boot's start would keep a
-  version used weeks ago on a computer never restarted). A version that is not the newest cleans nothing. The same cleanup
-  removes the layout of 0.11.10 and earlier once it is safe (`legacy.remove`), what that layout wrote after the
-  version imported it carried in first (`imports.carry`); while that layout is there, the server tries its removal
-  again every minute between cleanups (`versions.clean_legacy`), since the one as it starts often finds the shipped
-  updater's helper that started it still running from that layout.
-- **The version check** (`cad_server.updates`): each version's server reads the version feed in the background at
-  most once an hour as it tends itself (`updates.refresh`), never waited on; a `cad` command says a newer release
-  after its own output (`cad_server.cli`).
-- `cad stop` and `cad status` act on one version's server: the pinned one, or the newest's with no pin.
+The clients of 0.11.10 and earlier -- their CAD app's line, their `cad` command, the library in a person's own
+Python -- find the same door, and where none answers start the installation `<state>/installations/current` names
+(`cad_server._internal.installations`), by its Python, with `-m cad_server._internal.engine_daemon`: this release's
+server where the bridge pointed it there (below). Such a client's builds are refused only for another worker contract
+(`contract.refusal`).
 
-A process with no version (a checkout, a test's device, a release of 0.11.10 and earlier) keeps that layout: the
-device's one engine is the current installation's, `<state>/installations/current` names it
-(`cad_server._internal.installations`), and every client of it that finds no engine running -- an agent app's CAD
-server, whatever release its plugin pins; a skill's `cad` command; `cad run`; a model run directly -- starts
-that installation's, with its Python (`places.engine`, `client._start`); one running is attached to, whatever
-its release. On a
-device with no current installation, the CAD app's server makes its own installation current, once
-(`installations.bootstrap`). A model's own process -- the library,
-which never starts a server of its own environment -- starts none there, but in a base or an environment
-of a model's packages an installation made (`places.HOME`, `cad run`'s), whose installation's engine it
-starts; elsewhere it says, in one
-line, ``cad-server is not installed on this computer: install cad-server and run `cad doctor` once,
-then run this again`` (`client.NOT_INSTALLED`): the remedy the `cad` command's own line gives. No
-client starts its own release's engine beside the device's, and none stops an engine to start
-another: an engine runs on until `cad stop`, an update, or its door going.
-Each installation's bytecode is its own (`places.bytecode_tag`).
+The version feed (`cad_server.updates`): the server reads it in the background at most once an hour as it tends
+itself (`updates.refresh`), never waited on, for cad's own update alone; nothing says a newer release to a person or
+an agent.
 
 cad updates itself only where the person turned it on (`cad auto-update on`, a cad installed as a uv tool alone;
 `cad_server._internal.auto_update`): first thing as a server starts, before its door opens, and as it tends itself
@@ -324,9 +277,7 @@ release, a detached helper that is not cad (`auto_update_helper`, run by the Pyt
 stops the server, has uv install that release, tried again on failure, and starts the server with whatever cad is
 there. A server that hands its start over exits `UPDATING`, and its starter waits for the next one; a `cad server
 start` that fails asks for the update before it gives up; a start never replaces a newer server, it joins it
-(`client.start`, `cad_mcp.shim.start_server`). Otherwise an engine only knows, from the version feed read in the
-background (`cad_server.updates`), the latest release, and a command says so in one line that names no command (the
-package's README, **The update notice**). After its own update, with the second switch on (`cad auto-update on --installer`), the server runs the hosted
+(`client.start`, `cad_mcp.shim.start_server`). After its own update, with the second switch on (`cad auto-update on --installer`), the server runs the hosted
 install command once in update mode, which updates only the copies of our plugin still in the agent apps
 (`cad_server._internal.install_script`): owed whenever the release it last ran for is older than this cad, begun at
 the server's first tending, detached, its report read as it ends; a failure is tried again an hour later at the next
@@ -369,18 +320,16 @@ held by <name> (pid N): stop it, or start the server with another CAD_ENGINE_POR
 --port` for a port `--port` named).
 
 The token is made at the first engine's start and every start serves with it: the engine's record,
-`engines/engine.json` in the data folder (`places.data_dir`: a version's `versions/<version>/data`, the
-state folder for an engine with no version), keeps the port it rolled to (`registry.Registry.engine`,
+`engines/engine.json` in the state folder (`places.state_dir`), keeps the port it rolled to (`registry.Registry.engine`,
 its own `registry.ENGINE_SCHEMA`), and the token is the user's one file beside it, `engines/token`,
-which the version's engine serves with, a new version importing the one before's (`registry.Registry.token`;
-both this user's alone, 0600), so a link outlives an update too. So a page link
+which every release's engine serves with (`registry.Registry.token`; both this user's alone, 0600), so a link
+outlives an update too. So a page link
 -- the `cad viewer` output, a model's `view:` line, the CAD app's card -- works across `cad
 stop`, a crash, a reboot and an update until the token is rotated, the session it left in a browser for 30 days past that
 browser's last use of it, on any port, and a page that lost its engine keeps asking the same address
 and reloads itself when the engine answers again. Whoever holds a live link or session reaches the
 user's folders whenever the engine runs. `cad server --rotate-token` replaces the token, once the person says yes
-(**Consent**, `--yes`), in every version's data on the device and the state folder 0.11.10 and earlier read, and
-tells every running server to take it at once (`{"op": "token"}`, `Daemon.retoken`): every link and session made
+(**Consent**, `--yes`), in the state folder every release reads, and tells every running server to take it at once (`{"op": "token"}`, `Daemon.retoken`): every link and session made
 before stops working now, in every server. One that cannot be told (a server of 0.11.10 or earlier) is said, and
 takes the new token as it starts again. `cad status` says the
 port and where it came from: the default, `--port`, `CAD_ENGINE_PORT`, or `rolled from 3245
@@ -452,11 +401,10 @@ model itself: it makes environments with uv, and every process that loads the ke
 
 **The base** is the environment of the build123d integration alone: `cad[build123d]` at the engine's
 own release -- or the source tree, or the wheel, the installation was made from -- on the engine's own
-Python, made by uv at `base/<key>` in the version's code (`base.folder`: `versions/<version>/code/base`; for
-an engine with no version, in the cache folder), its files hard links into uv's cache; uv is
+Python, made by uv at `base/<key>` in the cache folder (`base.folder`), its files hard links into uv's cache; uv is
 asked `--offline` first and goes to the network only for what its cache lacks, saying so first
 (`cad_server._internal.base`). One per installation, keyed by it (the version it runs as, its release
-and source, and with no version its environment), its Python and the architecture, so an update has a base of its
+and source), its Python and the architecture, so an update has a base of its
 own. Its marker, `cad-env.json`, written last, makes it complete, so a later use reads the marker and
 resolves nothing; a lock beside it makes one process make it while another waits. An installation
 whose own environment carries the kernel (installed with the extra, `pip install
@@ -551,7 +499,7 @@ package is so another environment: the next run makes it, saying `making the env
 model's packages again, as <path> changed: ...`, and builds in a fresh worker of its Python. Its
 marker, written last, names the installation, the requirements (`with`), the spec, the
 integrations, its Python's version and the local fingerprints (`local`); a lock makes one maker. A
-process there reaches its version's engine as one in the base does, and -- the environment not being
+process there reaches the device's engine as one in the base does, and -- the environment not being
 the base (`places.SEPARATE`) -- names its Python in its orders, with how `cad run` named its
 environment (`places.RUN_WITH`: the options and requirements its command line was given, one word
 an option, and the script whose header named the rest); the engine builds the script in a warm
@@ -562,12 +510,10 @@ Python, once the environment is made for one `--python` named.
 
 **Its releases.** Environments are tied to their release, cad being pinned in each. Making one
 removes the environments of releases older than the one before the current -- the current
-release's and the one before's stay (`extras.kept`: the newest older one); a version keeps its own in its own code
-folder, which goes with it -- and the one an
+release's and the one before's stay (`extras.kept`: the newest older one) -- and the one an
 edit to its local packages superseded, but one a process runs from (`releases.running`: named on a
 process's command line, as written or by a link to it), which a later making removes
-(`extras._collect`; the bases are their versions', removed with them, `versions.clean`). The environments of other
-sets stay, one per set a program named, and go with their version's folder; `cad cache prune` removes those made for
+(`extras._collect`). The environments of other sets stay, one per set a program named; `cad cache prune` removes those made for
 other releases and `cad cache clean` all of them (`cli/cache.py`); nothing else removes another release's. After an update,
 a new release's environments are made as its runs ask for them, from uv's cache.
 
@@ -648,11 +594,8 @@ no Python and hears neither.
 Every other process of the engine's that loads the kernel runs the base's Python (`places.kernel`,
 which the distribution makes as `places.KERNEL`): a model's worker but one in its script's own Python,
 the documents worker, the standby, the render processes, and the meshing and reading pools, whose spawned
-processes start on the base's own import path, which the marker records (`serve._spawn_in`). **The base is
-made with its version**: whatever installs a version -- its `cad setup` (the install command's, a skill's line,
-an updater of 0.11.x's `--engine-update`) -- makes its base before the version is used (`versions.make_present`),
-so the first build after an install waits on nothing. **Where none is there it is made on first
-need**: an environment that was not installed as a version, or a base that was removed. The engine starts and
+processes start on the base's own import path, which the marker records (`serve._spawn_in`). **It is made on
+first need**, by the server, for any cad of its release: a release just installed, or a base that was removed. The engine starts and
 serves with none made -- pages, the home, documents held in the cache, `status` -- and `cad doctor` reports
 one that is missing without making it. The first thing that needs it makes it: a `cad run` of a script whose
 environment it is, or the start of one of the engine's kernel processes -- a build's worker, or a view or
@@ -662,7 +605,7 @@ every kernel process asked for meanwhile waits on it; those processes start only
 standby stands only once the base exists -- at the engine's start where it is made already, else the
 moment its making is done -- and until then none stands and nothing waits on one. An
 engine a host's CAD app started runs outside any sandbox, where an agent's command may not write the
-cache folder: a `cad run` that finds no base asks its version's engine over its door (`{"op": "base"}`,
+cache folder: a `cad run` that finds no base asks the device's engine over its door (`{"op": "base"}`,
 its key naming the installation's base) and follows its making, each line said as it comes; it makes the
 base itself only when no engine of its installation answers. A base that cannot be made fails the
 request that needed it in one line (`serve.KernelProcessesUnavailable`) that says what to do next. The
@@ -712,7 +655,7 @@ answers (`base.Making.claim`, `mcp.server._first_report`).
 | `display.py` | the engine's X display on Linux, which a render process is started with (`Service.draws`) and a worker told with an export that draws: the daemon's own `DISPLAY`, else an Xvfb it starts at the first picture and stops with it, else none |
 | `frames.py` | the frames every process of the engine's speaks to the daemon, read and written: the library's, the standard library alone (**Services**, the protocol) |
 | `contract.py` | the worker contract the library and the server both state (`CONTRACT`: the worker protocol's number, the document format, OCP's major.minor), the Python an order comes from (`interpreter`), the one line another contract is refused in (`refusal`) and the update notice of another release (`notice`): **Running a model**; what measures a manufacturing check (`measuring`, from `_measuring.py`, of the standard library alone, which `cad.engine` takes as it is imported) |
-| `places.py` | where things are, for every process alike, with the standard library alone: the version a process belongs to (`versioned`) and its folders (`version_dir`, `code_dir`, `data_dir`, `cache_dir`), the layout of 0.11.10 and earlier a process with none keeps (`state_dir`, `legacy_cache_dir`), the engine folders and their door, lock and port file (`engines_dir`, `engine_dir`, `folder_refusal`, `lock`), the installation a process belongs to (`installation`, the base's marker as `HOME`) and the current one a client starts (`current`, `engine`), and how a process of the engine's is started (`windowless`, `detached`, `bytecode`, and the kernel environment, `kernel`, which the server makes as `KERNEL`) |
+| `places.py` | where things are, for every process alike, with the standard library alone: the user's one state folder and cache folder (`state_dir`, `cache_dir`), the engine folder and its door, lock and port file (`engine_dir`, `folder_refusal`, `lock`), the installation a process belongs to (`installation`, the base's marker as `HOME`) and the current one the clients of 0.11.10 and earlier start (`current`), and how a process of the engine's is started (`windowless`, `detached`, `bytecode`, and the kernel environment, `kernel`, which the server makes as `KERNEL`) |
 | `records.py` | the documents' records read, as a model's run reads them in its own process (`Records`, `current`), their one shape (`parse`), the words said of a record (`home`, `rerun`, `command`) and a model document's cache file's name (`FILE`); the registry (the server's) writes them |
 | `said.py` | the words a build, an export and an inspection are said in: the run line and what is under it (`describe`, `reported`), a file written (`written`, `given`), what a robot file holds (`robot`), a size and a measure (`size`, `number`); a model's process says them, and the commands say the same |
 | `weights.py` | what a document weighs as its robot description weighs it, for `inspect`: the description's **Mass** rule over the engine's volumes, with no kernel -- each part's mass, its point masses, which is declared and which computed (`Weights.said`), and the description's refusal in its words |
@@ -720,7 +663,7 @@ answers (`base.Making.claim`, `mcp.server._first_report`).
 | `progress.py` | where a build is: the engine's stages heard where they begin, each body a model's body runs by name, the frames, and the terminal's bar |
 | `atomic_replace.py` | the one rename every written file is moved into place with: the library's bounded Windows retry, kept in the engine |
 | `cache.py` | the document cache: each model document's bytes in the cache folder (`documents/<id>/document.xbf`; a file document's derived views, a board's, and a document's kept checks beside it), saved when idle, at its drain and at shutdown, once per revision; the index a restart reads; kept until a person deletes it, with no cap (`Cache`) |
-| `registry.py` | the registry of documents in the version's data folder (`Registry`: `get`, `put`, `list`, `delete`), the user's page token (`token`, `put_token`), the engine's record (`engine`, `put_engine`: its rolled port), and the one owner of every write under that folder (`Folder`); the server's, on the records' shape (`records`), of the folders `places` names (`FACTORY`: a test's other registry) |
+| `registry.py` | the registry of documents in the state folder (`Registry`: `get`, `put`, `list`, `delete`), the user's page token (`token`, `put_token`), the engine's record (`engine`, `put_engine`: its rolled port), and the one owner of every write under that folder (`Folder`); the server's, on the records' shape (`records`), of the folders `places` names (`FACTORY`: a test's other registry) |
 | `identity.py` | identity beyond the formula, on records and file names alone (no kernel, no XBF read): an explicit name's claim in its folder (`claimed`), a shape refused a declared model's id (`handed`), a moved script's record re-attached (`reattach`, `repoint`, `relocated`), and the startup identity migration (`migrate`) |
 | `cli.py` | the verbs as commands, the server's: the operations `export`, `snapshot` and `inspect` (each type's, `cad <type> <operation>`), and `serve`, `status`, `stop`, `delete`, `server` (`parser_for`, `run`; also `python -m cad_server.engine VERB`), each said in `said`'s words |
 | `kernel/` | the memo (`memo.py`), maker history (`history.py`), element naming (`trace.py`), deterministic kernel settings (`determinism.py`) |
@@ -880,9 +823,7 @@ sets the exit status, the same with `--json` and without: 2 for the command line
 command or an option it does not take, an argument missing or out of range, a file of another type, an
 input that is not there, a destructive command where no one can be asked and no `--yes` -- which fails
 the same way until the call changes; 1 for a failure of the work (a build, a render, an export, a tool,
-the engine out of reach, a mistake of ours, a destructive command the person said no to); 3 for a version
-this shell cannot install (`cad setup` in an agent's sandbox, no uv, no network), as the `cad` command says 3 for a
-version that is not installed; 5 for a pin to another version than the one that read it; 130 for an interrupt
+the engine out of reach, a mistake of ours, a destructive command the person said no to); 130 for an interrupt
 (Ctrl-C). A command's `--json` prints
 its answer as one JSON object on stdout, and every failure as one JSON document there too, so a caller
 reading stdout always finds an answer, with nothing else on stdout and no traceback (`--verbose`, where
@@ -896,10 +837,8 @@ a command takes it, puts one on stderr):
 option or argument the command line got wrong), `invalid_argument` (a value refused by name before
 anything ran: out of range, a pose the document lacks), `wrong_type`, `not_found` (a file that is not
 there, a document the engine has no record of or does not hold), `confirmation_required` (with
-`"userActionRequired": true` and `"next"`, the command with `--yes`), `bad_pin` (a first word `+...` that is
-no pin, `cad +<version>[@<channel>]`), exit 2; `declined`, `engine_unavailable`, `failed`, `internal_error`,
-exit 1; `cannot_install_here`, exit 3; `other_version`, exit 5 (the package README's
-**The `cad` command**); `canceled`, exit 130. Without `--json` a
+`"userActionRequired": true` and `"next"`, the command with `--yes`), exit 2; `declined`, `not_running`,
+`other_release`, `engine_unavailable`, `failed`, `internal_error`, exit 1; `canceled`, exit 130. Without `--json` a
 failure is its words on stderr. A
 command line no parser can read is the parser's own usage error (`cli_parser`: every command's options are
 read by the one parser, which takes no abbreviation of an option -- `--js` is no `--json` -- and suggests
@@ -961,14 +900,12 @@ it imports are compiled from their bytes on disk, never from a `__pycache__` `.p
 build writes no bytecode of them: CPython takes a `.pyc` as current by the source's whole-second
 mtime and its size, so a same-length edit inside the second another tool compiled the file would
 otherwise run that tool's code. The libraries a worker loads are another matter: the daemon and
-its workers cache their bytecode in the version's code, `code/pycache` (with no version, under
-`pycache/<installation>` in the cache folder; `places.bytecode`, `PYTHONPYCACHEPREFIX`; one given is honoured, a caller's
+its workers cache their bytecode under `pycache/<installation>` in the cache folder (`places.bytecode`, `PYTHONPYCACHEPREFIX`; one given is honoured, a caller's
 `PYTHONDONTWRITEBYTECODE` is not, as the daemon serves every later client), never beside a
 library or a model. A uvx installation compiles nothing on install, so without it every worker's
 start compiled build123d and the pure-Python libraries it loads: measured on a fresh uvx
 environment of the wheel, a fresh daemon's first build of a one-body model took 5.2-6.2 s with
-none cached and 2.4-2.9 s cached. A version's goes with the version; in the cache folder, a folder no
-daemon started in 30 days goes (`PYCACHE_UNUSED_DAYS`). With no cache folder that is this user's alone, nothing is written.
+none cached and 2.4-2.9 s cached. A folder no daemon started in 30 days goes (`PYCACHE_UNUSED_DAYS`). With no cache folder that is this user's alone, nothing is written.
 The daemon's standby (**The engine server and its workers**) loads the kernel once the base exists:
 the first load of a fresh installation on macOS also waits on the system's first look at each native
 library, 43 s measured, which the standby pays while nobody waits. A build that waits
@@ -1381,7 +1318,7 @@ logs from native code to file descriptor 1 and can die on a mesh it cannot repai
 kernel never loads it), keeping what it made. One decomposition is one mesh with one set of options. Each hull is a
 mesh asset `<mesh>_hull<i>` (a file in the engine's cache) and a collision geom `<part>_hull<i>`. A decomposition
 the cache does not hold needs coacd: where the calling environment does not hold it (a script `cad run` runs, whose
-imports name `cad[mujoco]`, or a Python of its own), its version's engine makes `cad[coacd]`'s environment on first
+imports name `cad[mujoco]`, or a Python of its own), the device's engine makes `cad[coacd]`'s environment on first
 need over its door (`{"op": "integration", "integration": "coacd"}`, `integration_env.made`) and the child runs
 there, so no script names it in its header. It is refused by name, naming the part and the extra, only where CoACD
 has no wheel, no engine answers, or the making fails; a hit needs no coacd at all. `cad[coacd]` is one wheel, about
@@ -1433,11 +1370,11 @@ which also avoids pybind11's unmatched profile events on Python 3.12 and later.
 
 ## The engine server and its workers
 
-One engine server (`daemon.py`: a daemon, which `cad server` runs in the
-foreground) for each installed version in use (**Starting and updating**), started on demand by the first command that needs it. **No timer stops it**: a
+One engine server (`daemon.py`: a daemon) for the device (**Starting and updating**), started by `cad server
+start` (or `cad mcp`). **No timer stops it**: a
 person may be using a page or the CAD app for hours without a build. It stops in four ways: on
-`cad stop` (or a terminate); once it has drained, asked by the switch of 0.11.10 and earlier or by the newest
-version's cleanup removing its version (**Starting and updating**); when
+`cad server stop` (or a terminate); once it has drained, asked by the switch of 0.11.10 and earlier, a newer
+release's start or cad's own update (**Starting and updating**); when
 its door is gone -- its folder removed, a
 temporary folder cleaned up, or another file put in the door's place -- so that no one can reach it
 (`Daemon.tend` sees it within a round, and it stops as `stop` does, saving what it holds to the
@@ -1737,9 +1674,7 @@ door. Inside one, a daemon could make its door but never bind its HTTP port, and
 serves its document: so it starts none. A shell that says it is sandboxed without network (a
 variable the distribution names, `client.SANDBOXES`) and finds no door is refused at once, in one line:
 no engine runs and this shell's sandbox cannot start one; run the command again outside the sandbox,
-or run `cad server` outside it (`client.SANDBOXED`). `cad setup`, which runs outside any sandbox, leaves
-its version's server running, so this is met only once that server is gone: the computer restarted,
-or `cad stop` stopped it. A daemon
+or run `cad server start` outside it (`client.SANDBOXED`). A daemon
 started where it may not bind a loopback port (`daemon._can_listen`, before it makes its door) or
 take its lock writes why beside its lock (`engine.failed`, `places.failure_path`) and exits 1;
 the client that started it says that reason at once, never after a timeout.
@@ -1810,8 +1745,8 @@ or from a script one of whose functions has its name -- naming that declaration 
 one id is one document.
 
 **The registry.** One record per document the engine built, and per CAD file a page opened,
-`documents/<id>/document.json` in the version's data folder ([registry.py](registry.py); the
-distribution names the folder, `places.data_dir`: the state folder for an engine with no version): it points; a document's bytes
+`documents/<id>/document.json` in the state folder ([registry.py](registry.py); the
+distribution names the folder, `places.state_dir`): it points; a document's bytes
 are the cache's, in the cache folder (**The cache**).
 Every record has one shape, `{schema, id, kind, root, home, entry, namespace, name, fingerprint?, module?, line?, declares?, relocated?, revision, built, created?, facts?,
 program?, python?, with?, cache?{revision, bytes}, opened?, pinned?, preview?}`, and holds what a restart
@@ -1890,8 +1825,7 @@ file's time on disk, a model's run), each row carrying both; a model's script is
 
 **The cache.** For every model and shape document -- never a file's, which is its own
 file -- the engine keeps `documents/<id>/document.xbf` in the cache folder its host names
-([cache.py](cache.py); `places.cache_dir`: a version's `versions/<version>/data/cache`; with no version
-`CAD_CACHE_DIR`, else
+([cache.py](cache.py); `places.cache_dir`: `CAD_CACHE_DIR`, else
 `$XDG_CACHE_HOME/cad`, else `~/.cache/cad`, on Windows too, where 0.10.0 kept it in
 `%LOCALAPPDATA%\cad`; releases before 0.10 kept theirs in the same places named `cadgen`, which no build reads), written through a `registry.Folder` with `replace_atomic`, its record staying in the state
 folder. The bytes are the hold's (`document.to_bytes`: the document, its closure record and its
@@ -3462,7 +3396,7 @@ carries `x-cad-viewer`, the gate a cross-site form cannot pass (403 without it).
 
 | Route | What it answers |
 | --- | --- |
-| `GET /api/v1/server` | who this engine is (`app`, `release`, `identityToken`, `platform`, `user`, `home`, `start`, `pick`, `port`, `pid`), `instance` (a random token of this start of it: a page that sees another reloads), `kinds` (`reads`, and each kind's `exports`), and `notice` (`{version, latest}`) only where the version check as last read knows a newer release and the default channel has used this version (`updates.offered`, `versions.on_default_channel`): the page's update nudge, which only the default channel gets |
+| `GET /api/v1/server` | who this engine is (`app`, `release`, `identityToken`, `platform`, `user`, `home`, `start`, `pick`, `port`, `pid`), `instance` (a random token of this start of it: a page that sees another reloads), and `kinds` (`reads`, and each kind's `exports`) |
 | `GET\|PUT /api/v1/settings` | `{"language": {"locale"}, "telemetry": {"share", "reason", "policy"}, "whats_new": {"seen", "release"}}` (`telemetry` null where the server keeps none, `saved` beside it after a change; `whats_new` the releases whose What's new the person has seen), the person's, one for every view; PUT takes the same shape, or a part of it (the read-only `reason`, `policy` and `release` ignored), and answers the whole |
 | `GET /api/v1/look`, `/api/v1/look/environment` | the regular modes' look, and its Radiance image |
 | `GET /api/v1/documents`, `/api/v1/documents/<kind>` | Recents (of one kind): `{"documents": [row]}`, each row its document's `id`, `kind`, `api` and its record's kind (`record`); `?kind=`, `?q=`, `?limit=`; `?path=` one file's envelope, known by its id from then on |

@@ -210,28 +210,21 @@ _APP_TOKEN_SCHEMA = {"type": "string", "description": "The view's capability, fr
 _BROWSER_OPEN_ROUTE = "/api/v1/local/browser/open"
 
 
-def _stamped(launch: dict[str, Any], told: bool = True) -> dict[str, Any]:
-    """A launch with what the page needs to start on it alone: this server's version and platform,
-    whether this computer has a file chooser for the home's Open, and, where a newer release is known
-    (``updates.offered``: the version check as last read, never waited on) and the session is ``told``, ``notice``
-    (``{version, latest}``), which the page's update nudge shows: none for a session a store's launcher opened
-    (``Server.store``), whose copy the store updates."""
-    from cad_server import __version__, updates
+def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
+    """A launch with what the page needs to start on it alone: this server's version and platform, and whether
+    this computer has a file chooser for the home's Open."""
+    from cad_server import __version__
     from cad_server._internal.picker import available
 
     launch["version"] = __version__
     launch["platform"] = sys.platform if sys.platform in ("darwin", "win32") else "linux"
     launch["pick"] = available()
-    found = updates.offered() if told else None
-    if found is not None:
-        launch["notice"] = found
     return launch
 
 
 # The tools 0.11.10 removed, each answered by name with the `cad` command that does its work now: a session
 # opened before the update still lists them, and its agent reads this, not a bare "unknown tool". Never
-# listed (``tools``); counted as any call naming no tool of cadgen's (``_refused``). The commands carry no
-# pin: an unpinned command runs the newest installed version. Goes at the next minor release.
+# listed (``tools``); counted as any call naming no tool of cadgen's (``_refused``). Goes at the next minor release.
 _REMOVED_TOOLS = {
     "cad_export": "The cad_export tool was removed in cad 0.11.10. Export with the cad command instead: "
                   "`cad model export <id> <file>...` for a model's document id, or `cad <type> export <file> <file>...` "
@@ -348,9 +341,6 @@ class Server:
                  app_token: str | None = None) -> None:
         self.page = page or AppPage()
         self._app: str | None = None  # the connecting app, by the name its MCP client gives
-        # Whether a store's launcher opened this session (its ``--channel``, the transport's ``pin``): its launches
-        # carry no update notice (``_stamped``), since the store updates that copy.
-        self.store = False
         # The engine's own origin (``http://127.0.0.1:<port>``), which an inline host is asked to let
         # the card reach (``_resource_meta``): where the host carries no tool call back, the card
         # reads the engine directly with its launch's link (``_reach``).
@@ -423,7 +413,7 @@ class Server:
             from cad_server.analytics import Recorder
             from cad_server.settings import FILE
 
-            # The settings beside the model library (this version's data folder, by default): shared by its every process.
+            # The settings beside the model library (the state folder, by default): shared by its every process.
             path = Path(self._recents.root).parent / FILE if self._recents is not None else None
             self._analytics = Recorder(path=path)
         return self._analytics
@@ -512,8 +502,6 @@ class Server:
                                                             transport.get("presentation"))
         self._app = client.get("name") if isinstance(client.get("name"), str) else None
         self._peer_browser = transport.get("browser") if isinstance(transport.get("browser"), dict) else None
-        pin = transport.get("pin") if isinstance(transport.get("pin"), dict) else {}
-        self.store = isinstance(pin.get("channel"), str) and bool(pin["channel"])
         self.tabs, self.text = presentation == "tabs", presentation == "text"
         if presentation == "inline":
             self.page = self.page.presenting("inline")
@@ -738,7 +726,7 @@ class Server:
         self._model = model
         if _reads_with_kernel(model):
             self.warm()  # the view's first document meshes on a pool already starting
-        return _stamped(launch, not self.store)
+        return _stamped(launch)
 
     def _home(self, *, surface: str | None = None) -> dict[str, Any]:
         """The launch that shows the home: the models opened before, which come with it so its cards
@@ -752,7 +740,7 @@ class Server:
         launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "home", "model": None, "recents": recents}
         if surface:
             launch["surface"] = surface
-        return _stamped(launch, not self.store)
+        return _stamped(launch)
 
     def _mounted(self, launch: dict[str, Any]) -> dict[str, Any]:
         """Stamp a launch that mounts a new inline view: its token, and its place among the views."""

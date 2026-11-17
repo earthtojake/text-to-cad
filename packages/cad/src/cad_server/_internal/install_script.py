@@ -25,7 +25,7 @@ none once ``GIVE_UP_SECONDS`` (30 days) have passed since the first (``gave up``
 undoes cad's own update, which the server asks for first.
 
 **An attempt** (``Carrier.begin``): the command started by the server itself, detached (a session or process group of
-its own, no window), its output nowhere, ``CAD_INSTALL_REPORT`` naming ``install-report.json`` in the data folder and
+its own, no window), its output nowhere, ``CAD_INSTALL_REPORT`` naming ``install-report.json`` in the state folder and
 uv's own installer told to leave shell profiles alone (``UV_NO_MODIFY_PATH``). No process of cad's waits on it: a
 server that stops leaves it running, and the next server judges its report. It is stopped, with what it started,
 after ``RUN_SECONDS``; one the server that started it no longer watches is taken as failed then.
@@ -34,7 +34,7 @@ after ``RUN_SECONDS``; one the server that started it no longer watches is taken
 by why: ``no_report`` (none written: the command could not be fetched, was stopped, or writes none), ``setup`` (its cad
 step failed), ``app`` (an app's step failed: cad itself was installed) or ``other`` (the command could not start).
 
-The record, ``handover.json`` in the data folder, one at a time: ``schema``, ``mode`` (``install``, ``update``),
+The record, ``handover.json`` in the state folder, one at a time: ``schema``, ``mode`` (``install``, ``update``),
 ``version`` (the release it is owed for), ``state`` (``owed``, ``done``, ``superseded``, ``gave up``), ``owed``
 (when), ``attempts``, ``first`` and ``last`` (when the first and the last attempt began), ``outcome`` (the last
 attempt's: ``running`` while it runs), ``installed`` (true once an attempt's report said cad was installed) and
@@ -96,7 +96,7 @@ RUN_SECONDS = 2 * 60 * 60.0
 def _folder() -> Path:
     from cad.engine import places
 
-    return places.data_dir()
+    return places.state_dir()
 
 
 def read() -> dict[str, Any] | None:

@@ -1,8 +1,6 @@
-"""The person's settings: one file, ``settings.json``, in the data folder of the version that reads them
-(``places.data_dir``: ``versions/<version>/data``; for a process with no version, the state folder itself, as in
-0.11.10 and earlier) beside its model library, so both CAD apps (``cad-mcp`` and ``cad viewer``) and every process of
-that version read the same answers -- nothing that version's code holds them. Each version keeps its own:
-a new one starts from the one it replaces. Deleting the data folder forgets them.
+"""The person's settings: one file, ``settings.json``, in the state folder (``places.state_dir``) beside the
+model library, so both CAD apps (``cad mcp`` and ``cad viewer``) and every process of every release read the same
+answers -- nothing cad's code holds them, and an update keeps them. Deleting the state folder forgets them.
 
 The file is one JSON object with a section per feature, each owned by the module that uses it
 (``telemetry``: whether usage stats and crash reports are sent, and the install's random id,
@@ -10,7 +8,7 @@ The file is one JSON object with a section per feature, each owned by the module
 ``cad_server/language.py``; ``whats_new``: the releases whose What's new dialog the person has seen,
 ``{"seen": ["0.11"]}``, ``cad_server/whats_new.py``; ``auto_update``: whether cad updates itself and whether the
 install command runs again after it, ``cad_server/_internal/auto_update.py``). A change reads,
-changes and writes its own section under the data folder's one lock (``update_section``,
+changes and writes its own section under the state folder's one lock (``update_section``,
 ``file_lock.state``), so two apps changing settings at once never undo each other, whichever
 sections they touch.
 """
@@ -29,11 +27,10 @@ FILE = "settings.json"
 
 
 def settings_path() -> Path:
-    """``settings.json`` in the data folder of the version this process belongs to (``places.data_dir``: the
-    state folder itself for a process with no version, as in 0.11.10 and earlier)."""
-    from cad.engine.places import data_dir
+    """``settings.json`` in the state folder (``places.state_dir``)."""
+    from cad.engine.places import state_dir
 
-    return data_dir() / FILE
+    return state_dir() / FILE
 
 
 def _load(path: Path) -> dict[str, Any]:

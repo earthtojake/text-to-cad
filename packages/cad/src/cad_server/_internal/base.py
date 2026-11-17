@@ -186,15 +186,6 @@ def _own() -> Installation:
                         kernel=_carries_kernel())
 
 
-def server_source() -> str | None:
-    """Where this installation's server installs from again (``versions.make_present``): its source tree, the wheel
-    it was installed from, or None, its release on the index (``_source``). The server ships in the library's
-    distribution, so that is the one whose record says where it came from."""
-    import cad_server
-
-    return _source(Path(cad_server.__file__).resolve().parent, os.path.abspath(sys.prefix), LIBRARY)
-
-
 def _machine() -> str:
     """The machine's architecture, as ``platform.machine()`` says it -- on Windows read where that reads
     it, the environment the system sets, since ``platform.machine()`` may first run ``cmd /c ver``: a
@@ -271,7 +262,7 @@ def _inputs(installation: Installation) -> dict[str, Any]:
 def folder() -> Path:
     """The folder the base and ``cad run``'s environments (``cad_server._internal.extras``) are made in, each
     ``<key>`` in it: ``base`` in the cache folder."""
-    return places.legacy_cache_dir() / BASE
+    return places.cache_dir() / BASE
 
 
 def where(installation: Installation | None = None) -> Path:

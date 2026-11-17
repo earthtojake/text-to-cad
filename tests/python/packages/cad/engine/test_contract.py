@@ -52,7 +52,7 @@ class ContractTest(unittest.TestCase):
     def test_a_newer_cad_is_told_to_update_cad_server_to_its_own_release(self) -> None:
         said = contract.refusal(named("0.10.3", 3), ours=OURS, server="0.10.2")
         self.assertEqual(said, "cad here is 0.10.3, worker contract 3 (xbf/9, OCP 8.0); cad-server 0.10.2 speaks "
-                               "contract 2 (xbf/9, OCP 8.0): run it with `cad +0.10.3 run`, or update cad-server to 0.10.3")
+                               "contract 2 (xbf/9, OCP 8.0): update cad-server to 0.10.3")
         library = contract.refusal({}, ours=OURS, server="0.10.2")
         for line in (said, library):
             self.assertNotIn("\n", line)

@@ -1,6 +1,6 @@
-"""The module the ``cad`` command of the layout of 0.11.10 and earlier ran: the current installation, run.
+"""BRIDGE-ONLY: the module the ``cad`` command of 0.10.0 to 0.11.10 runs: the current installation, run.
 
-The ``cad`` command of revisions before 12 (``installations``) ran this module with the current installation's
+That command (``~/.local/bin/cad``, revisions 9 to 11, which no release writes any more) runs this module with the current installation's
 interpreter (``installations/current``), or with no current one the interpreter registered last, and it runs one
 installation's ``cad`` console script with the arguments:
 
@@ -8,10 +8,9 @@ a. the current installation, while its interpreter and console script are there;
 b. else the installation registered last (no installation is current yet: one from before there was
    a current one).
 
-The command of revision 12 and later runs a version's own ``cad`` itself and never this module. This release's
-copy runs only where a command of an earlier revision is still on the computer (one ``cad setup`` could not replace)
-while ``installations/current`` names a version (``installations.mirror``): it runs that version's ``cad``, which
-reads any pin.
+This release's copy runs only where that command is still on the computer (the install command replaces it with
+the uv tool's ``cad``) while ``installations/current`` names an installation of this release (``cad_server.cli.setup``):
+it runs that installation's ``cad``. Released commands run it by this name, which stays.
 
 There is one installation a command runs, and nothing here compares versions: the arguments go to it as
 they are. With no installation at all it says so, in the ``cad`` command's own words (``NONE_INSTALLED``).
@@ -29,10 +28,8 @@ from __future__ import annotations
 import os
 import sys
 
-from cad_server._internal.pins import none_installed
-
-# The ``cad`` command's own words when no version is installed (``pins.none_installed``).
-NONE_INSTALLED = f"cad: {none_installed()}"
+# The ``cad`` command's own words when no installation is on record.
+NONE_INSTALLED = "cad: cad is not installed on this computer."
 
 
 class Refused(Exception):

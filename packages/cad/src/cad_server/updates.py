@@ -1,4 +1,4 @@
-"""Whether a newer cad is out: the version check.
+"""Which release is newest: the version feed, as cad's own update reads it.
 
 At most once an hour, a server reads the version feed (``GET /v1/versions``, ``cad_server/_internal/api.py``)::
 
@@ -6,17 +6,13 @@ At most once an hour, a server reads the version feed (``GET /v1/versions``, ``c
 
 in the background (``refresh``), never waited on. It is one anonymous request: no id, no path, nothing about the
 person or their machine beyond what any web request carries. ``CAD_UPDATE_CHECK=0`` turns it off, and it never runs
-in CI (``CI`` set) or for a copy that is not told (``cad_server/_internal/channel.py``). The feed as last read is
-kept in the data folder (``versions.json``), where every process of the person's reads it: ``latest`` says the
-newest release the last check saw, and ``notice`` whether it is newer than this one, and only the newest installed
-version says it (``_newer_installed``). Nothing here updates anything, and the notice (``line``) names no command:
-it says only that a newer version exists. What installs it is for whoever installed this one to say.
+in CI (``CI`` set) or for a development build (``cad_server._internal.editable.development``). The feed as last read
+is kept in the state folder (``versions.json``), where every process of the person's reads it: ``latest`` is the
+release cad's own update moves to (``cad_server._internal.auto_update``). Nothing here updates anything, and nothing
+here says anything to a person or an agent.
 
-A release is also known with no network at all: an MCP client running a newer release's server says its release as
-it connects (``see``), and that proves the release exists.
-
-Nothing here ever raises or waits: what is told comes from the feed as last read. Each hour's attempt is spent
-before it is made, so a feed that cannot be reached is tried once an hour.
+Nothing here ever raises or waits. Each hour's attempt is spent before it is made, so a feed that cannot be reached
+is tried once an hour.
 """
 
 from __future__ import annotations
@@ -32,19 +28,15 @@ from typing import Any, Callable
 
 from cad_server._internal.api import api_url
 from cad._internal.atomic_replace import write_bytes_atomic
-from cad_server._internal.channel import told
 
 LOG = logging.getLogger("cad_server.updates")
 
-FILE = "versions.json"  # the feed as last read, in the data folder
+FILE = "versions.json"  # the feed as last read, in the state folder
 CHECK_SECONDS = 60 * 60  # how old the feed may get before it is read again
 TIMEOUT_SECONDS = 5
 MAX_BYTES = 64 * 1024  # a feed is a few dozen bytes
 _RELEASE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 _OFF = ("0", "off", "false", "no")
-# The releases connecting MCP clients' servers said they run as they connected to this process's engine (``see``).
-_seen: set[str] = set()
-_seen_lock = threading.Lock()
 
 
 def parse_release(value: Any) -> tuple[int, int, int] | None:
@@ -63,20 +55,22 @@ def parse_feed(data: Any) -> dict[str, Any] | None:
 
 
 def checking() -> bool:
-    """Whether to read the feed at all: not turned off (``CAD_UPDATE_CHECK=0``), not in CI, and a copy that is
-    told -- not one something else keeps up to date, nor a development install."""
+    """Whether to read the feed at all: not turned off (``CAD_UPDATE_CHECK=0``), not in CI, and no development
+    build."""
     if str(os.environ.get("CAD_UPDATE_CHECK") or "").strip().lower() in _OFF:
         return False
     if str(os.environ.get("CI") or "").strip().lower() not in ("", *_OFF):
         return False
-    return told()
+    from cad_server._internal.editable import development
+
+    return not development()
 
 
 def _cache() -> Path:
-    """The feed's cache, in this process's data folder (``places.data_dir``)."""
-    from cad.engine.places import data_dir
+    """The feed's cache, in the state folder (``places.state_dir``)."""
+    from cad.engine.places import state_dir
 
-    return data_dir() / FILE
+    return state_dir() / FILE
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -136,104 +130,6 @@ def feed(*, fetch: bool = True, force: bool = False, now: float | None = None, p
     return known
 
 
-def see(release: Any) -> None:
-    """A release a connecting MCP client's server runs, as it said when it connected: one newer than this
-    install proves a release exists, with no network."""
-    if parse_release(release) is not None:
-        with _seen_lock:
-            _seen.add(release)
-
-
-def _newest(candidates: list[Any], version: str) -> str | None:
-    """The newest of ``candidates`` that is newer than ``version``, or None."""
-    current = parse_release(version)
-    found = [(parse_release(value), value) for value in candidates if parse_release(value) is not None]
-    newer = [(parsed, value) for parsed, value in found if current is not None and parsed > current]
-    return max(newer)[1] if newer else None
-
-
-def _newer_installed() -> bool:
-    """Whether a version newer than this process's own is installed on this computer: the newest installed
-    (``versions.newest``, which the cleanup asks too) is newer than this one (``versions.older``). False for a process
-    of no version, and where the installed versions cannot be listed: then the notice is said as before."""
-    try:
-        from cad.engine import places
-        from cad_server._internal import versions
-
-        own = places.versioned()
-        if own is None:
-            return False
-        found = versions.newest()
-        return found is not None and versions.older(own, found)
-    except Exception:  # noqa: BLE001 - a notice never goes quiet by accident
-        LOG.debug("could not list the installed versions", exc_info=True)
-        return False
-
-
-def notice(*, path: Path | None = None) -> dict[str, str] | None:
-    """``{latest, version}``: a release newer than this one, from the feed as last read (never read here:
-    ``refresh``) and the releases connecting servers run (``see``), where this process is told (``told``), and only
-    the newest installed version says it (``_newer_installed``); or ``None`` when there is none, it is not told, or
-    a newer version is installed beside this one."""
-    try:
-        from cad_server import __version__
-
-        if not told():
-            return None
-        with _seen_lock:
-            candidates: list[Any] = [*_seen]
-        if checking():
-            known = feed(fetch=False, path=path)
-            if known is not None:
-                candidates.append(known["latest"])
-        latest = _newest(candidates, __version__)
-        if latest is None or _newer_installed():
-            return None
-        return {"latest": latest, "version": __version__}
-    except Exception:  # noqa: BLE001 - a notice never fails what shows it
-        LOG.debug("the version check failed", exc_info=True)
-        return None
-
-
-def offered(*, path: Path | None = None) -> dict[str, str] | None:
-    """The notice a page is handed for its update nudge (``GET /api/v1/server``'s and a CAD app launch's ``notice``):
-    ``notice`` where the check is not turned off (``CAD_UPDATE_CHECK=0``), the same decision a command's line makes
-    (``cad_server.cli._notice``), and only where the default channel -- a copy with no store's name -- has used this
-    version (``versions.on_default_channel``): only the default channel gets the nudge. A page cannot tell who opened
-    it, and a store updates its own copy, so a nudge on a computer with store copies alone would only have its agent
-    install a second one. Never read from the network here,
-    never waited on."""
-    if str(os.environ.get("CAD_UPDATE_CHECK") or "").strip().lower() in _OFF:
-        return None
-    try:
-        from cad_server._internal.versions import on_default_channel
-
-        if not on_default_channel():
-            return None
-    except Exception:  # noqa: BLE001 - a notice never fails what shows it
-        LOG.debug("could not tell whether the default channel uses this version", exc_info=True)
-        return None
-    return notice(path=path)
-
-
-def latest(*, path: Path | None = None) -> str | None:
-    """The latest release the last check saw (the feed as last read, never read here), or None: none read yet, the
-    check turned off, or a feed that named none."""
-    try:
-        if not checking():
-            return None
-        known = feed(fetch=False, path=path)
-        return known["latest"] if known is not None else None
-    except Exception:  # noqa: BLE001 - a fact for a notice, never a failure
-        LOG.debug("the version check failed", exc_info=True)
-        return None
-
-
-def line(found: dict[str, str]) -> str:
-    """The notice as text: one line, that a newer version is out. It names no command."""
-    return f"A new version of cad is available: {found['version']} -> {found['latest']}"
-
-
 def _quietly() -> None:
     try:
         feed()
@@ -242,8 +138,8 @@ def _quietly() -> None:
 
 
 def refresh() -> threading.Thread | None:
-    """Read the feed in the background when it is due, so what is told stays current: as a server
-    starts, and as a page asks (a server can run for days). The thread reading it, if one started."""
+    """Read the feed in the background when it is due, so what cad's own update reads stays current: as a server
+    starts and as it tends (a server can run for days). The thread reading it, if one started."""
     try:
         if not (checking() and _due(_load(_cache()), "checked", time.time())):
             return None

@@ -28,7 +28,7 @@ from cad_server.mcp.server import _AGENT_TOOLS, NO_TOOLS_INSTRUCTIONS, UNPROVEN,
 from cad_server.mcp.tunnel import MAX_REPLY_BYTES
 from cad_server.mcp.ui import AppPage
 # A release's process: a checkout is a development build, never told of a release and sending nothing by default,
-# unless it is told the version it runs as (``cad_server/_internal/channel.py``).
+# unless it is told the version it runs as (``cad_server/_internal/editable.py``).
 RELEASE = __import__("cad_server").__version__
 
 CODEX = {"name": "codex-mcp-client", "title": "Codex", "version": "0.159.0"}
@@ -291,43 +291,26 @@ class TabServerTest(_Session):
         read = self.server.handle("resources/read", {"uri": uri}, None)["contents"][0]
         self.assertEqual((read["mimeType"], read["text"]), ("text/html;profile=mcp-app", "<!doctype html><title>CAD</title>"))
 
-    def test_a_newer_release_is_the_page_s_notice_while_the_check_is_on_and_never_a_store_session_s(self) -> None:
-        """The update nudge's data: ``/api/v1/server`` and each launch carry ``notice`` where the version check knows a
-        newer release and is not turned off and the default channel has used this version; a session a store's
-        launcher opened (``--channel``) is told none."""
+    def test_no_page_and_no_launch_says_a_newer_release_is_out(self) -> None:
+        """The update nudge is gone: ``/api/v1/server`` and each launch carry the release this server runs and no
+        ``notice``, whatever the feed as last read says, for every session alike (a launcher's ``pin`` is read for
+        nothing)."""
         import cad_server
         from cad_server import updates
-        from cad_server._internal import versions
 
-        default = mock.patch.object(versions, "on_default_channel", return_value=True)
-        default.start()
-        self.addCleanup(default.stop)
-
-        newer = {"latest": "99.0.0", "version": cad_server.__version__}
-        with mock.patch.object(updates, "notice", return_value=None):
+        with mock.patch.object(updates, "feed", return_value={"latest": "99.0.0"}), \
+                mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": ""}):
             read = self.http("GET", "/api/v1/server")[1]
             self.assertEqual(read["release"], cad_server.__version__)
-            self.assertFalse({"notice", "update"} & set(read), "none known: no notice, and never an update")
+            self.assertFalse({"notice", "update"} & set(read))
             self.assertNotIn("notice", self.launch("cad_home"))
-        with mock.patch.object(updates, "notice", return_value=newer):
-            with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": ""}):
-                self.assertEqual(self.http("GET", "/api/v1/server")[1]["notice"], newer)
-                self.assertEqual(self.launch("cad_home")["notice"], newer)
-                self.assertEqual(self.launch("cad_open", {"source": self.bracket})["notice"], newer)
-                # A store's launcher's session: its launches say nothing of releases.
-                store = Server(page=self.server.page, recents=self.server.recents)
-                params = initialize_params({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": CODEX})
-                params["_meta"]["dev.texttocad/transport"]["pin"] = {"channel": "codex"}  # what PR #835's launchers said
-                store.handle("initialize", params, None)
-                launch = store.handle("tools/call", {"name": "cad_home", "arguments": {}}, RequestContext(1, {"threadId": "s"}))
-                self.assertNotIn("notice", launch["structuredContent"]["launch"])
-            with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": "0"}):
-                self.assertNotIn("notice", self.http("GET", "/api/v1/server")[1])
-                self.assertNotIn("notice", self.launch("cad_home"))
-            # Only the default channel gets the nudge: a version only store copies have used is told none.
-            with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": ""}), \
-                    mock.patch.object(versions, "on_default_channel", return_value=False):
-                self.assertNotIn("notice", self.http("GET", "/api/v1/server")[1])
+            self.assertNotIn("notice", self.launch("cad_open", {"source": self.bracket}))
+            store = Server(page=self.server.page, recents=self.server.recents)
+            params = initialize_params({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": CODEX})
+            params["_meta"]["dev.texttocad/transport"]["pin"] = {"channel": "codex"}  # what PR #835's launchers said
+            store.handle("initialize", params, None)
+            launch = store.handle("tools/call", {"name": "cad_home", "arguments": {}}, RequestContext(1, {"threadId": "s"}))
+            self.assertNotIn("notice", launch["structuredContent"]["launch"])
 
     def test_an_agent_names_a_model_by_its_absolute_path_and_a_tab_reopens_on_it(self) -> None:
         opened = self.launch("cad_open", {"source": self.bracket})

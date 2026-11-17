@@ -1,7 +1,7 @@
 """BRIDGE-ONLY: how a release arrived on a computer by a shipped updater, kept by ``cad setup`` for its server, and
 counted.
 
-``cad setup --engine-update`` (``cad_server.cli.setup``) keeps, in the data folder, the record ``arrival.json`` --
+``cad setup --engine-update`` (``cad_server.cli.setup``) keeps, in the state folder, the record ``arrival.json`` --
 written where none is there yet for the same release, so an updater's second run keeps the first --: ``schema``,
 ``version``, ``route`` (``updater``), ``from`` (the release it arrived from, ``came_from``, or None) and ``at`` (when,
 the wall clock's seconds).
@@ -30,7 +30,7 @@ OK, FAILED = "ok", "failed"
 def _path() -> Path:
     from cad.engine import places
 
-    return places.data_dir() / RECORD
+    return places.state_dir() / RECORD
 
 
 def read(name: str) -> dict[str, Any] | None:

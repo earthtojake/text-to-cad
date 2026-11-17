@@ -177,7 +177,7 @@ class Carrying(State):
         record = install_script.read()
         self.assertEqual((record["mode"], record["state"], record["attempts"]), ("update", "done", 1))
         [ran] = self.ran()
-        report = str(places.data_dir() / install_script.REPORT)
+        report = str(places.state_dir() / install_script.REPORT)
         self.assertEqual(ran, {"CAD_INSTALL_REPORT": report, "CAD_INSTALL_UPDATE": "1", "UV_NO_MODIFY_PATH": "1"})
         self.assertIsNone(self.tend(carrier, mono=60.0 + 3 * DAY), "nothing owed any more")
         self.assertEqual(len(self.ran()), 1)
@@ -255,7 +255,7 @@ class Carrying(State):
         install_script._write(record)
         carrier = install_script.Carrier(began=0.0)
         self.assertIsNone(self.tend(carrier, wall=1000.0 + 60), "still running, maybe: its report is not there yet")
-        report = places.data_dir() / install_script.REPORT
+        report = places.state_dir() / install_script.REPORT
         report.write_text(json.dumps({"setup": 0, "apps": {}}), encoding="utf-8")
         self.assertIsNone(self.tend(carrier, wall=1000.0 + 120))
         self.assertEqual(install_script.read()["state"], "done", "judged by the server after it, once its report came")

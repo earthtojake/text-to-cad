@@ -122,9 +122,8 @@ def refusal(named: Any, *, ours: dict[str, Any] | None = None, server: str | Non
         # the protocol and kept its version). Neither update moves either one: one build of both does.
         return f"{said}: both are {server}, but different builds of it: use one build of both"
     if newer > 0:
-        # The caller's own release, run exactly, its own server with it (a pin installs a release missing).
-        pinned = "" if _preview(here) else f"run it with `{COMMAND} +{here} run`, or "
-        return f"{said}: {pinned}{_server_to(here)}"
+        # The caller's own release: the server updated to it.
+        return f"{said}: {_server_to(here)}"
     # The server's release: ``cad run`` runs a program with the device's library, that release's.
     return f"{said}: {_library_to(server)}, or run it with `{COMMAND} run`"
 
@@ -193,13 +192,6 @@ def _order(release: Any) -> tuple[Any, ...] | None:
     return (int(found["epoch"] or 0), tuple(numbers), pre,
             (int(found["post_n1"] or found["post_n2"] or 0),) if post else (_FIRST,),
             (int(found["dev_n"] or 0),) if dev else (_LAST,))
-
-
-def _preview(release: Any) -> bool:
-    """Whether ``release`` is a pre-release or a development build: the caller's own release is run exactly
-    (``cad +<release> run``) only for a release."""
-    found = _parsed(release)
-    return found is not None and (found["pre"] is not None or found["dev"] is not None)
 
 
 def _compared(one: Any, other: Any) -> int:

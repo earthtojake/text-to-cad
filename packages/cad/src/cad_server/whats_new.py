@@ -9,13 +9,14 @@ one seen (``@cad/ui/whats-new``).
 
 A person who never used an earlier release is shown nothing new. The first time a release finds no
 section -- a new device, or settings an earlier release wrote, which had none -- it decides once which it
-is, and keeps the answer: a device with an installation of an earlier release on record
+is, and keeps the answer: a device where an earlier release ran was updated, ``{"seen": []}``; any other
+is a new person's, who has seen everything up to this release, ``{"seen": ["<this release>"]}``. An earlier
+release ran where the server's record of its starts names one (``started.json``: the release it started as
+before, ``cad_server._internal.started``), or an installation of one is on record
 (``installations/<version>.json``, 0.10.0's on Windows in the local application data, 0.8's where it left
-them), a record naming a release or a development build of one, was updated, ``{"seen": []}``; any other
-is a new person's, who has seen everything up to this
-release, ``{"seen": ["<this release>"]}``. A version's import from the layout of 0.11.10 and earlier decides it
-(``cad_server._internal.imports``), before the cleanup removes that layout's records of its releases; a view's
-read decides it otherwise.
+them), a record naming a release or a development build of one. Every release reads the one settings file
+(``places.state_dir``), so a section kept by one is the next one's: an update to a release whose notes are newer
+than every one seen shows them. A view's read decides it.
 Settings that cannot be read or written show nothing: a dismissal that could not be kept would ask again
 at every view.
 """
@@ -57,11 +58,17 @@ def running() -> str | None:
 
 
 def _installed() -> list[str]:
-    """The version of every installation on record on this device: this state folder's, 0.10.0's in
-    Windows' local application data, and 0.8's where it left them."""
-    from cad_server._internal import installations
+    """The version of every release on record on this device: the releases the server last started as
+    (``started.json``), and the installations on record in this state folder, 0.10.0's in Windows' local
+    application data, and 0.8's where it left them."""
+    from cad_server._internal import installations, started
 
     found: list[str] = []
+    try:
+        kept = started.read()
+        found += [kept[name] for name in ("before", "release") if isinstance(kept.get(name), str)]
+    except Exception:  # noqa: BLE001 - a record that cannot be read is no evidence either way
+        LOG.debug("could not read the server's record of its starts", exc_info=True)
     for read in (installations.records, installations.appdata, installations.earlier):
         try:
             found += [record["version"] for record in read()]
@@ -113,7 +120,7 @@ def read(*, path: Path | None = None, release: str | None = None,
 
 def change(choice: Any, *, path: Path | None = None, release: str | None = None) -> dict[str, Any]:
     """Keep the releases a view says the person has seen (``{"seen": ["0.11"]}``; the ``release`` a
-    read answered may ride along and is ignored) beside those kept, under the data folder's one lock --
+    read answered may ride along and is ignored) beside those kept, under the state folder's one lock --
     a release once seen stays seen, whichever view put back what -- and answer as ``read``. Raises
     ``ValueError`` for anything else, and ``OSError`` when the settings cannot be written."""
     if not isinstance(choice, dict) or "seen" not in choice or not set(choice) <= {"seen", "release"} \
@@ -122,13 +129,3 @@ def change(choice: Any, *, path: Path | None = None, release: str | None = None)
         raise ValueError('a what\'s new change is {"seen": ["<major>.<minor>", ...]}')
     update_section(SECTION, lambda kept: {**kept, "seen": _seen(_seen(kept.get("seen")) + choice["seen"])}, path=path)
     return read(path=path, release=release)
-
-
-def settle(*, path: Path | None = None, release: str | None = None) -> None:
-    """Decide, once, whether this device was updated or is a new person's (a version's import from the
-    layout of 0.11.10 and earlier, ``cad_server._internal.imports``): never fails what it rides on."""
-    try:
-        read(path=path, release=release)
-    except Exception:  # noqa: BLE001 - what's new never fails the setup it rides on
-        LOG.debug("could not settle what's new", exc_info=True)
-

@@ -306,9 +306,6 @@ class CadApp:
         self.pick = available()
         self.host = host
         self.port = port
-        # The delivery channel of the CAD app session this app serves (``mcp.http.Sessions``: its launcher's
-        # ``--channel``), None for the default's and for the browser page.
-        self.channel = None
         # dist_dir is compared as a string prefix, so resolve it ONCE here and
         # never re-resolve at request time.
         self.dist_dir = os.path.abspath(dist_dir) if dist_dir else ""
@@ -618,16 +615,8 @@ class CadApp:
     def api_server(self) -> dict:
         """``GET /api/v1/server``: who this engine is (``server_info``), the token of this start of it
         (``instance``: a page that sees another one reloads), the kinds of documents it reads and
-        what each exports, the release this server runs (``release``), and, where a newer release is known
-        (``updates.offered``: the version check as last read, never waited on; none with ``CAD_UPDATE_CHECK=0`` or
-        for a development build), ``notice`` (``{version, latest}``): the page's update nudge, which hands the
-        person a prompt for their agent. Only the default channel gets it: a CAD app session a store's launcher
-        opened (``channel``) is told none, and a page, which cannot tell who opened it, only where the default
-        channel has used this version (``versions.on_default_channel``)."""
-        from cad_server import updates
-
-        found = updates.offered() if self.channel is None else None
-        return {**self.server_info(), **self._version(), **({"notice": found} if found is not None else {}),
+        what each exports, and the release this server runs (``release``)."""
+        return {**self.server_info(), **self._version(),
                 "kinds": {"reads": list(KINDS), "exports": {kind: list(formats) for kind, formats in EXPORTS.items()}}}
 
     def settings(self, share=None) -> dict:

@@ -4,7 +4,7 @@ A command sends nothing itself: it keeps what it counted in the spool beside the
 (``analytics.spool``), which the CAD app's and the viewer's background sends take every window
 (``analytics.FLUSH_SECONDS``), each as a ``cli`` batch of its own (``Recorder._spooled``). With neither
 running, nothing would. So a command that finds the spool's (or the arrivals') oldest line older than a window, and
-no sender started within one (the time of the data folder's one lock, ``file_lock.STATE_LOCK``, which only a sender's
+no sender started within one (the time of the state folder's one lock, ``file_lock.STATE_LOCK``, which only a sender's
 start changes, as in 0.11.10), starts this module detached (``start_if_due``): no window, a process group or session
 of its own, its output nowhere, the telemetry switches of the command's environment not inherited
 (``analytics.for_others``: it goes by the person's settings) -- and goes on without waiting for it.
@@ -36,7 +36,7 @@ ROUNDS = 8  # the most batches one sender sends: a spool past ``analytics.MAX_EV
 def start_if_due(path: Path | None = None, *, now: float | None = None,
                  spawn: Callable[[Path], Any] | None = None) -> bool:
     """Start the sender when the spool (or the arrivals) has waited longer than a window and none was started
-    within one; whether it was. Under the data folder's one lock, whose time is when the last sender was started:
+    within one; whether it was. Under the state folder's one lock, whose time is when the last sender was started:
     so two commands at once start one, and a sender a window old -- done or stuck -- is followed by the next. Never
     raises, never waits on it."""
     try:

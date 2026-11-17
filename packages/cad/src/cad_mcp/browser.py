@@ -97,7 +97,7 @@ def open_page(url: str, *, opener: Callable[[str], bool] = webbrowser.open) -> P
         raise CannotOpen(refusal)
     folder = places.engine_dir()
     try:
-        places.make_engine_dir(folder)
+        places.make_engine_dir()
     except OSError as error:
         raise CannotOpen(f"the engine's folder {folder} cannot be made: {error.strerror or error}") from error
     refusal = places.folder_refusal(folder)

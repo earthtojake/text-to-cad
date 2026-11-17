@@ -1,6 +1,5 @@
-"""The version check (`cad_server/updates.py`): what each install is told about a newer cad, from a feed
-read at most once an hour or a connecting client's newer server, said the same way wherever it shows. No test
-reaches the real feed: each one is handed in, or kept as just read."""
+"""The version feed (`cad_server/updates.py`): read at most once an hour by a server, in the background, for cad's own
+update, and never said to anyone. No test reaches the real feed: each one is handed in, or kept as just read."""
 
 from __future__ import annotations
 
@@ -9,7 +8,6 @@ import io
 import json
 import os
 import shutil
-import sys
 import tempfile
 import threading
 import time
@@ -18,9 +16,7 @@ from pathlib import Path
 from unittest import mock
 
 import cad_server
-from cad.engine import places
 from cad_server import updates
-from cad_server._internal import versions
 from cad_server.cli import main as cadgen_main
 
 FEED = {"latest": "0.9.0"}
@@ -36,9 +32,6 @@ class UpdatesTest(unittest.TestCase):
         version = mock.patch.object(cad_server, "__version__", "0.8.1")
         version.start()
         self.addCleanup(version.stop)
-        seen = mock.patch.object(updates, "_seen", set())
-        seen.start()
-        self.addCleanup(seen.stop)
 
     def environment(self, values: dict[str, str]) -> None:
         patched = mock.patch.dict(os.environ, values)
@@ -48,12 +41,9 @@ class UpdatesTest(unittest.TestCase):
     def just_read(self, feed: dict) -> None:
         (self.tmp / updates.FILE).write_text(json.dumps({"checked": time.time(), "feed": feed}), encoding="utf-8")
 
-    def test_every_version_is_told_but_a_development_build(self) -> None:
-        # A development build -- a development version's name, or a source tree not told the version it runs as -- is
-        # never told. CAD_INSTALL_CHANNEL and CAD_AUTO_UPDATED, which configs of 0.11.10 and earlier set, decide nothing.
-        # (A command that names a channel says nothing: ``cad_server.cli``.)
-        from cad_server._internal import channel
-
+    def test_every_release_reads_the_feed_but_a_development_build(self) -> None:
+        # A development build -- a development version's name, or a source tree not told the version it runs as --
+        # reads none. CAD_INSTALL_CHANNEL and CAD_AUTO_UPDATED, which configs of 0.11.10 and earlier set, decide nothing.
         for values, source_tree, expected in (
             ({"CAD_INSTALL_CHANNEL": "claude-directory", "CAD_AUTO_UPDATED": "1"}, False, True),
             ({"CAD_INSTALL_CHANNEL": "dev", "CAD_INSTALLATION_VERSION": ""}, False, True),
@@ -62,33 +52,8 @@ class UpdatesTest(unittest.TestCase):
             ({"CAD_INSTALLATION_VERSION": "0.8.1-dev.20261113120000"}, False, False),
         ):
             with self.subTest(values=values, source_tree=source_tree), mock.patch.dict(os.environ, values), \
-                    mock.patch("cad_server._internal.channel._source_tree", return_value=source_tree):
-                self.assertEqual(channel.told(), expected)
-
-    def test_the_notice_is_one_line_that_names_the_release_and_no_command(self) -> None:
-        self.assertIsNone(updates.latest())
-        self.just_read(FEED)
-        self.assertEqual(updates.latest(), "0.9.0")
-        found = updates.notice()
-        self.assertEqual(found, {"latest": "0.9.0", "version": "0.8.1"})
-        self.assertEqual(updates.line(found), "A new version of cad is available: 0.8.1 -> 0.9.0")
-        with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": "0"}):
-            self.assertIsNone(updates.latest())
-        # Never from a process that is not told: a development build.
-        with mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": "0.8.1-dev.20261113120000"}):
-            self.assertIsNone(updates.notice())
-
-    def test_an_app_s_newer_server_shows_the_release_with_no_network(self) -> None:
-        """A shim whose release is newer than the engine's proves a release exists: the button shows,
-        with no feed read, and an update moves to it; an older or a broken one is no release."""
-        with mock.patch.object(updates, "_get", side_effect=AssertionError("the network")), \
-                mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": "0"}):
-            self.assertIsNone(updates.notice())
-            for said in ("0.8.0", "0.8.1", "not a release", None):
-                updates.see(said)
-            self.assertIsNone(updates.notice())
-            updates.see("0.9.2")
-            self.assertEqual(updates.notice(), {"latest": "0.9.2", "version": "0.8.1"})
+                    mock.patch("cad_server._internal.editable._source_tree", return_value=source_tree):
+                self.assertEqual(updates.checking(), expected)
 
     def test_the_feed_is_read_at_most_once_an_hour_and_kept_when_unreachable(self) -> None:
         asked: list[str] = []
@@ -112,72 +77,17 @@ class UpdatesTest(unittest.TestCase):
             with self.subTest(broken=broken):
                 self.assertIsNone(updates.parse_feed(broken))
 
-    def test_the_newest_release_is_offered_until_the_install_has_it(self) -> None:
-        # The notice stays while behind.
-        self.just_read(FEED)
-        self.assertEqual([updates.notice()["latest"], updates.notice()["latest"]], ["0.9.0", "0.9.0"])
-        self.just_read({"latest": "0.9.1"})
-        self.assertEqual(updates.notice()["latest"], "0.9.1")
-        with mock.patch.object(cad_server, "__version__", "0.9.1"):
-            self.assertIsNone(updates.notice())
-
-    def installed(self, name: str) -> Path:
-        """Version ``name``'s code marker, as ``versions.make_present`` writes it (its environment this Python's)."""
-        code = self.tmp / places.VERSIONS / name / places.CODE
-        code.mkdir(parents=True)
-        record = {"schema": places.VERSION_SCHEMA, "version": name, "python": sys.executable, "cad": sys.executable,
-                  "prefix": sys.prefix}
-        (code / places.VERSION_MARKER).write_text(json.dumps(record), encoding="utf-8")
-        places._versioned.cache_clear()
-        self.addCleanup(places._versioned.cache_clear)
-        return self.tmp / places.VERSIONS / name
-
-    def read_by_this_version(self, feed: dict) -> None:
-        """The feed as just read, in this installed version's own data folder."""
-        cache = places.data_dir() / updates.FILE
-        cache.parent.mkdir(parents=True, exist_ok=True)
-        cache.write_text(json.dumps({"checked": time.time(), "feed": feed}), encoding="utf-8")
-
-    def test_only_the_newest_installed_version_says_a_newer_release_is_out(self) -> None:
-        # Decided as the cleanup decides whether its version is the newest installed (``versions.newest``): a version
-        # with a newer one beside it says nothing, on a command's line or a page's nudge.
-        (self.installed("0.8.1") / versions.DEFAULT_CHANNEL_USED).write_bytes(b"")
-        self.installed("0.8.0")
-        self.read_by_this_version(FEED)
-        expected = {"latest": "0.9.0", "version": "0.8.1"}
-        self.assertEqual((updates.notice(), updates.offered()), (expected, expected), "the newest installed: told")
-        self.installed("0.8.2")
-        self.assertEqual((updates.notice(), updates.offered()), (None, None), "a newer one installed: quiet")
-        with mock.patch.object(versions, "newest", side_effect=OSError("unreadable")):
-            self.assertEqual(updates.notice(), expected, "the versions not listed: as before, never quiet by accident")
-        self.just_read(FEED)  # where a process of no version keeps it
-        with mock.patch.object(places, "versioned", return_value=None):
-            self.assertEqual(updates.notice(), expected, "a process of no version: as before")
-
-    @unittest.skipIf(os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0),
-                     "a folder's mode does not keep this user out")
-    def test_a_versions_folder_that_cannot_be_read_leaves_the_notice_as_it_was(self) -> None:
-        self.installed("0.8.1")
-        self.installed("0.8.2")
-        self.just_read(FEED)  # where a process of no version keeps it: this one, once its folder cannot be read
-        root = self.tmp / places.VERSIONS
-        root.chmod(0)
-        self.addCleanup(root.chmod, 0o755)
-        places._versioned.cache_clear()
-        self.assertEqual(updates.notice(), {"latest": "0.9.0", "version": "0.8.1"})
-
     def test_nothing_is_checked_when_turned_off_in_ci_or_for_a_development_build(self) -> None:
         self.just_read(FEED)
         for values in ({"CAD_UPDATE_CHECK": "0"}, {"CI": "true"}, {"CAD_INSTALLATION_VERSION": "0.8.1-dev.1"}):
             with self.subTest(values=values), mock.patch.dict(os.environ, values):
                 asked: list[str] = []
-                self.assertIsNone(updates.notice())
                 updates.feed(now=time.time() + 2 * updates.CHECK_SECONDS, get=asked.append)
                 self.assertEqual((asked, updates.refresh()), ([], None))
 
     def test_nothing_waits_on_the_feed(self) -> None:
-        # A feed that is due is read in the background, and whatever asks meanwhile -- a page, a launch,
-        # a tool's result -- is told from the feed as last read: offline or slow, nothing waits.
+        # A feed that is due is read in the background, and whatever asks meanwhile is told the feed as last read:
+        # offline or slow, nothing waits.
         (self.tmp / updates.FILE).write_text(json.dumps({"checked": 0, "feed": FEED}), encoding="utf-8")
         reading, answer = threading.Event(), threading.Event()
 
@@ -189,21 +99,26 @@ class UpdatesTest(unittest.TestCase):
         with mock.patch.object(updates, "_get", get):
             thread = updates.refresh()
             self.assertTrue(reading.wait(30))
-            self.assertEqual(updates.notice()["latest"], "0.9.0")
+            self.assertEqual(updates.feed(fetch=False)["latest"], "0.9.0")
             self.assertIsNone(updates.refresh(), "an hour's read is not asked for twice")
             answer.set()
             thread.join(30)
-        self.assertEqual(updates.notice()["latest"], "0.9.1")
+        self.assertEqual(updates.feed(fetch=False)["latest"], "0.9.1")
 
-    def test_no_command_reads_the_feed(self) -> None:
-        # A command says a newer release the feed as last read names (``test_pins``), and never reads it: a server
-        # does, in the background. (Telemetry's notice is not this test's: ``cad_server/analytics.py``.)
+    def test_no_command_reads_the_feed_or_says_a_newer_release_is_out(self) -> None:
+        # A server reads the feed, in the background, for cad's own update, which is silent: no command reads it, and
+        # none says a newer release is out, `cad --version` included. (Telemetry's notice is not this test's.)
         self.environment({"DO_NOT_TRACK": "1"})
-        out, err = io.StringIO(), io.StringIO()
-        with mock.patch.object(updates, "_get") as get, contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            self.assertEqual(cadgen_main(["telemetry"]), 0)
-        get.assert_not_called()
-        self.assertEqual(err.getvalue(), "")
+        self.just_read({"latest": "9.9.9"})
+        for argv in (["telemetry"], ["--version"]):
+            out, err = io.StringIO(), io.StringIO()
+            with self.subTest(argv=argv), mock.patch.object(updates, "_get") as get, contextlib.redirect_stdout(out), \
+                    contextlib.redirect_stderr(err):
+                self.assertEqual(cadgen_main(argv), 0)
+                get.assert_not_called()
+                self.assertEqual(err.getvalue(), "")
+                self.assertNotIn("9.9.9", out.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

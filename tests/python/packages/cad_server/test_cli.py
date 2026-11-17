@@ -67,8 +67,7 @@ class Dispatch(unittest.TestCase):
 
         from cad_server._internal import installations
 
-        with mock.patch.dict("os.environ", {installations.NAME_ENV: ""}), \
-                mock.patch.object(installations, "editable", return_value=False):
+        with mock.patch.dict("os.environ", {installations.NAME_ENV: ""}):
             code, out, _ = self._run(["--version"])
         self.assertEqual(code, 0)
         self.assertEqual(out.strip(), f"cad {__version__}")

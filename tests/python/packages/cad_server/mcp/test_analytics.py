@@ -32,11 +32,11 @@ from cad_server.mcp.ui import AppPage
 from cad_server.viewer.recents import RecentStore
 
 # Where the notice is said, and the default holds: a release's process outside CI (a checkout is a development build
-# unless it is told the version it runs as, and then sends nothing by default: ``cad_server/_internal/channel.py``).
+# unless it is told the version it runs as, and then sends nothing by default: ``cad_server/_internal/editable.py``).
 # Every test runs there unless it says otherwise.
 RELEASE = __import__("cad_server").__version__
 TOLD = {"CAD_INSTALLATION_VERSION": RELEASE, "CI": ""}
-# A development build's name, which makes a process one (``channel.development``).
+# A development build's name, which makes a process one (``editable.development``).
 DEVELOPMENT = {"CAD_INSTALLATION_VERSION": f"{RELEASE}-dev.20261113120000"}
 QUIET = {"DO_NOT_TRACK": "", "CAD_TELEMETRY": "", NOTICE_ENV: "", **TOLD}
 
@@ -63,14 +63,14 @@ class _Tmp(unittest.TestCase):
         self.addCleanup(threads.stop)
         self.addCleanup(lambda: [thread.join(10) for thread in begun])
 
-    def serve(self, channel: str | None, client: str = "codex-mcp-client") -> tuple[Server, list[dict]]:
+    def serve(self, client: str = "codex-mcp-client") -> tuple[Server, list[dict]]:
         sent: list[dict] = []
-        # A session on its launcher's delivery channel (``cad-mcp --channel``), as the engine's sessions see the
-        # recorder (``mcp.http.Sessions``: ``Recorder.of``).
+        # A session of an agent app's, as the engine's sessions see the recorder (``mcp.http.Sessions``:
+        # ``Recorder.of``).
         recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or True)
         (self.tmp / "app").mkdir(exist_ok=True)
         server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
-                        analytics=recorder.of(channel, client))
+                        analytics=recorder.of(client))
         server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": {},
                                      "clientInfo": {"name": client, "version": "0.159.0"}}), None)
         return server, sent
@@ -250,11 +250,11 @@ class OneAnswerTest(_Tmp):
         self.assertEqual(len(sent), 1)
 
     def test_only_a_page_answers_and_its_toggle_changes_it_whenever(self) -> None:
-        server, sent = self.serve(None, client="some-terminal-agent")
+        server, sent = self.serve(client="some-terminal-agent")
         with self.assertRaisesRegex(RpcError, "unknown tool"):  # a client with no page has no cad_http
             self.agent(server, "PUT", "/api/v1/settings", {"telemetry": {"share": True}})
         self.assertEqual(status(path=self.path)["reason"], "untold")
-        server, sent = self.serve(None)
+        server, sent = self.serve()
         self.consent(server, True)
         self.assertTrue(status(path=self.path)["sharing"])
         self.consent(server, False)  # the app menu's toggle changes it whenever
@@ -269,7 +269,7 @@ class OneAnswerTest(_Tmp):
 
 class ServerCountsTest(_Tmp):
     def test_a_yes_sends_use_files_counted_and_metadata_and_nothing_the_person_made(self) -> None:
-        server, sent = self.serve("claude")
+        server, sent = self.serve()
         self.assertNotIn("ask", self.consent(server))  # nothing in a CAD app asks: a command tells
         self.consent(server, True)
         secret, plate = self.tmp / "secret-bracket.step", self.tmp / "secret-plate.STL"
@@ -295,10 +295,10 @@ class ServerCountsTest(_Tmp):
             {"name": "tool", "tool": "cad_open", "calls": 1, "errors": 0},
             {"name": "view", "calls": 1},
         ])
-        # Schema 11: the session's delivery channel and the app its client names, two fields of the batch.
-        self.assertEqual((payload["schema"], payload["process"], payload["channel"], payload["app"],
-                          payload["presentation"], payload["client"]["name"]),
-                         (11, "app", "claude", "codex", "tabs", "codex-mcp-client"))
+        # Schema 11: the app its client names, a field of the batch; no channel.
+        self.assertEqual((payload["schema"], payload["process"], payload["app"], payload["presentation"],
+                          payload["client"]["name"], "channel" in payload),
+                         (11, "app", "codex", "tabs", "codex-mcp-client", False))
         # Under an id of its own, stamped with the time it was made: a random id, and a whole second.
         self.assertEqual(str(uuid.UUID(payload["batch"], version=4)), payload["batch"])
         self.assertIsInstance(payload["at"], int)
@@ -317,7 +317,7 @@ class ServerCountsTest(_Tmp):
     def test_a_views_controls_are_counted_by_name_and_seconds_only_with_consent(self) -> None:
         # The page's report of what a person used (`@cad/ui`'s `usage/controls.js`), through the CAD app's
         # own route: counted only under the person's yes.
-        server, sent = self.serve("claude")
+        server, sent = self.serve()
         report = {"controls": [{"control": "pencil", "count": 2, "seconds": 95}, {"control": "display_xray", "count": 1, "seconds": 0}]}
         self.assertEqual(self.http(server, "POST", "/api/v1/local/activity", report)[0], 204)
         self.assertFalse(server.analytics.flush(), "nobody told, nothing said yes: nothing goes")
@@ -361,7 +361,7 @@ class ServerCountsTest(_Tmp):
 
     def test_a_server_nobody_used_sends_nothing(self) -> None:
         # Codex starts a server per thread, and some only to list tools: none of them is a user.
-        server, sent = self.serve("claude")
+        server, sent = self.serve()
         self.consent(server, True)
         self.call(server, "cad_sync", {"view": "v", "surface": "sidebar"})
         self.assertFalse(server.analytics.flush())
@@ -448,7 +448,7 @@ class ServerCountsTest(_Tmp):
         self.assertEqual(following, sent)
 
     def test_a_failed_call_says_why_by_a_word_chosen_where_it_failed_never_what_it_said(self) -> None:
-        server, sent = self.serve("claude")
+        server, sent = self.serve()
         self.consent(server, True)
         notes = self.tmp / "secret-notes.txt"
         notes.write_text("not CAD", encoding="utf-8")
@@ -475,7 +475,7 @@ class ServerCountsTest(_Tmp):
         # Answered with an error before any tool runs, each is counted all the same: a tool of cadgen's this host was
         # not listed (a text host shows no views) as its own, no view; a name cadgen has no tool by, or none at all,
         # as `cad_unknown`'s -- never the host's string; arguments that are no object as that tool's bad request.
-        server, sent = self.serve("claude", client="some-agent")
+        server, sent = self.serve(client="some-agent")
         self.assertTrue(server.text, "no extension, no known launcher: a text host")
         choose(True, by="cli", path=self.path)
         context = RequestContext(1, {"threadId": "t"})
@@ -630,7 +630,7 @@ class ServerCountsTest(_Tmp):
         self.assertEqual(sent[-2]["events"][0], {"name": "files", "kind": "glb", "count": 3})
 
     def test_counts_go_from_the_notice_on_without_a_restart(self) -> None:
-        server, sent = self.serve(None)
+        server, sent = self.serve()
         self.call(server, "cad_show", {"source": "a.step"})
         self.assertEqual(self.consent(server), {"share": False, "reason": "untold", "policy": PRIVACY_URL})
         self.assertFalse(server.analytics.flush())
@@ -650,7 +650,7 @@ class ServerCountsTest(_Tmp):
         self.assertEqual(sent[0]["install"], status(path=self.path)["id"])
 
     def test_an_off_deletes_the_id_and_asks_for_deletion_and_no_agent_reaches_the_setting(self) -> None:
-        server, sent = self.serve("claude", "codex-mcp-client")
+        server, sent = self.serve("codex-mcp-client")
         server.analytics.choose(True, by="app")
         identity = status(path=self.path)["id"]
         deleted = threading.Event()
@@ -689,7 +689,7 @@ class ServerCountsTest(_Tmp):
             self.call(server, "cad_telemetry")
 
     def test_an_off_reports_when_the_choice_cannot_be_saved(self) -> None:
-        server, _ = self.serve("claude")
+        server, _ = self.serve()
         server.analytics.choose(True, by="app")
         with mock.patch("cad_server.settings.write_bytes_atomic", side_effect=OSError("read only")):
             code, answer = self.http(server, "PUT", "/api/v1/settings", {"telemetry": {"share": False}})
@@ -770,8 +770,8 @@ class SenderTest(_Tmp):
                                "health": {"workers": 1, "crashes": 1}, "crashes": [died(-11)]}, path=self.path))
         self.assertTrue(app.flush())
         commands, own = sent  # the spool's batch, then the app's own
-        self.assertEqual((commands["process"], commands["schema"], commands["version"], commands["channel"]),
-                         ("cli", own["schema"], own["version"], own["channel"]))
+        self.assertEqual((commands["process"], commands["schema"], commands["version"], "channel" in commands),
+                         ("cli", own["schema"], own["version"], False))
         self.assertEqual({key for key in ("client", "presentation") if key in commands}, set())
         self.assertEqual([event["name"] for event in commands["events"]], ["build", "health", "exception"])
         self.assertEqual((commands["events"][0]["via"], commands["events"][2]["type"]), ("script", "WorkerDied"))
@@ -839,10 +839,9 @@ class SenderTest(_Tmp):
 
 
 class WhereFromTest(_Tmp):
-    """Where a count came from, schema 11's two batch fields (`cad_server/_internal/channel.py`'s `describe`): the
-    delivery channel of the session or request it counted (`default` for none, `dev` from a development build) and the
-    app, detected -- one batch for each pair. No environment of a server says a channel: the configs of 0.11.10 and
-    earlier that set `CAD_INSTALL_CHANNEL` are ignored."""
+    """Where a count came from, schema 11's batch field (``analytics._app``): the app, detected -- one batch for each.
+    No batch says a channel: nothing of a server's or a session's names one, and the configs of 0.11.10 and earlier
+    that set `CAD_INSTALL_CHANNEL` are ignored."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -850,153 +849,58 @@ class WhereFromTest(_Tmp):
         self.sent: list[dict] = []
         self.recorder = Recorder(path=self.path, send=lambda payload: self.sent.append(payload) or True)
 
-    def test_each_session_s_channel_and_app_is_a_batch_of_its_own(self) -> None:
-        store = self.recorder.of("codex", "codex-mcp-client")
-        default = self.recorder.of(None, "claude-code")
-        store.started(client={"name": "codex-mcp-client", "version": "0.163.0"}, presentation="tabs")
-        default.started(client={"name": "claude-code", "version": "2.1.0"}, presentation="text")
-        store.called("cad_show", True)
-        default.called("cad_show", True)
-        default.called("cad_view", True)
+    def test_each_session_s_app_is_a_batch_of_its_own(self) -> None:
+        codex = self.recorder.of("codex-mcp-client")
+        claude = self.recorder.of("claude-code")
+        codex.started(client={"name": "codex-mcp-client", "version": "0.163.0"}, presentation="tabs")
+        claude.started(client={"name": "claude-code", "version": "2.1.0"}, presentation="text")
+        codex.called("cad_show", True)
+        claude.called("cad_show", True)
+        claude.called("cad_view", True)
         with mock.patch.dict("os.environ", {"CAD_INSTALL_CHANNEL": "claude-github", "CAD_AUTO_UPDATED": "1"}):
             self.assertTrue(self.recorder.flush())
-        by = {(batch["channel"], batch["app"]): batch for batch in self.sent}
-        self.assertEqual(set(by), {("codex", "codex"), ("default", "claude-code")})
-        self.assertEqual((by["codex", "codex"]["client"]["name"], by["codex", "codex"]["presentation"],
-                          [event["tool"] for event in by["codex", "codex"]["events"]]),
+        by = {batch["app"]: batch for batch in self.sent}
+        self.assertEqual(set(by), {"codex", "claude-code"})
+        self.assertEqual((by["codex"]["client"]["name"], by["codex"]["presentation"],
+                          [event["tool"] for event in by["codex"]["events"]]),
                          ("codex-mcp-client", "tabs", ["cad_show"]))
-        self.assertEqual((by["default", "claude-code"]["presentation"],
-                          [event["tool"] for event in by["default", "claude-code"]["events"]]),
+        self.assertEqual((by["claude-code"]["presentation"], [event["tool"] for event in by["claude-code"]["events"]]),
                          ("text", ["cad_show", "cad_view"]))
         self.assertEqual(len({batch["batch"] for batch in self.sent}), 2, "each under an id of its own")
         self.assertEqual({batch["schema"] for batch in self.sent}, {11})
+        self.assertFalse(any("channel" in batch for batch in self.sent), "no channel, nothing derived from one")
 
     def test_a_page_and_a_development_build(self) -> None:
-        # The browser viewer's own client name is no MCP client's: it names no app. Nothing in the server's
-        # environment names a channel: the default's.
+        # The browser viewer's own client name is no MCP client's: it names no app.
         viewer = Recorder(process="viewer", path=self.path, send=lambda payload: self.sent.append(payload) or True)
         viewer.started(client={"name": "cad-viewer", "version": RELEASE}, presentation="browser")
         viewer.viewed()
         self.assertTrue(viewer.flush())
-        self.assertEqual((self.sent[-1]["channel"], self.sent[-1]["app"], self.sent[-1]["client"]["name"]),
-                         ("default", "unknown", "cad-viewer"))
-        # A development build says `dev`, whatever channel its session names.
+        self.assertEqual((self.sent[-1]["app"], self.sent[-1]["client"]["name"], "channel" in self.sent[-1]),
+                         ("unknown", "cad-viewer", False))
+        # A development build, sending with telemetry turned on, says its app and its version's name.
         with mock.patch.dict("os.environ", DEVELOPMENT):
             development = Recorder(path=self.path, send=lambda payload: self.sent.append(payload) or True)
-            development.of("claude", "cursor-vscode").called("cad_show", True)
+            development.of("cursor-vscode").called("cad_show", True)
             self.assertTrue(development.flush())
-        self.assertEqual((self.sent[-1]["channel"], self.sent[-1]["app"]), ("dev", "cursor"))
+        self.assertEqual((self.sent[-1]["app"], self.sent[-1]["version"], "channel" in self.sent[-1]),
+                         ("cursor", DEVELOPMENT["CAD_INSTALLATION_VERSION"], False))
 
     def test_a_spool_row_says_who_counted_it_and_is_sent_as_that(self) -> None:
-        # A build the daemon answered for a request on the codex channel from a Claude Code shell, and a row a version
-        # that is gone kept (handed on to this one: ``hand_on``).
-        self.assertTrue(spool({"features": ["drawing"]}, path=self.path, env={"CLAUDECODE": "1"}, channel="codex"))
+        # A build the daemon answered for a request from a Claude Code shell, and a row an earlier build kept with a
+        # channel (read as ever, the channel left out).
+        self.assertTrue(spool({"features": ["drawing"]}, path=self.path, env={"CLAUDECODE": "1"}))
         kept = json.loads(self.path.with_name(analytics.SPOOL).read_text(encoding="utf-8"))
-        self.assertEqual(kept["source"], {"version": RELEASE, "channel": "codex", "app": "claude-code"})
+        self.assertEqual(kept["source"], {"version": RELEASE, "app": "claude-code"})
         other = {**kept, "source": {"version": "0.11.99", "channel": "default", "app": "codex"}}
         with self.path.with_name(analytics.SPOOL).open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(other) + "\n")
         sender = Recorder(process="cli", path=self.path, send=lambda payload: self.sent.append(payload) or True)
         self.assertTrue(sender.flush())
-        self.assertEqual(sorted((batch["version"], batch["channel"], batch["app"]) for batch in self.sent),
-                         sorted([("0.11.99", "default", "codex"), (RELEASE, "codex", "claude-code")]))
+        self.assertEqual(sorted((batch["version"], batch["app"]) for batch in self.sent),
+                         sorted([("0.11.99", "codex"), (RELEASE, "claude-code")]))
+        self.assertFalse(any("channel" in batch for batch in self.sent))
         self.assertEqual({key for batch in self.sent for key in ("client", "presentation") if key in batch}, set())
-
-    def test_what_a_version_kept_is_handed_on_once(self) -> None:
-        leaving = self.tmp / "leaving" / "settings.json"
-        leaving.parent.mkdir()
-        leaving.write_text(self.path.read_text(encoding="utf-8"), encoding="utf-8")  # imported: the same answer
-        self.assertTrue(spool({"features": ["drawing"]}, path=leaving, env={}))
-        self.recorder.called("cad_show", True)
-        self.recorder.close()  # its batch kept whole as it exits
-        os.replace(self.path.with_name(KEPT), leaving.with_name(KEPT))
-        self.assertEqual(analytics.hand_on(leaving, self.path), 2)
-        self.assertFalse(leaving.with_name(analytics.SPOOL).exists())
-        self.assertEqual(analytics.hand_on(leaving, self.path), 0, "nothing is moved twice")
-        sender = Recorder(process="cli", path=self.path, send=lambda payload: self.sent.append(payload) or True)
-        sender.flush()
-        self.assertEqual(sorted(event["name"] for batch in self.sent for event in batch["events"]),
-                         ["feature", "tool"])
-
-
-class EveryVersionOwesTest(_Tmp):
-    """A no deletes what was sent under every install id the device's versions hold: asked for by the version that
-    takes it (``everywhere``), by whichever version sends next (``_forget_owed``), and handed on by one that leaves
-    (``hand_on``). This process's own settings are ``self.path``; two other versions' and the state folder's beside
-    them (``_settings_everywhere``)."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.device, self.other, self.third = (self.tmp / name / "settings.json" for name in ("device", "other", "third"))
-        for path in (self.device, self.other, self.third):
-            path.parent.mkdir()
-        for patch in (mock.patch("cad_server.analytics.settings_path", return_value=self.path),
-                      mock.patch("cad_server.analytics._settings_everywhere",
-                                 return_value=[self.device, self.other, self.third, self.path])):
-            patch.start()
-            self.addCleanup(patch.stop)
-
-    def section(self, path: Path) -> dict:
-        return json.loads(path.read_text(encoding="utf-8"))["telemetry"]
-
-    def on(self, path: Path) -> str:
-        """A version sharing under an install id of its own (one turned on again there, or one with nothing to import)."""
-        choose(True, by="cli", path=path)
-        return self.section(path)["id"]
-
-    def test_a_no_at_a_terminal_asks_for_every_version_s_id_at_once(self) -> None:
-        mine, theirs, third = self.on(self.path), self.on(self.other), self.on(self.third)
-        asked: list[str] = []
-        chosen = choose(False, by="cli", forget=lambda install_id: asked.append(install_id) or True)
-        self.assertTrue(chosen["forgotten"])
-        self.assertEqual(asked, [mine, theirs, third])
-        for path in (self.path, self.device, self.other, self.third):
-            with self.subTest(path=path.parent.name):
-                self.assertEqual((self.section(path)["choice"], "id" in self.section(path),
-                                  "forget" in self.section(path)), ("off", False, False))
-
-    def test_unreached_the_receiver_costs_one_wait_and_the_rest_stay_owed(self) -> None:
-        mine, theirs, third = self.on(self.path), self.on(self.other), self.on(self.third)
-        asked: list[str] = []
-        choose(False, by="cli", forget=lambda install_id: asked.append(install_id) or install_id == mine)
-        self.assertEqual(asked, [mine, theirs], "nothing asked after the first not heard")
-        self.assertNotIn("forget", self.section(self.path))
-        self.assertEqual((self.section(self.other)["forget"], self.section(self.third)["forget"]), ([theirs], [third]))
-        self.assertEqual(self.section(self.third)["choice"], "off", "the no kept everywhere all the same")
-        # Offline from the first request: this version's own is the one asked, and every other stays owed.
-        again = self.on(self.path)
-        asked.clear()
-        self.assertFalse(choose(False, by="cli", forget=lambda install_id: asked.append(install_id) or False)["forgotten"])
-        self.assertEqual(asked, [again])
-        self.assertEqual((self.section(self.other)["forget"], self.section(self.third)["forget"]), ([theirs], [third]))
-
-    def test_the_next_send_asks_for_what_any_version_owes(self) -> None:
-        sender = Recorder(process="cli", path=self.path, send=lambda payload: True)
-        sender.flush()
-        self.assertEqual(self.deleted, [], "nothing owed anywhere: nothing asked")
-        theirs, third = self.on(self.other), self.on(self.third)
-        for path in (self.other, self.third):  # said in that version alone: owed there, and nowhere else
-            choose(False, by="cli", path=path)
-        asked: list[str] = []
-        with mock.patch("cad_server.analytics.request_deletion", side_effect=lambda install_id: asked.append(install_id) or False):
-            sender.flush()
-        self.assertEqual(asked, [theirs], "offline: one request, and the rest left for a later send")
-        self.assertEqual((self.section(self.other)["forget"], self.section(self.third)["forget"]), ([theirs], [third]))
-        sender.flush()
-        self.assertEqual(self.deleted, [theirs, third])
-        self.assertNotIn("forget", self.section(self.other))
-        self.assertNotIn("forget", self.section(self.third))
-
-    def test_a_version_that_leaves_hands_on_what_it_owes(self) -> None:
-        self.other.write_text(json.dumps({"telemetry": {"choice": "off", "forget": ["a", "b", "a"]}}), encoding="utf-8")
-        self.path.write_text(json.dumps({"telemetry": {"choice": "on", "disclosure": 1, "id": "c", "forget": ["b"]}}),
-                             encoding="utf-8")
-        self.assertEqual(analytics.hand_on(self.other, self.path), 0, "the count is of rows kept for sending")
-        self.assertEqual((self.section(self.path)["forget"], self.section(self.path)["id"]), (["b", "a"], "c"),
-                         "added once each, whatever the answer there")
-        self.assertNotIn("forget", self.section(self.other))
-        analytics.hand_on(self.other, self.path)
-        self.assertEqual(self.section(self.path)["forget"], ["b", "a"], "nothing moved twice")
 
 
 class BeforeTelemetryTest(_Tmp):
@@ -1046,7 +950,6 @@ class NoticeTest(_Tmp):
         self.assertIn("notifiedAt", json.loads(self.path.read_text(encoding="utf-8"))["telemetry"])
 
     def test_its_off_command_runs_the_installation_that_said_it_when_pasted(self) -> None:
-        from cad_server._internal import installations
         from cad_server.analytics import off_command
 
         uvx = "uvx --no-config --managed-python --python 3.14 --from"
@@ -1054,9 +957,7 @@ class NoticeTest(_Tmp):
         script.parent.mkdir()
         script.write_text("#!/bin/sh\n", encoding="utf-8")
         script.chmod(0o755)
-        launcher = self.tmp / "launcher"
-        env = {"CAD_STATE_DIR": str(self.tmp / "state"), "CAD_LAUNCHER_DIR": str(launcher),
-               "CAD_INSTALLATION_VERSION": "", "PATH": str(self.tmp / "nowhere")}
+        env = {"CAD_STATE_DIR": str(self.tmp / "state"), "CAD_INSTALLATION_VERSION": "", "PATH": str(self.tmp / "nowhere")}
         made = self.tmp / "uv" / "archive-v0" / "abc"  # an environment uvx made
         record = made / "lib" / "site-packages" / "cad-0.8.0.dist-info"
         record.mkdir(parents=True)
@@ -1071,25 +972,7 @@ class NoticeTest(_Tmp):
             wheel.write_bytes(b"")
             (record / "direct_url.json").write_text(json.dumps({"url": wheel.as_uri(), "archive_info": {}}), encoding="utf-8")
             self.assertEqual(off_command(), f"{uvx} {wheel} cad telemetry off")
-            # Registered (its CAD app's server started, or `cad doctor` ran): the `cad` command -- by its path
-            # while it is not the `cad` on PATH.
-            python, console = made / "bin" / "python", made / "bin" / "cad"
-            for path in (python, console):
-                path.parent.mkdir(exist_ok=True)
-                path.write_text("", encoding="utf-8")
-            installations.register("0.8.0-dev.20261026120000", (str(console), str(python), str(made)))
-            self.assertEqual(off_command(), f"{uvx} {wheel} cad telemetry off", "no `cad` command to run it")
-            installations.write_proxy()
-            proxy = installations.proxy_path()
-            self.assertEqual(off_command(), f"{proxy} telemetry off")
-            with mock.patch.dict("os.environ", {"PATH": str(launcher)}):
-                self.assertEqual(off_command(), "cad telemetry off")
-            # uvx's own environment first on PATH, with its own `cad` (the install command's `cad setup`): not
-            # the person's PATH, so not the command they type.
-            with mock.patch.dict("os.environ", {"PATH": os.pathsep.join((str(console.parent), str(launcher)))}):
-                self.assertEqual(off_command(), "cad telemetry off")
-            wheel.unlink()  # the wheel gone and nothing registered: this interpreter, as it runs now
-            installations.forget("0.8.0-dev.20261026120000")
+            wheel.unlink()  # the wheel gone: this interpreter, as it runs now
             with mock.patch("sys.argv", ["/x/cad_server/cli/__main__.py"]), mock.patch("sys.executable", "/venv/bin/python"):
                 self.assertEqual(off_command(), "/venv/bin/python -m cad_server.cli telemetry off")
         with mock.patch.dict("os.environ", env):
@@ -1150,7 +1033,7 @@ class NeverInTheWayTest(_Tmp):
     call = ServerCountsTest.call
 
     def test_a_broken_telemetry_layer_fails_nothing_and_logs_nothing_a_host_shows(self) -> None:
-        server, sent = self.serve("claude")
+        server, sent = self.serve()
         with mock.patch("cad_server.analytics.status", side_effect=RuntimeError("broken")), \
                 mock.patch("cad_server.analytics.choose", side_effect=RuntimeError("broken")), \
                 self.assertNoLogs("cad_server.analytics", level="INFO"):
@@ -1164,7 +1047,7 @@ class NeverInTheWayTest(_Tmp):
             server.analytics.close()
 
     def test_no_tool_call_waits_on_the_network(self) -> None:
-        server, sent = self.serve("claude")
+        server, sent = self.serve()
         self.consent(server, True)
         release, asked, finished = threading.Event(), threading.Event(), threading.Event()
         self.addCleanup(release.set)

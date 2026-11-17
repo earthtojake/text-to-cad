@@ -1,6 +1,6 @@
 """``cad cache dir | prune | clean``: cad's cache, as ``uv cache dir | prune | clean`` treat uv's.
 
-The cache is what cad makes again when it needs it, in its cache folder (``places.legacy_cache_dir``: ``CAD_CACHE_DIR``,
+The cache is what cad makes again when it needs it, in its cache folder (``places.cache_dir``: ``CAD_CACHE_DIR``,
 else ``~/.cache/cad``): the CAD kernel environment and the environments ``cad run`` makes (``base/``, one per release
 and set of integrations, ``cad_server._internal.base``), the engine's bytecode, hulls, MJCF assets, integrations'
 homes and kept interference measurements (``OWN``). Data is never in it: the documents the engine keeps there
@@ -49,9 +49,9 @@ def build_parser(prog: str = DEFAULT_PROG):
 
 def folder() -> Path:
     """cad's cache folder."""
-    from cad.engine.places import legacy_cache_dir
+    from cad.engine.places import cache_dir
 
-    return legacy_cache_dir()
+    return cache_dir()
 
 
 def _folders(parent: Path) -> list[Path]:

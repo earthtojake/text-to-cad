@@ -8,13 +8,6 @@ user's own uv settings (an index, a cache policy) from resolving it differently,
 --python 3.14`` (``PYTHON``) makes the installation the first command creates the same on every machine,
 whatever interpreter a GUI app's PATH happens to find first.
 
-An agent's shell cannot always run ``uvx``: it is often a sandbox, and uv writes its cache before it starts. So
-each version is installed in its own folder and writes the proxy, ``~/.local/bin/cad``
-(``cad_server._internal.installations``), and a command names its version, ``cad +<version> ...``, which runs that
-version and no other (``cad_server._internal.pins``): every thread and every command of one release share its
-daemon. A version that is not installed the proxy only says so; what installs version X is X's own code, by X's own
-line, ``uvx ... --from cad-server==X cad setup`` (``launch_command("cad setup", X)``), run outside the sandbox.
-
 Error hints and ``cad doctor`` print these from here; the plugin's server configs carry the same
 strings, stamped by the release and held to these by a repository test.
 """

@@ -20,7 +20,7 @@ from cad_server.mcp.protocol import RequestContext
 from cad_mcp.shim import Proxy, call
 from tests.python.support import engine_daemon
 # A release's process: a checkout is a development build, never told of a release and sending nothing by default,
-# unless it is told the version it runs as (``cad_server/_internal/channel.py``).
+# unless it is told the version it runs as (``cad_server/_internal/editable.py``).
 RELEASE = __import__("cad_server").__version__
 
 INIT = {'protocolVersion': '2025-11-25', 'clientInfo': {'name': 'codex-mcp-client'}, 'capabilities': {}}

@@ -63,7 +63,7 @@ DEFAULT_PROG = "cad setup"
 # Set by the updater of 0.11.x for an automatic update's first run of ``--engine-update``; it runs it again, without
 # it, once its server is idle.
 PREPARE_ENV = "CAD_UPDATE_PREPARE"
-# The helper's record of the move to the uv tool's server, in the data folder.
+# The helper's record of the move to the uv tool's server, in the state folder.
 MOVE_RECORD = "handover-move.json"
 # How long a server of 0.10.0 is given to say what it is, and its own stop to run.
 ASK_SECONDS = 5.0
@@ -291,7 +291,7 @@ def _appdata_serving() -> str | None:
 
     folder = places.appdata_engine_dir()
     if folder is None and places.WINDOWS and os.environ.get("CAD_ENGINE_DIR"):
-        folder = places.engines_dir()
+        folder = places.engine_dir()
     if folder is None:
         return None
     door = folder / f"{places.NAME}.port"
@@ -398,7 +398,7 @@ def tool() -> tuple[str, Path, str] | None:
 def move(name: str, told: Callable[[str], None]) -> bool:
     """Step 5 (see the module), from this server of release ``name`` that is not the uv tool's: whether the helper
     started. Never older: a uv tool cad older than this release stays where it is, and this server runs on."""
-    from cad.engine.places import data_dir, detached
+    from cad.engine.places import detached, state_dir
     from cad_server._internal import auto_update
 
     found = tool()
@@ -415,14 +415,14 @@ def move(name: str, told: Callable[[str], None]) -> bool:
         _point(release, (str(scripts / ("cad.exe" if windows else "cad")),
                          str(scripts / ("python.exe" if windows else "python")), str(environment)))
         command = auto_update.helper_command(release, now=time.time(), version=name, prefix=str(environment), uv=uv,
-                                             record=str(data_dir() / MOVE_RECORD))
+                                             record=str(state_dir() / MOVE_RECORD))
         inside = os.path.normcase(os.path.realpath(sys.prefix)).rstrip(os.sep) + os.sep
         if os.path.normcase(os.path.realpath(command[0])).startswith(inside):
             told("no Python outside this environment to hand over with: this server runs on")
             return False
         _start(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          env={key: value for key, value in os.environ.items() if key not in auto_update._UNSET},
-                         cwd=str(data_dir()), **detached())
+                         cwd=str(state_dir()), **detached())
     except (OSError, ValueError) as error:
         told(f"could not hand over to the uv tool's cad {release}: {error}")
         return False

@@ -36,9 +36,6 @@ class Session:
     holder: str | None = None  # the name of the stdio server's hold it was opened under (``release``)
     released: bool = False  # that hold is gone: the session ends once nothing runs in it
     calls: int = 0  # an agent's tool calls in flight (``Sessions.working``)
-    # The delivery label of the launcher that opened it (its ``pin``'s, ``cad_mcp``'s ``--channel``): None where it
-    # names none, as every launcher of 0.11.10 and earlier.
-    channel: str | None = None
 
     def close(self):
         self.server.sidebar_views.close()
@@ -96,18 +93,13 @@ class Sessions:
         page = AppPage(Path(directory)) if isinstance(directory, str) and directory else AppPage()
         app = ViewerApp(self.engine.server, host=self.engine.host, port=self.engine.server.port,
                          start=options.get('cwd') if isinstance(options.get('cwd'), str) else None)
-        # The session's launcher's delivery label (its ``pin``: ``cad_mcp``'s ``--channel``; none for a launcher that
-        # names none) and its client: every use it counts is counted under the two (``Recorder.of``), a batch of
-        # their own.
-        from cad.engine.places import CHANNEL
-        pin = options.get('pin') if isinstance(options.get('pin'), dict) else {}
-        channel = pin.get('channel') if isinstance(pin.get('channel'), str) and CHANNEL.fullmatch(pin['channel']) else None
+        # The session's client: every use it counts is counted under the app it names (``Recorder.of``), a batch
+        # of its own.
         client = params.get('clientInfo')
         client = client if isinstance(client, dict) else {}
-        analytics = self.engine.analytics.of(channel, client.get('name'))
+        analytics = self.engine.analytics.of(client.get('name'))
         app.analytics = analytics
         app.consent_by = "app"
-        app.channel = channel  # a store's session: its ``/api/v1/server`` carries no update notice
         # The link to the engine's own page (``GET /api/v1/local/link``), for a card's Copy link:
         # the card's capability already reaches everything a link does.
         app.issue_link = self.engine.fresh_link
@@ -129,8 +121,7 @@ class Sessions:
         result = server.handle('initialize', params, RequestContext(None, {}))
         holder = options.get('holder')
         holder = holder if isinstance(holder, str) and 0 < len(holder) <= 64 else None
-        return Session(server, result['protocolVersion'], str(client.get('name', 'unknown')), holder=holder,
-                       channel=channel), result
+        return Session(server, result['protocolVersion'], str(client.get('name', 'unknown')), holder=holder), result
 
     def handle(self, request, response):
         origin = request.header('origin')
@@ -199,7 +190,6 @@ class Sessions:
             if agent:
                 with self.lock:
                     session.calls += 1
-                self._used(session.channel)
             try:
                 meta = params.get('_meta') if isinstance(params.get('_meta'), dict) else {}
                 result = session.server.handle(method, params, RequestContext(request_id, meta))
@@ -221,20 +211,6 @@ class Sessions:
                 with self.lock:
                     session.active -= 1
                     session.touched = time.monotonic()
-
-    @staticmethod
-    def _used(channel):
-        """An agent's tool call (on channel ``channel``, a label): this version's use recorded (``versions.used``),
-        by a version's server alone; a session whose launcher names no ``--channel`` marks it used on the default
-        channel (``default_channel``)."""
-        from cad.engine.places import versioned
-        if versioned() is None:
-            return
-        try:
-            from cad_server._internal import versions
-            versions.used(default_channel=channel is None)
-        except Exception:  # noqa: BLE001 - a mark, never a reason a call fails
-            pass
 
     @staticmethod
     def _result(response, ident, result, headers=()):

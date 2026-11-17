@@ -14,11 +14,9 @@ exits, each batch under an id of its own and stamped with the time it was made:
   for the batch, so a batch sent again is never counted twice;
 - what runs: which process (``app``, ``viewer``, or ``cli``: what ``cadgen`` commands and the daemon's
   model builds counted, a batch of its own from whichever process sends it), the version that counted it
-  (``installation_version``: a release's, or a development install's ``<version>-dev.<time>``), the delivery
-  channel of the requests or sessions it counted (``channel``: a pin's ``cad +<version>@<channel>`` or a
-  launcher's ``--channel``, ``default`` for none, ``dev`` from a development build) and the agent app that ran
-  them (``app``, detected: the MCP handshake's client name, else the markers an app sets in its shell, else
-  ``unknown``; ``cad_server/_internal/channel.py``'s ``describe``) -- one batch for each version, channel and app
+  (``installation_version``: a release's, or a development install's ``<version>-dev.<time>``) and the agent app
+  that ran what it counted (``app``, detected: the MCP handshake's client name, else the markers an app sets in its
+  shell, else ``unknown``; ``cad_server/_internal/engine_host.py``'s ``app``) -- one batch for each version and app
   a window counted --, the operating system and processor, and from the apps the agent app's name and version
   as its handshake says them and how that app shows CAD (tabs, inline or text) -- or, from the browser viewer,
   ``cad-viewer`` and ``browser``; a ``cli`` batch names no client;
@@ -102,7 +100,7 @@ It is sent by default once the person has been told, and never after their no. S
    to the settings, and not inherited by the processes it starts for others (``for_others``): a detached
    viewer and the telemetry sender go by the settings.
 2. The person's choice, kept as the ``telemetry`` section of their settings (``cad_server/settings.py``:
-   ``settings.json`` in the data folder) and shared by every process: either app's menu,
+   ``settings.json`` in the state folder) and shared by every process: either app's menu,
    or ``cad telemetry on|off``. A yes sends all of
    the above; a no, nothing.
 3. Otherwise the default: all of the above, from the moment the person has been told -- one line,
@@ -121,19 +119,18 @@ still be installed beside this one (a plugin not yet updated, while ``uvx cadgen
 reading only ``analytics``: a no here is said there too, and the id it sent under is deleted with
 this one's (``_stop_earlier``).
 
-Where a count came from is only reported, as ``channel`` and ``app``: it decides nothing here. A development build
-sends nothing by default (``_here``).
+Where a count came from is only reported, as ``app``: it decides nothing here. A development build sends nothing by
+default (``_here``).
 
 The install id exists only while sharing is on: turning it off deletes it here and asks the
-receiver to delete what it holds under it -- again and again until it hears back -- and turning it
-on again starts a new install, so nothing links the two. A no is said in every version on the device, each
-of whose ids is owed a deletion too (``everywhere``): whichever version sends next asks for what any of them
-owes (``_forget_owed``), and a version that leaves hands what it owes to the one that sends next (``hand_on``).
+receiver to delete what it holds under it -- again and again until it hears back (``_forget_owed``) -- and
+turning it on again starts a new install, so nothing links the two. Every release of cad on the device reads the
+one settings file in the state folder, so a no there is a no for each.
 
 Telemetry never gets in the way of CAD:
 
 - Nothing here raises into the process that counts. Every ``Recorder`` method is guarded: a failure
-  (an unreadable data folder, a broken receiver, a bug here) is logged at debug level, below
+  (an unreadable state folder, a broken receiver, a bug here) is logged at debug level, below
   what ``cad-mcp`` prints, so nothing reaches a host's or an agent's logs, and answered with a
   safe default: not sharing, nothing sent, nothing said.
 - No tool call, build or command waits on the network, and none needs it: offline, everything
@@ -147,7 +144,7 @@ Telemetry never gets in the way of CAD:
   makes a second copy the first one, never more counts. One the receiver read and refused
   (``REFUSED``) is dropped: it would be refused again, and take everything after it down with it.
 
-The answer is changed only under the data folder's one lock (``settings.update_section``), so the processes
+The answer is changed only under the state folder's one lock (``settings.update_section``), so the processes
 answering, opting out or making the install's id at once never undo one another. A settings file
 that is there but cannot be read counts as no answer that can be kept ("unavailable"), never as no
 answer yet, and is never written back over.
@@ -184,10 +181,9 @@ LOG = logging.getLogger("cad_server.analytics")
 OWN = frozenset({"cad", "cadgen", "cad_server"})
 
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
-# 11: where a batch comes from is two fields, ``channel`` (the delivery channel of the requests or sessions it
-# counted: a pin's or a launcher's, ``default`` for none, ``dev`` from a development build) and ``app`` (the agent
-# app, detected), one batch per pair; the combined channel values of 10 and earlier (an app's name joined to
-# where its copy came from) are no longer sent; and how a computer got to a version (``arrival``);
+# 11: where a batch comes from is one field, ``app`` (the agent app, detected), one batch per app; the channel of 10
+# and earlier (an app's name joined to where its copy came from) is no longer sent; and how a computer got to a
+# version (``arrival``);
 # 10: a CAD tool's call the engine could start no kernel process for (``tool_failure``'s ``no_kernel``), and
 # why, on its crash (``exception``'s ``cause``);
 # 9: the part of a snapshot's request a refusal named (``snapshot_failure``'s ``part``);
@@ -199,7 +195,7 @@ PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
 SCHEMA = 11
 # What a yes agreed to: the fields and events this module sends. Raise it when that grows, and a yes
 # to less counts as no answer again; a no stays a no. Restarts and updates that send nothing new keep
-# the answer: it lives in the version's data folder, which a new version imports, not in its code. Neither schema 4, 5 nor 6 raised it
+# the answer: it lives in the state folder, which every release reads, not in its code. Neither schema 4, 5 nor 6 raised it
 # (nor ``NOTICE``): each says more of what was told already -- why a counted call, build or snapshot failed,
 # in a word of ours; one more format; one more of cadgen's processes sending what commands counted, which
 # the daemon sent before -- and a batch's random id and time link nothing its process's id did not. Nor schema 7:
@@ -212,14 +208,13 @@ SCHEMA = 11
 # nor the daemon counting model builds again (``build`` of kind ``model``, ``health``, a build's ``exception``):
 # what 0.8 sent of them, under this disclosure, from the model's own process, with fewer failures than before.
 # Nor schema 11: where a batch came from was sent before as one value (the install's channel: an app's name joined to
-# where its copy came from), and is now two that say no more -- the delivery channel a pin or a launcher names
-# (``default`` for most, a store's name for a store's copy: what the old value's prefix and suffix said) and the
-# agent app, which the old values named and the MCP handshake's client name sent already -- under the same ids.
+# where its copy came from), and is now one that says less -- the agent app, which the old values named and the MCP
+# handshake's client name sent already -- under the same ids.
 # The notice ("usage stats and crash reports, tagged with a random ID") stays true of it word for word. Nor schema 11's
 # ``arrival``: whether a version's setup, its server's first serving and the hand-over after it went, and where one did
 # not, which, in a word of ours -- cad failing, as a crash report says it fails, never a message or a path -- by which
 # of two routes, and the version it came from, which the same install id's batches said already as their ``version``
-# (a version takes the id with the settings it imports from the one before). No field of the person's, no new identity.
+# (every release reads the one settings file, and the id in it). No field of the person's, no new identity.
 DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.
@@ -235,24 +230,16 @@ def notice_text() -> str:
 
 def off_command() -> str:
     """``cad telemetry off`` as a command that runs this installation when pasted, never one naming a
-    version it is not (a development wheel's is on no index): the ``cad`` command (``_through_proxy``) where
-    this installation is registered; else, for
-    an installation uvx made, the ``uvx`` line that makes it from what it was installed from (``_installed_from``:
-    the release's requirement, or the wheel); else ``cad`` where the ``cad`` on PATH is the script that runs
-    now, that script by its path, or this interpreter with ``-m cad_server.cli``."""
+    version it is not (a development wheel's is on no index): for an installation uvx made, the ``uvx`` line
+    that makes it from what it was installed from (``_installed_from``: the release's requirement, or the wheel);
+    else ``cad`` where the ``cad`` on PATH is the script that runs now, that script by its path, or this
+    interpreter with ``-m cad_server.cli``."""
     import shlex
     import shutil
 
     from cad_server._internal.launch import LAUNCHER
 
     quote = _windows_quote if os.name == "nt" else shlex.quote
-    try:
-        proxied = _through_proxy(quote)
-    except Exception:  # noqa: BLE001 - records that cannot be read name no command: the next way does
-        LOG.debug("could not read this installation's record", exc_info=True)
-        proxied = None
-    if proxied is not None:
-        return f"{proxied} telemetry off"
     if "archive-v0" in Path(sys.prefix).parts:  # uv's cache: an installation of the exact requirement
         source = _installed_from()
         if source is not None:
@@ -264,26 +251,6 @@ def off_command() -> str:
             return "cad telemetry off"
         return f"{quote(str(script))} telemetry off"
     return f"{quote(sys.executable)} -m cad_server.cli telemetry off"
-
-
-def _through_proxy(quote: Callable[[str], str]) -> str | None:
-    """``cad``: the ``cad`` command (``cad_server._internal.installations``), where a record names this
-    installation -- ``cad`` where that command is the one on the person's PATH (uvx's own
-    environment, first on PATH for the command it runs, is not theirs: ``installations.lasting``), else by its
-    path. ``None`` where no record names this installation, or the command is not there."""
-    import shutil
-
-    from cad_server._internal import installations
-    from cad_server._internal.installations import lasting
-
-    record = installations.here()
-    proxy = installations.proxy_path()
-    if record is None or installations.proxy_status(proxy) not in (installations.OK, installations.NEWER,
-                                                                     installations.STALE):
-        return None
-    found = shutil.which("cad", path=lasting(os.environ.get("PATH", os.defpath)))
-    on_path = found is not None and os.path.normcase(os.path.realpath(found)) == os.path.normcase(os.path.realpath(proxy))
-    return "cad" if on_path else quote(proxy)
 
 
 def _installed_from() -> str | None:
@@ -536,7 +503,7 @@ ARRIVAL_OUTCOMES = {"setup": frozenset({"ok", "failed"}), "serving": frozenset({
                     "handover": frozenset({"done", "failed", "gave_up", "superseded"})}
 # Why a step failed, a word chosen where it failed, never its message: a setup's -- no uv, or one that would not run
 # (``uv``), no network for what uv's cache lacks (``network``), a folder it may not write (``denied``: the causes
-# ``cad_server._internal.versions.Present.cannot`` names), anything else (``other``) -- and a hand-over's -- the
+# ``cad setup`` met), anything else (``other``) -- and a hand-over's -- the
 # program it ran said nothing of how it went (``no_report``), its setup failed (``setup``), what it updates did not
 # take the update (``app``), anything else (``other``).
 ARRIVAL_FAILURES = {"setup": frozenset({"uv", "network", "denied", "other"}),
@@ -714,7 +681,7 @@ _UNREAD = object()  # a process's first batch, before its first use: the answer 
 
 
 def _update(path: Path, change: Callable[[dict[str, Any]], dict[str, Any]]) -> dict[str, Any] | None:
-    """Change the telemetry section under the data folder's one lock: what is kept, or ``None`` when it
+    """Change the telemetry section under the state folder's one lock: what is kept, or ``None`` when it
     could not be read or written -- and then this process stops asking (``_can_keep``)."""
     try:
         return update_section(SECTION, change, path=path)
@@ -788,7 +755,7 @@ def _here(env: Any = None) -> bool:
     """Whether the default can hold in this process, or for the environment handed in: never in CI or from a
     development install, where nobody is told (``notify``) -- a person told elsewhere is, here, a machine or a
     developer at work."""
-    from cad_server._internal.channel import development
+    from cad_server._internal.editable import development
 
     return not _in_ci(env) and not development()
 
@@ -826,7 +793,7 @@ _KEEPS: set[Path] = set()  # state files whose folder took a file in this proces
 
 def _can_keep(path: Path) -> bool:
     """Whether an answer could be written to ``path``, found by doing what a write does -- a file
-    beside it, and the data folder's one lock opened and held -- rather than by ``os.access``, which calls
+    beside it, and the state folder's one lock opened and held -- rather than by ``os.access``, which calls
     every folder writable on Windows. A folder that passed is not tried again in this process, one
     that refused is, every time it matters; once a write has failed after all, this process asks
     no more (``_UNKEPT``)."""
@@ -862,17 +829,10 @@ def status(*, path: Path | None = None, probe: bool = True, keep: bool = True,
     ``unavailable`` (nothing is sent, and nothing said: no answer could be kept). Sharing makes the
     install's id where it is missing -- but with ``keep`` false (``cad doctor --check``, which writes
     nothing), which says the id as it is, none. ``probe=False`` takes no answer that could be kept for
-    ``unavailable`` without trying the data folder (``_can_keep``): a sender's question, which
+    ``unavailable`` without trying the state folder (``_can_keep``): a sender's question, which
     either way sends nothing.
     """
     path = path or settings_path()
-    if not keep:
-        # Read-only (``cad doctor --check``): the device's no, where it is newer than this version's answer, in force
-        # without being written here.
-        if _device_no(path):
-            return {"sharing": False, "reason": "choice", "id": None}
-    else:
-        _heed_device(path)
     forced = _environment(env)
     kept = _read(path)
     if kept is None:  # there, but unreadable now: neither sent under nor said
@@ -900,241 +860,15 @@ def status(*, path: Path | None = None, probe: bool = True, keep: bool = True,
 
 def choose(share: bool, *, by: str, path: Path | None = None,
            forget: Callable[[str], bool] | None = None) -> dict[str, Any]:
-    """Keep the person's choice (``_choose``); a no in this process's own settings -- the app menu's switch, ``cad
-    telemetry off``, ``cad setup --no-telemetry`` -- said in every other version on the device too (``everywhere``),
-    so a no is a no whichever version runs next. Given ``forget`` (a person at a terminal waits for it), the
-    deletions every other version owes are asked for too, each install id once -- but only once this process's own
-    were heard: unreached, the receiver costs that person one wait, never one for each version."""
-    forget = _once(forget) if forget is not None else None
-    chosen = _choose(share, by=by, path=path, forget=forget)
-    if not share and chosen.get("saved") and _own(path):
-        everywhere(by, forget=forget if chosen.get("forgotten") else None)
-    return chosen
-
-
-def _once(forget: Callable[[str], bool]) -> Callable[[str], bool]:
-    """``forget`` asking the receiver about each install id once: versions that imported one another's settings
-    hold the same id, and the answer for one file is the answer for all."""
-    heard: dict[str, bool] = {}
-
-    def ask(install_id: str) -> bool:
-        if install_id not in heard:
-            heard[install_id] = bool(forget(install_id))
-        return heard[install_id]
-
-    return ask
-
-
-def _own(path: Path | None) -> bool:
-    """Whether ``path`` is this process's own settings (``settings_path``): a choice there is the person's for the
-    device, where a test's or a tool's settings elsewhere are not."""
-    if path is None:
-        return True
-    try:
-        return os.path.normcase(os.path.realpath(path)) == os.path.normcase(os.path.realpath(settings_path()))
-    except OSError:
-        return False
-
-
-def _settings_everywhere() -> list[Path]:
-    """Every settings file a version on this device reads: each version's whose data is imported (one not imported
-    yet takes the no as it imports: ``inherit_no``), and the state folder's, which 0.11.10 and earlier read and every
-    process with no version does -- the device's one record of a no, kept whatever else goes
-    (``cad_server._internal.legacy``)."""
-    from cad.engine import places
-    from cad_server._internal import imports, versions
-    from cad_server.settings import FILE
-
-    found = [places.state_dir() / FILE]
-    for name in versions.folders():
-        if imports.imported(name):
-            found.append(places.data_dir(name) / FILE)
-    return found
-
-
-def everywhere(by: str, *, forget: Callable[[str], bool] | None = None) -> list[Path]:
-    """A no said in every settings file of the device but this process's own (``_settings_everywhere``), as ``cad
-    telemetry off`` would say it there (``_choose``): its install id deleted and owed a deletion there, what it kept
-    for sending deleted. The state folder's file is made where it is missing, in the form every release reads (the
-    ``telemetry`` section's ``choice``), so 0.11.10 and earlier, and a version installed later with nothing to import
-    from, start with it (``inherit_no``). Given ``forget``, what each file owes is asked for there and then
-    (``forget_pending``) -- a version removed before it runs again would take it away unasked -- until the first
-    request not heard: the no is still kept in every file after it, and what is not asked stays owed for the next
-    sender (``Recorder.flush``). What was written. Never raises: a file that cannot be written is skipped."""
-    done = []
-    mine = os.path.normcase(os.path.realpath(settings_path()))
-    try:
-        targets = _settings_everywhere()
-    except Exception:  # noqa: BLE001 - this version's no is kept already: the rest is best done, never a failure
-        LOG.debug("could not list the device's versions", exc_info=True)
-        return done
-    for target in targets:
-        if os.path.normcase(os.path.realpath(target)) == mine:
-            continue
-        try:
-            if not _choose(False, by=by, path=target)["saved"]:
-                continue
-            done.append(target)
-        except Exception:  # noqa: BLE001 - as above
-            LOG.debug("could not keep the no in %s", target, exc_info=True)
-            continue
-        if forget is not None:
-            try:
-                heard = forget_pending(path=target, forget=forget, stop=True)
-            except Exception:  # noqa: BLE001 - as above: what is not asked stays owed
-                LOG.debug("could not ask for what %s owes", target, exc_info=True)
-                heard = False
-            forget = forget if heard else None
-    return done
-
-
-def _forget_elsewhere(forget: Callable[[str], bool]) -> bool:
-    """The deletions owed in the device's other settings files (``_settings_everywhere``) asked for by this process's
-    sender, each heard taken off the list that held it: a version removed before it runs again (one left
-    unused, by the newest version's cleanup) would otherwise take what it owes away unasked. Each file read first, a
-    local read, so nothing is asked where nothing is owed; after the first request not heard nothing more is asked,
-    and the rest stay owed. It waits on the network where something is owed: only the sender calls it
-    (``_forget_owed``). Whether every one asked was heard. Never raises."""
-    try:
-        mine = os.path.normcase(os.path.realpath(settings_path()))
-        targets = _settings_everywhere()
-    except Exception:  # noqa: BLE001 - owed still, for a later send
-        LOG.debug("could not list the device's versions", exc_info=True)
-        return False
-    for target in targets:
-        try:
-            if os.path.normcase(os.path.realpath(target)) == mine:
-                continue
-            if not forget_pending(path=target, forget=forget, stop=True):
-                return False
-        except Exception:  # noqa: BLE001 - as above
-            LOG.debug("could not ask for what %s owes", target, exc_info=True)
-            return False
-    return True
+    """Keep the person's choice (``_choose``): the app menu's switch, ``cad telemetry off``. Given ``forget`` (a
+    person at a terminal waits for it), the deletion a no owes is asked for there and then."""
+    return _choose(share, by=by, path=path, forget=forget)
 
 
 def _forget_owed(path: Path | None = None) -> None:
-    """The deletions a sender asks for (``Recorder.flush``, and an opt-out's in the background): those its own
-    settings at ``path`` owe (``forget_pending``), then, where those are this process's own settings and every one
-    of theirs was heard, those any other version on the device owes (``_forget_elsewhere``) -- so whichever version
-    sends next asks for what every version owes, each install id once. It waits on the network: only the
-    background sender calls it."""
-    path = path or settings_path()
-    ask = _once(request_deletion)
-    if forget_pending(path=path, forget=ask) and _own(path):
-        _forget_elsewhere(ask)
-
-
-def _device_no(path: Path) -> bool:
-    """Whether the device's no (the state folder's settings, ``everywhere``) is newer than the answer the versioned
-    process's own settings at ``path`` hold, or they hold none -- what ``inherit_no`` would write there --, read and
-    nothing written. Never raises."""
-    try:
-        from cad.engine import places
-        from cad.engine.places import versioned
-        from cad_server.settings import FILE
-
-        if versioned() is None or not _own(path):
-            return False
-        device = places.state_dir() / FILE
-        if os.path.normcase(os.path.realpath(device)) == os.path.normcase(os.path.realpath(path)):
-            return False
-        said = _read(device) or {}
-        if said.get("choice") != "off":
-            return False
-        when = said.get("decidedAt") if isinstance(said.get("decidedAt"), (int, float)) else 0
-        kept = _read(path) or {}
-        held = kept.get("decidedAt") if isinstance(kept.get("decidedAt"), (int, float)) else None
-        return not (kept.get("choice") == "off" or (held is not None and held >= when))
-    except Exception:  # noqa: BLE001 - a read for a report
-        return False
-
-
-def inherit_no(path: Path) -> bool:
-    """A version's first start (``cad_server._internal.imports``): the device's no (the state folder's settings,
-    ``everywhere``) kept in its imported settings at ``path`` where it is newer than the answer they hold, or they
-    hold none -- so a version made present after a no, older or newer, with or without anything to import, sends
-    nothing. Whether it was. Never raises."""
-    try:
-        from cad.engine import places
-        from cad_server.settings import FILE
-
-        device = places.state_dir() / FILE
-        if os.path.normcase(os.path.realpath(device)) == os.path.normcase(os.path.realpath(path)):
-            return False
-        said = _read(device) or {}
-        if said.get("choice") != "off":
-            return False
-        when = said.get("decidedAt") if isinstance(said.get("decidedAt"), (int, float)) else 0
-        kept = _read(path) or {}
-        held = kept.get("decidedAt") if isinstance(kept.get("decidedAt"), (int, float)) else None
-        if kept.get("choice") == "off" or (held is not None and held >= when):
-            return False
-        return bool(_choose(False, by=str(said.get("by") or "device"), path=path)["saved"])
-    except Exception:  # noqa: BLE001 - an import never stops for telemetry
-        LOG.debug("could not keep the device's no in %s", path, exc_info=True)
-        return False
-
-
-# What a versioned process last saw of the device's settings file (``_heed_device``), by its own settings' path: the
-# file's modified time and size, so the file is read again only when it changed.
-_DEVICE_SEEN: dict[str, tuple[int, int]] = {}
-
-
-def _heed_device(path: Path) -> None:
-    """A versioned process's own settings (``path``) told the device's no whenever it is newer than their answer
-    (``inherit_no``): a no said where 0.11.10 and earlier keep it -- the state folder's settings, which their ``cad
-    telemetry off`` writes, and ``everywhere`` too -- after this version imported its settings, is this version's
-    no as well, from the next count or send on. Asked wherever an answer is read to count or send (``status``,
-    which every spool, batch and send reads first), cheaply: one ``stat`` of that file, read only when it changed
-    since this process last looked. Nothing for a process with no version (its settings are that file), nor for
-    settings not this process's own (a test's, a tool's). Never raises."""
-    try:
-        from cad.engine.places import state_dir, versioned
-        from cad_server.settings import FILE
-
-        if versioned() is None or not _own(path):
-            return
-        found = os.stat(state_dir() / FILE)
-    except Exception:  # noqa: BLE001 - no file there (nothing said there), or none that can be read now
-        return
-    seen, key = (found.st_mtime_ns, found.st_size), str(path)
-    if _DEVICE_SEEN.get(key) == seen:
-        return
-    _DEVICE_SEEN[key] = seen
-    inherit_no(path)
-
-
-def hand_on(source: Path, target: Path) -> int:
-    """What a version leaving the device had kept for sending -- its spool and its arrivals (each row says who
-    counted it: ``spool``'s ``source``) and the whole batches its processes kept as they exited (``KEPT``) -- moved to
-    another version's settings folder, ``target`` (both settings paths), for that version's sender: taken whole from
-    ``source`` under its lock, so no row is moved twice, then appended under ``target``'s. A row is sent only under
-    the answer it was kept under (``_drain``, ``send_kept``), and a batch's id makes a second copy the first. The
-    deletions it still owed (``forget``) go to ``target``'s list too, whatever ``target``'s own answer: a deletion
-    owed is owed, and that version's sender asks for it (``forget_pending``) -- kept there first, then taken off
-    ``source``'s, so one is asked for twice rather than never. A local move, never the network; nothing waits on a
-    send. How many rows were moved. Never raises."""
-    moved = 0
-    try:
-        for name, key in ((SPOOL, "counts"), (ARRIVALS, "arrival"), (KEPT, "batch")):
-            for entry in _take_spool(source, name, key):
-                if _keep(target, name, entry):
-                    moved += 1
-    except Exception:  # noqa: BLE001 - counts not moved are lost with the folder, never a failed removal
-        LOG.debug("could not hand on what %s kept for sending", source, exc_info=True)
-    try:
-        owed = list(dict.fromkeys(_pending(_read(source) or {})))
-        if owed:
-            def owe(section: dict[str, Any]) -> dict[str, Any]:
-                pending = _pending(section)
-                return {**section, "forget": [*pending, *(value for value in owed if value not in pending)]}
-
-            if _update(target, owe) is not None:
-                _update(source, lambda section: _without(section, owed))
-    except Exception:  # noqa: BLE001 - as above: lost with the folder, never a failed removal
-        LOG.debug("could not hand on the deletions %s owed", source, exc_info=True)
-    return moved
+    """The deletions a sender asks for (``Recorder.flush``, and an opt-out's in the background): those the settings
+    at ``path`` owe (``forget_pending``). It waits on the network: only the background sender calls it."""
+    forget_pending(path=path or settings_path(), forget=request_deletion)
 
 
 def _choose(share: bool, *, by: str, path: Path | None = None,
@@ -1674,30 +1408,33 @@ def hand_over(counts: dict[str, Any]) -> bool:
         return False
 
 
-def source(channel: str | None = None, env: Mapping[str, str] | None = None) -> dict[str, str]:
+def _app(client: str | None = None, environ: Mapping[str, str] | None = None) -> str:
+    """The agent app a count comes from, detected, never told: from the MCP handshake's client name where there is
+    one (``client``), else from the markers a program sets in its shell (read from ``environ``), else ``unknown``
+    (``engine_host.app``)."""
+    from cad_server._internal.engine_host import app
+
+    return app(client, environ) or "unknown"
+
+
+def source(env: Mapping[str, str] | None = None) -> dict[str, str]:
     """Where a command's or a build's counts come from, written into each spool row (``spool``) so that whichever
-    version's sender sends it -- this one's, or the version this one's folder is handed to as it goes
-    (``hand_on``) -- says who counted it: the version counting it now (``installation_version``), the delivery
-    channel of the request (``channel``: a build's ``request["channel"]``; this command's own pin's, by default) and
-    the agent app, detected from ``env`` (the asker's, by default this process's environment)."""
-    from cad.engine.places import channel as pinned
-    from cad_server._internal.channel import describe
-
+    process's sender sends it says who counted it: the version counting it now (``installation_version``) and the
+    agent app, detected from ``env`` (the asker's, by default this process's environment)."""
     return {"version": _token(installation_version(), 32) or "unknown",
-            **describe(pinned() if channel is None else channel, None, os.environ if env is None else env)}
+            "app": _app(None, os.environ if env is None else env)}
 
 
-def spool(counts: dict[str, Any], *, path: Path | None = None, env: Mapping[str, str] | None = None,
-          channel: str | None = None) -> bool:
+def spool(counts: dict[str, Any], *, path: Path | None = None, env: Mapping[str, str] | None = None) -> bool:
     """Keep a command's counts for the next process that sends (``Recorder.take``, by way of its flush): its
     crashes and drawings (``hand_over``) and what the engine's verbs count, and the builds the daemon answers
     (``cad_server._internal.engine_telemetry``). One line, under the
     answer in force (``_answer``), stamped with when it was kept (``at``: how long the spool has waited,
-    ``cad_server._internal.telemetry_send``) and with who counted it (``source``: the version, the request's
-    ``channel`` and the app ``env`` names), and only while sharing is on -- by this process's environment, or
+    ``cad_server._internal.telemetry_send``) and with who counted it (``source``: the version and the app ``env``
+    names), and only while sharing is on -- by this process's environment, or
     ``env``, the asker's (``status``): a sender takes a line only under that
     same answer, and a no deletes them all (``choose``). Past ``SPOOL_BYTES`` nothing more is kept. A local
-    write under the data folder's one lock, safe from any thread. Never raises."""
+    write under the state folder's one lock, safe from any thread. Never raises."""
     try:
         if not isinstance(counts, dict) or not any(counts.get(name) for name in ("builds", "snapshots", "features",
                                                                                   "crashes", "health")):
@@ -1706,7 +1443,7 @@ def spool(counts: dict[str, Any], *, path: Path | None = None, env: Mapping[str,
         if not status(path=path, probe=False, env=env)["sharing"]:
             return False
         return _keep(path, SPOOL, {"answer": list(_answer(_read(path) or {})), "at": round(time.time(), 3),
-                                   "source": source(channel, env), "counts": counts})
+                                   "source": source(env), "counts": counts})
     except Exception:  # noqa: BLE001 - a count kept or not never fails the command that made it
         LOG.debug("could not keep a command's counts", exc_info=True)
         return False
@@ -1766,7 +1503,7 @@ def _arrival(step: Any, route: Any, earlier: Any, outcome: Any, reason: Any = No
 
 def _take_spool(path: Path, name: str = SPOOL, key: str = "counts") -> list[dict[str, Any]]:
     """What commands kept (``spool``), or exiting processes (``KEPT``, each line a ``batch``), taken whole
-    by one process: moved aside under the data folder's one lock, so no line is taken twice or lost to a process
+    by one process: moved aside under the state folder's one lock, so no line is taken twice or lost to a process
     appending meanwhile."""
     kept = path.with_name(name)
     if not kept.exists():
@@ -1792,7 +1529,7 @@ def _take_spool(path: Path, name: str = SPOOL, key: str = "counts") -> list[dict
 
 
 def _keep(path: Path, name: str, entry: dict[str, Any]) -> bool:
-    """One line appended to the kept file ``name`` beside the settings, under the data folder's one lock: past
+    """One line appended to the kept file ``name`` beside the settings, under the state folder's one lock: past
     ``SPOOL_BYTES`` nothing more is kept. A local write, never the network."""
     line = json.dumps(entry, separators=(",", ":"))
     kept = path.with_name(name)
@@ -1892,28 +1629,25 @@ class _Tally:
         return events + [{"name": "exception", **found, "count": count} for found, count in self.crashes.values()]
 
 
-def _kept_source(found: Any) -> tuple[str | None, str, str]:
+def _kept_source(found: Any) -> tuple[str | None, str]:
     """Who counted a spool row (``spool``'s ``source``), as a recorder keeps it apart (``Source``): each field the
-    receiver would take, else this process's own version, the default channel, an unknown app (a row an earlier
-    version kept with none)."""
-    from cad.engine.places import CHANNEL, DEFAULT_CHANNEL
-
+    receiver would take, else this process's own version, an unknown app (a row an earlier version kept with none).
+    A row an earlier build kept with a ``channel`` is read as ever, the channel left out."""
     found = found if isinstance(found, dict) else {}
-    version, channel, app = found.get("version"), found.get("channel"), found.get("app")
+    version, app = found.get("version"), found.get("app")
     return (version if isinstance(version, str) and _token(version, 32) == version and version else None,
-            channel if isinstance(channel, str) and CHANNEL.fullmatch(channel) else DEFAULT_CHANNEL,
             app if isinstance(app, str) and _APP.fullmatch(app) else "unknown")
 
 
 _APP = re.compile(r"[a-z0-9][a-z0-9._-]{0,39}")
-# Who counted a use (``Recorder``): the version that counted it (None: this process's own, read as a batch is made),
-# its delivery channel and its app (``channel.describe``).
-Source = tuple  # (version | None, channel, app)
+# Who counted a use (``Recorder``): the version that counted it (None: this process's own, read as a batch is made)
+# and its app (``_app``).
+Source = tuple  # (version | None, app)
 
 
 class Sourced:
     """A recorder as one session sees it (``Recorder.of``): every use noted through it counted under that session's
-    channel and app, and the client its initialize names kept for their batch. Everything else is the recorder's."""
+    app, and the client its initialize names kept for their batch. Everything else is the recorder's."""
 
     def __init__(self, recorder: Recorder, key: Source) -> None:
         self._recorder, self._key = recorder, key
@@ -1935,7 +1669,7 @@ class Recorder:
     """Notes one process's use -- tool calls, view activity, files on screen, builds, snapshots,
     features, a view's controls and the engine daemon's health -- and sends it while sharing is on, and with it, as
     a batch of its own, what commands and scripts kept for a sender (``_spooled``). What it noted is kept apart by
-    who counted it -- the version, the channel and the app (``Source``: a session's, through ``of``) -- and sent as
+    who counted it -- the version and the app (``Source``: a session's, through ``of``) -- and sent as
     one batch for each. Every method is guarded (see the module docstring): it never raises, and none waits on the
     network."""
 
@@ -1953,9 +1687,9 @@ class Recorder:
         self._context: dict[str, Any] = {"process": process if process in PROCESSES else "app", "platform": "other"}
         self._installation: str | None = None  # the version the installation runs as (``_version``)
         # What was noted since the last batch, by who counted it (``Source``), and the client and presentation each
-        # session's initialize named, by its channel and app (``started``).
+        # session's initialize named, by its app (``started``).
         self._tallies: dict[Source, _Tally] = {}
-        self._clients: dict[tuple[str, str], tuple[dict[str, Any], str]] = {}
+        self._clients: dict[tuple[str], tuple[dict[str, Any], str]] = {}
         self._local = threading.local()  # the source a session's use is counted under now (``_counting``)
         # The batches the receiver did not take, each whole, and the answer they were made under: sent again, as
         # they are, before anything newer (``flush``). What is noted meanwhile waits in the tallies.
@@ -1982,13 +1716,10 @@ class Recorder:
     def _describe(self) -> None:
         self._context.update(platform=_platform_name(), arch=_token(_platform.machine().lower(), 16))
 
-    def of(self, channel: str | None = None, client: Any = None) -> Sourced:
-        """This recorder as a session sees it (``Sourced``): its use counted under the session's delivery channel
-        (``channel``: its launcher's, None for the default) and the app its MCP client's name says (``client``)."""
-        from cad_server._internal.channel import describe
-
-        described = describe(channel, client if isinstance(client, str) else None, {})
-        return Sourced(self, (None, described["channel"], described["app"]))
+    def of(self, client: Any = None) -> Sourced:
+        """This recorder as a session sees it (``Sourced``): its use counted under the app its MCP client's name
+        says (``client``)."""
+        return Sourced(self, (None, _app(client if isinstance(client, str) else None, {})))
 
     @contextlib.contextmanager
     def _counting(self, key: Source):
@@ -2001,16 +1732,12 @@ class Recorder:
 
     def _source(self) -> Source:
         """Who counts a use noted now: the session's this thread notes it for (``of``), else this process's own --
-        the default channel (a page names none), and the app the client it was started for names (``started``; a
-        page's own names none)."""
+        the app the client it was started for names (``started``; a page's own names none)."""
         found = getattr(self._local, "source", None)
         if found is not None:
             return found
-        from cad_server._internal.channel import describe
-
         client = self._context.get("client") or {}
-        described = describe(None, client.get("name"), {})
-        return (None, described["channel"], described["app"])
+        return (None, _app(client.get("name"), {}))
 
     def _tally(self, key: Source | None = None) -> _Tally:
         """Under the lock: the tally of what ``key`` (else ``_source()``) counted since the last batch."""
@@ -2339,8 +2066,8 @@ class Recorder:
             return self._unsent is None  # none owed any more: sent, or refused and dropped
 
     def _batch(self, settings: Path) -> tuple[list[dict[str, Any]], Any, int] | None:
-        """The batches of what this process noted since its last, taken from it: one for each version, channel and
-        app that counted (``Source``) -- each under an id of its own, stamped with the time it was made --, the answer
+        """The batches of what this process noted since its last, taken from it: one for each version and app that
+        counted (``Source``) -- each under an id of its own, stamped with the time it was made --, the answer
         they were made under, and the choices made here when they were taken; or ``None``, with nothing to send under
         the answer in force, which drops what was noted under another. Reads the settings, never the network."""
         with self._lock:
@@ -2370,7 +2097,7 @@ class Recorder:
                     continue
                 said, presentation = self._clients.get(key[1:], (self._context.get("client"),
                                                                  self._context.get("presentation")))
-                context = {**self._context, "version": key[0] or version, "channel": key[1], "app": key[2]}
+                context = {**self._context, "version": key[0] or version, "app": key[1]}
                 context.pop("client", None)
                 context.pop("presentation", None)
                 if said is not None:
