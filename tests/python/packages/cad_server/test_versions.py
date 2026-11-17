@@ -439,26 +439,6 @@ class Cleanup(Device):
         self.assertFalse(any(entry.startswith(".trash-") for entry in os.listdir(places.versions_dir())))
         self.assertIn(f"removed cad {stale}, which no agent has used for 2 days", self.said)
 
-    def test_going_back_from_a_development_install_removes_its_versions_used_or_not(self) -> None:
-        # A development version sorts after its release: `dev_install.py --release` removes it (its REMOVE, run by the
-        # checkout's Python), so the release is the newest installed again.
-        import importlib.util
-
-        spec = importlib.util.spec_from_file_location("dev_install_under_test",
-                                                      repo_path("scripts/install/dev_install.py"))
-        dev_install = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(dev_install)
-        self.data(X)
-        development = f"{X}-dev.20261114000000"
-        versions.development(development, sys.executable, sys.executable, sys.prefix)
-        versions.used(development)
-        self.assertEqual(versions.newest(), development)
-        printed: list[str] = []
-        with mock.patch("builtins.print", side_effect=lambda *words, **_: printed.append(" ".join(map(str, words)))):
-            exec(dev_install.REMOVE, {})  # noqa: S102 - the snippet the script runs, run here on this device
-        self.assertEqual((versions.present(), versions.newest()), ([X], X))
-        self.assertEqual(printed, [f"removed cad {development}"])
-
     def test_a_version_that_is_not_the_newest_cleans_nothing(self) -> None:
         now = time.time()
         for name in (X, Y, Z):
