@@ -1,8 +1,8 @@
 """The server follows the library's folders (``cad.engine.places``): a process of an installed version keeps
 its settings, telemetry spool, feed cache, documents' records, Recents, page token
-and port in ``versions/<version>/data``, and its kernel and ``cad run`` environments in its code; a process
-with no version -- this suite's own, under ``CAD_STATE_DIR`` and ``CAD_CACHE_DIR`` -- keeps the layout of 0.11.10 and
-earlier. A version is faked by its code marker in a temporary device; nothing is installed or started."""
+and port in ``versions/<version>/data``; a process with no version -- this suite's own, under ``CAD_STATE_DIR`` and ``CAD_CACHE_DIR`` -- keeps the layout of 0.11.10 and
+earlier. Every process keeps its kernel and ``cad run`` environments in the one cache folder, keyed by the
+release and never by where cad is installed (test_base.py's). A version is faked by its code marker in a temporary device; nothing is installed or started."""
 
 from __future__ import annotations
 
@@ -18,7 +18,6 @@ from unittest import mock
 from cad.engine import places
 from cad.engine import records
 from cad_server import settings, updates
-from cad_server._internal import base, extras
 from cad_server.engine import registry
 from cad_server.viewer.recents import RecentStore
 
@@ -49,28 +48,22 @@ class ServerFoldersTest(unittest.TestCase):
         self.server = server
 
     def paths(self) -> dict[str, Path]:
-        installation = base.Installation.here()
         return {"settings": settings.settings_path(), "feed": updates._cache(),
                 "registry": registry.current().state.root,
                 "documents": registry.current().cache.root, "records": records.current().root_folder,
-                "recents": RecentStore().root, "kernel": base.where(installation).parent,
-                "extras": extras.where(installation, ["numpy"]).parent}
+                "recents": RecentStore().root}
 
     def test_no_version_keeps_the_layout_before_0_12(self) -> None:
         self.assertEqual(self.paths(), {
             "settings": self.state / "settings.json", "feed": self.state / "versions.json",
-            "registry": self.state, "documents": self.cache, "records": self.state, "recents": self.state / "recents",
-            "kernel": self.cache / "base", "extras": self.cache / "base"})
-        self.assertIn("prefix", base._inputs(base.Installation.here()), "one cache folder for every installation")
+            "registry": self.state, "documents": self.cache, "records": self.state, "recents": self.state / "recents"})
 
     def test_a_version_keeps_its_data_and_environments_in_its_own_folder(self) -> None:
-        data, code = self.version / "data", self.version / "code"
+        data = self.version / "data"
         with mock.patch.object(sys, "prefix", str(self.server)):
             self.assertEqual(self.paths(), {
                 "settings": data / "settings.json", "feed": data / "versions.json",
-                "registry": data, "documents": data / "cache", "records": data, "recents": data / "recents",
-                "kernel": code / "base", "extras": code / "base"})
-            self.assertNotIn("prefix", base._inputs(base.Installation.here()), "one installation a version")
+                "registry": data, "documents": data / "cache", "records": data, "recents": data / "recents"})
 
     def test_what_a_version_writes_lands_in_its_folder_alone(self) -> None:
         with mock.patch.object(sys, "prefix", str(self.server)):

@@ -39,8 +39,6 @@ Such a tool's own settings folders (the registry's ``homes``: ``BLENDER_USER_CON
 of cad's in the cache folder unless the caller set them (``_homes``): every run of cad's shares them, so what
 one run writes there (an extension it installs, preferences it saves) is there for the next, and a person's own
 preferences and add-ons never load into a run.
-
-The ``cad`` command (``cad_server._internal.proxy``) runs this verb with the installation it picks.
 """
 
 from __future__ import annotations
@@ -528,28 +526,24 @@ def main(argv: list[str] | None = None) -> int:
         if plan.directory:
             os.chdir(plan.directory)
         _env_file(plan.env_file)
+        from cad_server._internal.launch import PYTHON
+
         installation = base.Installation.here()
-        prepared = prepare(plan, installation.release, installation.python or platform.python_version())
+        prepared = prepare(plan, installation.release, PYTHON)
         spec = prepared.spec
-        script = Path(plan.target).name if plan.kind == "script" else "the program"
         assert isinstance(spec, extras.Spec)
-        if spec.python is None:
-            _admitted(prepared.wanted, installation.python or platform.python_version(), script, "the server's")
-        if spec.default():
-            env = base.ensure(installation, told=said, engine=True)
-        else:
-            env = extras.ensure(installation, spec, told=said, engine=True)
-        assert env is not None  # made, or refused
-        if spec.python is not None:
-            version = str(extras.marker(env).get("python_version") or "")
-            line = prepared.line
-            whose = (f"the environment's (--python {spec.python})" if plan.python or line is None
-                     else f"cad's {line[1]} integration's")
-            if version:
-                _admitted(prepared.wanted, version, script, whose)
-                if line is not None and not extras.admits(f"=={line[0]}.*", version):
-                    raise base.Refused(f"{script} uses cad's {line[1]} integration, which runs on Python {line[0]} "
-                                       f"alone, and {whose} is {version}")
+        env = extras.ensure(installation, spec, told=said, engine=True)
+        # Its Python's version as the environment's marker says it (this process's own, where its own environment
+        # is the base), checked against the script's ``requires-python`` and the line an integration is built for.
+        version = str(extras.marker(env).get("python_version") or platform.python_version())
+        script = Path(plan.target).name if plan.kind == "script" else "the program"
+        line = prepared.line
+        whose = ("the server's" if spec.python is None else f"the environment's (--python {spec.python})"
+                 if plan.python or line is None else f"cad's {line[1]} integration's")
+        _admitted(prepared.wanted, version, script, whose)
+        if line is not None and not extras.admits(f"=={line[0]}.*", version):
+            raise base.Refused(f"{script} uses cad's {line[1]} integration, which runs on Python {line[0]} "
+                               f"alone, and {whose} is {version}")
         os.environ.update(_homes(spec.integrations, dict(os.environ)))
     except (base.Refused, OSError) as refused:
         said(str(refused) if isinstance(refused, base.Refused) else f"{refused.strerror or refused}")

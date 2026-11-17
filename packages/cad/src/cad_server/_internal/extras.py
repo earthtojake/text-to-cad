@@ -28,16 +28,18 @@ A header, a project or a project's lock that pins cad to another release than th
 one line, before anything is made (``pinned``, ``locked_cad``); the device's release is fine, and an unpinned ``cad`` is given it. So PyPI's
 unrelated ``cad`` 1.x is never resolved.
 
-**The key** digests the installation's base's inputs (the release among them), the spec, and what each
-local package, editable folder and requirements file is now (``fingerprints``): an edit to a local package
-is another environment, said in the line that makes it; an editable folder is keyed by its metadata alone,
-its code read as it is; a lock, a project's ``pyproject.toml`` and a uv configuration by their contents. ``places.RUN_WITH`` tells the program how it was named, which a document it
-builds says builds it again.
+**The key** digests the base's inputs (the release, where it installs from, the Python line and the platform:
+``base._inputs``, nothing of where cad is installed), the spec, and what each local package, editable folder and
+requirements file is now (``fingerprints``): an edit to a local package is another environment, said in the line
+that makes it; an editable folder is keyed by its metadata alone, its code read as it is; a lock, a project's
+``pyproject.toml`` and a uv configuration by their contents. ``places.RUN_WITH`` tells the program how it was
+named, which a document it builds says builds it again. The spec of the build123d integration alone, on the
+server's Python, is the base's own (``Spec.default``): ``ensure`` and ``making`` give the base for it.
 
-**Making one** (``ensure``): by the device's engine when one runs -- outside any sandbox, its lines
-followed as it makes it (``{"op": "base", "key", "spec"}``, ``making``) -- else here, with uv, as the base
-is made (``base.make``: offline first, from uv's cache, the base's link mode, find-links and index
-settings, a lock for one maker, the marker written last). After uv installs it, the distributions it holds
+**Making one** (``ensure``): by the server -- outside any sandbox, its lines followed as it makes it (``{"op":
+"base", "key", "spec"}``, ``making``), never by the command, which with no server running says the server's one
+line -- with uv, as the base is made (``base.make``: offline first, from uv's cache, the base's link mode,
+find-links and index settings, a lock for one maker, the marker written last). After uv installs it, the distributions it holds
 are read: one of an integration it was not given (``build123d``, pulled in by a package that depends on
 it) adds that integration's extra, and uv resolves again, so cad's pins decide its version. Once made it is
 never changed. A script's ``requires-python`` the Python cannot meet is refused in one line; what uv cannot
@@ -51,13 +53,11 @@ never ``uv python install``, which writes a ``python3.13`` among the person's co
 it as in any other; a platform its tool has no build for is refused in one line before anything is made
 (``supported``), as are two integrations built for different lines.
 
-**Its releases**: environments are tied to the release (cad is pinned in each). When one is made, the
-environments of releases older than the one before the current go -- the current release's and the one
-before's stay, the way back, as ``releases/`` keeps the release before (``kept``) -- and the one its local
-packages' edit superseded (``_collect``), but one a process runs from, which goes at a later making. Those
-of other sets stay with their version, and go with its folder (``versions.clean``); each use marks its marker, which
-``cad doctor`` reads for the layout of 0.11.10 and earlier (``leftovers``). Nothing is made ahead of a run: after an update, a new release's environments are
-made as its runs ask for them, from uv's cache.
+**Its releases**: environments are tied to the release (cad is pinned in each). cad removes none of another
+release's: when one is made, only the one its local packages' edit superseded goes (``_collect``), but one a
+process runs from, which goes at a later making. Each use marks its marker, which ``cad doctor`` reads
+(``leftovers``). Nothing is made ahead of a run: after an update, a new release's environments are made as its
+runs ask for them, from uv's cache.
 """
 
 from __future__ import annotations
@@ -67,7 +67,6 @@ import hashlib
 import json
 import ntpath
 import os
-import platform
 import posixpath
 import re
 import stat
@@ -82,7 +81,7 @@ from typing import Any, Callable, Iterable
 from cad_server._internal import base
 
 __all__ = ["SKIPPED", "Making", "Project", "Refused", "Spec", "admits", "admits_line", "ensure", "fingerprint",
-           "fingerprints", "header", "integration_spec", "integrations", "key", "kept", "local_package", "locked_cad",
+           "fingerprints", "header", "integration_spec", "integrations", "key", "local_package", "locked_cad",
            "making", "normalized", "on", "pinned", "project", "python_line", "refusal", "split", "supported", "tell",
            "uv_config", "uv_settings", "where"]
 # uv's settings that say how it reaches an index, never what it resolves: a run that differs from the base's
@@ -255,14 +254,11 @@ def tell(given: list[str], script: str | None = None, named: list[str] | None = 
     option one word, ``--python=3.13``, a requirement as it is), and the ``script`` whose inline metadata
     ``named`` the rest. What a document it builds names to build it again (``contract.interpreter``,
     ``models.Models.register``): the command line's, and the header's but for a model that script defines,
-    whose header ``cad run`` reads again. A named channel this command is on (``places.channel``) goes with them
-    (``channel``), so the program's own requests to the engine name it too."""
-    from cad.engine.places import DEFAULT_CHANNEL, RUN_WITH, channel
+    whose header ``cad run`` reads again."""
+    from cad.engine.places import RUN_WITH
 
-    on = channel()
-    if given or named or on != DEFAULT_CHANNEL:
-        told = {"with": list(given), "script": script, "header": list(named or ())}
-        os.environ[RUN_WITH] = json.dumps({**told, "channel": on} if on != DEFAULT_CHANNEL else told)
+    if given or named:
+        os.environ[RUN_WITH] = json.dumps({"with": list(given), "script": script, "header": list(named or ())})
     else:
         os.environ.pop(RUN_WITH, None)
 
@@ -379,11 +375,13 @@ def narrowed(python: str, line: str) -> str:
     return line if all(meets) else f"{request},=={line}.*"
 
 
-def integration_spec(installation: base.Installation, names: Iterable[str]) -> "Spec":
+def integration_spec(names: Iterable[str]) -> "Spec":
     """The spec of the environment of the integrations ``names`` alone, as ``cad run`` makes it for a program
-    that names nothing else: on the Python they are built for (``on``)."""
+    that names nothing else: on the Python they are built for (``on``), else the server's line."""
+    from cad_server._internal.launch import PYTHON
+
     names = tuple(sorted(set(names)))
-    python, options = on(names, installation.python or platform.python_version())
+    python, options = on(names, PYTHON)
     return Spec(integrations=names, python=python, python_options=options)
 
 
@@ -772,11 +770,16 @@ def _complete(env: Path, spec: Spec) -> dict[str, Any] | None:
 
 def ensure(installation: base.Installation, spec: Spec | list[str], *, told: Callable[[str], None],
            engine: bool = False) -> base.Environment:
-    """The environment of ``spec`` beside ``installation``'s base: made first when it is not complete -- by
-    the server with ``engine`` (``cad run``; none running, its one line), its lines said to ``told``, else here.
-    ``Refused`` in one line when uv cannot make it. A list of requirements is a spec of them."""
+    """The environment of ``spec``: the base for the base's own (``Spec.default``: ``base.ensure``), else one
+    beside it, made first when it is not complete -- with ``engine`` (a command: ``cad run``, an integration's) by
+    the server (``base._by_the_engine``), its lines said to ``told``, else here (the server's own making:
+    ``Making``). ``Refused`` in one line when uv cannot make it. A list of requirements is a spec of them."""
     spec = spec if isinstance(spec, Spec) else Spec(requirements=tuple(sorted(set(spec))))
     supported(spec.integrations, installation.arch)
+    if spec.default():
+        found = base.ensure(installation, told=told, engine=engine)
+        assert found is not None  # made, or refused
+        return found
     prints = fingerprints(spec)
     env = where(installation, spec, prints)
     marker = _complete(env, spec)
@@ -784,9 +787,8 @@ def ensure(installation: base.Installation, spec: Spec | list[str], *, told: Cal
         _used(env)
         return base._found(env, marker)
     if engine:
-        marker = _by_the_engine(env, spec, told)
-        if marker is not None:
-            return base._found(env, marker)
+        return base._found(env, base._by_the_engine(env, {"op": "base", "key": env.name, "spec": spec.as_dict()},
+                                                     lambda folder: _complete(folder, spec), told))
     return base._found(env, _make(env, installation, spec, prints, told))
 
 
@@ -803,28 +805,6 @@ def _used(env: Path) -> None:
         os.utime(env / base.MARKER)
     except OSError:
         pass
-
-
-def _by_the_engine(env: Path, spec: Spec, told: Callable[[str], None]) -> dict[str, Any] | None:
-    """The environment made by the device's engine when it is this installation's (``{"op":
-    "base", "key", "spec"}``, ``making``), its lines said to ``told``; None for one of another installation's,
-    which this process makes it for. ``Refused`` in the engine's words; no server running, or one of another
-    release, its one line (``client.NotRunning``, ``client.OtherRelease``)."""
-    from cad.engine import client
-
-    try:
-        answer = client.request({"op": "base", "key": env.name, "spec": spec.as_dict(),
-                                 "with": list(spec.requirements)},
-                                on_log=lambda frame: told(str(frame.get("log", ""))))
-    except (client.NotRunning, client.OtherRelease):
-        raise
-    except (ConnectionError, OSError, ValueError):
-        return None
-    if not answer or answer.get("base") is not True:
-        return None
-    if answer.get("failed"):
-        raise Refused(str(answer["failed"]))
-    return _complete(env, spec)
 
 
 def _cad(installation: base.Installation, extras: Iterable[str]) -> tuple[str, ...]:
@@ -984,8 +964,7 @@ def _make(env: Path, installation: base.Installation, spec: Spec, prints: dict[s
     """The environment at ``env`` made (``base.make``), its marker naming its installation, as the base's
     does, the requirements it holds (``with``), its spec, the integrations it was made with, its Python's
     version and its local things' fingerprints (``local``), its line naming those an edit made it anew for
-    (``_changed``); then the environments of releases before the one before, and the one it supersedes,
-    collected."""
+    (``_changed``); then the one it supersedes collected."""
     inputs = base._inputs(installation)
     made: dict[str, Any] = {"integrations": list(spec.integrations)}
 
@@ -1000,7 +979,7 @@ def _make(env: Path, installation: base.Installation, spec: Spec, prints: dict[s
     changed = _changed(env.parent, inputs, spec, prints)
     marker = base.make(env, recipe(installation, spec, changed, made), told, finish=finish, marker=base.MARKER,
                        done=lambda folder: _complete(folder, spec))
-    _collect(env.parent, kept(env.parent, installation.release), made=env, spec=spec, inputs=inputs)
+    _collect(env.parent, env, spec, inputs)
     return marker
 
 
@@ -1021,41 +1000,10 @@ def _changed(folder: Path, inputs: dict[str, Any], spec: Spec, prints: dict[str,
     return sorted(changed)
 
 
-def _releases(folder: Path) -> set[str]:
-    """The releases the environments of models' packages in ``folder`` are of, as their markers say."""
-    found: set[str] = set()
-    try:
-        entries = [Path(entry.path) for entry in os.scandir(folder) if entry.is_dir(follow_symlinks=False)]
-    except OSError:
-        return found
-    for env in entries:
-        marker = base.complete(env)
-        release = ((marker or {}).get("inputs") or {}).get("release")
-        if marker is not None and isinstance(marker.get("with"), list) and isinstance(release, str):
-            found.add(release)
-    return found
-
-
-def kept(folder: Path, current: str) -> set[str]:
-    """The releases whose environments of models' packages stay: the current one, and the one before it, the
-    newest of the environments' releases older than ``current`` (as PEP 440 orders them). A version keeps its own
-    environments in its own code folder, so beside the current one there are only those of the layout of 0.11.10
-    and earlier, which go with that layout (``cad_server._internal.legacy``)."""
-    from cad.engine.contract import _order
-
-    mine = _order(current)
-    older = [(_order(release), release) for release in _releases(folder) if release != current]
-    older = [(order, release) for order, release in older if order is not None and mine is not None and order < mine]
-    return {current, *([max(older)[1]] if older else [])}
-
-
-def _collect(folder: Path, keep: set[str], made: Path | None = None, spec: Spec | None = None,
-             inputs: dict[str, Any] | None = None) -> list[str]:
-    """The environments of a model's packages in ``folder`` of releases other than ``keep`` (``kept``: the
-    current one and the one before it) removed, those whose Python is gone (``base.marked``: dead, no way
-    back), and those the one just ``made`` supersedes -- of its installation's base (``inputs``) and ``spec``,
-    a local package since edited --, but one a process runs from (``releases.running``), which goes at a later
-    making: the paths removed. The bases are their versions' to remove (``versions.clean``)."""
+def _collect(folder: Path, made: Path, spec: Spec, inputs: dict[str, Any]) -> list[str]:
+    """The environments in ``folder`` the one just ``made`` supersedes -- of the same base's inputs (``inputs``:
+    the same release) and ``spec``, a local package since edited -- removed, but one a process runs from
+    (``releases.running``), which goes at a later making: the paths removed. No other release's is removed."""
     from cad_server._internal.releases import running
 
     removed = []
@@ -1065,12 +1013,7 @@ def _collect(folder: Path, keep: set[str], made: Path | None = None, spec: Spec 
         return removed
     for env in entries:
         marker = base.marked(env) if env != made else None
-        if marker is None or not isinstance(marker.get("with"), list):
-            continue
-        other = (marker.get("inputs") or {}).get("release") not in keep or not base.interpreter(env).exists()
-        superseded = (made is not None and spec is not None and marker.get("spec") == spec.keyed()
-                      and marker.get("inputs") == inputs)
-        if not (other or superseded) or running(env):
+        if marker is None or marker.get("spec") != spec.keyed() or marker.get("inputs") != inputs or running(env):
             continue
         try:
             base._remove(env)
@@ -1122,10 +1065,11 @@ _MAKINGS: dict[str, Making] = {}
 _MAKINGS_LOCK = threading.Lock()
 
 
-def making(spec: Spec | dict[str, Any] | list[str]) -> Making:
+def making(spec: Spec | dict[str, Any] | list[str]) -> base.Making:
     """The engine's making of the environment of ``spec`` (as the door carries it, or a list of requirements
-    normalized): one per environment. ``Refused`` for one that is no spec (``Spec.from_dict``): only the door
-    reaches this, and uv is handed options only as options, requirements only as requirements."""
+    normalized): one per environment, the base's own (``base.MAKING``) for the base's spec (``Spec.default``).
+    ``Refused`` for one that is no spec (``Spec.from_dict``): only the door reaches this, and uv is handed options
+    only as options, requirements only as requirements."""
     if isinstance(spec, list):
         for requirement in spec:
             refused = refusal(requirement)
@@ -1134,6 +1078,8 @@ def making(spec: Spec | dict[str, Any] | list[str]) -> Making:
         spec = Spec(requirements=tuple(sorted(set(spec))))
     elif isinstance(spec, dict):
         spec = Spec.from_dict(spec)
+    if spec.default():
+        return base.MAKING
     found = Making(spec)
     named = found.key() or ""
     with _MAKINGS_LOCK:

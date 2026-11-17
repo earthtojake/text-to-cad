@@ -87,36 +87,36 @@ def carries(integration: Integrations) -> bool:
 def found(integration: Integrations) -> tuple[str, str, str]:
     """Where ``integration``'s operations run, read and nothing made or marked used (``cad doctor``):
     ``(state, folder, release)`` -- ``carried`` (this process's environment holds it; no folder), ``made`` or
-    ``not made`` (made on first need, by the first command that needs it), the folder of its environment
-    either way, and the release of ``cad[<integration>]`` there."""
+    ``not made`` (made on first need, by the server, for the first command that needs it), the folder of its
+    environment either way, and the release of ``cad[<integration>]`` there."""
     from cad_server._internal import base, extras
 
     installation = base.Installation.here()
     if carries(integration):
         return "carried", "", installation.release
-    spec = extras.integration_spec(installation, _names(integration))
-    folder = extras.where(installation, spec)
-    return ("made" if extras._complete(folder, spec) is not None else "not made"), str(folder), installation.release
+    spec = extras.integration_spec(_names(integration))
+    if spec.default():  # the kernel's own: the base
+        folder, made = base.where(installation), base.ensure(installation, make=False) is not None
+    else:
+        folder = extras.where(installation, spec)
+        made = extras._complete(folder, spec) is not None
+    return ("made" if made else "not made"), str(folder), installation.release
 
 
 def environment(integration: Integrations, told: Callable[[str], None], *, engine: bool = True) -> str:
-    """The Python of the environment that holds ``integration``, made first when it is not complete (by
-    the server, its lines said to ``told``; here, with ``engine`` false: the engine itself, a viewer export).
-    ``Failed`` in uv's or the engine's words; no server running, or one of another release, its one line
-    (``client.NotRunning``, ``client.OtherRelease``), which the command says as it says every one."""
+    """The Python of the environment that holds ``integration``, made first when it is not complete: by the
+    server, its lines said to ``told`` -- asked over the door by a command (``engine``), followed by the server
+    itself (``made``: a viewer's export, a board's view). ``Failed`` in uv's or the server's words; no server
+    running, or one of another release, its one line (``client.NotRunning``, ``client.OtherRelease``), which the
+    command says as it says every one."""
+    if not engine:
+        return made(integration, told)
     from cad.engine import client
     from cad_server._internal import base, extras
 
     try:
         installation = base.Installation.here()
-        names = _names(integration)
-        if names == (base.EXTRA,):  # the kernel's own: the base the engine's kernel processes run in
-            found = base.ensure(installation, told=told, engine=engine)
-            if found is None:
-                raise base.Refused("the CAD kernel's environment could not be made")
-        else:
-            found = extras.ensure(installation, extras.integration_spec(installation, names), told=told,
-                                  engine=engine)
+        found = extras.ensure(installation, extras.integration_spec(_names(integration)), told=told, engine=True)
     except (client.NotRunning, client.OtherRelease):
         raise
     except (base.Refused, OSError) as error:
@@ -124,31 +124,31 @@ def environment(integration: Integrations, told: Callable[[str], None], *, engin
     return found.python
 
 
-def made(integration: str, told: Callable[[str], None]) -> str:
-    """The Python of the environment that holds ``integration``, for a process that lacks it
-    (``{"op": "integration"}``, answered by the engine: ``cad.mujoco.decompose``'s, ``cad.engine.hulls``): this
-    process's own where it carries it, else ``environment``'s, its making the engine's one of that environment --
-    the one under way followed, or one started (``extras.Making``, as the door's ``base`` with a spec makes a
-    program's) -- each of its lines said to ``told``. ``Failed`` in one line: an integration the registry does
-    not name, or uv's words."""
+def made(integration: Integrations, told: Callable[[str], None]) -> str:
+    """The Python of the environment that holds ``integration``, in the server (``{"op": "integration"}``, for a
+    process that lacks it: ``cad.mujoco.decompose``'s, ``cad.engine.hulls``; ``environment`` without ``engine``):
+    this process's own where it carries it, else the one the server's one making of it made -- the one under way
+    followed, or one started (``extras.making``, as the door's ``base`` makes a command's) -- each of its lines
+    said to ``told``. ``Failed`` in one line: an integration the registry does not name, or uv's words."""
     import sys
 
     from cad.registry import INTEGRATIONS
     from cad_server._internal import base, extras
 
-    if integration not in INTEGRATIONS:
-        raise Failed(f"no integration {integration!r}: one of {', '.join(sorted(INTEGRATIONS))}")
+    unknown = [name for name in ((integration,) if isinstance(integration, str) else integration)
+               if name not in INTEGRATIONS]
+    if unknown:
+        raise Failed(f"no integration {unknown[0]!r}: one of {', '.join(sorted(INTEGRATIONS))}")
     if carries(integration):
         return sys.executable
     try:
-        # The spec ``environment`` ensures, so the making followed here is the one it then finds complete.
-        spec = extras.integration_spec(base.Installation.here(), _names(integration))
+        spec = extras.integration_spec(_names(integration))
         error = extras.making(spec).follow(told)
-    except extras.Refused as refused:
+        if error is not None:
+            raise Failed(error)
+        return extras.ensure(base.Installation.here(), spec, told=told).python  # made now: its marker read
+    except base.Refused as refused:
         raise Failed(str(refused)) from None
-    if error is not None:
-        raise Failed(error)
-    return environment(integration, told, engine=False)
 
 
 def call(python: str, document_type: str, operation: str, args: list[Any], kwargs: dict[str, Any]) -> dict[str, Any]:

@@ -174,7 +174,7 @@ class NamingTest(unittest.TestCase):
         sent: list = []
         with mock.patch.object(integration_env, "carries", return_value=False), \
                 mock.patch.object(extras, "making", lambda spec: (sent.append(spec.integrations), Making())[1]), \
-                mock.patch.object(integration_env, "environment", return_value="/env/bin/python"):
+                mock.patch.object(extras, "ensure", return_value=base.Environment("/env/bin/python", "/env", False)):
             Daemon.integration({"op": "integration", "integration": "coacd"}, sent.append)
             self.assertEqual(sent, [("coacd",), {"log": "making the coacd integration's environment, once"},
                                     {"ok": True, "python": "/env/bin/python"}])
@@ -247,7 +247,9 @@ class NamingTest(unittest.TestCase):
                          "uv could not make the environment of the model's packages, from its cache, then from the "
                          "network: Downloaded numpy (the last of what uv said; the rest is kept nowhere)")
 
-    def test_making_one_removes_releases_older_than_the_one_before_but_the_bases_and_one_a_process_runs_from(self) -> None:
+    def test_making_one_removes_only_the_one_an_edit_superseded_never_another_release_s(self) -> None:
+        # cad removes nothing of a past release by itself: what goes is its own environment an edit to a local
+        # package made again, unless a process runs from it.
         folder = Path(tempfile.mkdtemp(prefix="extras-collect-"))
         self.addCleanup(shutil.rmtree, folder, True)
 
@@ -262,24 +264,18 @@ class NamingTest(unittest.TestCase):
             (env / base.MARKER).write_text(json.dumps(marker), encoding="utf-8")
             return env
 
-        old = made("old", "0.8.0", ["pandas"])
-        dead = made("dead", "0.10.0", ["bpy"])
-        base.interpreter(dead).unlink()  # its Python, one uv managed, since uninstalled: no run can use it again
         superseded = made("edited", "0.10.0", ["/w/gears"], {"/w/gears": "before"})
+        made("held", "0.10.0", ["/w/gears"], {"/w/gears": "older"})
         now = made("now", "0.10.0", ["/w/gears"], {"/w/gears": "after"})
-        for name, release, given in (("held", "0.8.0", ["scipy"]), ("same", "0.10.0", ["pandas"]),
-                                     ("before", "0.9.0", ["pandas"]), ("base", "0.8.0", None)):
+        for name, release, given in (("old", "0.8.0", ["/w/gears"]), ("other", "0.10.0", ["pandas"]),
+                                     ("base", "0.8.0", None)):
             made(name, release, given)
-        keep = extras.kept(folder, "0.10.0")
-        self.assertEqual(keep, {"0.10.0", "0.9.0"}, "the current release and the one before it")
         with mock.patch("cad_server._internal.releases.running", side_effect=lambda env: Path(env).name == "held"):
-            self.assertEqual(sorted(extras._collect(folder, keep, made=now, spec=extras.Spec(requirements=("/w/gears",)),
-                                                    inputs={"release": "0.10.0"})),
-                             sorted([str(superseded), str(old), str(dead)]))
-        self.assertEqual(sorted(path.name for path in folder.iterdir()), ["base", "before", "held", "now", "same"],
-                         "the release before's stay; a base is its release's to remove; one a process runs from "
-                         "goes at a later making; the environments of other packages stay; one whose Python is "
-                         "gone goes, of whatever release")
+            self.assertEqual(extras._collect(folder, now, extras.Spec(requirements=("/w/gears",)), {"release": "0.10.0"}),
+                             [str(superseded)])
+        self.assertEqual(sorted(path.name for path in folder.iterdir()), ["base", "held", "now", "old", "other"],
+                         "another release's stays; one a process runs from goes at a later making; the "
+                         "environments of other packages stay")
         self.assertEqual(extras._changed(folder, {"release": "0.10.0"}, extras.Spec(requirements=("/w/gears",)),
                                          {"/w/gears": "later"}),
                          ["/w/gears"], "the line that makes it again names the local package edited")

@@ -406,7 +406,7 @@ class ServerCrashTest(_Recording):
         from cad_server._internal import base
 
         core = self.tmp / "core"
-        installation = base.Installation(release="9.9.9", name="9.9.9", python="3.14.2",
+        installation = base.Installation(release="9.9.9", python="3.14.2",
                                          executable=str(base.interpreter(core)), prefix=str(core),
                                          root=str(core / "site-packages"), source=None, arch="arm64", kernel=False)
         making = base.Making(clock=lambda: 0.0)

@@ -190,10 +190,7 @@ class MakingPresent(Device):
         code = places.code_dir(X)
         record = places.version_record(X)
         self.assertEqual((record["prefix"], record["version"]), (str(code / "server"), X))
-        kernel = Path(record["kernel"])
-        self.assertEqual(kernel.parent, code / "base", "the kernel made now, in the version's code")
-        self.assertEqual(places.home(str(kernel))["prefix"], str(code / "server"), "the kernel names its server")
-        self.assertEqual(self.uv.made(), ["server", kernel.name])
+        self.assertEqual(self.uv.made(), ["server"], "the kernel is made on first need, never at install")
         installs = [step for step in self.uv.steps if step[1] == "pip"]
         self.assertTrue(all("--find-links" in step and str(self.wheels) in step and "--offline" in step
                             for step in installs), "uv's cache first, the suites' wheels beside the index")
@@ -202,22 +199,10 @@ class MakingPresent(Device):
         if os.name != "nt":
             self.assertFalse(os.stat(code).st_mode & 0o022, "no one else writes a version's code")
         again = versions.make_present(X)
-        self.assertEqual((again.ok, again.made, len(self.uv.steps)), (True, False, 4), "nothing made twice")
+        self.assertEqual((again.ok, again.made, len(self.uv.steps)), (True, False, 2), "nothing made twice")
         self.assertEqual(sorted(os.listdir(self.state)), ["install.lock", "versions"])
         self.assertEqual(os.listdir(self.state / "versions"), [X])
         self.assertFalse(os.path.exists(places.data_dir(X)), "making a version present imports nothing")
-
-    def test_interrupted_then_finished_from_where_it_stopped(self) -> None:
-        def cut(step):
-            if step[1] == "pip" and not Uv.installs_server(step):
-                raise KeyboardInterrupt  # the kernel's install, cut short
-        self.uv.fail = cut
-        with self.assertRaises(KeyboardInterrupt):
-            versions.make_present(X, told=self.said.append)
-        self.assertIsNone(places.version_record(X), "no marker: not present")
-        self.uv.fail, self.uv.steps = None, []
-        found = self.present(X)
-        self.assertEqual(self.uv.made(), [Path(found.record["kernel"]).name], "the server is not made again")
 
     def test_two_callers_at_once_make_it_once(self) -> None:
         second_waits = threading.Event()
@@ -241,7 +226,7 @@ class MakingPresent(Device):
         two.join(60)
         self.assertTrue(second_waits.is_set(), "the second waited on the install lock")
         self.assertEqual((results["first"].made, results["second"].made, results["second"].ok), (True, False, True))
-        self.assertEqual(len(self.uv.made()), 2, "each environment made once")
+        self.assertEqual(len(self.uv.made()), 1, "made once")
 
     def test_where_it_cannot_run_it_says_so_as_a_result(self) -> None:
         with mock.patch.object(base, "find_uv", side_effect=base.Refused("no uv here", "uv")):

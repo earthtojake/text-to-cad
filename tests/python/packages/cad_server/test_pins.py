@@ -421,15 +421,14 @@ class TheChannel(unittest.TestCase):
             self.addCleanup(patch.stop)
         os.environ.pop(places.RUN_WITH, None)
 
-    def test_default_unless_a_pin_or_cad_run_names_one(self) -> None:
+    def test_default_unless_a_pin_names_one(self) -> None:
         self.assertEqual(places.channel(), "default")
         extras.tell([])
         self.assertNotIn(places.RUN_WITH, os.environ)
         places.set_channel("store")
-        extras.tell([])  # cad run hands it to its program, whose requests name it too
-        places._channel = None
         self.assertEqual(places.channel(), "store")
-        self.assertEqual(places.run_with(), {"with": [], "script": None, "header": []})
+        extras.tell([])  # cad run hands its program no channel: there is none in the cad command
+        self.assertNotIn(places.RUN_WITH, os.environ)
         places.set_channel(None)
         self.assertEqual(places.channel(), "default")
         with self.assertRaises(ValueError):

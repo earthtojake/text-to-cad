@@ -1,42 +1,38 @@
 """The base: the one environment models and the engine's kernel processes run in.
 
-The ``cadgen`` wheel's required dependencies are the core -- the engine's server, the ``cadgen``
-command, the CAD Viewer's server, the MCP shim --, and the CAD kernel (OCP, build123d and the rest) is
-its ``build123d`` extra. So an installation of the core, as uvx makes the plugin's server, runs no model
-itself: the engine makes one environment per installation, the base, and every process that loads
-the kernel starts from it -- the script ``cad run`` runs, its worker, and the engine's own kernel
-processes (the standby, the documents worker, the meshing and reading pools, the render processes:
+The ``cad`` distribution's required dependencies are the core -- the server, the ``cad`` command, the CAD
+Viewer's server --, and the CAD kernel (OCP, build123d and the rest) is its ``build123d`` extra. So an
+installation of the core runs no model itself: the server makes one environment per release, the base, and every
+process that loads the kernel starts from it -- the program ``cad run`` runs, its worker, and the engine's own
+kernel processes (the standby, the documents worker, the meshing and reading pools, the render processes:
 ``kernel``, which the engine is handed as ``cad.engine.places.KERNEL``). The engine's standby stands once it
 exists (``Making.made``), never before.
 
-- **What it is**: ``cad[build123d]`` at the installation's own release -- or the source tree, or the
-  wheel, the installation was made from (``Installation.requirement``) -- on the installation's own
-  Python (the line ``cad_server._internal.launch.PYTHON`` names, for one uvx made), so the engine and the
-  base are one Python. uv makes it at ``base/<key>`` in the version's code (``folder``: in 0.11.10 and earlier, and
-  for a
-  process with no version, in the cache folder), its files hard links into
-  uv's cache (``LINK``). An installation whose own environment carries the kernel (installed with the
-  extra: ``pip install 'cad[build123d]==<release>'``, a checkout's development environment) is its own base, and
-  none is made.
-- **The key** digests the installation (the version it runs as, its release, where its cadgen installs
-  from, and with no version its environment), its Python and the architecture: an upgrade makes a base of
-  its own, from uv's cache, and nothing is made twice.
+- **What it is**: ``cad[build123d]`` at the server's release -- or the source tree, or the wheel, it was
+  installed from (``Installation.requirement``) -- on the server's own Python, the line every installation runs
+  on (``cad_server._internal.launch.PYTHON``), so the engine and the base are one Python. uv makes it at
+  ``base/<key>`` in the cache folder (``folder``), its files hard links into uv's cache (``LINK``). An
+  installation whose own environment carries the kernel (installed with the extra:
+  ``pip install 'cad[build123d]==<release>'``, a checkout's development environment) is its own base, and none is
+  made.
+- **The key** digests the release, where it installs from, the Python line and the platform (``_inputs``) --
+  never where cad is installed: a server started from one place (uvx's cache, as an agent app starts it) makes
+  the base that a ``cad`` installed elsewhere (uv's tool folder) of the same release then finds and uses,
+  whatever Python that ``cad`` runs on.
 - **The marker**, ``cad-env.json``, written last, makes it complete: a later use reads the marker
-  and resolves nothing. It names the installation the base belongs to (``home``), so a process
-  running there reaches that installation's engine and starts it with that installation's Python, and
-  it records the base's own import path, which the engine's spawned kernel processes start with.
+  and resolves nothing. It names the installation that made it (``home``), and records the base's own import
+  path, which the engine's spawned kernel processes start with, and its Python's version.
 - **One maker**: a lock beside it, so a process that finds another making it waits for it.
 - **The network** waits on nothing it need not: uv is asked ``--offline`` first, from its cache, and
   online only for what the cache does not hold, said in a line before it starts.
-- **Made on first need** for a process with no version, never ahead of it: nothing makes it at the
-  engine's start. The exception: a version of the per-version layout has its base made as it is installed
-  (``cad_server._internal.versions.make_present``), so a version that is present has nothing left to make --
-  a sandboxed command of it cannot write its code folder --; and so does a version an updater of 0.11.x installs
-  (``cad setup --engine-update``), the same way. The first ``cad run`` that needs it, or the first of the engine's kernel processes -- a build's
-  worker, a view or an operation that reads a STEP or an xbf or meshes one -- makes it (``kernel``,
-  ``Making``), and what needs it waits on its making. An engine a host's CAD app starts runs outside any
-  sandbox, so an agent's sandboxed ``cad run``, which cannot write the cache folder, asks it over its door
-  (``ensure``'s ``engine``) and follows its making; with no engine to ask, the command makes it itself.
+- **Made on first need**, never ahead of it: nothing makes it at install or at the server's start. Every need
+  goes to the server's one making (``MAKING``, ``Making.follow``): the start of a kernel process (``kernel``: a
+  build's worker, a view or an operation that reads a STEP or an xbf or meshes one), and a command's ask over the
+  door (``ensure``'s ``engine``: ``cad run``, an integration's command), which, in an agent's sandbox, could not
+  write the cache folder. Whoever waits hears each line of the making as it comes, from its first: the command
+  that asked and one that asks meanwhile, and the request whose kernel process waits on it (``TOLD``, which the
+  server sets for each request it serves). With no server running, a command that needs it made says the
+  server's one line (``client.NotRunning``): nothing but the server makes it.
 - **A failed making is remembered** by the engine, in memory alone (``Making.remembered``): its kernel
   processes are told the failure at once rather than making the base again on every request, until a
   failure that can clear by itself has waited (``PASSING``, ``RETRY_SECONDS``), a ``cad run`` asks for the
@@ -45,6 +41,7 @@ exists (``Making.made``), never before.
 
 from __future__ import annotations
 
+import contextvars
 import dataclasses
 import functools
 import hashlib
@@ -64,7 +61,7 @@ from typing import Any, Callable
 from cad.engine import places
 
 __all__ = ["BASE", "EXTRA", "FIND_LINKS_ENV", "MAKING", "PASSING", "RETRY", "RETRY_SECONDS", "Environment",
-           "Installation", "MARKER", "Making", "Recipe", "Refused", "Remembered", "SCHEMA", "complete", "ensure",
+           "Installation", "MARKER", "Making", "Recipe", "Refused", "Remembered", "SCHEMA", "TOLD", "complete", "ensure",
            "failure", "find_uv", "folder", "halt", "interpreter", "kernel", "make", "marked", "where"]
 
 # The bases' folder in the cache folder, and the marker that makes one complete, written last: the one a
@@ -141,7 +138,6 @@ class Installation:
     """The installation whose engine the base serves: what it installs and belongs to."""
 
     release: str  # the library's release, as its metadata says it (the server's own: one release)
-    name: str  # the version it runs as (``cad.engine.places.installation``)
     python: str  # its Python's version, ``3.14.0``
     executable: str  # its Python, as its environment names it (never resolved: that reaches the base interpreter)
     prefix: str  # its environment
@@ -184,7 +180,7 @@ def _own() -> Installation:
 
     package = Path(cad_server.__file__).resolve().parent
     prefix = os.path.abspath(sys.prefix)
-    return Installation(release=version(), name=places.installation(), python=platform.python_version(),
+    return Installation(release=version(), python=platform.python_version(),
                         executable=os.path.abspath(sys.executable), prefix=prefix, root=str(package.parent),
                         source=_source(Path(cad.__file__).resolve().parent, prefix, LIBRARY), arch=_machine(),
                         kernel=_carries_kernel())
@@ -262,22 +258,20 @@ def interpreter(env: Path) -> Path:
 
 
 def _inputs(installation: Installation) -> dict[str, Any]:
-    """What makes the base, which its key digests and its marker holds. A version's environments are its
-    alone, in its own code (``folder``), so its installation's environment (``prefix``) is no input; in 0.11.10 and
-    earlier every installation's were in one cache folder, told apart by it."""
-    found = {"schema": SCHEMA, "installation": installation.name, "release": installation.release,
-             "source": installation.source, "python": installation.python, "arch": installation.arch}
-    if places.versioned() is None:
-        found["prefix"] = os.path.normcase(os.path.realpath(installation.prefix))
-    return found
+    """What makes the base, which its key digests and its marker holds: the release, where it installs from (None:
+    the release on the index), the Python line every installation runs on (``launch.PYTHON``, never the asking
+    process's) and the platform -- nothing of where cad is installed, so every installation of one release finds
+    the one base its server made."""
+    from cad_server._internal.launch import PYTHON
+
+    return {"schema": SCHEMA, "release": installation.release, "source": installation.source, "python": PYTHON,
+            "platform": f"{sys.platform}-{installation.arch}"}
 
 
 def folder() -> Path:
     """The folder the base and ``cad run``'s environments (``cad_server._internal.extras``) are made in, each
-    ``<key>`` in it: ``base`` in this process's version's code (``places.code_dir``), which goes with the
-    version; with no version, ``base`` in the cache folder of 0.11.10 and earlier (``places.legacy_cache_dir``)."""
-    mine = places.versioned()
-    return (places.code_dir(mine) if mine is not None else places.legacy_cache_dir()) / BASE
+    ``<key>`` in it: ``base`` in the cache folder."""
+    return places.legacy_cache_dir() / BASE
 
 
 def where(installation: Installation | None = None) -> Path:
@@ -318,8 +312,8 @@ def ensure(installation: Installation | None = None, *, make: bool = True,
     """The installation's base (see the module): the installation's own environment when it carries the
     kernel; else ``base/<key>`` in the cache folder, made first when it is not complete and ``make``
     (None when it is not, and ``make`` is false), each line of the making said to ``told`` -- with
-    ``engine`` (``cad run``), made by the server (``_by_the_engine``: none running, its one line), else here.
-    ``Refused`` in one line when it cannot be made."""
+    ``engine`` (a command: ``cad run``, an integration's), by the server (``_by_the_engine``), else here (the
+    server's own making: ``Making``). ``Refused`` in one line when it cannot be made."""
     installation = installation or Installation.here()
     if installation.kernel:
         return Environment(installation.executable, installation.prefix, True)
@@ -330,32 +324,27 @@ def ensure(installation: Installation | None = None, *, make: bool = True,
     if not make:
         return None
     if engine:
-        marker = _by_the_engine(env, told or _say)
-        if marker is not None:
-            return _found(env, marker)
+        return _found(env, _by_the_engine(env, {"op": "base", "key": env.name}, complete, told or _say))
     return _found(env, _make(env, installation, told or _say))
 
 
-def _by_the_engine(env: Path, told: Callable[[str], None]) -> dict[str, Any] | None:
-    """The base at ``env`` made by the device's engine, when it is this installation's
-    (``{"op": "base"}``, ``Making``): its making followed, each line said to ``told``, and the base's
-    marker once made. None when the engine makes no base of this installation's (another
-    installation's, a release before this one): the caller makes the base itself. ``Refused`` in the
-    engine's words when it could not make it; no server running, or one of another release, its one line
-    (``client.NotRunning``, ``client.OtherRelease``)."""
+def _by_the_engine(env: Path, order: dict[str, Any], done: Callable[[Path], dict[str, Any] | None],
+                   told: Callable[[str], None]) -> dict[str, Any]:
+    """The environment at ``env`` made by the server (``order``: the door's ``base``, ``Making``): its making
+    followed, each line said to ``told``, and its marker (``done``) once made. ``Refused`` in the server's words
+    when it could not make it, and in one line when the server makes another one than ``env`` -- the same
+    release installed from elsewhere (a source tree, a wheel). No server running, or one of another release:
+    its one line (``client.NotRunning``, ``client.OtherRelease``), as every command says it."""
     from cad.engine import client
 
-    try:
-        answer = client.request({"op": "base", "key": env.name}, on_log=lambda frame: told(str(frame.get("log", ""))))
-    except (client.NotRunning, client.OtherRelease):
-        raise
-    except (ConnectionError, OSError, ValueError):
-        return None
-    if not answer or answer.get("base") is not True:
-        return None
-    if answer.get("failed"):
+    answer = client.request(order, on_log=lambda frame: told(str(frame.get("log", ""))))
+    if answer and answer.get("base") is True and answer.get("failed"):
         raise Refused(str(answer["failed"]))
-    return complete(env)
+    marker = done(env) if answer and answer.get("base") is True else None
+    if marker is None:
+        raise Refused("the running server is cad of this release installed from elsewhere, and makes its own "
+                      "environments, not this one's: run `cad server stop`, then `cad server start`")
+    return marker
 
 
 def kernel(make: bool = True) -> dict[str, Any] | None:
@@ -363,14 +352,15 @@ def kernel(make: bool = True) -> dict[str, Any] | None:
     (``cad.engine.places.KERNEL``): the base's Python, its folder, its import path and whether it is this
     installation's own; None when it is not made and ``make`` is false. With ``make``, one not made is made
     now, on first need, by the engine's one making (``MAKING``: its state in ``status``, every asker waiting
-    on the same making), unless that making failed and the failure is remembered (``Making.remembered``).
-    ``Refused`` when it cannot be, saying what the person can do next, with the failure's cause."""
+    on the same making, each line of it said to the request this need came from, ``TOLD``), unless that making
+    failed and the failure is remembered (``Making.remembered``). ``Refused`` when it cannot be, saying what the
+    person can do next, with the failure's cause."""
     found = ensure(make=False)
     if found is None and make:
         earlier = MAKING.remembered()
         if earlier is not None:
             raise Refused(earlier.said(), earlier.cause)
-        error = MAKING.follow(lambda _line: None)
+        error = MAKING.follow(TOLD.get())
         if error is not None:
             cause = MAKING.cause or "other"
             raise Refused(f"{error}. {_next(cause, RETRY_SECONDS)}", cause)
@@ -434,10 +424,9 @@ class Making:
         self.reported = False  # whether telemetry was told this failure (``claim``)
 
     def key(self) -> str | None:
-        """The name of this installation's base folder (``where``), which a client names the base it
-        needs by; None for an installation that carries the kernel."""
-        installation = Installation.here()
-        return None if installation.kernel else where(installation).name
+        """The name of this release's base folder (``where``), which a command names the base it needs by: one
+        the server makes for it even where the server's own environment carries the kernel."""
+        return where(Installation.here()).name
 
     def start(self) -> bool:
         """The base made on a thread of its own when it is absent and none is being made here: whether it
@@ -445,8 +434,7 @@ class Making:
         with self.changed:
             if self.state == "making":
                 return True
-            installation = Installation.here()
-            if installation.kernel or complete(where(installation)) is not None:
+            if complete(where(Installation.here())) is not None:
                 return False
             self.state, self.lines, self.error, self.since = "making", [], None, time.time()
         threading.Thread(target=self._make, name="cad-base", daemon=True).start()
@@ -461,7 +449,8 @@ class Making:
     def _make(self) -> None:
         cause = None
         try:
-            ensure(told=self._said)
+            installation = Installation.here()
+            _make(where(installation), installation, self._said)
             state, error = "made", None
         except Refused as refused:
             state, error, cause = "failed", str(refused), refused.cause
@@ -488,8 +477,7 @@ class Making:
         left = RETRY_SECONDS - since if cause in PASSING else None
         if left is not None and left <= 0:
             return None
-        installation = Installation.here()
-        if installation.kernel or complete(where(installation)) is not None:
+        if complete(where(Installation.here())) is not None:
             return None
         return Remembered(error, cause, since, left)
 
@@ -532,6 +520,11 @@ class Making:
 
 # The engine's making of its base (``Making``): one a process.
 MAKING = Making()
+# Where a making's lines go when a kernel process's start waits on it (``kernel``): to the request that start is
+# for, which the server sets for each request it serves (``cad_server.engine.daemon``: a ``log`` frame of the
+# ``making`` stream, which every client says as it comes); else nowhere.
+TOLD: contextvars.ContextVar[Callable[[str], None]] = contextvars.ContextVar("cad_making_told",
+                                                                             default=lambda _line: None)
 
 
 # --- making it -------------------------------------------------------------------------------------
@@ -548,10 +541,8 @@ def find_uv() -> str:
         return find_uv_bin()
     except (ImportError, FileNotFoundError):
         pass
-    from cad_server._internal.launch import SERVER, launch_command
-
-    raise Refused("the server makes its CAD kernel environment with uv, and finds none: it depends on the uv "
-                  f"package, which carries it; install {SERVER} again: run `{launch_command('cad setup')}`", "uv")
+    raise Refused("the server makes its environments with uv, and finds none: cad depends on the uv package, which "
+                  "carries it, and this installation of cad lacks it", "uv")
 
 
 @dataclass(frozen=True)
@@ -621,17 +612,15 @@ def _say(line: str) -> None:
     print(f"cad: {line}", file=sys.stderr, flush=True)
 
 
-def _make(env: Path, installation: Installation, told: Callable[[str], None],
-          inputs: dict[str, Any] | None = None) -> dict[str, Any]:
-    """The base at ``env`` made (``make``): the import path its Python starts with asked of it, and its
-    marker, naming the installation it belongs to, written last. ``inputs``: what its key digests, as the
-    installation's own process works it out (``cad_server._internal.versions`` makes a version's base from
-    another process); by default this process's (``_inputs``)."""
+def _make(env: Path, installation: Installation, told: Callable[[str], None]) -> dict[str, Any]:
+    """The base at ``env`` made (``make``): the import path its Python starts with, and that Python's version,
+    asked of it, and its marker, naming the installation that made it and what its key digests, written last."""
 
     def finish(steps: list[list[str]], seconds: float) -> dict[str, Any]:
-        return {"schema": SCHEMA, "key": env.name, "inputs": inputs if inputs is not None else _inputs(installation),
-                "installation": dataclasses.asdict(installation), "path": _path(env), "commands": steps,
-                "seconds": round(seconds, 2), "made": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+        path, version = _probe(env)
+        return {"schema": SCHEMA, "key": env.name, "inputs": _inputs(installation),
+                "installation": dataclasses.asdict(installation), "path": path, "python_version": version,
+                "commands": steps, "seconds": round(seconds, 2), "made": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
 
     return make(env, recipe(installation), told, finish=finish, marker=MARKER, done=complete)
 
@@ -919,12 +908,7 @@ def _failure(step: list[str], said: str, recipe: Recipe, code: int | None = None
                     f"{_last(said)}"), "network"
         return f"{what} needs the network once: {_last(said)}", "network"
     if step[1] == "venv":
-        again = ""
-        if what == WHAT:  # the installation's own Python: a release installed again brings it back
-            from cad_server._internal.launch import SERVER as server, launch_command
-
-            again = f"; that Python must run here: install {server} again: run `{launch_command('cad setup')}`"
-        return f"uv cannot make {what} on {recipe.python}: {words}{again}", "python"
+        return f"uv cannot make {what} on {recipe.python}: {words}", "python"
     release = recipe.release
     if recipe.source is None and any(f"no version of {name}=={release}" in explained
                                      for name in (LIBRARY, f"{LIBRARY}[{EXTRA}]", SERVER)):

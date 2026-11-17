@@ -1978,6 +1978,11 @@ def _serve(daemon: Daemon, reader: Any, writer: Any, protocol: int = DOOR_PROTOC
         # A manufacturing check's caller is watched for hanging up: a check no one waits for gives up its checks
         # process to one someone does (``checks_runner.Runner.reap``).
         request["_gone"] = _watched(reader, connection)
+    from cad_server._internal.base import TOLD
+
+    # An environment this request's kernel process waits on, made meanwhile: each line of its making said to the
+    # client, which says it as it comes (``base.kernel``, ``client._exchange``).
+    making = TOLD.set(lambda line: send({"log": line, "stream": "making"}))
     try:
         daemon.handle(request, send)
     except ValueError as error:  # a request refused, in its words
@@ -1985,6 +1990,7 @@ def _serve(daemon: Daemon, reader: Any, writer: Any, protocol: int = DOOR_PROTOC
     except OSError as error:  # a failure: its words, and its type
         send({"failed": str(error), **failed_type(error)})
     finally:
+        TOLD.reset(making)
         daemon.ended(request)  # a command's end; the server's own asks are none
         if daemon.refusal is not None:
             daemon.stopping.set()  # its answer sent: the engine whose port is another's stops

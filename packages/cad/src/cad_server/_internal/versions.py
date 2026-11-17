@@ -20,12 +20,10 @@ outside ``versions/<version>/code``:
    install: ``base.server_source``), made by uv as every environment is (``base.make``: uv's cache first, the
    network only for what it lacks, a folder of wheels a test names read beside the index,
    ``base.FIND_LINKS_ENV``, its marker ``cad-release.json`` written last);
-3. the proof that it runs (``_probe``): its own Python asked, in a process of its own, which version it is and
-   where its kernel environment goes, as it works them out itself;
-4. the kernel environment, ``cad[build123d]`` at the version, made now in ``code/base/<key>`` (``base``) rather
-   than on first need: a present version has nothing left to make, since a command of it in an agent's sandbox
-   cannot write its code;
-5. the code marker, last.
+3. the proof that it runs (``_probe``): its own Python asked, in a process of its own, which version it is, as it
+   works it out itself;
+4. the code marker, last. The kernel environment is not made here: the server makes it on first need, in the cache
+   folder (``base``).
 
 Each step is skipped when it is done already, so running it twice, or again after an interruption, finishes
 what is left; a second caller waits on the install lock and finds it present. Where it cannot run from this
@@ -277,10 +275,9 @@ def _make(name: str, say: Callable[[str], None]) -> dict[str, Any]:
     base.make(server, releases.recipe(name, sys.executable, source), say, finish=finish, marker=releases.MARKER,
               done=lambda env: _server(env, name))
     probe = _probe(name)
-    kernel = _kernel(name, probe, say)
     record = {"schema": places.VERSION_SCHEMA, "version": name, "python": str(base.interpreter(server)),
               "cad": str(releases.console(server)), "prefix": str(server), "release": probe.get("release"),
-              "kernel": kernel, "source": source, "made": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+              "source": source, "made": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
     # A key a line, its paths as they are (not escaped): the ``cad`` command's sh reads its ``python`` and ``cad``
     # lines (``installations``).
     write_bytes_atomic(code / places.VERSION_MARKER,
@@ -375,21 +372,6 @@ def development(name: str, python: str, cad: str, prefix: str) -> dict[str, Any]
                            (json.dumps(record, indent=1, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"))
         installations._forget_read()
     return record
-
-
-def _kernel(name: str, probe: dict[str, Any], say: Callable[[str], None]) -> str | None:
-    """Version ``name``'s kernel environment made, where the version's own Python said it goes (``probe``):
-    its folder, or None for a server environment that carries the kernel itself."""
-    installation = base.Installation(**{key: probe["installation"][key] for key in
-                                        base.Installation.__dataclass_fields__})
-    if installation.kernel:
-        return None
-    env = Path(probe["base"])
-    inside = os.path.normcase(os.path.realpath(places.code_dir(name))).rstrip(os.sep) + os.sep
-    if not os.path.normcase(os.path.realpath(env)).startswith(inside):
-        raise base.Refused(f"cad {name}'s kernel environment would be made outside its code: {env}", "probe")
-    base._make(env, installation, say, inputs=probe.get("inputs"))
-    return str(env)
 
 
 # --- a version's server, asked through its own door ----------------------------------------------------

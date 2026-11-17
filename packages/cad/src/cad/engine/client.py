@@ -361,6 +361,9 @@ def _exchange(connection: Connection, message: dict[str, Any], on_log: Callable[
         connection.writer.flush()
         for line in connection.reader:
             answer = json.loads(line)
+            if answer.get("stream") == "making":  # an environment the request waits on, made meanwhile: said here
+                print(f"cad: {answer.get('log', '')}", file=sys.stderr, flush=True)
+                continue
             if "log" in answer:
                 on_log(answer)
                 continue

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import os
 import subprocess
 import tempfile
@@ -63,7 +64,7 @@ class BaseTest(unittest.TestCase):
         self.core = self.root / "core"
         # A release installed from the index with its core alone, as uvx installs the plugin's server.
         self.installation = base.Installation(
-            release=RELEASE, name=RELEASE, python="3.14.2", executable=str(base.interpreter(self.core)),
+            release=RELEASE, python="3.14.2", executable=str(base.interpreter(self.core)),
             prefix=str(self.core), root=str(self.core / "site-packages"), source=None, arch="arm64", kernel=False)
         self.said: list[str] = []
         self.path = ["/stdlib", "/the-base/site-packages"]
@@ -73,7 +74,7 @@ class BaseTest(unittest.TestCase):
         stack = contextlib.ExitStack()
         stack.enter_context(mock.patch.object(base, "_uv", fake))
         stack.enter_context(mock.patch.object(base, "find_uv", return_value="uv"))
-        stack.enter_context(mock.patch.object(base, "_path", return_value=self.path))
+        stack.enter_context(mock.patch.object(base, "_probe", return_value=(self.path, "3.14.2")))
         return stack
 
     def test_the_base_is_made_once_with_the_kernel_and_reused_after(self) -> None:
@@ -179,15 +180,63 @@ class BaseTest(unittest.TestCase):
                 mock.patch.object(base, "where", return_value=self.root / "cache" / base.BASE / "none"), \
                 self.assertRaises(client.NotRunning):
             base.ensure(self.installation, told=self.said.append, engine=True)
-        # One of another installation's, one that makes no base: the command makes it.
+        # A server that makes another base than this command's (the release installed from elsewhere), or none:
+        # one line, and nothing made here -- only the server makes it.
         for answer in ({"ok": False, "other": True}, {"failed": "unknown request 'base'"}):
-            with self.subTest(answer=answer):
-                folder = self.root / "cache" / base.BASE / f"own-{len(own_uv.steps)}"
-                with self.made(own_uv), mock.patch.object(client, "request", return_value=answer), \
-                        mock.patch.object(base, "where", return_value=folder):
-                    self.assertEqual(base.ensure(self.installation, told=self.said.append, engine=True).prefix,
-                                     str(folder))
-        self.assertEqual(own_uv.asked(), ["venv", "pip --offline"] * 2)
+            with self.subTest(answer=answer), self.made(own_uv), \
+                    mock.patch.object(client, "request", return_value=answer), \
+                    mock.patch.object(base, "where", return_value=self.root / "cache" / base.BASE / "other"), \
+                    self.assertRaisesRegex(base.Refused, "^the running server is cad of this release installed from "
+                                                         "elsewhere, .+: run `cad server stop`, then `cad server start`$"):
+                base.ensure(self.installation, told=self.said.append, engine=True)
+        self.assertEqual(own_uv.steps, [])
+
+    def test_one_release_has_one_base_wherever_cad_is_installed_and_whatever_python_asks(self) -> None:
+        # An agent app starts the server from uvx's cache; the `cad` in the agent's shell is installed elsewhere
+        # (uv's tool folder), perhaps on another Python: both name the one base, which the server makes.
+        tool = self.root / "tools" / "cad"
+        elsewhere = base.dataclasses.replace(self.installation, python="3.13.1", executable=str(base.interpreter(tool)),
+                                             prefix=str(tool), root=str(tool / "site-packages"))
+        self.assertEqual(base.where(elsewhere), base.where(self.installation))
+        for other in ({"release": "9.9.10"}, {"source": "file:///wheels/cad-9.9.9-py3-none-any.whl"}):
+            with self.subTest(other=other):
+                self.assertNotEqual(base.where(base.dataclasses.replace(self.installation, **other)),
+                                    base.where(self.installation))
+
+    def test_a_request_whose_kernel_process_waits_on_the_making_hears_its_lines(self) -> None:
+        # A first build, view or export says nothing of its own while the kernel is fetched: the server says each
+        # line of the making to the request that waits on it (``base.TOLD``, set for each request it serves), and
+        # the client says it as it comes, whichever command it is (``client._exchange``).
+        from cad.engine import client
+        from cad_server.engine import daemon
+
+        class Served:
+            unsaid, refusal, token = "", None, None
+
+            @staticmethod
+            def handle(request, send):
+                send({"ok": True, "kernel": base.kernel()["prefix"]})
+
+            @staticmethod
+            def ended(request):
+                pass
+
+        answered = io.BytesIO()
+        with self.kernel(base.Making(), Fake()), mock.patch.object(daemon, "WINDOWS", False):
+            daemon._serve(Served(), io.BytesIO(b'{"op": "build"}\n'), answered)
+        env = base.where(self.installation)
+        line = f"making the CAD kernel environment, once: cad[build123d] {RELEASE} on Python 3.14.2, in {env}"
+        frames = [json.loads(frame) for frame in answered.getvalue().splitlines()]
+        self.assertEqual(frames, [{"log": line, "stream": "making"}, {"ok": True, "kernel": str(env)}])
+
+        class Connection(io.BytesIO):
+            reader, writer = io.BytesIO(answered.getvalue()), io.BytesIO()
+
+        logged: list[dict] = []
+        with contextlib.redirect_stderr(io.StringIO()) as said, mock.patch.object(client.places, "WINDOWS", False):
+            answer = client._exchange(Connection(), {"op": "build"}, logged.append)
+        self.assertEqual((answer, logged), ({"ok": True, "kernel": str(env)}, []))
+        self.assertEqual(said.getvalue(), f"cad: {line}\n")
 
     def kernel(self, making: base.Making, uv) -> contextlib.ExitStack:
         """``base.kernel`` as the engine asks it, its making ``making`` and uv ``uv``, the engine's log
@@ -218,8 +267,8 @@ class BaseTest(unittest.TestCase):
             first = self.refused()
             self.assertEqual(first.cause, "python")
             self.assertTrue(str(first).startswith(f"uv cannot make the CAD kernel environment on "
-                                                  f"{self.installation.executable}: Failed to inspect Python interpreter; "
-                                                  "that Python must run here: install cad-server again: run `"), str(first))
+                                                  f"{self.installation.executable}: Failed to inspect Python "
+                                                  "interpreter. "), str(first))
             self.assertTrue(str(first).endswith(". The engine does not try again until it restarts; "
                                                 '`cad run -c "import build123d"` tries again, saying each step.'))
             now[0] += 3600
