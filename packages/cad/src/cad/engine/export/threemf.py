@@ -22,6 +22,8 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape, quoteattr
 
+import numpy as np
+
 from cad.engine.export import ZIP_DATE, within
 from cad.engine.export.mesh import groups, meshes
 from cad.engine.formats.gltf import drawn_alpha
@@ -42,6 +44,23 @@ def _srgb(value: float) -> int:
 
 def _hex(rgba: tuple) -> str:
     return "#%02X%02X%02X%02X" % (_srgb(rgba[0]), _srgb(rgba[1]), _srgb(rgba[2]), round(float(rgba[3]) * 255))
+
+
+# A seam vertex is meshed once per face that uses it, so the same position appears
+# once per face: a cube leaves with 24 vertices, and a slicer reads every seam edge
+# as open (3MF judges an edge by index, not by position). Weld positions closer than
+# this, in millimetres: 1e-5 mm is far below any print tolerance, and the kept vertex
+# carries its own coordinates, so the mesh's shape does not move.
+_MERGE = 1e-5
+
+
+def _merged(positions: Any) -> tuple[Any, Any]:
+    """Positions with coincident corners welded: the kept positions, and per old
+    position its kept index. Coordinates are rounded to ``_MERGE`` first, so a seam
+    vertex meshed twice with a last-bit difference still welds."""
+    keys = np.round(np.asarray(positions, dtype=np.float64) / _MERGE).astype(np.int64)
+    _, first, remap = np.unique(keys, axis=0, return_index=True, return_inverse=True)
+    return np.asarray(positions)[first], remap.reshape(-1)
 
 
 def write(view: Any, path: Path) -> None:
@@ -69,12 +88,15 @@ def write(view: Any, path: Path) -> None:
             return None
         prototype = view.prototypes[index]
         default = look_index(groups(mesh, {**prototype, "faceColors": {}, "faceMaterials": {}}, color)[0][0])
-        vertices = "".join(f'<vertex x="{x:.6g}" y="{y:.6g}" z="{z:.6g}"/>' for x, y, z in mesh.positions.tolist())
+        merged, remap = _merged(mesh.positions)
+        vertices = "".join(f'<vertex x="{x:.6g}" y="{y:.6g}" z="{z:.6g}"/>' for x, y, z in merged.tolist())
         rows = []
         for look, indices in groups(mesh, prototype, color):
             at = look_index(look)
             tail = "/>" if at == default else f' pid="{BASE_ID}" p1="{at}"/>'
-            rows.extend(f'<triangle v1="{a}" v2="{b}" v3="{c}"{tail}' for a, b, c in indices.reshape(-1, 3).tolist())
+            welded = remap[indices.reshape(-1, 3)]
+            kept = (welded[:, 0] != welded[:, 1]) & (welded[:, 1] != welded[:, 2]) & (welded[:, 0] != welded[:, 2])
+            rows.extend(f'<triangle v1="{a}" v2="{b}" v3="{c}"{tail}' for a, b, c in welded[kept].tolist())
         ident = len(objects) + 3
         objects.append(f'<object id="{ident}" type="model" name={quoteattr(prototype["name"])} pid="{BASE_ID}" '
                        f'pindex="{default}"><mesh><vertices>{vertices}</vertices>'
