@@ -395,7 +395,43 @@ class JoinTest(unittest.TestCase):
                 mock.patch.object(client, "_sandboxed", return_value=False), \
                 mock.patch.object(client, "sweep") as sweep:
             self.assertIsNone(client.make_way())
-        sweep.assert_called_once_with(stop=True, seconds=client.STOP_SECONDS)
+        sweep.assert_called_once_with(stop=True, seconds=client.STOP_SECONDS, leave=version())
+
+    def test_starts_at_once_stop_the_older_server_alone_and_join_the_one_another_of_them_started(self) -> None:
+        """Starts at the same moment all find an older server; one stops it and starts this release's. Another reaches
+        the server after that -- before it would tell it to stop, or while it waits for the older one to go -- and
+        joins the server it finds, of this release or a newer one: never told to stop, never waited on."""
+        for moment in ("before the stop", "while the older one goes"):
+            for theirs in (version(), "999.0.0"):
+                serving = ["0.0.1"]  # the release of the server that answers now
+                stopped: list[str] = []
+
+                def connect(*_args, **_kwargs):
+                    return types.SimpleNamespace(release=serving[0], close=lambda: None)
+
+                def sandboxed() -> bool:  # asked between the start's look at the server and its stop
+                    if moment == "before the stop":
+                        serving[0] = theirs
+                    return False
+
+                def exchange(connection, message, **_kwargs):
+                    stopped.append(connection.release)
+                    if moment == "while the older one goes":
+                        serving[0] = theirs  # the other start's server answers before this one sees none
+                    return {"ok": True}
+
+                with self.subTest(moment=moment, theirs=theirs), \
+                        mock.patch.object(client, "_connect", side_effect=connect), \
+                        mock.patch.object(client, "_answering", return_value=True), \
+                        mock.patch.object(client, "_sandboxed", side_effect=sandboxed), \
+                        mock.patch.object(client, "_note_pages"), \
+                        mock.patch.object(client, "_exchange", side_effect=exchange), \
+                        mock.patch.object(client, "_remove_dead", return_value=[]):
+                    said = client.make_way()
+                    self.assertEqual(stopped, [] if moment == "before the stop" else ["0.0.1"], "the older one alone")
+                    self.assertEqual(said, f"the cad server (cad {version()}) is already running" if theirs == version()
+                                     else f"the cad server (cad 999.0.0, newer than this cad {version()}) is already "
+                                          "running")
 
     def test_a_server_that_hands_its_start_to_an_update_is_waited_for_and_the_update_s_newer_server_joined(self):
         answers = iter([None, None, None, types.SimpleNamespace(release="999.0.0", close=lambda: None)])

@@ -1,7 +1,7 @@
 """Reaching the server: connect through its door (on Windows, its loopback port). Nothing here starts one but
 ``start`` (``cad server start``, ``cad mcp``): a client that finds none is told so in one line (``NotRunning``), and a
 ``cad`` command that finds one of another release is too (``OtherRelease``, ``RELEASE``). A start never replaces a
-server newer than itself: it joins it (forward only)."""
+server of its own release or a newer one, whenever it finds it: it joins it (forward only)."""
 
 from __future__ import annotations
 
@@ -252,29 +252,43 @@ def _working_folder() -> str | None:
     return str(folder.parent) if folder.parent.exists() else None
 
 
+def _at_least(theirs: str | None, mine: str) -> bool:
+    """Whether release ``theirs`` is ``mine`` or a newer one: a server a start of ``mine`` joins, never replaces."""
+    return theirs == mine or newer(theirs, mine)
+
+
 def make_way() -> str | None:
     """Room made for this release's server, as ``start`` makes it, and ``cad server start --foreground`` before it
-    runs one in its own process: a server of another release -- or one whose greeting names none, of 0.11.10 or
+    runs one in its own process: a server of an older release -- or one whose greeting names none, of 0.11.10 or
     earlier -- told to stop at once, its work cut short, and waited for, ``STOP_SECONDS`` at most (``sweep``). Where a
     server of this release or a newer one answers, nothing is done, and that is said in one line (returned); else None.
-    ``ConnectionError`` in one line where room cannot be made: in a shell whose sandbox refuses the loopback port a
-    server needs (``SANDBOXED``), before anything is stopped, and where the server told to stop did not go."""
+    So it is too where one answers by the time of the stop or while the older one goes -- a start at the same moment
+    started it --: the stop is asked of the server it reaches only once that server's own greeting names an older
+    release (``sweep``'s ``leave``), so no start stops a server of this release or a newer one, however the moments
+    fall. ``ConnectionError`` in one line where room cannot be made: in a shell whose sandbox refuses the loopback port
+    a server needs (``SANDBOXED``), before anything is stopped, and where the server told to stop did not go."""
     found = _connect()
     if found is not None:
         found.close()
-        if found.release == version() or newer(found.release, version()):
+        if _at_least(found.release, version()):
             return _joined(found.release)
     if _sandboxed():
         raise ConnectionError(SANDBOXED)
     if found is not None:
-        sweep(stop=True, seconds=STOP_SECONDS)
+        sweep(stop=True, seconds=STOP_SECONDS, leave=version())
+        found = _connect()
+        if found is not None:
+            found.close()
+            if _at_least(found.release, version()):
+                return _joined(found.release)
     return None
 
 
 def start(port: int | None = None) -> str:
     """This release's server running: the one function that starts a server (``cad server start``, ``cad mcp``),
     once room is made for it (``make_way``) -- started (``_spawn``; ``port``, the HTTP port it must take) and waited
-    for until its door answers. Starts at the same moment end with one server, by the daemon's lock. A server that
+    for until its door answers. Starts at the same moment end with one server, by the daemon's lock, and none of them
+    stops the server another of them started (``make_way``): each says it ran or joined it. A server that
     hands its start to cad's own update (``UPDATING``) is not started again: the update's server is waited for, and
     joined where it is newer. What was done, in one line. ``ConnectionError`` in one line where it could not be: room
     not made (``make_way``), a server that did not start (its note, ``places.failure_path``), and one of an older
@@ -357,19 +371,25 @@ def connect(*, start: bool = True) -> Connection | None:
     return found
 
 
-def wait_gone(timeout: float = 60.0, endpoint: places.Endpoint | None = None) -> bool:
+def wait_gone(timeout: float = 60.0, endpoint: places.Endpoint | None = None, *, leave: str | None = None) -> bool:
     """Wait until the daemon, told to stop, is gone: its door no longer answers -- its port file,
     refused as it is removed, does not (``_connect``) -- and its lock, held until its workers have
-    stopped, is free."""
+    stopped, is free. With ``leave`` (``sweep``'s), a server of that release or a newer one answering in its place
+    -- a start at the same moment started it, once the one told to stop had gone -- says it is gone too."""
     deadline = time.monotonic() + timeout
     lock = endpoint.lock if endpoint else places.lock_path()
+    address = endpoint.address if endpoint else places.address()
     while time.monotonic() < deadline:
-        if not _answering(endpoint.address if endpoint else places.address(), stopping=True):
+        if not _answering(address, stopping=True):
             if not lock.exists():
                 return True  # it removed its lock as it let it go (``daemon.let_go``)
             held = _lock(lock)
             if held is not None:
                 held.close()
+                return True
+        elif leave is not None and (found := _connect(address, stopping=True)) is not None:
+            found.close()
+            if _at_least(found.release, leave):
                 return True
         time.sleep(0.05)
     return False
@@ -516,13 +536,15 @@ def _note_pages(address: Path) -> None:
 PAGES_SECONDS = 5.0
 
 
-def sweep(*, stop: bool, seconds: float = 60.0) -> dict[str, list[str]]:
+def sweep(*, stop: bool, seconds: float = 60.0, leave: str | None = None) -> dict[str, list[str]]:
     """The engine of this engine folder (``places.endpoints``): with ``stop``, stopped if it lives and
     waited for until gone, ``seconds`` at most (``stopped``, its door or port file), the port it served pages on
     noted first for the next server (``_note_pages``); a live one left running listed in ``running``. The door and
     lock files of a dead one -- nothing answers there and nobody holds its lock -- are removed (``removed``). A
     daemon starting or stopping holds its lock before it listens and until it has left, so its files are never
-    taken."""
+    taken. ``leave``: a release whose servers, and a newer one's, are left running, never told to stop (``make_way``,
+    this release): read from the greeting of the very connection the stop would go by, and a server of it answering
+    while the one told to stop goes is that one gone (``wait_gone``)."""
     found: dict[str, list[str]] = {"stopped": [], "running": [], "removed": []}
     for endpoint in places.endpoints():
         if _answering(endpoint.address):
@@ -533,11 +555,15 @@ def sweep(*, stop: bool, seconds: float = 60.0) -> dict[str, list[str]]:
             connection = _connect(endpoint.address)
             if connection is None:
                 continue  # it went meanwhile: gone, as asked
+            if leave is not None and _at_least(connection.release, leave):
+                connection.close()  # one to join, not the one to replace: a start at the same moment started it
+                found["running"].append(str(endpoint.address))
+                continue
             try:
                 _exchange(connection, {"op": "stop"}, address=endpoint.address)
             except ConnectionError:
                 pass  # it closed the connection unanswered: stopping already (another start told it), as asked
-            if not wait_gone(seconds, endpoint=endpoint):
+            if not wait_gone(seconds, endpoint=endpoint, leave=leave):
                 raise ConnectionError(f"the engine server at {endpoint.address} did not exit")
             found["stopped"].append(str(endpoint.address))
             _remove_dead(endpoint)  # what it left, should it have died before removing its files

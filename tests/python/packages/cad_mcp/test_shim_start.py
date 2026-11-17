@@ -155,12 +155,12 @@ class StoppingTest(unittest.TestCase):
         older = types.SimpleNamespace(release="0.0.1", close=lambda: None)
         with mock.patch.object(client.places, "endpoints", return_value=[endpoint]), \
                 mock.patch.object(client, "_answering", return_value=True), \
-                mock.patch.object(client, "_connect", side_effect=[older, silent, closing]), \
+                mock.patch.object(client, "_connect", side_effect=[older, silent, closing, None]), \
                 mock.patch.object(client, "wait_gone", return_value=True) as waited, \
                 mock.patch.object(client, "_remove_dead", return_value=[]), \
                 mock.patch.object(client, "_sandboxed", return_value=False):
-            self.assertIsNone(client.make_way())
-        waited.assert_called_once_with(client.STOP_SECONDS, endpoint=endpoint)
+            self.assertIsNone(client.make_way())  # gone, and none answers after it: this start starts its own
+        waited.assert_called_once_with(client.STOP_SECONDS, endpoint=endpoint, leave=version())
 
 
 class UnansweredTest(unittest.TestCase):
