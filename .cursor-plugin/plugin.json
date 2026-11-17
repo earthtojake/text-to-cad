@@ -24,5 +24,15 @@
     "gcode"
   ],
   "logo": ".claude-plugin/icon.png",
-  "skills": "./skills/"
+  "skills": "./skills/",
+  "hooks": {
+    "version": 1,
+    "hooks": {
+      "sessionStart": [
+        {
+          "command": "cad server start"
+        }
+      ]
+    }
+  }
 }

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -253,28 +254,37 @@ class PluginManifestPolicyTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertIn(command, page)
 
-    def test_codex_starts_the_cad_server_pinned_in_the_threads_workspace(self) -> None:
-        # One uniquely named server (a host allowlists servers by name), run by uvx from the
-        # runtime this plugin version pins. Not offline: the first start after an install or an
-        # update downloads that runtime, given the time to (an offline start of an uncached pin
-        # fails). No `cwd`: Codex then starts each thread's server in that thread's workspace.
+    def test_codex_starts_the_cad_server_of_its_release(self) -> None:
+        # One uniquely named server (a host allowlists servers by name): uvx runs cad at this plugin's release, as
+        # `cad mcp`, from uv's cache, installing nothing. Not offline: the first start downloads that release. No
+        # `cwd`: Codex then starts each thread's server in that thread's workspace. Every copy carries this line.
         manifest = load_json(CODEX_PLUGIN_PATH)
         self.assertEqual(manifest.get("mcpServers"), "./codex.mcp.json")
-        servers = load_json(CODEX_MCP_PATH)["mcpServers"]
-        self.assertEqual(list(servers), ["cad"])
-        server = servers["cad"]
-        self.assertNotIn("cwd", server)
-        self.assertEqual(server["command"], "uvx")
-        args = server["args"]
-        self.assertNotIn("--offline", args)
-        self.assertGreaterEqual(server.get("startup_timeout_sec", 0), 300)
-        self.assertIn("--no-config", args)
-        # Its launcher told the same startup timeout, so its first start holds Codex's initialize that long rather
-        # than answer early with no tools (Codex acts on no tools/list_changed within a turn): `latest` and `main`
-        # are installed from this file.
-        self.assertEqual(args[args.index("cad-mcp"):], ["cad-mcp", "--startup-timeout", f"{server['startup_timeout_sec']:g}"])
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        self.assertEqual(args[args.index("--from") + 1], f"cad-mcp=={version}")
+        self.assertEqual(load_json(CODEX_MCP_PATH), {"mcpServers": {"cad": {
+            "command": "uvx",
+            "args": ["--no-config", "--managed-python", "--python", "3.14", f"cad@{version}", "mcp"],
+            "startup_timeout_sec": 300,
+        }}})
+
+    def test_claude_code_and_cursor_start_the_server_at_session_start(self) -> None:
+        # The copies we install start the server when a session starts, without holding the session: Claude Code's
+        # hook in the catalog's entry (so claude.ai's directory copy, which ships no catalog, carries none), Cursor's
+        # in its own manifest. No file at hooks/hooks.json: Claude Code, Cursor and Codex all read one there by
+        # default, each in its own format.
+        entry = next(entry for entry in load_json(MARKETPLACE_PATH)["plugins"] if entry["name"] == PLUGIN_NAME)
+        self.assertEqual(entry["hooks"], {"SessionStart": [{"hooks": [
+            {"type": "command", "command": "cad", "args": ["server", "start"], "async": True}]}]})
+        self.assertEqual(load_json(CURSOR_PLUGIN_PATH)["hooks"],
+                         {"version": 1, "hooks": {"sessionStart": [{"command": "cad server start"}]}})
+        for path in (*MANIFESTS, GEMINI_EXTENSION_PATH):
+            if path != CURSOR_PLUGIN_PATH:
+                with self.subTest(path=str(path.relative_to(REPO_ROOT))):
+                    self.assertNotIn("hooks", load_json(path))
+        tracked = subprocess.run(["git", "-C", str(REPO_ROOT), "ls-files"], check=True, capture_output=True,
+                                 text=True).stdout.splitlines()
+        self.assertEqual([path for path in tracked if path == "hooks/hooks.json" or path.endswith("/hooks/hooks.json")], [])
+        self.assertFalse((REPO_ROOT / "hooks").exists())
 
     def test_only_codex_s_manifest_starts_a_server(self) -> None:
         # Browser first: the CAD server ships to the one app whose CAD view is verified, the Codex app (a tab beside
@@ -316,31 +326,14 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertNotIn("contextFileName", manifest)
         self.assertFalse((REPO_ROOT / "GEMINI.md").exists())
 
-    def test_codex_s_server_runs_the_one_launch_command(self) -> None:
-        # Codex's server starts the shim by one command (cad_server._internal.launch's mcp_command), as the skills
-        # run the server by one: its config may not spell it differently.
-        import sys
-
-        from tests.python.support.paths import add_sources
-
-        add_sources()
-        from cad_server._internal.launch import LAUNCHER, mcp_command
-
-        version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        expected = mcp_command(version)[1:]
-        self.assertEqual(expected, [*LAUNCHER[1:], f"cad-mcp=={version}", "cad-mcp"])
-        server = load_json(CODEX_MCP_PATH)["mcpServers"]["cad"]
-        self.assertEqual((server["command"], server["args"][:len(expected)]), (LAUNCHER[0], expected))
-        self.assertEqual(server["args"][len(expected):], ["--startup-timeout", f"{server['startup_timeout_sec']:g}"])
-
-    def test_no_plugin_on_main_names_a_channel(self) -> None:
-        # Main's text is our own, the default channel: Codex's config, the one there is, names no channel or says
-        # who updates the copy (the variables 0.11.10 and earlier read, which a copy of those releases still sets,
-        # are ignored now), and its launcher is given no `--channel`. A store's copy is told its channel by the
-        # builder that makes it (scripts/release/plugin_branch.py, plugin_zip.py).
-        server = load_json(CODEX_MCP_PATH)["mcpServers"]["cad"]
-        self.assertNotIn("env", server)
-        self.assertNotIn("--channel", server["args"])
+    def test_no_plugin_file_names_a_channel(self) -> None:
+        # Every copy behaves the same: no line or hook names a channel or who updates the copy (the variables 0.11.10
+        # and earlier read, which a copy of those releases still sets, are ignored).
+        for path in (*MANIFESTS, MARKETPLACE_PATH, MUSE_MARKETPLACE_PATH, GEMINI_EXTENSION_PATH, CODEX_MCP_PATH):
+            with self.subTest(path=str(path.relative_to(REPO_ROOT))):
+                text = path.read_text(encoding="utf-8")
+                for word in ("--channel", "channel", "CAD_INSTALL_CHANNEL", "CAD_AUTO_UPDATED", "--startup-timeout"):
+                    self.assertNotIn(word, text)
 
     def test_no_stale_plugin_subdirectory_package_remains(self) -> None:
         # The generated `plugins/cad/skills` copy is what the repo-root move
