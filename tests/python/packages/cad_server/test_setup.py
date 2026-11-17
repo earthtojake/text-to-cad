@@ -210,6 +210,43 @@ class TakeOver(Computer):
             self.assertFalse(setup._alone(), "not Windows, or a state folder named")
 
 
+class Serving(Computer):
+    """The server a take-over starts (``_serve``) gets this process's environment, without what only this run goes
+    by, and leaves ``os.environ`` as it was. Measured on Windows: computed from an emptied one, it started no server."""
+
+    def test_the_server_gets_this_process_s_environment_less_the_run_s_own_and_it_is_put_back(self) -> None:
+        kept = {"CAD_ENGINE_DIR": str(self.root / "engine"), "CAD_BRIDGE_MARK": "kept"}
+        dropped = {"PYTHONPATH": str(self.root / "src"), setup.PREPARE_ENV: "1", "UV_NO_MODIFY_PATH": "1"}
+        with mock.patch.dict(os.environ, {**kept, **dropped}):
+            before = dict(os.environ)
+            for failing in (False, True):
+                with self.subTest(failing=failing):
+                    seen: list[dict[str, str]] = []
+
+                    def start() -> str:
+                        seen.append(dict(os.environ))
+                        if failing:
+                            raise ConnectionError("the engine server did not start")
+                        return "started"
+
+                    err = io.StringIO()
+                    with mock.patch.object(client, "start", side_effect=start), \
+                            mock.patch.object(client, "request", side_effect=lambda *_a, **_k: seen.append(
+                                dict(os.environ))), contextlib.redirect_stderr(err):
+                        setup._serve(Y)
+                    self.assertEqual(len(seen), 1 if failing else 2)
+                    for environment in seen:
+                        self.assertEqual({key: environment.get(key) for key in kept}, kept)
+                        self.assertEqual({key: environment.get(key) for key in (*dropped, places.INSTALLATION_ENV)},
+                                         dict.fromkeys((*dropped, places.INSTALLATION_ENV)))
+                        self.assertEqual((environment["CAD_STATE_DIR"], environment["HOME"]),
+                                         (str(self.state), str(self.home)))
+                        self.assertIn("PATH", environment)
+                    self.assertEqual(dict(os.environ), before)
+                    self.assertEqual("cad: cad 0.12.1's server is not running: the engine server did not start\n"
+                                     if failing else "", err.getvalue())
+
+
 class AppdataServing(unittest.TestCase):
     """Where the guard on 0.10.0's own stop asks what answers: where that stop reaches."""
 

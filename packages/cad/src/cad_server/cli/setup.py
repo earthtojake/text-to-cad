@@ -220,15 +220,18 @@ def _take_over(name: str, came: str | None) -> int:
 
 def _serve(name: str) -> None:
     """This release's server started from this environment (``client.start``) and asked to serve pages, on the port
-    and with the token it took in, so a page 0.10.0 served finds it there. Never a failed run."""
+    and with the token it took in, so a page 0.10.0 served finds it there. Never a failed run. Its environment is this
+    process's without what only this run goes by (``install_script.environment``), computed before ``os.environ`` is
+    replaced: from an empty one, Windows' Python could not open a socket, and the server never started."""
     from cad.engine import client
     from cad_server._internal import install_script
 
     saved = dict(os.environ)
     try:
+        served = {key: value for key, value in install_script.environment(update=False, report=None).items()
+                  if key != "UV_NO_MODIFY_PATH"}
         os.environ.clear()
-        os.environ.update({key: value for key, value in install_script.environment(update=False, report=None).items()
-                           if key != "UV_NO_MODIFY_PATH"})
+        os.environ.update(served)
         client.start()
         client.request({"op": "http"}, start=False)
     except (ConnectionError, OSError, ValueError) as error:

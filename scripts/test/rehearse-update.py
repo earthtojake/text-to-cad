@@ -212,6 +212,12 @@ class Box:
             if (self.state / name).exists():
                 parts.append(f"  {name}: {json.dumps(self.read(name))[:800]}")
         parts.append(f"  switches: {self.read('settings.json').get('auto_update')}")
+        # The engine folder, and why the last server started there could not take its lock or listen (the daemon's
+        # failure note, ``places.failure_path``: ``engine.failed``), where it said.
+        parts.append(f"  engine: {listing(self.work / 'engine')}")
+        failed = self.work / "engine" / "engine.failed"
+        if failed.is_file():
+            parts.append(f"  engine.failed: {failed.read_text(encoding='utf-8', errors='replace')[:800]}")
         tools = self.run(["uv", "tool", "list", "--show-paths"], check=False, timeout=60)
         parts.append(f"  uv's tools: {tools.stdout.strip() or tools.stderr.strip()}")
         for log in (self.old_state / "update.log", *sorted((self.work / "engine").glob("*.log"))):
