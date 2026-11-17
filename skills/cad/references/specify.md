@@ -8,12 +8,9 @@ them from its geometry, and writes the answers into the STEP as AP242 PMI: dimen
 tolerances, datums, and the part's general notes. The CAD Viewer shows that PMI in the PMI tab of the
 view's panel, beside Model and Position, and draws its dimensions on the part.
 
-Specify is its own command line, run through `cad run` (uv fetches it once, about 10 MB, and keeps
-it):
-
-```bash
-SPECIFY="cad run --with specify-core==0.1.17 specify-core"
-```
+Specify is its own command line, `specify-core`, run through `cad run` as below (uv fetches it once,
+about 10 MB, and keeps it). Write the command out each time: a variable holding it does not split
+into words in zsh, macOS's shell.
 
 The method: **fill in what you can, ask the person only what the part cannot tell you, then write
 it.** On a typical part Specify proposes all but one or two answers; the one it cannot propose is
@@ -22,9 +19,9 @@ usually the material of an imported STEP.
 ## 1. Read the part and its questions
 
 ```bash
-$SPECIFY analyse -o bracket.analysis.json bracket.step
+cad run --with specify-core==0.1.17 specify-core analyse -o bracket.analysis.json bracket.step
 # {"faces": 14, "features": {"holes": 4, "plates": 2, ...}, "existing_pmi": 0}
-$SPECIFY questions bracket.analysis.json > bracket.questions.json
+cad run --with specify-core==0.1.17 specify-core questions bracket.analysis.json > bracket.questions.json
 ```
 
 `questions` prints a JSON list. Each question has an `id`, a `prompt`, a `kind` (`choice`, `text`,
@@ -60,7 +57,7 @@ answers you left out take Specify's proposals (`--accept-defaults`):
 
 ```bash
 echo '{"part.material": "Aluminium 6061-T6"}' > bracket.answers.json
-$SPECIFY write -o bracket.step --accept-defaults bracket.step bracket.analysis.json bracket.answers.json
+cad run --with specify-core==0.1.17 specify-core write -o bracket.step --accept-defaults bracket.step bracket.analysis.json bracket.answers.json
 ```
 
 `write` keeps the geometry as it is and adds the PMI, so writing over the part is how it gets its
@@ -81,7 +78,7 @@ material as the body's material ([PMI](pmi.md)), never into the exported file.
 with what changed coloured:
 
 ```bash
-$SPECIFY diff -o tmp/bracket-diff bracket-rev-a.step bracket.step
+cad run --with specify-core==0.1.17 specify-core diff -o tmp/bracket-diff bracket-rev-a.step bracket.step
 # tmp/bracket-diff/report.md, report.json, model.png
 ```
 
@@ -93,7 +90,7 @@ compares two STEP files the same way, in the page: Compare with, in a STEP's fil
 
 | The change | Check it with |
 | --- | --- |
-| The answers | `$SPECIFY questions bracket.analysis.json --answers bracket.answers.json --open` lists no question whose `attention` is `required` (the rest it lists keep their defaults) |
+| The answers | `cad run --with specify-core==0.1.17 specify-core questions bracket.analysis.json --answers bracket.answers.json --open` lists no question whose `attention` is `required` (the rest it lists keep their defaults) |
 | The written file | `write`'s `written` names each answer; its `not_written` is empty or said to the person |
 | What the viewer shows | The part shown, its PMI tab's notes and dimensions as written |
 
