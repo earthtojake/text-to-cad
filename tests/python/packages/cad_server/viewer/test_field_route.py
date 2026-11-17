@@ -251,7 +251,7 @@ def _gsl_shades() -> bool:
     return False
 
 
-@unittest.skipUnless(_gsl_shades(), "needs a gsl whose eval has shader (omega-core after 0.1.2: set CAD_GSL)")
+@unittest.skipUnless(_gsl_shades(), "needs a gsl whose eval has shader (omega-core 0.1.2 or later: set CAD_GSL)")
 class Shades(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
