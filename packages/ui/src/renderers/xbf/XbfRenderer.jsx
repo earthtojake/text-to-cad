@@ -6,6 +6,7 @@ import { fetchXbfPartGroups } from "@cad/core/lib/xbf/xbfDocument.js";
 import { XBF_PICK_PIXELS, parseXbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
 import { useExportView } from "../../export/context.js";
 import { useViewerHost } from "../../host/context.js";
+import ParametersSection from "../kit/inspector/ParametersSection.jsx";
 import { readFileView } from "../kit/shell/fileView.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { usePreviewState, useRendererShell } from "../kit/shell/useRendererShell.js";
@@ -649,9 +650,17 @@ function XbfSurface({ view, data }) {
     const bounds = scene?.selectionBounds(ids);
     if (bounds) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(bounds);
   }, [scene, leavesOf]);
+  // The GSL concepts the document's parts name (`xbfConcepts.js`), as they are shown now.
+  const [shownAs, setShownAs] = useState(0);
+  const concepts = useMemo(() => scene?.concepts?.() || EMPTY, [scene, shownAs]);
+  const showAs = useCallback((menu, value) => {
+    if (!scene?.setRepresentation(menu.representationId, value)) return;
+    setShownAs(now => now + 1);
+    shellRef.current?.requestFrame?.();
+  }, [scene]);
   const menuForNode = useCallback(id => xbfPartMenu({ tree, nodeId: id, assembly, hiddenIds, isolatedIds,
-    selectedNodeIds, expandedIds, copyText: singleChip([...new Set([...selectedNodeIds, id])]), zoomSelectionAvailable, shape }),
-  [tree, assembly, hiddenIds, isolatedIds, selectedNodeIds, expandedIds, singleChip, zoomSelectionAvailable, shape]);
+    selectedNodeIds, expandedIds, copyText: singleChip([...new Set([...selectedNodeIds, id])]), zoomSelectionAvailable, shape, concepts }),
+  [tree, assembly, hiddenIds, isolatedIds, selectedNodeIds, expandedIds, singleChip, zoomSelectionAvailable, shape, concepts]);
   const partMenuActions = useMemo(() => Object.fromEntries(Object.entries({
     onCopyReference: menu => copy(menu.copyText),
     onSelect: (menu) => {
@@ -680,8 +689,11 @@ function XbfSurface({ view, data }) {
     onZoomSelection: zoomToSelection,
     onSelectTangentFaces: menu => selectTangent("face", menu.tangentFaceIds),
     onSelectTangentEdges: menu => selectTangent("edge", menu.tangentEdgeIds)
-  }).map(([name, action]) => [name, (menu) => { usage.used(MENU_CONTROLS[name]); ensureSelect(); return action(menu); }])),
-  [copy, exitSingleIsolate, isolate, exitIsolate, hideOthers, showAll, hideNodes, selectedNodeIds, revealNodes, toggleExpanded,
+  }).map(([name, action]) => [name, (menu) => { usage.used(MENU_CONTROLS[name]); ensureSelect(); return action(menu); }]).concat([
+    // How a baked part is shown: no control of the usage vocabulary, so none is counted.
+    ["onShowExact", menu => showAs(menu, "exact")], ["onShowConcept", menu => showAs(menu, "concept")], ["onShowBoth", menu => showAs(menu, "both")]
+  ])),
+  [showAs, copy, exitSingleIsolate, isolate, exitIsolate, hideOthers, showAll, hideNodes, selectedNodeIds, revealNodes, toggleExpanded,
     zoomToSelection, selectTangent, ensureSelect, usage]);
   const contextMenuItems = selectActive ? (press) => {
     const hit = pickAtClient(press.clientX, press.clientY);
@@ -742,11 +754,22 @@ function XbfSurface({ view, data }) {
     menuForNode, partMenuActions
   }), [assembly, hiddenIds, isolatedIds, selectableIds, expandedIds, toggleExpanded, revealExpanded, selectTreeNode, ensureSelect, isolate, exitSingleIsolate,
     exitIsolate, toggleVisibility, showAll, tree, menuForNode, partMenuActions]);
-  const sidebar = scene && (assembly || kinematics) ? <>
+  // The ranged names of a concept, as sliders: the selected part's, else the first concept that has any.
+  const tuned = useMemo(() => {
+    const withNames = concepts.filter(concept => concept.parameters.length);
+    const chosenLeaves = new Set(leavesOf(selectedNodeIds));
+    const concept = withNames.find(found => chosenLeaves.has(found.id)) || withNames[0];
+    return concept ? { id: concept.id, parameters: concept.parameters,
+      parameterValue: name => scene.conceptParameterValue(concept.id, name),
+      setParameter: (name, value) => scene.setConceptParameter(concept.id, name, value) } : null;
+  }, [scene, concepts, leavesOf, selectedNodeIds]);
+  const redrawConcept = useCallback(() => shellRef.current?.requestFrame?.(), []);
+  const sidebar = scene && (assembly || kinematics || tuned) ? <>
     {assembly ? <XbfModelTree key={document.modelKey} tree={tree} active={!previewing} disabled={shell.idle} mode={shape}
       selectedIds={selected} onClearSelection={clearSelection} partControls={partControls} /> : null}
     {kinematics ? <XbfPositionSection kinematics={kinematics} motion={motionOwns ? motion : null} values={poseValues || {}} couplings={poseCouplings} preset={posePreset}
       onValues={setPoseValues} onPreset={choosePreset} onReset={resetPose} /> : null}
+    {tuned && !previewing ? <ParametersSection key={tuned.id} scene={tuned} revision={`${loaded.revision}:${tuned.id}`} onChange={redrawConcept} /> : null}
   </> : null;
 
   // What is picked, as the frame reads it: the Selected pane under the Model tree, the hover tip, the rows of

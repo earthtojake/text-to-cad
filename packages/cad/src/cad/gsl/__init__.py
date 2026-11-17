@@ -22,6 +22,13 @@ The other two hold exact parts to the concept's field, with no mesh of the conce
 - ``bake`` (``cad gsl bake part.gsl ID``): an exact part baked from the concept, checked against its field both
   ways, the concept kept as baked; ``--stale`` says where the concept has moved since.
 
+A model's script says which of its parts are concepts, so an assembly holds exact parts and concepts together
+and the document carries which is which (``cad.engine.declarations.CONCEPT``); neither is a command:
+
+- ``concept("enclosure.gsl")`` is a part with no shape of its own, placed as any part is: the viewer draws its
+  field among the exact parts, and ``fit`` and ``bake`` given the assembly alone find it there.
+- ``baked(knob, "knob.gsl")`` says an exact part was made from a concept, which stays its other representation.
+
 Each command is a generated MIRROR of its function. Everything loads on first use: ``import cad.gsl`` imports no
 omega_core. A function called where the integration's extra is missing says so by name (``cad[omega]``).
 """
@@ -33,9 +40,35 @@ from pathlib import Path
 from cad._internal.document_type import bind as _bind
 from cad.results import CheckResult
 
-__all__ = ["bake", "fit", "mesh", "validate"]
+__all__ = ["bake", "baked", "concept", "fit", "mesh", "validate"]
 
 SUFFIX = ".gsl"
+
+
+def concept(path: Path, *, label: str | None = None, **values: float):
+    """A GSL concept as a part of an assembly: a part with no shape of its own, placed as any part is
+    (``.moved(Location(...))``, a child of a ``Compound``). The concept is written in the part's own frame.
+
+    path: the .gsl concept.
+    label: the part's name in the assembly; the file's stem where none is given.
+    values: a value for one of the concept's top-level names (``wall=2.5``), this placement's.
+    """
+    from cad.engine.concepts import concept_part
+
+    return concept_part(path, label, values)
+
+
+def baked(part, path: Path, **values: float):
+    """Say an exact part was baked from a GSL concept, which stays its other representation: the viewer shows
+    either, and ``bake`` given the assembly holds the part to it. Returns ``part``.
+
+    part: the exact part, a build123d shape; not an assembly.
+    path: the .gsl concept it was made from, written in the part's own frame.
+    values: the values of the concept's top-level names it was baked with (``lobes=7``).
+    """
+    from cad.engine.concepts import baked_part
+
+    return baked_part(part, path, values)
 
 
 def validate(path: Path, *, mesh: Path | None = None, strict: bool = False, verbose: bool = False) -> CheckResult:
@@ -83,7 +116,7 @@ def _mesh(path: Path, out: Path | None = None, *, define: tuple[str, ...] = (), 
     return made(path, out, define=define, depth=depth, strict=strict, verbose=verbose)
 
 
-def fit(path: Path, exact: str, *, contact: tuple[str, ...] = (), define: tuple[str, ...] = (),
+def fit(path: Path, exact: str | None = None, *, contact: tuple[str, ...] = (), define: tuple[str, ...] = (),
         tolerance: float = 0.01, contact_radius: float = 3.0, density: float = 4.0, chord: float = 0.01,
         strict: bool = False, verbose: bool = False) -> CheckResult:
     """Check exact parts against a GSL concept part they must fit with, through its field, with no mesh of it.
@@ -96,7 +129,11 @@ def fit(path: Path, exact: str, *, contact: tuple[str, ...] = (), define: tuple[
     Clearance alone never shows a contact is missing. The concept is written in the exact parts' frame. Its own
     features that no exact part comes near are not judged: look at its picture.
 
-    path: the .gsl concept.
+    Given an assembly alone (a document id or an .xbf whose model names its concepts, ``cad.gsl.concept``), every
+    exact part is held to each part that is a concept, each where the assembly places it and with the values it
+    gives it there; a place is then said in that concept's own frame, and no ``contact`` or ``define`` is taken.
+
+    path: the .gsl concept; or, alone, the assembly that names its concepts: a document id or an .xbf.
     exact: the exact parts: a document id (cad run prints it), an .xbf, a .step, or a .glb.
     contact: a point x,y,z (mm) where an exact part should touch the concept; repeat it for several.
     define: a value for one of the concept's top-level names, as name=number (r=6.5); repeat it for several.
@@ -107,13 +144,16 @@ def fit(path: Path, exact: str, *, contact: tuple[str, ...] = (), define: tuple[
     strict: treat warnings as blocking.
     verbose: narrate the target on stderr.
     """
-    from cad.omega._fit import fit as fitted
+    from cad.omega._fit import assembly, fit as fitted
 
+    if exact is None:
+        return assembly("fit", path, contact=contact, define=define, tolerance=tolerance, contact_radius=contact_radius,
+                        density=density, chord=chord, strict=strict, verbose=verbose)
     return fitted(path, exact, contact=contact, define=define, tolerance=tolerance, contact_radius=contact_radius,
                   density=density, chord=chord, strict=strict, verbose=verbose)
 
 
-def bake(path: Path, exact: str, *, stale: bool = False, define: tuple[str, ...] = (), max_deviation: float = 0.0,
+def bake(path: Path, exact: str | None = None, *, stale: bool = False, define: tuple[str, ...] = (), max_deviation: float = 0.0,
          tolerance: float = 0.01, density: float = 4.0, chord: float = 0.01, strict: bool = False,
          verbose: bool = False) -> CheckResult:
     """Check an exact part baked from a GSL concept against the concept's field, both ways, and keep the concept
@@ -128,7 +168,11 @@ def bake(path: Path, exact: str, *, stale: bool = False, define: tuple[str, ...]
     as it is now and as it was kept, and fails where the two differ by more than ``tolerance``, saying by how
     much and over what region of which part, so the change can be baked. A file the concept imports is not kept.
 
-    path: the .gsl concept.
+    Given an assembly alone (a document id or an .xbf whose model says which parts were baked, ``cad.gsl.baked``),
+    each such part is held to its own concept, alone, in the part's own frame, with the values the assembly gives;
+    no ``define`` is taken.
+
+    path: the .gsl concept; or, alone, the assembly that names its baked parts: a document id or an .xbf.
     exact: the exact part: a document id (cad run prints it), an .xbf, a .step, or a .glb.
     stale: hold the concept as it is now to the copy kept at its last bake, instead of baking.
     define: a value for one of the concept's top-level names, as name=number (r=6.5); repeat it for several.
@@ -139,9 +183,12 @@ def bake(path: Path, exact: str, *, stale: bool = False, define: tuple[str, ...]
     strict: treat warnings as blocking.
     verbose: narrate the target on stderr.
     """
-    from cad.omega._fit import bake as baked
+    from cad.omega._fit import assembly, bake as baked_from
 
-    return baked(path, exact, stale=stale, define=define, max_deviation=max_deviation, tolerance=tolerance,
+    if exact is None:
+        return assembly("bake", path, define=define, stale=stale, max_deviation=max_deviation, tolerance=tolerance,
+                        density=density, chord=chord, strict=strict, verbose=verbose)
+    return baked_from(path, exact, stale=stale, define=define, max_deviation=max_deviation, tolerance=tolerance,
                  density=density, chord=chord, strict=strict, verbose=verbose)
 
 

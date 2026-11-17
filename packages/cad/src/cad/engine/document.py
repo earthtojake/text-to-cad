@@ -2158,9 +2158,10 @@ def _frames(value: Any, path: str) -> dict[str, tuple[float, ...]]:
 #: holds it), the masses declared on it or above it (``[[levels above the part, grams], ...]``, the outermost
 #: first: 0 is the part's own), its point masses (``{name: {"grams", "at": 16 floats column-major mm,
 #: "inertia"?}}``), the nodes declared free at or above it (``[levels above the part, ...]``, the outermost
-#: first) and the link names declared at or above it (``[[levels above the part, name], ...]``, the outermost
-#: first).
-DECLARED = ("body", "drives", "mass", "pointMasses", "free", "link")
+#: first), the link names declared at or above it (``[[levels above the part, name], ...]``, the outermost
+#: first) and the GSL concept it stands for or was baked from (``{"gsl", "role", "digest", "values"?}``,
+#: ``declarations.concept_value``).
+DECLARED = ("body", "drives", "mass", "pointMasses", "free", "link", "concept")
 
 
 def _nodes(state: dict[str, Any], path: str) -> tuple[tuple[int, str, Any], ...]:
@@ -2227,6 +2228,9 @@ def _declared(state: dict[str, Any], path: str, masses: tuple[tuple[int, float],
     named = [[up, value] for up, key, value in nodes if key == "link"]
     if named:
         found["link"] = named
+    concept = state.get(declarations.CONCEPT)
+    if concept is not None:
+        found["concept"] = declarations.concept_value(concept, path)
     return found
 
 

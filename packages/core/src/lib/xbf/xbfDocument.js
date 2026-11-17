@@ -15,6 +15,7 @@
 // person asks (`fetchXbfElementFacts`), never extracted ahead. Beside the document, the engine's
 // look of the regular display modes (`GET /api/v1/look`, `xbfLook.js`), read once per engine.
 
+import { xbfConceptKey, xbfStructureConcepts } from "./xbfConcepts.js";
 import { fetchXbfLook } from "./xbfLook.js";
 import { readXbmPart, xbmUnmeshedFaces } from "./xbm.js";
 
@@ -124,10 +125,13 @@ async function inBatches(items, limit, run) {
  *
  * @param {string | { url: string }} source  The document's API URL (`xbfDocumentSource`).
  * @param {{ previous?: XbfDocument | null, fetch?: typeof fetch, signal?: AbortSignal,
- *   onProgress?: (progress: { done: number, total: number }) => void }} [options]
+ *   onProgress?: (progress: { done: number, total: number }) => void,
+ *   field?: ((concept: { gsl: string, digest: string }) => Promise<{ payload: object, textures: object }>) | null }} [options]
+ *   `field` reads the field of a GSL concept a part names (`xbfConcepts.js`); without it a document's
+ *   concepts are not read, and one whose part is its concept is not drawn.
  * @returns {Promise<XbfDocument>}
  */
-export async function loadXbfDocument(source, { previous = null, fetch: fetchImpl = globalThis.fetch, signal, onProgress } = {}) {
+export async function loadXbfDocument(source, { previous = null, fetch: fetchImpl = globalThis.fetch, signal, onProgress, field = null } = {}) {
   const where = xbfDocumentSource(source);
   const started = performance.now();
   const looked = previous?.look && previous.source?.base === where.base ? Promise.resolve(previous.look)
@@ -179,12 +183,26 @@ export async function loadXbfDocument(source, { previous = null, fetch: fetchImp
     for (const part of parts.values()) part.release();
     throw error;
   }
+  // The fields of the concepts its parts name, each read once and kept while its text is the same.
+  const fields = new Map();
+  if (field) {
+    try {
+      await Promise.all(xbfStructureConcepts(structure).map(async (concept) => {
+        const key = xbfConceptKey(concept);
+        fields.set(key, previous?.fields?.get(key) || await field(concept));
+      }));
+    } catch (error) {
+      for (const part of parts.values()) part.release();
+      throw error;
+    }
+  }
   let released = false;
   return {
     source: where,
     structure,
     version: String(structure.version || ""),
     parts,
+    fields,
     look,
     fetch: fetchImpl,
     load: { fetched, kept, structureMs: Math.round(structureMs), partsMs: Math.round(performance.now() - partsStarted), bytes },

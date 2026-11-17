@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { useI18n } from "@cad/ui/i18n";
-import { SliderField } from "../kit/inspector/SliderField.jsx";
-import ToolPanel from "../kit/tools/ToolPanel.jsx";
+import { SliderField } from "./SliderField.jsx";
+import ToolPanel from "../tools/ToolPanel.jsx";
 
 // A value as its text: enough digits for the slider's span, no trailing zeros.
 function shown(value, span) {

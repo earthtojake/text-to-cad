@@ -19,6 +19,7 @@ Neither judges the concept's own features where no exact part comes near them: a
 
 from __future__ import annotations
 
+import contextvars
 import json
 import math
 import sys
@@ -56,6 +57,8 @@ class Sampled:
     part: Any
     names: list[str]
     triangles: Any
+    matrices: Any = None  # each named part's placement (4, 4), by its index in ``names``
+    owners: Any = None  # each triangle's part, an index into ``names``
 
 
 def as_glb(exact: Any, folder: Path, chord: float = CHORD_MM) -> Path:
@@ -83,7 +86,7 @@ def sample(glb: Path, density: float = DENSITY, seed: int = 0) -> Sampled:
 
     read = read_gltf(Path(glb))
     rng = np.random.default_rng(seed)
-    points, owners, names, placed_triangles = [], [], [], []
+    points, owners, names, placed_triangles, matrices, triangle_owners = [], [], [], [], [], []
     seen: dict[str, int] = {}
     for index, matrix, name in read.placed:
         part = read.parts[index]
@@ -104,11 +107,14 @@ def sample(glb: Path, density: float = DENSITY, seed: int = 0) -> Sampled:
         mine = np.concatenate([world, drawn])
         points.append(mine)
         owners.append(np.full(len(mine), len(names), np.int64))
+        triangle_owners.append(np.full(len(tri), len(names), np.int64))
         names.append(label)
+        matrices.append(np.asarray(matrix, float))
         placed_triangles.append(tri)
     if not points:
         return Sampled(np.zeros((0, 3)), np.zeros(0, np.int64), [], np.zeros((0, 3, 3)))
-    return Sampled(np.concatenate(points), np.concatenate(owners), names, np.concatenate(placed_triangles))
+    return Sampled(np.concatenate(points), np.concatenate(owners), names, np.concatenate(placed_triangles), matrices,
+                   np.concatenate(triangle_owners))
 
 
 def _union(session: Any, code: str, defs: str) -> str:
@@ -196,7 +202,130 @@ def _sampled(exact: Any, scratch: Path, chord: float, density: float, findings: 
     if not len(sampled.points):
         findings.add("error", "exact_empty", f"{exact} holds no triangles to sample", path=where)
         return None
+    placed = _PLACED.get()
+    if placed is not None:
+        sampled = _in_frame(sampled, placed)
+        if sampled is None:
+            findings.add("error", "exact_empty", f"{exact} holds no triangles of {placed['only']['part']}", path=where)
     return sampled
+
+
+# How an assembly places the concept being checked (``assembly``): ``{"frame": its placement (4, 4), "only": the
+# one exact part to hold to it, {"part", "matrix"}, or None for every part}``. The concept is written in its own
+# part's frame, so the exact surface is taken into that frame, where every place said is.
+_PLACED: "contextvars.ContextVar[dict | None]" = contextvars.ContextVar("cad_omega_placed", default=None)
+
+
+def _in_frame(sampled: Sampled, placed: dict) -> Sampled | None:
+    import numpy as np
+
+    keep = np.ones(len(sampled.names), bool)
+    only = placed.get("only")
+    if only is not None:
+        # The part by its name; among several of one name, the one placed where the document places it.
+        stem = [index for index, name in enumerate(sampled.names) if name.partition("#")[0] == only["part"]]
+        if not stem:
+            return None
+        at = np.asarray(only["matrix"], float)[:3, 3]
+        chosen = min(stem, key=lambda index: float(np.linalg.norm(sampled.matrices[index][:3, 3] - at)))
+        keep[:] = False
+        keep[chosen] = True
+    inverse = np.linalg.inv(np.asarray(placed["frame"], float))
+    points = sampled.points[keep[sampled.part]] @ inverse[:3, :3].T + inverse[:3, 3]
+    triangles = sampled.triangles[keep[sampled.owners]] @ inverse[:3, :3].T + inverse[:3, 3]
+    renumbered = np.cumsum(keep) - 1
+    return Sampled(points, renumbered[sampled.part[keep[sampled.part]]],
+                   [name for name, kept in zip(sampled.names, keep) if kept], triangles,
+                   [matrix for matrix, kept in zip(sampled.matrices, keep) if kept],
+                   renumbered[sampled.owners[keep[sampled.owners]]])
+
+
+PLAN = "concepts.json"
+
+
+def as_plan(document: Any, folder: Path, chord: float = CHORD_MM) -> Path:
+    """An assembly that names its concepts (``cad.gsl.concept``, ``cad.gsl.baked``) as what ``assembly`` reads,
+    made where the engine is: its exact parts as a GLB in ``folder`` and, beside it, ``concepts.json``, each
+    placed part that names a concept with its ``.gsl``, its role, its values and where it stands. ``document``
+    is a document id or an ``.xbf`` (a STEP holds no declaration); a plan already made is given back."""
+    import json
+
+    from cad.engine.api import export
+    from cad.engine.document import Loaded
+    from cad.engine.ids import is_id
+
+    text, folder = str(document), Path(folder)
+    if not is_id(text) and Path(text).name == PLAN:
+        return Path(text).expanduser().resolve()
+    if is_id(text):
+        held = folder / "exact.xbf"
+        export(text, held, progress=False)
+    elif Path(text).suffix.lower() == ".xbf":
+        held = Path(text).expanduser().resolve()
+    else:
+        raise ValueError(f"an assembly that names its concepts is a document id or an .xbf, not {Path(text).name}")
+    glb = as_glb(text, folder, chord)
+    structure = Loaded(held).structure()
+    concepts = []
+    for instance in structure["instances"]:
+        prototype = structure["prototypes"][instance["prototype"]]
+        concept = prototype.get("concept")
+        if concept:
+            concepts.append({"part": prototype.get("name") or instance["path"], "path": instance["path"],
+                             "gsl": concept["gsl"], "role": concept["role"], "values": concept.get("values") or {},
+                             "matrix": [float(value) for value in instance["matrix"]]})
+    plan = folder / PLAN
+    plan.write_text(json.dumps({"document": text, "exact": str(glb), "concepts": concepts}, indent=1), encoding="utf-8")
+    return plan
+
+
+def assembly(operation: str, document: Any, *, contact: tuple[str, ...] = (), define: tuple[str, ...] = (),
+             strict: bool = False, **options: Any) -> CheckResult:
+    """``fit`` or ``bake`` over an assembly that names its concepts: ``fit`` holds every exact part to each part
+    that is a concept (``cad.gsl.concept``); ``bake`` holds each part baked from one (``cad.gsl.baked``) to it,
+    alone. Each concept is taken where the document places it, with the values it was given there."""
+    import json
+    import tempfile
+
+    import numpy as np
+
+    from cad._internal.validation_door import failed
+
+    with tempfile.TemporaryDirectory(prefix="cad-omega-assembly-", ignore_cleanup_errors=True) as scratch:
+        try:
+            plan = as_plan(document, Path(scratch), options.get("chord", CHORD_MM))
+            read = json.loads(plan.read_text(encoding="utf-8"))
+        except (OSError, ValueError, RuntimeError) as error:
+            return failed(Path(str(document)), f"the assembly's concepts were not read: {error}", code="exact_unread")
+        shown = Path(read["document"])
+        if contact or define:
+            return failed(shown, "an assembly names its concepts' values where it places them: give no "
+                          f"{'--contact' if contact else '--define'} with it, or name one concept and the exact parts",
+                          code="bad_define")
+        role = "body" if operation == "fit" else "baked"
+        wanted = [concept for concept in read["concepts"] if concept["role"] == role]
+        if not wanted:
+            said = ("no part that is a concept (cad.gsl.concept)" if role == "body"
+                    else "no part baked from a concept (cad.gsl.baked)")
+            return failed(shown, f"{read['document']} holds {said}", code="no_concepts")
+        run = fit if operation == "fit" else bake
+        results = []
+        for concept in wanted:
+            frame = np.asarray(concept["matrix"], float).reshape(4, 4).T
+            only = {"part": concept["part"], "matrix": frame} if role == "baked" else None
+            token = _PLACED.set({"frame": frame, "only": only})
+            try:
+                results.append((concept, run(Path(concept["gsl"]), read["exact"], strict=strict,
+                                             define=tuple(f"{name}={value:g}" for name, value in concept["values"].items()),
+                                             **options)))
+            finally:
+                _PLACED.reset(token)
+    ok = all(result.ok for _concept, result in results)
+    findings = tuple(finding for _concept, result in results for finding in result.findings)
+    summary = "\n".join(result.summary for _concept, result in results if result.summary) if ok else ""
+    return CheckResult(ok=ok, path=results[0][1].path, findings=findings, summary=summary,
+                       measurements={"concepts": [{"part": concept["part"], "gsl": concept["gsl"], "role": concept["role"],
+                                                   **result.measurements} for concept, result in results]})
 
 
 def _result(target: Path, findings: Any, strict: bool, summary: str, measurements: dict) -> CheckResult:

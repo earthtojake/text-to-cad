@@ -83,6 +83,13 @@ export function useXbfScene({ client, file }) {
         throw new Error("This viewer cannot open an engine document: its host serves no engine.");
       }
       let served = await client.engineDocument(file, { signal, onProgress: imported });
+      // A GSL concept a part names is read as a `.gsl` shown alone is: its field, then each texture it names.
+      const field = typeof client.fieldPayload !== "function" ? null : async (concept) => {
+        const payload = await client.fieldPayload(concept.gsl, { signal });
+        const textures = Object.fromEntries(await Promise.all((payload.textures || []).map(
+          async (texture) => [texture.name, await client.fieldTexture(concept.gsl, texture.name, { signal })])));
+        return { payload, textures };
+      };
       let previous = held.current.document;
       let noticed = null;
       // The document's build as last heard, and its count (the engine's, which moves with each stage
@@ -91,7 +98,7 @@ export function useXbfScene({ client, file }) {
       let counted = 0;
       for (;;) {
         const document = await loadXbfDocument(served.url, {
-          previous, signal, fetch: served.fetch,
+          previous, signal, fetch: served.fetch, field,
           onProgress: ({ done, total }) => {
             if (!previous) setState(current => ({ ...current, progress: { phase: "geometry", label: "Loading parts", done, total, determinate: true } }));
           }

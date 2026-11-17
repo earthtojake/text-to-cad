@@ -2994,6 +2994,17 @@ not the world's (its first part's own frame, turned or moved), at the root's pla
 the MJCF stands it. Each writer keeps links and joints in a namespace each, as MJCF and URDF do, and says a rename
 in its kind (`export.note`, the export's log).
 
+**A part's GSL concept.** A part's prototype may carry one more declared key beside those, `concept`
+(`{"gsl", "role", "digest", "values"?}`, kept in the same JSON string on the part's label): the `.gsl` it names by
+its absolute path, the digest of that file as the model's run read it (the file is opened in the model's body, so
+it is one of the build's inputs), the values given for its ranged names, and its role. `body` is a part that IS
+its concept (`cad.gsl.concept`): its shape is an empty compound, placed as any part is, so it has an instance, a
+name and a row in the tree and no triangles; the page draws the field `/documents/gsl/<id>/field` answers for
+that file where the instance stands. `baked` is an exact part made from the concept (`cad.gsl.baked`), which the
+page can show beside or in place of its exact body. A snapshot of a document holding a `body` is refused by the
+part's name (`snapshot.refusals`), as a STEP of it is (`export.translate`); a GLB, an STL and a 3MF hold the
+exact parts and say which part they leave out. No format change: an older file reads back with no `concept`.
+
 **The zero, the scene and what an export says** (`describe.py`'s **The zero**, `export/mjcf.py`'s **The
 scene**, `Description.summary`). An export to an MJCF or a URDF may name a mechanism state (`--zero`,
 `zero=`; `export.zero_of` refuses one for any other kind, the daemon forwards it, a worker's row says it,

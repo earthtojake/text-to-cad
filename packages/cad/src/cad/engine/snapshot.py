@@ -780,6 +780,16 @@ def parse_references(value: Any, document: Path) -> list[str] | None:
 def refusals(still: Still, structure: dict[str, Any], name: str) -> None:
     """What the document's view does not offer, refused by name before anything renders: Parts and
     Explode colour or move placed parts apart, and a document of one has nothing to part."""
+    # A part that is a GSL concept has no shape for OCCT to draw: a picture without it would show a document
+    # that is not the one held.
+    concepts = [prototype for prototype in structure.get("prototypes") or []
+                if (prototype.get("concept") or {}).get("role") == "body"]
+    if concepts:
+        named = ", ".join(f"{prototype.get('name') or 'a part'} ({Path(prototype['concept']['gsl']).name})"
+                          for prototype in concepts)
+        raise SnapshotRefused(f"{name} holds {'a concept' if len(concepts) == 1 else 'concepts'} OCCT does not draw: "
+                              f"{named}. Look at it in the CAD Viewer, or draw the concept alone "
+                              "(cad run gsl render)", part="source")
     placed = len(structure.get("instances") or [])
     if placed >= 2 or still.preview:
         return

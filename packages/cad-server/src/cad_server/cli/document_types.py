@@ -601,9 +601,15 @@ def _omega_checked(operation: str) -> Callable[[list[str], str], int]:
 
         target = ("cad.gsl", operation)
         verb = _verb(target)
-        parser = _present(_typed(generated_parser(target, prog=prog), "gsl", operation, _first_parameter(target)))
+        if operation in _AGAINST_EXACT:
+            # ``fit`` and ``bake`` take a concept and the exact parts, or an assembly alone that names its concepts.
+            parser = _present(generated_parser(target, prog=prog))
+            parser.checks.append(lambda parsed: _concept_or_assembly(operation, parsed))  # type: ignore[attr-defined]
+        else:
+            parser = _present(_typed(generated_parser(target, prog=prog), "gsl", operation, _first_parameter(target)))
         parsed = parser.parse_args(argv)
         positional, keywords = _call_arguments(verb, parsed, explicit_keywords=_explicit_option_dests(parser, argv))
+        positional = [value for value in positional if value is not None]
 
         def said(line: str) -> None:
             print(f"{prog}: {line}", file=sys.stderr, flush=True)
@@ -621,6 +627,16 @@ def _omega_checked(operation: str) -> Callable[[list[str], str], int]:
         import tempfile
 
         with tempfile.TemporaryDirectory(prefix="cad-gsl-exact-", ignore_cleanup_errors=True) as scratch:
+            if operation in _AGAINST_EXACT and len(positional) == 1:
+                # An assembly alone: its exact parts and what it says of its concepts, read here where the engine is.
+                from cad.engine.export import ExportRefused
+                from cad.omega._fit import CHORD_MM, as_plan
+
+                try:
+                    positional[0] = str(as_plan(positional[0], Path(scratch), keywords.get("chord", CHORD_MM)))
+                except (ExportRefused, OSError, ValueError, RuntimeError) as error:
+                    print(f"{prog}: the assembly's concepts were not read from {positional[0]}: {error}", file=sys.stderr)
+                    return 2
             if operation in _AGAINST_EXACT and len(positional) > 1:
                 # The exact parts are meshed here, where the engine is, so the omega environment reads a GLB.
                 from cad.engine.export import ExportRefused
@@ -635,6 +651,26 @@ def _omega_checked(operation: str) -> Callable[[list[str], str], int]:
                         as_json=bool(getattr(parsed, JSON_FLAG_DEST)), verbose=bool(getattr(parsed, "verbose", False)))
 
     return run
+
+
+def _concept_or_assembly(operation: str, parsed: argparse.Namespace) -> None:
+    """What ``cad gsl fit`` and ``cad gsl bake`` read first: with the exact parts named, a ``.gsl`` as any GSL
+    operation's (``_refuse_other_type``); alone, the assembly that names its concepts, a document id or an
+    ``.xbf``, refused by name when it is neither."""
+    from cad.engine.ids import is_id
+    from cad_server._internal.cli_errors import Failure
+
+    source = str(getattr(parsed, "path"))
+    if getattr(parsed, "exact", None) is not None:
+        _refuse_other_type("gsl", operation, source)
+        return
+    if is_id(source):
+        return
+    if Path(source).suffix.lower() != ".xbf":
+        raise Failure(f"{source} alone is no assembly: cad gsl {operation} takes a .gsl concept and the exact parts, or "
+                      "alone a document id or an .xbf whose model names its concepts", "wrong_type")
+    if not Path(source).expanduser().is_file():
+        raise Failure(f"{source} is not there", "not_found")
 
 
 def _first_parameter(target: tuple[str, str]) -> str:

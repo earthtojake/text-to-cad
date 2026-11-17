@@ -344,3 +344,36 @@ A concept part is fitted to exact ones (a board, a motor, a bought part's STEP) 
   where it should touch the concept. A contact the part does not make is an error, with its gap.
 - It judges the exact parts, not the concept's own features where no part comes near (a hole cut through a lid
   above nothing): look at the concept's picture as well.
+
+### Concepts in the assembly's own script
+
+An assembly's script can say which of its parts are concepts, so one document holds the exact parts and the
+concepts together and the CAD Viewer shows them as one model:
+
+```python
+from cad import gsl, model
+
+@model
+def device():
+    board = xbf.read("vendor/board.xbf")
+    knob = bd.Pos(8, 0, 25.5) * knob_part()
+    gsl.baked(knob, "knob/knob.gsl")                 # an exact part made from a concept
+    enclosure = gsl.concept("enclosure.gsl", wall=2.5)  # a part that is still a concept
+    return bd.Compound(children=[board, knob, enclosure], label="device")
+```
+
+- `gsl.concept(path, label=..., **values)` is a part with no shape of its own. Place it as any part
+  (`.moved(bd.Location(...))`); write the concept in that part's own frame. A value is one of the concept's
+  **ranged** names (`@range`), this placement's: a name without a range is refused where the concept is drawn.
+- `gsl.baked(part, path, **values)` says an exact part was made from a concept. The Viewer shows it as its exact
+  body, the concept, or both (the part's menu), which is where a bake's departure from its concept is seen.
+- The Viewer draws each concept as its field among the exact parts; its ranged names are sliders in the panel's
+  Parameters tab, which change the picture and never the file.
+- With the pairs in the document, the checks take the assembly alone: `cad gsl fit "$ID"` holds every exact part
+  to each part that is a concept, where the assembly places it and with its values; `cad gsl bake "$ID"` holds
+  each baked part to its own concept, alone, and `cad gsl bake "$ID" --stale` says which bakes the concepts have
+  moved away from. A place is then said in that concept's own frame. `--contact` and `--define` belong to the
+  two-argument forms, which stay as they are.
+- A part that is a concept has no exact shape: a STEP of the assembly is refused by the part's name, a snapshot
+  is refused (OCCT draws no field: look at it in the Viewer), and a GLB, STL or 3MF holds the exact parts and
+  says which part it leaves out. Bake the concept when the assembly must be exact.

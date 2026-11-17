@@ -478,6 +478,8 @@ class Source:
             if prototype.get("mass"):
                 # Each mass back on the node that declared it, ``up`` levels above the part (``declare``).
                 made.__dict__[_MASSES] = [(int(up), float(grams)) for up, grams in prototype["mass"]]
+            if prototype.get("concept"):
+                made.__dict__["_concept"] = dict(prototype["concept"])
             # Each ``free`` and ``link`` likewise.
             nodes = [(int(up), "_free", True) for up in prototype.get("free") or ()]
             nodes += [(int(up), "_link", str(name)) for up, name in prototype.get("link") or ()]
@@ -596,6 +598,23 @@ def _instances(node: dict[str, Any]) -> list[int]:
     return [index for child in node["children"] for index in _instances(child)]
 
 
+def _concepts(view: "View", kind: str) -> None:
+    """A part that is a GSL concept (``cad.gsl.concept``) has no shape to translate. An exact file of a
+    document holding one would say the part is there and hold nothing of it, so a STEP is refused by the
+    part's name; a file of triangles holds the exact parts, and says which part it leaves out."""
+    held = [view.prototypes[index] for index in view.used()
+            if (view.prototypes[index].get("concept") or {}).get("role") == "body"]
+    if not held:
+        return
+    named = ", ".join(f"{prototype.get('name') or 'a part'} ({Path(prototype['concept']['gsl']).name})" for prototype in held)
+    if kind == "step":
+        raise ExportRefused(f"{view.name} holds {'a concept' if len(held) == 1 else 'concepts'} with no exact shape: "
+                            f"{named}. A STEP is exact: bake each to a build123d part first (cad gsl bake), or "
+                            "export the exact parts alone")
+    note(f"not in this file: {named}, {'a GSL concept' if len(held) == 1 else 'GSL concepts'} with no exact shape; "
+         "mesh one with cad gsl mesh")
+
+
 # --- the one call ------------------------------------------------------------------------------
 
 
@@ -644,6 +663,7 @@ def translate(document: Any, kind: str | None, path: Any, tolerance: float | Non
     summaries: list[dict[str, Any]] = []
     token, summarized = _NOTES.set(heard), _SUMMARY.set(summaries)
     try:
+        _concepts(view, kind)
         if not spec.atomic:
             spec.write(view, path)
             size = path.stat().st_size
