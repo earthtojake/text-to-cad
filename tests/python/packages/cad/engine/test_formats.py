@@ -24,17 +24,20 @@ look makes them again: `CAD_RENDER_GOLDENS=write`.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import json
 import math
 import os
 import shutil
 import struct
+import sys
 import tempfile
 import textwrap
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -595,6 +598,53 @@ class MeshFileTest(FixtureTest):
 
         mesh = Mesh.from_bytes(found.buffers[plate["key"]])
         self.assertAlmostEqual(float(np.ptp(mesh.positions[:, 0])), 60.0, places=4)
+
+
+def _without_material_packages() -> contextlib.AbstractContextManager[None]:
+    """``bd_materials`` and ``threejs_materials`` absent, as a mesh-only install has them: an import
+    of either then raises, the way the reporter's ``cad threemf dfm`` environment does."""
+    return mock.patch.dict(sys.modules, {"bd_materials": None, "bd_materials.core": None,
+                                         "threejs_materials": None})
+
+
+class MaterialWithoutBdMaterialsTest(FixtureTest):
+    """A mesh file carrying a ``bd_materials`` material reads where ``bd_materials`` is not installed:
+    the display properties the file names are the material, built from the file alone (#844)."""
+
+    def test_a_3mf_with_a_material_reads_without_bd_materials(self) -> None:
+        reference = formats.read(write_3mf(self.folder / "kit.3mf"))
+        with _without_material_packages():
+            found = formats.read(write_3mf(self.folder / "kit.3mf"))
+        self.assertEqual(found.structure, reference.structure)
+
+    def test_a_material_reads_the_same_with_and_without_bd_materials(self) -> None:
+        from cad.engine.formats.gltf import material_of
+
+        for entry in ({"name": "3MF display properties", "alphaMode": "OPAQUE",
+                       "pbrMetallicRoughness": {"baseColorFactor": (0.5333333333333333, 0.6, 0.6666666666666666, 1.0),
+                                                "metallicFactor": 1.0, "roughnessFactor": 0.3}},
+                      {"name": "clearcoat", "alphaMode": "BLEND",
+                       "pbrMetallicRoughness": {"baseColorFactor": (0.5, 0.5, 0.5, 0.55), "metallicFactor": 0.2,
+                                                "roughnessFactor": 0.4},
+                       "extensions": {"KHR_materials_clearcoat": {"clearcoatFactor": 1,
+                                                                  "clearcoatRoughnessFactor": 0.1},
+                                      "KHR_materials_transmission": {"transmissionFactor": 0.5}}}):
+            reference = material_of(entry)
+            with _without_material_packages():
+                self.assertEqual(material_of(entry), reference)
+
+    def test_a_glb_look_reads_its_colour_without_bd_materials(self) -> None:
+        from cad.engine.export.mesh_file import _look_color
+
+        look = {"type": "RangeMaterial",
+                "material": {"name": "red", "density": None, "family": None, "transparent": False},
+                "pbr": {"id": "red", "name": "red", "source": "glTF", "url": "", "license": "",
+                        "values": {"color": [0.9063317533440594, 0.3491902126282938, 0.3491902126282938],
+                                   "metalness": 0.0, "roughness": 0.5, "ior": 1.5,
+                                   "emissive": [0.0, 0.0, 0.0], "opacity": 1.0}, "textures": {}}}
+        reference = _look_color(look)
+        with _without_material_packages():
+            self.assertEqual(_look_color(look), reference)
 
 
 # --- GLB -------------------------------------------------------------------------------------------
