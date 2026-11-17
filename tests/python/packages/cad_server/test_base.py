@@ -203,6 +203,29 @@ class BaseTest(unittest.TestCase):
                 self.assertNotEqual(base.where(base.dataclasses.replace(self.installation, **other)),
                                     base.where(self.installation))
 
+    def test_a_server_on_a_python_newer_than_cads_line_makes_the_base_on_cads_line(self) -> None:
+        # `uv tool install cad` takes any Python that meets requires-python, which has no upper bound: on a line
+        # newer than the one this release runs on (launch.PYTHON), the kernel may have no wheels yet (OCP had none
+        # for 3.15), so the base is made on cad's line, a Python uv manages, and found by every installation of
+        # the release as before. The floor's line and cad's own keep the server's own Python.
+        from cad_server._internal.launch import PYTHON
+
+        newer = base.dataclasses.replace(self.installation, python="3.15.0b3")
+        self.assertEqual(base.where(newer), base.where(self.installation), "one base for the release")
+        fake = Fake()
+        with self.made(fake):
+            base.ensure(newer, told=self.said.append)
+        env = base.where(newer)
+        self.assertEqual(fake.steps[0], ["uv", "venv", "--no-project", "--python", PYTHON, "--managed-python", str(env)])
+        self.assertEqual(self.said, [f"making the CAD kernel environment, once: cad[build123d] {RELEASE} on Python "
+                                     f"{PYTHON}, in {env}"])
+        for version in ("3.13.1", f"{PYTHON}.0"):
+            with self.subTest(version=version):
+                own = base.dataclasses.replace(self.installation, python=version)
+                self.assertEqual(base.kernel_python(own), (own.executable, (), version))
+        self.assertEqual(base.kernel_python(base.dataclasses.replace(self.installation, python="4.0.1"))[:2],
+                         (PYTHON, ("--managed-python",)))
+
     def test_a_request_whose_kernel_process_waits_on_the_making_hears_its_lines(self) -> None:
         # A first build, view or export says nothing of its own while the kernel is fetched: the server says each
         # line of the making to the request that waits on it (``base.TOLD``, set for each request it serves), and

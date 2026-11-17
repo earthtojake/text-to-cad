@@ -9,8 +9,11 @@ kernel processes (the standby, the documents worker, the meshing and reading poo
 exists (``Making.made``), never before.
 
 - **What it is**: ``cad[build123d]`` at the server's release -- or the source tree, or the wheel, it was
-  installed from (``Installation.requirement``) -- on the server's own Python, the line every installation runs
-  on (``cad_server._internal.launch.PYTHON``), so the engine and the base are one Python. uv makes it at
+  installed from (``Installation.requirement``) -- on the server's own Python, unless that is a line newer than the
+  one this release runs on (``cad_server._internal.launch.PYTHON``): ``uv tool install cad`` takes whatever Python
+  uv finds that meets ``requires-python``, which has no upper bound, and the kernel's wheels come for a new line
+  months after it. Then it is made on ``PYTHON``, a Python uv manages, fetched on first need
+  (``kernel_python``), and the engine starts its kernel processes there. uv makes it at
   ``base/<key>`` in the cache folder (``folder``), its files hard links into uv's cache (``LINK``). An
   installation whose own environment carries the kernel (installed with the extra:
   ``pip install 'cad[build123d]==<release>'``, a checkout's development environment) is its own base, and none is
@@ -62,7 +65,7 @@ from cad.engine import places
 
 __all__ = ["BASE", "EXTRA", "FIND_LINKS_ENV", "MAKING", "PASSING", "RETRY", "RETRY_SECONDS", "Environment",
            "Installation", "MARKER", "Making", "Recipe", "Refused", "Remembered", "SCHEMA", "TOLD", "complete", "ensure",
-           "failure", "find_uv", "folder", "halt", "interpreter", "kernel", "make", "marked", "where"]
+           "failure", "find_uv", "folder", "halt", "interpreter", "kernel", "kernel_python", "make", "marked", "where"]
 
 # The bases' folder in the cache folder, and the marker that makes one complete, written last: the one a
 # process in the base reads its installation from (``places.home``).
@@ -591,12 +594,29 @@ def _kernel_download_mb() -> int:
     return INTEGRATIONS[EXTRA].download_mb
 
 
+def kernel_python(installation: Installation) -> tuple[str, tuple[str, ...], str]:
+    """The Python an environment that names none is made on (the base, and ``cad run``'s with no ``--python``), its
+    ``uv venv`` options, and its line in words: the installation's own, unless its line is newer than the one this
+    release runs on (``launch.PYTHON``: a ``uv tool install cad`` on a Python released after cad, 3.15, for which the
+    kernel's wheels may not exist yet); then that line, a Python uv manages, fetched on first need, as an environment
+    of an integration built for one line is made (``extras.on``)."""
+    from cad_server._internal.launch import PYTHON
+
+    own, known = (re.match(r"(\d+)\.(\d+)", version) for version in (installation.python, PYTHON))
+    if own is not None and known is not None and (int(own[1]), int(own[2])) > (int(known[1]), int(known[2])):
+        return PYTHON, ("--managed-python",), PYTHON
+    return installation.executable, (), installation.python
+
+
 def recipe(installation: Installation) -> Recipe:
-    """The base's recipe: ``cad[build123d]`` as the installation installs it, on its own Python."""
-    return Recipe(what=WHAT, python=installation.executable, requirement=tuple(installation.requirement()),
+    """The base's recipe: ``cad[build123d]`` as the installation installs it, on its own Python where the kernel is
+    known to run on it (``kernel_python``)."""
+    python, options, said = kernel_python(installation)
+    return Recipe(what=WHAT, python=python, requirement=tuple(installation.requirement()),
                   release=installation.release, source=installation.source,
-                  making=f"making {WHAT}, once: {LIBRARY}[{EXTRA}] {installation.release} on Python {installation.python}",
-                  downloading=f"downloading the CAD kernel (about {_kernel_download_mb()} MB) and what it needs, once")
+                  making=f"making {WHAT}, once: {LIBRARY}[{EXTRA}] {installation.release} on Python {said}",
+                  downloading=f"downloading the CAD kernel (about {_kernel_download_mb()} MB) and what it needs, once",
+                  venv_options=options)
 
 
 def _say(line: str) -> None:

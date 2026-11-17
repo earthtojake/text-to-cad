@@ -10,11 +10,12 @@ Error hints print these from here.
 
 from __future__ import annotations
 
-# The one Python line the server runs on: the uv tool runs it, so the engine does, and the environment every model and
-# kernel process runs in (``base``) is made with the engine's own interpreter. The install scripts carry the same line
-# as text. It is not the packages' floor (``requires-python``), which is older: an environment with an integration
-# whose tool is built for another line alone is made on that line (``extras.on``: blender's bpy, 3.13), the library in
-# it.
+# The Python line this release is made for and runs on: cad's own uv calls and the install scripts ask for it. The
+# promised line, ``uv tool install cad``, asks for none, so the tool may run on any line ``requires-python`` admits:
+# the floor, older, or a newer one than this. The environment every model and kernel process runs in (``base``) is
+# made with the engine's own interpreter, but on a line newer than this one, where the kernel's wheels may not exist
+# yet, on this line, a Python uv manages (``base.kernel_python``). An environment with an integration whose tool is
+# built for another line alone is made on that line (``extras.on``: blender's bpy, 3.13), the library in it.
 PYTHON = "3.14"
 # A ``uvx`` line, up to the requirement it runs from (``analytics``: a command that runs an installation uvx made).
 LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", PYTHON, "--from")

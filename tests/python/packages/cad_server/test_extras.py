@@ -212,6 +212,25 @@ class NamingTest(unittest.TestCase):
         for recipe in (kicad, both, bare, packages):
             self.assertNotIn("nothing more", recipe.making + recipe.downloading + (recipe.unsatisfiable or ""))
 
+    def test_an_environment_that_names_no_python_is_made_on_the_bases(self) -> None:
+        """No ``--python``: the base's Python (``base.kernel_python``), so on a server newer than cad's line a
+        program's environment is made on cad's line, a Python uv manages, as the base is; a ``--python`` and uv's
+        own Python options stand as given."""
+        from cad_server._internal.launch import PYTHON
+
+        here = base.dataclasses.replace(base.Installation.here(), python=PYTHON + ".0")
+        newer = base.dataclasses.replace(here, python="3.15.0")
+        spec = extras.Spec(requirements=("pandas",))
+        self.assertEqual((extras.recipe(here, spec).python, extras.recipe(here, spec).venv_options),
+                         (here.executable, ()))
+        self.assertEqual((extras.recipe(newer, spec).python, extras.recipe(newer, spec).venv_options),
+                         (PYTHON, ("--managed-python",)))
+        system = dataclasses.replace(spec, python_options=("--no-managed-python",))
+        self.assertEqual((extras.recipe(newer, system).python, extras.recipe(newer, system).venv_options),
+                         (PYTHON, ("--no-managed-python",)))
+        asked = dataclasses.replace(spec, python="3.12")
+        self.assertEqual((extras.recipe(newer, asked).python, extras.recipe(newer, asked).venv_options), ("3.12", ()))
+
     def test_uv_s_refusals_are_one_line_with_its_reason_or_the_package_its_cache_lacks(self) -> None:
         recipe = extras.recipe(base.Installation.here(), ["build123d<0.1"])
         conflict = ("error: No solution found when resolving dependencies\n"

@@ -940,11 +940,18 @@ def recipe(installation: base.Installation, spec: Spec | list[str], changed: lis
                 f"{', '.join(pulled)} came in through another package: resolving again with "
                 f"{base.LIBRARY}[{','.join(every)}] {installation.release}, so cad's pins decide it")
 
-    return base.Recipe(what=what, python=spec.python or installation.executable,
+    # No --python: the base's Python (``base.kernel_python``: the engine's own, or the line cad runs on where the
+    # engine's is newer), with uv's Python options as given where they say which kind.
+    python, venv_options = spec.python, spec.python_options
+    if python is None:
+        python, kind, _said = base.kernel_python(installation)
+        if not {"--managed-python", "--no-managed-python"} & set(venv_options):
+            venv_options = (*venv_options, *kind)
+    return base.Recipe(what=what, python=python,
                        requirement=(*_cad(installation, spec.integrations), *rest), release=installation.release,
                        source=installation.source, making=making, downloading=downloading,
                        unsatisfiable=unsatisfiable,
-                       options=_options(spec, spec.integrations), venv_options=spec.python_options, revise=revise,
+                       options=_options(spec, spec.integrations), venv_options=venv_options, revise=revise,
                        environment=spec.settings(), folder=spec.folder,
                        before=(lambda env: _export(env, spec, installation.release)) if spec.lock else None)
 
