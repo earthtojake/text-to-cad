@@ -15,6 +15,14 @@ release, with the Python flags of cad's own uv calls (``launch.PYTHON``: they ch
 is forced, and ``Failed`` carries uv's last line. Bounded: a uv that hangs is stopped (``timeout``). Several at once
 make one install: uv locks its tool folder, the others wait, then find cad installed and say so (exit status 0).
 
+BRIDGE-ONLY, the one exception: the ``cad`` command 0.10.0 to 0.11.10 wrote in uv's bin folder (``old_launcher``),
+which uv would refuse to replace. Where uv's bin folder holds it (``uv tool dir --bin``; on Windows its ``cad.exe``),
+it is renamed beside itself first, under the name cad's own update gives a ``cad.exe`` it sets aside
+(``auto_update_helper.ASIDE``). It is deleted once uv ends 0 (one that still runs on Windows stays, harmless, for cad's
+next update or the install command to delete), and put back where uv did not, unless uv left a ``cad`` there. Nothing
+else is moved: another program's ``cad`` still makes uv refuse. This is how a computer of those releases gets cad
+installed globally, by this bridge (``cli.setup``) or by an app's server line.
+
 uv is found as cad's own update finds it (``auto_update.find_uv``), else the one cad's own ``uv`` dependency carries.
 Imports the standard library alone at module scope.
 """
@@ -22,13 +30,19 @@ Imports the standard library alone at module scope.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
+import time
+from pathlib import Path
 
-__all__ = ["ASK_SECONDS", "Failed", "command", "find", "from_uv_cache", "install"]
+__all__ = ["ASK_SECONDS", "Failed", "command", "find", "from_uv_cache", "install", "old_launcher"]
 
 # How long one ``uv`` question (``uv cache dir``) may take.
 ASK_SECONDS = 15.0
+# BRIDGE-ONLY: the mark in the first lines of the ``cad`` command 0.10.0 to 0.11.10 wrote, with its revision: ``# `` in
+# the sh script and in the ``__main__.py`` of the zip behind 0.11's cad.exe (Windows), ``rem `` in 0.10's cad.cmd.
+OLD_LAUNCHER = re.compile(r"(#|rem) cad proxy: \d+")
 
 
 class Failed(Exception):
@@ -90,18 +104,85 @@ def command(uv: str) -> list[str]:
     return [uv, "tool", "install", "--managed-python", "--python", PYTHON, COMMAND]
 
 
+def old_launcher(path: Path) -> bool:
+    """BRIDGE-ONLY. Whether ``path`` is the ``cad`` command 0.10.0 to 0.11.10 wrote: ``OLD_LAUNCHER`` in its first
+    lines (0.11's cad.exe: in the ``__main__.py`` of the zip behind its launcher). A link is never one."""
+    import zipfile
+
+    if path.is_symlink() or not path.is_file():
+        return False
+    try:
+        if zipfile.is_zipfile(path):
+            with zipfile.ZipFile(path) as archive:
+                head = archive.read("__main__.py")[:512]
+        else:
+            with open(path, "rb") as handle:
+                head = handle.read(4096)
+    except (OSError, KeyError, ValueError, zipfile.BadZipFile):
+        return False
+    return any(OLD_LAUNCHER.match(line.strip()) for line in head.decode("utf-8", "replace").splitlines()[:3])
+
+
+def _bin(uv: str) -> Path | None:
+    """uv's bin folder, as uv names it (``uv tool dir --bin``), or None."""
+    try:
+        done = _run([uv, "tool", "dir", "--bin"], ASK_SECONDS)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    lines = [line.strip() for line in done.stdout.splitlines() if line.strip()]
+    return Path(lines[-1]) if done.returncode == 0 and lines else None
+
+
+def _set_aside(uv: str) -> tuple[Path, Path] | None:
+    """BRIDGE-ONLY. The old ``cad`` command in uv's bin folder renamed beside itself (see the module): where it was
+    and where it is now. None where there is none, or it could not be renamed."""
+    folder = _bin(uv)
+    if folder is None:
+        return None
+    path = folder / ("cad.exe" if os.name == "nt" else "cad")
+    if not old_launcher(path):
+        return None
+    from cad_server._internal.auto_update_helper import ASIDE
+
+    aside = path.with_name(ASIDE.format(stamp=f"{os.getpid()}-{time.time_ns()}", n=0))
+    try:
+        os.replace(path, aside)
+    except OSError:
+        return None
+    return path, aside
+
+
+def _settle(moved: tuple[Path, Path] | None, ok: bool) -> None:
+    """BRIDGE-ONLY. What ``_set_aside`` renamed: deleted where uv ended 0 and put a ``cad`` in its place; put back
+    where nothing is in its place; else left. Quiet: a file that still runs stays."""
+    if moved is None:
+        return
+    path, aside = moved
+    try:
+        if not os.path.lexists(path):
+            os.replace(aside, path)
+        elif ok:
+            aside.unlink()
+    except OSError:
+        pass
+
+
 def install(uv: str | None = None, *, timeout: float) -> list[str]:
     """cad installed as the uv tool ``cad`` (``command``), ``timeout`` seconds at most: what uv said, line by line.
-    ``Failed`` in one line where it was not."""
+    ``Failed`` in one line where it was not. The old ``cad`` command set aside first (see the module)."""
     uv = uv or find()
     if uv is None:
         raise Failed("uv is not found")
+    moved, ok = _set_aside(uv), False
     try:
         done = _run(command(uv), timeout)
+        ok = done.returncode == 0
     except subprocess.TimeoutExpired:
         raise Failed(f"uv did not finish within {timeout:g} s, and was stopped") from None
     except OSError as error:
         raise Failed(f"uv could not run: {error}") from None
+    finally:
+        _settle(moved, ok)
     said = [line.strip() for line in (done.stderr + "\n" + done.stdout).splitlines() if line.strip()]
     if done.returncode != 0:
         errors = [line for line in said if line.lower().startswith("error")]

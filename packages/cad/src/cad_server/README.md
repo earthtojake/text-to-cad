@@ -116,7 +116,7 @@ Kept only for releases 0.10.0 to 0.11.10, and deleted with that bridge (`cli/set
 --engine-update`, which those releases' updater runs on the new release; plain `cad setup`, which a `cad
 update` typed on those releases runs, the install command in install mode; and the hidden short forms
 `cad status` and `cad stop`, which their skill text uses. On a computer whose apps got text-to-cad only
-from a store, the bridge moves cad alone and runs no install command.
+from a store, the bridge moves cad alone, installs it with uv, and runs no install command.
 
 A command the skills used keeps working for at least 30 days after the skills stop using it.
 

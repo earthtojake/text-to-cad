@@ -151,8 +151,10 @@ release the old way and runs its hidden `cad setup --engine-update`. The new cad
 hosted install command once, which installs cad as a uv tool, installs the plugin and turns
 automatic updates on. A computer whose apps got text-to-cad only from a plugin store gets the new cad
 alone: running the install command there would put our plugin in apps the person never asked us
-into. The code that does this is kept apart and marked, so that a later release deletes it in one
-change.
+into. There, and where the install command failed before it installed cad, the new cad installs
+itself with uv, and that cad updates itself from then on. Where the new cad arrived by the uv line
+on a computer the install command set up before, cad runs the install command once. The code that
+does this is kept apart and marked, so that a later release deletes it in one change.
 
 **Why.** That updater cannot be changed, and it is the only way those computers reach the new
 design without a person doing anything.

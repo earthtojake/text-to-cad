@@ -19,18 +19,20 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from cad.engine import client, places
-from cad_server._internal import arrival, auto_update, install_script, installations
+from cad_server._internal import arrival, auto_update, install_script, installations, tool_install
 from cad_server.cli import setup
 from cad_server.engine.registry import Folder
 
 OLD, Y = "0.11.10", "0.12.1"
 REFUSED = ("the install command online is not yet this release's, so nothing was installed: run the install command "
            "again in a few minutes")
+INSTALLING = "this cad runs from an earlier release's folder: installing cad with uv"
 
 
 class Computer(unittest.TestCase):
@@ -287,6 +289,33 @@ class TakeOver(Computer):
         self.assertEqual(arrival.read(Y)["from"], "0.10.0")
         self.served.assert_called_once_with(Y)
 
+    def test_its_typed_cad_update_takes_its_data_over_before_the_install_command_runs(self) -> None:
+        # What 0.10.0's typed `cad update` runs of the new release: plain `cad setup`, from 0.10.0's own folder.
+        seen, adopted = self.root / "seen", self.state / "adopted"
+        stand_in = self.root / "install.py"
+        stand_in.write_text("import os, sys\nopen(sys.argv[1], 'a').write(f'{os.path.exists(sys.argv[2])} '"
+                            " + open(sys.argv[3]).read().strip() + '\\n')\n", encoding="utf-8")
+        current = self.appdata / "installations" / "current"
+        installer = {install_script.INSTALLER_ENV: f'"{sys.executable}" "{stand_in}" "{seen}" "{adopted}" "{current}"'}
+        adopt = mock.Mock(side_effect=lambda: adopted.write_text("", encoding="utf-8"))
+        with mock.patch.dict(os.environ, {**installer, "TEN_EXIT": "1"}), \
+                mock.patch.object(places, "adopt_earlier", adopt), \
+                mock.patch.object(setup, "_appdata_serving", return_value=str(self.root / "ten")):
+            code, out, err = self.main([])
+            self.assertEqual(code, 0, err)
+            self.assertIn(f"cad {Y} left the data of cad-server 0.10.0 where it is: its server did not stop", err)
+            self.assertEqual(seen.read_text(encoding="utf-8"), "False 0.10.0\n", "nothing moved; the command ran")
+            adopt.assert_not_called()
+            os.environ.pop("TEN_EXIT")
+            code, out, err = self.main([])
+        self.assertEqual(code, 0, err)
+        self.assertEqual(seen.read_text(encoding="utf-8").splitlines()[1], f"True {Y}",
+                         "adopted, and 0.10.0's records name this release, before the command ran")
+        self.assertEqual(self.stopped.read_text(encoding="utf-8"), "stop --json\nstop --json\n")
+        for folder in (self.state, self.appdata):
+            self.assertEqual(installations.current_version(Folder(folder)), Y)
+        self.served.assert_not_called()
+
     def test_0_10_0_s_stop_runs_only_against_0_10_0_s_own_server(self) -> None:
         # Its `cad stop` stops whatever answers at its port file, where later servers write a copy of their own.
         for answering, runs in ((self.this[2], False), (str(self.root / "ten"), True), (None, True)):
@@ -385,18 +414,22 @@ class Tool(Computer):
 
 
 @unittest.skipIf(os.name == "nt", "the stand-in uv is a POSIX script")
-class Moving(Tool):
-    """Step 5: a server that runs from a shipped updater's folder hands over to the uv tool's once install mode
-    installed cad, and nothing is in flight; never to an older one."""
+class Handing(Tool):
+    """A server that runs from a shipped updater's folder, handing over: the helper it starts recorded, never run; no
+    pipx found but where a test gives one; uv's tools in the test's folder."""
 
     def setUp(self) -> None:
         super().setUp()
         self.started: list = []
+        self.envs: list[dict[str, str]] = []
         # The Python a server's environment was made from, outside it, as a uv tool's or a shipped updater's
         # environment has: the suite's own may be a system Python, with nothing outside it (CI's Linux jobs).
         for patch in (mock.patch.object(sys, "_base_executable", str(self.root / "python3"), create=True),
-                      mock.patch.dict(os.environ, {"PATH": str(self.root / "bin")}),
-                      mock.patch.object(setup, "_start", side_effect=lambda *a, **k: self.started.append(a)),
+                      mock.patch.dict(os.environ, {"PATH": str(self.root / "bin"),
+                                                   "UV_TOOL_DIR": str(self.root / "uv-tools")}),
+                      mock.patch.object(setup, "_start", side_effect=lambda *a, **k: (
+                          self.started.append(a), self.envs.append(k["env"]))),
+                      mock.patch.object(auto_update, "find_pipx", return_value=None),
                       mock.patch.object(auto_update, "uv_tool", side_effect=lambda prefix=None: Path(prefix)
                                         if prefix and Path(prefix, "uv-receipt.toml").exists() else None)):
             patch.start()
@@ -407,6 +440,11 @@ class Moving(Tool):
         tending.tend(Y, said.append, quiet=quiet)
         return said
 
+
+class Moving(Handing):
+    """Step 5: a server that runs from a shipped updater's folder hands over to the global cad's once install mode
+    installed cad, and nothing is in flight; never to an older one."""
+
     def test_once_installed_and_quiet_the_records_name_the_tool_and_the_helper_starts(self) -> None:
         environment = self.tool("0.12.2")
         installations.register(Y, self.this)
@@ -416,7 +454,7 @@ class Moving(Tool):
         self.assertEqual(self.tending(tending), [], "install mode has not run: nothing")
         install_script._write({**install_script.read(), "attempts": 1, "outcome": "app", "installed": True})
         self.assertEqual(self.tending(tending, quiet=False), [], "work in flight: not yet")
-        self.assertEqual(self.tending(tending), ["handing over to the uv tool's cad 0.12.2: this server stops, and "
+        self.assertEqual(self.tending(tending), ["handing over to the global cad 0.12.2: this server stops, and "
                                                  "that cad starts the next"])
         [(command,)] = self.started
         told = json.loads(command[-1])
@@ -433,12 +471,170 @@ class Moving(Tool):
     def test_never_to_an_older_cad_nor_where_there_is_none(self) -> None:
         install_script._write({**install_script._new("install", Y, 0.0), "attempts": 1, "outcome": "done",
                                "state": "done", "installed": True})
-        self.assertEqual(self.tending(setup.Tending()), ["no cad installed as a uv tool was found: this server runs on"])
+        self.assertEqual(self.tending(setup.Tending()), ["no global cad was found: this server runs on"])
         self.tool("0.12.0")
         self.assertEqual(self.tending(setup.Tending()),
-                         [f"the uv tool's cad 0.12.0 is older than this cad {Y}: this server runs on"])
+                         [f"the global cad 0.12.0 is older than this cad {Y}: this server runs on"])
         self.assertEqual(self.started, [])
         self.assertIsNone(installations.current_version())
+
+    def test_a_pipx_global_cad_gets_a_helper_with_pipx_s_commands(self) -> None:
+        environment = self.root / "pipx" / "venvs" / "cad"
+        (environment / "lib" / "python3.14" / "site-packages" / "cad-0.12.2.dist-info").mkdir(parents=True)
+        (environment / "bin").mkdir()
+        for name in ("cad", "python"):
+            (environment / "bin" / name).write_text("", encoding="utf-8")
+        (environment / "pipx_metadata.json").write_text(json.dumps({"main_package": {"package": "cad"}}),
+                                                        encoding="utf-8")
+        install_script._write({**install_script._new("install", Y, 0.0), "attempts": 1, "outcome": "done",
+                               "state": "done", "installed": True})
+        with mock.patch.object(auto_update, "installed_tool", return_value=environment), \
+                mock.patch.object(auto_update, "find_pipx", return_value=["/opt/pipx"]):
+            self.assertEqual(self.tending(setup.Tending()), ["handing over to the global cad 0.12.2: this server "
+                                                             "stops, and that cad starts the next"])
+        [(command,)] = self.started
+        told = json.loads(command[-1])
+        self.assertEqual((told["cad"], told["target"], told["prefix"]),
+                         (str(environment / "bin" / "cad"), "0.12.2", str(environment)))
+        self.assertEqual((told["upgrade"], told["launchers"]),
+                         (["/opt/pipx", "upgrade", "cad"], ["/opt/pipx", "environment", "--value", "PIPX_BIN_DIR"]))
+        self.assertEqual(self.envs[0]["PIPX_HOME"], str(self.root / "pipx"), "pipx acts on this cad's folder")
+        self.assertEqual(installations.current()["prefix"], str(environment))
+
+
+class Carrying(Handing):
+    """Step 4b: a server that runs from a shipped updater's folder, where nothing is owed or install mode's attempt
+    installed nothing, installs cad globally on a thread, then hands over at the next quiet tending."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.installs: list[float] = []
+        for patch in (mock.patch.object(sys, "prefix", str(self.state / "releases" / Y)),
+                      mock.patch.dict(os.environ, {install_script.FIRST_ENV: "0"}),
+                      mock.patch.object(tool_install, "install", side_effect=self.install)):
+            patch.start()
+            self.addCleanup(patch.stop)
+        installations.register(Y, self.this)
+        installations.point(Y)  # what the shipped switch does
+
+    def install(self, *, timeout: float) -> list[str]:
+        """uv's install, a stand-in: the uv tool cad 0.12.2 made."""
+        self.installs.append(timeout)
+        self.tool("0.12.2")
+        return ["Installed 1 executable: cad"]
+
+    def carried(self, tending: setup.Tending) -> list[str]:
+        """One quiet tending, and the install it began waited for: what both said."""
+        said = self.tending(tending)
+        if tending.carrying is not None:
+            tending.carrying.join(30)
+        return said
+
+    def test_it_installs_on_a_thread_then_hands_over_at_the_next_quiet_tending(self) -> None:
+        tending = setup.Tending()
+        self.assertEqual(self.carried(tending), [INSTALLING, "uv: Installed 1 executable: cad"])
+        self.assertEqual(self.installs, [setup.CARRY_SECONDS])
+        self.assertEqual(self.tending(tending, quiet=False), [], "work in flight: not yet")
+        self.assertEqual(self.tending(tending), ["handing over to the global cad 0.12.2: this server stops, and that "
+                                                 "cad starts the next"])
+        self.assertEqual(json.loads(self.started[0][0][-1])["prefix"], str(self.root / "uv-tools" / "cad"))
+        self.assertEqual(installations.current()["prefix"], str(self.root / "uv-tools" / "cad"))
+        self.assertEqual((self.tending(tending), self.installs), ([], [setup.CARRY_SECONDS]), "once a server")
+        self.assertIsNone(install_script.read(), "nothing owed: the install command never runs")
+
+    def test_a_global_cad_already_there_is_moved_to_with_no_install(self) -> None:
+        self.tool("0.12.2")
+        tending = setup.Tending()
+        self.assertEqual(self.carried(tending), [])
+        self.assertIn("handing over to the global cad 0.12.2", self.tending(tending)[0])
+        self.assertEqual(self.installs, [])
+
+    def test_never_from_a_project_s_python_or_a_checkout(self) -> None:
+        for prefix in (self.root / "project" / ".venv", self.root / "checkout" / ".venv", self.this[2]):
+            with self.subTest(prefix=prefix), mock.patch.object(sys, "prefix", str(prefix)):
+                tending = setup.Tending()
+                self.assertEqual(self.carried(tending), [])
+                self.assertIsNone(tending.carrying)
+        installations.point(OLD)
+        self.assertEqual(self.carried(setup.Tending()), [], "current names another release: the switch's to decide")
+        self.assertEqual(self.installs, [])
+
+    def test_not_while_install_mode_is_owed_and_after_an_attempt_that_installed_nothing(self) -> None:
+        install_script.owe(Y)
+        self.assertEqual(self.carried(setup.Tending()), [], "owed: install mode's to run")
+        for outcome in (install_script.RUNNING, "no_report"):
+            install_script._write({**install_script.read(), "attempts": 1, "outcome": outcome, "installed": False})
+            tending = setup.Tending()
+            self.carried(tending)
+            self.assertEqual(self.installs, [] if outcome == install_script.RUNNING else [setup.CARRY_SECONDS], outcome)
+        self.assertIn("handing over to the global cad 0.12.2", self.tending(tending)[0])
+        self.assertEqual(install_script.read()["state"], "owed", "install mode still owed: the next server runs it")
+
+    def test_where_nothing_moved_it_tries_again_a_day_later_and_at_each_start(self) -> None:
+        def refused(*, timeout: float) -> list[str]:
+            self.installs.append(timeout)
+            raise tool_install.Failed("error: Executable already exists: cad")
+
+        tending = setup.Tending()
+        with mock.patch.object(tool_install, "install", side_effect=refused):
+            self.assertEqual(self.carried(tending), [
+                INSTALLING, "could not install cad with uv: error: Executable already exists: cad"])
+        self.assertEqual(self.tending(tending), ["no global cad was found: this server runs on"])
+        self.assertGreater(tending.next, time.monotonic() + install_script.DAY_SECONDS - 60)
+        self.assertEqual((self.carried(tending), len(self.installs)), ([], 1), "not again within the day")
+        self.assertEqual(self.carried(setup.Tending()), [INSTALLING, "uv: Installed 1 executable: cad"],
+                         "a server's start: again")
+        self.assertEqual(len(self.installs), 2)
+
+
+class Once(Computer):
+    """Step 7: a global install's server on a computer where our setup ran (``ours``), whose switch was never set, turns
+    it on, then runs the install command once, detached."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.runs = self.root / "runs"
+        stand_in = self.root / "install.py"
+        # What the switch said when the command began, a line per run.
+        stand_in.write_text("import json, sys\nkept = json.load(open(sys.argv[1], encoding='utf-8'))\n"
+                            "open(sys.argv[2], 'a', encoding='utf-8').write(json.dumps(kept.get('plugin')) + '\\n')\n"
+                            "print('installed')\n", encoding="utf-8")
+        settings = self.state / "settings.json"
+        for patch in (mock.patch.dict(os.environ, {install_script.INSTALLER_ENV:
+                                                   f'"{sys.executable}" "{stand_in}" "{settings}" "{self.runs}"'}),
+                      mock.patch.object(auto_update, "uv_tool", return_value=Path(self.this[2]))):  # a global install
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_it_runs_once_with_the_switch_on_first(self) -> None:
+        said: list[str] = []
+        first, second = setup.Tending(), setup.Tending()  # a server, and the next
+        for tending in (first, second):
+            for _ in range(2):
+                tending.tend(Y, said.append, quiet=True)
+        self.assertIsNone(second.command)
+        self.assertEqual(first.command.wait(60), 0)
+        self.assertEqual(self.runs.read_text(encoding="utf-8").splitlines(), ['{"auto_update": true}'],
+                         "once, the switch on before it began")
+        self.assertTrue(auto_update.plugin_switch())
+        self.assertIn("the install command set up this computer before: it runs once now, in the background", said)
+        self.assertEqual((self.state / auto_update.INSTALL_LOG).read_text(encoding="utf-8"), "installed\n")
+
+    def test_nothing_runs_where_the_switch_was_set_on_a_computer_not_ours_while_owed_or_not_global(self) -> None:
+        for kept in (False, True):
+            (self.state / "settings.json").write_text(json.dumps({"plugin": {"auto_update": kept}}), encoding="utf-8")
+            self.assertFalse(setup.once(lambda line: None), kept)
+            self.assertIs(auto_update.plugin_switch(), kept, "the person's switch left as it is")
+        (self.state / "settings.json").unlink()
+        install_script.owe(Y)
+        self.assertFalse(setup.once(lambda line: None), "install mode owed: the Carrier's")
+        (self.state / install_script.RECORD).unlink()
+        with mock.patch.object(auto_update, "uv_tool", return_value=None):
+            self.assertFalse(setup.once(lambda line: None), "not a global install")
+        (self.state / "install-receipt.json").unlink()
+        self.assertFalse(setup.once(lambda line: None), "not ours: a store's copy alone")
+        self.assertFalse((self.state / "settings.json").exists(), "no switch written")
+        self.assertFalse(self.runs.exists(), "the install command never ran")
 
 
 class Following(Tool):
@@ -467,6 +663,14 @@ class Following(Tool):
                     self.assertTrue(setup.follow(said.append))
                 self.assertEqual(installations.current_version(Folder(appdata)), Y if followed else named)
         self.assertEqual(said[0], f"the clients of 0.11.10 and earlier start this cad {Y} where none runs")
+
+    def test_a_server_of_pipx_s_cad_is_followed_too(self) -> None:
+        installations.point(OLD)
+        with mock.patch.object(auto_update, "uv_tool", return_value=None), \
+                mock.patch.object(auto_update, "pipx_tool", return_value=Path(self.this[2])), \
+                mock.patch.object(auto_update, "find_pipx", return_value=None):
+            self.assertTrue(setup.follow(lambda line: None))
+        self.assertEqual((installations.current_version(), self.record(Y)["prefix"]), (Y, self.this[2]))
 
 
 class Arriving(unittest.TestCase):

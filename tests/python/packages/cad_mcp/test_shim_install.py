@@ -103,7 +103,16 @@ class Started(unittest.TestCase):
 
 
 class Install(unittest.TestCase):
-    """The install itself: uv's own command, never forced, its refusal said in one line, and bounded in time."""
+    """The install itself: uv's own command, never forced, its refusal said in one line, and bounded in time. uv's bin
+    folder is one of the test's own (``_bin``)."""
+
+    def setUp(self) -> None:
+        self.bin = Path(tempfile.mkdtemp(prefix="uvbin-")).resolve()
+        self.addCleanup(shutil.rmtree, self.bin, True)
+        patch = mock.patch.object(tool_install, "_bin", return_value=self.bin)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.cad = self.bin / ("cad.exe" if os.name == "nt" else "cad")
 
     def test_the_command_is_uv_tool_install_of_the_newest_cad_with_cad_s_own_python_flags(self) -> None:
         self.assertEqual(tool_install.command("uv"),
@@ -134,6 +143,44 @@ class Install(unittest.TestCase):
             with self.assertRaises(tool_install.Failed):
                 tool_install.install(timeout=1)
             self.assertFalse(tool_install.from_uv_cache(sys.prefix))
+
+    # BRIDGE-ONLY: the cad command of 0.10.0 to 0.11.10 in uv's bin folder, which uv would refuse to replace.
+    OLD = "#!/bin/sh\n# cad proxy: 3\nexec python -m cad_server._internal.proxy \"$@\"\n"
+
+    def uv_that(self, code: int, writes: bool) -> str:
+        """A stand-in uv: it notes whether a ``cad`` was in its way, writes uv's own where ``writes``, and exits
+        ``code``."""
+        return (f"import os, sys\nprint('in the way' if os.path.lexists({str(self.cad)!r}) else 'room')\n"
+                + (f"open({str(self.cad)!r}, 'w').write('uv')\n" if writes else "")
+                + ("sys.stderr.write('error: Executable already exists: cad\\n')\n" if code else "")
+                + f"sys.exit({code})\n")
+
+    def test_the_old_cad_command_is_set_aside_and_deleted_once_uv_installed_cad(self) -> None:
+        self.cad.write_text(self.OLD, encoding="utf-8")
+        self.assertTrue(tool_install.old_launcher(self.cad))
+        self.assertEqual(self.run_as_uv(self.uv_that(0, writes=True)), ["room"], "out of uv's way while it ran")
+        self.assertEqual(self.cad.read_text(encoding="utf-8"), "uv")
+        self.assertEqual(sorted(os.listdir(self.bin)), [self.cad.name], "nothing left beside it")
+
+    def test_the_old_cad_command_is_put_back_where_uv_failed(self) -> None:
+        self.cad.write_text(self.OLD, encoding="utf-8")
+        with self.assertRaises(tool_install.Failed):
+            self.run_as_uv(self.uv_that(2, writes=False))
+        self.assertEqual(self.cad.read_text(encoding="utf-8"), self.OLD, "put back: it still runs cad")
+        self.assertEqual(sorted(os.listdir(self.bin)), [self.cad.name])
+        with self.assertRaises(tool_install.Failed):
+            self.run_as_uv("import time; time.sleep(60)", timeout=0.5)
+        self.assertEqual(self.cad.read_text(encoding="utf-8"), self.OLD, "put back after uv was stopped too")
+
+    def test_another_program_s_cad_is_never_moved(self) -> None:
+        other = "#!/bin/sh\necho another cad\n"
+        self.cad.write_text(other, encoding="utf-8")
+        self.assertFalse(tool_install.old_launcher(self.cad))
+        with self.assertRaises(tool_install.Failed) as refused:
+            self.run_as_uv(self.uv_that(2, writes=False))
+        self.assertEqual(str(refused.exception), "error: Executable already exists: cad")
+        self.assertEqual(self.cad.read_text(encoding="utf-8"), other)
+        self.assertEqual(sorted(os.listdir(self.bin)), [self.cad.name])
 
 
 class FromUvCache(unittest.TestCase):

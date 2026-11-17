@@ -14,8 +14,9 @@ the index (``UV_FIND_LINKS``, ``CAD_UPDATE_FIND_LINKS``), and the version feed i
 Every computer has a folder of releases of its own, holding only those that are out (``Box.out``): the install command
 installs PyPI's newest, and an upgrade is ``uv tool install cad@latest``, so a release not out yet must not be there.
 
-**cad updating itself** (a computer the install command set up: cad a uv tool, its automatic updates on). The install
-command cad runs counts its runs there (``Box.runs``).
+The install command cad runs counts its runs on every computer (``Box.runs``).
+
+**cad updating itself** (a computer the install command set up: cad a uv tool, its automatic updates on).
 
 - ``self-update``: with ``cad plugin auto-update on``, the feed names the next release and an hour passes; the running
   server, idle, stops, uv installs the next release, and its server answers; then the helper runs the new cad's ``cad
@@ -52,9 +53,15 @@ updater), installed by its own ``cad setup`` through uvx, its server serving pag
   place of the shipped release's launcher, ``cad --version`` this build, the tool's server answering on the pages'
   port with their token, ``installations/current`` and its record naming the tool's environment, the hand-over
   recorded done, both switches on, and the old release folders still there (nothing of a past release is deleted).
+  The install command ran once, and two tendings of the tool's server later still once.
 - ``automatic`` (0.11.x): the same, by the shipped release's automatic update (an hour passes for its feed).
+- ``updater-fallback``: ``updater`` where the install command fails and writes no report: install mode's attempt
+  fails, this build's server installs cad as a uv tool itself and hands over; install mode stays owed (one attempt),
+  for the tool's server to run later, and the tool's server serves the pages.
 - ``store-only``: a computer that never ran our install command (no receipt of it, no plugin folder): the updater
-  brings this build, and cad alone moves: no install command runs, nothing is owed, no uv tool, no plugin.
+  brings this build, whose server installs cad as a uv tool itself (the shipped launcher set aside, then deleted) and
+  hands over to the tool's server, as ``updater`` ends; but the install command never runs: nothing owed, no plugin
+  folder, no plugin switch.
 - ``rollback``: the updater to a build whose server cannot start: the shipped switch goes back, so the old release
   serves on the pages' port with their token, ``current`` and the ``cad`` command are its own, and the install command
   never runs.
@@ -62,19 +69,24 @@ updater), installed by its own ``cad setup`` through uvx, its server serving pag
   pages: cad a uv tool, the old launcher gone, both switches on; ``cad server start`` then replaces the old server.
 - ``typed``: the shipped release's own ``cad update`` typed (what today's skill text has an agent type where cad is
   older): it brings this build, whose plain ``cad setup`` runs the install command: the end of ``install-command``.
-  On Windows that install cannot finish: the typed command is the shipped release's ``cad.exe``, still running, which
-  Windows lets no one replace, so the install command refuses and says so. The command exits 1, and the computer is
-  left as it was and working: the same release answers ``cad --version`` and serves the pages, ``current`` and the
-  switches unchanged, no uv tool, nothing owed (no ``handover.json``) and no arrival kept. Then the way on every skill
-  names, the install command run with no ``cad.exe`` running: the end of ``install-command``.
+  On Windows the typed command is the shipped release's ``cad.exe``, running all along, which Windows lets no one
+  replace or delete: the install command renames it aside and installs uv's cad all the same, and the command exits 0.
+  What it set aside, which ran until the command exited, goes at the install command's next run, which leaves cad as
+  it is.
 - ``store-typed``: the same on a store-only computer: cad alone moves, as in ``store-only``; ``cad server start`` then
-  replaces the old server with this build's.
+  replaces the old server with this build's, which ends as ``store-only`` does.
+- ``uv-line``: the uv line typed (a skill's Setup block): ``uv tool install cad`` refused by the shipped launcher,
+  then with ``--force`` (on Windows 0.10's ``cad.cmd`` is not in its way); ``cad server start`` replaces the old
+  server; the tool's server turns the plugin's switch on and runs the install command once; stopped and started
+  again, two tendings later still once.
+- ``store-uv-line``: the same on a store-only computer: two tendings after the start the install command never ran,
+  and there is no plugin switch.
 
 Usage::
 
     scripts/test/rehearse-update.py [ROUTE ...] [--old RELEASE] [--wheels DIR] [--uv-cache DIR]
 
-``all`` (the default) is every route; ``self`` the seven of cad updating itself; ``bridge`` the seven from a shipped
+``all`` (the default) is every route; ``self`` the seven of cad updating itself; ``bridge`` the ten from a shipped
 release. ``--wheels``: this tree's wheels as ``scripts/release/check-wheel-contents.sh`` keeps them; without it they
 are built from the source (``tests/python/support/machine.py``, no packaged runtime: no route opens a page).
 ``--uv-cache``: one folder for uv's cache and Pythons, shared by every computer of the run (default: a new one of the
@@ -852,9 +864,69 @@ def bridged(box: Box, old: str) -> None:
     left = box.from_folder(old_state / "releases")
     if left:
         raise Failed(f"{box.label}: processes still run from the release folders:\n" + "\n".join(left))
+    # The install command ran once (install mode), and the tool's server runs it no more: its switch is on.
+    tendings(box, Path(tool["env"]), 2)
+    if box.runs() != 1 or (box.read("settings.json").get("plugin") or {}).get("auto_update") is not True:
+        raise Failed(f"{box.label}: two tendings after the move the install command ran {box.runs()} times, plugin "
+                     f"{box.read('settings.json').get('plugin')}\n{box.said()}")
     say(f"        {old} -> {NEW}: uv's cad in {box.bin}, its server ({status.get('prefix')}), current {current}, "
-        f"hand-over done (attempt {record.get('attempts')}), automatic updates on, releases/{old} and releases/{NEW} kept")
+        f"hand-over done (attempt {record.get('attempts')}), automatic updates on, releases/{old} and releases/{NEW} "
+        "kept; the install command ran once, and two tendings later still once")
     pages(box, NEW)
+
+
+# A server tends itself every 30 s (``cad_server.engine.daemon.TEND_SECONDS``).
+TEND_SECONDS = 30.0
+
+
+def tendings(box: Box, env: Path, count: int) -> None:
+    """The server of the environment ``env`` up through ``count`` of its tendings, as its status says (``up``). A
+    start stamps no work, so its first tending is a quiet one: what the bridge does there, it has done by then."""
+    box.until(lambda: ((box.ask(rc.interpreter(env), "status") or {}).get("up") or 0) > count * TEND_SECONDS + 5,
+              f"the server through {count} tendings")
+
+
+def handed_over(box: Box) -> dict:
+    """The move to the uv tool's server ended (``handover-move.json``), the helper's server started: its record."""
+    move = box.until(lambda: (lambda found: found if "ended" in found else None)(box.read("handover-move.json")),
+                     "the move to the uv tool's server")
+    if move.get("outcome") not in ("current", "installed") or str(move.get("started", "")).startswith("not started"):
+        raise Failed(f"{box.label}: the move to the uv tool's server: {move}\n{box.said()}")
+    return move
+
+
+def on_the_tool(box: Box, old: str) -> dict:
+    """The end the bridge's own install reaches (``store-only``, ``updater-fallback``): uv's cad at this build, its
+    server serving the pages' port with their token; ``current`` and its record naming the tool's environment; no
+    shipped launcher, and nothing it set aside, in the bin folder; both release folders kept, nothing running from them.
+    The tool."""
+    handed_over(box)
+    box.tool_serves(NEW)
+    tool = box.is_tool(NEW)
+    current = box.current()
+    entry = json.loads((box.state / "installations" / f"{current}.json").read_text(encoding="utf-8")) if current else {}
+    if current != NEW or not rc._within(Path(entry.get("prefix") or "/nowhere"), Path(tool["env"])):
+        raise Failed(f"{box.label}: installations/current names {current!r}: {entry}")
+    aside = leftovers(box)
+    if aside:
+        raise Failed(f"{box.label}: what the install set aside is still in {box.bin}: {aside}")
+    kept = [box.old_state / "releases" / old, box.old_state / "releases" / NEW]
+    if not all(path.is_dir() for path in kept):
+        raise Failed(f"{box.label}: a release folder is gone: {[str(path) for path in kept if not path.is_dir()]}")
+    left = box.from_folder(box.old_state / "releases")
+    if left:
+        raise Failed(f"{box.label}: processes still run from the release folders:\n" + "\n".join(left))
+    return tool
+
+
+def no_plugin(box: Box) -> dict:
+    """A store-only computer's end: the install command never ran, nothing owed, no report, no plugin folder, no
+    plugin switch. What it holds."""
+    held = {"runs": box.runs(), "handover": box.read("handover.json"), "report": box.read("install-report.json"),
+            "plugin folder": (box.state / "plugin").exists(), "plugin": box.read("settings.json").get("plugin")}
+    if held != {"runs": 0, "handover": {}, "report": {}, "plugin folder": False, "plugin": None}:
+        raise Failed(f"{box.label}: a store-only computer: {held}\n{box.said()}")
+    return held
 
 
 def updater(box: Box, old: str) -> None:
@@ -881,25 +953,41 @@ def automatic(box: Box, old: str) -> None:
     bridged(box, old)
 
 
-def store_only(box: Box, old: str) -> None:
-    box.install_old(old)
-    # What only our install command's setup leaves: gone, as on a computer that only ever had a store's copy.
+def store_bought(box: Box) -> None:
+    """What only our install command's setup leaves, gone: a computer that only ever had a store's copy."""
     (box.old_state / "install-receipt.json").unlink(missing_ok=True)
     shutil.rmtree(box.old_state / "plugin", ignore_errors=True)
+
+
+def store_only(box: Box, old: str) -> None:
+    box.install_old(old)
+    store_bought(box)
     box.button(NEW)
     box.switched(old, NEW)
-    box.until(lambda: box.serving(NEW), f"{NEW}'s server on the pages' port")
-    status = box.ask(rc.interpreter(box.old_state / "releases" / NEW), "status") or {}
-    held = {"current": box.current(), "handover": box.read("handover.json"), "tool": box.tool(),
-            "plugin": (box.state / "plugin").exists(), "report": box.read("install-report.json"),
-            "cad": box.version()}
-    if (held["current"], held["handover"], held["tool"], held["plugin"], held["report"]) != (NEW, {}, None, False, {}) \
-            or not rc._within(Path(status.get("prefix") or "/nowhere"), box.old_state / "releases" / NEW) \
-            or held["cad"] != f"cad {NEW}":
-        raise Failed(f"{box.label}: a store-only computer after the update: {held}, server {status.get('prefix')}\n"
+    tool = on_the_tool(box, old)
+    no_plugin(box)
+    say(f"        {old} -> {NEW}: this build's server installed uv's cad ({tool['env']}) and handed over; the install "
+        "command never ran: nothing owed, no plugin folder, no plugin switch")
+    pages(box, NEW)
+
+
+def updater_fallback(box: Box, old: str) -> None:
+    # An install command that fails and writes no report (one that could not be fetched, say), counted.
+    box.env["CAD_ENGINE_UPDATE_INSTALLER"] = (
+        f"powershell -NoProfile -Command \"Add-Content -LiteralPath '{box.counted}' -Value ran; exit 1\"" if WINDOWS
+        else f"""sh -c 'echo ran >> "$0"; exit 1' '{box.counted}'""")
+    box.install_old(old)
+    box.button(NEW)
+    box.switched(old, NEW)
+    tool = on_the_tool(box, old)
+    owed = box.read("handover.json")
+    if (owed.get("state"), owed.get("attempts"), owed.get("outcome"), owed.get("installed"), box.runs()) != (
+            "owed", 1, "no_report", False, 1):
+        raise Failed(f"{box.label}: install mode after the bridge's own install: {owed}, ran {box.runs()} times\n"
                      f"{box.said()}")
-    say(f"        {old} -> {NEW}, cad alone: no install command, nothing owed, no uv tool, no plugin folder; the "
-        f"shipped cad command runs {NEW}")
+    say(f"        {old} -> {NEW}: install mode failed (no_report), this build's server installed uv's cad "
+        f"({tool['env']}) and handed over; install mode still owed after 1 attempt")
+    pages(box, NEW)
 
 
 def rollback(box: Box, old: str) -> None:
@@ -948,51 +1036,34 @@ def install_command(box: Box, old: str) -> None:
     by_hand(box, old, box.install_command().stdout, "by the install command")
 
 
-# What the install command says where a cad.exe runs from cad's own folder (``install.py``: ``cad_running``), as the
-# shipped release's typed ``cad update`` does on Windows while it runs this build's ``cad setup``.
-CAD_EXE_RUNS = "cad.exe is running from cad's own folder, and Windows lets no one replace it while it does"
-# The records a typed update that could not install leaves as they were (the state folder's).
-RECORDS = ("handover.json", "arrival.json", "install-report.json", "auto-update.json", "update.json")
+# What the install command sets aside in uv's bin folder and may leave there while it runs (``install.py``:
+# ``LEFTOVERS``): on Windows, the typed command's own launcher, which runs on from its new name until it exits.
+LEFTOVERS = (".cad.exe.text-to-cad-old", ".cad.cmd.text-to-cad-old", ".cad-launcher.text-to-cad-old",
+             ".text-to-cad-trash-*", ".cad.exe.*.*.old")
 
 
-def held(box: Box) -> dict:
-    """What a person on a computer of a shipped release relies on, and what would act on it later: for ``typed`` on Windows."""
-    return {"cad": box.version(), "current": box.current(), "tool": box.tool(),
-            "launcher": sorted(path.name for path in box.commands() if launcher(path)),
-            "switches": box.read("settings.json").get("auto_update"),
-            "records": {name: box.read(name) for name in RECORDS},
-            "new release folder": (box.old_state / "releases" / NEW).is_dir()}
+def leftovers(box: Box) -> list[str]:
+    """What the install command set aside in uv's bin folder and is still there."""
+    return sorted(path.name for pattern in LEFTOVERS for path in box.bin.glob(pattern))
 
 
 def typed_on_windows(box: Box, old: str) -> None:
-    """``typed`` on Windows (see the module): the install refused while the typed ``cad.exe`` runs, the computer as it
-    was, then the install command run by hand."""
-    before = held(box)
-    done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 300)
-    words = done.stdout + done.stderr
-    if done.returncode != 1 or CAD_EXE_RUNS not in words or f"text-to-cad {NEW} is out (this is {old})" not in words:
-        raise Failed(f"{box.label}: {old}'s cad update exited {done.returncode}, not 1 with the install command's "
-                     f"refusal:\n{done.stdout}\n{done.stderr}\n{box.said()}")
-    box.until(lambda: box.serving(old), f"{old}'s server still serving the pages' port {box.port} with their token")
-    after = held(box)
-    expected = {**before, "new release folder": True}  # the shipped update made it before it ran this build's setup
-    if after != expected or (after["cad"], after["current"], after["tool"]) != (f"cad {old}", old, None) \
-            or not after["launcher"] or after["records"]["handover.json"] or after["records"]["arrival.json"]:
-        raise Failed(f"{box.label}: after {old}'s cad update was refused: {after}\nbefore it: {before}\n{box.said()}")
-    left = box.from_folder(box.old_state / "releases" / NEW)
-    if left:
-        raise Failed(f"{box.label}: processes of {NEW} still run after {old}'s cad update:\n" + "\n".join(left))
-    say(f"        {old}'s `cad update` exited 1, refused while its cad.exe runs; cad {old} answers and serves the "
-        f"pages, current {old}, no uv tool, nothing owed, no arrival kept")
-    by_hand(box, old, box.install_command().stdout, "then by the install command, with no cad.exe running")
+    """The end of ``typed`` on Windows (see the module): what the install command set aside while the typed command
+    ran, and could not delete then, goes at its next run, once that command has exited."""
+    left = leftovers(box)
+    said = box.install_command().stdout
+    if f"cad {NEW} is installed already" not in said or leftovers(box):
+        raise Failed(f"{box.label}: the install command run again said:\n{said}\nand left {leftovers(box)} in {box.bin}")
+    box.is_tool(NEW)
+    say(f"        the install command run again: cad {NEW} left as it is, and what the typed update set aside "
+        f"({', '.join(left) or 'nothing'}) gone")
 
 
 def typed(box: Box, old: str) -> None:
     box.install_old(old)
     box.out(NEW)
-    if WINDOWS:
-        typed_on_windows(box, old)
-        return
+    # On Windows the typed command is the shipped release's cad.exe, running all along: the install command renames it
+    # aside, and uv's cad goes in all the same.
     box.run([box.cad(), "update"], timeout=SECONDS + 300)
     box.is_tool(NEW)
     started = box.run([box.cad(), "server", "start"]).stdout
@@ -1005,33 +1076,97 @@ def typed(box: Box, old: str) -> None:
         raise Failed(f"{box.label}: {old}'s server still runs:\n" + "\n".join(left))
     say(f"        {old} -> {NEW} by {old}'s `cad update`: uv's cad, both switches on, the old server replaced by "
         f"`cad server start`, current {NEW}")
+    if box.old_state != box.state:
+        # 0.10.0 on Windows: the typed update's setup took 0.10.0's data over first, so its page token still works.
+        missing = [name for name in ("install-receipt.json", "engines/token") if not (box.state / name).is_file()]
+        if missing:
+            raise Failed(f"{box.label}: not taken over from {box.old_state}: {missing}\n{box.said()}")
+        pages(box, NEW)
+    if WINDOWS:
+        typed_on_windows(box, old)
 
 
 def store_typed(box: Box, old: str) -> None:
     box.install_old(old)
-    (box.old_state / "install-receipt.json").unlink(missing_ok=True)
-    shutil.rmtree(box.old_state / "plugin", ignore_errors=True)
+    store_bought(box)
     box.out(NEW)
     box.run([box.cad(), "update"], timeout=SECONDS + 300)
+    if box.current() != NEW or box.read("handover.json"):
+        raise Failed(f"{box.label}: after {old}'s cad update: current {box.current()!r}, "
+                     f"{box.read('handover.json')}\n{box.said()}")
     started = box.run([box.cad(), "server", "start"]).stdout
-    status = box.until(lambda: (lambda found: found if found and found.get("version") == NEW else None)(
-        box.ask(rc.interpreter(box.old_state / "releases" / NEW), "status")), f"{NEW}'s server answering")
-    held = {"current": box.current(), "handover": box.read("handover.json"), "tool": box.tool(),
-            "plugin": (box.state / "plugin").exists(), "report": box.read("install-report.json"),
-            "cad": box.version()}
-    if (held["current"], held["handover"], held["tool"], held["plugin"], held["report"]) != (NEW, {}, None, False, {}) \
-            or not rc._within(Path(status.get("prefix") or "/nowhere"), box.old_state / "releases" / NEW) \
-            or held["cad"] != f"cad {NEW}":
-        raise Failed(f"{box.label}: a store-only computer after {old}'s cad update: {held}, {started!r}, server "
-                     f"{status.get('prefix')}\n{box.said()}")
-    say(f"        {old} -> {NEW} by {old}'s `cad update`, cad alone: no install command, no uv tool, no plugin folder; "
-        f"`cad server start` serves {NEW}")
+    if f"cad {NEW}" not in started:
+        raise Failed(f"{box.label}: cad server start said {started!r}")
+    tool = on_the_tool(box, old)
+    no_plugin(box)
+    say(f"        {old} -> {NEW} by {old}'s `cad update`, cad alone; `cad server start` started {NEW}, whose server "
+        f"installed uv's cad ({tool['env']}) and handed over; the install command never ran")
+    pages(box, NEW)
+
+
+def by_uv_line(box: Box, old: str, *, ours: bool) -> None:
+    """``uv-line`` (``ours``) and ``store-uv-line`` (see the module)."""
+    box.install_old(old)
+    if not ours:
+        store_bought(box)
+    box.out(NEW)
+    # The shipped launcher is in uv's way, but for 0.10's cad.cmd on Windows, which uv's cad.exe goes in beside.
+    collides = any(launcher(path) and path.name != "cad.cmd" for path in box.commands())
+    first = box.run(["uv", "tool", "install", "cad"], check=False)
+    if (first.returncode == 0) == collides or (collides and "already exists" not in first.stdout + first.stderr):
+        raise Failed(f"{box.label}: `uv tool install cad` over {old}'s cad command exited {first.returncode}:\n"
+                     f"{first.stdout}\n{first.stderr}")
+    if collides:
+        box.run(["uv", "tool", "install", "--force", "cad"])
+    tool = box.tool()
+    if tool is None or tool["version"] != NEW or launcher(box.cad()) or box.version() != f"cad {NEW}":
+        raise Failed(f"{box.label}: after the uv line: uv's cad tool {tool}, {box.cad()} says {box.version()!r}")
+    started = box.run([box.cad(), "server", "start"]).stdout
+    if f"cad {NEW}" not in started:
+        raise Failed(f"{box.label}: cad server start said {started!r}")
+    box.tool_serves(NEW)
+    box.until(lambda: box.current() == NEW, f"installations/current naming {NEW}")
+    left = box.from_folder(box.old_state / "releases")
+    if left:
+        raise Failed(f"{box.label}: {old}'s server still runs:\n" + "\n".join(left))
+    env = Path(tool["env"])
+    if not ours:
+        tendings(box, env, 2)
+        no_plugin(box)
+        say(f"        {old} -> {NEW} by the uv line; `cad server start` replaced {old}'s server; two tendings later "
+            "the install command never ran, and no plugin switch")
+        pages(box, NEW)
+        return
+    # The tool's server, at its first quiet tending: the switch on, then the install command once, run to the line its
+    # last step prints (``cad plugin auto-update on``'s).
+    log = box.state / "install-command.log"
+    box.until(lambda: box.runs() == 1 and log.is_file() and "plugin auto-update: on" in log.read_text(
+        encoding="utf-8", errors="replace"), "the install command run once by the tool's server, to its last step")
+    if (box.read("settings.json").get("plugin") or {}).get("auto_update") is not True:
+        raise Failed(f"{box.label}: the plugin's switch after the install command: {box.read('settings.json')}")
+    box.run([box.cad(), "server", "stop"])
+    box.run([box.cad(), "server", "start"])
+    tendings(box, env, 2)
+    if box.runs() != 1:
+        raise Failed(f"{box.label}: the install command ran {box.runs()} times\n{box.said()}")
+    say(f"        {old} -> {NEW} by the uv line; `cad server start` replaced {old}'s server; the tool's server turned "
+        "the plugin's switch on and ran the install command once; restarted, two tendings later still once")
+    pages(box, NEW)
+
+
+def uv_line(box: Box, old: str) -> None:
+    by_uv_line(box, old, ours=True)
+
+
+def store_uv_line(box: Box, old: str) -> None:
+    by_uv_line(box, old, ours=False)
 
 
 SELF = {"self-update": self_update, "self-typed": self_typed, "self-at-start": self_at_start, "self-off": self_off,
         "self-broken": self_broken, "self-uninstallable": self_uninstallable, "self-pipx": self_pipx}
-BRIDGE = {"updater": updater, "automatic": automatic, "store-only": store_only, "rollback": rollback,
-          "install-command": install_command, "typed": typed, "store-typed": store_typed}
+BRIDGE = {"updater": updater, "automatic": automatic, "updater-fallback": updater_fallback, "store-only": store_only,
+          "rollback": rollback, "install-command": install_command, "typed": typed, "store-typed": store_typed,
+          "uv-line": uv_line, "store-uv-line": store_uv_line}
 
 
 def publish_all(source: Path | None, out: Path) -> None:
@@ -1088,7 +1223,7 @@ def main(argv: list[str] | None = None) -> int:
         for name in chosen:
             before = rc.Sentinels.here()
             alone = WINDOWS and args.old == "0.10.0" and name in BRIDGE
-            box = Box(name, feed, wheels, shared, named_state=not alone, pypi=pypi, counted=name in SELF)
+            box = Box(name, feed, wheels, shared, named_state=not alone, pypi=pypi, counted=True)
             say(f"-- {name}: a computer in {box.work}")
             began = time.monotonic()
             try:
