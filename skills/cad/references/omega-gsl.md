@@ -40,7 +40,7 @@ build). `cad run gsl ...` installs it on first use and runs it as it is:
 
 | Task | Command |
 | --- | --- |
-| The language reference, before writing GSL | omega-core's [language specification](https://github.com/Gradient-Control-Laboratories/omega-core/blob/v0.1.1/doc/gsl_lang_spec_current.md) and [standard library](https://github.com/Gradient-Control-Laboratories/omega-core/tree/v0.1.1/stdlib) (`builtin`, and `mechanical`, `map`, `lattice` and the rest beside it) at the pinned release |
+| The language reference, before writing GSL | omega-core's [language specification](https://github.com/Gradient-Control-Laboratories/omega-core/blob/v0.1.3/doc/gsl_lang_spec_current.md) and [standard library](https://github.com/Gradient-Control-Laboratories/omega-core/tree/v0.1.3/stdlib) (`builtin`, and `mechanical`, `map`, `lattice` and the rest beside it) at the pinned release |
 | Check it parses and links | `cad run gsl compile -t ast --no-meta -o - part.gsl > /dev/null` (silent when it is fine; errors name the line) |
 | Picture the field, no mesh | `cad run gsl render --views iso,top --light -o part.png part.gsl` |
 | Ask the field (values, extrema, volume, proofs) | `cad run gsl eval REQUEST.json`, or `omega_core.Session` in a script run with `cad run` |
