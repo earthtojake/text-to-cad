@@ -197,6 +197,8 @@ class Computer:
             folder.mkdir(parents=True, exist_ok=True)
         home = self.home
         uv = Path(shared).resolve() if shared is not None else self.work / "uv"
+        self.uv = uv
+        self.looked = True  # whether the last look at the running processes could see them (``processes``)
         env = {key: os.environ[key] for key in KEPT if key in os.environ}
         bypass = ",".join(filter(None, ("127.0.0.1,localhost", os.environ.get("NO_PROXY") or os.environ.get("no_proxy"))))
         env.update({
@@ -256,6 +258,8 @@ class Computer:
         self.env = env
         (self.work / "gitconfig").write_text("", encoding="utf-8")
         (self.work / "git-template").mkdir(exist_ok=True)
+        # Telemetry off as the person's kept choice too: a detached server goes by that, not by the environment.
+        quiet(self.state)
         self.commit = ""
         self.nonce = ""
 
@@ -267,8 +271,8 @@ class Computer:
 
     def isolation(self, say: Callable[[str], None] = print) -> None:
         """Each folder a program of the computer writes in, printed, and ``Failed`` before anything runs where one is
-        not inside the computer; uv's cache and Pythons, where the run shares them, outside the person's home; the
-        feed on loopback."""
+        not inside the computer; uv's cache and Pythons, where the run shares them, in none of the person's own
+        folders of uv, cad and the agent apps, and not holding the home (``uv_refused``); the feed on loopback."""
         wrong = []
         for name in self.ISOLATED:
             value = self.env.get(name)
@@ -281,7 +285,7 @@ class Computer:
         for name in ("UV_CACHE_DIR", "UV_PYTHON_INSTALL_DIR"):
             value = self.env[name]
             say(f"  {name}={value}")
-            if _within(Path(value), Path.home()) and not _within(Path(value), self.work):
+            if not _within(Path(value), self.work) and uv_refused(Path(value)):
                 wrong.append(name)
         for name in ("CAD_API_URL", "CAD_INSTALL_FEED"):
             value = self.env.get(name, "")
@@ -434,18 +438,23 @@ class Computer:
     # --- ending -----------------------------------------------------------------------------------------------
 
     def processes(self) -> list[tuple[int, str]]:
-        """Every process whose command line names the computer's folder, but this one."""
+        """Every process of the computer's, but this one: on macOS and Linux each whose command line names the
+        computer's folder; on Windows each whose program lies in it or in the run's uv folder (a venv's python.exe
+        starts uv's Python, whose command line names no folder of the computer's), read through the Win32 API in this
+        process (WMI is refused in a service's session). ``looked`` says whether it could look at all."""
         if WINDOWS:
-            listing = ["powershell", "-NoProfile", "-Command",
-                       "Get-CimInstance Win32_Process | ForEach-Object { \"$($_.ProcessId) $($_.CommandLine)\" }"]
-        else:
-            listing = ["ps", "-axo", "pid=,command="]
-        listed = subprocess.run(listing, capture_output=True, text=True, errors="replace").stdout
+            images = windows_images()
+            self.looked = images is not None
+            places = (self.work, self.uv)
+            return [(pid, image) for pid, image in images or [] if pid != os.getpid()
+                    and any(_within(Path(image), place) for place in places)]
+        listed = subprocess.run(["ps", "-axo", "pid=,command="], capture_output=True, text=True, errors="replace")
+        self.looked = listed.returncode == 0
         found = []
-        mark = str(self.work).lower() if WINDOWS else str(self.work)
-        for line in listed.splitlines():
+        mark = str(self.work)
+        for line in listed.stdout.splitlines():
             pid, _, command = line.strip().partition(" ")
-            if pid.isdigit() and int(pid) != os.getpid() and mark in (command.lower() if WINDOWS else command):
+            if pid.isdigit() and int(pid) != os.getpid() and mark in command:
                 found.append((int(pid), command))
         return found
 
@@ -712,6 +721,103 @@ def publish(wheels: Path, version: str, out: Path, *, replace: dict[str, bytes] 
         raise Failed(f"{wheels}: expected the wheels of one release, cad's among them: {[path.name for path in found]}")
     return [rewrite(path, out, version, **({"replace": replace, "commands": commands}
                                             if path.name.startswith("cad-") else {})) for path in found]
+
+
+def quiet(state: Path) -> None:
+    """Telemetry off as the person's kept choice in the state folder ``state`` (its ``settings.json``'s ``telemetry``
+    section, as every release from 0.8 reads it), where nothing is kept there yet."""
+    path = Path(state) / "settings.json"
+    if path.exists():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"telemetry": {"choice": "off", "by": "rehearsal", "decidedAt": time.time()}}),
+                    encoding="utf-8")
+
+
+def protected(home: Path | None = None, environ: dict[str, str] | None = None,
+              windows: bool = WINDOWS, darwin: bool = sys.platform == "darwin") -> list[Path]:
+    """The person's own folders a run must never share: uv's cache, Pythons, tools and their commands (where uv's
+    variables name them, and uv's defaults), cad's state, cache and command, and the agent apps' configuration."""
+    environ = os.environ if environ is None else environ
+    home = Path(home or Path.home())
+    named = [environ.get(name) for name in ("UV_CACHE_DIR", "UV_PYTHON_INSTALL_DIR", "UV_TOOL_DIR", "UV_TOOL_BIN_DIR",
+                                            "UV_INSTALL_DIR", "CAD_STATE_DIR", "CAD_CACHE_DIR")]
+    found = [Path(value) for value in named if value]
+    found += [home / ".local" / "bin", home / ".local" / "state" / "cad", home / ".cache" / "cad",
+              home / ".claude", home / ".codex", home / ".cursor", home / ".gemini"]
+    if windows:
+        local = Path(environ.get("LOCALAPPDATA") or home / "AppData" / "Local")
+        roaming = Path(environ.get("APPDATA") or home / "AppData" / "Roaming")
+        found += [local / "uv", roaming / "uv", local / "cad-state", local / "cad"]
+    else:
+        found += [Path(environ.get("XDG_CACHE_HOME") or home / ".cache") / "uv",
+                  Path(environ.get("XDG_DATA_HOME") or home / ".local" / "share") / "uv",
+                  Path(environ.get("XDG_CONFIG_HOME") or home / ".config") / "uv",
+                  Path(environ.get("XDG_STATE_HOME") or home / ".local" / "state") / "cad"]
+        if darwin:
+            found.append(home / "Library" / "Application Support" / "cad")
+    return found
+
+
+def uv_refused(path: Path, home: Path | None = None, environ: dict[str, str] | None = None,
+               windows: bool = WINDOWS, darwin: bool = sys.platform == "darwin") -> bool:
+    """Whether a run may not keep uv's cache or Pythons at ``path``: inside one of the person's own folders
+    (``protected``), or holding one of them, or the home itself."""
+    home = Path(home or Path.home())
+    return _within(home, path) or any(_within(path, place) or _within(place, path)
+                                      for place in protected(home, environ, windows, darwin))
+
+
+def windows_images() -> list[tuple[int, str]] | None:
+    """Windows: each running process's id and program path, read through the Win32 API in this process (no program
+    started, no WMI); a process whose path cannot be read is left out. None where the API cannot be used."""
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class Entry(ctypes.Structure):  # PROCESSENTRY32W
+            _fields_ = [("size", wintypes.DWORD), ("usage", wintypes.DWORD), ("pid", wintypes.DWORD),
+                        ("heap", ctypes.c_size_t), ("module", wintypes.DWORD), ("threads", wintypes.DWORD),
+                        ("parent", wintypes.DWORD), ("priority", ctypes.c_long), ("flags", wintypes.DWORD),
+                        ("name", ctypes.c_wchar * 260)]
+
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel.Process32FirstW.argtypes = kernel.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(Entry)]
+        kernel.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
+                                                      ctypes.POINTER(wintypes.DWORD)]
+        snapshot = kernel.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+        if not snapshot or snapshot == wintypes.HANDLE(-1).value:
+            return None
+        found: list[tuple[int, str]] = []
+        entry = Entry()
+        entry.size = ctypes.sizeof(Entry)
+        try:
+            more = kernel.Process32FirstW(snapshot, ctypes.byref(entry))
+            while more:
+                process = kernel.OpenProcess(0x1000, False, entry.pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+                if process:
+                    buffer, size = ctypes.create_unicode_buffer(32768), wintypes.DWORD(32768)
+                    if kernel.QueryFullProcessImageNameW(process, 0, buffer, ctypes.byref(size)):
+                        found.append((int(entry.pid), buffer.value))
+                    kernel.CloseHandle(process)
+                more = kernel.Process32NextW(snapshot, ctypes.byref(entry))
+        finally:
+            kernel.CloseHandle(snapshot)
+        return found
+    except (AttributeError, OSError, ValueError):
+        return None
+
+
+def cad_commands(folder: Path, windows: bool = WINDOWS) -> list[Path]:
+    """The ``cad`` commands in the bin folder ``folder``, in the order a shell runs them: ``cad`` on macOS and Linux;
+    on Windows ``cad.exe`` (uv's, and 0.11's launcher) before ``cad.cmd`` (0.10's)."""
+    names = ("cad.exe", "cad.cmd") if windows else ("cad",)
+    return [Path(folder) / name for name in names]
 
 
 def interpreter(env: Path) -> Path:

@@ -37,18 +37,20 @@ removed unless ``--keep``. A failure prints what the computer holds.
 without it they are built from the source (``tests/python/support/machine.py``: cad importable, no packaged client,
 so a page link is checked for its token alone). A
 program missing here is skipped and said, unless ``--require`` names it; ``--only`` leaves the others out. It needs the
-tag v0.11.10 in this checkout, uv, git, and the network (PyPI, uv's Python, the programs' own vendors). CI runs it on
-Windows, macOS and Linux (``.github/workflows/real-install.yml``).
+tag v0.11.10 in this checkout (without it, the migrate step is skipped and said; on CI it fails), uv, git and a
+git checkout of this tree (it stops at once, in one line, without either), and the network (PyPI, uv's Python, the
+programs' own vendors). CI runs it on Windows, macOS and Linux (``.github/workflows/real-install.yml``).
 """
 
 from __future__ import annotations
 
 import argparse
 import importlib.util
-import shutil
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -425,7 +427,26 @@ def parse(text: str):
     raise rc.Failed(f"no JSON in what the program said:\n{text[:2000]}")
 
 
-def steps(run: Run) -> None:
+def needs() -> tuple[str | None, bool]:
+    """What this run needs of this machine and checkout: git (the computer's apps clone the plugin with it), and this
+    tree a git checkout (the plugin's latest copy is built from what git tracks, as Publish Release builds it). The
+    one line naming what is missing, else None; and whether the tag v0.11.10 is here (the migrate step builds
+    0.11.10's plugin folder from it)."""
+    git = shutil.which("git")
+    if git is None:
+        return ("git is not on PATH: this run needs it (each app clones the plugin with git, and the plugin's latest "
+                "copy is built from what git tracks)"), False
+    inside = subprocess.run([git, "-C", str(REPO_ROOT), "rev-parse", "--is-inside-work-tree"], capture_output=True,
+                            text=True)
+    if inside.returncode or inside.stdout.strip() != "true":
+        return (f"{REPO_ROOT} is not a git checkout: this run builds the plugin's latest copy from what git tracks "
+                "there (clone the repository; an archive of it will not do)"), False
+    tag = subprocess.run([git, "-C", str(REPO_ROOT), "rev-parse", "--verify", "--quiet", f"{OLD}^{{commit}}"],
+                         capture_output=True)
+    return None, tag.returncode == 0
+
+
+def steps(run: Run, migrate: bool = True) -> None:
     c = run.computer
     commit = c.stand_in(rc.plugin_tree())
     say(f"ok    the local repository: latest at {commit[:12]}, which {GITHUB} names in the computer's git")
@@ -468,6 +489,9 @@ def steps(run: Run) -> None:
         raise rc.Failed(f"the install command in update mode changed cad: {run.tool()}")
     say(f"ok    update mode: {', '.join(kept) or 'no program'} updated; nothing added to {left_out}; cad left alone")
 
+    if not migrate:
+        say(f"skip  migrate: the tag {OLD} is not in this checkout (git fetch --depth 1 origin tag {OLD})")
+        return
     run.as_old_installer_left_it()
     ran = run.script("migrate")
     removed = {"claude": rf"Claude Code: installed \(removed old copies: {re.escape(OLD_OURS)}\)",
@@ -522,6 +546,13 @@ def main(argv: list[str] | None = None) -> int:
     if not shutil.which("uv"):
         say("FAILED  uv is not on PATH")
         return 1
+    missing, tagged = needs()
+    if missing:
+        say(f"FAILED  {missing}")
+        return 1
+    if not tagged and CI:
+        say(f"FAILED  the tag {OLD} is not in this checkout, and CI runs every step: git fetch --depth 1 origin tag {OLD}")
+        return 1
 
     work = (args.work or Path(tempfile.mkdtemp(prefix="real-install-"))).resolve()
     work.mkdir(parents=True, exist_ok=True)
@@ -564,7 +595,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         installer = load_installer()
         computer.check_path([app.command for app in installer.APPS if app.command] + ["cursor-agent"])
-        steps(run)
+        steps(run, migrate=tagged)
     except (rc.Failed, OSError, ValueError, KeyError) as failure:
         failed = f"{type(failure).__name__}: {failure}" if not isinstance(failure, rc.Failed) else str(failure)
     if failed:
@@ -576,6 +607,9 @@ def main(argv: list[str] | None = None) -> int:
     if left:
         failed = failed or "processes were left running"
         say("FAILED  left running, now ended:\n" + "\n".join(left))
+    elif not computer.looked:
+        say("note  this system did not let the run list its processes: whether anything was left running is not "
+            "known")
     else:
         say("ok    nothing of the computer's is left running")
     moved = sentinels.moved(rc.Sentinels.here())

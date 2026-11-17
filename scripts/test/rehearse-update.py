@@ -48,7 +48,9 @@ Usage::
 release. ``--wheels``: this tree's wheels as ``scripts/release/check-wheel-contents.sh`` keeps them; without it they
 are built from the source (``tests/python/support/machine.py``, no packaged runtime: no route opens a page).
 ``--uv-cache``: one folder for uv's cache and Pythons, shared by every computer of the run (default: a new one of the
-run's, removed at its end). It needs uv and the network (PyPI: the shipped releases and what every release depends
+run's in the system's temporary folder, removed at its end; never one of the person's own folders of uv, cad or the
+agent apps, ``real_computer.uv_refused``). A server's feed stamp is set back only while it is stopped (it writes that
+file itself), and telemetry is off as each computer's kept choice too (``real_computer.quiet``). It needs uv and the network (PyPI: the shipped releases and what every release depends
 on). Before and after every route it reads the modification times of the files a person's apps and cad keep on this
 machine (``real_computer.Sentinels``), and fails where one moved. Exit 0 when every route held; 1, with what the
 computer holds, when one did not. The release tier of ``.github/workflows/test.yml`` runs it on Linux, macOS and
@@ -91,6 +93,9 @@ INSTALL_PY = REPO_ROOT / "scripts" / "install" / "install.py"
 START = "import json\nfrom cad.engine import client\nprint(json.dumps(client.request({'op': 'http'})))"
 # Asked as no command (``internal``): a rehearsal's look never counts as work, which would keep a server from the idle
 # its update and the bridge's hand-over wait for.
+# Whether the shipped release's server answers its own client, asked by that client: "None" once it is gone.
+OLD_STATUS = ("from cad.engine import client\ntry:\n    gone = client.request({'op': 'status'}, start=False) is None\n"
+              "except ConnectionError:\n    gone = True\nprint(gone)")
 ASK = ("import json, sys\nfrom cad.engine import client\n"
        "print(json.dumps(client.request({'op': sys.argv[1], 'internal': True}, start=False)))")
 
@@ -132,7 +137,11 @@ class Box:
             # its computer names no state folder, so each release keeps its own where it would.
             env.pop("CAD_STATE_DIR")
             self.computer.state = self.home / ".local" / "state" / "cad"
+            rc.quiet(self.computer.state)
         self.state = self.computer.state
+        # Where the shipped release keeps its state: the computer's, or 0.10.0's own on Windows.
+        self.old_state = self.state if named_state else self.home / "AppData" / "Local" / "cad-state"
+        rc.quiet(self.old_state)
         self.env = env
         self.token = ""
         self.pythons: list[Path] = []  # the shipped release's Python, which stops its server at the end
@@ -185,11 +194,19 @@ class Box:
             return {}
         return found if isinstance(found, dict) else {}
 
+    def read_old(self, name: str) -> dict:
+        """A JSON file of the shipped release's state folder, or {}."""
+        try:
+            found = json.loads((self.old_state / name).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        return found if isinstance(found, dict) else {}
+
     def said(self) -> str:
         """What the computer holds, for a failure."""
         listing = lambda path: sorted(os.listdir(path)) if path.is_dir() else []  # noqa: E731
         parts = [f"computer {self.work}", f"  state: {listing(self.state)}",
-                 f"  releases: {listing(self.state / 'releases')}, current: {self.current() or '(none)'}",
+                 f"  releases: {listing(self.old_state / 'releases')}, current: {self.current() or '(none)'}",
                  f"  bin: {listing(self.bin)}"]
         for name in ("update.json", "handover.json", "handover-move.json", "auto-update.json", "install-report.json"):
             if (self.state / name).exists():
@@ -197,22 +214,36 @@ class Box:
         parts.append(f"  switches: {self.read('settings.json').get('auto_update')}")
         tools = self.run(["uv", "tool", "list", "--show-paths"], check=False, timeout=60)
         parts.append(f"  uv's tools: {tools.stdout.strip() or tools.stderr.strip()}")
-        for log in (self.state / "update.log", *sorted((self.work / "engine").glob("*.log"))):
+        for log in (self.old_state / "update.log", *sorted((self.work / "engine").glob("*.log"))):
             if log.is_file():
                 parts.append(f"  {log.name}:\n{log.read_text(encoding='utf-8', errors='replace')[-3000:]}")
         parts.append("  processes:\n" + self.running())
         return "\n".join(parts)
 
     def running(self) -> str:
-        return "\n".join(f"{pid} {command}" for pid, command in self.computer.processes())
+        """The computer's processes, one a line (on Windows, each one's program); said where it could not look."""
+        found = self.computer.processes()
+        if not self.computer.looked:
+            return "(this system did not let the run list its processes)"
+        return "\n".join(f"{pid} {command}" for pid, command in found)
+
+    def from_folder(self, folder: Path) -> list[str]:
+        """The computer's processes that run from ``folder`` (by their command line; on Windows, their program)."""
+        mark = os.path.normcase(str(folder))
+        return [f"{pid} {command}" for pid, command in self.computer.processes() if mark in os.path.normcase(command)]
 
     def current(self) -> str:
         path = self.state / "installations" / "current"
         return path.read_text(encoding="utf-8").strip() if path.exists() else ""
 
+    def commands(self) -> list[Path]:
+        """The ``cad`` commands in uv's bin folder that are there: on Windows cad.exe (uv's, or 0.11's launcher) and
+        cad.cmd (0.10's launcher)."""
+        return [path for path in rc.cad_commands(self.bin) if path.exists()]
+
     def cad(self) -> Path:
-        """The ``cad`` command in uv's bin folder, whatever wrote it."""
-        return self.bin / ("cad.exe" if WINDOWS else "cad")
+        """The ``cad`` command in uv's bin folder a shell runs, whatever wrote it."""
+        return next(iter(self.commands()), rc.cad_commands(self.bin)[0])
 
     def version(self) -> str:
         said = self.run([self.cad(), "--version"], check=False, timeout=120)
@@ -247,14 +278,38 @@ class Box:
 
     def an_hour_passes(self) -> None:
         """The feed due again, as an hour passing makes it: its ``checked`` stamp (``versions.json``, in the data
-        folder of 0.11.10 and of a uv tool's cad alike) set back 61 minutes."""
+        folder of 0.11.10 and of a uv tool's cad alike) set back 61 minutes. Only while no server runs, which writes
+        that file as it reads the feed (Windows refuses a write that meets its own): ``hour_later``."""
         kept = self.read("versions.json")
         kept["checked"] = time.time() - 61 * 60
         (self.state / "versions.json").write_text(json.dumps(kept), encoding="utf-8")
 
+    def hour_later(self) -> None:
+        """The uv tool's server, as an hour passes while it runs: stopped by its own command (which returns once its
+        lock is free: it writes nothing after), the feed's stamp set back, and started again, idle: it reads the
+        feed at its first tending."""
+        self.run([self.cad(), "server", "stop"])
+        self.an_hour_passes()
+        started = self.run([self.cad(), "server", "start"]).stdout
+        if "started" not in started:
+            raise Failed(f"{self.label}: cad server start said {started!r}")
+
+    def old_hour_later(self, python: Path) -> None:
+        """The shipped release's server, as an hour passes while it runs: stopped by its own client and awaited until
+        its door is gone, the feed's stamp set back, and started again as a page link starts it (the same port and
+        token, which it keeps)."""
+        self.run([python, "-c", "from cad.engine import client\nclient.request({'op': 'stop'}, start=False)"],
+                 check=False, timeout=60)
+        self.until(lambda: self.run([python, "-c", OLD_STATUS], check=False, timeout=60).stdout.strip() == "True",
+                   "the shipped release's server gone")
+        self.an_hour_passes()
+        answer = json.loads(self.run([python, "-c", START]).stdout.strip().splitlines()[-1])
+        if int(answer["port"]) != self.port or answer["token"] != self.token:
+            raise Failed(f"{self.label}: the shipped release's server came back on {answer['port']}, another token")
+
     def stop(self) -> list[str]:
         """Every server of the computer stopped, by its own client, and anything still running from its folder ended:
-        what had to be ended."""
+        what had to be ended (``looked``: whether it could see)."""
         if self.cad().exists():
             self.run([self.cad(), "server", "stop"], check=False, timeout=120)
         for python in self.pythons:
@@ -316,8 +371,9 @@ class Box:
             raise Failed(f"{self.label}: uv's cad tool is {tool}, not {version}\n{self.said()}")
         if os.path.realpath(Path(tool["command"]).parent) != os.path.realpath(self.bin):
             raise Failed(f"{self.label}: the tool's cad command is not in uv's bin folder {self.bin}: {tool}")
-        if launcher(self.cad()):
-            raise Failed(f"{self.label}: {self.cad()} is still a shipped release's launcher")
+        stale = [path for path in self.commands() if launcher(path)]
+        if stale:
+            raise Failed(f"{self.label}: a shipped release's launcher is still in uv's bin folder: {stale}")
         if self.version() != f"cad {version}":
             raise Failed(f"{self.label}: cad --version says {self.version()!r}, not cad {version}")
         return tool
@@ -348,8 +404,7 @@ class Box:
         self.feed.latest = old
         self.run(["uvx", "--no-config", "--managed-python", "--python", "3.14", "--from", f"cad-server=={old}", "cad",
                   "setup"], timeout=1500)
-        state = self.state if "CAD_STATE_DIR" in self.env else self.home / "AppData" / "Local" / "cad-state"
-        python = rc.interpreter(state / "releases" / old)
+        python = rc.interpreter(self.old_state / "releases" / old)
         if not python.exists():
             raise Failed(f"{self.label}: {old}'s setup made no release folder\n{self.said()}")
         self.pythons.append(python)
@@ -358,8 +413,8 @@ class Box:
         if int(answer["port"]) != self.port:
             raise Failed(f"{self.label}: {old}'s server took port {answer['port']}, not the computer's {self.port}")
         self.until(lambda: self.serving(old), f"{old}'s server on port {self.port} with the page token")
-        if not launcher(self.cad()):
-            raise Failed(f"{self.label}: {old}'s setup wrote no cad command in {self.bin}")
+        if not any(launcher(path) for path in self.commands()):
+            raise Failed(f"{self.label}: {old}'s setup wrote no cad command in {self.bin}: {self.commands()}")
         return python
 
     def button(self, target: str) -> None:
@@ -373,7 +428,7 @@ class Box:
     def switched(self, old: str, target: str) -> dict:
         """The shipped updater's switch, as its record (``update.json``) says it, from ``old`` to ``target``, ended."""
         said = self.until(lambda: (lambda found: found if found.get("to") == target and "ok" in found else None)(
-            self.read("update.json")), f"{old}'s switch to {target}")
+            self.read_old("update.json")), f"{old}'s switch to {target}")
         if said.get("from") != old:
             raise Failed(f"{self.label}: the switch's record: {said}")
         return said
@@ -412,7 +467,7 @@ def updated(box: Box, target: str, outcome: str = "installed") -> dict:
 def self_update(box: Box) -> None:
     box.set_up()
     box.feed.latest = NEXT
-    box.an_hour_passes()
+    box.hour_later()
     updated(box, NEXT)
     box.tool_serves(NEXT)
     box.is_tool(NEXT)
@@ -446,8 +501,8 @@ def self_off(box: Box) -> None:
     if switched[-2:] != ["auto-update: off", "installer: off"]:
         raise Failed(f"{box.label}: cad auto-update off said {switched}")
     box.feed.latest = NEXT
-    box.an_hour_passes()
-    # The server reads the feed at its next tending; then a start, which updates first where the switch is on.
+    box.hour_later()
+    # The server reads the feed at its first tending; then a start, which updates first where the switch is on.
     box.until(lambda: (box.read("versions.json").get("feed") or {}).get("latest") == NEXT and
               time.time() - box.read("versions.json").get("checked", 0) < 600, "the server reading the feed")
     box.run([box.cad(), "server", "stop"])
@@ -461,13 +516,13 @@ def self_off(box: Box) -> None:
 def self_broken(box: Box) -> None:
     box.set_up()
     box.feed.latest = BROKEN
-    box.an_hour_passes()
+    box.hour_later()
     record = updated(box, BROKEN)
     if not str(record.get("started", "")).startswith("not started"):
         raise Failed(f"{box.label}: {BROKEN}'s server started: {record}")
     if box.version() != f"cad {BROKEN}":
         raise Failed(f"{box.label}: cad --version says {box.version()!r}, not cad {BROKEN}")
-    # The next release: `cad server start`, failing, updates cad to it.
+    # The next release: `cad server start`, failing, updates cad to it (no server runs to write the feed's file).
     box.feed.latest = AFTER
     box.an_hour_passes()
     done = box.run([box.cad(), "server", "start"], check=False)
@@ -482,7 +537,7 @@ def self_broken(box: Box) -> None:
 def self_uninstallable(box: Box) -> None:
     box.set_up()
     box.feed.latest = NOCMD
-    box.an_hour_passes()
+    box.hour_later()
     record = updated(box, NOCMD, "failed")
     if record.get("restored") is not True:
         raise Failed(f"{box.label}: the release before was not put back: {record}\n{box.said()}")
@@ -494,8 +549,9 @@ def self_uninstallable(box: Box) -> None:
 # --- the bridge ---------------------------------------------------------------------------------------------------
 
 
-def bridged(box: Box, old: str, old_state: Path) -> None:
+def bridged(box: Box, old: str) -> None:
     """The end of the bridge (see the module)."""
+    old_state = box.old_state
     record = box.until(lambda: (lambda found: found if found.get("state") in ("done", "gave up") else None)(
         box.read("handover.json")), "the install command in install mode, done")
     if (record.get("mode"), record.get("version"), record.get("state")) != ("install", NEW, "done"):
@@ -512,10 +568,10 @@ def bridged(box: Box, old: str, old_state: Path) -> None:
     switches = box.read("settings.json").get("auto_update") or {}
     if (switches.get("on"), switches.get("installer")) != (True, True):
         raise Failed(f"{box.label}: the switches after the bridge: {switches}")
-    kept = [old_state / "releases" / old, box.state / "releases" / NEW]
+    kept = [old_state / "releases" / old, old_state / "releases" / NEW]
     if not all(path.is_dir() for path in kept):
         raise Failed(f"{box.label}: a release folder is gone: {[str(path) for path in kept if not path.is_dir()]}")
-    left = [line for line in box.running().splitlines() if str(old_state / "releases") in line]
+    left = box.from_folder(old_state / "releases")
     if left:
         raise Failed(f"{box.label}: processes still run from the release folders:\n" + "\n".join(left))
     say(f"        {old} -> {NEW}: uv's cad in {box.bin}, its server ({status.get('prefix')}), current {current}, "
@@ -526,34 +582,41 @@ def bridged(box: Box, old: str, old_state: Path) -> None:
 def updater(box: Box, old: str) -> None:
     box.install_old(old)
     box.button(NEW)
-    box.switched(old, NEW)
-    bridged(box, old, box.state)
+    if box.old_state == box.state:
+        box.switched(old, NEW)
+    else:
+        # 0.10.0 on Windows: this build's setup takes the computer over (its switch could only go back): 0.10.0's own
+        # records then name this build, and 0.10.0's server is not running beside it.
+        box.until(lambda: (box.old_state / "installations" / "current").is_file() and (
+            box.old_state / "installations" / "current").read_text(encoding="utf-8").strip() == NEW,
+            f"{old}'s own records naming {NEW}")
+    bridged(box, old)
 
 
 def automatic(box: Box, old: str) -> None:
     if not old.startswith("0.11."):
         raise Failed(f"{box.label}: {old} has no automatic update (0.11.0 and later have)")
-    box.install_old(old)
+    python = box.install_old(old)
     box.feed.latest = NEW
-    box.an_hour_passes()
+    box.old_hour_later(python)
     box.switched(old, NEW)
-    bridged(box, old, box.state)
+    bridged(box, old)
 
 
 def store_only(box: Box, old: str) -> None:
     box.install_old(old)
     # What only our install command's setup leaves: gone, as on a computer that only ever had a store's copy.
-    (box.state / "install-receipt.json").unlink(missing_ok=True)
-    shutil.rmtree(box.state / "plugin", ignore_errors=True)
+    (box.old_state / "install-receipt.json").unlink(missing_ok=True)
+    shutil.rmtree(box.old_state / "plugin", ignore_errors=True)
     box.button(NEW)
     box.switched(old, NEW)
     box.until(lambda: box.serving(NEW), f"{NEW}'s server on the pages' port")
-    status = box.ask(rc.interpreter(box.state / "releases" / NEW), "status") or {}
+    status = box.ask(rc.interpreter(box.old_state / "releases" / NEW), "status") or {}
     held = {"current": box.current(), "handover": box.read("handover.json"), "tool": box.tool(),
             "plugin": (box.state / "plugin").exists(), "report": box.read("install-report.json"),
             "cad": box.version()}
     if (held["current"], held["handover"], held["tool"], held["plugin"], held["report"]) != (NEW, {}, None, False, {}) \
-            or not rc._within(Path(status.get("prefix") or "/nowhere"), box.state / "releases" / NEW) \
+            or not rc._within(Path(status.get("prefix") or "/nowhere"), box.old_state / "releases" / NEW) \
             or held["cad"] != f"cad {NEW}":
         raise Failed(f"{box.label}: a store-only computer after the update: {held}, server {status.get('prefix')}\n"
                      f"{box.said()}")
@@ -565,7 +628,7 @@ def rollback(box: Box, old: str) -> None:
     box.install_old(old)
     box.button(BROKEN)
     said = box.until(lambda: (lambda found: found if found.get("to") == BROKEN and "restored" in found else None)(
-        box.read("update.json")), f"the switch to {BROKEN} gone back from")
+        box.read_old("update.json")), f"the switch to {BROKEN} gone back from")
     if (said.get("ok"), said.get("restored")) != (False, True):
         raise Failed(f"{box.label}: the switch did not go back to {old}: {said}")
     box.until(lambda: box.serving(old), f"{old} serving again on the pages' port with their token")
@@ -575,7 +638,7 @@ def rollback(box: Box, old: str) -> None:
     if (held["current"], held["cad"], held["tool"], held["report"]) != (old, f"cad {old}", None, {}) \
             or held["owed"] not in (("owed", 0), (None, None)):
         raise Failed(f"{box.label}: after going back: {held}\n{box.said()}")
-    left = [line for line in box.running().splitlines() if f"releases{os.sep}{BROKEN}" in line]
+    left = box.from_folder(box.old_state / "releases" / BROKEN)
     if left:
         raise Failed(f"{box.label}: processes of {BROKEN} still run:\n" + "\n".join(left))
     say(f"        {old} -> {BROKEN} gone back from: {old} serves the pages, current and the cad command its own, "
@@ -594,7 +657,7 @@ def install_command(box: Box, old: str) -> None:
         raise Failed(f"{box.label}: cad server start said {started!r}")
     box.tool_serves(NEW)
     box.until(lambda: box.current() == NEW, f"installations/current naming {NEW}")
-    left = [line for line in box.running().splitlines() if str(box.state / "releases") in line]
+    left = box.from_folder(box.old_state / "releases")
     if left:
         raise Failed(f"{box.label}: {old}'s server still runs:\n" + "\n".join(left))
     say(f"        {old} -> {NEW} by the install command: uv's cad, both switches on, the old server replaced by "
@@ -679,6 +742,9 @@ def main(argv: list[str] | None = None) -> int:
                 left = box.stop()
                 if left:
                     say(f"note    {name}: ended what was still running:\n" + "\n".join(left))
+                elif not box.computer.looked:
+                    say(f"note    {name}: this system did not let the run list its processes: whether anything was "
+                        "left running is not known")
                 moved = before.moved(rc.Sentinels.here())
                 if moved:
                     failed += 1
