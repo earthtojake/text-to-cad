@@ -9,7 +9,7 @@
 #              the API's tests.
 #   unit       the packages' suites on Linux (packages), the JS workspaces (js-*), docs, skills.
 #   platform   the packages' suites on Windows; the router's unit files on macOS.
-#   integration  fea, kicad, blender, packaging, viewer-e2e: each with what it drives installed.
+#   integration  fea, cam, kicad, blender, packaging, viewer-e2e: each with what it drives installed.
 #   release    a full run only (and a change to the thing itself): the packages' suites on their
 #              oldest Python, and the installer rehearsals.
 #   CI         the one required check: every job above that ran passed (ci_gate.py).
@@ -84,6 +84,7 @@ jobs:
       packaging: ${{ steps.select.outputs.packaging }}
       kicad: ${{ steps.select.outputs.kicad }}
       fea: ${{ steps.select.outputs.fea }}
+      cam: ${{ steps.select.outputs.cam }}
       bpy: ${{ steps.select.outputs.bpy }}
       floor: ${{ steps.select.outputs.floor }}
       routing: ${{ steps.select.outputs.routing }}
@@ -415,6 +416,50 @@ jobs:
       ref: ${{ inputs.ref }}
 
   # ---- integration: each with what it drives installed -------------------------------------------
+
+  # A CAM job (cad <type> plan --job) with FreeCAD, the freecad integration's planner, installed as a person on Linux
+  # installs it: the release's AppImage, checked by its SHA-256 and unpacked, its freecadcmd named by CAD_FREECAD. No
+  # other job installs FreeCAD, so its suite (tests/python/packages/cam, test-cam.sh) is this job's alone. Linux only:
+  # FreeCAD plans the same paths everywhere. About 2 minutes: 97 tests in 95 s locally, beside the AppImage (~20 s).
+  cam:
+    name: cam
+    needs: changes
+    if: needs.changes.outputs.cam == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CAD_TEST_FILE_BUDGET: "120"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        timeout-minutes: 10
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: packages/core
+
+      # A missing or broken FreeCAD fails here by name rather than as every plan in the suite failing.
+      - name: Install FreeCAD
+        timeout-minutes: 5
+        run: |
+          mkdir -p "$RUNNER_TEMP/freecad" && cd "$RUNNER_TEMP/freecad"
+          curl -fsSL -o FreeCAD.AppImage \
+            https://github.com/FreeCAD/FreeCAD/releases/download/1.1.4/FreeCAD_1.1.4-Linux-x86_64-py311.AppImage
+          echo "f6dc6ba676e5ac96a565ebc8d657232f94c6158e85b4352141bd1a46f6b43434  FreeCAD.AppImage" | sha256sum -c -
+          chmod +x FreeCAD.AppImage
+          ./FreeCAD.AppImage --appimage-extract > /dev/null
+          rm FreeCAD.AppImage
+          echo "CAD_FREECAD=$RUNNER_TEMP/freecad/squashfs-root/usr/bin/freecadcmd" >> "$GITHUB_ENV"
+          squashfs-root/usr/bin/freecadcmd --version
+
+      - name: Run the cam suite
+        run: scripts/test/test-cam.sh
+        shell: bash
 
   # The stress study (cad <type> solve) and its result (cad fea) with their integrations installed as on a
   # person's computer: netgen, cad[netgen], meshes, and CalculiX's ccx, cad[calculix] (the cad-ccx package), solves.
@@ -825,6 +870,7 @@ jobs:
       - install-linux
       - install-windows
       - fea
+      - cam
       - blender
       - kicad
       - skills

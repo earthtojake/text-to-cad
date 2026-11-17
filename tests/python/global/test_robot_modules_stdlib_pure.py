@@ -85,6 +85,9 @@ ALLOWED_CADGEN = {
     # A B-rep type's stress study (no robot type's): its signature and options, stdlib only; the kernel, netgen
     # and CalculiX are imported in the function that studies.
     "cad._internal.fea.operation",
+    # A B-rep type's CAM job (no robot type's): its signature and options, stdlib only; the kernel and FreeCAD are
+    # reached in the function that plans.
+    "cad._internal.cam.operation",
     # A mechanism's joint stops (no robot type's): its signature and options, stdlib only; the kernel and the sweep
     # (``cad.engine.ranges``, numpy) are imported in the function that sweeps.
     "cad._internal.ranges",

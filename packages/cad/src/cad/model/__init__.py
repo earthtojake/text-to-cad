@@ -9,7 +9,8 @@ a shape over), with no file of its own; the files it declares are the other type
 ``model.inspect(...)`` and ``model.dfm(handle_or_id, process="cnc")`` (or ``"sheet"``, ``"molding"``,
 ``"printing"``), which checks it for manufacturing on its exact geometry, measured by the engine with the build123d
 integration (``cad._internal.manufacturing``), and
-``model.solve(handle_or_id, study=..., out="results/")``, a stress study of it (``cad._internal.fea.operation``),
+``model.solve(handle_or_id, study=..., out="results/")``, a stress study of it (``cad._internal.fea.operation``), and
+``model.plan(handle_or_id, job=..., out="cam/")``, a CAM job on its part (``cad._internal.cam.operation``), each of
 which reads an ``.xbf`` the engine writes of it in a temporary folder. A file is
 refused by name: ``arm.xbf`` is an xbf's (``cad.xbf``). Everything loads on first use: ``import cad.model``
 imports no CAD kernel (``cad._internal.document_type``).

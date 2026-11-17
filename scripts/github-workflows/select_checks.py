@@ -46,8 +46,8 @@ ROOT = Path(__file__).resolve().parents[2]
 PACKAGES_SUITE = "tests/python/packages"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "docs", "packaging", "kicad", "fea", "bpy", "floor",
-         "routing", "installer")
+FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "docs", "packaging", "kicad", "fea", "cam", "bpy",
+         "floor", "routing", "installer")
 # How many jobs the packages' suites are split over when they run whole (CAD_TEST_SHARD); a
 # narrowed selection runs in one. Windows starts every process slower, so it takes one more.
 SHARDS = {"linux": 2, "windows": 3}
@@ -107,12 +107,12 @@ PACKAGE_PROJECTS = ("packages/cad", "packages/cad-server", "packages/cad-mcp")
 PACKAGES = (*(f"{project}/**" for project in PACKAGE_PROJECTS), "packages/aliases/**", "scripts/bundle/**")
 # Whatever runs the packages: their suites on both platforms, the policy tests and skill suites
 # that load them, the wheels, the bundled viewer served through them, and the jobs that run them
-# with a tool installed as a person has it (netgen and CalculiX, KiCad, Blender) or on the third
-# C library. Those four are minutes together and never the longest job, so every package change
+# with a tool installed as a person has it (netgen and CalculiX, FreeCAD, KiCad, Blender) or on the third
+# C library. Those five are minutes together and never the longest job, so every package change
 # runs them: a list of the modules each one reaches was the table's most intricate part, and
 # the one a new import silently outgrew.
 PACKAGE_CONSUMERS = select(
-    flags=["packaging", "web_viewer", "fea", "kicad", "bpy", "routing"],
+    flags=["packaging", "web_viewer", "fea", "cam", "kicad", "bpy", "routing"],
     packages=[PACKAGES_SUITE], policy=[POLICY_SUITE], skills=[SKILL_SUITES],
 )
 
@@ -198,6 +198,7 @@ RULES: tuple[Rule, ...] = (
     Rule(("apps/docs/**",), select(flags=["docs", "core_js"])),
     Rule(("skills/**",), NOTHING),  # prose and scripts the light contracts and light suites read
     Rule(("skills/fea/**",), select(skills=[f"{SKILL_SUITES}/fea"])),
+    Rule(("skills/cam/**",), select(skills=[f"{SKILL_SUITES}/cam"])),
     # The installer rehearsals (install-linux.yml, install-windows.yml, which test.yml calls): the
     # workflows and the installers. The server's commands they run are rehearsed with every
     # release, a full run.
@@ -219,6 +220,7 @@ RULES: tuple[Rule, ...] = (
     # (a helper, a fixture) the suite.
     Rule((f"{PACKAGES_SUITE}/kicad/**", "scripts/test/test-kicad.sh"), select(flags=["kicad"]), final=True),
     Rule((f"{PACKAGES_SUITE}/fea/**", "scripts/test/test-fea.sh"), select(flags=["fea"]), final=True),
+    Rule((f"{PACKAGES_SUITE}/cam/**", "scripts/test/test-cam.sh"), select(flags=["cam"]), final=True),
     Rule((f"{PACKAGES_SUITE}/blender/**", "scripts/test/test-blender.sh"), select(flags=["bpy"]), final=True),
     Rule(("scripts/test/test-floor.sh",), select(flags=["floor"]), final=True),
     # The router's unit files run themselves in the packages jobs (below), and all of them on macOS.

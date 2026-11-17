@@ -3,12 +3,13 @@
 A type's manufacturing ``dfm`` is its integration's (``cad.registry``): a mesh's, trimesh's; a model's, a STEP's,
 an xbf's and a DXF's, build123d's; a B-rep type's ``solve`` reads the document with the kernel, meshes it with
 netgen and solves it with CalculiX, so it runs where all three are (``cad[build123d,calculix,netgen]``:
-calculix's registry entry names the others ``alongside``); a KiCad board's ``drc``, a schematic's ``erc`` and
-their ``export`` are the kicad integration's, run by kicode's kicad-cli. The command's own environment -- the
-server's installation -- holds the library without them, so the operation runs in the environment of that
-integration instead: for build123d alone, the installation's base, the environment the engine's kernel
-processes run in (``base``); for another, ``cad[<integration>]`` at the installation's release, made once by the
-device's engine outside any sandbox and used again, as ``cad run`` makes a program's
+calculix's registry entry names the others ``alongside``); a B-rep type's ``plan`` reads the part with the kernel,
+build123d's, and FreeCAD, the person's program, is found by its probe wherever it runs; a KiCad board's ``drc``, a
+schematic's ``erc`` and their ``export`` are the kicad integration's, run by kicode's kicad-cli. The command's own
+environment -- the server's installation -- holds the library without them, so the operation runs in the
+environment of that integration instead: for build123d alone, the installation's base, the environment the engine's
+kernel processes run in (``base``); for another, ``cad[<integration>]`` at the installation's release, made once by
+the device's engine outside any sandbox and used again, as ``cad run`` makes a program's
 (``cad_server._internal.extras``: offline first, from uv's cache). Its
 Python runs the library's runner of one operation (``cad._internal.operation``), handed the call on
 stdin and answering it on stdout; what the operation says beside goes to stderr as it comes.
@@ -99,7 +100,8 @@ def found(integration: Integrations) -> tuple[str, str, str]:
 def environment(integration: Integrations, told: Callable[[str], None], *, engine: bool = True) -> str:
     """The Python of the environment that holds ``integration``, made first when it is not complete (by
     the device's engine when one runs, its lines said to ``told``; here, with ``engine`` false: the engine
-    itself, a viewer export). ``Failed`` in uv's or the engine's words."""
+    itself, a viewer export): the kernel's, the installation's base; any other's, ``cad[<integration>]``.
+    ``Failed`` in uv's or the engine's words."""
     from cad_server._internal import base, extras
 
     try:

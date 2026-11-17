@@ -12,7 +12,7 @@ type from some input; many integrations may produce one type, each stating which
 content it provides. The **operations** are a closed set (``OPERATIONS``): ``export`` and ``snapshot``,
 shared by every type that has them, ``inspect`` where a type has it, and the rest named for what they do --
 ``dfm`` a 3D type's manufacturing check, ``interference`` a B-rep type's check that no two parts share volume,
-``solve`` a B-rep type's stress study, ``ranges`` a mechanism's joint
+``solve`` a B-rep type's stress study, ``plan`` a B-rep type's toolpaths and G-code, ``ranges`` a mechanism's joint
 stops found from its geometry, ``drc`` a board's design rule check, ``erc`` a schematic's electrical rules check,
 ``validate`` a robot description's conformance check.
 
@@ -43,7 +43,8 @@ __all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "INTEGRATION_OPERATIONS", "OPERATIO
 
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
 #: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
-OPERATIONS = ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges", "drc", "erc", "validate")
+OPERATIONS = ("export", "snapshot", "inspect", "dfm", "interference", "solve", "plan", "ranges", "drc", "erc",
+              "validate")
 #: What an integration does to a file of its tool's own that is no document type (a file we check and never
 #: show): a closed set too. ``check`` answers findings, as a type's check does (``cad.results.CheckResult``).
 INTEGRATION_OPERATIONS = ("check",)
@@ -286,6 +287,12 @@ _SOLVE = Operation("solve", "a linear static stress study of a part or a bonded 
                             "failing it; with no --study, the parts, the pairs that touch and a part's faces a study "
                             "names", "calculix")
 
+# The CAM job a B-rep type shares (``cad._internal.cam``): the kernel reads the part's exact faces, FreeCAD plans and
+# posts. A mesh has no faces a job can name, so it has none.
+_PLAN = Operation("plan", "toolpaths and G-code for a part: with --job and --out DIR, FreeCAD plans and posts each "
+                          "setup, every path checked against the part, its results written into DIR (result.json, "
+                          "result.glb and, when nothing fails, the G-code) and a plan with an error failing it; with "
+                          "no --job, the faces, holes and floors a job names", _KERNEL)
 # The joint stops a document with a mechanism shares (``cad._internal.ranges``): each joint swept alone against its
 # parts' surfaces, read and meshed by the kernel. A mesh holds no mechanism, so it has none.
 _RANGES = Operation("ranges", "each joint's stops found from the geometry: the joint turned or slid alone, a step at a "
@@ -300,17 +307,20 @@ _TYPES = (
         "model", "model", "a model built from code and held in the engine's memory, with no file behind it: "
                           "addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
         (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _PLAN, _RANGES),
+        decorator=True),
     DocumentTypeEntry(
         "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
                       "closure", (".xbf",), "application/octet-stream", "document",
         (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True, reader=True,
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _PLAN, _RANGES),
+        decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "step", "STEP", "an ISO 10303 (AP242) exchange file of exact geometry", (".step", ".stp"),
         "application/step", "document", _DOCUMENT_CONTENT,
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True, reader=True,
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _PLAN, _RANGES),
+        decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "stl", "STL", "a binary STL of one triangle mesh", (".stl",), "model/stl", "mesh", ("triangles",),
@@ -443,6 +453,16 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         # A study reads the B-rep with the kernel and meshes it with netgen before CalculiX solves it.
         alongside=("build123d", "netgen"),
         holds="CalculiX's ccx solver", download_mb=13),
+    "freecad": Integration(
+        "freecad", "FreeCAD's CAM workbench, run by freecadcmd, a program the person installs: a CAM plan (plan) writes "
+                   "its input, runs it headless in a private folder, and reads back its paths and its posted G-code",
+        extra=None, process="separate",
+        # No extra: FreeCAD ships no package cad can install, so the person installs it and the probe finds it --
+        # CAD_FREECAD, then PATH, then the place its installer puts it (cad.freecad._program).
+        probe=Probe("freecadcmd", "1.1", "install FreeCAD 1.1 or newer from https://www.freecad.org/downloads.php (macOS: "
+                                         "the .dmg into Applications; Windows: the installer; Linux: the AppImage, "
+                                         "unpacked with --appimage-extract, its squashfs-root/usr/bin/freecadcmd named by "
+                                         "CAD_FREECAD), or set CAD_FREECAD to a freecadcmd program", "CAD_FREECAD")),
     "blender": Integration(
         "blender", "Blender as a Python module, bpy (the Blender Foundation's wheel): a script loads the GLB cad "
                    "exports into Blender's scene, every part where the file places it and each clip playable alone "

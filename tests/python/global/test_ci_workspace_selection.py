@@ -91,6 +91,7 @@ class EveryTestRunsInCI(unittest.TestCase):
             r"^tests/python/packages/cad(_server|_mcp)?/(.*/)?test_[^/]*\.py$",  # test-python.sh, test-floor.sh
             r"^tests/python/packages/kicad/(.*/)?test_[^/]*\.py$",       # test-kicad.sh
             r"^tests/python/packages/fea/(.*/)?test_[^/]*\.py$",         # test-fea.sh
+            r"^tests/python/packages/cam/(.*/)?test_[^/]*\.py$",         # test-cam.sh
             r"^tests/python/packages/blender/(.*/)?test_[^/]*\.py$",     # test-blender.sh
             r"^tests/python/skills/[^/]+/(.*/)?test_[^/]*\.py$",         # test-python.sh skills
             r"^tests/python/global/test_[^/]*\.py$",                     # test-global.sh
@@ -478,9 +479,18 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual((route(heavy)["skills_policy"], jobs_for(heavy)), (heavy, jobs_on("skills")))
         self.assertEqual(jobs_for(f"{POLICY}/test_ci_workspace_selection.py"), set())  # light: static's
         # A suite with a job of its own is that job's alone.
-        for suite, flag in (("fea", "fea"), ("kicad", "kicad"), ("blender", "bpy")):
+        for suite, flag in (("fea", "fea"), ("cam", "cam"), ("kicad", "kicad"), ("blender", "bpy")):
             with self.subTest(suite=suite):
                 self.assertEqual(jobs_for(a_test_in(f"{PACKAGES}/{suite}")), jobs_on(flag))
+
+    def test_the_cam_job_installs_the_freecad_release_checked(self):
+        # FreeCAD is no package: the cam job downloads the release's AppImage, checks it and names its freecadcmd.
+        job = JOBS["cam"]
+        self.assertIn("FreeCAD.AppImage --appimage-extract", job)
+        self.assertIn("sha256sum -c", job)
+        self.assertIn("CAD_FREECAD=", job)
+        self.assertIn("scripts/test/test-cam.sh", job)
+        self.assertEqual(route("skills/cam/references/job-file.md")["skills_tests"], f"{SKILLS}/cam")
 
     def test_a_deleted_test_file_has_nothing_left_to_run(self):
         self.assertEqual(jobs_for(f"{PACKAGES}/cad_server/test_gone_for_good.py"), set())
@@ -509,7 +519,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(selector.scope(route(module, first)), selector.scope(route(module)))
 
     def test_each_component_reaches_what_runs_it(self):
-        packages = jobs_on("packages", "skills", "packaging", "web_viewer", "fea", "kicad", "bpy", "routing")
+        packages = jobs_on("packages", "skills", "packaging", "web_viewer", "fea", "cam", "kicad", "bpy", "routing")
         ui = jobs_on("web_ui", "web_client", "web_viewer", "mcp", "packaging")
         cases = {
             # The packages: their suites whole on both platforms, and every job that runs them.
@@ -533,8 +543,9 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/test/test-js.sh": jobs_on("core_js", "web_ui", "web_client", "mcp"),
             "scripts/test/test-floor.sh": jobs_on("floor"),
             "scripts/test/test-installed.sh": jobs_on("packaging"),
-            # The fea skill's own suite needs the kernel.
+            # The fea and cam skills' own suites need the kernel.
             "skills/fea/SKILL.md": jobs_on("skills"),
+            "skills/cam/SKILL.md": jobs_on("skills"),
         }
         for path, expected in cases.items():
             with self.subTest(path=path):

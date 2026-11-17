@@ -743,6 +743,13 @@ cad model inspect ID [REF] [--query Q] [--json] | xbf|step|glb inspect FILE [REF
                                              closure, geometry (the default with REF) or build
 cad urdf|sdf|srdf validate FILE [--strict] [--json] [the type's own options]
                                              its findings, each a severity, a code and a location
+cad model|xbf|step plan SRC [--occurrence PART] [--verbose] [--json]
+                                             what a job can name, the kernel's: the part's faces, holes
+                                             and floors by ref, and its box; writes nothing
+cad model|xbf|step plan SRC --job JOB --out DIR [--occurrence PART] [--verbose] [--json]
+                                             the plan, by the person's FreeCAD, written into DIR:
+                                             result.json, result.glb and, when nothing is an error, the
+                                             G-code; exit 1 when a finding is an error
 cad mujoco check FILE [--strict] [--json]    a MuJoCo model's file (an MJCF: no document type, an
                                              integration's operation), compiled by MuJoCo: what it
                                              refuses or warns of, the model-health checks, what collides
@@ -802,7 +809,7 @@ cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]
 
 The rule: `cad <document_type> <operation> <file>`, the type's id as the registry names it
 (`cad.registry`); `export` and `snapshot` are shared by every type that has them, `inspect` where a type
-has it, and every other operation is named for what it does (`dfm`, `drc`, `erc`, `validate`); `TYPE` is any
+has it, and every other operation is named for what it does (`dfm`, `plan`, `drc`, `erc`, `validate`); `TYPE` is any
 type with that operation (`cad <type> --help` lists a type's). A file of another type is refused by name
 before anything runs, exit 2 (`part.glb is a glb, not a stl: use cad glb snapshot`; `wrong_type`), as is a
 file of no type (`robot.dae is not a urdf file: cad urdf takes .urdf`), and a file of the type that is not
@@ -1067,7 +1074,7 @@ declared, and nothing is written from the edited file but what explicit calls af
 **The commands.** `cad_server.cli.document_types` makes every type's command from the registry:
 `OPERATIONS` maps `(type, operation)` to its run -- the engine's verbs (`engine/cli.py`'s parsers and
 runners) for `export`, `snapshot` and `inspect`, each with its source said as the type's and a mesh's export
-without `--tolerance` or `--angle`; the type's own function for `dfm`, `drc`, `erc` and `validate` (generated from the
+without `--tolerance` or `--angle`; the type's own function for `dfm`, `plan`, `drc`, `erc` and `validate` (generated from the
 function's signature, `cad_server._internal.cli_from_function`, or an adapter's parser where a flag
 repeats). A parameter whose type is a `Literal` of strings is an enumeration, its values the flag's
 choices (`sdf.validate`'s `gz_check`, `dfm`'s `process`, `rules`, `units` and `technology`), so a value outside them is the
@@ -1082,6 +1089,20 @@ integration's operations on its tool's own files are made the same way, by `cad_
 its file refused by name where it is a document type's (which names that type's own check), any other
 file's, or not there, and run in this process where it holds the integration, else in that integration's
 environment. A name is a type's or an integration's, never both.
+
+**A CAM job.** A B-rep type's `plan` (`model`, `xbf`, `step`: the registry's `plan` operation of the
+`build123d` integration) is one function the library makes for each (`cad._internal.cam.operation.plan_for`,
+bound by `DocumentType`): with no job, what a job can name, which writes nothing; with a job and `--out`, a
+folder, the plan, its results written there (`result.json`, `result.glb` and the G-code). `--out` with no job,
+a job with no `--out` and an `--out` that is a file are refused there, the standard library alone, before
+anything is read. A model is written to an `.xbf` in a temporary folder first, which the job reads, and the
+result names it by its document id. A job reads its part's exact faces with the kernel in its own
+process and plans each setup with FreeCAD (`cad.freecad`: the `freecad` integration's probe, `CAD_FREECAD`,
+then `freecadcmd` on PATH, then the installers' folders, run headless in a private folder by
+`cad._internal.programs`). Its answer is a `cad.results.CamResult`, a check's: findings, `measurements` and
+the files `written`. The command runs it in its own process when its environment holds the kernel, else in
+the installation's base, by the library's runner of one operation, and the result is printed as it would be
+here (`CamResult.from_data`). FreeCAD is the person's program wherever the job runs; nothing installs it.
 
 **The manufacturing check.** A 3D type's `dfm` (`model`, `xbf`, `step`, `stl`, `glb`, `threemf`) and a DXF's (a
 sheet's cut file) are the registry's `dfm` operation of family `manufacturing`, one function the library

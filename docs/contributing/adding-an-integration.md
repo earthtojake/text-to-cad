@@ -1,7 +1,7 @@
 # Adding an integration
 
 An **integration** is our support for one third-party tool, named for the tool's own project
-(`build123d`, `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`), never for a capability.
+(`build123d`, `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`, `freecad`), never for a capability.
 It is three things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs; our code for it --
 helpers that take its objects, producers and operations; and a process kind: in-process, separate
 process, or both. The definitions and laws are the library's README
@@ -34,6 +34,7 @@ The integrations so far came out in different shapes, each from those answers:
 | `kicad` | `kicad-cli` and an IPC API; its own editors | a board's and a schematic's `drc`, `erc` and `export` as typed commands with one result shape and the project left as found; an edit of a saved file through its API. Everything else is `cad run kicad-cli ...` |
 | `trimesh` | mesh measurements as a library | a mesh's 3D printing check: the measurements judged against cited rules, in the shape every manufacturing check answers |
 | `netgen`, `calculix` | a mesher, a solver | a B-rep type's `solve`: the study read, the document meshed and solved, the results as standard files |
+| `freecad` | a CAM workbench that plans and posts toolpaths, and checks none of them against the part | a B-rep type's `plan`: the job read, FreeCAD run headless, its paths and posted G-code checked against the part, the results as standard files |
 | `coacd` | convex decomposition of a mesh | nothing a person calls: it backs `cad.mujoco.decompose`, run in a process of its own, its hulls kept in the cache |
 | `blender` | all of Blender as a Python module, `bpy` | one helper, `cad.blender.load`: a GLB cad wrote, in Blender's scene, with each node's object by its name and its clips to play. The framing, the lights and the render are `bpy`'s own, in the script. No document type and no command |
 | `mujoco` | a compiler, a simulator, `MjSpec`, MuJoCo Studio | a document as an `MjSpec`, a part's collision chosen by its label path, a spec saved as a folder that travels, and one operation on a file that is no document type, `cad mujoco check` (below). No reader, no viewer and no still of an MJCF: Studio shows one |
@@ -80,7 +81,8 @@ it the same way and answers its Python, and runs the integration's code there in
 decomposition of a collision, the `coacd` integration's (`cad.engine.hulls`), so no model names `cad[coacd]` in its
 header. An external program that ships as a Python package (KiCad's `kicad-cli`, in
 kicode; CalculiX's `ccx`, in the cad-ccx package) is its integration's extra and installs the same way; any other is
-the person's to install, found by its probe: an integration with no extra and a probe alone. When a program
+the person's to install, found by its probe: an integration with no extra and a probe alone (`freecad`, FreeCAD's
+`freecadcmd`, which ships no package cad can install). When a program
 ships no package, packaging it, its own binary unmodified in a wheel per platform with a launcher that names
 where it is, is usually better than asking a person to install it (`earthtojake/ccx` is that for CalculiX). `cad doctor` says, for each integration with an extra but build123d (the
 kernel's own line), whether this installation carries it or where its environment is and whether it is
