@@ -297,6 +297,50 @@ part.glb --process printing --technology T` ([Can it be made?](../SKILL.md#can-i
 through themselves (omega-core 0.1.1's dual contouring can leave a small body inside the material of a lattice
 or a thin shell, which a slicer may fill wrongly).
 
+## Answer from the field, never from a picture
+
+Before you state a wall thickness, a clearance, whether two parts touch, a volume or weight, or that something holds
+for every value of a slider, ask the field. The source's numbers and a picture miss what blends, rotations and
+slider ranges do, and the field answers exactly, often with a proof. Put the questions in a script and run it with
+`cad run`:
+
+```python
+# ask.py, run with: cad run ask.py
+from omega_core import Session
+
+with Session() as gsl:
+    part = gsl.document("part.gsl")
+    box = (-60, -60, -60, 60, 60, 60)                       # x0, y0, z0, x1, y1, z1 in mm: the @scene box (here 120)
+
+    # Do two of the returns overlap? Proven: never (max(a, b) >= 0 everywhere). Disproven: counter_box is where.
+    c = part.certify("max(plate, bolt)", region=box, threshold=0)
+    print(c.verdict, c.counter_box)
+
+    # Is the wall at least 2 mm for every value of the sliders? over_sliders proves it over their whole ranges;
+    # counter_params is the range where it fails. A plain number is a slider's value for one query: defs="t = 8.0;".
+    c = part.certify("wall", region=box, threshold=2, over_sliders=True)
+    print(c.verdict, c.counter_params)
+
+    # The deepest point of a field, and where: min is a true value, the bound below it holds for a distance field.
+    e = part.extremum("max(plate, bolt)", region=box, tolerance=1e-3)
+    print(e.min, e.min_at, e.min_conditional_bound)
+
+    # Values and gradients at points.
+    f = part.eval(["plate", "plate.dp"], points=[(0, 0, 5)])
+    print(f["plate"].values, f["plate.dp"].values)
+```
+
+- Ask over the `@scene` box, or one you know holds the whole part, never a box from the part's nominal dimensions
+  or from `bounds()`, which samples and falls short. Blends bulge past the faces they join (a `unionRound` of two
+  flush faces stands out by a good part of its radius), and a query whose box cuts that off answers for less than
+  the part, silently.
+- `certify` answers proven or disproven: report that word, and the box or the slider range of a disproof.
+- `volume(region=box, relative_tolerance=0.01)` brackets the volume, but on a part with many faces it can stop at
+  its budget with a bracket wider than you asked for: read `upper_mm3 - lower_mm3`. For a weight to 1%, mesh it
+  (`cad run gsl compile -t stl`) and take the mesh's signed volume, and say which you did.
+- Ask in the part's own names (`describe()` lists them, and its sliders): an expression is any GSL in the document's
+  scope, such as `max(plate, bolt)` or `slot - 1`.
+
 ## From concept to exact geometry
 
 GSL is for the shape: iterate on the field and its pictures (`gsl render` is fast, no mesh), mesh it once it is
