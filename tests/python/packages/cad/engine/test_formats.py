@@ -596,6 +596,44 @@ class MeshFileTest(FixtureTest):
         mesh = Mesh.from_bytes(found.buffers[plate["key"]])
         self.assertAlmostEqual(float(np.ptp(mesh.positions[:, 0])), 60.0, places=4)
 
+    def test_a_3mf_shares_one_vertex_per_position_along_face_seams(self) -> None:
+        """A part is meshed once per face, so a seam vertex reaches the writer once per
+        face that uses it; the 3MF welds those copies, or a slicer reads every seam edge
+        as open (3MF judges an edge by index, not by position)."""
+        import re
+        from collections import Counter
+        from types import SimpleNamespace
+
+        from cad.engine.export import Placed, View, threemf
+        from cad.engine.mesh_format import Mesh
+
+        corners = [(x, y, z) for x in (0, 20) for y in (0, 20) for z in (0, 20)]
+        quads = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+        positions, indices, faces = [], [], []
+        for ordinal, quad in enumerate(quads):
+            base = len(positions)
+            positions.extend(corners[i] for i in quad)
+            indices.extend((base, base + 1, base + 2, base, base + 2, base + 3))
+            faces.append((ordinal, ordinal * 6, 6))
+        empty = np.zeros((0, 4), np.uint32)
+        mesh = Mesh(np.array(positions, np.float32), np.zeros((len(positions), 3), np.float32),
+                    np.array(indices, np.uint32), np.array(faces, np.uint32),
+                    empty, np.zeros((0, 3), np.float32), np.zeros((0, 4), np.float32))
+        source = SimpleNamespace(structure={"prototypes": [{"key": "k0", "name": "box"}]}, meshes={"k0": mesh})
+        view = View(source, "box", [Placed(0, np.eye(4), ["box"], None)], {}, [])
+        path = self.folder / "box.3mf"
+        threemf.write(view, path)
+        model = zipfile.ZipFile(path).read("3D/3dmodel.model").decode()
+        vertices = re.findall(r'<vertex x="([^"]+)" y="([^"]+)" z="([^"]+)"/>', model)
+        triangles = re.findall(r'<triangle v1="(\d+)" v2="(\d+)" v3="(\d+)"', model)
+        uses: Counter = Counter()
+        for a, b, c in ((int(a), int(b), int(c)) for a, b, c in triangles):
+            for edge in (tuple(sorted((a, b))), tuple(sorted((b, c))), tuple(sorted((a, c)))):
+                uses[edge] += 1
+        self.assertEqual(len(vertices), 8, "one vertex per corner, not one per face")
+        self.assertEqual(len(triangles), 12, "no triangle dropped by the weld")
+        self.assertEqual(set(uses.values()), {2}, "every edge used by exactly two triangles")
+
 
 # --- GLB -------------------------------------------------------------------------------------------
 
