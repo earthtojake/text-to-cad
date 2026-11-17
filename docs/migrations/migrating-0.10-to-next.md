@@ -1,9 +1,9 @@
 # Migrating from 0.10 to 0.11
 
 This guide covers moving a project from 0.10 to 0.11: the skills, the library's imports, the `cad`
-command, what `cad run` runs a program in, and setting up and updating as 0.11.0 to 0.11.10 did it.
+command, what `cad run` runs a program in, and setting up and updating as 0.11.0 to 0.11.11 did it.
 How text-to-cad installs and updates today is in [docs/install.md](../install.md); the releases after
-0.11.10 need no migration.
+0.11.11 need no migration.
 
 Each change names its tier of the compatibility law ([law 15](../../packages/cad/README.md#the-design-laws),
 "Compatibility, by who pays for a break"), which says what a change of its kind keeps working.
@@ -235,7 +235,7 @@ release, and what it runs a program in follows the program:
 
 - **Automatic updates are on** (tier 3: your settings). The CAD server installs a newer release that
   breaks nothing (a patch release, before 1.0) by itself, in the background, and switches to it once
-  text-to-cad has had nothing to do for an hour; 0.10 installed nothing until you asked. A 0.10 settings file says
+  nothing has run for a minute; 0.10 installed nothing until you asked. A 0.10 settings file says
   nothing of them, so they are on: `cad update auto off`, or unchecking Automatic updates in the menu
   under CAD's logo, turns them off, and `cad update auto` says whether they are on.
   `CAD_UPDATE_CHECK=0` in the server's environment turns them off too, as it turns off the version

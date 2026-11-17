@@ -3,8 +3,9 @@
  *
  *   {"latest": "0.9.0"}
  *
- * `latest` is THE POINTER: the one release cad's own update and the install command install (`cad==X`), and that
- * releases 0.10.0 to 0.11.11 install as `cad-server==X`. It is the newest release that
+ * `latest` is THE POINTER: a cad older than it updates itself. cad's own update then installs PyPI's newest
+ * (`uv tool install cad@latest`), and the install command installs PyPI's newest too, neither reading the feed; only
+ * releases 0.10.0 to 0.11.11 install the release the feed names, exactly, as `cad-server==X`. It is the newest release that
  *   1. has a file PyPI's simple index lists unyanked (a pre-release is no release here: the server reads only
  *      `X.Y.Z`), read from `cadgen`'s index: a release uploads its projects one at a time, `cad`, `cad-server`,
  *      `cad-mcp`, then `cadgen`, each only once PyPI lists the one before (.github/workflows/release-publish.yml),

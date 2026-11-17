@@ -359,7 +359,7 @@ jobs:
   # once: argparse's suggest_on_error), so only the suites hold the floor. A third run of
   # suites the packages jobs already run on the Python the server's installations use, for a
   # rare kind of break: so it runs before a release ships (a VERSION change), nightly and on a
-  # manual run, not on every push. Whole, unsharded: 7 to 14 minutes.
+  # manual run, not on every push. Whole, unsharded: the last run measured took 15.7 minutes.
   packages-floor:
     name: packages (Python 3.11 floor)
     needs: changes

@@ -24,7 +24,8 @@ It does six things, and nothing else:
 4. Removes what earlier releases of text-to-cad left in those apps.
 5. Where cad's folder is not on your PATH, runs uv's own `uv tool update-shell`, which adds it for
    new terminals (on macOS and Linux in your shell's profile, on Windows in your user PATH). Setting
-   `UV_NO_MODIFY_PATH` stops that.
+   `UV_NO_MODIFY_PATH` stops that. cad sets it when cad itself runs the install command
+   (`cad plugin install`, and after an automatic update), so only your own run changes the PATH.
 6. Turns on the plugin's automatic updates ([Updating](#updating)).
 
 It takes no options and does not start anything. Run it again at any time to bring the plugin up
@@ -317,9 +318,9 @@ cad auto-update off
 cad auto-update on
 ```
 
-Only a cad installed with `uv tool install` updates itself; one installed another way, such as with
-pip into a project's own Python, never does. Setting `CAD_UPDATE_CHECK=0` where cad runs turns the
-check off for that process. You can also update cad with uv yourself:
+A cad installed with `uv tool install cad` updates itself; one installed with pip into a project's
+own Python never does. Setting `CAD_UPDATE_CHECK=0` (or `CI`) where cad runs turns the check off for
+that process, and makes `cad update` refuse there too. You can also update cad with uv yourself:
 
 ```bash
 cad server stop

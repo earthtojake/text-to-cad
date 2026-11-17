@@ -122,7 +122,9 @@ and nothing asked:
   release of `cad` with `uv tool install`; a `cad` that is installed and starts is
   left as it is. Where cad's folder is not on the PATH, it runs uv's own
   `uv tool update-shell`, which adds it to your shell profile (on Windows, your
-  user PATH); `UV_NO_MODIFY_PATH` stops that.
+  user PATH); `UV_NO_MODIFY_PATH` stops that. cad sets it whenever cad itself runs
+  the install command (`cad plugin install`, and after an automatic update), so only
+  a person's own run changes the PATH.
 - The plugin, from this repository's `latest` branch on GitHub, installed in each
   agent app it finds with that app's own command. It removes what earlier releases
   left there, among them the CAD server they wrote into Claude Desktop's config

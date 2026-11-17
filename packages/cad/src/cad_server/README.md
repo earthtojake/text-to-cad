@@ -114,9 +114,10 @@ cad_server/
   is all cad knows of plugins.
 - **`cad telemetry [status|on|off]`**: the person's answer about usage stats and crash reports.
 
-No command installs or removes cad: that is uv's (`uv tool install cad`, `uv tool uninstall cad`).
-The one exception is `cad mcp` run from uv's cache on a computer with none, which runs that same
-`uv tool install`. Every command that destroys asks first (`cad delete`,
+No command removes cad, and installing it is uv's (`uv tool install cad`, `uv tool uninstall cad`).
+Two commands can install it with uv where a computer has none: `cad mcp` run from uv's cache, which
+runs that same `uv tool install`, and `cad plugin install`, through the install command it runs.
+Every command that destroys asks first (`cad delete`,
 `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`; `_internal/consent.py`).
 
 Kept only for releases 0.10.0 to 0.11.11, and deleted with that bridge (`cli/setup.py`): `cad setup
