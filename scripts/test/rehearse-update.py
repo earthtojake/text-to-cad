@@ -4,15 +4,18 @@ engine and cache folders, uv's tools and their commands of its own, never this m
 the real install command (``scripts/install/install.sh``, this tree's ``install.py``) and, for the bridge, the REAL
 shipped releases from PyPI.
 
-This tree is published as releases no index holds (``0.11.<9000+n>`` and the next few, n from this process), written
-into a folder uv reads beside the index (``UV_FIND_LINKS``, ``CAD_UPDATE_FIND_LINKS``), and the version feed is a
-stand-in on loopback (``CAD_API_URL``, ``CAD_INSTALL_FEED``), as is PyPI's JSON API that ``cad update`` asks
+This tree is published as releases no index holds (``<major>.<minor>.<9000+n>`` of ``VERSION`` and the next few, n
+from this process: ``real_computer.stamp``, newer than every release PyPI holds), written into a folder uv reads beside
+the index (``UV_FIND_LINKS``, ``CAD_UPDATE_FIND_LINKS``), and the version feed is a stand-in on loopback
+(``CAD_API_URL``), as is PyPI's JSON API that ``cad update`` asks
 (``CAD_PYPI_URL``), which names what the feed names. Every computer's server takes a port of its own
 (``CAD_ENGINE_DEFAULT_PORT``: the true default, 3245, on CI alone). No real agent app is on any PATH.
 
-**cad updating itself** (a computer the install command set up: cad a uv tool, its automatic updates on). Each such
-computer has a folder of releases of its own, holding only those that are out (``Box.out``), since an upgrade is
-``uv tool install cad@latest``; the install command cad runs counts its runs there (``Box.runs``).
+Every computer has a folder of releases of its own, holding only those that are out (``Box.out``): the install command
+installs PyPI's newest, and an upgrade is ``uv tool install cad@latest``, so a release not out yet must not be there.
+
+**cad updating itself** (a computer the install command set up: cad a uv tool, its automatic updates on). The install
+command cad runs counts its runs there (``Box.runs``).
 
 - ``self-update``: with ``cad plugin auto-update on``, the feed names the next release and an hour passes; the running
   server, idle, stops, uv installs the next release, and its server answers; then the helper runs the new cad's ``cad
@@ -33,6 +36,12 @@ computer has a folder of releases of its own, holding only those that are out (`
 - ``self-uninstallable``: an update to a release uv cannot install as a tool (no command: "No executables are
   provided"): uv takes the tool away with the failed attempt, the helper puts the release before back, and its server
   answers; the plugin's switch on, no install command runs after the failed update.
+- ``self-pipx``: cad installed by ``pipx install cad`` (pipx itself a uv tool of the computer's, on pip's backend, its
+  folders in the home, pip offered this tree's releases by ``PIP_FIND_LINKS``): the install command leaves it as it is,
+  installs no uv tool, and turns the plugin's switch on; the next release out and an hour passed, the server, idle,
+  updates it by ``pipx upgrade cad`` and the new cad runs ``cad plugin install`` once; then, automatic updates off, a
+  typed ``cad update`` with nothing newer says so, and with the release after out updates pipx's cad to it, no install
+  command after it. Each time pipx's cad serves the new release, and an open page's port and token reach it.
 
 **The bridge** from a shipped release (``--old``, 0.11.10 by default; 0.11.0 to 0.11.10 and 0.10.0 to 0.10.4 have the
 updater), installed by its own ``cad setup`` through uvx, its server serving pages on the computer's port:
@@ -65,7 +74,7 @@ Usage::
 
     scripts/test/rehearse-update.py [ROUTE ...] [--old RELEASE] [--wheels DIR] [--uv-cache DIR]
 
-``all`` (the default) is every route; ``self`` the six of cad updating itself; ``bridge`` the seven from a shipped
+``all`` (the default) is every route; ``self`` the seven of cad updating itself; ``bridge`` the seven from a shipped
 release. ``--wheels``: this tree's wheels as ``scripts/release/check-wheel-contents.sh`` keeps them; without it they
 are built from the source (``tests/python/support/machine.py``, no packaged runtime: no route opens a page).
 ``--uv-cache``: one folder for uv's cache and Pythons, shared by every computer of the run (default: a new one of the
@@ -104,7 +113,7 @@ OLD = "0.11.10"
 _BASE = 9000 + os.getpid() % 800
 # This tree as releases no index holds: the one installed first, the next, one whose server cannot start, the one after
 # it, and one uv cannot install as a tool.
-NEW, NEXT, BROKEN, AFTER, NOCMD = (f"0.11.{_BASE + step}" for step in range(5))
+NEW, NEXT, BROKEN, AFTER, NOCMD = (rc.stamp(_BASE + step) for step in range(5))
 BROKEN_DAEMON = b"raise SystemExit('cad: this build cannot start its server (a rehearsal of a release that cannot)')\n"
 # How long each wait may take: an install from uv's cache, a switch, a tending or two of a server (30 s each).
 SECONDS = 600.0
@@ -176,16 +185,16 @@ class PyPI(http.server.ThreadingHTTPServer):
 
 
 class Box:
-    """One private computer of a route (see the module). ``links``: where uv finds this tree's releases. A route of cad
-    updating itself (``counted``) gets a folder of its own, holding only the releases that are out (``out``): an
-    upgrade installs the newest there; its install command counts its runs (``runs``)."""
+    """One private computer of a route (see the module). ``links``: where uv finds this tree's releases, a folder of
+    its own holding only the releases that are out (``out``): an install or an upgrade installs the newest there. On a
+    route of cad updating itself (``counted``) its install command counts its runs (``runs``)."""
 
     def __init__(self, label: str, feed: rc.Feed, wheels: Path, shared: Path, *, named_state: bool = True,
                  pypi: PyPI | None = None, counted: bool = False) -> None:
         self.label, self.feed, self.wheels = label, feed, wheels
         # Short: Windows' paths stay well under its old limit.
         work = Path(tempfile.mkdtemp(prefix=f"cr{label[:3]}.")).resolve()
-        self.links = work / "links" if counted else wheels
+        self.links = work / "links"
         self.links.mkdir(exist_ok=True)
         self.computer = rc.Computer(work, {}, feed=feed, shared=shared, wheels=self.links, helpers=("uv", "uvx"))
         self.work, self.home, self.bin, self.port = work, self.computer.home, self.computer.bin, self.computer.port
@@ -214,10 +223,10 @@ class Box:
         self.pythons: list[Path] = []  # the shipped release's Python, which stops its server at the end
 
     def out(self, version: str) -> None:
-        """``version`` out: the feed and PyPI name it, and, on a computer of its own folder of releases, uv finds it."""
-        if self.links != self.wheels:
-            for wheel in self.wheels.glob(f"*-{version}-*.whl"):
-                shutil.copy2(wheel, self.links / wheel.name)
+        """``version`` out: the feed and PyPI name it, and uv finds it in the computer's folder of releases (a shipped
+        release, from PyPI, has none there)."""
+        for wheel in self.wheels.glob(f"*-{version}-*.whl"):
+            shutil.copy2(wheel, self.links / wheel.name)
         self.feed.latest = version
 
     def runs(self) -> int:
@@ -497,7 +506,7 @@ class Box:
     def install_old(self, old: str) -> Path:
         """The shipped release as its install command set it up: its own ``cad setup`` through uvx, its server
         serving pages on the computer's port. Its Python."""
-        self.feed.latest = old
+        self.out(old)
         self.run(["uvx", "--no-config", "--managed-python", "--python", "3.14", "--from", f"cad-server=={old}", "cad",
                   "setup"], timeout=1500)
         python = rc.interpreter(self.old_state / "releases" / old)
@@ -515,7 +524,7 @@ class Box:
 
     def button(self, target: str) -> None:
         """The shipped release's update button, on the port pages are on."""
-        self.feed.latest = target
+        self.out(target)
         status, answer = self.http("POST", "/api/v1/local/update", body=b"{}",
                                    headers={"x-cad-viewer": "1", "Content-Type": "application/json"})
         if status != 202 or (answer.get("update") or {}).get("target") != target:
@@ -697,6 +706,124 @@ def self_uninstallable(box: Box) -> None:
     say(f"        {NOCMD} could not be installed ({record.get('detail')!r}); {NEW} put back and serving")
 
 
+# --- cad installed by pipx ----------------------------------------------------------------------------------------
+
+# The variables of pip and pipx a computer with pipx holds besides its own (``with_pipx``).
+PIPX_FOLDERS = ("PIPX_HOME", "PIPX_BIN_DIR", "PIPX_MAN_DIR", "PIP_CACHE_DIR")
+
+
+def with_pipx(box: Box) -> Path:
+    """pipx on the computer, as a person may have it: ``uv tool install pipx`` (the computer's own uv tools, its command
+    in the home's ``.local/bin``, on PATH), on uv's Python 3.14, its folders in the home (``PIPX_HOME``; ``PIPX_BIN_DIR``
+    the home's ``.local/bin``, pipx's default and uv's; ``PIPX_MAN_DIR``), pipx's classic backend, pip
+    (``PIPX_DEFAULT_BACKEND``), whose cache is the run's (``PIP_CACHE_DIR``, beside uv's), which reads no configuration
+    file of this machine's (``PIP_CONFIG_FILE``), and which is offered this tree's releases as uv is (``PIP_FIND_LINKS``:
+    the computer's folder of releases). Each folder said, and ``Failed`` where one is not the computer's or the run's.
+    pipx's environment of cad (``<PIPX_HOME>/venvs/cad``)."""
+    pipx_home = box.home / ".local" / "share" / "pipx"
+    box.env.update({"PIPX_HOME": str(pipx_home), "PIPX_BIN_DIR": str(box.bin),
+                    "PIPX_MAN_DIR": str(box.home / ".local" / "share" / "man"), "PIPX_DEFAULT_BACKEND": "pip",
+                    "PIP_CACHE_DIR": str(box.computer.uv / "pip"), "PIP_CONFIG_FILE": os.devnull,
+                    "PIP_FIND_LINKS": str(box.links), "PIP_DISABLE_PIP_VERSION_CHECK": "1", "PIP_NO_INPUT": "1"})
+    for name in PIPX_FOLDERS:
+        say(f"  {name}={box.env[name]}")
+        if not (rc._within(Path(box.env[name]), box.work) or rc._within(Path(box.env[name]), box.computer.uv)):
+            raise Failed(f"the computer is not isolated: {name}")
+    box.run(["uv", "tool", "install", "--managed-python", "--python", "3.14", "pipx"])
+    if not shutil.which("pipx", path=box.env["PATH"]):
+        raise Failed(f"{box.label}: uv's pipx is not on the computer's PATH")
+    return pipx_home / "venvs" / "cad"
+
+
+def pipx_said(box: Box) -> str:
+    """What pipx says it holds, for a failure."""
+    listed = box.run(["pipx", "list", "--short"], check=False, timeout=60)
+    return f"  pipx's tools: {listed.stdout.strip() or listed.stderr.strip()}\n{box.said()}"
+
+
+def pipx_is(box: Box, env: Path, version: str) -> None:
+    """pipx's cad at ``version``: its metadata says so, the ``cad`` command in the bin folder is pipx's (a link into its
+    environment; on Windows pipx's copy), it says ``cad <version>``, and uv has no cad tool beside it."""
+    try:
+        held = json.loads((env / "pipx_metadata.json").read_text(encoding="utf-8"))["main_package"]["package_version"]
+    except (OSError, ValueError, KeyError) as error:
+        raise Failed(f"{box.label}: pipx's cad has no metadata: {error}\n{pipx_said(box)}") from None
+    command = box.cad()
+    linked = WINDOWS or (command.is_symlink() and rc._within(Path(os.path.realpath(command)), env))
+    if held != version or not command.exists() or not linked or box.version() != f"cad {version}" or box.tool():
+        raise Failed(f"{box.label}: pipx's cad is {held}, its command {command} (linked {linked}), cad --version says "
+                     f"{box.version()!r}, uv's cad tool {box.tool()}; not {version}\n{pipx_said(box)}")
+
+
+def pipx_serves(box: Box, env: Path, version: str) -> dict:
+    """pipx's cad's server answering as ``version``, from pipx's environment of cad: its status."""
+    def found():
+        status = box.ask(rc.interpreter(env), "status")
+        return status if status and status.get("version") == version and rc._within(
+            Path(status.get("prefix") or "/nowhere"), env) else None
+    return box.until(found, f"pipx's cad's server answering as {version}")
+
+
+def self_pipx(box: Box) -> None:
+    """cad installed by ``pipx install cad``: the install command leaves it as it is and turns the plugin's switch on;
+    it updates itself by ``pipx upgrade cad`` (then ``cad plugin install`` once), and a typed ``cad update`` updates it
+    the same way, with no install command after it."""
+    env = with_pipx(box)
+    box.out(NEW)
+    box.run(["pipx", "install", "cad"])
+    pipx_is(box, env, NEW)
+    said = box.install_command().stdout
+    if f"cad {NEW} is installed already: it is left as it is" not in said or "another program's" in said:
+        raise Failed(f"{box.label}: the install command with pipx's cad said:\n{said}\n{pipx_said(box)}")
+    pipx_is(box, env, NEW)
+    switches = box.read("settings.json")
+    if (switches.get("plugin") or {}).get("auto_update") is not True or (switches.get("auto_update") or {}).get("on") \
+            is False:
+        raise Failed(f"{box.label}: after the install command: {switches}")
+    started = box.run([box.cad(), "server", "start"]).stdout
+    if f"cad {NEW}" not in started:
+        raise Failed(f"{box.label}: cad server start said {started!r}")
+    box.token = (box.ask(rc.interpreter(env), "http") or {}).get("token", "")
+    pipx_serves(box, env, NEW)
+    say(f"        `pipx install cad` gave {NEW}; the install command left it as it is (no uv tool) and turned the "
+        "plugin's switch on")
+    # By itself: an hour passes with the next release out.
+    box.out(NEXT)
+    box.hour_later()
+    record = updated(box, NEXT)
+    if not record.get("then_install"):
+        raise Failed(f"{box.label}: the update says no install command runs after it: {record}")
+    pipx_serves(box, env, NEXT)
+    pipx_is(box, env, NEXT)
+    record = box.until(lambda: (lambda found: found if "install_command" in found else None)(
+        box.read("auto-update.json")), "the install command after the update")
+    if record["install_command"] != 0 or box.runs() != 1:
+        raise Failed(f"{box.label}: the install command after the update: {record}, ran {box.runs()} times\n"
+                     f"{pipx_said(box)}")
+    say(f"        {NEW} -> {NEXT} by itself, idle, as `pipx upgrade cad` got it; then `cad plugin install`, once, exit 0")
+    pages(box, NEXT)
+    # Typed, with automatic updates off: nothing newer, then the release after.
+    switched = box.run([box.cad(), "auto-update", "off"]).stdout.strip()
+    if switched != "auto-update: off":
+        raise Failed(f"{box.label}: cad auto-update off said {switched!r}")
+    done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
+    if (done.returncode, done.stdout.strip()) != (0, f"cad {NEXT} is the newest release"):
+        raise Failed(f"{box.label}: cad update with nothing newer exited {done.returncode}: {done.stdout}{done.stderr}")
+    box.out(AFTER)
+    done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
+    typed = f"cad {NEXT} updated to {AFTER}"
+    if (done.returncode, done.stdout.strip()) != (0, typed):
+        raise Failed(f"{box.label}: cad update exited {done.returncode}: {done.stdout}{done.stderr}\n{pipx_said(box)}")
+    record = updated(box, AFTER)
+    pipx_serves(box, env, AFTER)
+    pipx_is(box, env, AFTER)
+    if record.get("then_install") or "install_command" in record or box.runs() != 1:
+        raise Failed(f"{box.label}: the install command ran after a typed cad update: {record}, runs {box.runs()}")
+    say(f"        `cad update` with nothing newer: 'cad {NEXT} is the newest release'; then {typed!r}, automatic updates "
+        "off; no install command")
+    pages(box, AFTER)
+
+
 # --- the bridge ---------------------------------------------------------------------------------------------------
 
 
@@ -748,7 +875,7 @@ def automatic(box: Box, old: str) -> None:
     if not old.startswith("0.11."):
         raise Failed(f"{box.label}: {old} has no automatic update (0.11.0 and later have)")
     python = box.install_old(old)
-    box.feed.latest = NEW
+    box.out(NEW)
     box.old_hour_later(python)
     box.switched(old, NEW)
     bridged(box, old)
@@ -817,7 +944,7 @@ def by_hand(box: Box, old: str, said: str, how: str) -> None:
 
 def install_command(box: Box, old: str) -> None:
     box.install_old(old)
-    box.feed.latest = NEW
+    box.out(NEW)
     by_hand(box, old, box.install_command().stdout, "by the install command")
 
 
@@ -862,7 +989,7 @@ def typed_on_windows(box: Box, old: str) -> None:
 
 def typed(box: Box, old: str) -> None:
     box.install_old(old)
-    box.feed.latest = NEW
+    box.out(NEW)
     if WINDOWS:
         typed_on_windows(box, old)
         return
@@ -884,7 +1011,7 @@ def store_typed(box: Box, old: str) -> None:
     box.install_old(old)
     (box.old_state / "install-receipt.json").unlink(missing_ok=True)
     shutil.rmtree(box.old_state / "plugin", ignore_errors=True)
-    box.feed.latest = NEW
+    box.out(NEW)
     box.run([box.cad(), "update"], timeout=SECONDS + 300)
     started = box.run([box.cad(), "server", "start"]).stdout
     status = box.until(lambda: (lambda found: found if found and found.get("version") == NEW else None)(
@@ -902,7 +1029,7 @@ def store_typed(box: Box, old: str) -> None:
 
 
 SELF = {"self-update": self_update, "self-typed": self_typed, "self-at-start": self_at_start, "self-off": self_off,
-        "self-broken": self_broken, "self-uninstallable": self_uninstallable}
+        "self-broken": self_broken, "self-uninstallable": self_uninstallable, "self-pipx": self_pipx}
 BRIDGE = {"updater": updater, "automatic": automatic, "store-only": store_only, "rollback": rollback,
           "install-command": install_command, "typed": typed, "store-typed": store_typed}
 

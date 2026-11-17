@@ -3,8 +3,8 @@ folder, its cache folder and how much ``cad cache prune`` would free there, whet
 (``cad_server._internal.base``) and loads -- where it is not, the environment ``cad run`` made for a program that a
 build ran in, if one was (``extras.last_with_kernel``) --, where each integration's operations run, whether the server runs and
 its release, and cad's own update (``cad_server._internal.auto_update``: the switches, whether this cad is a global
-install, whether uv is found, and the last attempt). It repairs, registers, starts, writes and deletes nothing: ``--check``
-prints the same report.
+install and by which installer, whether that installer is found, and the last attempt). It repairs, registers, starts,
+writes and deletes nothing: ``--check`` prints the same report.
 
 The kernel is loaded in a fresh interpreter of its environment (``-P -B``: never this one, never a module of the
 working folder's, no bytecode written), so a refused load is named for what it is: on Windows 11, Smart App Control
@@ -85,8 +85,7 @@ def _report() -> list[dict]:
             _check("install", INFO, str(Path(cad_server.__file__).resolve().parent)),
             _check("data", INFO, str(state_dir())), read("cache", _cache), _kernel(),
             *(_check(line.split(" ", 1)[0], status, line.split(" ", 1)[1]) for status, line in _integrations()),
-            read("server", _server), read("update", _update),
-            read("uv", lambda: (INFO, _auto().find_uv() or "not found")), read("attempt", _attempt)]
+            read("server", _server), read("update", _update), _installer(), read("attempt", _attempt)]
 
 
 def _auto():
@@ -105,6 +104,19 @@ def _update() -> tuple[str, str]:
         return INFO, f"no auto-update: this cad is not a global install, so it never updates itself; {plugin}"
     return INFO, (f"auto-update {word[auto.switches()['on']]}, {plugin}; a global install by {found.installer.name} "
                   f"({found.prefix})")
+
+
+def _installer() -> dict:
+    """The installer cad's update runs, as the update finds it: the global install's (uv, pipx), and uv where this cad
+    is none; the line named after it."""
+    try:
+        auto = _auto()
+        found = auto.global_install()
+        if found is None:
+            return _check("uv", INFO, auto.find_uv() or "not found")
+        return _check(found.installer.name, INFO, " ".join(found.program) if found.program else "not found")
+    except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
+        return _check("uv", WARNING, f"unknown ({type(error).__name__}: {error})")
 
 
 def _attempt() -> tuple[str, str]:
