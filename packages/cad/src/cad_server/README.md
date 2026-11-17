@@ -45,11 +45,11 @@ cad_server/
   settings.py            # the person's settings: settings.json in the data folder
   language.py            # the language the person chose for the CAD views
   whats_new.py           # the releases whose What's new the person has seen
-  updates.py             # the hourly read of the version feed: the release it names
+  updates.py             # the hourly read of the version feed, and PyPI asked for `cad update`
   assets.py              # where the bundled runtime is
   _internal/             # the environments models run in (base, extras, scan), cad's own update
-                         #   (auto_update, auto_update_helper), the hosted install command run after
-                         #   an update (install_script), the daemon's entry (engine_daemon,
+                         #   (auto_update, auto_update_helper), the hosted install command as cad
+                         #   runs it (install_script), the daemon's entry (engine_daemon,
                          #   engine_host), telemetry's sender, file locks, the one parser every command
                          #   reads its options by (cli_parser) and the one failure contract every
                          #   command fails by (cli_errors); and, kept apart for the bridge from
@@ -88,21 +88,24 @@ cad_server/
   `cad delete` deletes documents.
 - **`cad doctor`**: one read-only report: this cad's release, its Python and where it is installed, its
   data and cache folders and what `cad cache prune` would free, the CAD kernel environment and whether it
-  loads, the integrations, whether the server runs and its release, and cad's own update (both switches,
-  whether this cad is a uv tool, whether uv is found, the last attempt). It changes nothing. Exit 1 when the
+  loads, the integrations, whether the server runs and its release, and cad's own update (the switches,
+  whether this cad is a global install, whether uv is found, the last attempt). It changes nothing. Exit 1 when the
   kernel is installed and does not load; `--json` gives the report as one document.
 - **`cad cache dir|prune|clean`**, as `uv cache` treats uv's: `dir` prints the cache folder, `prune`
   removes what this release cannot use (environments made for other releases, and the release folders
   0.11.10 and earlier left), `clean` removes all of it, refused while the server runs. Nothing else of cad
   deletes a past release's files.
-- **`cad auto-update [status|on|off]`**: whether cad updates itself (below). `on` is refused unless this
-  cad is a uv tool; `on --installer` also has the install command run again after each update; `off` turns
-  both off. Where a server runs, it keeps the switches (`{"op": "auto_update"}`), as it does every other
-  command's writing, so a shell whose sandbox may not write cad's state folder needs no permission; with none
-  running, the command writes them itself.
-- **`cad update`**: cad updated to the newest release now, by the server that runs (below), even with
-  switch 1 off. It never starts a server, and is refused unless this cad is a uv tool. It waits until the
-  update ends and says how, in one line, on Windows too.
+- **`cad auto-update [status|on|off]`**: whether cad updates itself (below), on by default. `on` is
+  refused unless this cad is a global install, and `status` says when it is not. Where a server runs, it
+  keeps the switch (`{"op": "auto_update"}`), as it does every other command's writing, so a shell whose
+  sandbox may not write cad's state folder needs no permission; with none running, the command writes it.
+- **`cad update`**: cad, and only cad, updated to the newest release on PyPI now, by the server that runs
+  (below), even with automatic updates off. It never starts a server, and is refused unless this cad is a
+  global install. It waits until the update ends and says how, in one line, on Windows too.
+- **`cad plugin install`**: the hosted install command run in the foreground, its output and exit status the
+  command's (`_internal/install_script.py`). **`cad plugin auto-update [status|on|off]`**: whether an
+  automatic update of cad runs it after it, off by default, kept by the server as `cad auto-update` is. That
+  is all cad knows of plugins.
 - **`cad telemetry [status|on|off]`**: the person's answer about usage stats and crash reports.
 
 There is no command that installs or removes cad: that is uv's (`uv tool install cad`,
@@ -124,33 +127,40 @@ PowerShell pipeline is still wrong there, and that is PowerShell's to set.
 
 ## cad's own update
 
-`_internal/auto_update.py`. Two switches in the person's settings, both off by default: whether cad updates
-itself, and whether the install command runs again after an update. `cad auto-update` changes them; the
-install command turns both on.
+`_internal/auto_update.py`. Only a global install updates itself: a cad whose environment an installer made
+(`uv tool install cad`: uv's receipt in its environment). Each installer is one entry (`INSTALLERS`): its
+upgrade command, the command that puts a release back, and where its launchers are. Two switches in the
+person's settings: `auto_update.on`, whether cad updates itself, on unless turned off (`cad auto-update`);
+and `plugin.auto_update`, whether an automatic update runs the install command after it, off unless turned
+on (`cad plugin auto-update`; the install command turns it on).
 
 The server reads the version feed (`updates.py`, at most once an hour, in the background; never waited on).
-It asks whether to update as it starts, and as it tends itself: switch 1 on, this cad the uv tool `cad`
-(uv's receipt in its environment), uv found, the feed's release newer than this one. Then, once nothing
-is in flight (at a start, at once; otherwise once nothing has run for a minute), a detached helper that is
-neither the `cad` executable nor run from cad's environment (`_internal/auto_update_helper.py`) stops the
-server, runs `uv tool install --managed-python --python 3.14 cad==<release>` (tried again on failure, and
-the previous release put back where a failed install left no `cad`), and starts the server with whatever
-cad is there. On Windows uv cannot remove a `cad.exe` that is running, but it can rename one, so the
-helper renames each `cad.exe` of the tool aside before uv runs and puts a copy back. For that to work, cad
-takes its launcher off `sys.path` as it starts (`__init__.py`), so it never holds the file open. One release is tried at most twice, never twice within an hour. `cad server start` asks too
-when the start fails, so a release whose server cannot start still updates. Forward only: nothing moves
-to an older release, and a start joins a running server of a newer release rather than replacing it. With
-no answer from the feed, nothing happens. `CAD_UPDATE_CHECK=0` in a process's environment turns the check
-off for it. A cad that is not a uv tool never updates itself.
+It asks whether to update as it starts, and as it tends itself: the switch on, this cad a global install
+whose installer is found, the feed's release newer than this one. Then, once nothing is in flight (at a
+start, at once; otherwise once nothing has run for a minute), a detached helper that is neither the `cad`
+executable nor run from cad's environment (`_internal/auto_update_helper.py`) stops the server, runs the
+installer's upgrade, `uv tool install cad@latest` (no version, no Python flags: the environment keeps its
+interpreter; tried again on failure, and the previous release put back where a failed install left no
+`cad`), and starts the server with whatever cad is there. The record keeps the release the upgrade got. On
+Windows uv cannot remove a `cad.exe` that is running, but it can rename one, so the helper renames each
+`cad.exe` of the tool aside before uv runs and puts a copy back. For that to work, cad takes its launcher
+off `sys.path` as it starts (`__init__.py`), so it never holds the file open. One release is tried at most
+twice, never twice within an hour. `cad server start` asks too when the start fails, so a release whose
+server cannot start still updates. Forward only: nothing moves to an older release, and a start joins a
+running server of a newer release rather than replacing it. With no answer from the feed, nothing happens.
+`CAD_UPDATE_CHECK=0` in a process's environment turns the check off for it.
+
+After an automatic update that installed a newer cad, with `plugin.auto_update` on, the helper runs the
+new cad's `cad plugin install` once, after the server has started: its exit status in the record
+(`install_command`), its output in `install-command.log` in the data folder. No retry: a failure waits for
+the next update.
 
 `cad update` asks the server that runs (`{"op": "update"}`, which an agent's sandboxed shell may send with no
-permission): it reads the feed at once and, where a newer release is out, begins the same update as soon as nothing
-is in flight, with switch 1 off too and past the limits on automatic tries (it counts as a try all the same), or
-joins the one underway.
-
-After an update, with switch 2 on, the new server runs the hosted install command once in its update
-mode, which updates only the copies of the plugin it installed that are still there
-(`_internal/install_script.py`). A failure is tried again later and never undoes the update.
+permission): it asks PyPI which release is newest (`updates.newest`, 5 s at most; `CAD_PYPI_URL` names a
+stand-in), says `cad X is the newest release` where none is newer, and otherwise begins the same update as
+soon as nothing is in flight, with the switch off too and past the limits on automatic tries (it counts as a
+try all the same), or joins the one underway. Where PyPI cannot be reached it runs the upgrade all the same
+and says what it got. It updates cad alone: it never runs the install command.
 
 ## Folders
 

@@ -1,16 +1,19 @@
-"""Which release is newest: the version feed, as cad's own update reads it.
+"""Which release is newest: the version feed, as cad's own automatic update reads it, and PyPI, as ``cad update`` asks.
 
 At most once an hour, a server reads the version feed (``GET /v1/versions``, ``cad_server/_internal/api.py``)::
 
     {"latest": "0.10.0"}
 
-in the background (``refresh``), never waited on; and at once when someone types ``cad update`` (``read_now``,
-waited on for ``TIMEOUT_SECONDS`` at most). It is one anonymous request: no id, no path, nothing about the
+in the background (``refresh``), never waited on. It is one anonymous request: no id, no path, nothing about the
 person or their machine beyond what any web request carries. ``CAD_UPDATE_CHECK=0`` turns it off, and it never runs
 in CI (``CI`` set) or for a development build (``cad_server._internal.editable.development``). The feed as last read
 is kept in the state folder (``versions.json``), where every process of the person's reads it: ``latest`` is the
-release cad's own update moves to (``cad_server._internal.auto_update``). Nothing here updates anything, and nothing
-here says anything to a person or an agent.
+release cad's own automatic update moves to (``cad_server._internal.auto_update``). Nothing here updates anything, and
+nothing here says anything to a person or an agent.
+
+``cad update`` asks PyPI instead (``newest``: ``GET https://pypi.org/pypi/cad/json``, its ``info.version``, which
+leaves yanked releases out), once, ``TIMEOUT_SECONDS`` at most, the asking thread waiting: the feed names a release up
+to an hour after PyPI does. ``CAD_PYPI_URL`` names another address for PyPI's JSON API (a test's stand-in).
 
 Nothing here ever raises, or waits longer than ``TIMEOUT_SECONDS``. Each hour's attempt is spent before it is made,
 so a feed that cannot be reached is tried once an hour.
@@ -125,16 +128,6 @@ def feed(*, fetch: bool = True, force: bool = False, now: float | None = None, p
     return known
 
 
-def read_now(*, now: float | None = None, path: Path | None = None,
-             get: Callable[[str], Any] | None = None) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    """The feed read now, whatever its hour, for ``cad update``: ``(fresh, known)``, what the feed says now (None
-    where it could not be read) and the feed as last read before. Whether to read it at all (``checking``) is the
-    caller's to ask first."""
-    path = path or _cache()
-    known = parse_feed(_load(path).get("feed"))
-    return _read(path, time.time() if now is None else now, known, get), known
-
-
 def _read(path: Path, now: float, known: dict[str, Any] | None,
           get: Callable[[str], Any] | None) -> dict[str, Any] | None:
     """The feed read and kept: what it says, or None where it could not be read."""
@@ -145,6 +138,50 @@ def _read(path: Path, now: float, known: dict[str, Any] | None,
     if fresh is not None:
         _save(path, now, fresh)
     return fresh
+
+
+PYPI = "https://pypi.org/pypi"
+PYPI_ENV = "CAD_PYPI_URL"
+PYPI_MAX_BYTES = 16 * 1024 * 1024  # a project's JSON lists every file of every release: a few hundred KB
+
+
+def pypi_url() -> str:
+    """PyPI's JSON API: ``CAD_PYPI_URL`` when it is http(s), else PyPI's own."""
+    override = str(os.environ.get(PYPI_ENV) or "").strip().rstrip("/")
+    return override if override.startswith(("https://", "http://")) else PYPI
+
+
+def _get_within(url: str, seconds: float) -> Any:
+    """The JSON at ``url``, all of it, read in ``seconds`` at most, by the caller waiting on a thread that reads it (a
+    socket's timeout bounds each read, not all of them); ``None`` when it could not be (offline, slow, refused, too
+    big, or not JSON)."""
+    found: list[Any] = []
+
+    def read() -> None:
+        try:
+            import urllib.request
+
+            request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "cad"})
+            with urllib.request.urlopen(request, timeout=seconds) as response:  # noqa: S310 - http(s) only (`pypi_url`)
+                data = response.read(PYPI_MAX_BYTES + 1)
+            if len(data) <= PYPI_MAX_BYTES:
+                found.append(json.loads(data))
+        except Exception:  # noqa: BLE001 - PyPI out of reach: no answer
+            LOG.debug("could not read %s", url, exc_info=True)
+
+    reading = threading.Thread(target=read, name="cad-pypi", daemon=True)
+    reading.start()
+    reading.join(seconds)
+    return found[0] if found else None
+
+
+def newest(*, get: Callable[[str], Any] | None = None) -> str | None:
+    """The newest release of cad on PyPI (``info.version`` of ``<CAD_PYPI_URL>/cad/json``), a plain ``X.Y.Z``; None
+    where PyPI could not be asked or said none. Asked once, ``TIMEOUT_SECONDS`` at most."""
+    found = (get or (lambda url: _get_within(url, TIMEOUT_SECONDS)))(f"{pypi_url()}/cad/json")
+    info = found.get("info") if isinstance(found, dict) else None
+    version = info.get("version") if isinstance(info, dict) else None
+    return version if parse_release(version) is not None else None
 
 
 def _quietly() -> None:

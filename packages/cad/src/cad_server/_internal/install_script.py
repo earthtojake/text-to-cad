@@ -1,28 +1,23 @@
-"""The install command run again by cad's server: in update mode after cad's own update, and in install mode once for
-a computer a shipped updater brought (the bridge).
+"""The hosted install command as cad runs it: in the foreground for ``cad plugin install`` (``run``), and, BRIDGE-ONLY,
+once by the server for a computer a shipped updater brought (install mode).
 
 cad knows no app, plugin or skill. What it knows is one fixed public command, the hosted install command (``curl -fsSL
 https://texttocad.dev/install.sh | sh``; on Windows PowerShell ``irm https://www.texttocad.dev/install.ps1 | iex``),
-and the report that command writes where ``CAD_INSTALL_REPORT`` names a file: whether its cad step ended 0 (``setup``)
-and whether any app's step failed (``apps``). Nothing else of the report is read. Two runs are owed:
+and, for the bridge, the report that command writes where ``CAD_INSTALL_REPORT`` names a file: whether its cad step
+ended 0 (``setup``) and whether any app's step failed (``apps``). Nothing else of the report is read.
 
-- **Update mode** (``CAD_INSTALL_UPDATE=1``: the command updates our plugin copies still there, adds nothing and leaves
-  cad alone), owed while the person's second switch is on (``auto_update.switches``: ``installer``), this cad is the uv
-  tool, the update check is not turned off for this process (``updates.checking``), and the release the command last
-  ran for (``installer_ran_for``) is older than this cad: after cad's own update. Done, that release becomes this one.
-- **Install mode** (BRIDGE-ONLY), owed by ``cad setup --engine-update`` (``owe``), which the updaters of 0.10.0 to
-  0.11.10 run: the command installs cad as a uv tool, our plugin in every agent app, and turns both switches on. Done,
-  the server that runs from the shipped updater's folder hands over to the uv tool's (``cad_server.cli.setup``).
+**Install mode** (BRIDGE-ONLY), owed by ``cad setup --engine-update`` (``owe``), which the updaters of 0.10.0 to 0.11.10
+run: the command installs cad as a uv tool and our plugin in every agent app. Done, the server that runs from the
+shipped updater's folder hands over to the uv tool's (``cad_server.cli.setup``).
 
-**When** (``plan``): update mode at the server's first tending (it touches nothing of cad, so it waits for nothing);
-install mode's first attempt once the server has run ``FIRST_SECONDS`` (five minutes) while ``installations/current``
-names the release it is owed for -- longer than a shipped updater's switch can still be deciding to go back from this
-server: its check can end, and go back, after the server's first tending; ``current`` naming a newer release first
-ends it (``superseded``). After an attempt that failed, either mode: at a server's start but not sooner than
-``RETRY_SECONDS`` (an hour) after the last began, then once every ``DAY_SECONDS`` while the server runs, by the wall
-clock or the server's own monotonic one (a clock set back stalls nothing); at most ``ATTEMPTS`` (30) attempts, and
-none once ``GIVE_UP_SECONDS`` (30 days) have passed since the first (``gave up``). Nothing of it blocks, delays or
-undoes cad's own update, which the server asks for first.
+**When** (``plan``): the first attempt once the server has run ``FIRST_SECONDS`` (five minutes) while
+``installations/current`` names the release it is owed for -- longer than a shipped updater's switch can still be
+deciding to go back from this server: its check can end, and go back, after the server's first tending; ``current``
+naming a newer release first ends it (``superseded``). After an attempt that failed: at a server's start but not sooner
+than ``RETRY_SECONDS`` (an hour) after the last began, then once every ``DAY_SECONDS`` while the server runs, by the wall
+clock or the server's own monotonic one (a clock set back stalls nothing); at most ``ATTEMPTS`` (30) attempts, and none
+once ``GIVE_UP_SECONDS`` (30 days) have passed since the first (``gave up``). Nothing of it blocks, delays or undoes
+cad's own update, which the server asks for first.
 
 **An attempt** (``Carrier.begin``): the command started by the server itself, detached (a session or process group of
 its own, no window), its output nowhere, ``CAD_INSTALL_REPORT`` naming ``install-report.json`` in the state folder and
@@ -34,12 +29,12 @@ after ``RUN_SECONDS``; one the server that started it no longer watches is taken
 by why: ``no_report`` (none written: the command could not be fetched, was stopped, or writes none), ``setup`` (its cad
 step failed), ``app`` (an app's step failed: cad itself was installed) or ``other`` (the command could not start).
 
-The record, ``handover.json`` in the state folder, one at a time: ``schema``, ``mode`` (``install``, ``update``),
-``version`` (the release it is owed for), ``state`` (``owed``, ``done``, ``superseded``, ``gave up``), ``owed``
-(when), ``attempts``, ``first`` and ``last`` (when the first and the last attempt began), ``outcome`` (the last
-attempt's: ``running`` while it runs), ``installed`` (true once an attempt's report said cad was installed) and
-``ended``; times are the wall clock's, in seconds. Each attempt's end, and the end of an install mode's run, is one
-line in the server's log; install mode's are counted too (``analytics.arrival``, as the bridge's other steps are).
+The record, ``handover.json`` in the state folder, one at a time: ``schema``, ``mode`` (``install``), ``version`` (the
+release it is owed for), ``state`` (``owed``, ``done``, ``superseded``, ``gave up``), ``owed`` (when), ``attempts``,
+``first`` and ``last`` (when the first and the last attempt began), ``outcome`` (the last attempt's: ``running`` while
+it runs), ``installed`` (true once an attempt's report said cad was installed) and ``ended``; times are the wall
+clock's, in seconds. Each attempt's end, and the end of the run, is one line in the server's log, and counted
+(``analytics.arrival``, as the bridge's other steps are).
 
 Every install command cad starts carries ``CAD_INSTALL_BY_CAD=1`` (``environment``), so a ``cad setup`` it reaches runs
 nothing (``cad_server.cli.setup``): the hosted command of 0.10.0 to 0.11.10 runs one, and is served until the site is
@@ -66,8 +61,9 @@ INSTALLER_ENV = "CAD_ENGINE_UPDATE_INSTALLER"
 INSTALLER = ("sh", "-c", "curl -fsSL https://texttocad.dev/install.sh | sh")
 INSTALLER_WINDOWS = ("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
                      "irm https://www.texttocad.dev/install.ps1 | iex")
-# What the command reads: where to write its report, and that it runs in update mode.
+# What the command reads: where to write its report.
 REPORT_ENV = "CAD_INSTALL_REPORT"
+# The update mode of the install command of earlier builds, which no run of cad's asks for: never passed on to one.
 UPDATE_ENV = "CAD_INSTALL_UPDATE"
 # The mark of a command cad started (``environment``): a ``cad setup`` it reaches runs nothing (BRIDGE-ONLY).
 BY_CAD_ENV = "CAD_INSTALL_BY_CAD"
@@ -75,7 +71,7 @@ BY_CAD_ENV = "CAD_INSTALL_BY_CAD"
 RECORD = "handover.json"
 REPORT = "install-report.json"
 SCHEMA = "cad hand-over/2"
-INSTALL, UPDATE = "install", "update"
+INSTALL = "install"
 OWED, DONE, SUPERSEDED, GAVE_UP = "owed", "done", "superseded", "gave up"
 RUNNING = "running"
 FAILURES = ("no_report", "setup", "app", "other")
@@ -96,7 +92,51 @@ DAY_SECONDS = 24 * 60 * 60.0
 RUN_SECONDS = 2 * 60 * 60.0
 
 
-# --- the record ---------------------------------------------------------------------------------------------------
+# --- the command --------------------------------------------------------------------------------------------------
+
+
+def installer() -> list[str] | str:
+    """What a run runs: ``CAD_ENGINE_UPDATE_INSTALLER``'s command where it is set (empty: none), else the hosted
+    install command for this computer. On Windows the variable's command line is run as it is written, one string that
+    Windows splits as its programs do: ``shlex`` there keeps a quoted word's quotes, naming a program that is not
+    there."""
+    if INSTALLER_ENV in os.environ:
+        named = os.environ[INSTALLER_ENV].strip()
+        return named if os.name == "nt" else shlex.split(named)
+    return list(INSTALLER_WINDOWS if os.name == "nt" else INSTALLER)
+
+
+def environment(*, report: Path | None, update: bool = False) -> dict[str, str]:
+    """The environment the command runs in: this process's, without its import path, the version it was told it runs
+    as and a ``cad run``'s marks, with the person's own PATH (none of an environment that comes and goes,
+    ``installations.lasting``), uv's installer told to leave shell profiles alone, cad's mark (``BY_CAD_ENV``), and the
+    report's file named. ``update`` is no longer read: the install command has no modes (the bridge still passes it)."""
+    from cad.engine.places import INSTALLATION_ENV, RUN_WITH
+    from cad_server._internal.installations import lasting
+
+    del update
+    dropped = ("PYTHONPATH", "PYTHONHOME", INSTALLATION_ENV, RUN_WITH, "CAD_UPDATE_PREPARE", REPORT_ENV, UPDATE_ENV)
+    found = {key: value for key, value in os.environ.items() if key not in dropped}
+    found["PATH"] = lasting(os.environ.get("PATH", os.defpath))
+    found["UV_NO_MODIFY_PATH"] = "1"
+    found[BY_CAD_ENV] = "1"
+    if report is not None:
+        found[REPORT_ENV] = str(report)
+    return found
+
+
+def run() -> int:
+    """``cad plugin install``: the install command run in the foreground, its output this process's and its exit status
+    returned (a signal's as a shell says it, 128 and its number); 0 where there is none to run. ``OSError`` where it
+    could not start."""
+    command = installer()
+    if not command:
+        return 0
+    code = subprocess.call(command, env=environment(report=None), stdin=subprocess.DEVNULL)
+    return code if code >= 0 else 128 - code
+
+
+# --- the record (BRIDGE-ONLY) ---------------------------------------------------------------------------------------
 
 
 def _folder() -> Path:
@@ -111,7 +151,7 @@ def read() -> dict[str, Any] | None:
         found = json.loads((_folder() / RECORD).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    ok = isinstance(found, dict) and found.get("schema") == SCHEMA and found.get("mode") in (INSTALL, UPDATE)
+    ok = isinstance(found, dict) and found.get("schema") == SCHEMA and found.get("mode") == INSTALL
     return found if ok and isinstance(found.get("version"), str) else None
 
 
@@ -132,24 +172,9 @@ def owe(version: str, *, now: float | None = None) -> None:
     """BRIDGE-ONLY. Install mode owed for release ``version`` (``cad setup --engine-update``), unless it is owed for it
     already (an updater's second run keeps the attempts counted). ``OSError`` when it cannot be written."""
     found = read()
-    if found is not None and (found["mode"], found["version"], found.get("state")) == (INSTALL, version, OWED):
+    if found is not None and (found["version"], found.get("state")) == (version, OWED):
         return
     _write(_new(INSTALL, version, time.time() if now is None else now))
-
-
-def update_owed(version: str) -> bool:
-    """Whether update mode is owed by this cad, release ``version`` (see the module). Never raises."""
-    try:
-        from cad_server import updates
-        from cad_server._internal import auto_update
-
-        found = auto_update.switches()
-        if not found["installer"] or auto_update.uv_tool() is None or not updates.checking():
-            return False
-        ran = found["installer_ran_for"]
-        return ran is None or auto_update.newer(version, ran)
-    except Exception:  # noqa: BLE001 - a run that cannot be decided is none
-        return False
 
 
 def _count(value: Any) -> int:
@@ -187,8 +212,6 @@ def plan(record: dict[str, Any] | None, current: str | None, *, wall: float, mon
         return None
     attempts, first, last = _count(record.get("attempts")), _time(record.get("first")), _time(record.get("last"))
     if attempts == 0 or last is None:
-        if record["mode"] == UPDATE:
-            return ATTEMPT
         if current is not None and _later(current, record["version"]):
             return SUPERSEDED
         if current != record["version"]:  # switched back to the release before, or not switched yet
@@ -206,37 +229,6 @@ def first_seconds() -> float:
         return max(0.0, float(os.environ[FIRST_ENV]))
     except (KeyError, ValueError):
         return FIRST_SECONDS
-
-
-def installer() -> list[str] | str:
-    """What an attempt runs: ``CAD_ENGINE_UPDATE_INSTALLER``'s command where it is set (empty: none), else the hosted
-    install command for this computer. On Windows the variable's command line is run as it is written, one string that
-    Windows splits as its programs do: ``shlex`` there keeps a quoted word's quotes, naming a program that is not
-    there."""
-    if INSTALLER_ENV in os.environ:
-        named = os.environ[INSTALLER_ENV].strip()
-        return named if os.name == "nt" else shlex.split(named)
-    return list(INSTALLER_WINDOWS if os.name == "nt" else INSTALLER)
-
-
-def environment(*, update: bool, report: Path | None) -> dict[str, str]:
-    """The environment the command runs in: this process's, without its import path, the version it was told it runs
-    as and a ``cad run``'s marks, with the person's own PATH (none of an environment that comes and goes,
-    ``installations.lasting``), uv's installer told to leave shell profiles alone, cad's mark (``BY_CAD_ENV``), and the
-    report's file and the mode named."""
-    from cad.engine.places import INSTALLATION_ENV, RUN_WITH
-    from cad_server._internal.installations import lasting
-
-    dropped = ("PYTHONPATH", "PYTHONHOME", INSTALLATION_ENV, RUN_WITH, "CAD_UPDATE_PREPARE", REPORT_ENV, UPDATE_ENV)
-    found = {key: value for key, value in os.environ.items() if key not in dropped}
-    found["PATH"] = lasting(os.environ.get("PATH", os.defpath))
-    found["UV_NO_MODIFY_PATH"] = "1"
-    found[BY_CAD_ENV] = "1"
-    if report is not None:
-        found[REPORT_ENV] = str(report)
-    if update:
-        found[UPDATE_ENV] = "1"
-    return found
 
 
 def judge(report: Path) -> tuple[str, bool]:
@@ -268,8 +260,8 @@ def _stop(process: subprocess.Popen) -> None:
 
 
 class Carrier:
-    """The server's side, at each tending (``tend``): the attempt it began last (its process) and when (monotonic),
-    and when the server started."""
+    """BRIDGE-ONLY. The server's side, at each tending (``tend``): the attempt it began last (its process) and when
+    (monotonic), and when the server started."""
 
     def __init__(self, began: float) -> None:
         self.began = began
@@ -278,10 +270,9 @@ class Carrier:
 
     def tend(self, name: str, told: Callable[[str], None], *, mono: float | None = None,
              wall: float | None = None) -> str | None:
-        """The runs this server, release ``name``, owes looked after: its own attempt watched, and judged as it ends;
-        one an earlier server began judged once its report is there, or ``RUN_SECONDS`` have passed; then update mode
-        owed where it is (``update_owed``) and no install mode is; then what ``plan`` says done. What it did: ``plan``'s
-        answer, or None."""
+        """The run this server, release ``name``, owes looked after: its own attempt watched, and judged as it ends;
+        one an earlier server began judged once its report is there, or ``RUN_SECONDS`` have passed; then what
+        ``plan`` says done. What it did: ``plan``'s answer, or None."""
         mono = time.monotonic() if mono is None else mono
         wall = time.time() if wall is None else wall
         report = _folder() / REPORT
@@ -300,14 +291,9 @@ class Carrier:
                 return None
             self.end(record, *judge(report), told, wall)
             record = read()
-        owed_install = record is not None and record["mode"] == INSTALL and record.get("state") == OWED
-        if not owed_install and update_owed(name) and not (
-                record is not None and (record["mode"], record["version"], record.get("state")) == (UPDATE, name, OWED)):
-            record = _new(UPDATE, name, wall)
-            _write(record)
-        if record is None or not installer() or (record["mode"] == UPDATE and record["version"] != name):
+        if record is None or not installer():
             return None
-        if record["mode"] == INSTALL and _later(record["version"], name):
+        if _later(record["version"], name):
             return None  # owed for a later release than this server's: that release's server carries it out
         from cad_server._internal import installations
 
@@ -333,39 +319,28 @@ class Carrier:
             report.unlink(missing_ok=True)
             _write(record)
             self.process = subprocess.Popen(installer(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                            stderr=subprocess.DEVNULL, env=environment(
-                                                update=record["mode"] == UPDATE, report=report), **detached())
+                                            stderr=subprocess.DEVNULL, env=environment(report=report), **detached())
         except (OSError, ValueError) as error:
             told(f"the install command could not start: {error}")
             self.end(record, "other", False, told, wall)
 
     def end(self, record: dict[str, Any], outcome: str, installed: bool, told: Callable[[str], None],
             wall: float) -> None:
-        """An attempt's ``outcome`` kept and told; done, the run is over, and in update mode its release is the one the
-        install command last ran for (``installer_ran_for``)."""
+        """An attempt's ``outcome`` kept and told; done, the run is over."""
         record["outcome"] = outcome
         record["installed"] = bool(record.get("installed")) or installed
         if outcome == DONE:
             record.update(state=DONE, ended=wall)
         _write(record)
-        if outcome == DONE and record["mode"] == UPDATE:
-            from cad_server._internal.auto_update import SECTION
-            from cad_server.settings import update_section
-
-            try:
-                update_section(SECTION, lambda kept: {**kept, "installer_ran_for": record["version"]})
-            except OSError as error:
-                told(f"the install command ran, but that could not be kept: {error}")
         ended(record, DONE if outcome == DONE else "failed", told, why=None if outcome == DONE else outcome)
 
 
 def ended(record: dict[str, Any], outcome: str, told: Callable[[str], None], *, why: str | None = None) -> None:
     """An attempt ended (``outcome`` ``done``, or ``failed`` and ``why``), or the run did (``gave_up``,
-    ``superseded``): one line to ``told`` (the server's log), and install mode's counted (``analytics.arrival``, by
-    the version it came from its arrival record keeps)."""
+    ``superseded``): one line to ``told`` (the server's log), and counted (``analytics.arrival``, by the version it
+    came from its arrival record keeps)."""
     name, attempts = record["version"], _count(record.get("attempts"))
-    what = (f"the install command, owed for cad {name}" if record["mode"] == INSTALL
-            else f"the install command, after cad's update to {name}")
+    what = f"the install command, owed for cad {name}"
     if outcome == DONE:
         told(f"{what}: done (attempt {attempts})")
     elif outcome == "failed":
@@ -374,8 +349,6 @@ def ended(record: dict[str, Any], outcome: str, told: Callable[[str], None], *, 
         told(f"{what}: given up after {attempts} attempts")
     else:
         told(f"{what}: a later cad took over, after {attempts} attempts")
-    if record["mode"] != INSTALL:
-        return
     from cad_server import analytics
     from cad_server._internal import arrival
 

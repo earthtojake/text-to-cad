@@ -1,9 +1,9 @@
-"""The install command run again by cad's server (``cad_server._internal.install_script``): in update mode after cad's
-own update, and in install mode once for a computer a shipped updater brought (the bridge, ``test_setup``).
+"""The install command run by cad (``cad_server._internal.install_script``): BRIDGE-ONLY, in install mode once for a
+computer a shipped updater brought (the bridge, ``test_setup``); the install command has no other mode, and cad's own
+update runs it by ``cad plugin install`` (``test_auto_update``).
 
-Here: the schedule (``plan``), when update mode is owed, and the server's side (``Carrier``) with a stand-in of the
-install command, a real process writing each kind of report. A real 0.11.10 handing over to this build is the update
-rehearsal's.
+Here: the schedule (``plan``) and the server's side (``Carrier``) with a stand-in of the install command, a real
+process writing each kind of report. A real 0.11.10 handing over to this build is the update rehearsal's.
 """
 
 from __future__ import annotations
@@ -18,8 +18,7 @@ from pathlib import Path
 from unittest import mock
 
 from cad.engine import places
-from cad_server import updates
-from cad_server._internal import arrival, auto_update, install_script, installations, telemetry_send
+from cad_server._internal import arrival, install_script, installations, telemetry_send
 from tests.python.packages.cad_server import test_arrival
 
 OLD, X, Y = "0.11.10", "0.12.0", "0.12.1"
@@ -69,9 +68,6 @@ class State(unittest.TestCase):
         return [json.loads(line) for line in self.noted.read_text(encoding="utf-8").splitlines()] \
             if self.noted.exists() else []
 
-    def switches(self, *, installer: bool = True, ran_for: str | None = X) -> None:
-        auto_update.change(True, installer, ran_for)
-
 
 class Schedule(unittest.TestCase):
     """``plan``: when the server runs the install command."""
@@ -81,7 +77,7 @@ class Schedule(unittest.TestCase):
 
     def test_the_schedule(self) -> None:
         owed = {"mode": "install", "version": Y, "state": "owed", "attempts": 0, "first": None, "last": None}
-        # Install mode: the first once the server has run longer than a shipped switch can still be deciding to go back.
+        # The first once the server has run longer than a shipped switch can still be deciding to go back.
         first = install_script.FIRST_SECONDS
         self.assertEqual(first, 300.0)
         self.assertIsNone(self.plan(owed, mono=first - 1), "a switch may yet go back from this server")
@@ -96,52 +92,23 @@ class Schedule(unittest.TestCase):
         for state in ("done", "superseded", "gave up"):
             self.assertIsNone(self.plan({**owed, "state": state}))
         self.assertIsNone(self.plan(None))
-        # Update mode: at once, whatever current names (it touches nothing of cad).
-        update = {**owed, "mode": "update"}
-        self.assertEqual(self.plan(update, current=None, mono=0.0), "attempt")
 
-        for mode in ("install", "update"):
-            failed = {**owed, "mode": mode, "attempts": 1, "first": 10_000.0, "last": 10_000.0}
-            with self.subTest(mode=mode):
-                # At a server's start: not sooner than an hour after the last, by the wall clock, or by its own run
-                # where the wall clock was set back; whatever current names now.
-                self.assertIsNone(self.plan(failed, wall=10_000.0 + HOUR - 1, mono=10.0))
-                self.assertEqual(self.plan(failed, current="0.12.2", wall=10_000.0 + HOUR, mono=10.0), "attempt")
-                self.assertIsNone(self.plan(failed, wall=5_000.0, mono=HOUR - 1), "the clock set back: its run counts")
-                self.assertEqual(self.plan(failed, wall=5_000.0, mono=HOUR), "attempt")
-                # A server that tried: once a day while it runs, by either clock.
-                tried = {"mono": 100.0, "tried": 100.0 - HOUR}
-                self.assertIsNone(self.plan(failed, wall=10_000.0 + DAY - 1, **tried))
-                self.assertEqual(self.plan(failed, wall=10_000.0 + DAY, **tried), "attempt")
-                self.assertEqual(self.plan(failed, wall=5_000.0, mono=100.0 + DAY, tried=100.0), "attempt")
-                # The bound: 30 attempts, or 30 days since the first (never by a clock set back).
-                self.assertEqual(self.plan({**failed, "attempts": install_script.ATTEMPTS}, wall=10_000.0 + DAY),
-                                 "gave up")
-                self.assertEqual(self.plan(failed, wall=10_000.0 + install_script.GIVE_UP_SECONDS), "gave up")
-                self.assertIsNone(self.plan(failed, wall=1_000.0, mono=10.0), "a clock set back gives up nothing")
-
-
-class UpdateOwed(State):
-    """Update mode is owed after cad's own update: the second switch on, this cad the uv tool, the check not turned
-    off, and the release the command last ran for older than this one."""
-
-    def test_only_after_an_update_with_the_switch_on(self) -> None:
-        tool = mock.patch.object(auto_update, "uv_tool", return_value=self.root)
-        checking = mock.patch.object(updates, "checking", return_value=True)
-        with tool, checking:
-            self.assertFalse(install_script.update_owed(Y), "both switches off by default")
-            self.switches(ran_for=X)
-            self.assertTrue(install_script.update_owed(Y))
-            self.assertFalse(install_script.update_owed(X), "it ran for this release")
-            self.switches(installer=False)
-            self.assertFalse(install_script.update_owed(Y), "the second switch off")
-            self.switches(ran_for=None)
-            self.assertTrue(install_script.update_owed(Y), "on, and never ran for any release this cad knows")
-        self.switches(ran_for=X)
-        with tool, mock.patch.object(updates, "checking", return_value=False):
-            self.assertFalse(install_script.update_owed(Y), "CAD_UPDATE_CHECK=0, CI: never")
-        with checking, mock.patch.object(auto_update, "uv_tool", return_value=None):
-            self.assertFalse(install_script.update_owed(Y), "a cad that is no uv tool never updates itself")
+        failed = {**owed, "attempts": 1, "first": 10_000.0, "last": 10_000.0}
+        # At a server's start: not sooner than an hour after the last, by the wall clock, or by its own run where the
+        # wall clock was set back; whatever current names now.
+        self.assertIsNone(self.plan(failed, wall=10_000.0 + HOUR - 1, mono=10.0))
+        self.assertEqual(self.plan(failed, current="0.12.2", wall=10_000.0 + HOUR, mono=10.0), "attempt")
+        self.assertIsNone(self.plan(failed, wall=5_000.0, mono=HOUR - 1), "the clock set back: its run counts")
+        self.assertEqual(self.plan(failed, wall=5_000.0, mono=HOUR), "attempt")
+        # A server that tried: once a day while it runs, by either clock.
+        tried = {"mono": 100.0, "tried": 100.0 - HOUR}
+        self.assertIsNone(self.plan(failed, wall=10_000.0 + DAY - 1, **tried))
+        self.assertEqual(self.plan(failed, wall=10_000.0 + DAY, **tried), "attempt")
+        self.assertEqual(self.plan(failed, wall=5_000.0, mono=100.0 + DAY, tried=100.0), "attempt")
+        # The bound: 30 attempts, or 30 days since the first (never by a clock set back).
+        self.assertEqual(self.plan({**failed, "attempts": install_script.ATTEMPTS}, wall=10_000.0 + DAY), "gave up")
+        self.assertEqual(self.plan(failed, wall=10_000.0 + install_script.GIVE_UP_SECONDS), "gave up")
+        self.assertIsNone(self.plan(failed, wall=1_000.0, mono=10.0), "a clock set back gives up nothing")
 
 
 class Carrying(State):
@@ -150,9 +117,9 @@ class Carrying(State):
 
     def setUp(self) -> None:
         super().setUp()
-        self.owed_update = mock.patch.object(install_script, "update_owed", return_value=False)
-        self.owed_update.start()
-        self.addCleanup(self.owed_update.stop)
+        first = mock.patch.dict(os.environ, {install_script.FIRST_ENV: "0"})
+        first.start()
+        self.addCleanup(first.stop)
 
     def tend(self, carrier, name=Y, **clocks):
         return carrier.tend(name, self.said.append, **clocks)
@@ -161,30 +128,28 @@ class Carrying(State):
         if carrier.process is not None:
             carrier.process.wait(timeout=60)
 
-    def realistic(self) -> None:
-        """Update mode owed as it is once the switches are on: until it ran for the release."""
-        install_script.update_owed.side_effect = lambda name: auto_update.switches()["installer_ran_for"] != name
+    def owed(self, version: str = Y, now: float = 1000.0) -> None:
+        install_script.owe(version, now=now)
+        installations.point(version)
 
-    def test_update_mode_runs_once_and_records_the_release_it_ran_for(self) -> None:
-        self.switches(ran_for=X)
-        self.realistic()
+    def test_install_mode_runs_once_and_is_done(self) -> None:
+        self.owed()
         carrier = install_script.Carrier(began=0.0)
-        self.assertEqual(self.tend(carrier, mono=30.0, wall=1000.0), "attempt", "at the first tending: no wait")
+        self.assertEqual(self.tend(carrier, mono=30.0, wall=1000.0), "attempt")
         self.finish(carrier)
         self.assertIsNone(self.tend(carrier, mono=60.0, wall=1100.0))
-        self.assertEqual(self.said, [f"the install command, after cad's update to {Y}: done (attempt 1)"])
-        self.assertEqual(auto_update.switches()["installer_ran_for"], Y, "done: it last ran for this release")
+        self.assertEqual(self.said, [f"the install command, owed for cad {Y}: done (attempt 1)"])
         record = install_script.read()
-        self.assertEqual((record["mode"], record["state"], record["attempts"]), ("update", "done", 1))
+        self.assertEqual((record["mode"], record["state"], record["attempts"], record["installed"]),
+                         ("install", "done", 1, True))
         [ran] = self.ran()
         report = str(places.state_dir() / install_script.REPORT)
-        self.assertEqual(ran, {"CAD_INSTALL_REPORT": report, "CAD_INSTALL_UPDATE": "1", "UV_NO_MODIFY_PATH": "1"})
+        self.assertEqual(ran, {"CAD_INSTALL_REPORT": report, "CAD_INSTALL_UPDATE": None, "UV_NO_MODIFY_PATH": "1"})
         self.assertIsNone(self.tend(carrier, mono=60.0 + 3 * DAY), "nothing owed any more")
         self.assertEqual(len(self.ran()), 1)
 
     def test_a_failure_is_tried_again_later_and_never_sooner(self) -> None:
-        self.switches(ran_for=X)
-        self.realistic()
+        self.owed()
         carrier = install_script.Carrier(began=0.0)
         for kind, why in (("app", "app"), ("setup", "setup"), ("none", "no_report"), ("shapeless", "no_report")):
             with self.subTest(kind=kind), self.runs(kind):
@@ -193,11 +158,11 @@ class Carrying(State):
                 self.assertEqual(self.tend(carrier, mono=30.0 + attempts * DAY, wall=wall), "attempt")
                 self.finish(carrier)
                 self.assertIsNone(self.tend(carrier, mono=31.0 + attempts * DAY, wall=wall + 1))
-                self.assertEqual(self.said[-1], f"the install command, after cad's update to {Y}: attempt "
-                                                f"{attempts + 1} of at most 30 failed ({why}); it runs again later")
+                self.assertEqual(self.said[-1], f"the install command, owed for cad {Y}: attempt {attempts + 1} of at "
+                                                f"most 30 failed ({why}); it runs again later")
                 self.assertIsNone(self.tend(carrier, mono=32.0 + attempts * DAY, wall=wall + HOUR),
                                   "a server that tried waits a day")
-        self.assertEqual(auto_update.switches()["installer_ran_for"], X, "never done: it ran for no new release")
+        self.assertEqual(install_script.read()["state"], "owed", "never done")
         # A server started after a failure: an hour after the last attempt began.
         restarted = install_script.Carrier(began=0.0)
         last = install_script.read()["last"]
@@ -208,6 +173,7 @@ class Carrying(State):
         self.assertEqual(install_script.read()["state"], "done")
 
     def test_install_mode_waits_for_the_switch_and_marks_cad_installed(self) -> None:
+        os.environ.pop(install_script.FIRST_ENV)
         install_script.owe(Y, now=1000.0)
         install_script.owe(Y, now=2000.0)  # the updater's second run keeps the record
         self.assertEqual(install_script.read()["owed"], 1000.0)
@@ -223,7 +189,6 @@ class Carrying(State):
         record = install_script.read()
         self.assertEqual((record["state"], record["outcome"], record["installed"]), ("owed", "app", True),
                          "an app failed: owed still, but cad was installed")
-        self.assertIsNone(self.ran()[0]["CAD_INSTALL_UPDATE"], "install mode")
         # Its next attempt runs whatever current names now: the uv tool's server carries it on.
         installations.point("0.12.2")
         later = install_script.Carrier(began=0.0)
@@ -242,15 +207,20 @@ class Carrying(State):
         self.assertEqual(self.said[-1], f"the install command, owed for cad {X}: given up after 30 attempts")
         install_script.owe(Y)
         installations.point(Y)
-        with mock.patch.dict(os.environ, {install_script.INSTALLER_ENV: "", install_script.FIRST_ENV: "0"}):
+        with mock.patch.dict(os.environ, {install_script.INSTALLER_ENV: ""}):
             self.assertIsNone(self.tend(install_script.Carrier(began=0.0)))
         self.assertIsNone(self.tend(install_script.Carrier(began=0.0), name=X), "owed for a later release than this")
         self.assertEqual(install_script.read()["attempts"], 0)
 
+    def test_a_record_of_the_update_mode_that_is_gone_is_no_record(self) -> None:
+        install_script._write(install_script._new("update", Y, 1000.0))
+        self.assertIsNone(install_script.read())
+        self.assertIsNone(self.tend(install_script.Carrier(began=0.0), wall=2000.0), "nothing runs for it")
+        self.assertEqual(self.ran(), [])
+
     def test_an_attempt_another_server_began_and_one_that_hangs_or_cannot_start(self) -> None:
-        self.switches(ran_for=X)
-        self.realistic()
-        record = {**install_script._new("update", Y, 1000.0), "attempts": 1, "first": 1000.0, "last": 1000.0,
+        installations.point(Y)
+        record = {**install_script._new("install", Y, 1000.0), "attempts": 1, "first": 1000.0, "last": 1000.0,
                   "outcome": "running"}
         install_script._write(record)
         carrier = install_script.Carrier(began=0.0)
@@ -267,7 +237,7 @@ class Carrying(State):
         self.finish(carrier)
         self.tend(carrier)
         # One that hangs is stopped with what it started, after RUN_SECONDS of the server's own clock.
-        install_script._write({**install_script._new("update", Y, 1000.0)})
+        install_script._write({**install_script._new("install", Y, 1000.0)})
         with self.runs("hang"):
             self.assertEqual(self.tend(carrier, mono=0.0, wall=9000.0), "attempt")
         process = carrier.process
@@ -276,7 +246,7 @@ class Carrying(State):
         self.assertIsNotNone(process.poll(), "stopped")
         self.assertEqual(install_script.read()["outcome"], "no_report")
         # One that cannot start: failed at once.
-        install_script._write({**install_script._new("update", Y, 1000.0)})
+        install_script._write({**install_script._new("install", Y, 1000.0)})
         with mock.patch.dict(os.environ, {install_script.INSTALLER_ENV: str(self.root / "no such program")}):
             self.assertEqual(self.tend(install_script.Carrier(began=0.0), wall=20_000.0), "attempt")
         self.assertEqual(install_script.read()["outcome"], "other")
@@ -291,18 +261,20 @@ class Defaults(unittest.TestCase):
                                  ["sh", "-c", "curl -fsSL https://texttocad.dev/install.sh | sh"])
             os.environ[install_script.INSTALLER_ENV] = ""
             self.assertFalse(install_script.installer(), "empty: nothing")
-            found = install_script.environment(update=False, report=Path("r.json"))
-            self.assertEqual((found["CAD_INSTALL_REPORT"], found["UV_NO_MODIFY_PATH"]), ("r.json", "1"))
-            self.assertNotIn("PYTHONPATH", found)
-            self.assertNotIn(install_script.UPDATE_ENV, found, "install mode: never inherited")
-            self.assertEqual(install_script.environment(update=True, report=None)[install_script.UPDATE_ENV], "1")
-            for update in (False, True):  # a `cad setup` the command reaches runs nothing (``cad_server.cli.setup``)
-                self.assertEqual(install_script.environment(update=update, report=None)[install_script.BY_CAD_ENV], "1")
+            self.assertEqual(install_script.run(), 0, "nothing to run")
+            for update in (False, True):  # the bridge still passes it; no mode is asked for either way
+                found = install_script.environment(update=update, report=Path("r.json"))
+                self.assertEqual((found["CAD_INSTALL_REPORT"], found["UV_NO_MODIFY_PATH"]), ("r.json", "1"))
+                self.assertNotIn("PYTHONPATH", found)
+                self.assertNotIn(install_script.UPDATE_ENV, found, "no mode: never inherited, never set")
+                # a `cad setup` the command reaches runs nothing (``cad_server.cli.setup``)
+                self.assertEqual(found[install_script.BY_CAD_ENV], "1")
+            self.assertNotIn(install_script.REPORT_ENV, install_script.environment(report=None))
 
 
 class Counted(State):
     """Install mode's ends are counted (``analytics.arrival``) beside the settings of the server that ran it, as
-    ``test_arrival`` shows the counting itself; update mode's are the server's log alone."""
+    ``test_arrival`` shows the counting itself."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -315,19 +287,18 @@ class Counted(State):
         self.settings = places.state_dir() / "settings.json"
         test_arrival.ArrivalTest.tell(self)
 
-    def test_install_mode_is_counted_and_update_mode_is_not(self) -> None:
+    def test_install_mode_is_counted(self) -> None:
         with mock.patch.object(arrival, "read", side_effect=lambda name: {"from": OLD} if name == Y else None):
             installed = {**install_script._new("install", Y, 0.0), "attempts": 2}
             install_script.ended({**installed, "attempts": 1}, "failed", self.said.append, why="app")
             install_script.ended(installed, "done", self.said.append)
             install_script.ended({**installed, "version": X, "attempts": 30}, "gave_up", self.said.append)
-            install_script.ended({**install_script._new("update", Y, 0.0), "attempts": 1}, "done", self.said.append)
         self.assertEqual(test_arrival.ArrivalTest.kept(self), [
             {"step": "handover", "route": "updater", "from": OLD, "outcome": "failed", "reason": "app", "attempts": 1},
             {"step": "handover", "route": "updater", "from": OLD, "outcome": "done", "attempts": 2},
             {"step": "handover", "route": "updater", "from": "none", "outcome": "gave_up", "attempts": 30},
         ])
-        self.assertEqual(len(self.said), 4, "each said in the server's log")
+        self.assertEqual(len(self.said), 3, "each said in the server's log")
 
 
 if __name__ == "__main__":

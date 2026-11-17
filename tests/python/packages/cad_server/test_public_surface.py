@@ -73,10 +73,13 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "urdf validate": frozenset({"path", "strict", "packages", "verbose"}),
     # The person's telemetry choice: status, on or off.
     "telemetry": frozenset({"action"}),
-    # Whether cad updates itself: status, on (and the install command with it) or off.
-    "auto-update": frozenset({"action", "installer"}),
+    # Whether cad updates itself: status, on or off.
+    "auto-update": frozenset({"action"}),
     # cad updated to the newest release now, by the server that runs: no options.
     "update": frozenset(),
+    # The install command run now, or whether cad's automatic update runs it after it; and the hidden --refresh the
+    # updater of 0.11.10 runs, which does nothing.
+    "plugin": frozenset({"command", "install", "auto-update", "refresh"}),
     # The engine's verbs (cad_server.engine.cli): each type's operations, and its process control.
     # A document's export (a model's, an xbf's, a STEP's) meshes a GLB, an STL or a 3MF to a tolerance and an
     # angle, and takes a robot description's joints from a zero state; a mesh's, to the other mesh kinds, does

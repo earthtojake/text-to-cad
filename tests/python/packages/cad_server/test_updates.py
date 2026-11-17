@@ -1,5 +1,6 @@
 """The version feed (`cad_server/updates.py`): read at most once an hour by a server, in the background, for cad's own
-update, and at once for `cad update`; never said to anyone. No test reaches the real feed: each one is handed in, or kept as just read."""
+update; and PyPI, asked at once for `cad update`; never said to anyone. No test reaches the real feed or PyPI: each
+answer is handed in, kept as just read, or a stand-in's on loopback."""
 
 from __future__ import annotations
 
@@ -70,12 +71,47 @@ class UpdatesTest(unittest.TestCase):
         self.assertEqual(len(asked), 2)
         self.assertEqual(updates.feed(get=get, now=start + 2 * updates.CHECK_SECONDS)["latest"], "0.9.1")
 
-    def test_cad_update_reads_the_feed_now_whatever_its_hour_and_learns_whether_it_was_read(self) -> None:
-        self.just_read(FEED)
-        self.assertEqual(updates.read_now(get=lambda _url: {"latest": "0.9.1"}), ({"latest": "0.9.1"}, FEED))
-        self.assertEqual(updates.feed(fetch=False), {"latest": "0.9.1"}, "kept as just read")
-        self.assertEqual(updates.read_now(get=lambda _url: None), (None, {"latest": "0.9.1"}), "unreachable")
-        self.assertEqual(updates.feed(fetch=False), {"latest": "0.9.1"}, "the feed as last read stands")
+    def test_cad_update_asks_pypi_which_release_is_newest_and_keeps_nothing(self) -> None:
+        asked: list[str] = []
+        answer = lambda found: lambda url: asked.append(url) or found  # noqa: E731
+        self.assertEqual(updates.newest(get=answer({"info": {"version": "0.9.1", "yanked": False}})), "0.9.1")
+        self.assertEqual(asked, ["https://pypi.org/pypi/cad/json"])
+        for found in (None, {}, {"info": None}, {"info": {"version": "0.9.2rc1"}}, {"info": {"version": 1}}):
+            with self.subTest(found=found):
+                self.assertIsNone(updates.newest(get=answer(found)))
+        self.environment({updates.PYPI_ENV: "http://127.0.0.1:9/pypi/"})
+        updates.newest(get=answer(None))
+        self.assertEqual(asked[-1], "http://127.0.0.1:9/pypi/cad/json", "a test's stand-in")
+        self.assertFalse((self.tmp / updates.FILE).exists(), "the feed's file untouched")
+
+    def test_pypi_is_read_from_a_stand_in_and_never_waited_on_past_its_bound(self) -> None:
+        import http.server
+
+        quiet, hold = threading.Event(), threading.Event()
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802 - http.server's name
+                if self.path.startswith("/slow/"):
+                    quiet.set()
+                    hold.wait(30)
+                body = json.dumps({"info": {"version": "0.9.3"}, "releases": {"0.9.3": []}}).encode()
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args) -> None:
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.addCleanup(hold.set)  # first: the slow request let go
+        self.environment({updates.PYPI_ENV: f"http://127.0.0.1:{server.server_port}/pypi"})
+        self.assertEqual(updates.newest(), "0.9.3")
+        self.assertIsNone(updates._get_within(f"http://127.0.0.1:{server.server_port}/slow/cad/json", 0.2))
+        self.assertTrue(quiet.is_set(), "asked, and given up on")
 
     def test_the_feed_is_asked_for_as_cad(self) -> None:
         """The request names cad, the product (``apps/api`` keys nothing on it)."""

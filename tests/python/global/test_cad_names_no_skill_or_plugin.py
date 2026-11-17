@@ -1,9 +1,15 @@
-"""The cad packages name no skill and no plugin in what they print or return.
+"""cad names no skill, and no plugin but in its one command, ``cad plugin``.
 
-text-to-cad's distribution (``packages/cad``: the library, the server and the shim) knows nothing of the
-skills or the plugin that use them: the plugin side knows cad, never the other way. So no string a package can print
-or return -- every string literal in its sources but a docstring -- says "skill" or "plugin". The words a format
-uses for its own elements (SDF's ``<plugin>``) are not messages.
+The plugin side knows cad; cad knows only that the install command exists. text-to-cad's distribution
+(``packages/cad``: the library, the server and the shim) never names a skill or an app, and its one knowledge of
+plugins is ``cad plugin``: ``install`` runs the hosted install command, which puts the plugin into the agent apps, and
+``auto-update`` says whether cad's own automatic update runs that command after it. So no string a package can print
+or return -- every string literal in its sources but a docstring -- says "skill" anywhere, nor "plugin" but where that
+command needs the word: its own module, its name and one-line help in the command table, the settings section that
+keeps its switch, the command words where cad's update runs ``cad plugin install``, and that switch as ``cad doctor``
+reports it. Each of those is listed below,
+as exact strings wherever it can be. Everything else says what cad does without the word. The words a format uses for
+its own elements (SDF's ``<plugin>``) are not messages.
 """
 
 from __future__ import annotations
@@ -15,14 +21,27 @@ import unittest
 from tests.python.support.paths import PROJECTS
 
 WORDS = re.compile(r"\b(skills?|plugins?)\b", re.IGNORECASE)
-# Strings that are no message: SDF's own element and its paths, and the names of folders in the state folder.
+SKILL = re.compile(r"\bskills?\b", re.IGNORECASE)
+# Strings that are no message, or that name the one command: per file, the exact strings allowed (None: every string
+# of the file, a format's own word).
 NOT_MESSAGES = {
     "cad/sdf/_validation.py": None,  # SDF's <plugin> element: the format's word
     "cad/engine/sdf_source.py": None,  # the same element, read
     # BRIDGE-ONLY: the folder 0.10.0 to 0.11.10's setup left in the state folder, which tells a computer its agent apps
     # got text-to-cad from that setup rather than a store alone (``cli.setup.ours``).
     "cad_server/cli/setup.py": {"plugin"},
+    # The command's name, its module and its one-line help in the command table, and the command named among those
+    # that reach any release's server and that carry no notice (``cad plugin``).
+    "cad_server/cli/__init__.py": {"plugin", "cad_server.cli.plugin", "the plugin: install, auto-update"},
+    # The settings section that keeps the command's switch (``plugin.auto_update``).
+    "cad_server/_internal/auto_update.py": {"plugin"},
+    # The command words of ``cad plugin install``, which the helper runs after an automatic update.
+    "cad_server/_internal/auto_update_helper.py": {"plugin"},
+    # ``cad doctor`` names the command's switch as it reports it (``cad plugin auto-update``).
+    "cad_server/cli/doctor.py": {"plugin auto-update "},
 }
+# The command's own module: "plugin" anywhere in it (its name, help and lines), "skill" never.
+COMMAND = "cad_server/cli/plugin.py"
 
 
 def _docstrings(tree: ast.AST) -> set[int]:
@@ -47,18 +66,27 @@ def offenders() -> list[str]:
             allowed = NOT_MESSAGES.get(relative, set())
             if allowed is None:
                 continue
+            words = SKILL if relative == COMMAND else WORDS
             tree = ast.parse(path.read_text(encoding="utf-8"))
             docstrings = _docstrings(tree)
             for node in ast.walk(tree):
                 if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings \
-                        and node.value not in allowed and WORDS.search(node.value):
+                        and node.value not in allowed and words.search(node.value):
                     found.append(f"{relative}:{node.lineno}: {node.value[:100]!r}")
     return found
 
 
 class CadNamesNoSkillOrPlugin(unittest.TestCase):
-    def test_no_message_names_a_skill_or_the_plugin(self) -> None:
-        self.assertEqual(offenders(), [], "a cad package's message names a skill or the plugin: say what cad does")
+    def test_no_message_names_a_skill_or_the_plugin_but_the_one_command(self) -> None:
+        self.assertEqual(offenders(), [], "a cad package's message names a skill, or the plugin outside `cad plugin`: "
+                                          "say what cad does")
+
+    def test_the_command_s_module_is_there_to_be_allowed(self) -> None:
+        for project in PROJECTS:
+            if (project / "src" / "cad_server").is_dir():
+                self.assertTrue((project / "src" / COMMAND).is_file(), "the allowance names the command's module")
+                for relative in NOT_MESSAGES:
+                    self.assertTrue((project / "src" / relative).is_file(), relative)
 
 
 if __name__ == "__main__":

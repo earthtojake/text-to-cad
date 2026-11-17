@@ -6,28 +6,33 @@ shipped releases from PyPI.
 
 This tree is published as releases no index holds (``0.11.<9000+n>`` and the next few, n from this process), written
 into a folder uv reads beside the index (``UV_FIND_LINKS``, ``CAD_UPDATE_FIND_LINKS``), and the version feed is a
-stand-in on loopback (``CAD_API_URL``, ``CAD_INSTALL_FEED``). Every computer's server takes a port of its own
+stand-in on loopback (``CAD_API_URL``, ``CAD_INSTALL_FEED``), as is PyPI's JSON API that ``cad update`` asks
+(``CAD_PYPI_URL``), which names what the feed names. Every computer's server takes a port of its own
 (``CAD_ENGINE_DEFAULT_PORT``: the true default, 3245, on CI alone). No real agent app is on any PATH.
 
-**cad updating itself** (a computer the install command set up: cad a uv tool, both switches on):
+**cad updating itself** (a computer the install command set up: cad a uv tool, its automatic updates on). Each such
+computer has a folder of releases of its own, holding only those that are out (``Box.out``), since an upgrade is
+``uv tool install cad@latest``; the install command cad runs counts its runs there (``Box.runs``).
 
-- ``self-update``: the feed names the next release and an hour passes; the running server, idle, stops, uv installs
-  the next release, and its server answers; then, the second switch on, the new server runs the install command in
-  update mode once, and the release it last ran for is recorded (``installer_ran_for``).
-- ``self-typed``: with switch 1 off (the second on), the feed names the next release and ``cad update`` is typed: the
-  server reads the feed at once and updates cad to it; the command, a running ``cad`` of the tool, waits and says so;
-  the uv tool is the next release, its server answers, and the install command runs in update mode once.
-- ``self-at-start``: the server stopped, the feed's file already naming the next release, then ``cad server start``:
-  the server it spawns hands its start to the update, and the starter, a running ``cad`` of the tool, waits for the
-  update's server. It exits 0, the uv tool is the next release and serves, and the attempt installed at its first try
-  (on Windows this failed every time until cad's update set the running ``cad.exe`` aside).
+- ``self-update``: with ``cad plugin auto-update on``, the feed names the next release and an hour passes; the running
+  server, idle, stops, uv installs the next release, and its server answers; then the helper runs the new cad's ``cad
+  plugin install`` once: exit 0, kept in the record, its output in ``install-command.log``.
+- ``self-typed``: with ``cad auto-update off`` and the plugin's switch on, ``cad update`` is typed with nothing newer on
+  PyPI: it says so and nothing restarts; then PyPI names the next release and ``cad update`` is typed again: the
+  server asks PyPI at once and updates cad to it; the command, a running ``cad`` of the tool, waits and says so; the uv
+  tool is the next release, its server answers, and no install command runs.
+- ``self-at-start``: the plugin's switch off, the server stopped, the feed's file already naming the next release, then
+  ``cad server start``: the server it spawns hands its start to the update, and the starter, a running ``cad`` of the
+  tool, waits for the update's server. It exits 0, the uv tool is the next release and serves, the attempt installed
+  at its first try (on Windows this failed every time until cad's update set the running ``cad.exe`` aside), and no
+  install command runs.
 - ``self-off``: with ``cad auto-update off``, the server reads the feed naming the next release, and a start of the
   server starts the same cad: nothing updates.
 - ``self-broken``: an update to a release whose server cannot start (its daemon module raises): cad is that release, its
   server down; the feed then names the next, and ``cad server start``, failing, updates cad to it, whose server answers.
 - ``self-uninstallable``: an update to a release uv cannot install as a tool (no command: "No executables are
   provided"): uv takes the tool away with the failed attempt, the helper puts the release before back, and its server
-  answers.
+  answers; the plugin's switch on, no install command runs after the failed update.
 
 **The bridge** from a shipped release (``--old``, 0.11.10 by default; 0.11.0 to 0.11.10 and 0.10.0 to 0.10.4 have the
 updater), installed by its own ``cad setup`` through uvx, its server serving pages on the computer's port:
@@ -77,6 +82,7 @@ from __future__ import annotations
 
 import argparse
 import http.client
+import http.server
 import json
 import os
 import re
@@ -85,6 +91,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -124,29 +131,73 @@ def say(line: str = "") -> None:
     print(line, flush=True)
 
 
-def installer_command() -> str:
-    """The install command as cad's server runs it, but this tree's (``CAD_ENGINE_UPDATE_INSTALLER``)."""
+def installer_command(counted: Path | None = None) -> str:
+    """The install command as cad runs it, but this tree's (``CAD_ENGINE_UPDATE_INSTALLER``); with ``counted``, each
+    run first adds a line to that file."""
     if WINDOWS:
-        return (f'powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Raw \'{INSTALL_PS1}\' | '
+        count = f"Add-Content -LiteralPath '{counted}' -Value ran; " if counted else ""
+        return (f'powershell -NoProfile -ExecutionPolicy Bypass -Command "{count}Get-Content -Raw \'{INSTALL_PS1}\' | '
                 'Invoke-Expression"')
+    if counted:
+        return f"""sh -c 'echo ran >> "$0"; exec sh "$1"' '{counted}' '{INSTALL_SH}'"""
     return f"sh '{INSTALL_SH}'"
 
 
-class Box:
-    """One private computer of a route (see the module)."""
+class PyPI(http.server.ThreadingHTTPServer):
+    """PyPI's JSON API for cad (``CAD_PYPI_URL``), naming as newest what the feed names: the release that is out."""
 
-    def __init__(self, label: str, feed: rc.Feed, wheels: Path, shared: Path, *, named_state: bool = True) -> None:
-        self.label, self.feed = label, feed
+    def __init__(self, feed: rc.Feed) -> None:
+        self.feed = feed
+        pypi = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802 - http.server's name
+                found = self.path.split("?", 1)[0].rstrip("/") == "/pypi/cad/json"
+                body = json.dumps({"info": {"version": pypi.feed.latest}}).encode() if found else b""
+                self.send_response(200 if found else 404)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args) -> None:
+                pass
+
+        super().__init__(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.serve_forever, daemon=True).start()
+
+    @property
+    def url(self) -> str:
+        return f"http://127.0.0.1:{self.server_port}/pypi"
+
+    def close(self) -> None:
+        self.shutdown()
+        self.server_close()
+
+
+class Box:
+    """One private computer of a route (see the module). ``links``: where uv finds this tree's releases. A route of cad
+    updating itself (``counted``) gets a folder of its own, holding only the releases that are out (``out``): an
+    upgrade installs the newest there; its install command counts its runs (``runs``)."""
+
+    def __init__(self, label: str, feed: rc.Feed, wheels: Path, shared: Path, *, named_state: bool = True,
+                 pypi: PyPI | None = None, counted: bool = False) -> None:
+        self.label, self.feed, self.wheels = label, feed, wheels
         # Short: Windows' paths stay well under its old limit.
         work = Path(tempfile.mkdtemp(prefix=f"cr{label[:3]}.")).resolve()
-        self.computer = rc.Computer(work, {}, feed=feed, shared=shared, wheels=wheels, helpers=("uv", "uvx"))
+        self.links = work / "links" if counted else wheels
+        self.links.mkdir(exist_ok=True)
+        self.computer = rc.Computer(work, {}, feed=feed, shared=shared, wheels=self.links, helpers=("uv", "uvx"))
         self.work, self.home, self.bin, self.port = work, self.computer.home, self.computer.bin, self.computer.port
+        self.counted = work / "install-command-runs.txt" if counted else None
         env = self.computer.env
         env.update({
-            # The install command a server runs: this tree's, through its test hooks; its first run in install mode at
+            # The install command cad runs: this tree's, through its test hooks; its first run in install mode at
             # the server's first tending (a shipped switch here decides in seconds).
-            "CAD_ENGINE_UPDATE_INSTALLER": installer_command(), "CAD_INSTALL_PY": str(INSTALL_PY),
+            "CAD_ENGINE_UPDATE_INSTALLER": installer_command(self.counted), "CAD_INSTALL_PY": str(INSTALL_PY),
             "CAD_ENGINE_UPDATE_FIRST_SECONDS": "0",
+            # PyPI, as `cad update` asks it: a stand-in on loopback.
+            **({"CAD_PYPI_URL": pypi.url} if pypi is not None else {}),
         })
         if not named_state:
             # 0.10.0 on Windows keeps its state in the local application data, apart from every later release's:
@@ -161,6 +212,20 @@ class Box:
         self.env = env
         self.token = ""
         self.pythons: list[Path] = []  # the shipped release's Python, which stops its server at the end
+
+    def out(self, version: str) -> None:
+        """``version`` out: the feed and PyPI name it, and, on a computer of its own folder of releases, uv finds it."""
+        if self.links != self.wheels:
+            for wheel in self.wheels.glob(f"*-{version}-*.whl"):
+                shutil.copy2(wheel, self.links / wheel.name)
+        self.feed.latest = version
+
+    def runs(self) -> int:
+        """How many times cad ran the install command on this computer."""
+        try:
+            return len(self.counted.read_text(encoding="utf-8").split()) if self.counted else 0
+        except OSError:
+            return 0
 
     # --- running things here ----------------------------------------------------------------------------------
 
@@ -227,7 +292,11 @@ class Box:
         for name in ("update.json", "handover.json", "handover-move.json", "auto-update.json", "install-report.json"):
             if (self.state / name).exists():
                 parts.append(f"  {name}: {json.dumps(self.read(name))[:800]}")
-        parts.append(f"  switches: {self.read('settings.json').get('auto_update')}")
+        parts.append(f"  switches: {self.read('settings.json').get('auto_update')}, plugin "
+                     f"{self.read('settings.json').get('plugin')}; the install command ran {self.runs()} times")
+        if (self.state / "install-command.log").is_file():
+            parts.append("  install-command.log:\n"
+                         + (self.state / "install-command.log").read_text(encoding="utf-8", errors="replace")[-3000:])
         # The engine folder, and why the last server started there could not take its lock or listen (the daemon's
         # failure note, ``places.failure_path``: ``engine.failed``), where it said.
         parts.append(f"  engine: {listing(self.work / 'engine')}")
@@ -372,14 +441,19 @@ class Box:
                          f"{self.said()}")
         return done
 
-    def set_up(self) -> None:
-        """This tree's ``NEW`` installed by the install command: a uv tool, both switches on; its server started."""
-        self.feed.latest = NEW
+    def set_up(self, plugin: str) -> None:
+        """This tree's ``NEW`` installed by the install command: a uv tool, its automatic updates on (by default, or
+        as the install command left them); ``cad plugin auto-update`` then turned ``plugin`` (``on``, ``off``) by its
+        own command; its server started."""
+        self.out(NEW)
         self.install_command()
         self.is_tool(NEW)
         switches = self.read("settings.json").get("auto_update") or {}
-        if (switches.get("on"), switches.get("installer"), switches.get("installer_ran_for")) != (True, True, NEW):
-            raise Failed(f"{self.label}: the install command left the switches {switches}")
+        if switches.get("on") is False:
+            raise Failed(f"{self.label}: the install command left cad's automatic updates off: {switches}")
+        said = self.run([self.cad(), "plugin", "auto-update", plugin]).stdout.strip()
+        if said != f"plugin auto-update: {plugin}":
+            raise Failed(f"{self.label}: cad plugin auto-update {plugin} said {said!r}")
         started = self.run([self.cad(), "server", "start"]).stdout
         if f"cad {NEW}" not in started:
             raise Failed(f"{self.label}: cad server start said {started!r}")
@@ -486,26 +560,31 @@ def updated(box: Box, target: str, outcome: str = "installed") -> dict:
     return record
 
 
+def never_installed(box: Box, record: dict, why: str) -> None:
+    """The update's record says no install command runs after it, and cad ran none (``why``: the route's reason)."""
+    if record.get("then_install") or "install_command" in record or box.runs() != 0:
+        raise Failed(f"{box.label}: the install command ran after the update ({why}): {record}, runs {box.runs()}\n"
+                     f"{box.said()}")
+
+
 def self_update(box: Box) -> None:
-    box.set_up()
-    box.feed.latest = NEXT
+    box.set_up("on")
+    box.out(NEXT)
     box.hour_later()
-    updated(box, NEXT)
+    record = updated(box, NEXT)
+    if not record.get("then_install"):
+        raise Failed(f"{box.label}: the update says no install command runs after it: {record}")
     box.tool_serves(NEXT)
     box.is_tool(NEXT)
-    # Then the install command in update mode, once, by the new server: done, and its release recorded.
-    record = box.until(lambda: (lambda found: found if found.get("mode") == "update" and found.get("version") == NEXT
-                                and found.get("state") == "done" else None)(box.read("handover.json")),
-                       "the install command in update mode, done")
-    if record.get("attempts") != 1:
-        raise Failed(f"{box.label}: the install command in update mode took {record.get('attempts')} attempts")
-    report = box.read("install-report.json")
-    if report.get("setup") != 0 or report.get("release") is not None:
-        raise Failed(f"{box.label}: the update mode's report: {report}")
-    ran_for = (box.read("settings.json").get("auto_update") or {}).get("installer_ran_for")
-    if ran_for != NEXT:
-        raise Failed(f"{box.label}: the release the install command last ran for is {ran_for!r}, not {NEXT}")
-    say(f"        {NEW} -> {NEXT} by itself, idle; the install command in update mode ran once; installer_ran_for {NEXT}")
+    # Then `cad plugin install`, once, by the new cad: its exit status kept, its output in the log.
+    record = box.until(lambda: (lambda found: found if "install_command" in found else None)(
+        box.read("auto-update.json")), "the install command after the update")
+    log = box.state / "install-command.log"
+    if record["install_command"] != 0 or box.runs() != 1 or not log.is_file():
+        raise Failed(f"{box.label}: the install command after the update: {record}, ran {box.runs()} times, log "
+                     f"{log.is_file()}\n{box.said()}")
+    say(f"        {NEW} -> {NEXT} by itself, idle, as `uv tool install cad@latest` got it; then `cad plugin install`, "
+        "once, exit 0")
     pages(box, NEXT)
 
 
@@ -518,34 +597,38 @@ def pages(box: Box, version: str) -> None:
 
 
 def self_typed(box: Box) -> None:
-    box.set_up()
-    # Switch 1 off, the second on: a typed update needs neither, and the install command still runs after it.
-    kept = box.read("settings.json")
-    kept["auto_update"] = {**(kept.get("auto_update") or {}), "on": False, "installer": True}
-    (box.state / "settings.json").write_text(json.dumps(kept), encoding="utf-8")
-    box.feed.latest = NEXT
+    # Automatic updates off, the plugin's switch on: a typed update needs neither, and never runs the install command.
+    box.set_up("on")
+    switched = box.run([box.cad(), "auto-update", "off"]).stdout.strip()
+    if switched != "auto-update: off":
+        raise Failed(f"{box.label}: cad auto-update off said {switched!r}")
+    # Nothing newer on PyPI: said, and nothing restarts.
+    done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
+    if (done.returncode, done.stdout.strip()) != (0, f"cad {NEW} is the newest release") or box.read("auto-update.json"):
+        raise Failed(f"{box.label}: cad update with nothing newer exited {done.returncode}: {done.stdout}{done.stderr}, "
+                     f"{box.read('auto-update.json')}")
+    box.out(NEXT)  # out on PyPI; the feed's hour has not passed for the server
     done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
     said = f"cad {NEW} updated to {NEXT}"
     if (done.returncode, done.stdout.strip()) != (0, said):
         raise Failed(f"{box.label}: cad update exited {done.returncode}: {done.stdout}{done.stderr}\n{box.said()}")
-    updated(box, NEXT)
+    record = updated(box, NEXT)
     box.tool_serves(NEXT)
     box.is_tool(NEXT)
-    record = box.until(lambda: (lambda found: found if found.get("mode") == "update" and found.get("version") == NEXT
-                                and found.get("state") == "done" else None)(box.read("handover.json")),
-                       "the install command in update mode, done")
-    if record.get("attempts") != 1 or (box.read("settings.json").get("auto_update") or {}).get("on") is not False:
-        raise Failed(f"{box.label}: after cad update: {record}, switches {box.read('settings.json').get('auto_update')}")
-    say(f"        {NEW} -> {NEXT} by `cad update` with switch 1 off ({said!r}); the install command in update mode "
-        "ran once")
+    if (box.read("settings.json").get("auto_update") or {}).get("on") is not False:
+        raise Failed(f"{box.label}: after cad update: switches {box.read('settings.json').get('auto_update')}")
+    never_installed(box, record, "a typed cad update")
+    say(f"        `cad update` with nothing newer: 'cad {NEW} is the newest release', nothing restarted; then {NEW} -> "
+        f"{NEXT} with automatic updates off ({said!r}); no install command")
     pages(box, NEXT)
+    never_installed(box, box.read("auto-update.json"), "a typed cad update")
 
 
 def self_at_start(box: Box) -> None:
-    box.set_up()
+    box.set_up("off")
     box.run([box.cad(), "server", "stop"])
     # The feed as the server last read it, naming the next release, read within the hour: due at the next start.
-    box.feed.latest = NEXT
+    box.out(NEXT)
     (box.state / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": NEXT}}),
                                              encoding="utf-8")
     done = box.run([box.cad(), "server", "start"], check=False)
@@ -557,15 +640,17 @@ def self_at_start(box: Box) -> None:
         raise Failed(f"{box.label}: cad's own update at the start: {record}\n{box.said()}")
     box.tool_serves(NEXT)
     box.is_tool(NEXT)
-    say(f"        {NEW} -> {NEXT} as `cad server start` started, the starter waiting: {done.stdout.strip()!r}")
+    never_installed(box, record, "the plugin's switch off")
+    say(f"        {NEW} -> {NEXT} as `cad server start` started, the starter waiting: {done.stdout.strip()!r}; the "
+        "plugin's switch off: no install command")
 
 
 def self_off(box: Box) -> None:
-    box.set_up()
+    box.set_up("off")
     switched = box.run([box.cad(), "auto-update", "off"]).stdout.splitlines()
-    if switched[-2:] != ["auto-update: off", "installer: off"]:
+    if switched != ["auto-update: off"]:
         raise Failed(f"{box.label}: cad auto-update off said {switched}")
-    box.feed.latest = NEXT
+    box.out(NEXT)
     box.hour_later()
     # The server reads the feed at its first tending; then a start, which updates first where the switch is on.
     box.until(lambda: (box.read("versions.json").get("feed") or {}).get("latest") == NEXT and
@@ -579,8 +664,8 @@ def self_off(box: Box) -> None:
 
 
 def self_broken(box: Box) -> None:
-    box.set_up()
-    box.feed.latest = BROKEN
+    box.set_up("off")
+    box.out(BROKEN)
     box.hour_later()
     record = updated(box, BROKEN)
     if not str(record.get("started", "")).startswith("not started"):
@@ -588,7 +673,7 @@ def self_broken(box: Box) -> None:
     if box.version() != f"cad {BROKEN}":
         raise Failed(f"{box.label}: cad --version says {box.version()!r}, not cad {BROKEN}")
     # The next release: `cad server start`, failing, updates cad to it (no server runs to write the feed's file).
-    box.feed.latest = AFTER
+    box.out(AFTER)
     box.an_hour_passes()
     done = box.run([box.cad(), "server", "start"], check=False)
     if done.returncode == 0 or f"updating cad to {AFTER}" not in done.stderr:
@@ -600,14 +685,15 @@ def self_broken(box: Box) -> None:
 
 
 def self_uninstallable(box: Box) -> None:
-    box.set_up()
-    box.feed.latest = NOCMD
+    box.set_up("on")
+    box.out(NOCMD)
     box.hour_later()
     record = updated(box, NOCMD, "failed")
     if record.get("restored") is not True:
         raise Failed(f"{box.label}: the release before was not put back: {record}\n{box.said()}")
     box.tool_serves(NEW)
     box.is_tool(NEW)
+    never_installed(box, record, "a failed update, the plugin's switch on")
     say(f"        {NOCMD} could not be installed ({record.get('detail')!r}); {NEW} put back and serving")
 
 
@@ -631,8 +717,8 @@ def bridged(box: Box, old: str) -> None:
     if move.get("outcome") not in ("current", "installed") or str(move.get("started", "")).startswith("not started"):
         raise Failed(f"{box.label}: the move to the uv tool's server: {move}")
     switches = box.read("settings.json").get("auto_update") or {}
-    if (switches.get("on"), switches.get("installer")) != (True, True):
-        raise Failed(f"{box.label}: the switches after the bridge: {switches}")
+    if switches.get("on") is False:
+        raise Failed(f"{box.label}: automatic updates off after the bridge: {switches}")
     kept = [old_state / "releases" / old, old_state / "releases" / NEW]
     if not all(path.is_dir() for path in kept):
         raise Failed(f"{box.label}: a release folder is gone: {[str(path) for path in kept if not path.is_dir()]}")
@@ -640,7 +726,7 @@ def bridged(box: Box, old: str) -> None:
     if left:
         raise Failed(f"{box.label}: processes still run from the release folders:\n" + "\n".join(left))
     say(f"        {old} -> {NEW}: uv's cad in {box.bin}, its server ({status.get('prefix')}), current {current}, "
-        f"hand-over done (attempt {record.get('attempts')}), both switches on, releases/{old} and releases/{NEW} kept")
+        f"hand-over done (attempt {record.get('attempts')}), automatic updates on, releases/{old} and releases/{NEW} kept")
     pages(box, NEW)
 
 
@@ -866,6 +952,7 @@ def main(argv: list[str] | None = None) -> int:
     wheels = run / "wheels"
     publish_all(args.wheels.resolve() if args.wheels else None, wheels)
     feed = rc.Feed(NEW)
+    pypi = PyPI(feed)
     say(f"rehearse-update: {', '.join(chosen)}; this tree as {NEW} (and {NEXT}, {BROKEN} whose server cannot start, "
         f"{AFTER}, {NOCMD} with no command); the bridge from {args.old}")
     failed = 0
@@ -874,11 +961,14 @@ def main(argv: list[str] | None = None) -> int:
         for name in chosen:
             before = rc.Sentinels.here()
             alone = WINDOWS and args.old == "0.10.0" and name in BRIDGE
-            box = Box(name, feed, wheels, shared, named_state=not alone)
+            box = Box(name, feed, wheels, shared, named_state=not alone, pypi=pypi, counted=name in SELF)
             say(f"-- {name}: a computer in {box.work}")
             began = time.monotonic()
             try:
                 box.computer.isolation(say)
+                say(f"  CAD_PYPI_URL={box.env['CAD_PYPI_URL']}")
+                if not box.env["CAD_PYPI_URL"].startswith("http://127.0.0.1:"):
+                    raise Failed("the computer is not isolated: CAD_PYPI_URL")
                 if name in SELF:
                     routes[name](box)
                 else:
@@ -902,6 +992,7 @@ def main(argv: list[str] | None = None) -> int:
                 shutil.rmtree(box.work, ignore_errors=True)
     finally:
         feed.close()
+        pypi.close()
         shutil.rmtree(run, ignore_errors=True)
     say(f"rehearse-update: {len(chosen) - failed} held, {failed} failed ({time.monotonic() - began_all:.0f} s)")
     return 1 if failed else 0

@@ -270,22 +270,20 @@ server where the bridge pointed it there (below). Such a client's builds are ref
 (`contract.refusal`).
 
 The version feed (`cad_server.updates`): the server reads it in the background at most once an hour as it tends
-itself (`updates.refresh`), never waited on, for cad's own update alone, and at once when `cad update` asks
-(`updates.read_now`); nothing says a newer release to a person or an agent.
+itself (`updates.refresh`), never waited on, for cad's automatic update alone; `cad update` asks PyPI instead
+(`updates.newest`), at once; nothing says a newer release to a person or an agent.
 
-cad updates itself only where the person turned it on (`cad auto-update on`, a cad installed as a uv tool alone;
-`cad_server._internal.auto_update`), or asks (`cad update`: `Daemon.update`, the update begun once nothing is in
-flight, whatever switch 1 says): first thing as a server starts, before its door opens, and as it tends itself
-once nothing has run for a minute (or nothing since it started), where the version feed as last read names a newer
-release, a detached helper that is not cad (`auto_update_helper`, run by the Python cad's environment was made from)
-stops the server, has uv install that release, tried again on failure, and starts the server with whatever cad is
-there. A server that hands its start over exits `UPDATING`, and its starter waits for the next one; a `cad server
-start` that fails asks for the update before it gives up; a start never replaces a newer server, it joins it
-(`client.start`, `cad_mcp.shim.start_server`). After its own update, with the second switch on (`cad auto-update on --installer`), the server runs the hosted
-install command once in update mode, which updates only the copies of our plugin still in the agent apps
-(`cad_server._internal.install_script`): owed whenever the release it last ran for is older than this cad, begun at
-the server's first tending, detached, its report read as it ends; a failure is tried again an hour later at the next
-start, then daily, 30 attempts or 30 days at most, and never blocks cad's own update.
+A global install of cad (`uv tool install cad`; `cad_server._internal.auto_update.global_install`) updates itself
+unless the person turned it off (`cad auto-update off`), or when asked (`cad update`: `Daemon.update`, the update
+begun once nothing is in flight, whatever the switch says): first thing as a server starts, before its door opens,
+and as it tends itself once nothing has run for a minute (or nothing since it started), where the version feed as
+last read names a newer release, a detached helper that is not cad (`auto_update_helper`, run by the Python cad's
+environment was made from) stops the server, runs the installer's upgrade (`uv tool install cad@latest`), tried
+again on failure, and starts the server with whatever cad is there. A server that hands its start over exits
+`UPDATING`, and its starter waits for the next one; a `cad server start` that fails asks for the update before it
+gives up; a start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). After an
+automatic update that installed a newer cad, with `cad plugin auto-update` on, the helper runs the new cad's
+`cad plugin install` once (the hosted install command); a typed `cad update` never does.
 
 The updaters of 0.10.0 to 0.11.10 are frozen on computers, though, and update by running a newer release's hidden
 `cad setup --engine-update` from a flat release folder they made (`<state>/releases/X`). The bridge
@@ -293,7 +291,8 @@ The updaters of 0.10.0 to 0.11.10 are frozen on computers, though, and update by
 installation record their switch starts the server by, naming that folder's environment, owes install mode, and
 changes nothing else; the switch points `installations/current` at X and starts X's server from that folder, and goes
 back where it does not answer. Five minutes after it started with `current` naming X, that server runs the hosted
-install command in install mode (cad as a uv tool, our plugin in every agent app, both switches on); once a report says
+install command in install mode (cad as a uv tool, our plugin in every agent app), once, retried as it failed (hourly
+at a start, then daily, 30 attempts or 30 days at most; `cad_server._internal.install_script`); once a report says
 cad was installed and nothing is in flight, the records point at the uv tool's environment and a helper that is not
 cad stops this server and starts the uv tool's. Every server of a uv tool points `current` and its record at itself,
 so a client of 0.11.10 or earlier that finds no server starts it. On a computer whose agent apps got text-to-cad from

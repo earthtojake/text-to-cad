@@ -7,7 +7,8 @@ integration's, for its tool's own files, which are no document type, which cad c
 shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations``: ``cad mujoco check``,
 ``cad orcaslicer presets``), only for the integrations the registry gives operations. And the commands that are no file's: the server's (``server``: ``start``,
 ``stop``, ``status``), the CAD app an agent app starts (``mcp``), the engine's verbs (``serve``, ``delete``), ``run``,
-and the installation's (``setup``, ``doctor``, ``cache``, ``viewer``, ``telemetry``, ``auto-update``, ``update``).
+and the installation's (``setup``, ``doctor``, ``cache``, ``viewer``, ``telemetry``, ``auto-update``, ``update``,
+``plugin``).
 
 A command that reaches the server holds it to its own release (``cad.engine.client.RELEASE``): one of another
 release is refused in one line. The server's own commands are not held to it (``_ANY_RELEASE``).
@@ -62,6 +63,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
     "auto-update": ("cad_server.cli.auto_update", "show or change whether cad updates itself: status, on, off"),
     "update": ("cad_server.cli.update", "update cad to the newest release now"),
+    "plugin": ("cad_server.cli.plugin", "the plugin: install, auto-update"),
 }
 # Only for releases 0.10.0 to 0.11.10 -- their skill text (`cad status`, `cad stop`) and their updaters (`cad setup`):
 # run, never listed, and gone with the bridge.
@@ -332,14 +334,15 @@ def _report(error: Exception) -> None:
 # Commands that reach a server of any release (``cad.engine.client.RELEASE``): the server's own -- which start this
 # release's in place of another's, stop whichever runs, and say which runs --, `mcp`, which decides it itself
 # (``cad_mcp.shim.start_server``), those that only ask whether one runs, and which (`doctor`, `cache`), and
-# `auto-update`, whose switches are the person's, kept for every release, which any server that knows how keeps, and
-# `update`, which any server that knows how carries out (one that does not is said), and whose next server is another.
-_ANY_RELEASE = frozenset({"server", "status", "stop", "mcp", "doctor", "cache", "auto-update", "update"})
+# `auto-update` and `plugin`, whose switches are the person's, kept for every release, which any server that knows how
+# keeps, and `update`, which any server that knows how carries out (one that does not is said), and whose next server
+# is another.
+_ANY_RELEASE = frozenset({"server", "status", "stop", "mcp", "doctor", "cache", "auto-update", "update", "plugin"})
 # Commands that never carry the analytics notice: the engine's server and `mcp`, writing nowhere a person reads;
 # `telemetry`, which says it its own way; `setup`, which an updater of 0.11.10 and earlier runs with no person to read
-# it; `run`, which is only the python it runs, as the `cad` command's `run` is; and `requirement`, whose
-# output a program reads.
-_UNTOLD = frozenset({"server", "mcp", "telemetry", "setup", "run", "requirement"})
+# it, and `plugin`, which cad's own update runs with none, its output in a log; `run`, which is only the python it runs,
+# as the `cad` command's `run` is; and `requirement`, whose output a program reads.
+_UNTOLD = frozenset({"server", "mcp", "telemetry", "setup", "plugin", "run", "requirement"})
 # Commands that only report, and so write nothing a command's run writes (``_tell``).
 _READ_ONLY = frozenset({"doctor"})
 

@@ -205,11 +205,11 @@ def _note(said: str, denied: bool = False) -> None:
 # while it is underway (``Daemon.handle``).
 SERVING = frozenset({"serve", "viewer", "http", "read", "warm"})
 # The requests that are no command's, which the last command's time (``Daemon.worked``) never counts
-# (``Daemon.ended``): who answers, a page token read again, an app's hold, cad's own update switched or asked for (``cad
-# update``, and its looks while it waits). Besides these, any request marked ``internal`` (what one server asks
-# another) and an ``http`` that names a port (an updater handing the pages' port on, 0.11.10's among them) are not
-# counted either.
-UNCOUNTED = frozenset({"pid", "token", "hold", "auto_update", "update"})
+# (``Daemon.ended``): who answers, a page token read again, an app's hold, cad's own update or the plugin's switched,
+# or cad's update asked for (``cad update``, and its looks while it waits). Besides these, any request marked
+# ``internal`` (what one server asks another) and an ``http`` that names a port (an updater handing the pages' port on,
+# 0.11.10's among them) are not counted either.
+UNCOUNTED = frozenset({"pid", "token", "hold", "auto_update", "plugin_auto_update", "update"})
 # The type a worker answers bytes of a held document that do not read with (``build.Unreadable``),
 # as ``worker.refusal`` names it.
 UNREADABLE = "cad.engine.build:Unreadable"
@@ -532,20 +532,33 @@ def rotate_token(told: Callable[[str], None] = lambda _line: None) -> str | None
 
 
 def switch_auto_update(request: dict[str, Any]) -> dict[str, Any]:
-    """cad's own update switched by the server (``{"op": "auto_update", "on", "installer", "ran_for"}``: ``cad
-    auto-update on|off`` where a server runs), which keeps the switches in the state folder as the command would
-    (``auto_update.change``), so a shell whose sandbox may not write that folder (an agent app's) needs no permission:
-    ``{"ok": true, "switches"}``, or ``{"failed"}`` in one line. Whether the cad that asked may turn it on (a uv tool)
-    is that command's to judge, for the cad it runs from."""
+    """cad's own update switched by the server (``{"op": "auto_update", "on"}``: ``cad auto-update on|off`` where a
+    server runs), which keeps the switch in the state folder as the command would (``auto_update.change``), so a shell
+    whose sandbox may not write that folder (an agent app's) needs no permission: ``{"ok": true, "switches"}``, or
+    ``{"failed"}`` in one line. Whether the cad that asked may turn it on (a global install) is that command's to
+    judge, for the cad it runs from. What else an earlier release's command sends is not read."""
     from cad_server._internal import auto_update
 
-    on, installer, ran_for = request.get("on"), request.get("installer"), request.get("ran_for")
-    if type(on) is not bool or installer not in (None, True, False) \
-            or not (ran_for is None or (isinstance(ran_for, str) and 0 < len(ran_for) <= 64)):
-        return {"failed": "not a switch of cad's own update: on is true or false, installer true, false or null, "
-                          "ran_for a release or null"}
+    on = request.get("on")
+    if type(on) is not bool:
+        return {"failed": "not a switch of cad's own update: on is true or false"}
     try:
-        return {"ok": True, "switches": auto_update.change(on, installer, ran_for)}
+        return {"ok": True, "switches": auto_update.change(on)}
+    except OSError as error:
+        return {"failed": str(error)}
+
+
+def switch_plugin(request: dict[str, Any]) -> dict[str, Any]:
+    """Whether cad's own automatic update runs the install command after it, switched by the server (``{"op":
+    "plugin_auto_update", "on"}``: ``cad plugin auto-update on|off`` where a server runs), as ``switch_auto_update``
+    keeps its own: ``{"ok": true, "on"}``, or ``{"failed"}`` in one line."""
+    from cad_server._internal import auto_update
+
+    on = request.get("on")
+    if type(on) is not bool:
+        return {"failed": "not a switch: on is true or false"}
+    try:
+        return {"ok": True, "on": auto_update.change_plugin(on)}
     except OSError as error:
         return {"failed": str(error)}
 
@@ -627,8 +640,8 @@ class Daemon:
         self.builders: dict[str, Process] = {}
         self.renders = None  # the served documents' pictures, by their render processes (``renders.Renders``)
         self.serving = threading.Lock()
-        # The install command's runs this server owes (``install_script.Carrier``), and the bridge's part of the tending
-        # (BRIDGE-ONLY, ``cli.setup.Tending``).
+        # BRIDGE-ONLY: the install command's one run this server may owe (``install_script.Carrier``), and the bridge's
+        # part of the tending (``cli.setup.Tending``).
         from cad_server._internal.install_script import Carrier
         from cad_server.cli.setup import Tending
 
@@ -1668,6 +1681,8 @@ class Daemon:
             send(self.retoken())
         elif op == "auto_update":
             send(switch_auto_update(request))
+        elif op == "plugin_auto_update":
+            send(switch_plugin(request))
         elif op == "update":
             send(self.update(request))
         elif op == "stop":
@@ -1681,20 +1696,21 @@ class Daemon:
             send({"failed": f"unknown request {op!r}"})
 
     def update(self, request: dict[str, Any]) -> dict[str, Any]:
-        """``cad update`` (``{"op": "update"}``): judged (``auto_update.asked``: the feed read now, in this request's
-        thread), then, where a newer release is out, the attempt underway joined, or the update begun as soon as nothing
-        is in flight (``_update_when_idle``) -- not after the idle minute, whatever switch 1 says. ``{"ok": true,
-        "updating", "from", "since"}`` (``since``: when the attempt that serves it began, or was asked for), else what
-        ``asked`` answers. ``{"op": "update", "begin": false}`` begins nothing: ``{"ok": true, "version", "last",
-        "waiting"}``, this release, the last attempt (``auto_update.last``) and the release an update waits to begin
-        for, which ``cad update`` asks while it waits."""
+        """``cad update`` (``{"op": "update"}``): judged (``auto_update.asked``: PyPI asked now, this request's thread
+        waiting), then, where a newer release is out or PyPI could not say, the attempt underway joined, or the update
+        begun as soon as nothing is in flight (``_update_when_idle``) -- not after the idle minute, whatever the switch
+        says. ``{"ok": true, "updating", "from", "since"}`` (``updating``: the release PyPI names, or null; ``since``:
+        when the attempt that serves it began, or was asked for), else what ``asked`` answers. ``{"op": "update",
+        "begin": false}`` begins nothing: ``{"ok": true, "version", "last", "waiting"}``, this release, the last
+        attempt (``auto_update.last``) and whether an update waits to begin (the release it waits for, or
+        ``latest``), which ``cad update`` asks while it waits."""
         from cad_server._internal import auto_update
 
         if request.get("begin") is False:
             with self.busy_lock:
                 waiting = self.asked_update
             return {"ok": True, "version": auto_update._version(), "last": auto_update.last(),
-                    "waiting": waiting[0] if waiting else None}
+                    "waiting": (waiting[0] or auto_update.LATEST) if waiting else None}
         judged = auto_update.asked()
         if "updating" not in judged:
             return judged
@@ -1709,7 +1725,7 @@ class Daemon:
             threading.Thread(target=self._update_when_idle, args=(target,), name="cad-update", daemon=True).start()
         return {**judged, "updating": target, "since": since}
 
-    def _update_when_idle(self, target: str) -> None:
+    def _update_when_idle(self, target: str | None) -> None:
         """The update ``cad update`` asked for, begun once nothing is in flight (``working``), on a thread of its own
         (``auto_update.begin``); never on a server that stops."""
         from cad_server._internal import auto_update
@@ -1847,10 +1863,11 @@ class Daemon:
         first, to the cache, as they are loaded (``serve.Server.trim``); telemetry's spool is handed to a sender
         once it has waited a window (``_send_counts``); the version check's feed is read in the background where it
         is due (``updates.refresh``), and cad updated where that is due and nothing is in flight
-        (``auto_update.tend``: the update stops this server and starts the next); then the install command run again
-        where it is owed (``install_script.Carrier``: after cad's own update, or once for a computer a shipped updater
-        brought), and the bridge's part (``cli.setup.Tending``: such a server, once that run installed cad as a uv
-        tool, hands over to the uv tool's). The engine stops on ``stop``, a terminate, another installation's
+        (``auto_update.tend``: the update stops this server and starts the next, and runs the install command after it
+        where the person's switch says); then, BRIDGE-ONLY, the install command run once where it is owed for a
+        computer a shipped updater brought (``install_script.Carrier``), and the bridge's part (``cli.setup.Tending``:
+        such a server, once that run installed cad as a uv tool, hands over to the uv tool's). The engine stops on
+        ``stop``, a terminate, another installation's
         retiring it (``bind``), and here when its door is gone (its folder removed, a temporary
         folder cleaned up) or another's: no one can reach it, so it stops as ``stop`` does, saving
         what it holds to the cache."""
