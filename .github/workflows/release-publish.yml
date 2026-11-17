@@ -18,9 +18,9 @@ name: Publish Release
 # `latest` branch, claude.ai's `claude-plugin` and Codex's `codex-plugin` get the plugin alone
 # (scripts/release/plugin_branch.py); after them, the docs deploy moves the site's header
 # version, and the tag and the GitHub Release go out. The version feed the install command and
-# the server's update notice read (apps/api) asks PyPI itself -- `cadgen`'s index, which the release
-# lists last -- but Vercel's edge keeps its answer an
-# hour, so the feed job purges that cache once the branches carry the release. main has the new pins from
+# cad's own update read (apps/api) asks PyPI itself -- `cadgen`'s index, which the release
+# lists last -- and names a release only once every file of it is an hour old there, its edge keeping an
+# answer five minutes: nothing here purges or waits on it. main has the new pins from
 # the merge on, so only an install of main itself -- a command that names no branch -- can see
 # a version minutes before PyPI has it.
 #
@@ -376,7 +376,6 @@ jobs:
           echo "Would have uploaded these pages' source maps to PostHog: $(ls "$RUNNER_TEMP/sourcemaps/files")"
           echo "Would have deployed the docs site from ${{ needs.gate.outputs.release_sha }}."
           echo "Would have committed the plugin to latest, claude-plugin and codex-plugin."
-          echo "Would have purged the version feed's CDN cache (api.texttocad.dev) after them."
           # --dry-run computes the tag and the release it would create without
           # pushing anything; the version check inside it runs for real.
           args=(--target HEAD --dry-run --publish)
@@ -569,69 +568,6 @@ jobs:
           # an unchanged plugin leaves each where it is.
           git push --atomic "$remote" "$latest:refs/heads/latest" "$directory:refs/heads/claude-plugin" \
             "$codex:refs/heads/codex-plugin"
-
-  # The version feed (api.texttocad.dev/v1/versions, apps/api) names the newest release PyPI lists, and
-  # the install command and every copy's hourly update check read it; but Vercel's edge keeps each answer
-  # an hour (s-maxage=3600), so for up to an hour after a release the feed can still name the one before.
-  # Once the install branches carry the release -- the plugin every install takes -- and the docs site
-  # serves its install script, this purges the API project's CDN cache, and the feed names the release at
-  # once. After the docs: an updater of 0.10.0 to 0.11.10 that reads the feed runs the release's hidden
-  # `cad setup --engine-update` once, which starts the hosted install script (and waits, up to an hour, for
-  # the site's install.py to name the release: cad_server._internal.install_script). A docs deploy that
-  # failed purges nothing; re-running it re-runs this. Its own job: the pypi job, the one that may mint a
-  # PyPI token, runs nothing from npm. Best effort, and nothing waits on it (the network never blocks a
-  # release): without the Vercel secrets, or when the purge fails, the feed names the release within the
-  # hour on its own, and meanwhile the install command's script installs at least the release stamped into it.
-  feed:
-    name: Version feed
-    needs:
-      - gate
-      - branches
-      - deploy-docs
-    if: ${{ !cancelled() && needs.branches.result == 'success' && needs.deploy-docs.result == 'success' && needs.gate.outputs.is_main == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions: {}
-
-    steps:
-      # As the deploys set it up; without it the runner's own Node runs the CLI.
-      - name: Set up Node.js
-        continue-on-error: true
-        uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-
-      - name: Purge the version feed's CDN cache
-        continue-on-error: true
-        timeout-minutes: 12
-        env:
-          VERSION: ${{ needs.gate.outputs.version }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_API_PROJECT_ID: ${{ secrets.VERCEL_API_PROJECT_ID }}
-        run: |
-          later="the feed names $VERSION within the hour on its own"
-          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_API_PROJECT_ID; do
-            if [ -z "${!name:-}" ]; then
-              echo "$name is not set, so the version feed's CDN cache is not purged: $later."
-              exit 0
-            fi
-          done
-          if ! npm install --global vercel@50.28.0; then
-            echo "::warning::The Vercel CLI did not install, so the version feed's CDN cache is not purged: $later."
-            exit 0
-          fi
-          # Each instance of the feed's function keeps what it read from PyPI five minutes (FRESH_MS,
-          # apps/api/src/versions.mjs): purged sooner, the edge could fill again from an instance that
-          # read PyPI just before it listed the release, and keep that answer another hour.
-          sleep 300
-          # The CLI finds the project by VERCEL_ORG_ID and VERCEL_PROJECT_ID, as the deploys link it
-          # (scripts/github-workflows/deploy-vercel-app.sh), and takes the team from the project.
-          if VERCEL_PROJECT_ID="$VERCEL_API_PROJECT_ID" vercel cache purge --type cdn --yes --token "$VERCEL_TOKEN"; then
-            echo "Purged the version feed's CDN cache. It answers: $(curl -fsS --max-time 10 https://api.texttocad.dev/v1/versions || true)"
-          else
-            echo "::warning::The version feed's CDN cache could not be purged: $later."
-          fi
 
   # The docs site is built from the release commit itself: main is the source tree, and
   # apps/docs/package.json carries the stamped version the header reads -- so it follows the

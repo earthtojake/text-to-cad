@@ -534,8 +534,9 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/test/real-install.py": jobs_on("installer"),
             # ...and the code of this build the update rehearsal runs, beside the packages' suites.
             **{f"packages/cad/src/cad_server/{path}": packages | jobs_on("installer") for path in (
-                "cli/setup.py", "_internal/install_script.py", "_internal/arrival.py",
-                "_internal/installations.py", "engine/daemon.py")},
+                "cli/setup.py", "cli/auto_update.py", "_internal/install_script.py", "_internal/arrival.py",
+                "_internal/auto_update.py", "_internal/auto_update_helper.py", "_internal/installations.py",
+                "engine/daemon.py")},
             # A runner runs what it feeds.
             "scripts/test/test-js.sh": jobs_on("core_js", "web_ui", "web_client", "mcp"),
             "scripts/test/test-floor.sh": jobs_on("floor"),

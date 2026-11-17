@@ -12,13 +12,26 @@ GitHub rewritten to it (``url.<local>.insteadOf``, for the https, ssh and ``git@
 config (``GIT_CONFIG_GLOBAL``) and in the template every new repository starts from (``GIT_TEMPLATE_DIR``): Gemini CLI
 clones with the global config set to nothing, which a new repository's own config survives.
 
-``RealHome`` lists what the machine's own home holds for these programs and cad, to prove a run changed none of it.
-``scripts/test/real-install.py`` runs the install script on it; an update rehearsal can run a shipped release on it.
-The standard library alone.
+Its uv keeps its tools, their commands and its Pythons in the computer (``UV_TOOL_DIR``, ``UV_TOOL_BIN_DIR``: the home's
+``.local/bin``, first on PATH as on a person's; ``UV_PYTHON_INSTALL_DIR``), and its cache there too unless a run names
+one folder for all its computers (``shared``: what each downloads once). ``Computer.isolation`` prints each folder a
+program could write and fails before anything runs where one is not the computer's. Its port is the true default
+(3245) on CI alone, where nothing else serves; elsewhere a free one of its own (``CAD_ENGINE_DEFAULT_PORT``), never a
+person's.
+
+``Feed`` is the version feed served on loopback: any path ending ``versions`` (``<api>/versions`` of 0.10.0 to
+0.11.10 and of this tree, the install command's ``CAD_INSTALL_FEED``). ``publish`` writes this tree's wheels again as
+another release, or a variant of one (a file replaced, its commands taken out), from wheels already built.
+
+``RealHome`` lists what the machine's own home holds for these programs and cad, to prove a run changed none of it;
+``Sentinels``, the times of the few files a person's agent apps and cad keep, before and after each rehearsal.
+``scripts/test/real-install.py`` and ``scripts/test/rehearse-update.py`` run on it. The standard library alone.
 """
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import http.server
 import json
 import os
@@ -33,12 +46,14 @@ import tempfile
 import threading
 import time
 import uuid
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WINDOWS = os.name == "nt"
+CI = bool(os.environ.get("GITHUB_ACTIONS"))
 REPOSITORY = "earthtojake/text-to-cad"
 BRANCH = "latest"
 # The ports the person's own servers serve on: never a test's.
@@ -56,6 +71,8 @@ KEPT = ("LANG", "LC_ALL", "LC_CTYPE", "USER", "LOGNAME", "SHELL", "HTTP_PROXY", 
         "PROCESSOR_IDENTIFIER", "NUMBER_OF_PROCESSORS", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432",
         "ProgramData", "CommonProgramFiles", "CommonProgramFiles(x86)", "CommonProgramW6432", "PSModulePath",
         "USERNAME", "USERDOMAIN", "ALLUSERSPROFILE", "PUBLIC", "DriverData")
+# Telemetry off for every program a computer runs: cad's (every release's words for it) and the agent apps'.
+QUIET = {"DO_NOT_TRACK": "1", "CAD_TELEMETRY": "0", "CADGEN_TELEMETRY": "0", "DISABLE_TELEMETRY": "1"}
 
 
 @dataclass
@@ -120,15 +137,19 @@ def default_free() -> bool:
 
 
 class Feed(http.server.ThreadingHTTPServer):
-    """The version feed (``GET /v1/versions``) saying ``latest``; anything else (telemetry) is not found."""
+    """The version feed (any path ending ``versions``) saying ``latest``; anything else (telemetry) is not found.
+    ``asked``: how many times it was read."""
 
     def __init__(self, latest: str) -> None:
         self.latest = latest
+        self.asked = 0
         feed = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802 - http.server's name
-                self.answer(json.dumps({"latest": feed.latest}).encode() if self.path == "/v1/versions" else None)
+                found = self.path.split("?", 1)[0].rstrip("/").endswith("versions")
+                feed.asked += found
+                self.answer(json.dumps({"latest": feed.latest}).encode() if found else None)
 
             def do_POST(self) -> None:  # noqa: N802
                 self.answer(None)
@@ -159,30 +180,47 @@ class Computer:
     """A private computer in ``work`` with the real ``programs`` (command -> its path on this machine) on its PATH:
     see the module."""
 
-    def __init__(self, work: Path, programs: dict[str, str], *, feed: Feed | None = None) -> None:
+    def __init__(self, work: Path, programs: dict[str, str], *, feed: Feed | None = None,
+                 shared: Path | None = None, wheels: Path | None = None,
+                 helpers: tuple[str, ...] = ("node", "git", "uv", "uvx")) -> None:
         self.work = Path(work).resolve()
         self.home = self.work / "home"
         self.state = self.work / "state"
         self.tools = self.work / "tools"
+        self.bin = self.home / ".local" / "bin"  # uv's bin folder, as on a person's computer
+        self.uv_tools = self.home / ".local" / "share" / "uv" / "tools"
         self.programs = programs
         self.feed = feed
-        self.port = DEFAULT_PORT if default_free() else free_port()
-        for folder in (self.home, self.tools, self.work / "tmp", self.state):
+        self.helpers = helpers
+        self.port = DEFAULT_PORT if CI and default_free() else free_port()
+        for folder in (self.home, self.tools, self.work / "tmp", self.state, self.bin):
             folder.mkdir(parents=True, exist_ok=True)
         home = self.home
+        uv = Path(shared).resolve() if shared is not None else self.work / "uv"
         env = {key: os.environ[key] for key in KEPT if key in os.environ}
+        bypass = ",".join(filter(None, ("127.0.0.1,localhost", os.environ.get("NO_PROXY") or os.environ.get("no_proxy"))))
         env.update({
             "HOME": str(home), "TMPDIR": str(self.work / "tmp"), "TEMP": str(self.work / "tmp"),
-            "TMP": str(self.work / "tmp"), "TERM": "dumb", "NO_COLOR": "1", "DO_NOT_TRACK": "1", "BROWSER": "true",
+            "TMP": str(self.work / "tmp"), "TERM": "dumb", "NO_COLOR": "1", "BROWSER": "true", **QUIET,
+            "NO_PROXY": bypass, "no_proxy": bypass,
             "XDG_CONFIG_HOME": str(home / ".config"), "XDG_DATA_HOME": str(home / ".local" / "share"),
             "XDG_STATE_HOME": str(home / ".local" / "state"), "XDG_CACHE_HOME": str(home / ".cache"),
+            "XDG_BIN_HOME": str(self.bin),
             "CAD_STATE_DIR": str(self.state), "CAD_ENGINE_DIR": str(self.work / "engine"),
-            "CAD_ENGINE_DEFAULT_PORT": str(self.port),
-            # uv's folders, each in the computer (its defaults are in the home too; named, so none is relied on).
-            "UV_CACHE_DIR": str(self.work / "uv" / "cache"), "UV_PYTHON_INSTALL_DIR": str(self.work / "uv" / "python"),
-            "UV_TOOL_DIR": str(self.work / "uv" / "tools"), "UV_NO_MODIFY_PATH": "1",
+            "CAD_CACHE_DIR": str(self.work / "cache"), "CAD_ENGINE_DEFAULT_PORT": str(self.port),
+            "CADGEN_ENGINE_DEFAULT_PORT": str(self.port),
+            # uv's folders, each named, so no default is relied on: its tools and their commands in the home, as on a
+            # person's computer; its cache and Pythons the computer's, or the run's (``shared``).
+            "UV_CACHE_DIR": str(uv / "cache"), "UV_PYTHON_INSTALL_DIR": str(uv / "python"),
+            "UV_PYTHON_BIN_DIR": str(self.work / "uv-python-bin"), "UV_PYTHON_INSTALL_BIN": "0",
+            "UV_TOOL_DIR": str(self.uv_tools), "UV_TOOL_BIN_DIR": str(self.bin), "UV_NO_MODIFY_PATH": "1",
             "GIT_CONFIG_GLOBAL": str(self.work / "gitconfig"), "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_TEMPLATE_DIR": str(self.work / "git-template"), "GIT_TERMINAL_PROMPT": "0",
+            # The install command looks for the apps on PATH alone.
+            "CAD_INSTALL_PATH_ONLY": "1",
+            # Agent apps' own config folders, in the home even where the app is not under test.
+            "CLAUDE_CONFIG_DIR": str(home / ".claude"), "CODEX_HOME": str(home / ".codex"),
+            "GEMINI_CLI_HOME": str(home),
         })
         if not WINDOWS:
             env["XDG_RUNTIME_DIR"] = str(self.work / "run")
@@ -192,12 +230,20 @@ class Computer:
                         "LOCALAPPDATA": str(home / "AppData" / "Local"), "HOMEDRIVE": home.drive,
                         "HOMEPATH": str(home)[len(home.drive):]})
         if feed is not None:
-            # The install script's feed, and cad's (its version feed and its telemetry: the stand-in answers neither).
+            # The install command's feed, and cad's (its version feed and its telemetry: the stand-in answers neither).
             env.update({"CAD_INSTALL_FEED": f"{feed.url}/versions", "CAD_API_URL": feed.url})
         else:
             env["CAD_API_URL"] = "http://127.0.0.1:9"
+        if wheels is not None:
+            # A folder of wheels uv reads beside the index: the install command's and cad's own `uv tool install`
+            # (UV_FIND_LINKS), the environments cad and its earlier releases make (CAD_UPDATE_FIND_LINKS).
+            env.update({"UV_FIND_LINKS": str(wheels), "CAD_UPDATE_FIND_LINKS": str(wheels)})
         for name in programs:
             env.update(PROGRAMS[name].environ(home) if name in PROGRAMS else {})
+        if "codex" not in programs:
+            # 0.10.0 to 0.11.10 take CODEX_CLI before the Codex app's bundled codex, which they find outside PATH: a
+            # path where there is none, so no codex is theirs to find.
+            env["CODEX_CLI"] = str(self.work / "no-such" / "codex")
         (home / ".codex").mkdir(exist_ok=True)
         # Gemini CLI: no update of itself, which would change the machine's install outside this computer.
         (home / ".gemini").mkdir(exist_ok=True)
@@ -213,6 +259,41 @@ class Computer:
         self.commit = ""
         self.nonce = ""
 
+    # Every variable that names a folder a program of the computer writes in, and the one that names the feed.
+    ISOLATED = ("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "TMPDIR", "TEMP", "XDG_CONFIG_HOME", "XDG_DATA_HOME",
+                "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_BIN_HOME", "XDG_RUNTIME_DIR", "CAD_STATE_DIR",
+                "CAD_ENGINE_DIR", "CAD_CACHE_DIR", "UV_TOOL_DIR", "UV_TOOL_BIN_DIR", "UV_PYTHON_BIN_DIR",
+                "CODEX_HOME", "CLAUDE_CONFIG_DIR", "GEMINI_CLI_HOME", "GIT_CONFIG_GLOBAL")
+
+    def isolation(self, say: Callable[[str], None] = print) -> None:
+        """Each folder a program of the computer writes in, printed, and ``Failed`` before anything runs where one is
+        not inside the computer; uv's cache and Pythons, where the run shares them, outside the person's home; the
+        feed on loopback."""
+        wrong = []
+        for name in self.ISOLATED:
+            value = self.env.get(name)
+            if value is None:
+                continue
+            inside = _within(Path(value), self.work)
+            say(f"  {name}={value}")
+            if not inside:
+                wrong.append(name)
+        for name in ("UV_CACHE_DIR", "UV_PYTHON_INSTALL_DIR"):
+            value = self.env[name]
+            say(f"  {name}={value}")
+            if _within(Path(value), Path.home()) and not _within(Path(value), self.work):
+                wrong.append(name)
+        for name in ("CAD_API_URL", "CAD_INSTALL_FEED"):
+            value = self.env.get(name, "")
+            say(f"  {name}={value}")
+            if value and not value.startswith("http://127.0.0.1:"):
+                wrong.append(name)
+        say(f"  CAD_ENGINE_DEFAULT_PORT={self.port}")
+        if self.port in TAKEN and not CI:
+            wrong.append("CAD_ENGINE_DEFAULT_PORT")
+        if wrong:
+            raise Failed(f"the computer is not isolated: {', '.join(wrong)}")
+
     # --- PATH -------------------------------------------------------------------------------------------------
 
     def _path(self, programs: dict[str, str]) -> str:
@@ -220,13 +301,13 @@ class Computer:
         is linked into one folder of the computer's, so no other command of their folders comes along; on Windows,
         where npm's commands are .cmd files that run what lies beside them, their folders themselves."""
         needed = {**programs}
-        for helper in ("node", "git", "uv", "uvx"):
+        for helper in self.helpers:
             found = shutil.which(helper)
             if found:
                 needed[helper] = found
         if WINDOWS:
             system = os.environ.get("SystemRoot", r"C:\Windows")
-            folders = [str(self.tools), *dict.fromkeys(str(Path(path).parent) for path in needed.values()),
+            folders = [str(self.bin), str(self.tools), *dict.fromkeys(str(Path(path).parent) for path in needed.values()),
                        rf"{system}\System32", system, rf"{system}\System32\WindowsPowerShell\v1.0",
                        rf"{system}\System32\Wbem"]
             return os.pathsep.join(folders)
@@ -234,7 +315,7 @@ class Computer:
             link = self.tools / name
             if not link.exists():
                 link.symlink_to(os.path.realpath(path))
-        return os.pathsep.join([str(self.tools), "/usr/bin", "/bin", "/usr/sbin", "/sbin"])
+        return os.pathsep.join([str(self.bin), str(self.tools), "/usr/bin", "/bin", "/usr/sbin", "/sbin"])
 
     def check_path(self, commands: list[str]) -> None:
         """``Failed`` when a command an agent app is found by, other than the programs under test, is on the computer's
@@ -374,7 +455,7 @@ class Computer:
         exiting then, and a kernel worker's multiprocessing resource tracker ends only after the worker), then what
         is still running after ``seconds`` ended. What had to be ended, which the caller treats as left behind."""
         if cad is not None and cad.exists():
-            self.run([cad, "stop"])
+            self.run([cad, "server", "stop"])
         deadline = time.monotonic() + seconds
         left = self.processes()
         while left and time.monotonic() < deadline:
@@ -511,3 +592,146 @@ def _walk(root: Path):
     for folder, folders, files in os.walk(root):
         for name in folders + files:
             yield Path(folder) / name
+
+
+def _within(path: Path, folder: Path) -> bool:
+    """Whether ``path`` is ``folder`` or inside it, both resolved."""
+    try:
+        Path(os.path.realpath(path)).relative_to(os.path.realpath(folder))
+        return True
+    except ValueError:
+        return False
+
+
+# --- the few files a person's apps and cad keep, untouched -------------------------------------------------
+
+
+@dataclass
+class Sentinels:
+    """Each file or folder a run must never change on the machine it runs on -- the agent apps' plugin lists and
+    configuration, cad's state folder and command, uv's tools and their commands -- and its modification time (None
+    where there is none). ``moved``: what changed between two readings."""
+
+    times: dict[str, float | None]
+
+    @classmethod
+    def here(cls) -> "Sentinels":
+        home = Path.home()
+        local = Path(os.environ.get("LOCALAPPDATA") or home / "AppData" / "Local")
+        paths = [home / ".codex" / "config.toml", home / ".claude" / "plugins" / "installed_plugins.json",
+                 home / ".claude" / "plugins" / "known_marketplaces.json", home / ".claude.json", home / ".cursor",
+                 home / ".gemini" / "extensions", home / ".local" / "bin" / ("cad.exe" if WINDOWS else "cad"),
+                 home / ".local" / "bin", home / ".local" / "share" / "uv" / "tools"]
+        if sys.platform == "darwin":
+            support = home / "Library" / "Application Support"
+            paths += [support / "cad", support / "cad" / "installations" / "current", support / "Claude"
+                      / "claude_desktop_config.json"]
+        elif WINDOWS:
+            paths += [home / ".local" / "state" / "cad", local / "cad-state",
+                      Path(os.environ.get("APPDATA") or home / "AppData" / "Roaming") / "Claude" / "claude_desktop_config.json"]
+        else:
+            paths += [Path(os.environ.get("XDG_STATE_HOME") or home / ".local" / "state") / "cad"]
+        times = {}
+        for path in paths:
+            try:
+                times[str(path)] = path.stat().st_mtime
+            except OSError:
+                times[str(path)] = None
+        return cls(times)
+
+    def moved(self, after: "Sentinels") -> list[str]:
+        return [f"{path}: {self.times[path]} -> {after.times.get(path)}" for path in self.times
+                if self.times[path] != after.times.get(path)]
+
+
+# --- this tree's wheels as another release -----------------------------------------------------------------
+
+
+def _record_line(name: str, data: bytes) -> str:
+    digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()
+    return f"{name},sha256={digest},{len(data)}"
+
+
+def rewrite(wheel: Path, out: Path, version: str, *, replace: dict[str, bytes] | None = None,
+            commands: bool = True, requires: list[str] | None = None) -> Path:
+    """``wheel`` written into ``out`` as release ``version``: its ``.dist-info`` renamed, its version and every
+    requirement on ``cad==`` stamped with ``version``, ``replace``'s files (by their path in the wheel) given other
+    bytes, and with ``commands`` false no console script (a release whose ``cad`` uv cannot install as a tool:
+    "No executables are provided"); ``requires``: ``Requires-Dist`` lines added. Its record written again. The new
+    wheel."""
+    with zipfile.ZipFile(wheel) as archive:
+        files = {name: archive.read(name) for name in archive.namelist() if not name.endswith("/")}
+    infos = {name.split("/", 1)[0] for name in files if name.split("/", 1)[0].endswith(".dist-info")}
+    if len(infos) != 1:
+        raise Failed(f"{wheel.name}: not one .dist-info ({sorted(infos)})")
+    info = infos.pop()
+    stem, old = info[: -len(".dist-info")].rsplit("-", 1)
+    new_info = f"{stem}-{version}.dist-info"
+    for name, data in (replace or {}).items():
+        if name not in files:
+            raise Failed(f"{wheel.name} has no {name} to replace")
+        files[name] = data
+    written: dict[str, bytes] = {}
+    for name, data in files.items():
+        if name == f"{info}/RECORD":
+            continue
+        if name.startswith(info + "/"):
+            relative = name[len(info) + 1:]
+            if relative == "METADATA":
+                text = data.decode("utf-8")
+                text = re.sub(r"(?m)^Version: .*$", f"Version: {version}", text, count=1)
+                text = re.sub(r"(?m)^(Requires-Dist: cad(?:\[[^\]]*\])?) ?==" + re.escape(old) + r"\b",
+                              rf"\g<1>=={version}", text)
+                text = text.rstrip("\n") + "\n" + "".join(f"Requires-Dist: {line}\n" for line in requires or [])
+                data = text.encode("utf-8")
+            elif relative == "entry_points.txt" and not commands:
+                data = re.sub(r"(?ms)^\[console_scripts\]\n.*?(?=^\[|\Z)", "", data.decode("utf-8")).encode("utf-8")
+            name = f"{new_info}/{relative}"
+        written[name] = data
+    record = [_record_line(name, data) for name, data in written.items()]
+    written[f"{new_info}/RECORD"] = ("\n".join([*record, f"{new_info}/RECORD,,"]) + "\n").encode("utf-8")
+    tag = wheel.name[: -len(".whl")].split("-", 2)[2]
+    out.mkdir(parents=True, exist_ok=True)
+    target = out / f"{stem}-{version}-{tag}.whl"
+    with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
+        for name, data in written.items():
+            archive.writestr(name, data)
+    return target
+
+
+def publish(wheels: Path, version: str, out: Path, *, replace: dict[str, bytes] | None = None,
+            commands: bool = True) -> list[Path]:
+    """Every wheel of one release in ``wheels`` (cad's and its aliases': cad-server, cad-mcp, cadgen) written into
+    ``out`` as release ``version`` (``rewrite``; ``replace`` and ``commands`` apply to cad's own wheel). The wheels
+    written."""
+    found = sorted(Path(wheels).glob("*.whl"))
+    releases = {path.name.split("-")[1] for path in found}
+    if len(releases) != 1 or not any(path.name.startswith("cad-") for path in found):
+        raise Failed(f"{wheels}: expected the wheels of one release, cad's among them: {[path.name for path in found]}")
+    return [rewrite(path, out, version, **({"replace": replace, "commands": commands}
+                                            if path.name.startswith("cad-") else {})) for path in found]
+
+
+def interpreter(env: Path) -> Path:
+    """The Python of the virtual environment ``env``."""
+    return Path(env) / ("Scripts/python.exe" if WINDOWS else "bin/python")
+
+
+def command(env: Path, name: str = "cad") -> Path:
+    """The console script ``name`` of the virtual environment ``env``."""
+    return Path(env) / (f"Scripts/{name}.exe" if WINDOWS else f"bin/{name}")
+
+
+if __name__ == "__main__":
+    # `python scripts/test/real_computer.py publish WHEELS VERSION OUT`: the install workflows' wheels as a release
+    # no index holds.
+    import argparse
+
+    parser = argparse.ArgumentParser(description="This tree's wheels written again as another release.")
+    parser.add_argument("action", choices=("publish",))
+    parser.add_argument("wheels", type=Path)
+    parser.add_argument("version")
+    parser.add_argument("out", type=Path)
+    args = parser.parse_args()
+    for written in publish(args.wheels, args.version, args.out):
+        print(written)

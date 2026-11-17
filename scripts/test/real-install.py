@@ -1,45 +1,51 @@
 #!/usr/bin/env python3
-"""The install script run for real, against the real command-line programs of Claude Code (``claude``), Codex
-(``codex``) and Gemini CLI (``gemini``), on a private computer (``scripts/test/real_computer.py``): its own home and
-folders, each program told its configuration folder there, nothing of this machine's home read or written.
+"""The install command run for real on a fresh private computer (``scripts/test/real_computer.py``): its own home,
+uv tools and folders, the real command-line programs of Claude Code (``claude``), Codex (``codex``) and Gemini CLI
+(``gemini``) each told its configuration folder there, nothing of this machine's home read or written.
 
-The script runs the way a person runs it (macOS and Linux: ``install.sh`` piped to ``sh``; Windows: ``install.ps1``
-handed to ``Invoke-Expression`` by Windows PowerShell 5.1), with this tree's ``install.py`` and ``cad setup`` from this
-tree's wheel (the install workflows' hooks, ``CAD_INSTALL_PY``, ``CAD_INSTALL_FROM``, ``UV_FIND_LINKS``), the version
-feed a local stand-in, and the apps looked for on PATH alone (``CAD_INSTALL_PATH_ONLY``). The plugin comes from this
+The command runs the way a person runs it (macOS and Linux: ``install.sh`` piped to ``sh``; Windows: ``install.ps1``
+handed to ``Invoke-Expression`` by Windows PowerShell 5.1), with this tree's ``install.py`` (``CAD_INSTALL_PY``), the
+version feed a local stand-in naming this tree's wheels written again as a release no index holds (``CAD_INSTALL_FEED``,
+``UV_FIND_LINKS``), and the apps looked for on PATH alone (``CAD_INSTALL_PATH_ONLY``). The plugin comes from this
 tree through each program's own GitHub route: the ``latest`` copy built as Publish Release builds it, in a local
 repository the computer's git reads for every address of ours on GitHub. Gemini CLI asks GitHub's API for a release
 named ``latest`` before it clones (there is none: it clones); that one request reaches GitHub.
 
-1. install: exit 0 and every line the app phase prints (and, at each run, Gemini CLI trusting no folder of the
-   person's); each program, asked by its own list command, holds our plugin (``text-to-cad@earthtojake``; Gemini CLI:
-   the extension ``text-to-cad`` from GitHub at ``latest``) exactly once, copied from the local repository (the copy
-   carries this run's mark and the skills' pins of this release); the cad this tree's wheel installed; ``cad
-   --version`` and ``cad +<release> --version``; a box built by ``cad +<release> run`` and its page link answering
-   with its token, refused without.
-2. again: the local repository moved on as a release moves it (a commit whose manifests name the next version); the
-   script again: exit 0, each app ``updated``, one copy each, the new commit's.
-3. migrate: our plugin removed by each program's own commands, then each program left as 0.11.10's installer left it
-   (``<state>/plugin`` made from the v0.11.10 tree by that release's own ``plugin.tree``, added as the catalog
-   ``text-to-cad`` and ``text-to-cad@text-to-cad`` installed from it; Gemini CLI: the folder linked); the script
-   again: each app ends with the new plugin alone, never neither, never both.
+1. install: exit 0 and every line the app phase prints; cad installed as a uv tool at the feed's release, its command
+   in uv's bin folder; ``cad --version``; both of cad's switches on (``cad auto-update``); no server started by the
+   install; each program holds our plugin (``text-to-cad@earthtojake``; Gemini CLI: the extension ``text-to-cad`` from
+   GitHub at ``latest``) exactly once, copied from the local repository.
+2. cad: ``cad server start``; a box built by ``cad run`` and its page link answering with its token, refused without;
+   a file shown by ``cad viewer`` the same way; ``cad doctor`` exit 0.
+3. again: the local repository moved on as a release moves it; the command again: "installed already", each app
+   ``updated``, one copy each, the new commit's.
+4. update mode (``CAD_INSTALL_UPDATE=1``, as cad runs it after its own update): our plugin first removed from one
+   program by its own command; the command updates the others and adds nothing to that one, and leaves cad alone.
+5. migrate: each program left as 0.11.10's installer left it (``<state>/plugin`` made from the v0.11.10 tree by that
+   release's own ``plugin.tree``, added as the catalog ``text-to-cad`` and ``text-to-cad@text-to-cad`` installed from
+   it; Gemini CLI: the folder linked); the command again: each app ends with the new plugin alone.
 
 Every process it starts is stopped (a process left running fails the run), and the machine's own home is compared
 before and after: a change to what an install of ours would touch fails it (on CI, any change). The private computer is
 removed unless ``--keep``. A failure prints what the computer holds.
 
-    scripts/test/real-install.py --wheels DIR [--require claude,codex,gemini] [--keep] [--work DIR] [--install-py FILE]
+    scripts/test/real-install.py --wheels DIR [--require claude,codex,gemini] [--only claude,codex] [--keep]
+                                 [--work DIR] [--uv-cache DIR] [--install-py FILE]
 
 ``--wheels``: the folder of this tree's wheels, as ``scripts/release/check-wheel-contents.sh`` keeps them
-(``CAD_KEEP_WHEEL=1 CAD_WHEEL_OUT_DIR=DIR``). A program missing here is skipped and said, unless ``--require`` names
-it. It needs the tag v0.11.10 in this checkout, uv, git, and the network (PyPI, uv's Python, the programs' own vendors).
-CI runs it on Windows, macOS and Linux (``.github/workflows/real-install.yml``).
+(``CAD_KEEP_WHEEL=1 CAD_WHEEL_OUT_DIR=DIR``): written again as release ``0.11.<9000+n>``, which no index holds;
+without it they are built from the source (``tests/python/support/machine.py``: cad importable, no packaged client,
+so a page link is checked for its token alone). A
+program missing here is skipped and said, unless ``--require`` names it; ``--only`` leaves the others out. It needs the
+tag v0.11.10 in this checkout, uv, git, and the network (PyPI, uv's Python, the programs' own vendors). CI runs it on
+Windows, macOS and Linux (``.github/workflows/real-install.yml``).
 """
 
 from __future__ import annotations
 
 import argparse
 import importlib.util
+import shutil
 import json
 import os
 import re
@@ -55,12 +61,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import real_computer as rc  # noqa: E402 - beside it
 
 REPO_ROOT = rc.REPO_ROOT
-VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+# This tree as a release no index holds, above every release, of this run alone.
+VERSION = f"0.11.{9000 + os.getpid() % 900}"
+# The plugin's version, which its manifests carry: the tree's.
+PLUGIN_VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 OLD = "v0.11.10"
 CATALOG, OLD_CATALOG, PLUGIN = "earthtojake", "text-to-cad", "text-to-cad"
 OURS, OLD_OURS = f"{PLUGIN}@{CATALOG}", f"{PLUGIN}@{OLD_CATALOG}"
 GITHUB = f"https://github.com/{rc.REPOSITORY}"
-CI = bool(os.environ.get("GITHUB_ACTIONS"))
+CI = rc.CI
 BOX = '''from cad import model
 
 
@@ -74,6 +83,8 @@ def box():
 if __name__ == "__main__":
     box()
 '''
+STL = ("solid p\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 10 0 0\nvertex 0 10 0\nendloop\nendfacet\n"
+       "endsolid p\n")
 
 
 def say(line: str = "") -> None:
@@ -100,11 +111,12 @@ class Run:
         self.computer = computer
         self.wheels = wheels
         self.installer = installer
-        self.server_wheel = next(iter(sorted(wheels.glob(f"cad_server-{VERSION}-*.whl"))), None)
-        if self.server_wheel is None:
-            raise rc.Failed(f"no cad_server-{VERSION} wheel in {wheels}")
-        bin_folder = computer.home / ".local" / "bin"
-        self.cad = bin_folder / ("cad.exe" if rc.WINDOWS else "cad")
+        self.wheel = next(iter(sorted(wheels.glob(f"cad-{VERSION}-*.whl"))), None)
+        if self.wheel is None:
+            raise rc.Failed(f"no cad-{VERSION} wheel in {wheels}")
+        with zipfile.ZipFile(self.wheel) as wheel:
+            self.client = any(name.startswith("cad_server/_runtime/viewer/") for name in wheel.namelist())
+        self.cad_path = computer.bin / ("cad.exe" if rc.WINDOWS else "cad")
 
     @property
     def names(self) -> list[str]:
@@ -112,10 +124,9 @@ class Run:
 
     # --- the install script, as a person runs it --------------------------------------------------------------
 
-    def script(self, label: str) -> rc.Ran:
-        hooks = {"CAD_INSTALL_PY": str(self.installer),
-                 "CAD_INSTALL_FROM": str(self.server_wheel), "UV_FIND_LINKS": str(self.wheels),
-                 "CAD_INSTALL_PATH_ONLY": "1"}
+    def script(self, label: str, *, update: bool = False) -> rc.Ran:
+        hooks = {"CAD_INSTALL_PY": str(self.installer), "CAD_INSTALL_PATH_ONLY": "1",
+                 **({"CAD_INSTALL_UPDATE": "1"} if update else {})}
         if rc.WINDOWS:
             script = REPO_ROOT / "scripts" / "install" / "install.ps1"
             argv = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
@@ -133,18 +144,15 @@ class Run:
             raise rc.Failed(f"the install script ({label}) made Gemini CLI trust a folder of the person's: {added}")
         if ran.code:
             raise rc.Failed(f"the install script ({label}) exited {ran.code}")
-        lines = ran.lines()
-        if f"Installing text-to-cad {VERSION}. The first run downloads it, which takes a minute." not in lines:
-            raise rc.Failed(f"the install script ({label}) did not install {VERSION}")
-        if any("cad setup: failed" in line for line in lines):
-            raise rc.Failed(f"cad setup failed ({label})")
         return ran
 
     def app_lines(self, ran: rc.Ran, label: str, wanted: dict[str, str]) -> None:
         """Every line of the app phase: one per program, matching ``wanted`` (program -> pattern), the count of the
         apps not found, and the closing line; nothing else."""
         lines = ran.lines()
-        start = lines.index("Setting up the plugin in each agent app found here:") + 1
+        heads = ("Setting up the plugin in each agent app found here:",
+                 "Updating text-to-cad's plugin in each agent app that has it:")
+        start = next(index for index, line in enumerate(lines) if line in heads) + 1
         phase = [line for line in lines[start:] if line.strip()]
         expected = {rc.PROGRAMS[name].name: pattern for name, pattern in wanted.items()}
         unexpected, seen = [], set()
@@ -153,6 +161,9 @@ class Run:
             if app in expected and re.fullmatch(expected[app], line):
                 seen.add(app)
             elif not (re.fullmatch(r"\d+ other supported apps were not found here\.", line)
+                      or re.fullmatch(r"\d+ apps found here have no copy of ours to update: nothing was added to them\.",
+                                      line)
+                      or line in ("auto-update: on", "installer: on")
                       or line == "Start a new session in each app to use it."):
                 unexpected.append(line)
         missing = sorted(set(expected) - seen)
@@ -204,9 +215,10 @@ class Run:
                 "said": {"extensions": [{key: entry.get(key) for key in ("name", "version", "path", "installMetadata")}
                                         for entry in ours]}}
 
-    def ours_alone(self, label: str) -> None:
-        """Each program holds our plugin from GitHub's ``latest`` exactly once, and the copy is this run's."""
-        for name in self.names:
+    def ours_alone(self, label: str, names: list[str] | None = None) -> None:
+        """Each program (of ``names``) holds our plugin from GitHub's ``latest`` exactly once, and the copy is this
+        run's."""
+        for name in self.names if names is None else names:
             held = self.listed(name)
             wanted = ({"plugins": [f"{PLUGIN} (git {GITHUB} latest)"], "catalogs": []} if name == "gemini"
                       else {"plugins": [OURS], "catalogs": [CATALOG]})
@@ -215,55 +227,112 @@ class Run:
                                 f"alone: {json.dumps(held['said'], default=str)[:2000]}")
             for folder in held["copies"]:
                 skill = folder / "skills" / "cad" / "SKILL.md"
-                pinned = skill.is_file() and f"cad +{VERSION} " in skill.read_text(encoding="utf-8", errors="replace")
-                if not self.computer.local_copy(folder) or not pinned:
+                if not self.computer.local_copy(folder) or not skill.is_file():
                     raise rc.Failed(f"{name} ({label}): {folder} is not this run's copy of the local repository "
-                                    f"(its mark: {self.computer.local_copy(folder)}, the pin cad +{VERSION}: {pinned})")
+                                    f"(its mark: {self.computer.local_copy(folder)}, skills/cad: {skill.is_file()})")
             say(f"ok    {name} ({label}): {', '.join(held['plugins'] + held['catalogs'])}, once; "
                 f"{len(held['copies'])} copies, each this run's")
 
     # --- cad ----------------------------------------------------------------------------------------------------
 
-    def cad_works(self) -> None:
-        """The server installed is this tree's wheel (every file of its package there, the same bytes: the wheel, not
-        the checkout, which Windows checks out with other line ends); the command with and without a pin; a box built
-        and its page answering."""
-        server = self.computer.state / "versions" / VERSION / "code" / "server"
-        servers = sorted(server.rglob("site-packages/cad_server"))
-        with zipfile.ZipFile(self.server_wheel) as wheel:
+    def cad(self, *argv, cwd: Path | None = None) -> rc.Ran:
+        return self.computer.must([self.cad_path, *argv], cwd=cwd)
+
+    def installed(self, ran: rc.Ran) -> None:
+        """What the install command's cad step left (step 1, see the module): cad a uv tool at the feed's release, its
+        command in uv's bin folder, its environment this run's wheel, both switches on, and no server started."""
+        c = self.computer
+        if f"Installing cad {VERSION} with uv. The first run downloads it, which takes a minute." not in ran.lines():
+            raise rc.Failed(f"the install command did not install cad {VERSION}")
+        tool = self.tool()
+        if tool is None or tool["version"] != VERSION or not rc._within(Path(tool["env"]), c.uv_tools):
+            raise rc.Failed(f"uv lists no cad tool {VERSION} in the computer's tool folder: {tool}")
+        if (os.path.realpath(Path(tool["command"]).parent) != os.path.realpath(c.bin)
+                or not self.cad_path.exists()):
+            raise rc.Failed(f"the cad command is not in uv's bin folder {c.bin}: {tool}")
+        with zipfile.ZipFile(self.wheel) as wheel:
             files = {name: wheel.read(name) for name in wheel.namelist()
-                     if name.startswith("cad_server/") and not name.endswith("/")}
-        installed = servers[0].parent if servers else None
-        differ = [name for name, data in sorted(files.items())
-                  if installed is None or not (installed / name).is_file() or (installed / name).read_bytes() != data]
-        if not servers or not files or differ:
-            raise rc.Failed(f"the server installed is not the wheel's: {servers[:1]}, {len(files)} files in the wheel, "
-                            f"missing or differing {differ[:5]}")
-        for argv in ([self.cad, "--version"], [self.cad, f"+{VERSION}", "--version"]):
-            said = self.computer.must(argv).lines()[:1]
-            if said != [f"cad {VERSION}"]:
-                raise rc.Failed(f"{' '.join(map(str, argv[1:]))} said {said}")
-        say(f"ok    cad --version and cad +{VERSION} --version: cad {VERSION}; the server is the wheel's "
-            f"({len(files)} files, each the same)")
+                     if name.startswith("cad_server/") and name.endswith(".py")}
+        site = sorted(Path(tool["env"]).rglob("site-packages/cad_server"))
+        differ = [name for name, data in sorted(files.items()) if not site
+                  or (site[0].parent / name).read_bytes() != data] if files else ["(none in the wheel)"]
+        if differ:
+            raise rc.Failed(f"the cad tool's environment is not this run's wheel: {differ[:5]}")
+        said = self.cad("--version").lines()[:1]
+        if said != [f"cad {VERSION}"]:
+            raise rc.Failed(f"cad --version said {said}")
+        switches = self.cad("auto-update", "status").lines()
+        if switches[-2:] != ["auto-update: on", "installer: on"]:
+            raise rc.Failed(f"cad auto-update status said {switches}")
+        status = self.cad("server", "status", "--json").out.strip().splitlines()[-1:]
+        if status != ["null"]:
+            raise rc.Failed(f"the install command started a server: {status}")
+        say(f"ok    cad {VERSION}: a uv tool in the computer ({len(files)} modules, the wheel's), its command in uv's "
+            "bin folder, cad --version, both switches on, no server started")
+
+    def tool(self) -> dict | None:
+        """uv's tool ``cad`` in the computer: its version, its environment, its ``cad`` command; None with none."""
+        listed = self.computer.must(["uv", "tool", "list", "--show-paths"]).lines()
+        for index, line in enumerate(listed):
+            found = re.fullmatch(r"cad v(\S+) \((.+)\)", line.strip())
+            if found:
+                commands = [re.fullmatch(r"- cad(?:\.exe)? \((.+)\)", entry.strip()) for entry in listed[index + 1:]]
+                command = next((match[1] for match in commands if match), "")
+                return {"version": found[1], "env": found[2], "command": command}
+        return None
+
+    def page(self, link: str, what: str) -> None:
+        """``link`` (a page link with its token) answering 200 with the page, and 403 without the token. Wheels built
+        from the source carry no packaged client (``--wheels`` not given): there the token alone is checked."""
+        try:
+            with urllib.request.urlopen(link) as page:
+                status, body = page.status, page.read()
+        except urllib.error.HTTPError as error:
+            status, body = error.code, b""
+        try:
+            urllib.request.urlopen(link.split("?", 1)[0])
+            bare = 200
+        except urllib.error.HTTPError as error:
+            bare = error.code
+        served = status == 200 and b"<html" in body.lower() if self.client else status not in (401, 403)
+        if not served or bare != 403:
+            raise rc.Failed(f"{what}: the page link answered {status} ({len(body)} bytes), {bare} without its token")
+
+    def cad_works(self) -> None:
+        """Step 2 (see the module)."""
+        started = self.cad("server", "start").out
+        if f"cad {VERSION}" not in started:
+            raise rc.Failed(f"cad server start said {started!r}")
         models = self.computer.work / "models" / "box"
         models.mkdir(parents=True, exist_ok=True)
         (models / "box.py").write_text(BOX, encoding="utf-8")
-        built = self.computer.must([self.cad, f"+{VERSION}", "run", "box.py"], cwd=models, echo=echo).out
+        built = self.computer.must([self.cad_path, "run", "box.py"], cwd=models, echo=echo).out
         if not re.search(r"(?m)^built \S+", built) or not re.search(r"bounds 40\D+20\D+6 mm", built):
             raise rc.Failed(f"cad run box.py built no box:\n{built}")
         link = re.search(r"(?m)^\s*view:\s+(http://\S+\?token=\S+)", built)
         if not link:
             raise rc.Failed(f"cad run box.py printed no view: link with a token:\n{built}")
-        with urllib.request.urlopen(link[1]) as page:
-            status, body = page.status, page.read()
-        try:
-            urllib.request.urlopen(link[1].split("?", 1)[0])
-            bare = 200
-        except urllib.error.HTTPError as error:
-            bare = error.code
-        if status != 200 or b"<html" not in body.lower() or bare != 403:
-            raise rc.Failed(f"the page link answered {status} ({len(body)} bytes), {bare} without its token")
-        say(f"ok    cad +{VERSION} run box.py built the box; its page answers 200 with its token, 403 without")
+        self.page(link[1], "cad run box.py")
+        say("ok    cad server start; cad run box.py built the box; its page answers 200 with its token, 403 without")
+        (models / "part.stl").write_text(STL, encoding="ascii")
+        if not self.client:
+            say("note  cad viewer not run: these wheels carry no packaged client, which it refuses to start without")
+            return self.doctor()
+        shown = self.cad("viewer", "part.stl", "--no-open", cwd=models).out
+        link = re.search(r"(http://\S+\?token=\S+)", shown)
+        if not link:
+            raise rc.Failed(f"cad viewer part.stl printed no link with a token:\n{shown}")
+        self.page(link[1], "cad viewer part.stl")
+        say("ok    cad viewer part.stl: its page answers 200 with its token, 403 without")
+        self.doctor()
+
+    def doctor(self) -> None:
+        doctor = self.computer.run([self.cad_path, "doctor"])
+        if doctor.code:
+            raise rc.Failed(f"cad doctor exited {doctor.code}:\n{doctor.out}")
+        if not re.search(r"auto-update on, installer on; a uv tool", doctor.out):
+            raise rc.Failed(f"cad doctor does not say both switches are on and cad is a uv tool:\n{doctor.out}")
+        say("ok    cad doctor: exit 0, both switches on, a uv tool")
 
     # --- 0.11.10's installer's state ------------------------------------------------------------------------------
 
@@ -272,17 +341,7 @@ class Run:
         the module): the folder made by that release's own ``plugin.tree`` from its tree. The folder."""
         c = self.computer
         for name in self.names:
-            if name == "claude":
-                c.must(["claude", "plugin", "uninstall", OURS])
-                c.must(["claude", "plugin", "marketplace", "remove", CATALOG])
-            elif name == "codex":
-                c.must(["codex", "plugin", "remove", OURS])
-                c.must(["codex", "plugin", "marketplace", "remove", CATALOG])
-            else:
-                c.must(["gemini", "extensions", "uninstall", PLUGIN])
-            held = self.listed(name)
-            if held["plugins"] or held["catalogs"]:
-                raise rc.Failed(f"{name} still holds {held['plugins']} {held['catalogs']} after its own removal")
+            self.remove(name)
         say("ok    each program removed ours with its own commands, and lists nothing of ours")
         module_text = rc.tagged_file(OLD, "packages/cad-server/src/cad_server/_internal/plugin.py")
         module_path = c.work / "old-plugin.py"
@@ -315,6 +374,26 @@ class Run:
             say(f"ok    {name} as 0.11.10 left it: {', '.join(held['plugins'] + held['catalogs'])}")
         return folder
 
+    def remove(self, name: str) -> None:
+        """Our plugin and catalog removed from program ``name`` by its own commands, where it holds them."""
+        c = self.computer
+        held = self.listed(name)
+        if name == "claude":
+            if OURS in held["plugins"]:
+                c.must(["claude", "plugin", "uninstall", OURS])
+            if CATALOG in held["catalogs"]:
+                c.must(["claude", "plugin", "marketplace", "remove", CATALOG])
+        elif name == "codex":
+            if OURS in held["plugins"]:
+                c.must(["codex", "plugin", "remove", OURS])
+            if CATALOG in held["catalogs"]:
+                c.must(["codex", "plugin", "marketplace", "remove", CATALOG])
+        elif held["plugins"]:
+            c.must(["gemini", "extensions", "uninstall", PLUGIN])
+        held = self.listed(name)
+        if held["plugins"] or held["catalogs"]:
+            raise rc.Failed(f"{name} still holds {held['plugins']} {held['catalogs']} after its own removal")
+
     # --- what the computer holds, for a failure ---------------------------------------------------------------
 
     def report(self) -> str:
@@ -325,8 +404,11 @@ class Run:
             except Exception as error:  # noqa: BLE001 - a failure's report says what it can
                 parts.append(f"{name} could not list: {error}")
         state = self.computer.state
-        parts.append(f"state {state}: {sorted(os.listdir(state)) if state.is_dir() else '(none)'}; versions "
-                     f"{sorted(os.listdir(state / 'versions')) if (state / 'versions').is_dir() else '(none)'}")
+        parts.append(f"state {state}: {sorted(os.listdir(state)) if state.is_dir() else '(none)'}")
+        try:
+            parts.append(f"uv's tools: {self.computer.run(['uv', 'tool', 'list', '--show-paths']).out}")
+        except Exception as error:  # noqa: BLE001
+            parts.append(f"uv's tools could not be listed: {error}")
         parts.append("processes from the computer's folder:\n" + "\n".join(
             f"{pid} {command}" for pid, command in self.computer.processes()))
         return "\n".join(parts)
@@ -347,35 +429,62 @@ def steps(run: Run) -> None:
     c = run.computer
     commit = c.stand_in(rc.plugin_tree())
     say(f"ok    the local repository: latest at {commit[:12]}, which {GITHUB} names in the computer's git")
-    say("note  Gemini CLI asks api.github.com for a release of ours named latest before it clones (there is none): "
-        "that request goes to GitHub; the clone is the local one")
+    if "gemini" in run.names:
+        say("note  Gemini CLI asks api.github.com for a release of ours named latest before it clones (there is "
+            "none): that request goes to GitHub; the clone is the local one")
 
     names = run.names
     ran = run.script("install")
     run.app_lines(ran, "install", {name: rf"{re.escape(rc.PROGRAMS[name].name)}: installed" for name in names})
+    run.installed(ran)
     run.ours_alone("install")
     run.cad_works()
 
-    major, minor, patch = VERSION.split(".")[:3]
-    c.advance(VERSION, f"{major}.{minor}.{int(patch) + 1}")
+    major, minor, patch = PLUGIN_VERSION.split(".")[:3]
+    c.advance(PLUGIN_VERSION, f"{major}.{minor}.{int(patch) + 1}")
     ran = run.script("again")
+    if f"cad {VERSION} is installed already." not in ran.lines():
+        raise rc.Failed(f"the install command again did not find cad {VERSION} installed already")
     run.app_lines(ran, "again", {name: rf"{re.escape(rc.PROGRAMS[name].name)}: updated" for name in names})
     run.ours_alone("again")
+    say(f"ok    the install command again: cad {VERSION} is installed already")
 
-    folder = run.as_old_installer_left_it()
+    # The update mode: one program without our copy (removed by its own command), the others with it.
+    left_out, kept = names[0], names[1:]
+    run.remove(left_out)
+    c.advance(f"{major}.{minor}.{int(patch) + 1}", f"{major}.{minor}.{int(patch) + 2}")
+    ran = run.script("update mode", update=True)
+    if any(line.startswith(("Installing cad", "cad ")) for line in ran.lines()):
+        raise rc.Failed("the install command in update mode touched cad")
+    if not any(re.fullmatch(r"\d+ apps found here have no copy of ours to update: nothing was added to them\.", line)
+               for line in ran.lines()):
+        raise rc.Failed("the install command in update mode did not say an app had no copy of ours to update")
+    run.app_lines(ran, "update mode", {name: rf"{re.escape(rc.PROGRAMS[name].name)}: updated" for name in kept})
+    run.ours_alone("update mode", kept)
+    held = run.listed(left_out)
+    if held["plugins"] or held["catalogs"]:
+        raise rc.Failed(f"the install command in update mode added ours to {left_out}: {held['plugins']}")
+    if run.tool()["version"] != VERSION:
+        raise rc.Failed(f"the install command in update mode changed cad: {run.tool()}")
+    say(f"ok    update mode: {', '.join(kept) or 'no program'} updated; nothing added to {left_out}; cad left alone")
+
+    run.as_old_installer_left_it()
     ran = run.script("migrate")
     removed = {"claude": rf"Claude Code: installed \(removed old copies: {re.escape(OLD_OURS)}\)",
                "codex": rf"Codex: installed \(removed old copies: {re.escape(OLD_OURS)}\)",
                "gemini": r"Gemini CLI: updated \(removed old copies: text-to-cad linked to .+\)"}
     run.app_lines(ran, "migrate", {name: removed[name] for name in names})
     run.ours_alone("migrate")
-    say(f"note  0.11.10's folder after the migration: {'still there' if folder.exists() else 'gone'}")
+    say(f"note  0.11.10's folder after the migration: {'still there' if (c.state / 'plugin').exists() else 'gone'}")
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--wheels", type=Path, required=True, help="the folder of this tree's wheels")
+    parser.add_argument("--wheels", type=Path, help="the folder of this tree's wheels (default: built from the "
+                        "source, with no packaged client: tests/python/support/machine.py)")
     parser.add_argument("--require", default="", help="programs that must be here, comma-separated")
+    parser.add_argument("--only", default="", help="run with these programs alone, comma-separated")
+    parser.add_argument("--uv-cache", type=Path, help="uv's cache and Pythons for the computer (default: its own)")
     parser.add_argument("--keep", action="store_true", help="keep the private computer")
     parser.add_argument("--work", type=Path, help="the private computer's folder (default: a new temporary one)")
     parser.add_argument("--install-py", type=Path, default=REPO_ROOT / "scripts" / "install" / "install.py",
@@ -389,11 +498,15 @@ def main(argv: list[str] | None = None) -> int:
         except (AttributeError, ValueError):
             pass
     required = [name for name in args.require.split(",") if name]
-    unknown = [name for name in required if name not in rc.PROGRAMS]
+    only = [name for name in args.only.split(",") if name]
+    unknown = [name for name in required + only if name not in rc.PROGRAMS]
     if unknown:
         parser.error(f"unknown programs {unknown}: {', '.join(rc.PROGRAMS)}")
     programs = {}
     for name, program in rc.PROGRAMS.items():
+        if only and name not in only:
+            say(f"skip  {name}: not asked for (--only)")
+            continue
         found = program.path()
         if found:
             programs[name] = found
@@ -406,18 +519,48 @@ def main(argv: list[str] | None = None) -> int:
     if not programs:
         say("FAILED  none of the programs is here")
         return 1
+    if not shutil.which("uv"):
+        say("FAILED  uv is not on PATH")
+        return 1
 
     work = (args.work or Path(tempfile.mkdtemp(prefix="real-install-"))).resolve()
     work.mkdir(parents=True, exist_ok=True)
     needles = (PLUGIN, CATALOG, str(work))
     before = rc.RealHome.here(list(rc.PROGRAMS), needles)
+    sentinels = rc.Sentinels.here()
     feed = rc.Feed(VERSION)
-    computer = rc.Computer(work, programs, feed=feed)
-    say(f"real-install: cad {VERSION} into {computer.work}, default port {computer.port}; "
+    wheels = work / "wheels"
+    if args.wheels is None:
+        sys.path.insert(0, str(REPO_ROOT))
+        from tests.python.support.machine import release  # noqa: PLC0415 - the source tree's wheels
+
+        built = work / "built"
+        built.mkdir(parents=True, exist_ok=True)
+        release(VERSION, built)
+        # Its kernel's extra as the library declares it (the source's wheel names nothing there).
+        import tomllib  # noqa: PLC0415
+
+        project = tomllib.loads((REPO_ROOT / "packages" / "cad" / "pyproject.toml").read_text(encoding="utf-8"))
+        kernel = [f'{line}; extra == "build123d"' for line in project["project"]["optional-dependencies"]["build123d"]]
+        for wheel in built.glob("*.whl"):
+            rc.rewrite(wheel, wheels, VERSION, requires=kernel if wheel.name.startswith("cad-") else None)
+        say("note  no --wheels: this tree's wheels built from the source, with no packaged client (the pages' "
+            "links are checked for their token alone)")
+    else:
+        rc.publish(args.wheels.resolve(), VERSION, wheels)
+    computer = rc.Computer(work, programs, feed=feed, wheels=wheels,
+                           shared=args.uv_cache.resolve() if args.uv_cache else None)
+    say(f"real-install: cad {VERSION} (this tree's wheels written again) into {computer.work}; "
         + ", ".join(f"{name} {program_version(computer, name)}" for name in programs))
-    run = Run(computer, args.wheels.resolve(), args.install_py.resolve())
     failed = ""
     began = time.monotonic()
+    try:
+        computer.isolation(say)
+    except rc.Failed as failure:
+        say(f"FAILED  {failure}")
+        feed.close()
+        return 1
+    run = Run(computer, wheels, args.install_py.resolve())
     try:
         installer = load_installer()
         computer.check_path([app.command for app in installer.APPS if app.command] + ["cursor-agent"])
@@ -428,13 +571,17 @@ def main(argv: list[str] | None = None) -> int:
         say(f"FAILED  {failed}")
         say("-- what the computer holds")
         say(run.report())
-    left = computer.stop(run.cad)
+    left = computer.stop(run.cad_path)
     feed.close()
     if left:
         failed = failed or "processes were left running"
         say("FAILED  left running, now ended:\n" + "\n".join(left))
     else:
         say("ok    nothing of the computer's is left running")
+    moved = sentinels.moved(rc.Sentinels.here())
+    if moved:
+        failed = failed or "the machine's own files moved"
+        say("FAILED  the machine's own files moved:\n" + "\n".join(moved))
     strict, other = before.changes(rc.RealHome.here(list(rc.PROGRAMS), needles))
     if strict or (CI and other):
         failed = failed or "the machine's own home changed"

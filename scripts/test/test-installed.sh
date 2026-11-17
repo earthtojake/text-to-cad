@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Exercise cad the way a user gets it: built into wheels (cad, and its aliases cad-server and cad-mcp),
-# pip-installed together, run from a directory that is not this repo.
+# pip-installed together, run from a directory that is not this repo; installed as the uv tool the install
+# command makes (`uv tool install cad==<release>`); and installed the old way the updaters of 0.10.0 to
+# 0.11.10 still bring a release (`uv pip install cad-server==<release>` into a venv of their own).
 #
 # Every other check in this repo runs against the source tree, where the repo root is on
 # sys.path and the apps' builds sit beside the packages. None of that is true after
@@ -16,6 +18,9 @@
 # Usage: scripts/test/test-installed.sh [--wheels DIR]
 #   DIR holds cad's wheel and its aliases' (cad, cad_server, cad_mcp), as
 #   scripts/release/check-wheel-contents.sh leaves them; without it they are built.
+# The uv tool and the old way install the same wheels written again as a release no index holds
+# (scripts/test/real_computer.py publish): an index's release of the same number never stands in. They need uv
+# and the network (the wheels' dependencies).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -74,15 +79,13 @@ mkdir -p "$EMPTY" "$DIST"
 # folder, stopped on the way out.
 export CAD_ENGINE_DIR="$WORK/engine" CAD_CACHE_DIR="$WORK/no-0.7-store"
 cleanup() {
-  # The version's server the CAD app started (the cad command stops the newest installed version's), and the daemon the
-  # installed server's own commands started, if any.
-  if [ -x "$WORK/bin/cad" ]; then
-    "$WORK/bin/cad" stop >/dev/null 2>&1 \
-      || echo "warning: this run's version's server did not stop; it goes once idle" >&2
+  # The server the venv's commands and the CAD app started, the uv tool's, and the old way's, if any.
+  if [ -x "$VENV/bin/cad" ]; then
+    "$VENV/bin/cad" server stop >/dev/null 2>&1 \
+      || echo "warning: this run's server did not stop" >&2
   fi
-  if [ -x "$VENV/bin/python" ]; then
-    "$VENV/bin/python" -m cad_server.engine stop >/dev/null 2>&1 \
-      || echo "warning: this run's engine daemon did not stop; it goes once idle" >&2
+  if [ -x "$WORK/tool-bin/cad" ]; then
+    CAD_STATE_DIR="$WORK/tool-state" CAD_ENGINE_DIR="$WORK/tool-engine" "$WORK/tool-bin/cad" server stop >/dev/null 2>&1 || true
   fi
   if [ -x "$WORK/bridge/bin/python" ]; then
     CAD_STATE_DIR="$WORK/bridge-state" CAD_ENGINE_DIR="$WORK/bridge-engine" "$WORK/bridge/bin/python" -m cad_server.engine stop >/dev/null 2>&1 || true
@@ -92,8 +95,11 @@ cleanup() {
 trap cleanup EXIT
 # What the CAD app remembers (its library, release checks) stays in the throwaway directory too.
 export CAD_STATE_DIR="$WORK/state"
-# And the command the installation writes for the skills: never this machine's ~/.local/bin.
-export CAD_LAUNCHER_DIR="$WORK/bin"
+# No version feed and no telemetry: nothing here asks the network but for the wheels' dependencies. The servers'
+# pages on a free port of this run's, never the machine's 3245.
+export CAD_API_URL="http://127.0.0.1:9" CAD_UPDATE_CHECK=0 DO_NOT_TRACK=1 CAD_TELEMETRY=0
+CAD_ENGINE_DEFAULT_PORT="$("$PYTHON_BIN" -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+export CAD_ENGINE_DEFAULT_PORT
 unset CAD_INSTALLATION_VERSION CAD_VERSION
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -148,11 +154,12 @@ for package in (cad, cad_server, cad_mcp, cadgen):
 import cad.build123d
 if cadgen.build123d is not cad.build123d or cadgen.model is not cad.model:
     sys.exit("FAIL: the cadgen alias is not the library's own modules and names")
-# One distribution, cad: each package reports its release, never an alias's.
+# One distribution, cad: each package that reports a release reports cad's, never an alias's (cad_mcp, the
+# transport inside cad, reports none of its own).
 from importlib.metadata import version
-releases = {cad.__version__, cad_server.__version__, cad_mcp.__version__, version("cad")}
+releases = {cad.__version__, cad_server.__version__, version("cad")}
 if len(releases) != 1:
-    sys.exit(f"FAIL: cad, cad_server and cad_mcp are not one release: {sorted(releases)}")
+    sys.exit(f"FAIL: cad and cad_server are not one release: {sorted(releases)}")
 print(f"   one release: {releases.pop()}")
 PY
 
@@ -202,21 +209,50 @@ while read -r command; do
   echo "   $COMMAND $command"
 done <"$WORK/commands.txt"
 
+# The same wheels as a release no index holds, for the installs through uv below.
+RELEASE="$("$VENV/bin/python" -c 'import cad; print(cad.__version__)')"
+STAMP="$(echo "$RELEASE" | cut -d. -f1-2).$((9000 + $$ % 900))"
+"$PYTHON_BIN" "$REPO_ROOT/scripts/test/real_computer.py" publish "$WHEELS" "$STAMP" "$WORK/stamped" >/dev/null \
+  || fail "writing the wheels again as $STAMP"
+UV=(uv)
+command -v uv >/dev/null 2>&1 || UV=("$PYTHON_BIN" -m uv)
+
+# What the install command does: `uv tool install --managed-python --python 3.14 cad==<release>`. uv's tool, its
+# command and its Python in private folders; the tool's receipt names cad, which is what lets cad update itself.
+step "The install command's uv tool: uv tool install cad==<release> gives the cad command, and cad knows it is a uv tool"
+export UV_TOOL_DIR="$WORK/tools" UV_TOOL_BIN_DIR="$WORK/tool-bin" UV_PYTHON_INSTALL_BIN=0 UV_NO_MODIFY_PATH=1
+"${UV[@]}" tool install --quiet --managed-python --python 3.14 --find-links "$WORK/stamped" "cad==$STAMP" \
+  || fail "uv tool install cad==$STAMP"
+[ -x "$UV_TOOL_BIN_DIR/cad" ] || fail "uv tool install cad wrote no cad command in $UV_TOOL_BIN_DIR"
+grep -q 'name = "cad"' "$UV_TOOL_DIR/cad/uv-receipt.toml" || fail "the tool's receipt does not name cad"
+(
+  cd "$EMPTY"
+  export CAD_STATE_DIR="$WORK/tool-state" CAD_ENGINE_DIR="$WORK/tool-engine"
+  [ "$("$UV_TOOL_BIN_DIR/cad" --version | head -n 1)" = "cad $STAMP" ] || fail "the tool's cad --version"
+  "$UV_TOOL_BIN_DIR/cad" auto-update on --installer >"$WORK/auto-update.log" 2>&1 \
+    || { cat "$WORK/auto-update.log" >&2; fail "cad auto-update on, which only a uv tool may do"; }
+  grep -qx "auto-update: on" "$WORK/auto-update.log" || { cat "$WORK/auto-update.log" >&2; fail "auto-update not on"; }
+  "$UV_TOOL_BIN_DIR/cad" doctor >"$WORK/tool-doctor.log" 2>&1 || true
+  grep -q "a uv tool" "$WORK/tool-doctor.log" || { cat "$WORK/tool-doctor.log" >&2; fail "cad doctor does not say a uv tool"; }
+  # The venv's cad is no uv tool: it is refused, in one line.
+  "$VENV/bin/cad" auto-update on >"$WORK/refused.log" 2>&1 && fail "a cad that is not a uv tool switched auto-update on"
+  grep -q "not a uv tool" "$WORK/refused.log" || { cat "$WORK/refused.log" >&2; fail "the refusal does not say why"; }
+) || exit 1
+echo "   $UV_TOOL_BIN_DIR/cad: cad $STAMP, a uv tool; cad auto-update on accepted there, refused in a venv"
+
 # What the updaters of 0.10.0 to 0.11.10, already on people's computers, do with a release and cannot be changed:
 # they make an environment with uv (`uv venv`, then `uv pip install cad-server==<release>`), take it as complete once
 # its `bin/cad` is there, and start its engine as `python -P -m cad_server._internal.engine_daemon`; a `cad` command
 # of their layout runs `python -m cad_server._internal.proxy`. The alias cad-server must bring all of that through
-# cad. From these wheels (--find-links: uv takes them over an index's release of the same number, which the hashes
-# below check), on private state and engine folders.
+# cad, on private state and engine folders.
 step "A 0.10-0.11 updater's environment: uv pip install cad-server==<release> gives bin/cad and the modules it runs"
 BRIDGE="$WORK/bridge"
 BRIDGE_ENGINE="$WORK/bridge-engine"
-RELEASE="$("$VENV/bin/python" -c 'import cad; print(cad.__version__)')"
-"$PYTHON_BIN" -m uv venv --quiet --no-project --python "$PYTHON_BIN" "$BRIDGE"
-"$PYTHON_BIN" -m uv pip install --quiet --python "$BRIDGE/bin/python" --find-links "$WHEELS" "cad-server==$RELEASE" \
-  || fail "uv pip install cad-server==$RELEASE"
-[ -x "$BRIDGE/bin/cad" ] || fail "uv pip install cad-server==$RELEASE wrote no bin/cad"
-"$BRIDGE/bin/python" - "$WHEELS" <<'PY' || exit 1
+"${UV[@]}" venv --quiet --no-project --python "$PYTHON_BIN" "$BRIDGE"
+"${UV[@]}" pip install --quiet --python "$BRIDGE/bin/python" --find-links "$WORK/stamped" "cad-server==$STAMP" \
+  || fail "uv pip install cad-server==$STAMP"
+[ -x "$BRIDGE/bin/cad" ] || fail "uv pip install cad-server==$STAMP wrote no bin/cad"
+"$BRIDGE/bin/python" - "$WORK/stamped" <<'PY' || exit 1
 import glob, hashlib, os, sys, sysconfig, zipfile
 site = sysconfig.get_paths()["purelib"]
 wheel = glob.glob(os.path.join(sys.argv[1], "cad-[0-9]*.whl"))[0]
@@ -234,23 +270,19 @@ expected="$("$BRIDGE/bin/python" -c 'from cad_server._internal.proxy import NONE
   >"$WORK/bridge-daemon.log" 2>&1) &
 answered=0
 for _ in $(seq 300); do
-  if CAD_STATE_DIR="$WORK/bridge-state" CAD_ENGINE_DIR="$BRIDGE_ENGINE" "$BRIDGE/bin/python" -m cad_server.engine status >/dev/null 2>&1; then
+  if CAD_STATE_DIR="$WORK/bridge-state" CAD_ENGINE_DIR="$BRIDGE_ENGINE" "$BRIDGE/bin/cad" server status --json 2>/dev/null | grep -q '"version"'; then
     answered=1
     break
   fi
   kill -0 $! 2>/dev/null || break
   sleep 0.2
 done
-CAD_STATE_DIR="$WORK/bridge-state" CAD_ENGINE_DIR="$BRIDGE_ENGINE" "$BRIDGE/bin/python" -m cad_server.engine stop >/dev/null 2>&1 || true
+CAD_STATE_DIR="$WORK/bridge-state" CAD_ENGINE_DIR="$BRIDGE_ENGINE" "$BRIDGE/bin/cad" server stop >/dev/null 2>&1 || true
 [ "$answered" -eq 1 ] || { cat "$WORK/bridge-daemon.log" >&2; fail "python -P -m cad_server._internal.engine_daemon never answered"; }
-echo "   bin/cad, cad_server._internal.proxy and cad_server._internal.engine_daemon of cad $RELEASE"
+echo "   bin/cad, cad_server._internal.proxy and cad_server._internal.engine_daemon of cad $STAMP"
 
-# The shim is a release's: as on a person's device, it installs its own version on this private device at its
-# first start (`uvx --from cad-server==<VERSION> cad setup`, the kernel's environment with it) and serves
-# from that version's server. uv reads the wheels under test beside its index (UV_FIND_LINKS for the uvx, the
-# server's own CAD_UPDATE_FIND_LINKS for the environments it makes) and takes them over an index's release of
-# the same number: which wheel was installed is checked below, so a release on PyPI never stands in.
-export UV_FIND_LINKS="$WHEELS" CAD_UPDATE_FIND_LINKS="$WHEELS"
+# The CAD app as an agent host starts it: the cad-mcp alias's command starts the server as `cad server start` does,
+# then serves MCP on stdio.
 step "Serve the CAD app over MCP through the shim, as an agent host starts it"
 "$VENV/bin/python" - "$VENV/bin/$SHIM_COMMAND" "$WORK" <<'PY' || exit 1
 import json, os, subprocess, sys, threading
@@ -260,7 +292,7 @@ import cad_server
 # offered no tools, and cards show the page and its launch with no tab to wait for.
 server = subprocess.Popen([sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
                           env={**os.environ, "CAD_MCP_PRESENTATION": "inline"})
-# Bounds a hang, not the work: the first start installs the version, its kernel's environment among it.
+# Bounds a hang, not the work.
 watchdog = threading.Timer(900, server.kill)
 watchdog.daemon = True
 watchdog.start()
@@ -307,35 +339,6 @@ watchdog.cancel()
 print(f"   {len(tools)} tools; the app is {len(page) // 1024} KiB at {uri}")
 PY
 
-step "Starting the CAD app installed its version from these wheels and wrote the $COMMAND command"
-VERSION_INSTALLED="$("$VENV/bin/python" -c 'import cad_server; print(cad_server.__version__)')"
-MARKER="$CAD_STATE_DIR/versions/$VERSION_INSTALLED/code/cad-version.json"
-PROXY="$CAD_LAUNCHER_DIR/$COMMAND"
-[ -f "$MARKER" ] || fail "$VERSION_INSTALLED is not installed: no $MARKER"
-# The version's server is the wheel under test, file for file (an index's release of the same number is not).
-"$VENV/bin/python" - "$MARKER" "$WHEELS" <<'PY' || exit 1
-import glob, hashlib, json, os, sys, zipfile
-marker = json.load(open(sys.argv[1], encoding="utf-8"))
-site = (glob.glob(os.path.join(marker["prefix"], "lib", "python*", "site-packages"))
-        or [os.path.join(marker["prefix"], "Lib", "site-packages")])[0]
-wheel = glob.glob(os.path.join(sys.argv[2], "cad-[0-9]*.whl"))[0]
-with zipfile.ZipFile(wheel) as archive:
-    files = [name for name in archive.namelist() if name.startswith("cad_server/") and name.endswith(".py")]
-    if not files:
-        sys.exit(f"FAIL: {os.path.basename(wheel)} carries no cad_server")
-    for name in files:
-        want = hashlib.sha256(archive.read(name)).digest()
-        path = os.path.join(site, *name.split("/"))
-        if not os.path.isfile(path) or hashlib.sha256(open(path, "rb").read()).digest() != want:
-            sys.exit(f"FAIL: the version's server is not {os.path.basename(wheel)}: {name} differs")
-print(f"   {len(files)} modules of {os.path.basename(wheel)} in {marker['prefix']}")
-PY
-[ -x "$PROXY" ] && grep -q "^# $COMMAND proxy: " "$PROXY" || fail "$PROXY is not the $COMMAND command"
-# cad run is uv run with cad pinned at the installation's release: the program runs on that release's library.
-[ "$("$PROXY" run -c 'import cad; print(cad.__version__)' | tail -n 1)" = "$("$VENV/bin/python" -c 'import cad; print(cad.__version__)')" ] \
-  || fail "$COMMAND run does not run the installation's release of cad"
-echo "   versions/$VERSION_INSTALLED and $PROXY"
-
 step "Build a real model with no repo in sight"
 mkdir -p "$EMPTY/models"
 cat >"$EMPTY/models/probe.py" <<'PY'
@@ -355,8 +358,10 @@ def probe():
 if __name__ == "__main__":
     probe()
 PY
+COMMAND_PATH="$VENV/bin/$COMMAND"
+"$COMMAND_PATH" server start >/dev/null || fail "$COMMAND server start"
 # Running the script IS the build: no CLI verb takes its place. Run as a skill runs it: $COMMAND run.
-"$PROXY" run models/probe.py >"$WORK/build.log" 2>&1 \
+"$COMMAND_PATH" run models/probe.py >"$WORK/build.log" 2>&1 \
   || { cat "$WORK/build.log" >&2; fail "$COMMAND run <model>.py"; }
 for written in XBF/probe.xbf probe.step probe.stl; do
   [ -s "$EMPTY/models/$written" ] \
@@ -367,7 +372,7 @@ echo "   built an xbf and the STEP and STL it declares"
 # The script above wrote the files the model DECLARES. This is the other half: an export of
 # the document to a destination the command names.
 step "Export the document"
-"$PROXY" xbf export models/XBF/probe.xbf models/exported.step models/exported.stl \
+"$COMMAND_PATH" xbf export models/XBF/probe.xbf models/exported.step models/exported.stl \
   >"$WORK/export.log" 2>&1 || { cat "$WORK/export.log" >&2; fail "$COMMAND xbf export"; }
 for written in exported.step exported.stl; do
   [ -s "$EMPTY/models/$written" ] || { cat "$WORK/export.log" >&2; fail "export wrote no models/$written"; }
@@ -379,7 +384,7 @@ echo "   wrote a STEP and an STL from the document"
 step "Check the part for each process"
 for process in cnc sheet molding printing; do
   status=0
-  "$PROXY" step dfm models/probe.step --process "$process" >"$WORK/dfm-$process.log" 2>&1 || status=$?
+  "$COMMAND_PATH" step dfm models/probe.step --process "$process" >"$WORK/dfm-$process.log" 2>&1 || status=$?
   # A verdict either way (a cube is no sheet): 0 or 1. 2 is the command refused, 3 a check that did not run.
   case "$status" in
     0|1) ;;

@@ -89,7 +89,21 @@ REQUIRED=(
   # engine, and every build fails.
   "cad_server/engine/daemon.py"
   "cad_server/engine/cli.py"
+  "cad_server/cli/server.py"
+  "cad_server/cli/cache.py"
   "cad_server/_internal/engine_daemon.py"
+  # cad's own update: the switches and their command, and the helper, whose SOURCE the update reads and runs
+  # with another Python (auto_update.HELPER): without the file no cad ever updates itself.
+  "cad_server/_internal/auto_update.py"
+  "cad_server/_internal/auto_update_helper.py"
+  "cad_server/cli/auto_update.py"
+  # The install command run again by the server (update mode, and the bridge's install mode).
+  "cad_server/_internal/install_script.py"
+  # What the updaters and launchers of 0.10.0 to 0.11.10 run in a release they bring: `cad setup
+  # --engine-update`, the records their switch starts a server by, and the module their `cad` command runs.
+  "cad_server/cli/setup.py"
+  "cad_server/_internal/installations.py"
+  "cad_server/_internal/proxy.py"
   # The script Open in starts a person's Blender with on a GLB or an STL (apps.BLENDER_SCRIPT).
   "cad_server/_internal/open_in_blender.py"
   # Its README: the mechanisms the package's laws name.
@@ -106,7 +120,6 @@ REQUIRED=(
   # The stdio transport an agent app starts: the standard library alone.
   "cad_mcp/__init__.py"
   "cad_mcp/shim.py"
-  "cad_mcp/engine.py"
   "cad_mcp/protocol.py"
 )
 

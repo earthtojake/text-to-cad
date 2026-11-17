@@ -413,10 +413,11 @@ jobs:
     with:
       ref: ${{ inputs.ref }}
 
-  # The install script against the real programs of Claude Code, Codex and Gemini CLI, on Windows, macOS and Linux,
-  # each on a private computer: install, again, and from 0.11.10's installer's state (real-install.yml,
-  # scripts/test/real-install.py). About 10 minutes a system on top of the wheel's 6 (cad's first download and
-  # its kernel's), Windows the slowest. With the rehearsals: a full run, nightly, and a change to the installers.
+  # The install command against the real programs of Claude Code, Codex and Gemini CLI, on Windows, macOS and Linux,
+  # each on a private computer: install (cad a uv tool, its server, a model, the viewer, the doctor), again, update
+  # mode, and from 0.11.10's installer's state (real-install.yml, scripts/test/real-install.py). Measured on macOS
+  # with a warm uv cache: 94 s; on a runner, cad's first download and its kernel's (about 240 MB) add a few minutes,
+  # Windows the slowest. With the rehearsals: a full run, nightly, and a change to the installers.
   real-install:
     name: real install
     needs: changes
@@ -425,20 +426,19 @@ jobs:
     with:
       ref: ${{ inputs.ref }}
 
-  # A computer on a shipped release arriving at this build, rehearsed with the real releases from PyPI, each on a
-  # computer of its own (scripts/test/rehearse-update.py): this tree published as one later release (wheels uv reads
-  # beside the index, a local version feed), and no port named for any process: the servers take the true default
-  # port, 3245 (free on a runner), and roll from it. The routes: 0.11.10's and 0.10.4's own updater (their update
-  # button running this build's hidden `cad setup --engine-update`, then this build's server running the install
-  # script it owes, a stand-in), 0.11.10's automatic update (Linux), the hand-over running the real install script on
-  # stand-ins of two apps and trying again after a failure (POSIX), 0.11.10 going back from a build whose server cannot
-  # start, 0.10.0's updater on Windows, which this build's setup takes over from (Windows), the install script
-  # (install.py) on a computer of 0.11.10 whose server serves pages, and the install script on a computer of 0.8.4,
-  # which has no updater. Each checks this build's server on the pages' port with their token, Recents and a document
-  # opening, the telemetry answer and What's new, the `cad` command with and without a pin, and one server left: the
-  # old release's stopped and its layout removed by this build's cleanup. About 8 minutes of rehearsal on macOS (10 on
-  # Linux, with the automatic update), plus the job's setup; Windows is slower (uv copies). Before a release ships (a
-  # full run), nightly, and on a change to the installers, the rehearsal or the code of this build it runs.
+  # cad's updates rehearsed end to end, each on a private computer of its own (scripts/test/rehearse-update.py): this
+  # tree published as releases no index holds (wheels uv reads beside the index, a local version feed), real uv, real
+  # servers and the real install command. cad updating itself as a uv tool (`self`: idle, switched off, to a release
+  # whose server cannot start and on past it, to a release uv cannot install and back); and the bridge from the real
+  # shipped releases on PyPI (`bridge`: 0.11.10's update button and automatic update into this build, through its
+  # server's run of the install command in install mode to the uv tool's server; a computer with no receipt of our
+  # installer, which gets cad alone; 0.11.10 going back from a build whose server cannot start; the install command
+  # on a computer of 0.11.10), and the button of 0.11.0 and 0.10.4, and on Windows of 0.10.0, which this build
+  # takes over. Each checks the end state (uv's cad in the bin folder, its server answering, the records 0.11.10's
+  # clients read naming it, both switches on, nothing of a past release deleted) and that no file of the runner's own
+  # home moved. Measured on macOS: `self` about 6 minutes, `bridge` about 11 (0.11.10's first setup downloads its
+  # kernel). Before a release ships (a full run), nightly, and on a change to the installers, the rehearsal or the
+  # code of this build it runs.
   update-rehearsal:
     name: update rehearsal (${{ matrix.os }})
     needs: changes
@@ -448,7 +448,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 55
+    timeout-minutes: 75
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -465,32 +465,29 @@ jobs:
         timeout-minutes: 5
         uses: astral-sh/setup-uv@v10.3.3
 
-      # The rehearsal builds this tree's wheels and reads its own helpers: the one distribution, cad.
-      - name: Install cad
-        timeout-minutes: 10
-        run: python -m pip install --editable ./packages/cad
+      # The rehearsal builds this tree's wheels from the source with the standard library alone
+      # (tests/python/support/machine.py): nothing of cad is installed here.
+      - name: cad updating itself (idle, switched off, past a broken server, back from an uninstallable release)
+        timeout-minutes: 20
+        run: python scripts/test/rehearse-update.py self --uv-cache "${{ runner.temp }}/uv"
 
-      # The automatic update is the button's switch, which every system rehearses, reached by the old release's own
-      # timers: Linux alone. The hand-over's stand-ins of the apps are POSIX scripts: not on Windows.
-      - name: From 0.11.10, by its updater (pressed, by itself, the hand-over, gone back from) and by the install script; from 0.8.4, by the install script
-        if: runner.os == 'Linux'
+      - name: From 0.11.10 (button, automatic, store-only, gone back from, the install command)
         timeout-minutes: 30
-        run: python scripts/test/rehearse-update.py
+        run: python scripts/test/rehearse-update.py bridge --uv-cache "${{ runner.temp }}/uv"
 
-      - name: From 0.11.10, by its updater (pressed, the hand-over, gone back from) and by the install script; from 0.8.4, by the install script
-        if: runner.os != 'Linux'
-        timeout-minutes: 30
-        run: python scripts/test/rehearse-update.py updater handover rollback install-script from-0.8
+      - name: From 0.11.0, the first with an automatic update, by itself
+        timeout-minutes: 15
+        run: python scripts/test/rehearse-update.py automatic --old 0.11.0 --uv-cache "${{ runner.temp }}/uv"
 
-      - name: From 0.10.4, the newest 0.10, by its updater
-        timeout-minutes: 10
-        run: python scripts/test/rehearse-update.py updater --old 0.10.4
+      - name: From 0.10.4, the newest 0.10, by its button
+        timeout-minutes: 15
+        run: python scripts/test/rehearse-update.py updater --old 0.10.4 --uv-cache "${{ runner.temp }}/uv"
 
       # 0.10.0 on Windows keeps its state apart from every later release's: this build's setup takes the computer over.
-      - name: From 0.10.0 on Windows, by its updater
+      - name: From 0.10.0 on Windows, by its button
         if: runner.os == 'Windows'
-        timeout-minutes: 10
-        run: python scripts/test/rehearse-update.py updater --old 0.10.0
+        timeout-minutes: 15
+        run: python scripts/test/rehearse-update.py updater --old 0.10.0 --uv-cache "${{ runner.temp }}/uv"
 
   # ---- integration: each with what it drives installed -------------------------------------------
 

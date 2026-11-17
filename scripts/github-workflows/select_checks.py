@@ -201,17 +201,19 @@ RULES: tuple[Rule, ...] = (
     # release, a full run.
     Rule((".github/workflows/install-linux.yml", ".github/workflows/install-windows.yml", "scripts/install/**"),
          select(flags=["installer"])),
-    # The update rehearsal (test.yml's update-rehearsal): a real 0.11.10 updating into this tree's build. Beside the
-    # packages' suites, the code of this build it runs: an updater's setup and the hand-over its server carries out,
-    # the layout of 0.11.10 and earlier and the records its clients read, the server's tending.
+    # The update rehearsal (test.yml's update-rehearsal): cad updating itself as a uv tool, and the real shipped
+    # releases updating into this tree's build. Beside the packages' suites, the code of this build it runs: cad's own
+    # update and its helper, an updater's setup and the install command its server runs, the layout of 0.11.10 and
+    # earlier and the records its clients read, the server's tending.
     Rule(("scripts/test/rehearse-update.py",), select(flags=["installer"]), final=True),
     # The real install (real-install.yml, which test.yml calls): the install script against the real programs of
     # agent apps, on a private computer of its own.
     Rule((".github/workflows/real-install.yml", "scripts/test/real-install.py", "scripts/test/real_computer.py"),
          select(flags=["installer"]), final=True),
     Rule(tuple(f"packages/cad/src/cad_server/{path}" for path in (
-        "cli/setup.py", "_internal/install_script.py", "_internal/arrival.py", "_internal/legacy.py",
-        "_internal/versions.py", "_internal/imports.py", "_internal/installations.py", "engine/daemon.py")),
+        "cli/setup.py", "cli/auto_update.py", "_internal/install_script.py", "_internal/arrival.py",
+        "_internal/auto_update.py", "_internal/auto_update_helper.py", "_internal/installations.py",
+        "engine/daemon.py")),
         select(flags=["installer"])),
     # The one-line installer: the docs site serves copies of install.sh, install.ps1 and install.py. Its own
     # tests (tests/python/global/test_install_script.py) are a light contract: static runs them on every change.
