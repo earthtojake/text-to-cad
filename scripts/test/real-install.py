@@ -32,7 +32,8 @@ removed unless ``--keep``. A failure prints what the computer holds.
                                  [--work DIR] [--uv-cache DIR] [--install-py FILE]
 
 ``--wheels``: the folder of this tree's wheels, as ``scripts/release/check-wheel-contents.sh`` keeps them
-(``CAD_KEEP_WHEEL=1 CAD_WHEEL_OUT_DIR=DIR``): written again as release ``0.11.<9000+n>``, which no index holds;
+(``CAD_KEEP_WHEEL=1 CAD_WHEEL_OUT_DIR=DIR``): written again as release ``<major>.<minor>.<9000+n>`` of this tree's
+``VERSION`` (``real_computer.stamp``), which no index holds;
 without it they are built from the source (``tests/python/support/machine.py``: cad importable, no packaged client,
 so a page link is checked for its token alone). A
 program missing here is skipped and said, unless ``--require`` names it; ``--only`` leaves the others out. It needs the
@@ -62,8 +63,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import real_computer as rc  # noqa: E402 - beside it
 
 REPO_ROOT = rc.REPO_ROOT
-# This tree as a release no index holds, above every release, of this run alone.
-VERSION = f"0.11.{9000 + os.getpid() % 900}"
+# This tree as a release no index holds, above every release on PyPI (this tree's major and minor, a patch far above
+# a real one: ``real_computer.stamp``), of this run alone.
+VERSION = rc.stamp(9000 + os.getpid() % 900)
 # The plugin's version, which its manifests carry: the tree's.
 PLUGIN_VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 OLD = "v0.11.10"
@@ -328,9 +330,10 @@ class Run:
         doctor = self.computer.run([self.cad_path, "doctor"])
         if doctor.code:
             raise rc.Failed(f"cad doctor exited {doctor.code}:\n{doctor.out}")
-        if not re.search(r"auto-update on\b.*; a uv tool", doctor.out):
-            raise rc.Failed(f"cad doctor does not say automatic updates are on and cad is a uv tool:\n{doctor.out}")
-        say("ok    cad doctor: exit 0, automatic updates on, a uv tool")
+        if f"auto-update on, {PLUGIN_SWITCH.replace(':', '')}; a global install by uv " not in doctor.out:
+            raise rc.Failed(f"cad doctor does not say both switches are on and cad is a global install by uv:\n"
+                            f"{doctor.out}")
+        say("ok    cad doctor: exit 0, both switches on, a global install by uv")
 
     # --- 0.11.10's installer's state ------------------------------------------------------------------------------
 

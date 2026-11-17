@@ -20,11 +20,14 @@ program could write and fails before anything runs where one is not the computer
 person's.
 
 ``Feed`` is the version feed served on loopback: any path ending ``versions`` (``<api>/versions`` of 0.10.0 to
-0.11.10 and of this tree, the install command's ``CAD_INSTALL_FEED``). ``publish`` writes this tree's wheels again as
-another release, or a variant of one (a file replaced, its commands taken out), from wheels already built.
+0.11.10 and of this tree, ``CAD_API_URL``; the install command reads no feed). ``publish`` writes this tree's wheels
+again as another release, or a variant of one (a file replaced, its commands taken out), from wheels already built;
+``stamp`` names that release: this tree's ``VERSION``'s major and minor, a patch far above any real one, so the wheels
+offered to uv (``UV_FIND_LINKS``) are newer than PyPI's newest and the install command's ``uv tool install cad`` takes
+them. The install workflows and ``scripts/test/real-install.py`` stamp with it.
 
 ``RealHome`` lists what the machine's own home holds for these programs and cad, to prove a run changed none of it;
-``Sentinels``, the times of the few files a person's agent apps and cad keep, before and after each rehearsal.
+``Sentinels``, the few files a person's agent apps and cad keep, before and after each rehearsal.
 ``scripts/test/real-install.py`` and ``scripts/test/rehearse-update.py`` run on it. The standard library alone.
 """
 
@@ -232,8 +235,8 @@ class Computer:
                         "LOCALAPPDATA": str(home / "AppData" / "Local"), "HOMEDRIVE": home.drive,
                         "HOMEPATH": str(home)[len(home.drive):]})
         if feed is not None:
-            # The install command's feed, and cad's (its version feed and its telemetry: the stand-in answers neither).
-            env.update({"CAD_INSTALL_FEED": f"{feed.url}/versions", "CAD_API_URL": feed.url})
+            # cad's version feed and its telemetry (the stand-in answers the feed alone).
+            env["CAD_API_URL"] = feed.url
         else:
             env["CAD_API_URL"] = "http://127.0.0.1:9"
         if wheels is not None:
@@ -263,7 +266,7 @@ class Computer:
         self.commit = ""
         self.nonce = ""
 
-    # Every variable that names a folder a program of the computer writes in, and the one that names the feed.
+    # Every variable that names a folder a program of the computer writes in.
     ISOLATED = ("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "TMPDIR", "TEMP", "XDG_CONFIG_HOME", "XDG_DATA_HOME",
                 "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_BIN_HOME", "XDG_RUNTIME_DIR", "CAD_STATE_DIR",
                 "CAD_ENGINE_DIR", "CAD_CACHE_DIR", "UV_TOOL_DIR", "UV_TOOL_BIN_DIR", "UV_PYTHON_BIN_DIR",
@@ -287,11 +290,10 @@ class Computer:
             say(f"  {name}={value}")
             if not _within(Path(value), self.work) and uv_refused(Path(value)):
                 wrong.append(name)
-        for name in ("CAD_API_URL", "CAD_INSTALL_FEED"):
-            value = self.env.get(name, "")
-            say(f"  {name}={value}")
-            if value and not value.startswith("http://127.0.0.1:"):
-                wrong.append(name)
+        value = self.env.get("CAD_API_URL", "")
+        say(f"  CAD_API_URL={value}")
+        if value and not value.startswith("http://127.0.0.1:"):
+            wrong.append("CAD_API_URL")
         say(f"  CAD_ENGINE_DEFAULT_PORT={self.port}")
         if self.port in TAKEN and not CI:
             wrong.append("CAD_ENGINE_DEFAULT_PORT")
@@ -621,9 +623,16 @@ class Sentinels:
     configuration, cad's state folder and command, uv's tools and their commands -- and its modification time (None
     where there is none). ``moved``: what changed between two readings. Not ``~/.claude.json``: a Claude Code
     session that is open on the machine rewrites it as it works, so a run beside one would fail for nothing; the
-    plugin lists beside it, which a run could change, are watched."""
+    plugin lists beside it, which a run could change, are watched.
 
-    times: dict[str, float | None]
+    Claude Desktop's ``claude_desktop_config.json`` is watched by what an install could change there, its
+    ``mcpServers`` section, parsed (``servers_of``), not by its time: the running app rewrites the file by itself
+    (its ``preferences``) every few minutes."""
+
+    times: dict[str, object]
+
+    # The files watched by their MCP servers alone (``servers_of``), by name.
+    BY_SERVERS = ("claude_desktop_config.json",)
 
     @classmethod
     def here(cls) -> "Sentinels":
@@ -642,10 +651,11 @@ class Sentinels:
                       Path(os.environ.get("APPDATA") or home / "AppData" / "Roaming") / "Claude" / "claude_desktop_config.json"]
         else:
             paths += [Path(os.environ.get("XDG_STATE_HOME") or home / ".local" / "state") / "cad"]
-        times = {}
+        times: dict[str, object] = {}
         for path in paths:
             try:
-                times[str(path)] = path.stat().st_mtime
+                times[str(path)] = (servers_of(path.read_bytes()) if path.name in cls.BY_SERVERS
+                                    else path.stat().st_mtime)
             except OSError:
                 times[str(path)] = None
         return cls(times)
@@ -653,6 +663,19 @@ class Sentinels:
     def moved(self, after: "Sentinels") -> list[str]:
         return [f"{path}: {self.times[path]} -> {after.times.get(path)}" for path in self.times
                 if self.times[path] != after.times.get(path)]
+
+
+def servers_of(data: bytes) -> str:
+    """What an install could change in Claude Desktop's config (``data``, the file's bytes): its ``mcpServers``
+    section, as canonical JSON (keys sorted), so the app's own rewrites of the rest compare equal; ``{}`` where the
+    file has none. A file that is not a JSON object is compared whole, by its bytes' digest."""
+    try:
+        config = json.loads(data.decode("utf-8"))
+    except ValueError:
+        config = None
+    if not isinstance(config, dict):
+        return "unparsed sha256:" + hashlib.sha256(data).hexdigest()
+    return json.dumps(config.get("mcpServers", {}), sort_keys=True, separators=(",", ":"))
 
 
 # --- this tree's wheels as another release -----------------------------------------------------------------
@@ -708,6 +731,18 @@ def rewrite(wheel: Path, out: Path, version: str, *, replace: dict[str, bytes] |
         for name, data in written.items():
             archive.writestr(name, data)
     return target
+
+
+def stamp(patch: int = 9999, version: str | None = None) -> str:
+    """The release a rehearsal writes this tree's wheels again as (``publish``): ``version`` (default: this tree's
+    ``VERSION``) with its major and minor kept and its patch ``patch``, far above any real one (9000 and up), so it
+    is newer than every release PyPI holds and uv, offered both, installs it. Never an earlier minor: once PyPI holds
+    one of this tree's minor or newer, a fixed ``0.11.9xxx`` would lose to it."""
+    if patch < 9000:
+        raise ValueError(f"a rehearsal's patch is 9000 or above, far from a real one: {patch}")
+    text = (REPO_ROOT / "VERSION").read_text(encoding="utf-8") if version is None else version
+    major, minor = text.strip().split(".")[:2]
+    return f"{int(major)}.{int(minor)}.{patch}"
 
 
 def publish(wheels: Path, version: str, out: Path, *, replace: dict[str, bytes] | None = None,
@@ -831,15 +866,22 @@ def command(env: Path, name: str = "cad") -> Path:
 
 
 if __name__ == "__main__":
-    # `python scripts/test/real_computer.py publish WHEELS VERSION OUT`: the install workflows' wheels as a release
-    # no index holds.
+    # `python scripts/test/real_computer.py stamp [PATCH]`: the release a rehearsal stamps (``stamp``), printed.
+    # `python scripts/test/real_computer.py publish WHEELS VERSION OUT`: the install workflows' wheels as that release,
+    # which no index holds.
     import argparse
 
     parser = argparse.ArgumentParser(description="This tree's wheels written again as another release.")
-    parser.add_argument("action", choices=("publish",))
-    parser.add_argument("wheels", type=Path)
-    parser.add_argument("version")
-    parser.add_argument("out", type=Path)
+    actions = parser.add_subparsers(dest="action", required=True)
+    stamping = actions.add_parser("stamp", help="print the release a rehearsal stamps this tree's wheels with")
+    stamping.add_argument("patch", nargs="?", type=int, default=9999)
+    publishing = actions.add_parser("publish", help="write the wheels in WHEELS again as VERSION into OUT")
+    publishing.add_argument("wheels", type=Path)
+    publishing.add_argument("version")
+    publishing.add_argument("out", type=Path)
     args = parser.parse_args()
-    for written in publish(args.wheels, args.version, args.out):
-        print(written)
+    if args.action == "stamp":
+        print(stamp(args.patch))
+    else:
+        for written in publish(args.wheels, args.version, args.out):
+            print(written)

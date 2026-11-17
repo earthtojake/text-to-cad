@@ -2,16 +2,17 @@ name: Linux installer rehearsal
 
 # install.sh on a fresh Linux, the way a person runs it, piped to sh, against the wheels this tree builds: on
 # the runner's own Ubuntu, and in the slim Python image, which has no curl until one is installed, no procps,
-# and no uv. uv comes from its own installer. The wheels are written again as a release no index holds
-# (scripts/test/real_computer.py publish), which a version feed of the job's own names (CAD_INSTALL_FEED, a
-# file), so the install command's `uv tool install cad==<that release>` takes them (UV_FIND_LINKS) and never an
-# index's. The checks: cad a uv tool at that release in ~/.local/bin, both of its switches on, no server
-# started by the install; then `cad server start`, a model built by `cad run` (which makes the CAD kernel's
-# environment), and `cad doctor`. The Windows rehearsal goes further (install-windows.yml); the release smoke
+# and no uv. uv comes from its own installer. The wheels are written again as a release no index holds, this
+# tree's major and minor with a patch far above PyPI's newest (scripts/test/real_computer.py stamp and publish),
+# and offered to uv (UV_FIND_LINKS), so the install command's `uv tool install cad`, which installs the newest
+# release uv is offered, takes them and never an index's. The checks: cad a uv tool at that release in
+# ~/.local/bin, cad's automatic updates on and the plugin's turned on by the install, no server started by the
+# install; then `cad server start`, a model built by `cad run` (which makes the CAD kernel's environment), and
+# `cad doctor`. The Windows rehearsal goes further (install-windows.yml); the release smoke
 # runs the wheels. test.yml calls it, as it does the Windows one, on a full run (so before a release ships) and
 # on a change to the installers: the selector's `installer` flag (scripts/github-workflows/select_checks.py).
 # Dispatched by hand with `published`, the same steps run against what people install today: the site's
-# install.sh and the release the version feed names, no wheel built.
+# install.sh and PyPI's newest release of cad, no wheel built.
 on:
   workflow_dispatch:
     inputs:
@@ -117,23 +118,21 @@ jobs:
           name: install-linux-wheels
           path: wheels
 
-      # This tree's wheels as a release no index holds, named by a feed of the job's own; this tree's install.py.
-      # Published: the site's installer, and the release the version feed names, from PyPI.
+      # This tree's wheels as a release newer than PyPI's newest, offered to uv; this tree's install.py.
+      # Published: the site's installer, and PyPI's newest release, which is what it installs.
       - name: Install, piped as the docs say (curl | sh)
         shell: sh
         run: |
           if [ "$CAD_PUBLISHED" = true ]; then
-            release=$(curl -fsS https://api.texttocad.dev/v1/versions | sed -n 's/.*"latest"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+            release=$(curl -fsS https://pypi.org/pypi/cad/json | python3 -c 'import json, sys; print(json.load(sys.stdin)["info"]["version"])')
             [ -n "$release" ]
             curl -fsSL https://texttocad.dev/install.sh | sh
           else
-            release="$(cut -d. -f1-2 VERSION).9999"
+            release="$(python3 scripts/test/real_computer.py stamp)"
             python3 scripts/test/real_computer.py publish wheels "$release" stamped
-            printf '{"latest": "%s"}\n' "$release" > feed.json
             CAD_INSTALL_PY=$PWD/scripts/install/install.py
-            CAD_INSTALL_FEED=file://$PWD/feed.json
             UV_FIND_LINKS=$PWD/stamped
-            export CAD_INSTALL_PY CAD_INSTALL_FEED UV_FIND_LINKS
+            export CAD_INSTALL_PY UV_FIND_LINKS
             sh < scripts/install/install.sh
             # The kernel's environment is made on first need, by a later step: it takes the same wheels.
             echo "UV_FIND_LINKS=$UV_FIND_LINKS" >> "$GITHUB_ENV"
@@ -147,9 +146,9 @@ jobs:
           echo "$said"
           [ "$said" = "cad $CAD_RELEASE" ]
           [ -L "$HOME/.local/bin/cad" ] || { echo "~/.local/bin/cad is not uv's link to its tool"; exit 1; }
-          switches=$("$HOME/.local/bin/cad" auto-update status)
+          switches=$("$HOME/.local/bin/cad" auto-update status; "$HOME/.local/bin/cad" plugin auto-update status)
           echo "$switches"
-          [ "$switches" = "$(printf 'auto-update: on\ninstaller: on')" ]
+          [ "$switches" = "$(printf 'auto-update: on\nplugin auto-update: on')" ]
           status=$("$HOME/.local/bin/cad" server status --json)
           [ "$status" = "null" ] || { echo "the install started a server: $status"; exit 1; }
 

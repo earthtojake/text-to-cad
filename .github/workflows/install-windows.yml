@@ -1,18 +1,18 @@
 name: Windows installer rehearsal
 
 # install.ps1 on a fresh Windows runner, the way a person runs it: Windows PowerShell 5.1, the piped `irm | iex`
-# form, against the wheels this tree builds, written again as a release no index holds
-# (scripts/test/real_computer.py publish), which a version feed of the job's own names (CAD_INSTALL_FEED, a
-# file): the install command's `uv tool install cad==<that release>` takes them (UV_FIND_LINKS), never an
-# index's. uv installed by its own installer when the image has none; cad a uv tool, its cad.exe in
-# ~\.local\bin, both of its switches on, no server started; the doctor; the command again ("installed
-# already"); then models built on it (a box, a box with a hand-made wheel through `--with`, by a version range on
-# the command line, through a script's header, from a venv of the user's own with the library installed, and the
-# page link's token), arguments cmd would have parsed, a state folder named with accents and a non-Latin
-# script, and `uv tool uninstall cad`. test.yml calls it, as it does the Linux one, on a full run (so before a
-# release ships) and on a change to the installers: the selector's `installer` flag
-# (scripts/github-workflows/select_checks.py). Dispatched by hand with `published`, the same steps run against
-# what people install today: the docs site's install.ps1 and the release the version feed names, no wheel built.
+# form, against the wheels this tree builds, written again as a release no index holds, this tree's major and
+# minor with a patch far above PyPI's newest (scripts/test/real_computer.py stamp and publish), and offered to uv
+# (UV_FIND_LINKS): the install command's `uv tool install cad`, which installs the newest release uv is offered,
+# takes them, never an index's. uv installed by its own installer when the image has none; cad a uv tool, its
+# cad.exe in ~\.local\bin, cad's automatic updates on and the plugin's turned on by the install, no server
+# started; the doctor; the command again ("installed already"); then models built on it (a box, a box with a
+# hand-made wheel through `--with`, by a version range on the command line, through a script's header, from a
+# venv of the user's own with the library installed, and the page link's token), arguments cmd would have
+# parsed, a state folder named with accents and a non-Latin script, and `uv tool uninstall cad`. test.yml calls
+# it, as it does the Linux one, on a full run (so before a release ships) and on a change to the installers: the
+# selector's `installer` flag (scripts/github-workflows/select_checks.py). Dispatched by hand with `published`, the same steps run against
+# what people install today: the docs site's install.ps1 and PyPI's newest release of cad, no wheel built.
 on:
   workflow_dispatch:
     inputs:
@@ -104,22 +104,20 @@ jobs:
           name: install-windows-wheels
           path: ${{ runner.temp }}\wheel
 
-      # This tree's wheels as a release no index holds, named by a feed of the job's own; this tree's install.py.
-      # Published: the site's installer and the release the version feed names, from PyPI.
-      - name: The release to install, and the feed that names it
+      # This tree's wheels as a release newer than PyPI's newest, offered to uv; this tree's install.py.
+      # Published: the site's installer, and PyPI's newest release, which is what it installs.
+      - name: The release to install, and the wheels that carry it
         shell: pwsh
         run: |
           if ($env:CAD_PUBLISHED -eq 'true') {
-            $release = (Invoke-RestMethod https://api.texttocad.dev/v1/versions).latest
-            if (-not $release) { throw "the version feed names no release" }
+            $release = (Invoke-RestMethod https://pypi.org/pypi/cad/json).info.version
+            if (-not $release) { throw "PyPI names no release of cad" }
             New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\wheel" | Out-Null
           } else {
-            $release = ((Get-Content VERSION -Raw).Trim() -replace '\.\d+$', '') + '.9999'
+            $release = (python scripts/test/real_computer.py stamp | Select-Object -First 1)
+            if ($LASTEXITCODE -or -not $release) { throw "the release to stamp the wheels with: exit $LASTEXITCODE" }
             python scripts/test/real_computer.py publish "$env:RUNNER_TEMP\wheel" $release "$env:RUNNER_TEMP\stamped"
             if ($LASTEXITCODE) { throw "writing the wheels again as $release exited $LASTEXITCODE" }
-            $feed = Join-Path $env:RUNNER_TEMP 'feed.json'
-            [IO.File]::WriteAllText($feed, "{`"latest`": `"$release`"}", (New-Object System.Text.UTF8Encoding($false)))
-            "CAD_INSTALL_FEED=file:///$($feed -replace '\\', '/')" >> $env:GITHUB_ENV
             "CAD_INSTALL_PY=$PWD\scripts\install\install.py" >> $env:GITHUB_ENV
             "UV_FIND_LINKS=$env:RUNNER_TEMP\stamped" >> $env:GITHUB_ENV
           }
@@ -141,23 +139,24 @@ jobs:
           $out = Get-Content "$env:RUNNER_TEMP\install.txt" -Raw
           Write-Host $out
           if ($out -match '(?m)^cad: (failed|not installed)') { throw "cad was not installed" }
-          if ($out -notmatch "Installing cad $([regex]::Escape($env:CAD_RELEASE)) with uv") { throw "the install command did not install cad $env:CAD_RELEASE" }
+          if ($out -notmatch '(?m)^Installing cad with uv\. ') { throw "the install command did not install cad" }
           $cmd = Join-Path $env:USERPROFILE '.local\bin\cad.exe'
           if (-not (Test-Path $cmd)) { throw "uv wrote no cad command at $cmd" }
           if (Test-Path (Join-Path $env:USERPROFILE '.local\bin\cad-launcher')) { throw "a cad-launcher folder was written" }
           if (Test-Path (Join-Path $env:USERPROFILE '.local\bin\cad.cmd')) { throw "a cad.cmd was written beside cad.exe" }
           "CAD_CMD=$cmd" >> $env:GITHUB_ENV
 
-      # Both switches on, no server started by the install, the doctor's verdict, then the command again: quick and
-      # harmless, cad is installed already.
+      # cad at the stamped release, both switches on (cad's own by default, the plugin's by the install), no server
+      # started by the install, the doctor's verdict, then the command again: quick and harmless, cad is installed
+      # already.
       - name: The cad command, its switches, the doctor and the install command again
         shell: pwsh
         run: |
           $said = (& $env:CAD_CMD --version | Select-Object -First 1)
           if ($LASTEXITCODE) { throw "cad --version exited $LASTEXITCODE" }
           if ($said -ne "cad $env:CAD_RELEASE") { throw "cad --version said '$said', not 'cad $env:CAD_RELEASE'" }
-          $switches = (& $env:CAD_CMD auto-update status) -join "`n"
-          if ($switches -ne "auto-update: on`ninstaller: on") { throw "cad auto-update status said: $switches" }
+          $switches = (@(& $env:CAD_CMD auto-update status) + @(& $env:CAD_CMD plugin auto-update status)) -join "`n"
+          if ($switches -ne "auto-update: on`nplugin auto-update: on") { throw "cad auto-update status and cad plugin auto-update status said: $switches" }
           $status = (& $env:CAD_CMD server status --json) -join ''
           if ($status.Trim() -ne 'null') { throw "the install started a server: $status" }
           & $env:CAD_CMD doctor

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Exercise cad the way a user gets it: built into wheels (cad, and its aliases cad-server and cad-mcp),
 # pip-installed together, run from a directory that is not this repo; installed as the uv tool the install
-# command makes (`uv tool install cad==<release>`); and installed the old way the updaters of 0.10.0 to
-# 0.11.10 still bring a release (`uv pip install cad-server==<release>` into a venv of their own).
+# command makes (`uv tool install cad`, the newest release uv is offered); and installed the old way the updaters
+# of 0.10.0 to 0.11.10 still bring a release (`uv pip install cad-server==<release>` into a venv of their own).
 #
 # Every other check in this repo runs against the source tree, where the repo root is on
 # sys.path and the apps' builds sit beside the packages. None of that is true after
@@ -18,9 +18,9 @@
 # Usage: scripts/test/test-installed.sh [--wheels DIR]
 #   DIR holds cad's wheel and its aliases' (cad, cad_server, cad_mcp), as
 #   scripts/release/check-wheel-contents.sh leaves them; without it they are built.
-# The uv tool and the old way install the same wheels written again as a release no index holds
-# (scripts/test/real_computer.py publish): an index's release of the same number never stands in. They need uv
-# and the network (the wheels' dependencies).
+# The uv tool and the old way install the same wheels written again as a release no index holds, above PyPI's
+# newest (scripts/test/real_computer.py stamp and publish): an index's release never stands in. They need uv and
+# the network (the wheels' dependencies).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -214,34 +214,43 @@ done <"$WORK/commands.txt"
 
 # The same wheels as a release no index holds, for the installs through uv below.
 RELEASE="$("$VENV/bin/python" -c 'import cad; print(cad.__version__)')"
-STAMP="$(echo "$RELEASE" | cut -d. -f1-2).$((9000 + $$ % 900))"
+STAMP="$("$PYTHON_BIN" "$REPO_ROOT/scripts/test/real_computer.py" stamp "$((9000 + $$ % 900))")" \
+  || fail "the release to stamp the wheels with"
 "$PYTHON_BIN" "$REPO_ROOT/scripts/test/real_computer.py" publish "$WHEELS" "$STAMP" "$WORK/stamped" >/dev/null \
   || fail "writing the wheels again as $STAMP"
 UV=(uv)
 command -v uv >/dev/null 2>&1 || UV=("$PYTHON_BIN" -m uv)
 
-# What the install command does: `uv tool install --managed-python --python 3.14 cad==<release>`. uv's tool, its
-# command and its Python in private folders; the tool's receipt names cad, which is what lets cad update itself.
-step "The install command's uv tool: uv tool install cad==<release> gives the cad command, and cad knows it is a uv tool"
+# What the install command does: `uv tool install --managed-python --python 3.14 cad`, no release named: uv installs
+# the newest it is offered, which is the stamped wheels' (above PyPI's newest). uv's tool, its command and its Python
+# in private folders; the tool's receipt names cad, which is what makes it a global install that updates itself.
+step "The install command's uv tool: uv tool install cad gives the cad command, a global install"
 export UV_TOOL_DIR="$WORK/tools" UV_TOOL_BIN_DIR="$WORK/tool-bin" UV_PYTHON_INSTALL_BIN=0 UV_NO_MODIFY_PATH=1
-"${UV[@]}" tool install --quiet --managed-python --python 3.14 --find-links "$WORK/stamped" "cad==$STAMP" \
-  || fail "uv tool install cad==$STAMP"
+"${UV[@]}" tool install --quiet --managed-python --python 3.14 --find-links "$WORK/stamped" cad \
+  || fail "uv tool install cad"
 [ -x "$UV_TOOL_BIN_DIR/cad" ] || fail "uv tool install cad wrote no cad command in $UV_TOOL_BIN_DIR"
 grep -q 'name = "cad"' "$UV_TOOL_DIR/cad/uv-receipt.toml" || fail "the tool's receipt does not name cad"
 (
   cd "$EMPTY"
   export CAD_STATE_DIR="$WORK/tool-state" CAD_ENGINE_DIR="$WORK/tool-engine"
   [ "$("$UV_TOOL_BIN_DIR/cad" --version | head -n 1)" = "cad $STAMP" ] || fail "the tool's cad --version"
-  "$UV_TOOL_BIN_DIR/cad" auto-update on --installer >"$WORK/auto-update.log" 2>&1 \
-    || { cat "$WORK/auto-update.log" >&2; fail "cad auto-update on, which only a uv tool may do"; }
-  grep -qx "auto-update: on" "$WORK/auto-update.log" || { cat "$WORK/auto-update.log" >&2; fail "auto-update not on"; }
+  # On by default for a global install, before anything is written; then turned on, as one line each.
+  [ "$("$UV_TOOL_BIN_DIR/cad" auto-update status)" = "auto-update: on" ] || fail "cad auto-update status, by default"
+  "$UV_TOOL_BIN_DIR/cad" auto-update on >"$WORK/auto-update.log" 2>&1 \
+    || { cat "$WORK/auto-update.log" >&2; fail "cad auto-update on, which only a global install may do"; }
+  [ "$(cat "$WORK/auto-update.log")" = "auto-update: on" ] || { cat "$WORK/auto-update.log" >&2; fail "auto-update not on"; }
+  # The plugin's switch, off by default; the install command turns it on.
+  [ "$("$UV_TOOL_BIN_DIR/cad" plugin auto-update status)" = "plugin auto-update: off" ] \
+    || fail "cad plugin auto-update status, by default"
+  [ "$("$UV_TOOL_BIN_DIR/cad" plugin auto-update on)" = "plugin auto-update: on" ] || fail "cad plugin auto-update on"
   "$UV_TOOL_BIN_DIR/cad" doctor >"$WORK/tool-doctor.log" 2>&1 || true
-  grep -q "a uv tool" "$WORK/tool-doctor.log" || { cat "$WORK/tool-doctor.log" >&2; fail "cad doctor does not say a uv tool"; }
-  # The venv's cad is no uv tool: it is refused, in one line.
-  "$VENV/bin/cad" auto-update on >"$WORK/refused.log" 2>&1 && fail "a cad that is not a uv tool switched auto-update on"
-  grep -q "not a uv tool" "$WORK/refused.log" || { cat "$WORK/refused.log" >&2; fail "the refusal does not say why"; }
+  grep -q "auto-update on, plugin auto-update on; a global install by uv " "$WORK/tool-doctor.log" \
+    || { cat "$WORK/tool-doctor.log" >&2; fail "cad doctor does not say both switches on and a global install by uv"; }
+  # The venv's cad is no global install: it is refused, in one line.
+  "$VENV/bin/cad" auto-update on >"$WORK/refused.log" 2>&1 && fail "a cad that is not a global install switched auto-update on"
+  grep -q "not a global install" "$WORK/refused.log" || { cat "$WORK/refused.log" >&2; fail "the refusal does not say why"; }
 ) || exit 1
-echo "   $UV_TOOL_BIN_DIR/cad: cad $STAMP, a uv tool; cad auto-update on accepted there, refused in a venv"
+echo "   $UV_TOOL_BIN_DIR/cad: cad $STAMP, a global install by uv; cad auto-update on accepted there, refused in a venv"
 TOOL_DIR="$UV_TOOL_DIR"
 # The steps after this one see no uv tool again: what they check is this install's.
 export UV_TOOL_DIR="$WORK/no-tools" UV_TOOL_BIN_DIR="$WORK/no-tool-bin"

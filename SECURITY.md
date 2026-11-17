@@ -116,14 +116,15 @@ and nothing asked:
 
 - `install.sh` or `install.ps1`, served by texttocad.dev over HTTPS. Where uv is
   missing, it downloads and runs uv's own installer from `astral.sh`.
-- `install.py`, downloaded from texttocad.dev and run with uv's Python. It asks
-  the version feed, `api.texttocad.dev/v1/versions`, for the newest release, and
-  installs `cad` at that release from PyPI with `uv tool install`.
+- `install.py`, downloaded from texttocad.dev and run with uv's Python. Where no
+  `cad` is installed, it installs PyPI's newest release of `cad` with
+  `uv tool install`; a `cad` that is installed and starts is left as it is.
 - The plugin, from this repository's `latest` branch on GitHub, installed in each
   agent app it finds with that app's own command. It removes what earlier releases
   left there, among them the CAD server they wrote into Claude Desktop's config
   (keeping a `.bak`).
-- `cad auto-update on --installer`, which turns on automatic updates (below).
+- `cad plugin auto-update on`, so that after cad updates itself (below) it runs
+  the install command again.
 
 It starts no server. To read the scripts first, take the copies attached to a
 release on GitHub and check them against the release's `SHA256SUMS`; they install

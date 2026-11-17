@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -98,6 +99,58 @@ class RealInstallNeeds(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root, mock.patch.object(module, "REPO_ROOT", Path(root)):
             missing, _tagged = module.needs()
         self.assertIn("is not a git checkout", missing)
+
+
+class Sentinels(unittest.TestCase):
+    """Claude Desktop rewrites its config by itself (its preferences) while it runs: the watch on the machine's own
+    files compares what an install could change there, its MCP servers, and every other file by its time."""
+
+    def test_claude_desktop_config_is_watched_by_its_mcp_servers_alone(self):
+        config = {"mcpServers": {"x": {"command": "x"}}, "preferences": {"sidebarMode": "chat"}}
+        same = {"preferences": {"sidebarMode": "task", "quickEntry": True}, "mcpServers": {"x": {"command": "x"}}}
+        self.assertEqual(rc.servers_of(json.dumps(config).encode()), rc.servers_of(json.dumps(same, indent=2).encode()))
+        for changed in ({**config, "mcpServers": {"x": {"command": "x"}, "cad": {"command": "cad"}}},
+                        {**config, "mcpServers": {"x": {"command": "y"}}}, {"preferences": config["preferences"]}):
+            with self.subTest(changed=changed):
+                self.assertNotEqual(rc.servers_of(json.dumps(config).encode()), rc.servers_of(json.dumps(changed).encode()))
+        # A file that is not a JSON object is compared by its bytes.
+        self.assertEqual(rc.servers_of(b"{broken"), rc.servers_of(b"{broken"))
+        self.assertNotEqual(rc.servers_of(b"{broken"), rc.servers_of(b"{broken!"))
+
+    def test_a_rewrite_of_the_preferences_moves_nothing_and_a_server_or_another_file_does(self):
+        with temporary_directory(prefix="rehearsal-") as root:
+            home = Path(root)
+            desktop = home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+            desktop.parent.mkdir(parents=True)
+            desktop.write_text(json.dumps({"preferences": {"a": 1}}), encoding="utf-8")
+            codex = home / ".codex" / "config.toml"
+            codex.parent.mkdir()
+            codex.write_text("", encoding="utf-8")
+
+            def here():
+                with mock.patch.object(rc.Path, "home", return_value=home), mock.patch.object(rc, "WINDOWS", False), \
+                        mock.patch.object(rc.sys, "platform", "darwin"):
+                    return rc.Sentinels.here()
+
+            before = here()
+            desktop.write_text(json.dumps({"preferences": {"a": 2}}), encoding="utf-8")
+            self.assertEqual(before.moved(here()), [])
+            desktop.write_text(json.dumps({"preferences": {"a": 2}, "mcpServers": {"cad": {}}}), encoding="utf-8")
+            self.assertEqual([line.split(":", 1)[0] for line in before.moved(here())], [str(desktop)])
+            desktop.write_text(json.dumps({"preferences": {"a": 2}}), encoding="utf-8")
+            stamp = codex.stat().st_mtime_ns + 5_000_000_000
+            os.utime(codex, ns=(stamp, stamp))
+            self.assertEqual([line.split(":", 1)[0] for line in before.moved(here())], [str(codex)])
+
+
+class Stamp(unittest.TestCase):
+    def test_a_rehearsal_stamps_this_trees_major_and_minor_with_a_patch_far_above_a_real_one(self):
+        self.assertEqual(rc.stamp(9123, "0.12.3"), "0.12.9123")
+        self.assertEqual(rc.stamp(version="1.0.0"), "1.0.9999")
+        major, minor = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip().split(".")[:2]
+        self.assertEqual(rc.stamp(), f"{major}.{minor}.9999")
+        with self.assertRaises(ValueError):
+            rc.stamp(12, "0.12.3")
 
 
 class Telemetry(unittest.TestCase):

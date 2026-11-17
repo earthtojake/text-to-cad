@@ -4,12 +4,12 @@ name: Real install
 # and Gemini CLI (gemini), on Windows, macOS and Linux: scripts/test/real-install.py, on a private computer of
 # its own, the way a person runs it (install.sh piped to sh; install.ps1 handed to Invoke-Expression by
 # Windows PowerShell 5.1): cad a uv tool from the wheels this tree builds (written again as a release no index
-# holds, named by a feed of the run's own), both of its switches on, no server started; `cad server start`, a
-# model built by `cad run`, a file shown by `cad viewer`, `cad doctor`; the plugin from this tree's `latest`
-# copy through each program's own GitHub route (a local repository the computer's git reads in GitHub's
-# place). Then the command again, the command in update mode (one program without our copy: nothing added to
-# it), and each program migrated from the state 0.11.10's installer left. The desktop apps are not here: they
-# need a person. test.yml calls it with the installer rehearsals, on a full run (so before a release ships),
+# holds, above PyPI's newest, and offered to uv), cad's automatic updates on and the plugin's turned on by the
+# install, no server started; `cad server start`, a model built by `cad run`, a file shown by `cad viewer`,
+# `cad doctor`; the plugin from this tree's `latest` copy through each program's own GitHub route (a local
+# repository the computer's git reads in GitHub's place). Then the command again (cad installed already and left
+# alone, each program's copy updated), and each program migrated from the state 0.11.10's installer left. The
+# desktop apps are not here: they need a person. test.yml calls it with the installer rehearsals, on a full run (so before a release ships),
 # nightly, and on a change to the installers or the runner: the selector's `installer` flag
 # (scripts/github-workflows/select_checks.py).
 on:
