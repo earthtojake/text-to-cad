@@ -151,6 +151,68 @@ class Plain(Computer):
         self.assertEqual(done.stderr.count(REFUSED), 1, done.stderr)
 
 
+class NothingOurs(Computer):
+    """Plain ``cad setup`` where our setup never ran: cad alone moves only on a computer that arrives from a shipped
+    release (0.10.0 to 0.11.10, a store's copy alone). Anywhere else only an install script reaches it -- a copy of an
+    old one kept, or the hosted one before the site is redeployed --, and the install command runs."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.state / "install-receipt.json").unlink()
+        self.runs = self.root / "runs"
+
+    def installer(self, code: int = 0) -> dict[str, str]:
+        stand_in = self.root / "install.py"
+        stand_in.write_text("import sys\nopen(sys.argv[1], 'a').write('ran\\n')\nsys.exit(int(sys.argv[2]))\n",
+                            encoding="utf-8")
+        return {install_script.INSTALLER_ENV: f'"{sys.executable}" "{stand_in}" "{self.runs}" {code}'}
+
+    def test_with_no_earlier_release_the_install_command_runs_and_its_exit_status_is_the_command_s(self) -> None:
+        for code in (0, 4):
+            with self.subTest(code=code), mock.patch.dict(os.environ, self.installer(code)):
+                self.runs.unlink(missing_ok=True)
+                self.assertEqual(self.main([]), (code, "", ""))
+                self.assertEqual(self.runs.read_text(encoding="utf-8"), "ran\n", "the install command ran once")
+        self.assertIsNone(installations.current_version(), "current left to the install command")
+        self.assertEqual([call.args[2:4] for call in self.ended.call_args_list], [(None, "ok"), (None, "failed")])
+
+    def test_cad_alone_moves_only_where_it_arrives_from_a_shipped_release(self) -> None:
+        for came, alone in ((None, False), ("0.10.0", True), (OLD, True), ("0.11.11", False), ("0.12.0", False),
+                            ("0.11.10-dev.1", False)):
+            with self.subTest(came=came), mock.patch.dict(os.environ, self.installer()):
+                self.runs.unlink(missing_ok=True)
+                current = self.state / "installations" / "current"
+                current.unlink(missing_ok=True)
+                if came is not None:
+                    installations.point(came)
+                code, out, err = self.main([])
+                self.assertEqual(code, 0, err)
+                self.assertEqual(self.runs.exists(), not alone)
+                self.assertEqual(installations.current_version(), Y if alone else came)
+                self.assertEqual(err, f"cad: cad {Y} runs from the next start of the cad server\n" if alone else "")
+
+    def test_run_by_an_install_command_cad_started_it_still_runs_nothing(self) -> None:
+        with mock.patch.dict(os.environ, {**self.installer(), install_script.BY_CAD_ENV: "1"}):
+            self.assertEqual(self.main([]), (1, "", f"cad: {REFUSED}\n"))
+        self.assertFalse(self.runs.exists(), "the install command never ran")
+
+    def test_an_earlier_release_s_script_kept_and_run_on_an_empty_computer_installs(self) -> None:
+        # A copy of the script 0.10.0 to 0.11.10 offered, which ends in `cad setup` of the feed's newest, this release.
+        old = self.root / "old-install.py"
+        old.write_text("import subprocess, sys\n"
+                       "sys.exit(subprocess.call([sys.executable, '-m', 'cad_server.cli', 'setup'], "
+                       "stdin=subprocess.DEVNULL))\n", encoding="utf-8")
+        source = str(Path(setup.__file__).resolve().parents[2])
+        env = {**os.environ, "CAD_ENGINE_DIR": str(self.root / "engine"), "CAD_CACHE_DIR": str(self.root / "cache"),
+               "CAD_TELEMETRY": "0", "DO_NOT_TRACK": "1", "CAD_API_URL": "http://127.0.0.1:9", "PYTHONPATH": source,
+               **self.installer()}
+        self.assertEqual(os.listdir(self.state), [], "an empty state folder")
+        done = subprocess.run([sys.executable, str(old)], env=env, stdin=subprocess.DEVNULL, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace", timeout=120)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.runs.read_text(encoding="utf-8"), "ran\n", "the install command ran")
+
+
 class StoreOnly(Computer):
     """A computer whose agent apps got text-to-cad from a store alone: no receipt and no plugin folder of our setup's.
     Its old release still runs ``--engine-update`` (an automatic update of a server a ``cad`` command started) and a

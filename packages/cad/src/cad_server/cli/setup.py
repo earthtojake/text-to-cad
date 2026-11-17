@@ -31,18 +31,23 @@ data moved out of the local application data once (``places.adopt_earlier``), th
 both state folders, install mode owed, and this release's server started, serving pages on the port and with the token
 it took in.
 
-Plain ``cad setup`` is what ``cad update`` typed on 0.10.x and 0.11.x runs of the new release: the install command in
-install mode, in the foreground; its exit status.
+Plain ``cad setup`` is what ``cad update`` typed on 0.10.0 to 0.11.10 runs of the new release, and what the install
+script of those releases ends in (a copy someone kept, or the hosted one until the site is redeployed): the install
+command in install mode, in the foreground; its exit status.
 
-Never on a computer whose agent apps got text-to-cad from a store alone (``ours``): there install mode would add our
-plugin to apps the person never asked us into. Such a computer's old release still reaches ``--engine-update``: its
-automatic update runs where its server was started by a ``cad`` command rather than by the store's server line (the
-line's ``CAD_AUTO_UPDATED=1`` reaches only the server it starts), and a typed ``cad update`` runs plain ``cad setup``.
-Ours is told by what 0.8 to 0.11.10's own setup leaves once it has put our plugin in the apps -- the install command's,
-an update button's or an automatic update's alike --, and nothing else writes: ``install-receipt.json`` or the plugin
-folder ``plugin/`` in the state folder (or 0.10.0's on Windows). Where neither is there, cad alone moves: the record the
-switch starts this release's server by is written (and ``current`` pointed at it by a plain ``cad setup``), and
-nothing is owed; the store's next copy brings the rest.
+Never on a computer that arrives from one of those releases (``SHIPPED``: the release ``arrival.came_from`` names) and
+whose agent apps got text-to-cad from a store alone (``ours``): there install mode would add our plugin to apps the
+person never asked us into. Everywhere else that is not ours -- no earlier release, or a later one such as a uv tool's
+cad that ``follow`` points ``current`` at, or one that is no plain ``X.Y.Z`` -- only an install script reaches plain
+``cad setup``, the person asked for an install, and the install command runs. Such a store-only computer's old release
+still reaches ``--engine-update``: its automatic update runs where its server was started by a ``cad`` command rather
+than by the store's server line (the line's ``CAD_AUTO_UPDATED=1`` reaches only the server it starts), and a typed
+``cad update`` runs plain ``cad setup``. Ours is told by what 0.8 to 0.11.10's own setup leaves once it has put our
+plugin in the apps -- the install command's, an update button's or an automatic update's alike --, and nothing else
+writes: ``install-receipt.json`` or the plugin folder ``plugin/`` in the state folder (or 0.10.0's on Windows). On
+such a computer, where neither is there, cad alone moves: the record the switch starts this release's server by is
+written (and ``current`` pointed at it by a plain ``cad setup``), and nothing is owed; the store's next copy brings
+the rest. An old install script run there cannot be told from a typed ``cad update``, and gets cad alone too.
 
 Nothing here deletes anything of a past release: ``releases/`` stays until ``cad cache prune``. The module names
 ``cad_server._internal.engine_daemon`` and ``cad_server._internal.proxy`` stay too: shipped releases start them.
@@ -68,6 +73,8 @@ MOVE_RECORD = "handover-move.json"
 # How long a server of 0.10.0 is given to say what it is, and its own stop to run.
 ASK_SECONDS = 5.0
 STOP_SECONDS = 60.0
+# The shipped releases whose updaters and install scripts reach this bridge, first and last.
+SHIPPED = ((0, 10, 0), (0, 11, 10))
 
 
 def build_parser(prog: str = DEFAULT_PROG):
@@ -124,7 +131,7 @@ def setup() -> int:
         _say("the install command online is not yet this release's, so nothing was installed: run the install command "
              "again in a few minutes")
         return _ended(name, arrival.SETUP, came, True)
-    if not ours():
+    if _shipped(came) and not ours():
         from cad_server._internal import installations
 
         try:
@@ -175,6 +182,14 @@ def ours() -> bool:
 
     return any(folder is not None and ((folder / "install-receipt.json").is_file() or (folder / "plugin").is_dir())
                for folder in (places.state_dir(), places.appdata_state_dir()))
+
+
+def _shipped(came: str | None) -> bool:
+    """Whether ``came`` is one of the shipped releases ``SHIPPED`` spans, a plain ``X.Y.Z``."""
+    from cad_server._internal.auto_update import release
+
+    found = release(came)
+    return found is not None and SHIPPED[0] <= found <= SHIPPED[1]
 
 
 def _keep(name: str, came: str | None) -> bool:
