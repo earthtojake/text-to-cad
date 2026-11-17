@@ -122,7 +122,7 @@ where those files ship, so these scripts are what produces them.
   start, switched off, past a release
   whose server cannot start, back from one uv cannot install), and the helper running `cad plugin install`
   once after an automatic update where `cad plugin auto-update` is on, never after a typed or a failed one.
-  `bridge`: a computer on a shipped release (0.11.10, or `--old`'s) arriving at this build by its updater,
+  `bridge`: a computer on a shipped release (0.11.11, or `--old`'s) arriving at this build by its updater,
   its automatic update, its typed `cad update`, the install command and the uv line, this build's server
   running the install command once where the computer had it, installing cad with uv itself where the
   computer had only a store's copy or the install command failed, and handing over to the uv tool's server;

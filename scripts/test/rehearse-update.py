@@ -50,7 +50,7 @@ The install command cad runs counts its runs on every computer (``Box.runs``).
   typed ``cad update`` with nothing newer says so, and with the release after out updates pipx's cad to it, no install
   command after it. Each time pipx's cad serves the new release, and an open page's port and token reach it.
 
-**The bridge** from a shipped release (``--old``, 0.11.10 by default; 0.11.0 to 0.11.11 and 0.10.0 to 0.10.4 have the
+**The bridge** from a shipped release (``--old``, 0.11.11 by default; 0.11.0 to 0.11.11 and 0.10.0 to 0.10.4 have the
 updater), installed by its own ``cad setup`` through uvx, its server serving pages on the computer's port:
 
 - ``updater``: its update button: its updater installs this build in ``releases/<new>`` and runs its hidden ``cad setup
@@ -127,7 +127,7 @@ import real_computer as rc  # noqa: E402 - beside it
 
 REPO_ROOT = rc.REPO_ROOT
 WINDOWS = rc.WINDOWS
-OLD = "0.11.10"
+OLD = "0.11.11"
 _BASE = 9000 + os.getpid() % 800
 # This tree as releases no index holds: the one installed first, the next, one whose server cannot start, the one after
 # it, and one uv cannot install as a tool.
@@ -301,7 +301,7 @@ class Box:
             return response.status, {"body": data[:200].decode("utf-8", "replace")}
 
     def read(self, name: str) -> dict:
-        """A JSON file of the state folder (the data folder of 0.11.10 and of a uv tool's cad alike), or {}."""
+        """A JSON file of the state folder (the data folder of 0.11.11 and of a uv tool's cad alike), or {}."""
         try:
             found = json.loads((self.state / name).read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -402,7 +402,7 @@ class Box:
 
     def an_hour_passes(self) -> None:
         """The feed due again, as an hour passing makes it: its ``checked`` stamp (``versions.json``, in the data
-        folder of 0.11.10 and of a uv tool's cad alike) set back 61 minutes. Only while no server runs, which writes
+        folder of 0.11.11 and of a uv tool's cad alike) set back 61 minutes. Only while no server runs, which writes
         that file as it reads the feed (Windows refuses a write that meets its own): ``hour_later``."""
         kept = self.read("versions.json")
         kept["checked"] = time.time() - 61 * 60
@@ -508,7 +508,7 @@ class Box:
         return tool
 
     def flat(self) -> None:
-        """The state folder flat, as 0.11.10 keeps it: never a ``versions/`` folder."""
+        """The state folder flat, as 0.11.11 keeps it: never a ``versions/`` folder."""
         if (self.state / "versions").exists():
             raise Failed(f"{self.label}: the state folder holds versions/: {sorted(os.listdir(self.state / 'versions'))}")
 
