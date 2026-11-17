@@ -2090,8 +2090,12 @@ def views_of_document(doc: Any, prototypes: list[Any]) -> list[dict[str, Any]]:
     found = []
     for at in range(1, labels.Length() + 1):
         held = _held_extra(labels.Value(at))
+        if held is None or held.get("kind") != "view":
+            # Another system's view (Specify's AP242 saved views): not read, and its label not
+            # asked for a reference, which OCCT's own views do not carry the way ours do.
+            continue
         part = _part_of(labels.Value(at), by_entry)
-        if held is not None and held.get("kind") == "view" and part is not None:
+        if part is not None:
             found.append(_view_entry(part, held))
     return sorted(found, key=lambda given: given["part"])
 
@@ -2120,8 +2124,10 @@ def _part_of(label: Any, by_entry: dict[str, Any]) -> int | None:
 
     from cad.engine.document import _entry
 
+    # Asked only of a label that holds one: OCP's FindAttribute crashes the process on one that
+    # does not (a view another system wrote).
     found = TDF_Reference()
-    if not label.FindAttribute(TDF_Reference.GetID_s(), found):
+    if not label.IsAttribute(TDF_Reference.GetID_s()) or not label.FindAttribute(TDF_Reference.GetID_s(), found):
         return None
     prototype = by_entry.get(_entry(found.Get()))
     return None if prototype is None else prototype.index

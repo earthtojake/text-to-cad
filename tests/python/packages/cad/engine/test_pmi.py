@@ -1379,6 +1379,29 @@ def requirements(more: str) -> str:
     return REQUIREMENTS.replace("{more}", more)
 
 
+class ForeignViewTest(unittest.TestCase):
+    def test_a_view_another_system_wrote_is_not_read_and_does_not_crash_the_read(self) -> None:
+        # A STEP whose AP242 saved views another system wrote (Specify's) holds XCAF views with no
+        # engine attribute and no reference to a part: the read skips them, and never asks such a
+        # label for its reference, which OCP answers by crashing the process.
+        from OCP.TCollection import TCollection_ExtendedString, TCollection_HAsciiString
+        from OCP.TDocStd import TDocStd_Document
+        from OCP.XCAFApp import XCAFApp_Application
+        from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_View
+        from OCP.XCAFView import XCAFView_Object
+
+        from cad.engine.pmi import _part_of, views_of_document
+
+        doc = TDocStd_Document(TCollection_ExtendedString("MDTV-XCAF"))
+        XCAFApp_Application.GetApplication_s().InitDocument(doc)
+        label = XCAFDoc_DocumentTool.ViewTool_s(doc.Main()).AddView()
+        view = XCAFView_Object()
+        view.SetName(TCollection_HAsciiString("Specify saved view"))
+        XCAFDoc_View.Set_s(label).SetObject(view)
+        self.assertIsNone(_part_of(label, {}))
+        self.assertEqual(views_of_document(doc, []), [])
+
+
 class CoverageTest(_Folder):
     def served(self) -> dict:
         """The structure the last build served, after checking the file serves the same coverage."""
