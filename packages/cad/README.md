@@ -874,7 +874,7 @@ document): an option refused by name, a file of another type or not there, a doc
 - **Injection molding** (`--pull`, `--cavities`): per-face draft, undercuts and the side action, lifter or
   collapsible core each needs, wall thickness and thick sections, ribs, bosses, internal corners, projected
   area and a clamp-force estimate, the parting, the mold envelope; `--candidates` ranks the pulls.
-- **3D printing** (`--technology fdm|sls|sla|mjf|pbf`, `--build-volume`, `--layer-height`, `--nozzle`):
+- **3D printing** (`--technology fdm|sls|sla|mjf|pbf`, `--build-volume`, `--layer-height`, `--nozzle`, `--printer`):
   walls supported and not, gaps, holes, pins, embossed and engraved detail, overhangs, bridges and
   cantilevers, clearances between parts, trapped volumes and their escape holes, build-volume fit, bed
   contact and warping, stair-stepping, support; `--candidates` ranks orientations.
