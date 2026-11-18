@@ -45,7 +45,8 @@ enough. Every other job runs on the changes that reach it. The two there now:
 
 - `packages (Python 3.11 floor)` is a third run of suites the packages jobs already run on the Python
   the server's installations use. It guards one kind of break, a call the floor's standard library
-  lacks, of which the repository has had one (argparse's `suggest_on_error`), at 11 minutes a run.
+  lacks, of which the repository has had one (argparse's `suggest_on_error`), at 11 to 17 minutes a run
+  whole, so it runs as two shards.
 - The installer rehearsals install this tree's wheel on a fresh machine. What they exercise changes in
   few pull requests, and before this layout they ran only after a merge (in November 2026 the Linux
   one had passed 7 runs of 7, the Windows one 23 pushes of 25); a release pull request runs every job,
@@ -221,7 +222,7 @@ decide which tests reach it. The components:
 | `blender` | the packages, its suite | `test-blender.sh`, in the environment `cad run` makes for bpy; a test that skips there fails the run |
 | `packaging` | the packages, the UI, `apps/web`, `apps/mcp`: whatever ships in a wheel | Clean bundle, layout, the wheels' contents, the installed commands |
 | `viewer-e2e` | the packages, the UI, `apps/web`, `tests/browser` | The bundle's viewer through the real backend: the launch smoke test and the format and camera gates in Chromium |
-| `packages (Python 3.11 floor)` | a full run | The three suites on the packages' oldest Python (`test-floor.sh`) |
+| `packages (Python 3.11 floor)` | a full run | The three suites on the packages' oldest Python (`test-floor.sh`), in two shards |
 | `install (Linux)`, `install (Windows)` | a full run; `scripts/install`, the two workflows | `install-linux.yml` and `install-windows.yml`: the one-line installers on a fresh machine, against this tree's wheel |
 | `real install` | a full run; `scripts/install`, its workflow, its runner | `real-install.yml`: the install script against the real `claude`, `codex` and `gemini` on Windows, macOS and Linux |
 | `CI` | always | The one required check: every job that ran passed (`scripts/github-workflows/ci_gate.py`) |
@@ -247,7 +248,8 @@ already tested `main`'s tree in full.
 **Shards.** Run whole, the packages' suites are split over two jobs on Linux and
 three on Windows, each taking its share of every suite (`CAD_TEST_SHARD=I/N`,
 which any `run_python_unittest` honours); a narrowed selection runs in one. The
-first shard also runs the type check, once a platform because the checker reads
+floor's suites, which only a full run selects, are always split over two. The
+first shard of Linux and of Windows also runs the type check, once a platform because the checker reads
 the `win32` branches on Windows alone, and the package test files the change
 itself touches before the suite, so a break in a pull request's own test (most
 Windows failures are one: a POSIX path, a line ending) reports in a minute or

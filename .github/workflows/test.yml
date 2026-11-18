@@ -359,13 +359,19 @@ jobs:
   # once: argparse's suggest_on_error), so only the suites hold the floor. A third run of
   # suites the packages jobs already run on the Python the server's installations use, for a
   # rare kind of break: so it runs before a release ships (a VERSION change), nightly and on a
-  # manual run, not on every push. Whole, unsharded: the last run measured took 15.7 minutes.
+  # manual run, not on every push. Always whole, so split over two shards, each taking its share
+  # of every suite (CAD_TEST_SHARD) as the Linux packages jobs do: unsharded it took 11.5 to 16.7
+  # minutes, the longest job of a full run once the update rehearsal was split.
   packages-floor:
-    name: packages (Python 3.11 floor)
+    name: packages (Python 3.11 floor ${{ matrix.shard }})
     needs: changes
     if: needs.changes.outputs.floor == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/2, 2/2]
     env:
       CAD_TEST_FILE_BUDGET: "120"
 
@@ -392,6 +398,7 @@ jobs:
       - name: Run the library's, the server's and the shim's suites on the floor
         env:
           PYTHON_BIN: ${{ runner.temp }}/floor/bin/python
+          CAD_TEST_SHARD: ${{ matrix.shard }}
         run: xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-floor.sh
 
   # The installer rehearsals: install.sh and install.ps1 on a fresh machine, the way a person
