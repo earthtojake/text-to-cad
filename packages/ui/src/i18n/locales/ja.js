@@ -443,6 +443,7 @@ export default {
   "render.finish": "仕上げ",
   "render.finish.matte": "マット",
   "render.finish.glossy": "光沢",
+  "render.reflections": "反射",
   "render.reset": "デフォルトに戻す",
 
   "colorPicker.saturationBrightness": "彩度と明度",

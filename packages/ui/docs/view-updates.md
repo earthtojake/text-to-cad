@@ -26,6 +26,9 @@ boundaries, never preset names:
 | Clip enable/disable | Clip position, Reverse and Part colours after preparation |
 | Appearance shader change | Projection, background, grid, axes, Explode |
 
+Reflections are a live update: the studio's frame makes their passes when they turn on,
+releases them when they turn off, and starts the picture again.
+
 Both paths yield until the controls have painted, then apply the latest recipe.
 Only the preparation path loads resources and compiles shader variants. Live
 updates coalesce to the next frame and do not wait for an artificial debounce.

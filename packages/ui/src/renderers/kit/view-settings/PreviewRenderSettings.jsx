@@ -69,7 +69,7 @@ function Palette({ colors, onChange }) {
 }
 
 /**
- * Preview's own settings (Render's part colours, lighting, background and floor), every one visible
+ * Preview's own settings (Render's part colours, lighting, background, floor and reflections), every one visible
  * without opening sections. `settings` is Preview's sparse settings; `display` the file's, for the
  * appearance it pins.
  */
@@ -106,6 +106,8 @@ export function PreviewRenderSettings({ settings = {}, display = {}, appearance 
           <Choice label={t("render.placement")} value={look.floor.placement} options={[["lowest", t("render.placement.lowest")], ["origin", t("render.placement.origin")]]} onChange={placement => patch("floor", { placement })} />
           <Choice label={t("render.finish")} value={look.floor.finish} options={[["matte", t("render.finish.matte")], ["glossy", t("render.finish.glossy")]]} onChange={finish => patch("floor", { finish })} />
         </FileSheetSettingsSection>
+        {/* What the parts mirror of each other switches on and off and has nothing else to set: its heading alone. */}
+        <FileSheetSettingsSection title={t("render.reflections")} enabled={look.reflections.enabled} onEnabledChange={enabled => patch("reflections", { enabled })} />
       </div>
     </ScrollArea>
     <div className="shrink-0 border-t border-border p-1">

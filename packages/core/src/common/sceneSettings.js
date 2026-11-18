@@ -335,6 +335,8 @@ export function resolveViewSceneSettings({
     quality: view.lighting.quality,
     exposure: view.lighting.enabled ? view.lighting.exposure : 0,
     lighting: { ...view.lighting },
+    // The parts' reflections of each other, which the studio's frame draws into a still view.
+    reflections: view.lighting.enabled && view.reflections.enabled,
     backdrop: {
       enabled: view.background.enabled,
       color: view.background.enabled ? view.background.color : neutralTheme.background.solidColor,

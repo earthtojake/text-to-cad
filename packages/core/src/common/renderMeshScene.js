@@ -396,8 +396,9 @@ export function renderJobContext(meshData, job = {}) {
     camera: job.camera || null,
     display: job.display ?? {},
     // Preview's look is the job's own request (`preview: true`), over the same display, at
-    // Preview's defaults: a snapshot has no Preview settings of its own.
+    // Preview's defaults unless the job brings Preview settings of its own (`previewSettings`).
     preview: job.preview === true,
+    previewSettings: job.preview === true ? job.previewSettings ?? {} : {},
     // The viewer's rule for this file: only a CAD model has edges to draw; Parts colours a file of
     // several parts; a GLB of several parts explodes; every 3D file is cut by Clip (`viewFeaturesForKind`).
     features: viewFeaturesForKind(sourceKind, { parts: meshData.partCount || 0, explodeParts: meshData.explodeParts || 0 })

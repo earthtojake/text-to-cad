@@ -17,6 +17,11 @@
 //
 // and a last pass copies the accumulation to whatever the frame was drawn for (the canvas).
 //
+// Asked for REFLECTIONS (studioReflections.js), the samples of a still view after its first also
+// carry what the model's parts mirror of each other: a geometry draw and two more passes before
+// the composite, which theirs replaces. A picture's first sample never does, so a moving view is
+// this file's passes alone.
+//
 // A still view CONVERGES. A frame that follows the last with nothing changed (the caller says
 // so: `still`) is the next SAMPLE of the same picture: the camera is moved by a fraction of a
 // pixel (a Halton sequence), the occlusion's directions are turned, and the studio may move its
@@ -26,6 +31,8 @@
 // frame, a setting) starts again from the first sample, which is a whole picture of its own: the
 // accumulation only ever refines what is on screen. A moving view therefore pays for one draw
 // and the small passes a frame, and the samples only while it rests.
+
+import { createStudioReflections } from "./studioReflections.js";
 
 const PASS_VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -315,12 +322,14 @@ function passTarget(THREE, name) {
  * share of the view's height its radius may span. `onSample(index, renderer, context)` is
  * called before each sample is drawn, so the studio can place its key light for it (0: at
  * rest); `context.castersChanged` says whether this frame may have moved a shadow caster.
- * `afterSample()` follows the draw.
+ * `afterSample()` follows the draw. `reflections` asks for the parts' reflections of each other
+ * in a still view (true, or `STUDIO_REFLECTION_DEFAULTS` overrides); `configure` changes it.
  */
 export function createStudioFrame(THREE, {
   samples = 32,
   multisample = 4,
   occlusion = {},
+  reflections = false,
   onSample = null,
   afterSample = null
 } = {}) {
@@ -396,6 +405,17 @@ export function createStudioFrame(THREE, {
     uAccumulation: { value: accumulation.texture }
   });
 
+  // The reflection passes, while they are asked for: their targets are theirs to make and release.
+  let reflection = null;
+  function setReflections(wanted) {
+    if (Boolean(wanted) === Boolean(reflection)) return;
+    reflection?.dispose();
+    reflection = wanted ? createStudioReflections(THREE, wanted === true ? {} : wanted, {
+      depthTexture, sceneTarget, accumulation, occlusionTargets, projection, projectionInverse, passCamera, fullScreenPass, passTarget
+    }) : null;
+    if (reflection && state.width > 0) reflection.resize(state.width, state.height);
+  }
+
   const state = { index: 0, width: 0, height: 0, disposed: false };
   const size = new THREE.Vector2();
   // The view the picture's samples are of (its first's), and points of the model the camera's
@@ -406,6 +426,7 @@ export function createStudioFrame(THREE, {
   const anchored = new THREE.Vector4();
   const current = new THREE.Vector4();
   placeProbes([0, 0, 0], 1);
+  setReflections(reflections);
 
   function placeProbes(center, radius) {
     probes.length = 0;
@@ -451,6 +472,7 @@ export function createStudioFrame(THREE, {
     accumulation.setSize(width, height);
     occlusionPass.uniforms.uSize.value.set(width, height);
     compositePass.uniforms.uOcclusionSize.value.set(halfWidth, halfHeight);
+    reflection?.resize(width, height);
     return true;
   }
 
@@ -461,7 +483,7 @@ export function createStudioFrame(THREE, {
 
   // Draw the scene for sample `index`: its camera a fraction of a pixel away for every sample
   // but the first, and left exactly as it was.
-  function drawScene(renderer, scene, camera, index) {
+  function drawScene(renderer, scene, camera, index, reflected = false) {
     const [jitterX, jitterY] = studioFrameJitter(index);
     const savedView = camera.view ? { ...camera.view } : null;
     if (index > 0) camera.setViewOffset(state.width, state.height, jitterX, jitterY, state.width, state.height);
@@ -471,6 +493,7 @@ export function createStudioFrame(THREE, {
       renderer.render(scene, camera);
       projection.copy(camera.projectionMatrix);
       projectionInverse.copy(camera.projectionMatrixInverse);
+      if (reflected) reflection.drawGeometry(renderer, scene, camera);
     } finally {
       if (index > 0) {
         if (savedView?.enabled) {
@@ -520,10 +543,13 @@ export function createStudioFrame(THREE, {
       settings.modelRadius = next;
       placeProbes(center.map((value) => Number(value) || 0), next);
     },
-    /** Change how many samples a still view converges over, or the occlusion. */
-    configure({ samples: count, occlusion: patch } = {}) {
+    /** Whether a still view's samples carry the parts' reflections of each other. */
+    get reflections() { return Boolean(reflection); },
+    /** Change how many samples a still view converges over, the occlusion, or the reflections. */
+    configure({ samples: count, occlusion: patch, reflections: wanted } = {}) {
       if (count != null) settings.samples = Math.max(1, Math.round(count));
       if (patch) Object.assign(settings, patch);
+      if (wanted !== undefined) setReflections(wanted);
       state.index = 0;
     },
     /** Start the next frame from its first sample. */
@@ -557,19 +583,28 @@ export function createStudioFrame(THREE, {
       onSample?.(index, renderer, {
         castersChanged: !still && Boolean(shadowMap?.enabled && (shadowMap.autoUpdate || shadowMap.needsUpdate))
       });
+      // How much of the reflections this sample carries: none for a picture's first, so a moving
+      // view is drawn exactly as it is without them, at the same cost.
+      const weight = reflection ? reflection.weightAt(index, settings.samples) : 0;
       try {
         renderer.autoClear = true;
-        drawScene(renderer, scene, camera, index);
+        drawScene(renderer, scene, camera, index, weight > 0);
       } finally {
         afterSample?.(index);
       }
       try {
         renderer.autoClear = false;
         if (settings.strength > 0) drawOcclusion(renderer, camera, index);
-        compositePass.uniforms.uStrength.value = settings.strength;
-        compositePass.uniforms.uPower.value = settings.power;
-        compositePass.mesh.material.blendAlpha = 1 / (index + 1);
-        pass(renderer, compositePass, accumulation);
+        if (weight > 0) {
+          reflection.drawReflection(renderer, scene, camera, index, {
+            occlusion: settings, modelRadius: settings.modelRadius, width: state.width, height: state.height, weight
+          });
+        }
+        const composite = weight > 0 ? reflection.compositePass : compositePass;
+        composite.uniforms.uStrength.value = settings.strength;
+        composite.uniforms.uPower.value = settings.power;
+        composite.mesh.material.blendAlpha = 1 / (index + 1);
+        pass(renderer, composite, accumulation);
         if (present) output(renderer, target);
       } finally {
         renderer.autoClear = autoClear;
@@ -607,7 +642,8 @@ export function createStudioFrame(THREE, {
       const half = occlusionTargets[0].width * occlusionTargets[0].height;
       // Colour and depth-stencil, multisampled and resolved; two half-resolution and one full
       // half-float target.
-      return pixels * 8 * (multisample + (sceneTarget.samples > 0 ? 1 : 0)) + half * 8 * 2 + pixels * 8;
+      return pixels * 8 * (multisample + (sceneTarget.samples > 0 ? 1 : 0)) + half * 8 * 2 + pixels * 8
+        + (reflection ? reflection.memoryBytes(pixels) : 0);
     },
     dispose() {
       if (state.disposed) return;
@@ -616,6 +652,8 @@ export function createStudioFrame(THREE, {
       sceneTarget.dispose();
       accumulation.dispose();
       for (const target of occlusionTargets) target.dispose();
+      reflection?.dispose();
+      reflection = null;
       for (const fullScreen of [occlusionPass, smoothPass, compositePass, outputPass]) {
         fullScreen.mesh.geometry.dispose();
         fullScreen.mesh.material.dispose();

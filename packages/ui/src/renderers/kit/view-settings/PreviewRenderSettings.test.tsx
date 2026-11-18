@@ -47,6 +47,26 @@ it("has Preview's lighting, background and a floor that folds while off; editing
   expect(store.getSnapshot().display).toEqual({ mode: 'xray', grid: true });
 });
 
+it("switches the parts' reflections of each other at their heading, a section with nothing else in it, and Reset takes them away", async () => {
+  const user = userEvent.setup({ skipHover: true });
+  render(<Harness />);
+  const reflections = screen.getByRole('checkbox', { name: 'Reflections', exact: true });
+  expect(reflections.getAttribute('aria-checked')).toBe('false');
+  expect(store.renderScene().render.configuration.reflections).toBe(false);
+  await user.click(reflections);
+  expect(store.getSnapshot().preview).toEqual({ reflections: { enabled: true } });
+  expect(store.renderScene().render.configuration.reflections).toBe(true);
+  expect(screen.getByRole('checkbox', { name: 'Reflections', exact: true }).getAttribute('aria-checked')).toBe('true');
+  expect(reflections.closest('section')!.querySelector('[data-settings-section-body]')).toBeNull();
+  act(() => reflections.focus());
+  await user.keyboard(' ');
+  expect(store.getSnapshot().preview.reflections.enabled).toBe(false);
+  await user.keyboard(' ');
+  await user.click(screen.getByRole('button', { name: 'Reset to default' }));
+  expect(store.getSnapshot().preview).toEqual({});
+  expect(store.getSnapshot().display).toEqual({ mode: 'xray', grid: true });
+});
+
 it('keeps sparse defaults when a value field is only focused, and the precision of an existing setting', async () => {
   const user = userEvent.setup({ skipHover: true });
   render(<Harness />);

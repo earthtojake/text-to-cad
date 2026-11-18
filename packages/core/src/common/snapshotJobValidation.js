@@ -1,5 +1,5 @@
 import { normalizeAnnotation } from "./annotation.js";
-import { normalizeViewSettings } from "./viewSettings.js";
+import { normalizePreviewSettings, normalizeViewSettings } from "./viewSettings.js";
 
 export function validateSnapshotRenderJob(job = {}) {
   const mode = String(job.mode || "view").trim().toLowerCase();
@@ -11,6 +11,11 @@ export function validateSnapshotRenderJob(job = {}) {
   }
   // Preview is its own request beside the display, never a display mode: `preview: true`.
   if (Object.hasOwn(job, "preview") && typeof job.preview !== "boolean") throw new Error("preview must be a boolean");
+  // Preview's own settings (`previewSettings`, the viewer's `PreviewSettings`): only with Preview.
+  if (Object.hasOwn(job, "previewSettings")) {
+    if (job.preview !== true) throw new Error("previewSettings needs preview: true");
+    normalizePreviewSettings(job.previewSettings);
+  }
   normalizeViewSettings(Object.hasOwn(job, "display") ? job.display : {});
   // The ink drawn over the model (`annotation.js`): refused before anything loads, by what is wrong.
   if (job.annotation != null) normalizeAnnotation(job.annotation);

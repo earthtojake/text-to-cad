@@ -465,6 +465,7 @@ export default {
   "render.finish": "Finish",
   "render.finish.matte": "Matte",
   "render.finish.glossy": "Glossy",
+  "render.reflections": "Reflections",
   "render.reset": "Reset to default",
 
   // The colour picker's controls.

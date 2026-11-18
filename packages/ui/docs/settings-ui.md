@@ -1113,12 +1113,14 @@ Projection is a menu of its own, shared, orthographic by default; Preview's Rend
 to perspective while preserving the shared choice.
 
 Preview's settings panel (`PreviewSettings.jsx`, its body `PreviewRenderSettings.jsx`) is
-the one settings form: Orbit, then Render's Part colours, Lighting, Background and Floor.
+the one settings form: Orbit, then Render's Part colours, Lighting, Background, Floor and
+Reflections.
 It shows all groups under static section headings and dividers, with no collapsible
 sections or cascading settings menus. A heading is 24px of regular `text-tiny` in the
 foreground colour, a rule above every one but the first. A feature that switches on and off
-(Orbit, Floor) is the checkbox at its heading's right end, the title naming it; there is no
-separate row for it. While the feature is off its section is that heading alone. Every
+(Orbit, Floor, Reflections) is the checkbox at its heading's right end, the title naming it;
+there is no separate row for it. While the feature is off its section is that heading alone;
+Reflections, with nothing else to set, is its heading alone on or off. Every
 setting is one 24px row: its label in a 4rem muted column, its control filling the rest, so
 a form's controls start on one line. A label is short under its heading ("Colour",
 "Opacity" under Floor); the control's accessible name stays whole ("Floor opacity"). A

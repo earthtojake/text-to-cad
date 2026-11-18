@@ -63,6 +63,7 @@ function resolvedConfiguration(configuration = {}) {
       size: clamp(finiteOr(lighting.size, DEFAULT_RENDER_LIGHTING.size), 0.25, 3),
       fill: clamp(finiteOr(lighting.fill, DEFAULT_RENDER_LIGHTING.fill), 0, 1)
     },
+    reflections: configuration.reflections === true,
     backdrop: {
       ...(Object.hasOwn(backdrop, "opacity") ? { opacity: clamp(finiteOr(backdrop.opacity, 1), 0, 1) } : {}),
       color: typeof backdrop.color === "string" ? backdrop.color : "#ffffff",
@@ -504,7 +505,9 @@ function updateRendererAndScene(THREE, runtime, state, configuration, ditherScal
  * still view converges to its occlusion and soft light. Only while that lighting is on, and
  * never in software, which keeps three's single draw. `options` is `applyPhotographicStudio`'s
  * `frame`: false for none, or the frame's `samples` and `multisample` (by default the canvas's
- * own MSAA). Lighting quality Final converges over more samples than Preview.
+ * own MSAA). Lighting quality Final converges over more samples than Preview. The parts'
+ * reflections of each other (`configuration.reflections`, studioReflections.js) are the frame's
+ * too: asked for, it makes their passes and targets; no longer asked for, it releases them.
  */
 function updateFrame(THREE, runtime, state, configuration, bounds, options, quality) {
   const wanted = options !== false && configuration.lighting.enabled && runtime.softwareRendering !== true;
@@ -536,6 +539,7 @@ function updateFrame(THREE, runtime, state, configuration, bounds, options, qual
   }
   const samples = options?.samples ?? PHOTOGRAPHIC_STUDIO_FRAME.samples[quality === "final" ? "final" : "preview"];
   if (state.frame.samples !== samples) state.frame.configure({ samples });
+  if (state.frame.reflections !== configuration.reflections) state.frame.configure({ reflections: configuration.reflections });
   state.frame.place({ radius: bounds.radius, center: bounds.center });
 }
 
@@ -560,7 +564,9 @@ function updateFrame(THREE, runtime, state, configuration, bounds, options, qual
  * which shows its pixels as drawn, keeps 1.
  *
  * `frame` is the studio's frame (`state.frame`, `studioFrame.js`), which its caller draws the
- * scene through: false for none, or its `samples` and `multisample`.
+ * scene through: false for none, or its `samples` and `multisample`. `configuration.reflections`
+ * asks that frame for the parts' reflections of each other in a still view; without a frame
+ * (unlit, in software, `frame: false`) there are none.
  */
 export function applyPhotographicStudio(THREE, runtime, configuration = {}, {
   bounds = runtime?.modelBounds,

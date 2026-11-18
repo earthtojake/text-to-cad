@@ -55,7 +55,7 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'preview_parts_color', 'preview_lighting_quality', 'preview_lighting_exposure', 'preview_lighting_rotation',
   'preview_lighting_size', 'preview_lighting_fill', 'preview_background_color', 'preview_background_opacity',
   'preview_floor_enabled', 'preview_floor_color', 'preview_floor_opacity', 'preview_floor_placement',
-  'preview_floor_finish', 'preview_reset',
+  'preview_floor_finish', 'preview_reflections_enabled', 'preview_reset',
   // A model's routines (the playbar, in the tools view and Preview), and its Position.
   'animation_play', 'animation_clip', 'animation_speed', 'animation_loop', 'animation_autoplay', 'animation_release',
   'position_joint', 'position_preset', 'position_reset', 'position_knob',

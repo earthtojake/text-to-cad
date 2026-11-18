@@ -443,6 +443,7 @@ export default {
   "render.finish": "마감",
   "render.finish.matte": "무광",
   "render.finish.glossy": "유광",
+  "render.reflections": "반사",
   "render.reset": "기본값으로 재설정",
 
   "colorPicker.saturationBrightness": "채도 및 명도",
