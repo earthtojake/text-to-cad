@@ -59,7 +59,7 @@ These words mean one thing each, in the code, the commands and every document.
   MuJoCo Studio shows it.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`),
+  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`, `xcaf_pmi`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
   kind: in-process, separate process, or both. An integration has operations of its own only on a file of its
@@ -639,6 +639,8 @@ src/cad/
                          #   model compiled by MuJoCo's own compiler, what it refuses and warns as
                          #   findings (_compile), the model-health checks (_health), what collides as
                          #   what and the contact excludes as data (_report, _check)
+  xcaf_pmi/              # the xcaf_pmi integration: xcaf-pmi, Paul Fremantle's AP242 writer, as
+                         #   `cad run xcaf-pmi` runs it (_command)
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,

@@ -457,6 +457,15 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                "BLENDER_USER_EXTENSIONS"),
         # PyPI's wheels with what they need: 262 MB on macOS arm64, 356 on Windows x86-64, 429 on Linux x86-64.
         holds="Blender as a Python module", download_mb=430),
+    "xcaf_pmi": Integration(
+        "xcaf_pmi", "xcaf-pmi, Paul Fremantle's AP242 writer: writes an .xbf's PMI to a STEP with haecceity instead "
+                    "of the kernel's writer, with callouts drawn as text and notes in the file",
+        extra="xcaf_pmi", process="separate",
+        modules=("xcaf_pmi",), distributions=("xcaf-pmi", "quiddity"), identity=("xcaf-pmi",),
+        commands=("xcaf-pmi",),
+        # xcaf-pmi's OCP is the kernel's, so its environment is resolved with build123d and the OCP wheel counts
+        # there: this is quiddity's wheel and xcaf-pmi's.
+        holds="xcaf-pmi and quiddity", download_mb=10),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})

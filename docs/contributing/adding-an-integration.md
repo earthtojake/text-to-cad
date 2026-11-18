@@ -1,7 +1,7 @@
 # Adding an integration
 
 An **integration** is our support for one third-party tool, named for the tool's own project
-(`build123d`, `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`), never for a capability.
+(`build123d`, `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`, `xcaf_pmi`), never for a capability.
 It is three things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs; our code for it --
 helpers that take its objects, producers and operations; and a process kind: in-process, separate
 process, or both. The definitions and laws are the library's README
@@ -37,6 +37,7 @@ The integrations so far came out in different shapes, each from those answers:
 | `coacd` | convex decomposition of a mesh | nothing a person calls: it backs `cad.mujoco.decompose`, run in a process of its own, its hulls kept in the cache |
 | `blender` | all of Blender as a Python module, `bpy` | one helper, `cad.blender.load`: a GLB cad wrote, in Blender's scene, with each node's object by its name and its clips to play. The framing, the lights and the render are `bpy`'s own, in the script. No document type and no command |
 | `mujoco` | a compiler, a simulator, `MjSpec`, MuJoCo Studio | a document as an `MjSpec`, a part's collision chosen by its label path, a spec saved as a folder that travels, and one operation on a file that is no document type, `cad mujoco check` (below). No reader, no viewer and no still of an MJCF: Studio shows one |
+| `xcaf_pmi` | `xcaf-pmi`, Paul Fremantle's AP242 writer, a command line | nothing but the command: `cad run xcaf-pmi ...` makes its environment and runs it there, a second STEP writer a person asks for. No document type and no helper |
 
 An integration that makes or checks a document type is added with that type, and the type's guide has
 a [walkthrough](adding-a-document-type.md#walkthrough-a-type-and-its-integration-together-kicad) that

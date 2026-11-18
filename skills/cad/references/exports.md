@@ -168,6 +168,14 @@ geometry, names, colours and materials. Keep the xbf beside the STEP, and read t
   face, edge and vertex, so a STEP read back keeps them. It drops the rest of a
   material's look and physical fields, a face's material (the face keeps its colour),
   and the mechanism: a STEP is placements only.
+- **STEP by xcaf-pmi**: [xcaf-pmi](https://github.com/pzfreo/xcaf-pmi), Paul Fremantle's
+  AP242 writer, writes GD&T with each callout drawn with its text and its notes in the
+  file, for a file another CAD system should draw. A STEP's GD&T goes through its own
+  reader (`cad step export` keeps none in the `.xbf`): `cad run xcaf-pmi to-xcaf part.step
+  -o part.xbf`, then `cad run xcaf-pmi to-step part.xbf -o drawn.step`. It is fetched the
+  first time it is run, says on stderr what it left out (saved views, today), `--strict`
+  refuses instead, and a build's `@step` stays the kernel's. Say it was xcaf-pmi that wrote
+  the file.
 - **GLB**: glTF 2.0, Y up, in metres. One mesh per part and the assembly's tree as nodes: a
   node per sub-assembly with its components under it, each placed in its parent's frame and
   named by its path below the root (`arm/head/pin_1`), so Blender and any glTF reader show the
