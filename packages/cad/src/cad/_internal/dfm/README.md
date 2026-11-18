@@ -902,7 +902,10 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   face square to the skin that reaches it and its opposite skin through breaks is a cut edge: its rays run
   across the plate and measure its width, never its thickness. A bend's end is broken by a cone or a torus
   about the bend's axis, beside one of its cylinders and a cut edge or a flange's break, within the sheet:
-  an `edge_break` too, and the bend's length runs to the cut. A cone, torus, sphere or freeform face whose
+  an `edge_break` too, and the bend's length runs to the cut. A cut edge rounded whole from one skin to the
+  other (a full round, r = t/2: a convex cylinder along the skins, a torus or sphere about their normal, and
+  the face that turns a corner of the outline between two) leaves no face of the cut square to the skins: it
+  is an `edge_break` of both, no cut edge. A cone, torus, sphere or freeform face whose
   rays cross `t` is `formed` (a cone between flanges is not a bend). A face square between two opposite planes that face away from each other,
   nearer each other than its own rays run, is the cut edge of a stretch off the thickness (a 3 mm wall's end
   cap): the stretch is judged on its skins, not on rays that run along it. Everything else, and any stretch
@@ -944,7 +947,10 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   rounds, a conic between a chamfer along a line and one along an arc) is laid as chords within `CHORD_MM`
   of it, as an arc's are, so none is shorter than the tolerance the breaks are fused with. A bend's ends'
   breaks are unrolled with its strip, and every break is laid face up, as the flanges are (the far skin's
-  project face down, and were left beside the flat as pieces of their own).
+  project face down, and were left beside the flat as pieces of their own). A full round is laid in its two
+  halves, split at the sheet's mid-plane where it is widest (laid whole, its outline folds back on itself to
+  a line): an 80 x 40 plate with full-round ends unfolds 80 x 40, not 78 x 40, and a hole with a full-round
+  rim is its narrowest.
   A countersink sunk into the unfolded side is laid in the same way: that skin's hole is the countersink's
   rim, the flat's the hole under it (a plate countersunk from both sides has one whichever side unfolds).
   `cad.build123d.unfold(shape, thickness=, k_factor=, material=, bend_lines=False)` returns it
