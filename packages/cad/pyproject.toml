@@ -140,7 +140,7 @@ trimesh = [
 # (MjSpec, the warning hook) and Studio's command line moved between majors.
 mujoco = [
   "mujoco-core>=4.0,<5",
-  "mujoco-studio>=4.0,<5",
+  "mujoco-studio>=4.0.1,<5",
 ]
 # The coacd integration's extra: cad.mujoco.decompose makes a part of a MuJoCo function's spec collide as
 # the convex hulls CoACD cuts its mesh into (cad.coacd), imported only by the decomposer's own process
