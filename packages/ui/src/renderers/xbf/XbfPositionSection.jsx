@@ -9,6 +9,7 @@ import { SliderField } from "../kit/inspector/SliderField.jsx";
 import { DEFAULT_POSE_VALUE, KinematicsPoseRow, NO_PRESET_VALUE } from "../kit/inspector/kinematicsControls.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 import { useI18n } from "@cad/ui/i18n";
+import XbfMachineRow from "./XbfMachineRow.jsx";
 
 // An engine document's Position: the view's panel's tab exactly as a STEP's is (the STEP
 // renderer's `PoseControlsSection.js` and `MotionControlsSection.js`, copied: one again at the
@@ -154,17 +155,21 @@ export function useXbfPose(kinematics) {
  *   `NO_PRESET_VALUE` set by hand. `onValues` takes every pair's values, and every coupling's when a
  *   coupling's slider moved. `motion`: the motion that owns the pose while it does (`useXbfMotion.js`):
  *   the section shows its frame, read-only, each coupling where the frame stands on it, and takes no
- *   edit (taking the motion up put Position's own pose at rest: one motion at a time).
+ *   edit (taking the motion up put Position's own pose at rest: one motion at a time). `machine`: the
+ *   machine the twin follows (`useMachineMirror.js`), whose row the section draws last where the
+ *   mechanism has a joint for a machine axis; while it is watched, the joints are read-only.
  */
-export default function XbfPositionSection({ kinematics, motion = null, ...own }) {
+export default function XbfPositionSection({ kinematics, motion = null, machine = null, ...own }) {
   const frame = useMotionFrame(kinematics, motion);
-  if (!frame) return <PositionBody kinematics={kinematics} {...own} />;
+  // While a machine is watched it owns the pose: the joints show where it is, and take no edit.
+  const watched = Boolean(machine && machine.phase !== "idle");
+  if (!frame) return <PositionBody kinematics={kinematics} machine={machine} readOnly={watched} {...own} />;
   const atRest = xbfSamePose(frame, xbfPoseValues(kinematics));
-  return <PositionBody kinematics={kinematics} values={frame} couplings={xbfCouplingValues(kinematics, frame)}
+  return <PositionBody kinematics={kinematics} machine={machine} values={frame} couplings={xbfCouplingValues(kinematics, frame)}
     preset={atRest ? DEFAULT_POSE_VALUE : NO_PRESET_VALUE} readOnly onValues={own.onValues} onPreset={own.onPreset} onReset={own.onReset} />;
 }
 
-function PositionBody({ kinematics, values, couplings = null, preset, onValues, onPreset, onReset, readOnly = false }) {
+function PositionBody({ kinematics, values, couplings = null, preset, onValues, onPreset, onReset, readOnly = false, machine = null }) {
   const usage = useControlUsage();
   const { t } = useI18n();
   const controls = xbfPositionRows(kinematics);
@@ -210,6 +215,8 @@ function PositionBody({ kinematics, values, couplings = null, preset, onValues, 
       {/* What the document's mechanism cannot pose, and why. */}
       {[...unposable].map(([label, why]) => <FileSheetStatusText key={label}>{t("position.cannotPose", { name: label, reason: why })}</FileSheetStatusText>)}
       {others.map(text => <FileSheetStatusText key={text}>{text}</FileSheetStatusText>)}
+      {/* A machine's twin: its joints follow the machine a controller reports (`useMachineMirror.js`). */}
+      {machine?.available ? <XbfMachineRow mirror={machine} /> : null}
     </div>
   </ToolPanel>;
 }

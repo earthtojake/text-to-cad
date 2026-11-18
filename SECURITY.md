@@ -109,6 +109,16 @@ names at most 512 distinct models, each STEP at most 64 MiB and all of them at m
 `cad sdf validate` runs `gz sdf --check` on a document that names a remote
 reference only when asked (`--gz-remote`).
 
+**Machines watched.** A page can ask the server to watch a machine tool's controller at an address
+the person types (`POST /api/v1/machines`, `cad_server/machines`): the server then connects to that
+host and port, on the person's network, from the person's computer. Only the authenticated page can
+ask (the door and the change header, as for every change), only the three schemes are taken
+(`mtconnect://`, `linuxcnc://`, `grbl://`), at most eight at once, and every answer is bounded
+(4 MiB from an agent, 64 KiB a line from linuxcncrsh, 4 KiB a GRBL report). The readers never command
+a machine: an MTConnect agent is asked its `probe` and `current`, linuxcncrsh its `get`s (never `set
+enable`), and GRBL its real-time status query alone. What a controller answers is untrusted input,
+parsed as data and shown as text.
+
 **The install command.** `curl -fsSL https://texttocad.dev/install.sh | sh` (on
 Windows `irm https://www.texttocad.dev/install.ps1 | iex`) runs the script the docs
 site serves over HTTPS, as you, with no sudo and nothing asked: it installs uv with

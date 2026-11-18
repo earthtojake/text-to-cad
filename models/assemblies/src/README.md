@@ -18,6 +18,7 @@ cad model snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the 
 | Script | Model | What it is |
 | --- | --- | --- |
 | `compact_humanoid/compact_humanoid.py` | `compact_humanoid` | 28-DOF compact humanoid concept; each actuator axis is an unconnected joint on its cartridge, so there is no mechanism (none before either) |
+| `cnc_router/cnc_router.py` | `cnc_router` | Three-axis gantry router as a machine's twin: prismatic joints `x`, `y` and `z` at 0 at machine zero, which Position's Machine row poses from a watched controller |
 | `cutaway_turbofan_engine/cutaway_turbofan_engine.py` | `cutaway_turbofan_engine` | Labeled multi-body cutaway turbofan |
 | `flying_car/flying_car.py` | `flying_car` | Four-rotor flying car concept |
 | `link_robot/link_robot.py` | `link_robot` | A base, two placements of `link_arm()` and a spare `link_pin()`: one pin B-rep placed five times, two levels deep |

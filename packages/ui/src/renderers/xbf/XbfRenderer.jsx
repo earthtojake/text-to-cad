@@ -28,6 +28,7 @@ import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } 
 import { createClickActivation } from "./clickActivation.js";
 import XbfMeasureOverlay from "./XbfMeasure.jsx";
 import XbfModelTree from "./XbfModelTree.jsx";
+import { useMachineMirror } from "./useMachineMirror.js";
 import XbfPositionSection, { useXbfPose, writeXbfPosition, xbfPoseGiven, xbfPositionRows } from "./XbfPositionSection.jsx";
 import { MeasureIcon, SelectIcon, SelectMenu, XBF_SELECT_DEFAULT, xbfSelectBadge } from "./XbfSelectionModes.jsx";
 import { useXbfElementFacts, useXbfSelectionChips, xbfCopyText, xbfDescriber, xbfNodeRefs, xbfTipper } from "./xbfChips.jsx";
@@ -216,6 +217,8 @@ function XbfSurface({ view, data }) {
     shellRef.current?.requestRender?.();
   }, []);
   const motion = useXbfMotion(kinematics, poseFrame);
+  // ---- Machine: the twin follows a machine its controller reports (`useMachineMirror.js`) ------
+  const machine = useMachineMirror({ client: document.client, kinematics, values: poseValues, onValues: setPoseValues });
   const motionOwns = Boolean(motion?.enabled);
   const motionRef = useRef(motion);
   motionRef.current = motion;
@@ -725,8 +728,9 @@ function XbfSurface({ view, data }) {
   const measureSelect = measureSelectHandlers(measure, runtimeOf, clearSelection, { picks: selects(selectFilter, "measurement") });
   measureSelectRef.current = measureSelect;
 
-  // Position's knobs: Select's, while its filter ticks Position, with nothing exploded and no motion owning the pose.
-  const knobsShown = selectActive && posable && selects(selectFilter, "position") && !explodeApplied && !motionOwns;
+  // Position's knobs: Select's, while its filter ticks Position, with nothing exploded and no motion or machine owning the pose.
+  const knobsShown = selectActive && posable && selects(selectFilter, "position") && !explodeApplied && !motionOwns
+    && machine.phase === "idle";
   const handles = useMemo(() => (knobsShown && poseValues ? xbfJointHandles({ kinematics, rows: positionRows, values: poseValues, scene,
     onChange: (row, value) => { const written = writeXbfPosition(poseValues, row, value); if (written) setPoseValues(written); } }) : null),
   [knobsShown, kinematics, positionRows, poseValues, scene, setPoseValues]);
@@ -745,7 +749,7 @@ function XbfSurface({ view, data }) {
   const sidebar = scene && (assembly || kinematics) ? <>
     {assembly ? <XbfModelTree key={document.modelKey} tree={tree} active={!previewing} disabled={shell.idle} mode={shape}
       selectedIds={selected} onClearSelection={clearSelection} partControls={partControls} /> : null}
-    {kinematics ? <XbfPositionSection kinematics={kinematics} motion={motionOwns ? motion : null} values={poseValues || {}} couplings={poseCouplings} preset={posePreset}
+    {kinematics ? <XbfPositionSection kinematics={kinematics} motion={motionOwns ? motion : null} machine={machine} values={poseValues || {}} couplings={poseCouplings} preset={posePreset}
       onValues={setPoseValues} onPreset={choosePreset} onReset={resetPose} /> : null}
   </> : null;
 

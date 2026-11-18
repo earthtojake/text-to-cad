@@ -300,6 +300,9 @@ class CadApp:
         # reads dispatched directly to its document server (``documents.py``).
         self.engine_documents = documents or EngineDocuments(on_crash=lambda error: self._crashed(error, bugs_only=True))
         self.prompt_files = PromptFiles()
+        # The machines a page watches, each read off its controller on a thread of its own
+        # (``cad_server/machines``): made at the first watch.
+        self._machines = None
         self._exports = None
         self.start = to_posix_path(os.path.abspath(start if start is not None else _working_folder()))
         # Whether this computer has a file chooser for the home's Open (``POST /api/v1/local/pick``).
@@ -603,6 +606,8 @@ class CadApp:
             return self._export_jobs(request, response, rest)
         if head == "local":
             return self._local(request, response, rest)
+        if head == "machines":
+            return self._machine_route(request, response, rest)
         raise ApiError(404, f"no route {pathname}", _ROUTES_HINT)
 
     def _methods(self, request, routes: dict) -> None:
@@ -1036,6 +1041,58 @@ class CadApp:
         if rest == ["activity"] and self.analytics is not None:
             return self._methods(request, {"POST": lambda: self._activity(request, response)})
         raise ApiError(404, f"no route {request.path}", _ROUTES_HINT)
+
+    # --- machines: a controller's live position, for a twin to mirror ------------------------------
+
+    @property
+    def machines(self):
+        if self._machines is None:
+            from cad_server.machines.watch import Watches
+
+            self._machines = Watches()
+        return self._machines
+
+    def _machine_route(self, request, response, rest) -> None:
+        """``/api/v1/machines``: ``POST`` ``{address}`` watches a machine (201, its state); ``GET
+        /<id>?after=&wait=`` is its state once its version is past ``after`` (waited on up to ``wait``
+        seconds); ``DELETE /<id>`` stops watching it (204)."""
+        if not rest:
+            return self._methods(request, {"POST": lambda: self._watch_machine(request, response)})
+        if len(rest) == 1 and rest[0]:
+            ident = rest[0]
+            return self._methods(request, {"GET": lambda: self._machine_state(request, response, ident),
+                                           "DELETE": lambda: self._unwatch_machine(response, ident)})
+        raise ApiError(404, f"no route {request.path}", _ROUTES_HINT)
+
+    def _watch_machine(self, request, response) -> None:
+        self._limit(request, 4096)
+        payload = json.loads(request.body() or b"{}")
+        if type(payload) is not dict or set(payload) != {"address"}:
+            raise ValueError("watching a machine takes {\"address\": \"mtconnect://...\", \"linuxcnc://...\" or \"grbl://...\"}")
+        try:
+            state = self.machines.start(payload["address"])
+        except OverflowError as error:
+            raise ApiError(409, str(error), "stop watching a machine on another page") from None
+        send_json(response, 201, state)
+
+    def _machine_state(self, request, response, ident) -> None:
+        watch = self.machines.get(ident)
+        if watch is None:
+            raise ApiError(404, "that machine is not watched", "watch it again")
+        def number(name, default, kind):
+            text = request.query.get(name)
+            if text in (None, ""):
+                return default
+            try:
+                return kind(text)
+            except ValueError:
+                raise ValueError(f"{name} is a number, not {text!r}") from None
+        send_json(response, 200, watch.wait(number("after", -1, int), number("wait", 0.0, float)))
+
+    def _unwatch_machine(self, response, ident) -> None:
+        if not self.machines.stop(ident):
+            raise ApiError(404, "that machine is not watched", "there is nothing to stop")
+        response.send_empty(204)
 
     def _create_prompt_files(self, request, response) -> None:
         from .prompt_files import MAX_BODY_BYTES
