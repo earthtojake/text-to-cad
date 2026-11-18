@@ -55,6 +55,11 @@ FAMILIES = ("parts", "not_sheet", "sharp_bends", "bends", "flanges", "channels",
             "hole_spacing", "hole_to_bend", "notches", "tabs", "webs", "gaps")
 ITEM_CAP = 300
 _PARALLEL = 0.9995
+#: Surfaces with no axis to read (``_dfm_brep.Surface``): a cut or a break along an ellipse or a spline is one,
+#: and is judged by its sampled normals.
+_FREEFORM = ("bspline", "extrusion", "revolution", "offset", "other")
+#: The most points a curve's chords are sampled at (an arc's at most 720 too).
+_CURVE_POINTS = 720
 #: A sheet's skin is at least this many times as wide as the sheet is thick (cad's own line, for which
 #: of a part's opposite faces can be a sheet's two sides: a strip 7 mm wide of 2 mm sheet is cut from sheet; a
 #: grille's webs, a bar's sides, a block's faces and a tube's two ends are not). Read on each face in its own
@@ -434,7 +439,16 @@ def _edge_points(edge: Any, reverse: bool, count: int = 48) -> tuple[np.ndarray,
         name = "circle"
         circle = (np.array(brep._xyz(circ.Location())), np.array(brep._xyz(circ.Position().Direction())), radius)
     else:
+        # an ellipse, a spline: ``count`` points, or more where its chords must be to stay within ``CHORD_MM`` of
+        # the curve, as an arc's are (``count`` alone left an outline's extent and area short where it bends
+        # sharply)
+        from OCP.GCPnts import GCPnts_QuasiUniformDeflection
+
         params = np.linspace(first, last, count + 1)
+        sampled = GCPnts_QuasiUniformDeflection(curve, plane.CHORD_MM, first, last)
+        if sampled.IsDone() and sampled.NbPoints() > count + 1:
+            params = (np.array([sampled.Parameter(i) for i in range(1, sampled.NbPoints() + 1)])
+                      if sampled.NbPoints() <= _CURVE_POINTS else np.linspace(first, last, _CURVE_POINTS))
         name = "curve"
     if reverse:
         params = params[::-1]
@@ -636,11 +650,14 @@ class _Analysis:
     def probe(self) -> None:
         total = float(self.areas.sum())
         self.hits: dict[int, list[_Hit]] = {}
+        self.normals: dict[int, np.ndarray] = {}  # each face's samples' outward normals
         for ordinal, face in enumerate(self.faces, start=1):
             share = self.areas[ordinal - 1] / total if total > 0 else 1.0
             count = 48 if share > 0.02 else 16 if share > 0.002 else 8
             found = []
-            for sample in _samples(face, count):
+            samples = _samples(face, count)
+            self.normals[ordinal] = np.array([sample.normal for sample in samples]).reshape(-1, 3)
+            for sample in samples:
                 hit = self.rays.first(sample.point, -sample.normal, skip=1e-6)
                 if hit is None:
                     found.append(_Hit(sample.area, None, 0, sample.point))
@@ -792,7 +809,8 @@ class _Analysis:
                 continue
             valid = [h for h in hs if h.distance is not None and h.face not in self.countersinks]
             if a in self.skins:
-                off = [h for h in valid if abs(h.distance - thickness) > tol]
+                # a ray that reaches the other skin's break is short by that break, reported as one
+                off = [h for h in valid if abs(h.distance - thickness) > tol and h.face not in self.breaks]
                 sampled = sum(h.area for h in hs) or 1.0
                 if sum(h.area for h in off) < 0.02 * sampled:
                     continue
@@ -906,6 +924,9 @@ class _Analysis:
             return abs(float(np.dot(surface.normal, normal))) < 0.01
         if surface.kind == "cylinder":
             return abs(float(np.dot(surface.axis, normal))) > _PARALLEL
+        if surface.kind in _FREEFORM:  # cut along an ellipse or a spline: square to it at every sample
+            cosines = np.abs(self.normals[a] @ normal)
+            return bool(len(cosines)) and float(cosines.max()) < 0.01
         return False
 
     def _break_of(self, b: int, skin: int, t: float, tol: float) -> float | None:
@@ -928,6 +949,13 @@ class _Analysis:
             size = surface.minor_radius if kind == "torus" else surface.radius
             if surface.concave is not False or float(size or math.inf) > t + tol or (
                     kind == "torus" and abs(float(np.dot(surface.axis, normal))) < _PARALLEL):
+                return None
+        elif kind in _FREEFORM:
+            # a chamfer or a round along an ellipse or a spline: facing the skin's side at every sample, at a
+            # slant to it somewhere, neither square to it nor flat with it all over
+            cosines = self.normals[b] @ normal
+            if not len(cosines) or float(cosines.min()) < -0.01 or float(cosines.max()) < 0.01 \
+                    or float(cosines.min()) > _PARALLEL:
                 return None
         else:
             return None

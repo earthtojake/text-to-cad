@@ -21,6 +21,7 @@ from pathlib import Path
 import build123d as bd
 
 from cad._internal import manufacturing
+from cad._internal import sheet_plane as plane
 from cad._internal.dfm import sheet as sheet_rules
 from cad.build123d import _dfm_brep as brep
 from cad.build123d import _dfm_sheet as sheet
@@ -893,6 +894,47 @@ class ModellingMistakeTest(unittest.TestCase):
                                          [50.0] * (len(steps) // 2))
                         self.assertIn("sheet.edge_break", {f.code for f in result.findings})
                         self.assertEqual(len(sheet.unfold(broken(part, how, size), k_factor=0.4).faces()), 1)
+
+    def test_broken_edges_along_an_ellipse_or_a_spline_are_breaks_and_the_flat_is_the_outline(self) -> None:
+        # a plate cut along an ellipse or a spline: a chamfer or a round of its edge is a B-spline face and its cut
+        # a surface of extrusion, which were read as faces off the sheet's thickness (FAILED,
+        # sheet.uniform_thickness), and its flat was measured off 48 points of each curve (a spline plate's
+        # 0.19 mm short). A deep break on one skin failed round a disc too: the other skin's rays that reach it
+        # are short by the break
+        spline = bd.Edge.make_spline([bd.Vector(x, y) for x, y in ((40, 0), (25, 18), (-5, 20), (-38, 12),
+                                                                  (-40, -6), (-15, -20), (20, -17))], periodic=True)
+        outlines = {"ellipse": bd.Ellipse(40, 20).face(), "spline": bd.Face(bd.Wire(spline)),
+                    "elliptical hole": (bd.Rectangle(80, 40) - bd.Ellipse(12, 6)).face(),
+                    "disc": bd.Circle(30).face()}
+        for name, outline in outlines.items():
+            wire = outline.outer_wire()
+            long, short, _ = plane.min_rectangle([(p.X, p.Y) for p in (wire @ (i / 4000) for i in range(4000))])
+            # (a cylinder's skins sample beside its rim, where the other skin's break is)
+            square = bd.Cylinder(30, 2) if name == "disc" else bd.extrude(outline, amount=2)
+            report = checked(square).measurements
+            found, holes = report["parts"]["items"][0], [hole["size_mm"] for hole in report["holes"]["items"]]
+            with self.subTest(part=name, broken=None):
+                # the outline's own size, within the chords' tolerance
+                self.assertAlmostEqual(found["flat_length_mm"], long, delta=plane.CHORD_MM)
+                self.assertAlmostEqual(found["flat_width_mm"], short, delta=plane.CHORD_MM)
+                self.assertAlmostEqual(found["flat_area_mm2"], outline.area, delta=0.001 * outline.area)
+            top, bottom = square.edges().group_by(bd.Axis.Z)[-1], square.edges().group_by(bd.Axis.Z)[0]
+            for how, size, edges in ((bd.chamfer, 0.5, top + bottom), (bd.fillet, 0.5, top), (bd.chamfer, 0.9, top)):
+                with self.subTest(part=name, broken=(how.__name__, size, "both" if len(edges) > len(top) else "top")):
+                    part = how(edges, size)
+                    result = checked(part)
+                    self.assertTrue(result.ok, [f.message for f in result.findings if f.severity == "error"])
+                    self.assertIn("sheet.edge_break", {f.code for f in result.findings})
+                    measured = result.measurements["parts"]["items"][0]
+                    for key in ("flat_length_mm", "flat_width_mm"):
+                        self.assertAlmostEqual(measured[key], found[key], delta=plane.CHORD_MM)
+                    self.assertAlmostEqual(measured["flat_area_mm2"], found["flat_area_mm2"], delta=0.05)
+                    sizes = [hole["size_mm"] for hole in result.measurements["holes"]["items"]]
+                    self.assertEqual(len(sizes), len(holes))
+                    for size_mm, hole in zip(sizes, holes):
+                        self.assertAlmostEqual(size_mm, hole, delta=plane.CHORD_MM)
+                    if len(edges) > len(top):  # both skins broken: their breaks fused on, one piece
+                        self.assertEqual(len(sheet.unfold(part).faces()), 1)
 
     @staticmethod
     def _sunk(size: tuple[float, float, float], top: list[tuple[float, float]], bottom: list[tuple[float, float]],
