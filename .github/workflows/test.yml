@@ -11,7 +11,7 @@
 #   platform   the packages' suites on Windows; the router's unit files on macOS.
 #   integration  fea, kicad, blender, packaging, viewer-e2e: each with what it drives installed.
 #   release    a full run only (and a change to the thing itself): the packages' suites on their
-#              oldest Python, and the installer rehearsals.
+#              oldest Python, the installer rehearsals and the real install.
 #   CI         the one required check: every job above that ran passed (ci_gate.py).
 #
 # main requires `CI` alone, so a job is added, renamed, split or sharded here without a
@@ -165,8 +165,11 @@ jobs:
           scripts/release/check-version.sh
           node scripts/release/sync-version.mjs --check
 
+      # `shell: bash` runs the step with pipefail: without it the default shell takes tee's status, and a
+      # refusal the guard printed would pass the step.
       - name: Check what merging releases
         if: github.event_name == 'pull_request'
+        shell: bash
         env:
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: scripts/release/check-pr-version.sh "$HEAD_REPO" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -231,9 +234,7 @@ jobs:
       - name: Check the packages' types (basic)
         if: startsWith(matrix.shard, '1/')
         run: |
-          for project in cad cad-server cad-mcp; do
-            python -m pyrefly check --config "packages/$project/pyproject.toml" --output-format full-text-with-github
-          done
+          python -m pyrefly check --config packages/cad/pyproject.toml --output-format full-text-with-github
 
       - name: Run the tests this change touches first
         if: startsWith(matrix.shard, '1/') && needs.changes.outputs.changed_tests != ''
@@ -294,9 +295,7 @@ jobs:
       - name: Check the packages' types (basic)
         if: startsWith(matrix.shard, '1/')
         run: |
-          for project in cad cad-server cad-mcp; do
-            python -m pyrefly check --config "packages/$project/pyproject.toml" --output-format full-text-with-github
-          done
+          python -m pyrefly check --config packages/cad/pyproject.toml --output-format full-text-with-github
         shell: bash
 
       - name: Run the tests this change touches first
@@ -354,15 +353,15 @@ jobs:
 
   # ---- release tier: a full run, or a change to the thing itself ---------------------------------
 
-  # The library's, the server's and the shim's suites on Python 3.13, the packages' floor
+  # The library's, the server's and the shim's suites on Python 3.11, the packages' floor
   # (test-floor.sh), in an environment made here with requirements-dev.txt: a call the floor's
   # standard library lacks parses there and fails only when it runs (one reached the server
   # once: argparse's suggest_on_error), so only the suites hold the floor. A third run of
   # suites the packages jobs already run on the Python the server's installations use, for a
   # rare kind of break: so it runs before a release ships (a VERSION change), nightly and on a
-  # manual run, not on every push. Whole, unsharded: 7 to 14 minutes.
+  # manual run, not on every push. Whole, unsharded: the last run measured took 15.7 minutes.
   packages-floor:
-    name: packages (Python 3.13 floor)
+    name: packages (Python 3.11 floor)
     needs: changes
     if: needs.changes.outputs.floor == 'true'
     runs-on: ubuntu-latest
@@ -384,10 +383,10 @@ jobs:
           npm: none
           apt: xvfb libgl1-mesa-dri fonts-dejavu-core
 
-      - name: Make an environment on Python 3.13, the packages' floor
+      - name: Make an environment on Python 3.11, the packages' floor
         timeout-minutes: 10
         run: |
-          uv venv --python 3.13 "$RUNNER_TEMP/floor"
+          uv venv --python 3.11 "$RUNNER_TEMP/floor"
           uv pip install --python "$RUNNER_TEMP/floor/bin/python" -r requirements-dev.txt
 
       - name: Run the library's, the server's and the shim's suites on the floor
@@ -413,6 +412,87 @@ jobs:
     uses: ./.github/workflows/install-windows.yml
     with:
       ref: ${{ inputs.ref }}
+
+  # The install command against the real programs of Claude Code, Codex and Gemini CLI, on Windows, macOS and Linux,
+  # each on a private computer: install (cad a uv tool, its server, a model, the viewer, the doctor), again (cad left
+  # alone, the plugin updated), and from 0.11.10's installer's state (real-install.yml, scripts/test/real-install.py). Measured on macOS
+  # with a warm uv cache: 94 s; on a runner, cad's first download and its kernel's (about 240 MB) add a few minutes,
+  # Windows the slowest. With the rehearsals: a full run, nightly, and a change to the installers.
+  real-install:
+    name: real install
+    needs: changes
+    if: needs.changes.outputs.installer == 'true'
+    uses: ./.github/workflows/real-install.yml
+    with:
+      ref: ${{ inputs.ref }}
+
+  # cad's updates rehearsed end to end, each on a private computer of its own (scripts/test/rehearse-update.py): this
+  # tree published as releases no index holds (wheels uv reads beside the index, a local version feed), real uv, real
+  # servers and the real install command; this build's servers there tend themselves every 2 s, not every 30 s
+  # (CAD_ENGINE_TEND_SECONDS). cad updating itself (`self`: idle, typed with and without a server running, at a start
+  # whose starter waits for it, switched off, to a release whose server cannot start and on past it, to a release uv
+  # cannot install and back, inside its major and never to a new major but by `cad update --major`, and installed by
+  # pipx); and the bridge from the real shipped releases on PyPI (`bridge`: 0.11.11's update button and automatic
+  # update into this build, through its server's run of the install command in install mode to the uv tool's server,
+  # and the same where that run fails; a computer with no receipt of our
+  # installer, whose server installs cad with uv itself and runs no install command, by the button and by a typed
+  # `cad update`; 0.11.11 going back from a build whose server cannot start; the install command, the typed update and
+  # the uv line on a computer of 0.11.11, the uv line on one with no receipt too), and the button of 0.11.0 and 0.10.4,
+  # and on Windows of 0.10.0, which this build takes over. Each checks the end state (uv's cad in the bin folder, its
+  # server answering, the records 0.11.11's clients read naming it, the switches as the route leaves them, nothing of
+  # a past release deleted) and that no file of the runner's own home moved. Measured on macOS with uv's cache warm:
+  # `self` about 2 minutes, `bridge` about 8; a fresh runner adds 0.11.11's first setup, which downloads its kernel.
+  # Before a release ships (a full run), nightly, and on a change to the installers, the rehearsal or the code of this
+  # build it runs.
+  update-rehearsal:
+    name: update rehearsal (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.installer == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Python
+        timeout-minutes: 5
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        timeout-minutes: 5
+        uses: astral-sh/setup-uv@v10.3.3
+
+      # The rehearsal builds this tree's wheels from the source with the standard library alone
+      # (tests/python/support/machine.py): nothing of cad is installed here.
+      - name: cad updating itself (idle, typed, typed with no server, at a start, switched off, past a broken server, back from an uninstallable release, inside its major, by pipx)
+        timeout-minutes: 20
+        run: python scripts/test/rehearse-update.py self --uv-cache "${{ runner.temp }}/uv"
+
+      - name: From 0.11.11 (button, automatic, a failed install command, store-only, gone back from, the install command, typed, the uv line)
+        timeout-minutes: 35
+        run: python scripts/test/rehearse-update.py bridge --uv-cache "${{ runner.temp }}/uv"
+
+      - name: From 0.11.0, the first with an automatic update, by itself
+        timeout-minutes: 15
+        run: python scripts/test/rehearse-update.py automatic --old 0.11.0 --uv-cache "${{ runner.temp }}/uv"
+
+      - name: From 0.10.4, the newest 0.10, by its button
+        timeout-minutes: 15
+        run: python scripts/test/rehearse-update.py updater --old 0.10.4 --uv-cache "${{ runner.temp }}/uv"
+
+      # 0.10.0 on Windows keeps its state apart from every later release's: this build's setup takes the computer over.
+      - name: From 0.10.0 on Windows, by its button
+        if: runner.os == 'Windows'
+        timeout-minutes: 15
+        run: python scripts/test/rehearse-update.py updater --old 0.10.0 --uv-cache "${{ runner.temp }}/uv"
 
   # ---- integration: each with what it drives installed -------------------------------------------
 
@@ -824,6 +904,8 @@ jobs:
       - packages-floor
       - install-linux
       - install-windows
+      - real-install
+      - update-rehearsal
       - fea
       - blender
       - kicad

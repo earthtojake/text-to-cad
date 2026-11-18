@@ -1,5 +1,5 @@
-"""The installations' registry, the current one, and the ``cad`` command that runs it
-(``cad_server._internal.installations``, ``cad_server._internal.proxy``).
+"""The installations' registry and the current one, which the clients of 0.11.11 and earlier read, and the module their
+``cad`` command runs (``cad_server._internal.installations``, ``cad_server._internal.proxy``).
 
 Each test writes into temporary folders from fake environments; none touches ~/.local/bin or the
 user's state folder, and no engine runs.
@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -23,9 +22,6 @@ from cad_server._internal import installations, proxy  # noqa: E402
 from cad_server.engine.registry import Folder, Registry  # noqa: E402
 from cad_server._internal import engine_host  # noqa: E402
 from cad_mcp import host  # noqa: E402
-
-POSIX = unittest.skipIf(os.name == "nt", "the proxy is an sh script on POSIX")
-
 
 class Fixture(unittest.TestCase):
     def setUp(self) -> None:
@@ -86,20 +82,6 @@ class RegistryTests(Fixture):
         self.assertEqual(sorted(record["version"] for record in installations.records(self.state)), ["0.7.0", "0.8.1"],
                          "0.8.0's code is gone from it: no record names it")
 
-    def test_prune_removes_only_records_whose_interpreter_is_gone(self) -> None:
-        gone, live = self.registered("1.0.0"), self.registered("2.0.0")
-        os.unlink(gone["python"])
-        self.assertEqual(installations.prune(self.state), [gone["path"]])
-        self.assertEqual([record["version"] for record in installations.records(self.state)], ["2.0.0"])
-        self.assertTrue(Path(live["path"]).is_file())
-
-    def test_a_source_tree_registers_nothing_unless_named(self) -> None:
-        # These tests import the server from the checkout: the release's version is not theirs to register.
-        with mock.patch.dict("os.environ", {installations.NAME_ENV: "", "CAD_STATE_DIR": str(self.root / "state")}):
-            self.assertIsNone(installations.own_version())
-        with mock.patch.dict("os.environ", {installations.NAME_ENV: "1.2.3-dev.4"}):
-            self.assertEqual(installations.own_version(), "1.2.3-dev.4")
-
     def test_an_environment_runs_as_the_version_it_is_registered_as(self) -> None:
         """``python model.py`` run directly in a registered development environment, no variable set:
         its client, engine and workers go by the record's version (one door with the dev MCP server's
@@ -118,41 +100,9 @@ class RegistryTests(Fixture):
             installations.register("0.0.1-dev.1", here)  # another release's record of this environment
             self.assertEqual(places.installation(), release)
             installations.register(dev, here)
-            self.assertEqual((places.installation(), installations.own_version()), (dev, dev))
+            self.assertEqual(places.installation(), dev)
             os.environ[installations.NAME_ENV] = "9.9.9"
-            self.assertEqual((places.installation(), installations.own_version()), ("9.9.9", "9.9.9"))
-
-    def test_only_the_cad_apps_server_and_doctor_write(self) -> None:
-        from cad_server import cli
-
-        found = self.environment("env")
-        named = {installations.NAME_ENV: "1.2.3", installations.DIR_ENV: str(self.root / "bin"),
-                 "CAD_STATE_DIR": str(self.root / "state")}
-        with mock.patch.dict("os.environ", named), mock.patch.object(installations, "targets", return_value=found):
-            with mock.patch.object(cli, "_run", return_value=0), mock.patch.object(cli, "_tell"):
-                self.assertEqual(cli._main(["status"]), 0)
-            self.assertFalse((self.root / "bin").exists())
-            self.assertEqual(installations.records(), [])
-            installations.startup()  # the transport's registration, on a device with none (``cad_mcp.engine.register``)
-            self.assertEqual([record["version"] for record in installations.records()], ["1.2.3"])
-            self.assertEqual(installations.current()["version"], "1.2.3")
-            self.assertEqual(installations.proxy_status(), installations.OK)
-
-    def test_a_cad_apps_server_of_another_release_registers_nothing_where_one_is_current(self) -> None:
-        """An app that moved its plugin ahead runs a newer server: it attaches to the current
-        installation's engine, writes the command, and moves nothing."""
-
-        self.registered("1.0.0")
-        installations.point("1.0.0", self.state)
-        named = {installations.NAME_ENV: "2.0.0", installations.DIR_ENV: str(self.root / "bin"),
-                 "CAD_STATE_DIR": str(self.root / "state")}
-        with mock.patch.dict("os.environ", named), \
-                mock.patch.object(installations, "targets", return_value=self.environment("newer")):
-            installations.startup()
-            self.assertEqual([record["version"] for record in installations.records()], ["1.0.0"])
-            self.assertEqual(installations.current()["version"], "1.0.0")
-            self.assertEqual(installations.proxy_status(), installations.OK)
-
+            self.assertEqual(places.installation(), "9.9.9")
 
 class CurrentTests(Fixture):
     def test_current_is_a_live_registered_installation_and_point_moves_it(self) -> None:
@@ -170,327 +120,6 @@ class CurrentTests(Fixture):
         self.assertEqual(installations.current_version(self.state), "2.0.0")
         with self.assertRaises(ValueError):
             installations.point("2.0.0; rm -rf /", self.state)
-
-    def test_the_first_installation_becomes_current_once_and_a_development_install_on_purpose(self) -> None:
-        self.registered("1.0.0")
-        self.registered("2.0.0")
-        self.assertTrue(installations.bootstrap("1.0.0", self.state))
-        self.assertFalse(installations.bootstrap("2.0.0", self.state), "one is current: nothing moves it but a switch")
-        self.assertEqual(installations.current(self.state)["version"], "1.0.0")
-        with mock.patch.dict("os.environ", {"CAD_STATE_DIR": str(self.root / "state"),
-                                            installations.DIR_ENV: str(self.root / "bin")}), \
-                mock.patch.object(installations, "targets", return_value=self.environment("dev")):
-            installations.setup("3.0.0-dev.1", make_current=True)  # a development install of a checkout
-            self.assertEqual(installations.current()["version"], "3.0.0-dev.1")
-
-    def test_the_current_release_writes_the_plugin_folder_as_it_registers_and_nothing_else_does(self) -> None:
-        from cad_server._internal import plugin
-
-        state = {"CAD_STATE_DIR": str(self.root / "state"), installations.DIR_ENV: str(self.root / "bin"),
-                 installations.NAME_ENV: ""}
-        with mock.patch.dict("os.environ", state), mock.patch.object(plugin, "write") as write, \
-                mock.patch.object(installations, "editable", return_value=False), \
-                mock.patch.object(installations, "targets", return_value=self.environment("release")):
-            installations.setup("1.0.0")  # the device's first: current, a release's, so the folder is written
-            self.assertEqual(installations.current()["version"], "1.0.0")
-            write.assert_called_once_with()
-            with mock.patch.object(installations, "targets", return_value=self.environment("other")):
-                installations.setup("2.0.0")  # registered, not current: the folder stays the current one's
-            self.assertEqual(write.call_count, 1)
-            with mock.patch.object(installations, "editable", return_value=True):
-                self.assertFalse(installations.write_plugin(), "a source tree writes it only when asked")
-            with mock.patch.dict("os.environ", {installations.NAME_ENV: "1.0.0-dev.1"}):
-                self.assertFalse(installations.write_plugin(), "a development install writes it only when asked")
-            write.side_effect = plugin.Missing("no plugin")
-            self.assertFalse(installations.write_plugin(), "never a failure of the registration it rides on")
-
-    def test_a_folder_it_cannot_write_is_skipped_silently(self) -> None:
-
-        blocked = self.root / "a-file"
-        blocked.write_text("", encoding="utf-8")
-        path, status, error = installations.write_proxy(str(blocked / "bin"))
-        self.assertTrue(error)
-        named = {installations.NAME_ENV: "1.2.3", installations.DIR_ENV: str(blocked / "bin"),
-                 "CAD_STATE_DIR": str(blocked / "state")}
-        with mock.patch.dict("os.environ", named), mock.patch.object(installations, "targets",
-                                                                     return_value=self.environment("env")):
-            installations.startup()  # it says nothing and raises nothing
-            (_, _, unregistered), (_, _, unwritten) = installations.setup("1.2.3")
-        self.assertTrue(unregistered and unwritten)
-
-
-class ProxyFileTests(Fixture):
-    def test_the_proxy_is_written_once_and_a_file_not_ours_is_left_alone(self) -> None:
-        where = str(self.root / "bin")
-        self.assertEqual(installations.write_proxy(where, windows=False)[1:], (installations.MISSING, None))
-        path = installations.proxy_path(where, windows=False)
-        self.assertEqual(Path(path).read_text(encoding="utf-8"), installations.script(False))
-        self.assertTrue(os.access(path, os.X_OK))
-        self.assertEqual(installations.write_proxy(where, windows=False)[1], installations.OK)
-        Path(path).write_text(installations.script(False).replace("exit 1", "exit 2"), encoding="utf-8")
-        self.assertEqual(installations.write_proxy(where, windows=False)[1], installations.STALE)
-        later = installations.script(False).replace(f"{installations.MARK}{installations.REVISION}",
-                                                    f"{installations.MARK}{installations.REVISION + 1}")
-        Path(path).write_text(later, encoding="utf-8")
-        self.assertEqual(installations.write_proxy(where, windows=False)[1], installations.NEWER)
-        self.assertEqual(Path(path).read_text(encoding="utf-8"), later)
-        Path(path).write_text("#!/bin/sh\nexec uv-tool-cadgen\n", encoding="utf-8")  # a person's own
-        self.assertEqual(installations.write_proxy(where, windows=False)[1], installations.FOREIGN)
-        self.assertEqual(Path(path).read_text(encoding="utf-8"), "#!/bin/sh\nexec uv-tool-cadgen\n")
-
-    @POSIX
-    def test_the_sh_runs_the_current_installation_else_the_one_registered_last(self) -> None:
-        where = str(self.root / "bin")
-        installations.write_proxy(where, windows=False)
-        proxy_file = installations.proxy_path(where, windows=False)
-        environment = {"PATH": os.environ.get("PATH", ""), "HOME": str(self.root), "CAD_STATE_DIR": str(self.root / "state")}
-        # None installed: the sh and the proxy say it in one wording, the command that installs it.
-        none = subprocess.run([proxy_file, "status"], capture_output=True, text=True, env=environment)
-        self.assertEqual((none.returncode, none.stderr.strip()), (1, proxy.NONE_INSTALLED))
-        with self.assertRaises(proxy.Refused) as refused:
-            proxy.choose(None, [])
-        self.assertEqual(str(refused.exception), "cad-server is not installed: run `uvx --no-config --managed-python "
-                                                 "--python 3.14 --from cad-server cad doctor` once, outside any "
-                                                 "sandbox or with its permission")
-        for version in ("1.0.0", "2.0.0"):
-            record = self.registered(version)
-            Path(record["python"]).write_text(f'#!/bin/sh\necho "{version}" "$@"\n', encoding="utf-8")
-            os.chmod(record["python"], 0o755)
-        os.utime(self.root / "state/installations/2.0.0.json", (1, 1))  # 1.0.0 registered last
-        ran = subprocess.run([proxy_file, "export", "a b"], capture_output=True, text=True, env=environment,
-                             cwd=self.root)
-        self.assertEqual(ran.stdout, "1.0.0 -P -m cad_server._internal.proxy export a b\n", "no current: the last registered")
-        installations.point("2.0.0", self.state)
-        ran = subprocess.run([proxy_file, "status"], capture_output=True, text=True, env=environment, cwd=self.root)
-        self.assertEqual(ran.stdout, "2.0.0 -P -m cad_server._internal.proxy status\n", "the current one")
-        (self.root / "state/installations/current").write_text("2.0.0; echo planted", encoding="utf-8")
-        ran = subprocess.run([proxy_file, "status"], capture_output=True, text=True, env=environment, cwd=self.root)
-        self.assertEqual(ran.stdout, "1.0.0 -P -m cad_server._internal.proxy status\n", "a current that is no version is none")
-
-    @POSIX
-    def test_the_sh_passes_over_an_installation_whose_console_script_is_gone(self) -> None:
-        where = str(self.root / "bin")
-        installations.write_proxy(where, windows=False)
-        environment = {"PATH": os.environ.get("PATH", ""), "HOME": str(self.root), "CAD_STATE_DIR": str(self.root / "state")}
-        for version in ("1.0.0", "2.0.0"):
-            record = self.registered(version)
-            Path(record["python"]).write_text(f'#!/bin/sh\necho "{version}"\n', encoding="utf-8")
-            os.chmod(record["python"], 0o755)
-        os.utime(self.root / "state/installations/1.0.0.json", (1, 1))  # 2.0.0 registered last...
-        os.remove(record["cad"])  # ...and uninstalled from its environment: its python stays
-        ran = subprocess.run([installations.proxy_path(where, windows=False), "status"], capture_output=True,
-                             text=True, env=environment, cwd=self.root)
-        self.assertEqual(ran.stdout, "1.0.0\n", ran.stderr)
-
-
-class WindowsCommandTests(Fixture):
-    """``cad.exe``: distlib's launcher, a shebang naming the command's own Python beside it, and a zip whose
-    ``__main__.py`` chooses the installation. Written on any system; run for real on Windows alone."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.bin = str(self.root / "bin")
-        self.exe = Path(installations.proxy_path(self.bin, windows=True))
-        self.making = mock.patch.object(installations, "_make_interpreter", side_effect=self.interpreter)
-        self.made = self.making.start()
-        self.addCleanup(self.making.stop)
-
-    def interpreter(self, folder: str) -> None:
-        """The command's Python as uv makes it, without uv: a venv's python.exe and the home it names."""
-        home = self.root / "home"
-        home.mkdir(exist_ok=True)
-        (home / "python.exe").write_bytes(b"MZ")
-        Path(folder, "Scripts").mkdir(parents=True, exist_ok=True)
-        Path(folder, "Scripts", "python.exe").write_bytes(b"MZ")
-        Path(folder, "pyvenv.cfg").write_text(f"home = {home}\nversion_info = 3.14.0\n", encoding="utf-8")
-
-    @staticmethod
-    def exe_of(main: str) -> bytes:
-        """A cad.exe of a launcher's shape whose ``__main__.py`` is ``main``."""
-        import io
-        import zipfile
-
-        stream = io.BytesIO()
-        with zipfile.ZipFile(stream, "w") as archive:
-            archive.writestr("__main__.py", main)
-        return b"MZ launcher\n#!C:\\uv\\tools\\cad-server\\Scripts\\python.exe\n" + stream.getvalue()
-
-    def write(self) -> str:
-        path, status, error = installations.write_proxy(self.bin, windows=True)
-        self.assertEqual((path, error), (str(self.exe), None))
-        return status
-
-    def test_cad_exe_is_distlib_s_launcher_a_shebang_to_its_own_python_and_the_zip(self) -> None:
-        import zipfile
-        from importlib.resources import files
-
-        self.assertEqual(self.write(), installations.MISSING)
-        data = self.exe.read_bytes()
-        stub = files("distlib").joinpath("t64.exe").read_bytes()
-        self.assertTrue(data.startswith(stub), "pip's console launcher, as it ships in distlib")
-        # The launcher runs `<its folder>\cad-launcher\Scripts\python.exe -I cad.exe <arguments>`: no state
-        # folder in it, so every release and every state folder writes these same bytes.
-        self.assertTrue(data[len(stub):].startswith(b"#!<launcher_dir>\\cad-launcher\\Scripts\\python.exe -I\n"))
-        with zipfile.ZipFile(self.exe) as archive:
-            self.assertEqual(archive.namelist(), ["__main__.py"])
-            main = archive.read("__main__.py").decode("utf-8")
-        self.assertEqual(main, installations.script(True))
-        self.assertTrue(main.startswith(f"# {installations.MARK}{installations.REVISION}\n"))
-        compile(main, "__main__.py", "exec")
-        self.made.assert_called_once_with(str(self.root / "bin" / "cad-launcher"))
-        self.assertEqual(self.write(), installations.OK)
-        self.assertEqual(self.made.call_count, 1, "a Python that starts is never made again")
-
-    def test_a_cad_exe_not_ours_is_left_alone_a_later_one_too_and_a_stale_one_rewritten(self) -> None:
-        exe = self.exe_of
-        self.exe.parent.mkdir()
-        theirs = exe("import sys\nfrom cad_server.cli import main\nsys.exit(main())\n")  # `uv tool install cad-server`
-        self.exe.write_bytes(theirs)
-        self.assertEqual(self.write(), installations.FOREIGN)
-        self.assertEqual(self.exe.read_bytes(), theirs)
-        self.exe.write_bytes(b"MZ not a zip")
-        self.assertEqual(self.write(), installations.FOREIGN)
-        later = exe(installations.script(True).replace(f"{installations.MARK}{installations.REVISION}",
-                                                       f"{installations.MARK}{installations.REVISION + 1}"))
-        self.exe.write_bytes(later)
-        self.assertEqual(self.write(), installations.NEWER)
-        self.assertEqual(self.exe.read_bytes(), later)
-        self.exe.write_bytes(exe(installations.script(True) + "# changed\n"))
-        self.assertEqual(self.write(), installations.STALE)
-        self.assertEqual(self.write(), installations.OK)
-
-    def test_a_stub_of_another_distlib_is_still_this_revision_s_command(self) -> None:
-        self.write()
-        data = self.exe.read_bytes()
-        archive = data[data.index(b"#!<launcher_dir>"):]
-        self.exe.write_bytes(b"MZ another distlib's t64.exe" + archive)
-        self.assertEqual(self.write(), installations.OK, "releases of other distlibs do not rewrite it in turn")
-
-    def test_a_python_that_no_longer_starts_is_made_again_and_the_exe_kept(self) -> None:
-        self.write()
-        before = self.exe.stat().st_mtime_ns
-        (self.root / "home" / "python.exe").unlink()  # uv's Python it was made of, uninstalled
-        self.assertEqual(installations.proxy_status(str(self.exe), windows=True), installations.STALE)
-        self.assertEqual(self.write(), installations.STALE)
-        self.assertEqual(self.made.call_count, 2)
-        self.assertEqual(self.exe.stat().st_mtime_ns, before, "the same bytes: cad.exe is not written again")
-        self.assertEqual(self.write(), installations.OK)
-
-    def test_a_running_cad_exe_is_set_aside_replaced_and_swept_by_a_later_write(self) -> None:
-        self.write()
-        self.exe.write_bytes(self.exe_of(installations.script(True) + "# the one running\n"))  # stale, and running:
-        replace, remove = os.replace, os.remove
-
-        def held_replace(source, target):  # Windows: a running program is never replaced...
-            if os.fspath(target) == str(self.exe) and self.exe.exists():
-                raise PermissionError(13, "Access is denied", str(target))
-            return replace(source, target)
-
-        def held_remove(path):  # ...nor removed, but it can be renamed
-            if os.fspath(path).endswith(installations.ASIDE):
-                raise PermissionError(13, "Access is denied", str(path))
-            return remove(path)
-
-        from cad._internal import atomic_replace
-
-        with mock.patch.object(atomic_replace.os, "replace", side_effect=held_replace), \
-                mock.patch.object(atomic_replace.time, "sleep"), \
-                mock.patch.object(installations.os, "remove", side_effect=held_remove):
-            self.assertEqual(self.write(), installations.STALE)
-        self.assertEqual(installations.proxy_status(str(self.exe), windows=True), installations.OK)
-        (aside,) = [name for name in os.listdir(self.bin) if name.endswith(installations.ASIDE)]
-        self.assertRegex(aside, r"^cad\.exe\.[0-9a-f]{8}\.old$")
-        self.assertIn(b"# the one running", (self.root / "bin" / aside).read_bytes(), "the running one, set aside")
-        self.assertEqual([name for name in os.listdir(self.bin) if name.endswith(".tmp")], [])
-        self.assertEqual(self.write(), installations.OK)  # it ended: the next write removes it
-        self.assertFalse((self.root / "bin" / aside).exists())
-
-    def test_the_cad_cmd_before_goes_at_the_write_after_cad_exe_is_in_place(self) -> None:
-        self.exe.parent.mkdir()
-        earlier = self.exe.parent / "cad.cmd"
-        earlier.write_text("@echo off\r\nrem cad proxy: 9\r\n", encoding="utf-8")
-        self.assertEqual(installations.earlier_command(self.bin), str(earlier))
-        self.assertEqual(self.write(), installations.MISSING)
-        self.assertTrue(earlier.exists(), "a cad update through cad.cmd still has cmd reading it")
-        self.assertEqual(self.write(), installations.OK)
-        self.assertFalse(earlier.exists())
-        earlier.write_text("@echo off\r\nrem a person's own\r\n", encoding="utf-8")
-        self.write()
-        self.assertTrue(earlier.exists(), "a cad.cmd not ours stays")
-        self.assertIsNone(installations.earlier_command(self.bin))
-
-    def test_an_uninstall_takes_cad_exe_its_python_and_the_cad_cmd_before(self) -> None:
-        self.write()
-        (self.exe.parent / "cad.cmd").write_text("@echo off\r\nrem cad proxy: 9\r\n", encoding="utf-8")
-        remove = os.remove
-
-        def held_remove(path):  # the cad.exe this uninstall runs through
-            if os.path.basename(os.fspath(path)).startswith("cad.exe"):
-                raise PermissionError(13, "Access is denied", str(path))
-            return remove(path)
-
-        with mock.patch.object(installations.os, "remove", side_effect=held_remove):
-            removed, left = installations.remove_proxy(self.bin, windows=True)
-        self.assertEqual(sorted(removed), sorted([str(self.exe), str(self.exe.parent / "cad.cmd"),
-                                                  installations.interpreter_folder(self.bin)]))
-        (aside,) = left
-        self.assertRegex(os.path.basename(aside), r"^cad\.exe\.[0-9a-f]{8}\.old$")
-        self.assertEqual(sorted(os.listdir(self.bin)), [os.path.basename(aside)], "no cad command is left")
-
-    @POSIX
-    def test_its_main_runs_the_current_installation_else_the_one_registered_last_with_the_arguments_as_given(self) -> None:
-        import sys
-
-        self.write()
-        environment = {"PATH": os.environ.get("PATH", ""), "CAD_STATE_DIR": str(self.root / "state")}
-
-        def run(*args: str) -> subprocess.CompletedProcess:
-            # The launcher's own command line: its Python, -I, the exe itself, then the arguments (and -S:
-            # the command's Python has nothing installed).
-            return subprocess.run([sys.executable, "-I", "-S", str(self.exe), *args], capture_output=True, text=True,
-                                  env=environment, cwd=self.root)
-
-        none = run("status")
-        self.assertEqual((none.returncode, none.stderr.strip()), (1, proxy.NONE_INSTALLED))
-        for version in ("1.0.0", "2.0.0"):
-            record = self.registered(version)
-            Path(record["python"]).write_text(f'#!/bin/sh\nprintf "%s|" "{version}" "$@"\nexit 3\n', encoding="utf-8")
-            os.chmod(record["python"], 0o755)
-        os.utime(self.root / "state/installations/2.0.0.json", (1, 1))  # 1.0.0 registered last
-        arguments = ["run", "--with", "pandas>=2", "a&b %PATH% ^!<c>|d.py", 'say "é"']
-        ran = run(*arguments)
-        self.assertEqual(ran.stdout, "|".join(["1.0.0", "-P", "-m", "cad_server._internal.proxy", *arguments]) + "|",
-                         "no current: the last registered, each argument one, as given")
-        self.assertEqual(ran.returncode, 3, "the installation's exit status")
-        installations.point("2.0.0", self.state)
-        self.assertTrue(run("status").stdout.startswith("2.0.0|"), "the current one")
-        (self.root / "state/installations/current").write_text("2.0.0; echo planted", encoding="utf-8")
-        self.assertTrue(run("status").stdout.startswith("1.0.0|"), "a current that is no version is none")
-        installations.point("2.0.0", self.state)
-        os.remove(record["cad"])  # 2.0.0 uninstalled from its environment: its python stays
-        self.assertTrue(run("status").stdout.startswith("1.0.0|"))
-
-    @unittest.skipUnless(os.name == "nt", "cad.exe runs on Windows")
-    def test_on_windows_cad_exe_runs_this_installation_with_the_arguments_as_given(self) -> None:
-        self.making.stop()  # the real one: uv makes the command's Python
-        self.addCleanup(self.making.start)
-        self.assertEqual(self.write(), installations.MISSING)
-        python = os.path.join(self.bin, "cad-launcher", "Scripts", "python.exe")
-        self.assertTrue(os.path.isfile(python))
-        self.assertFalse((self.root / "home").exists(), "uv made it, not the test's stand-in")
-        ran = subprocess.run([str(self.exe), "--version"], capture_output=True, text=True, encoding="utf-8")
-        # The current installation of the runner's state folder: this interpreter, by the version it is
-        # registered as, which the proxy tells it.
-        current = installations.current()
-        self.assertIsNotNone(current)
-        self.assertEqual((ran.returncode, ran.stdout.strip()), (0, f"cad {current['version']}"), ran.stderr)
-        # cmd parsed these: `>` and `|` redirected, `&` split the line, `^` and `!` went, `%PATH%` expanded.
-        odd = 'a&b>c|d ^e !f! %PATH% "g"'
-        ran = subprocess.run([str(self.exe), odd], capture_output=True, text=True, encoding="utf-8", cwd=self.root)
-        self.assertEqual(ran.returncode, 2, ran.stderr)
-        self.assertIn(f"cad: unknown command {odd!r}", ran.stderr)
-        self.assertFalse((self.root / "c").exists(), "nothing was redirected")
-
 
 class ResolutionTests(Fixture):
     def setUp(self) -> None:
@@ -557,7 +186,7 @@ class ResolutionTests(Fixture):
 
     def test_the_shell_names_its_host(self) -> None:
         self.assertEqual(engine_host.shell({"CODEX_THREAD_ID": "t", "CLAUDECODE": "1"}), "codex")
-        self.assertEqual(engine_host.shell({"CLAUDECODE": "1"}), "claude code")
+        self.assertEqual(engine_host.shell({"CLAUDECODE": "1"}), "claude-code")  # the app's token, as telemetry says it
         self.assertIsNone(engine_host.shell({}))
         self.assertEqual(host.family({"host": "codex app-server"}), "codex")
         self.assertEqual(host.family({"host": "claude code"}), "claude code")

@@ -24,9 +24,12 @@ from cad_server.mcp.browser import OPEN, OPENED
 from cad_mcp.shim import initialize_params
 from cad_server.mcp.protocol import RequestContext, RpcError
 from cad_server.viewer.recents import RecentStore
-from cad_server.mcp.server import _AGENT_TOOLS, CLAUDE_CODE_INSTRUCTIONS, FOLLOWS, Server, local_path, no_drive
+from cad_server.mcp.server import _AGENT_TOOLS, NO_TOOLS_INSTRUCTIONS, UNPROVEN, Server, local_path, no_drive
 from cad_server.mcp.tunnel import MAX_REPLY_BYTES
 from cad_server.mcp.ui import AppPage
+# A release's process: a checkout is a development build, never told of a release and sending nothing by default,
+# unless it is told the version it runs as (``cad_server/_internal/editable.py``).
+RELEASE = __import__("cad_server").__version__
 
 CODEX = {"name": "codex-mcp-client", "title": "Codex", "version": "0.159.0"}
 CLAUDE = {"name": "claude-ai", "version": "0.1.0"}
@@ -37,7 +40,7 @@ CODEX_APP = {"host": "codex app-server", "renders": True, "command": "codex -c f
 CODEX_EXEC = {"host": "codex exec", "renders": False, "command": "codex exec --skip-git-repo-check"}
 RENDERS_APPS = {"extensions": {"io.modelcontextprotocol/ui": {"mimeTypes": ["text/html;profile=mcp-app"]}}}
 OTHER_HOST = {"name": "some-desktop-app", "version": "0.1.0"}
-DECLARES_TABS = {"extensions": {**RENDERS_APPS["extensions"], "dev.texttocad/tabs": {"entrypoints": ["global", "thread", "file"]}}}
+CURSOR = {"name": "cursor-vscode", "version": "1.0.0"}
 STL = b"solid t\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid t\n"
 # The longest message a reply may make: its body's base64 and an envelope. 5.6 MB, under the
 # 10 MiB the MCP TypeScript SDK's stdio reader stops at.
@@ -52,18 +55,16 @@ def as_codex_spells_it(path: str) -> str:
     return "/" + path.replace("\\", "/") if os.name == "nt" else path
 
 
-def offer_an_update(test: unittest.TestCase) -> None:
-    """A feed read today that offers 99.0.0 to the Claude plugin installed from GitHub (`cad_server/updates.py`)."""
-    state = Path(tempfile.mkdtemp())
-    test.addCleanup(shutil.rmtree, state, ignore_errors=True)
-    patched = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(state), "CAD_INSTALL_CHANNEL": "claude-github", "CAD_AUTO_UPDATED": "", "CI": "",
-                                           "CAD_UPDATE_CHECK": ""})
-    patched.start()
-    test.addCleanup(patched.stop)
-    (state / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": "99.0.0"}}), encoding="utf-8")
-
-
 PAGE_TOOLS = ("cad_sync", "cad_capture_reply")
+
+
+def greet(server: Server, client: dict, offered: dict | None = None, launcher: dict | None = None,
+          presentation: str | None = None) -> dict:
+    """The server's answer to ``client``'s initialize, through the shim's ``initialize_params``, with the
+    development switch ``CAD_MCP_PRESENTATION`` set to ``presentation`` (unset with None)."""
+    with mock.patch.dict(os.environ, {"CAD_MCP_PRESENTATION": presentation or ""}):
+        params = initialize_params({"protocolVersion": "2025-06-18", "capabilities": offered or {}, "clientInfo": client}, launcher)
+    return server.handle("initialize", params, None)
 
 
 def as_page(server: Server, name: str, arguments: dict | None) -> dict:
@@ -81,6 +82,7 @@ class _Session(unittest.TestCase):
     client = CODEX
     offered: dict = {}
     launcher: dict | None = None
+    presentation: str | None = None  # the development switch, ``CAD_MCP_PRESENTATION``
     viewer_url = None
 
     def setUp(self) -> None:
@@ -112,8 +114,7 @@ class _Session(unittest.TestCase):
             self.addCleanup(patched.stop)
         self.server = Server(page=AppPage(page), recents=RecentStore(self.tmp / "state"), viewer_url=self.viewer_url,
                              browser_opener=lambda target: self.opened.append(target) or True)
-        self.initialized = self.server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": self.offered,
-                                                             "clientInfo": self.client}, self.launcher), None)
+        self.initialized = greet(self.server, self.client, self.offered, self.launcher, self.presentation)
 
     def record(self, target: str) -> bool:
         self.opened.append(target)
@@ -290,23 +291,33 @@ class TabServerTest(_Session):
         read = self.server.handle("resources/read", {"uri": uri}, None)["contents"][0]
         self.assertEqual((read["mimeType"], read["text"]), ("text/html;profile=mcp-app", "<!doctype html><title>CAD</title>"))
 
-    def test_the_page_reads_whether_a_newer_release_is_out_and_nothing_is_kept(self) -> None:
+    def test_no_page_and_no_launch_says_a_newer_release_is_out(self) -> None:
+        """The update nudge is gone: ``/api/v1/server`` and each launch carry the release this server runs and no
+        ``notice``, whatever the feed as last read says, for every session alike (a launcher's ``pin`` is read for
+        nothing)."""
         import cad_server
+        from cad_server import updates
 
-        offer_an_update(self)
-        for _ in range(2):  # the update button stays while this install is behind
+        with mock.patch.object(updates, "feed", return_value={"latest": "99.0.0"}), \
+                mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": ""}):
             read = self.http("GET", "/api/v1/server")[1]
-            self.assertEqual((read["notice"], read["release"], read["update"]["state"]),
-                             ({"latest": "99.0.0", "version": cad_server.__version__}, cad_server.__version__, "idle"))
-        # A launch carries it, as the server last read it, so the button draws with the page.
-        self.assertEqual(self.launch("cad_home")["notice"], read["notice"])
+            self.assertEqual(read["release"], cad_server.__version__)
+            self.assertFalse({"notice", "update"} & set(read))
+            self.assertNotIn("notice", self.launch("cad_home"))
+            self.assertNotIn("notice", self.launch("cad_open", {"source": self.bracket}))
+            store = Server(page=self.server.page, recents=self.server.recents)
+            params = initialize_params({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": CODEX})
+            params["_meta"]["dev.texttocad/transport"]["pin"] = {"channel": "codex"}  # what PR #835's launchers said
+            store.handle("initialize", params, None)
+            launch = store.handle("tools/call", {"name": "cad_home", "arguments": {}}, RequestContext(1, {"threadId": "s"}))
+            self.assertNotIn("notice", launch["structuredContent"]["launch"])
 
     def test_an_agent_names_a_model_by_its_absolute_path_and_a_tab_reopens_on_it(self) -> None:
         opened = self.launch("cad_open", {"source": self.bracket})
         self.assertEqual({key: opened[key] for key in ("protocol", "page", "model", "surface")},
                          {"protocol": 9, "page": "viewer", "model": self.bracket, "surface": "agent"})
         # No tolerance: the page reads each part's one display mesh by its key.
-        self.assertEqual(sorted(opened), ["model", "notice", "page", "pick", "platform", "protocol", "surface",
+        self.assertEqual(sorted(opened), ["model", "page", "pick", "platform", "protocol", "surface",
                                           "version"])
         # The thread's tab reopens on what the thread last opened.
         self.assertEqual(self.launch("cad_tab")["model"], self.bracket)
@@ -394,6 +405,28 @@ class TabServerTest(_Session):
         before = len(asked)
         launch = self.launch("cad_file", {"file": {"name": "bracket.stl", "resourceUri": "x"}}, {"openai/resource": {"path": self.bracket}})
         self.assertEqual((launch["surface"], "browser" in launch, "engine" in launch, len(asked)), ("file", False, False, before))
+
+    def test_a_tool_0_11_10_removed_answers_with_its_command_and_is_never_listed(self) -> None:
+        # A session opened before the update still holds them: its agent is told the command, not "unknown tool".
+        listed = [tool["name"] for tool in self.server.tools()]
+        context = RequestContext(1, {"threadId": "t"})
+        with mock.patch.object(self.server.analytics, "called") as counted:
+            for name, command in (("cad_export", "`cad model export <id> <file>...`"),
+                                  ("cad_snapshot", "`cad model snapshot <id> <out.png>`"),
+                                  ("cad_inspect", "`cad model inspect <id> [ref]`")):
+                with self.subTest(name=name):
+                    self.assertNotIn(name, listed)
+                    answered = self.server.handle("tools/call", {"name": name, "arguments": {"source": "x"}}, context)
+                    self.assertTrue(answered["isError"])
+                    [text] = answered["content"]
+                    self.assertIn("removed in cad 0.11.10", text["text"])
+                    self.assertIn(command, text["text"])
+                    self.assertNotIn("skill", text["text"])
+        # Counted as the caller's call naming no tool of cadgen's, never as the system's failure.
+        self.assertEqual({call.args for call in counted.call_args_list}, {("cad_unknown", False, "bad_request")})
+        with self.assertRaisesRegex(RpcError, "unknown tool 'cad_render'") as refused:
+            self.server.handle("tools/call", {"name": "cad_render", "arguments": {}}, context)
+        self.assertEqual(refused.exception.code, -32602)
 
     def test_the_hosts_file_view_shows_the_file_it_opened_and_nothing_the_agent_shows(self) -> None:
         self.call("cad_sync", {"view": "f1", "surface": "file", "model": self.bracket})
@@ -624,32 +657,13 @@ class SidebarAcrossThreadsTest(_Session):
         self.assertEqual(self.call("cad_view")["structuredContent"]["views"], [])
 
 
-class DeclaredTabServerTest(_Session):
-    """Any host that declares Codex's entrypoints gets tabs, whatever it is called."""
-
-    client = OTHER_HOST
-    offered = DECLARES_TABS
-
-    def test_a_host_that_declares_the_entrypoints_gets_the_tab_surfaces(self) -> None:
-        tools = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}
-        entrypoints = {name: tool["_meta"]["openai/ui"]["entrypoints"][0]["type"] for name, tool in tools.items()
-                       if "entrypoints" in tool.get("_meta", {}).get("openai/ui", {})}
-        self.assertEqual(entrypoints, {"cad_home": "global", "cad_tab": "thread", "cad_file": "file"})
-        self.assertIn("cad_open", tools)
-
-    def test_a_partial_declaration_is_shown_inline(self) -> None:
-        partial = {"extensions": {**RENDERS_APPS["extensions"], "dev.texttocad/tabs": {"entrypoints": ["thread"]}}}
-        server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state2"))
-        server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": partial, "clientInfo": OTHER_HOST}), None)
-        tools = {tool["name"] for tool in server.handle("tools/list", {}, None)["tools"]}
-        self.assertNotIn("cad_open", tools)
-
-
 class InlineServerTest(_Session):
-    """Claude and every other MCP Apps host: each cad_show mounts a new view in the chat."""
+    """Cards, which no app is served but through the development switch: each cad_show mounts a new view in the
+    chat."""
 
     client = CLAUDE
     offered = RENDERS_APPS
+    presentation = "inline"
 
     def test_a_host_that_renders_apps_never_has_a_browser_opened(self) -> None:
         self.assertIn("launch", self.call("cad_show", {"source": self.bracket}, CODEX_EXEC_TURN)["structuredContent"])
@@ -695,8 +709,7 @@ class InlineServerTest(_Session):
         self.assertNotIn("engine", launch)
         # A tab host's launches carry the page alone, for Open in browser: its card always has its channel.
         tabs = Server(page=self.server.page, recents=self.server.recents, viewer_url=page)
-        tabs.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": DECLARES_TABS,
-                                                     "clientInfo": OTHER_HOST}), None)
+        greet(tabs, CODEX, launcher=CODEX_APP)
         home = tabs.handle("tools/call", {"name": "cad_home", "arguments": as_page(tabs, "cad_home", {})},
                            RequestContext(1, {"threadId": "t"}))["structuredContent"]["launch"]
         self.assertEqual((home["page"], "browser" in home, "engine" in home), ("home", True, False))
@@ -750,8 +763,7 @@ class InlineServerTest(_Session):
         # An inline host is asked to let the card fetch the engine; a server given no engine adds nothing.
         uri = self.server.handle("resources/list", {}, None)["resources"][0]["uri"]
         server = Server(page=self.server.page, recents=self.server.recents, engine_origin="http://127.0.0.1:3245")
-        server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": RENDERS_APPS,
-                                                       "clientInfo": CLAUDE}), None)
+        greet(server, CLAUDE, presentation="inline")
         for listed in (server.handle("resources/list", {}, None)["resources"][0],
                        server.handle("resources/read", {"uri": uri}, None)["contents"][0]):
             self.assertEqual(listed["_meta"]["ui"]["csp"]["connectDomains"], ["data:", "blob:", "http://127.0.0.1:3245"])
@@ -759,8 +771,7 @@ class InlineServerTest(_Session):
                          ["data:", "blob:"])
         # A host that shows tabs is served what it was, engine or not: its card always has its channel.
         tabs = Server(page=self.server.page, recents=self.server.recents, engine_origin="http://127.0.0.1:3245")
-        tabs.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": DECLARES_TABS,
-                                                     "clientInfo": OTHER_HOST}), None)
+        greet(tabs, CODEX, launcher=CODEX_APP)
         self.assertEqual(tabs.handle("resources/list", {}, None)["resources"][0]["_meta"]["ui"]["csp"]["connectDomains"],
                          ["data:", "blob:"])
 
@@ -907,8 +918,7 @@ class InlineServerTest(_Session):
         # Claude Desktop's card reads it from the launch alone: no tool's metadata carries it.
         self.assertNotIn(token, json.dumps(self.server.handle("tools/list", {}, None)))
         other = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state-other"))
-        other.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": self.offered,
-                                                     "clientInfo": self.client}), None)
+        greet(other, self.client, self.offered, presentation=self.presentation)
         self.assertTrue(other.handle("tools/call", {"name": "cad_http", "arguments": {"method": "GET", "url": "/api/v1/server",
                         "headers": {"x-cad-app": token}}}, RequestContext(1, {}))["isError"])
         # With it, the page reaches every viewer route; the header never reaches the route.
@@ -917,12 +927,14 @@ class InlineServerTest(_Session):
 
 
 class CursorServerTest(_Session):
-    """Cursor (``cursor-vscode``, declaring MCP Apps) hands its card a result rebuilt from its transcript, content
-    and structuredContent alone, and the tool that launched it in ``ui/initialize``'s host context: the launching
-    tool's own metadata carries the page's capability there, and nowhere the agent reads."""
+    """Cursor (``cursor-vscode``), served cards through the development switch (it is offered no tools otherwise),
+    hands its card a result rebuilt from its transcript, content and structuredContent alone, and the tool that
+    launched it in ``ui/initialize``'s host context: the launching tool's own metadata carries the page's
+    capability there, and nowhere the agent reads."""
 
-    client = {"name": "cursor-vscode", "version": "1.0.0"}
+    client = CURSOR
     offered = RENDERS_APPS
+    presentation = "inline"
 
     def test_cursor_s_card_takes_its_capability_from_the_launching_tool_and_the_agent_never_sees_it(self) -> None:
         tools = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}
@@ -948,73 +960,34 @@ class CursorServerTest(_Session):
         self.assertFalse(self.call("cad_sync", {"view": view, "surface": "inline", "model": self.bracket}).get("isError"))
 
     def test_every_other_host_keeps_its_catalog_as_it_was(self) -> None:
-        for client, offered in ((CLAUDE, RENDERS_APPS), (CODEX, RENDERS_APPS), ({"name": "cursor-vscode"}, {})):
-            with self.subTest(client=client["name"], offered=offered):
+        for client, launcher, presentation in ((CLAUDE, None, "inline"), (CODEX, CODEX_APP, None), (CURSOR, None, "tabs")):
+            with self.subTest(client=client["name"], presentation=presentation):
                 server = Server(page=self.server.page, recents=RecentStore(self.tmp / "state"))
-                server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": offered,
-                                                               "clientInfo": client}), None)
+                greet(server, client, RENDERS_APPS, launcher, presentation)
+                self.assertTrue(server.handle("tools/list", {}, None)["tools"])
                 self.assertNotIn(server._app_token, json.dumps(server.handle("tools/list", {}, None)))
 
 
-class ClaudeCodeSessionTest(_Session):
-    """A server Claude Code started (``CLAUDE_CODE_ENTRYPOINT`` in the transport's environment, the terminal's
-    or the desktop app's Code tab's): no tools, and the instructions name the cad skill and the `cad` command.
-    ``CAD_MCP_CARDS=1`` keeps every tool; Claude Desktop's own server, which never sees the variable, keeps them."""
+class HeadlessCodexTest(_Session):
+    """A Codex whose launcher is unknown (Windows, a wrapper) is offered its tools; a call whose turn says ``exec``
+    shows no app, and its cad_show opens the model's page in the person's browser and answers with its URL."""
 
-    client = {"name": "claude-code", "title": "Claude Code", "version": "2.1.316"}
-    offered = RENDERS_APPS
-    environ: dict = {"CLAUDE_CODE_ENTRYPOINT": "claude-desktop"}
-
-    def setUp(self) -> None:
-        cleared = {key: "" for key in ("CLAUDE_CODE_ENTRYPOINT", "CAD_MCP_CARDS")}
-        patched = mock.patch.dict(os.environ, {**cleared, **self.environ})
-        patched.start()
-        self.addCleanup(patched.stop)
-        super().setUp()
-
-    def tools(self) -> list[str]:
-        return [tool["name"] for tool in self.server.handle("tools/list", {}, None)["tools"]]
-
-    def test_claude_code_s_session_lists_no_tool_and_says_to_use_the_skill(self) -> None:
-        self.assertEqual(self.tools(), [])
-        self.assertIn("cad skill", self.initialized["instructions"])
-        self.assertIn("`cad viewer`", self.initialized["instructions"])
-        # A Code tab missing Claude Desktop's own server, whose card works there: what makes it appear.
-        self.assertIn("run `cad setup` and ask the user to quit and reopen Claude Desktop", self.initialized["instructions"])
-        with self.assertRaises(RpcError):
-            self.call("cad_show", {"source": self.bracket})
-
-    def test_cad_mcp_cards_keeps_every_tool_and_desktop_s_own_server_has_them(self) -> None:
-        for environ in ({"CLAUDE_CODE_ENTRYPOINT": "cli", "CAD_MCP_CARDS": "1"}, {"CLAUDE_CODE_ENTRYPOINT": ""}):
-            with self.subTest(environ=environ), mock.patch.dict(os.environ, environ):
-                self.server = Server(page=self.server.page, recents=RecentStore(self.tmp / "state"))
-                said = self.server.handle("initialize", initialize_params(
-                    {"protocolVersion": "2025-06-18", "capabilities": self.offered, "clientInfo": CLAUDE}), None)
-                self.assertIn("cad_show", self.tools())
-                self.assertIn("cad_show", said["instructions"])
-
-
-class TextServerTest(_Session):
-    """A client that renders no MCP Apps: cad_show answers with the model's link in the CAD Viewer."""
-
-    client = {"name": "some-cli", "version": "1"}
+    client = CODEX
     # The engine's launch registers the model and answers its page, `/<id>`.
     viewer_url = staticmethod(lambda model=None: "http://127.0.0.1:3245/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab")
+    EXEC = {"threadId": "t", **CODEX_EXEC_TURN}
 
-    def test_a_client_with_no_page_has_no_app_capability(self) -> None:
+    def call(self, name: str, arguments: dict | None = None, meta: dict | None = None) -> dict:
+        return super().call(name, arguments, {**CODEX_EXEC_TURN, **(meta or {})})
+
+    def test_its_answer_carries_no_app_capability(self) -> None:
         self.assertNotIn("_meta", self.call("cad_show", {"source": self.bracket}))
-        # Nor the page's tools: they are not listed, and a call naming one is refused.
-        with self.assertRaises(RpcError):
-            self.call("cad_http", {"method": "GET", "url": "/api/v1/server", "headers": {"x-cad-app": self.server._app_token}})
 
     def test_cad_show_opens_the_model_in_the_browser_and_says_so_with_its_url(self) -> None:
-        tools = self.server.handle("tools/list", {}, None)["tools"]
-        self.assertEqual([(tool["name"], "_meta" in tool) for tool in tools], [("cad_show", False)])
-        self.assertIn("cannot show CAD views", self.initialized["instructions"])
         told = []
         self.server._browser_opened = told.append
         shown = self.call("cad_show", {"source": self.bracket})
-        # Text alone: Claude Code shows a result's structured content in place of its text.
+        # Text alone: an app that shows a result's structured content shows it in place of its text.
         self.assertNotIn("structuredContent", shown)
         self.assertEqual(shown["content"][0]["text"],
                          "bracket.stl opened in your browser at http://127.0.0.1:3245/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab.\n"
@@ -1030,15 +1003,14 @@ class TextServerTest(_Session):
 
     def test_cad_show_takes_a_path_or_a_document_id_and_says_so(self) -> None:
         cad_show = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}["cad_show"]
-        for said in (cad_show["description"], cad_show["inputSchema"]["properties"]["source"]["description"],
-                     self.initialized["instructions"]):
+        for said in (cad_show["inputSchema"]["properties"]["source"]["description"], self.initialized["instructions"]):
             self.assertIn("document id", said)
             self.assertIn("absolute path", said)
         refused = self.call("cad_show", {"id": "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"})
         self.assertTrue(refused["isError"])
-        self.assertEqual(refused["content"][0]["text"], "cad_show: missing source; unknown id. cad_show takes source; source "
-                                                        "is a document id (running a model's script prints it) or a CAD "
-                                                        "file's absolute path.")
+        self.assertEqual(refused["content"][0]["text"], "cad_show: missing source; unknown id. cad_show takes source, "
+                                                        "optionally view; source is a document id (running a model's "
+                                                        "script prints it) or a CAD file's absolute path.")
 
     def test_a_model_a_browser_page_shows_already_is_not_opened_again(self) -> None:
         self.server._in_browser = lambda model: model == self.bracket
@@ -1072,7 +1044,7 @@ class TextServerTest(_Session):
 
         told: list[str] = []
         self.server._browser_opened = told.append
-        context = RequestContext(1, {"threadId": "t"})
+        context = RequestContext(1, self.EXEC)
         with mock.patch.object(webbrowser, "open", refuse), mock.patch.object(browser_open, "open_page", refuse):
             raw = self.server.handle("tools/call", {"name": "cad_show", "arguments": {"source": self.bracket}}, context)
         link = "http://127.0.0.1:3245/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
@@ -1111,7 +1083,7 @@ class TextServerTest(_Session):
             tried.append(target)
             return False
 
-        context = RequestContext(1, {"threadId": "t"})
+        context = RequestContext(1, self.EXEC)
         for attempt in (1, 2):
             shown = deliver(self.server.handle("tools/call", {"name": "cad_show", "arguments": {"source": self.bracket}}, context),
                             failing, self.tell)["content"][0]["text"]
@@ -1124,7 +1096,7 @@ class TextServerTest(_Session):
         told: list[str] = []
         self.server._browser_opened = told.append
         link = "http://127.0.0.1:3245/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
-        context = RequestContext(1, {"threadId": "t"})
+        context = RequestContext(1, self.EXEC)
         # Never asked: a client's word alone counts no page as open.
         self.server.notify(OPENED, {"url": link, "opened": True})
         self.server.notify(OPENED, {"url": "http://127.0.0.1:3245/elsewhere", "opened": True})
@@ -1154,7 +1126,7 @@ class TextServerTest(_Session):
                         browser_opened=told.append)
         server.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": self.client}, None)
         shown = server.handle("tools/call", {"name": "cad_show", "arguments": {"source": self.bracket}},
-                              RequestContext(1, {"threadId": "t"}))
+                              RequestContext(1, self.EXEC))
         self.assertNotIn("_meta", shown)
         self.assertTrue(shown["content"][0]["text"].startswith(
             "bracket.stl's page is http://127.0.0.1:3245/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab; nothing was opened, "
@@ -1174,25 +1146,11 @@ class TextServerTest(_Session):
             server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": {},
                                                            "clientInfo": self.client}), None)
         shown = server.handle("tools/call", {"name": "cad_show", "arguments": {"source": self.bracket}},
-                              RequestContext(1, {"threadId": "t"}))
+                              RequestContext(1, self.EXEC))
         self.assertNotIn("_meta", shown)
         self.assertTrue(shown["content"][0]["text"].startswith(
             "No browser can be opened from here (this is a remote session with no display to open a browser on); "
             "bracket.stl's page is http://127.0.0.1:3245/"), shown)
-
-    def test_a_text_client_reaches_no_page_tool(self) -> None:
-        # No page answers a card or reaches the viewer's routes here, so neither does the agent.
-        for name in ("cad_sync", "cad_open"):
-            with self.assertRaises(RpcError, msg=name):
-                self.call(name, {"method": "PUT", "url": "/api/v1/settings", "view": "v", "surface": "tab"})
-
-    def test_a_newer_release_comes_with_the_first_cad_show_and_only_the_first(self) -> None:
-        offer_an_update(self)
-        first = self.call("cad_show", {"source": self.bracket})["content"]
-        self.assertRegex(first[-1]["text"], r"^text-to-cad 99\.0\.0 is out \(this is .+\); to update every agent "
-                                            r"app here, run: (curl -fsSL https://texttocad\.dev/install\.sh \| sh|"
-                                            r"irm https://www\.texttocad\.dev/install\.ps1 \| iex)$")
-        self.assertEqual(len(self.call("cad_show", {"source": self.bracket})["content"]), 1)
 
     def test_a_viewer_that_will_not_start_leaves_the_command_to_run(self) -> None:
         from cad_server.mcp.browser import ViewerUnavailable
@@ -1205,19 +1163,11 @@ class TextServerTest(_Session):
         self.assertTrue(failed["isError"])
         self.assertIn(f"`cad viewer --host 127.0.0.1 --json {self.bracket}`", failed["content"][0]["text"])
 
-    def test_an_app_that_renders_without_advertising_it_can_be_told(self) -> None:
-        from unittest import mock
-
-        with mock.patch.dict(os.environ, {"CAD_MCP_PRESENTATION": "inline"}):
-            server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "other"))
-            server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": self.client}), None)
-        self.assertIn("ui", {tool["name"]: tool for tool in server.handle("tools/list", {}, None)["tools"]}["cad_show"]["_meta"])
-
 
 class CodexExecTest(_Session):
     """`codex exec` greets the server as the Codex app does, and renders no app. Its launcher says so
-    (the shim's parent process is `codex exec`), and on 0.163 each call's turn metadata does too
-    (``turn_trigger: exec``): its cad_open and cad_show claim no tab."""
+    (the shim's parent process is `codex exec`): it is offered no tools. On 0.163 each call's turn metadata says
+    so too (``turn_trigger: exec``): a cad_open and cad_show in such a turn claim no tab."""
 
     client = CODEX
     launcher = CODEX_APP
@@ -1226,11 +1176,10 @@ class CodexExecTest(_Session):
     # The Codex app's own turn (its app server's, measured): no trigger.
     APP = {"x-codex-turn-metadata": {"sandbox": "seatbelt"}}
 
-    def greet(self, launcher: dict | None, **kwargs) -> Server:
+    def greet(self, launcher: dict | None, offered: dict | None = None, **kwargs) -> Server:
         server = Server(page=self.server.page, recents=self.server.recents, viewer_url=self.viewer_url,
                         browser_opener=lambda target: self.opened.append(target) or True, **kwargs)
-        server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": CODEX},
-                                                      launcher), None)
+        greet(server, CODEX, offered, launcher)
         return server
 
     def test_an_exec_turn_opens_the_browser_once_and_never_claims_a_tab(self) -> None:
@@ -1251,74 +1200,107 @@ class CodexExecTest(_Session):
         self.assertTrue(shown.startswith("bracket.stl is already open in your browser at http://127.0.0.1:3245/"), shown)
         self.assertEqual(len(self.opened), 1)
 
-    def test_a_server_codex_exec_launched_is_a_text_server_whatever_its_calls_say(self) -> None:
-        # codex-cli 0.153 sends no turn metadata: the launcher alone says it.
-        server = self.greet(CODEX_EXEC)
-        self.assertEqual([tool["name"] for tool in server.handle("tools/list", {}, None)["tools"]], ["cad_show"])
-        shown = deliver(server.handle("tools/call", {"name": "cad_show", "arguments": {"source": self.bracket}},
-                                      RequestContext(1, {"threadId": "t"})), self.record)["content"][0]["text"]
-        self.assertTrue(shown.startswith("bracket.stl opened in your browser at http://127.0.0.1:3245/"), shown)
+    def test_a_server_codex_exec_launched_offers_no_tools_whatever_it_declares(self) -> None:
+        # codex-cli 0.153 sends no turn metadata: the launcher alone says it. Codex 0.169 declares the MCP Apps
+        # extension, perhaps from exec too: the declaration alone gives it no tabs.
+        for offered in ({}, RENDERS_APPS):
+            with self.subTest(offered=offered):
+                server = self.greet(CODEX_EXEC, offered)
+                self.assertEqual(server.handle("tools/list", {}, None)["tools"], [])
+                with self.assertRaises(RpcError):
+                    server.handle("tools/call", {"name": "cad_show", "arguments": {"source": self.bracket}},
+                                  RequestContext(1, {"threadId": "t"}))
+        self.assertEqual(self.opened, [])
+
+    def test_an_exec_turn_where_no_launcher_is_read_opens_the_browser_though_it_declares_views(self) -> None:
+        # Windows: no launcher read, the extension declared; the turn's metadata comes first.
+        server = self.greet(None, RENDERS_APPS)
+        opened = deliver(server.handle("tools/call", {"name": "cad_open", "arguments": {"source": self.bracket}},
+                                       RequestContext(1, {"threadId": "t", **self.EXEC})), self.record)
+        self.assertTrue(opened["content"][0]["text"].startswith("bracket.stl opened in your browser"), opened)
         self.assertEqual(len(self.opened), 1)
 
     def test_the_codex_apps_own_turns_keep_their_tabs_and_open_no_browser(self) -> None:
         opened = self.call("cad_open", {"source": self.bracket}, self.APP)
-        self.assertEqual(opened["content"][0]["text"],
-                         f"{self.bracket} is open in a new CAD tab. From now on, use cad_show to show models in it.")
+        self.assertEqual([part["text"] for part in opened["content"]],
+                         [f"{self.bracket} is open in a new CAD tab. From now on, use cad_show to show models in it."])
         self.assertEqual(opened["structuredContent"]["launch"]["model"], self.bracket)
-        # A show in the same turn goes to the tab cad_open launched, which the host is still opening.
-        self.syncs_later("tab-1", "agent", self.bracket)
-        self.assertEqual(self.call("cad_show", {"source": self.loose}, self.APP)["content"][0]["text"], f"Showing {self.loose} in CAD.")
+        # A show in the same turn goes to the tab cad_open launched, which the host is still opening: never waited
+        # for, it shows the model as it first syncs. The Codex app's tab is verified: no web page goes with it.
+        shown = self.call("cad_show", {"source": self.loose}, self.APP)
+        self.assertEqual([part["text"] for part in shown["content"]],
+                         [f"The CAD tab cad_open opened is still opening; it shows {self.loose} once it opens."])
+        self.assertEqual(shown["structuredContent"], {"delivered": 0, "opening": True})
         events = self.call("cad_sync", {"view": "tab-1", "surface": "agent", "model": self.bracket})["structuredContent"]["events"]
         self.assertEqual([(event["type"], event["launch"]["model"]) for event in events], [("show", self.loose)])
-        self.assertEqual(self.opened, [])
-
-    def test_a_tab_still_opening_is_said_so_and_shown_the_model_once_it_opens(self) -> None:
-        self.call("cad_open", {"source": self.bracket}, self.APP)
-        with mock.patch("cad_server.mcp.server.OPENING_SECONDS", 0.1):
-            shown = self.call("cad_show", {"source": self.loose}, self.APP)
-        self.assertEqual(shown["content"][0]["text"], f"The CAD tab cad_open opened is still opening; it shows {self.loose} once it opens.")
-        self.assertNotIn("No CAD viewer", shown["content"][0]["text"])
-        events = self.call("cad_sync", {"view": "tab-1", "surface": "agent", "model": self.bracket})["structuredContent"]["events"]
-        self.assertEqual([(event["type"], event["launch"]["model"]) for event in events], [("show", self.loose)])
+        # The tab called back: the tab alone from now on.
+        self.assertEqual([part["text"] for part in self.call("cad_show", {"source": self.bracket}, self.APP)["content"]],
+                         [f"Showing {self.bracket} in CAD."])
         self.assertEqual(self.opened, [])
 
 
 class UnconfirmedCodexTest(_Session):
     """A Codex client nothing else speaks for (its launcher unknown, no turn metadata): its name gives it
-    Codex's catalog, never the claim that a tab opened. The next call decides from evidence."""
+    Codex's catalog, never the claim that a tab opened, and the model's web page goes with each answer."""
 
     client = CODEX
     viewer_url = staticmethod(lambda model=None: "http://127.0.0.1:3245/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab?token=t")
 
     def test_cad_open_says_where_the_model_is_either_way_and_opens_no_browser(self) -> None:
         opened = self.call("cad_open", {"source": self.bracket})
-        self.assertEqual(opened["content"][0]["text"],
-                         f"Where this app shows CAD tabs, {self.bracket} opens in a new CAD tab with this answer; where it "
-                         "shows none, the user can see it in their browser at http://127.0.0.1:3245/6f1c2a4e-1b2c-5d3e-8f4a-"
-                         "0123456789ab?token=t: give them this URL. Do not tell the user a tab opened. Use cad_show next: "
-                         "it says where a model went.")
+        self.assertEqual([part["text"] for part in opened["content"]],
+                         [f"Where this app shows CAD tabs, {self.bracket} opens in a new CAD tab with this answer. Do not "
+                          "tell the user a tab opened. Use cad_show next: it says where a model went.",
+                          UNPROVEN.format(link=self.viewer_url())])
         self.assertEqual(opened["structuredContent"]["launch"]["model"], self.bracket)
         self.assertEqual(self.opened, [])
 
-    def test_a_tab_that_never_comes_means_this_host_shows_none(self) -> None:
-        self.call("cad_open", {"source": self.bracket})
-        with mock.patch("cad_server.mcp.server.OPENING_SECONDS", 0.1):
-            shown = self.call("cad_show", {"source": self.bracket})["content"][0]["text"]
-        self.assertTrue(shown.startswith("bracket.stl opened in your browser at http://127.0.0.1:3245/"), shown)
-        self.assertEqual(len(self.opened), 1)
-        self.assertNotIn("tab", self.call("cad_open", {"source": self.loose})["content"][0]["text"])
-
     def test_a_view_reaching_the_server_proves_tabs_over_a_turn_that_says_exec(self) -> None:
         self.call("cad_open", {"source": self.bracket})
-        self.syncs_later("tab-1", "agent", self.bracket)
+        self.call("cad_sync", {"view": "tab-1", "surface": "agent", "model": self.bracket})
         self.assertEqual(self.call("cad_show", {"source": self.loose})["content"][0]["text"], f"Showing {self.loose} in CAD.")
         self.assertIn("in a new CAD tab. From now on", self.call("cad_open", {"source": self.loose}, CODEX_EXEC_TURN)["content"][0]["text"])
         self.assertEqual(self.opened, [])
 
 
+class NoToolsTest(_Session):
+    """Every app but the Codex app is offered no tools at all, whatever it declares: it shows a model as a web page.
+    Its connection still completes: it is greeted, lists nothing, and reads the page."""
+
+    client = {"name": "gemini-cli-mcp-client", "version": "0.20.0"}
+
+    def test_every_app_but_codex_is_offered_no_tools_whatever_it_declares(self) -> None:
+        claude_code = {"name": "claude-code", "title": "Claude Code", "version": "2.1.316"}
+        for client in (CURSOR, CLAUDE, claude_code, OTHER_HOST):
+            with self.subTest(client=client["name"]):
+                server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "other"))
+                said = greet(server, client, RENDERS_APPS, {"host": "claude desktop", "renders": True})
+                self.assertEqual((server.handle("tools/list", {}, None), said["instructions"]),
+                                 ({"tools": []}, NO_TOOLS_INSTRUCTIONS))
+
+    def test_it_is_offered_no_tools_and_told_the_cad_command(self) -> None:
+        self.assertEqual(self.initialized["instructions"], NO_TOOLS_INSTRUCTIONS)
+        for said in ("`cad` command", "`cad viewer`"):
+            self.assertIn(said, NO_TOOLS_INSTRUCTIONS)
+        for unsaid in ("skill", "cad setup"):  # nothing sends the agent to set a CAD server up
+            self.assertNotIn(unsaid, NO_TOOLS_INSTRUCTIONS)
+        self.assertEqual(self.server.handle("tools/list", {}, None), {"tools": []})
+        self.assertEqual(len(self.server.handle("resources/list", {}, None)["resources"]), 1)
+        self.assertEqual(self.server.handle("ping", {}, None), {})
+        for name in ("cad_show", "cad_open", "cad_sync", "cad_http"):
+            with self.subTest(name=name), self.assertRaises(RpcError):
+                self.call(name, {"source": self.bracket, "view": "v", "surface": "tab", "method": "GET", "url": "/"})
+        self.assertEqual(self.opened, [])
+
+    def test_the_development_switch_serves_cards_to_any_app(self) -> None:
+        server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "other"))
+        greet(server, self.client, presentation="inline")
+        self.assertIn("ui", {tool["name"]: tool for tool in server.handle("tools/list", {}, None)["tools"]}["cad_show"]["_meta"])
+
+
 TEXT_CLIENT = {"name": "some-cli", "version": "1"}
-# Each catalog a host is listed, by the greeting that lists it.
-CATALOGS = {"tabs": (CODEX, {}), "inline": (CLAUDE, RENDERS_APPS), "text": (TEXT_CLIENT, {})}
+# Each catalog a host is listed, by the greeting that lists it; an app that declares nothing is listed none.
+CATALOGS = {"tabs": (CODEX, None), "inline": (CLAUDE, "inline"), "none": (TEXT_CLIENT, None)}
 
 
 class ToolArgumentsTest(unittest.TestCase):
@@ -1332,13 +1314,12 @@ class ToolArgumentsTest(unittest.TestCase):
         self.model.write_bytes(STL)
 
     def served(self, catalog: str) -> Server:
-        client, offered = CATALOGS[catalog]
+        client, presentation = CATALOGS[catalog]
         page = self.tmp / "app"
         page.mkdir(exist_ok=True)
         (page / "shell.html").write_text("<!doctype html><title>CAD</title>", encoding="utf-8")
         server = Server(page=AppPage(page), recents=RecentStore(self.tmp / "state"))
-        server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": offered,
-                                                       "clientInfo": client}, None), None)
+        greet(server, client, presentation=presentation)
         return server
 
     def call(self, server: Server, name: str, arguments: dict) -> dict:
@@ -1376,7 +1357,7 @@ class ToolArgumentsTest(unittest.TestCase):
                     self.assertIn("source", properties, (catalog, tool["name"]))
 
     def test_a_refusal_names_every_argument_missing_and_unknown_and_what_the_tool_takes(self) -> None:
-        server = self.served("text")
+        server = self.served("inline")
         shown = self.call(server, "cad_show", {"path": str(self.model)})
         self.assertTrue(shown["isError"])
         self.assertEqual(shown["content"][0]["text"], "cad_show: missing source; unknown path. cad_show takes source; source "
@@ -1384,30 +1365,14 @@ class ToolArgumentsTest(unittest.TestCase):
                                                       "absolute path.")
 
     def test_every_host_is_told_the_commands_that_export_inspect_and_snapshot(self) -> None:
-        # No tool exports, inspects or draws a picture for the agent: an agent that has not loaded the cad skill
-        # learns the commands that do from the instructions, in every presentation and in Claude Code's.
-        told = [CLAUDE_CODE_INSTRUCTIONS] + [
-            Server(page=AppPage(self.tmp), recents=RecentStore(self.tmp / "state")).handle("initialize", initialize_params(
-                {"protocolVersion": "2025-06-18", "capabilities": offered, "clientInfo": client}, None), None)["instructions"]
-            for client, offered in CATALOGS.values()]
+        # No tool exports, inspects or draws a picture for the agent: it learns the commands that do from the
+        # instructions, in every presentation and where it is offered no tools.
+        told = [greet(Server(page=AppPage(self.tmp), recents=RecentStore(self.tmp / "state")), client,
+                      presentation=presentation)["instructions"]
+                for client, presentation in CATALOGS.values()]
         for instructions in told:
             for command in ("`cad model export <id> <file>`", "`cad model inspect <id>`", "`cad model snapshot <id> out.png`"):
                 self.assertIn(command, instructions)
-
-    def test_the_text_catalog_says_the_model_opens_in_the_browser_and_never_in_the_chat(self) -> None:
-        server = self.served("text")
-        instructions = server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": {},
-                                                                      "clientInfo": TEXT_CLIENT}, None), None)["instructions"]
-        tools = server.handle("tools/list", {}, None)["tools"]
-        said = [instructions] + [tool["description"] for tool in tools] + [
-            schema.get("description", "") for tool in tools for schema in tool["inputSchema"]["properties"].values()]
-        for words in said:
-            for wrong in ("chat", "card", "viewer tab"):
-                self.assertNotIn(wrong, words.lower())
-        cad_show = next(tool for tool in tools if tool["name"] == "cad_show")
-        for words in (instructions, cad_show["description"]):
-            self.assertIn("in the user's browser", words)
-            self.assertIn(FOLLOWS, words)
 
 
 class LocalPathTest(unittest.TestCase):

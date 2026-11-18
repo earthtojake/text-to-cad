@@ -12,13 +12,13 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 | Build it and assert it is complete | `scripts/bundle/bundle.sh --check` |
 | Run code tests | `scripts/test/test.sh` |
 | Run docs checks | `scripts/test/test-docs.sh` |
-| Check the release version and skill pins | `scripts/release/check-version.sh` |
+| Check the release version and every stamp of it | `scripts/release/check-version.sh` |
 | Check the shipping contract | `scripts/github-workflows/check-builds.sh` |
-| Install this checkout into an agent app to test it | `scripts/install/dev_install.py <host>` |
+| Install this checkout into the agent apps to test it, and go back | `scripts/install/dev_install.py`, `scripts/install/dev_install.py --release` |
 
 ## Index
 
-`bundle/` — the server's packaged runtime (`packages/cad-server/src/cad_server/_runtime`).
+`bundle/` — the server's packaged runtime (`packages/cad/src/cad_server/_runtime`).
 None of it is committed: the directory is gitignored end to end and the wheel is
 where those files ship, so these scripts are what produces them.
 
@@ -28,16 +28,13 @@ where those files ship, so these scripts are what produces them.
   metadata (which IS committed) rather than writing it. `--clean` removes the
   `_runtime` tree first. Called by `test.yml`, `release-publish.yml`,
   `check-builds.sh`, the pre-commit hook.
-- `cadgen-runtime.sh` — builds the three runtime stages: `--viewer` (vite build of
-  `apps/web`), `--mcp` (vite build of `apps/mcp`: `shell.html`, the shell a host keeps, and `app.js`,
-  the app it loads from the engine) and `--plugin` (a copy of
-  the root's plugin files and of every skill file git keeps, which the server writes the plugin
-  folder from), first removing any entry under `_runtime` that no stage builds, and saying so.
-  `--print-outputs` lists the directories a bundle always produces, `--print-plugin-files` the
-  plugin's files beside `skills/`; `--check` builds them and asserts each page stage's
+- `cadgen-runtime.sh` — builds the two runtime stages: `--viewer` (vite build of
+  `apps/web`) and `--mcp` (vite build of `apps/mcp`: `shell.html`, the shell a host keeps, and `app.js`,
+  the app it loads from the engine), first removing any entry under `_runtime` that no stage builds, and saying so.
+  `--print-outputs` lists the directories a bundle always produces; `--check` builds them and asserts each stage's
   pages (the viewer's `index.html`, the CAD app's `shell.html` and `app.js`) and the
   `THIRD_PARTY_LICENSES.txt` its build writes
-  (`@cad/core/third-party-licenses`), and the plugin stage's every file, byte for byte.
+  (`@cad/core/third-party-licenses`).
   Called by `bundle.sh` and `check-builds.sh`; pinned by `test_js_runtime_reproducibility.py`.
   Call it directly only to debug one stage.
 - `lib/snapshot_runtime.sh [OUT_DIR]` — the OCCT parity bench's snapshot page,
@@ -103,20 +100,56 @@ where those files ship, so these scripts are what produces them.
   engine, state and cache folders. Called by `test.yml`'s `blender` job; on Linux it needs X11's
   client libraries and OpenGL from the system.
 - `test-floor.sh` — the library's, the server's and the shim's suites on the oldest Python the packages declare
-  (`requires-python`: 3.13, the one Blender's module is built for, so the one the library runs on in a
-  render script's environment). `PYTHON_BIN` names a Python of that line with `requirements-dev.txt`
+  (`requires-python`: 3.11, so pip, pipx or a plain `uv tool install` can put cad on an older system
+  Python). `PYTHON_BIN` names a Python of that line with `requirements-dev.txt`
   installed; another is refused in one line. A call that Python's standard library lacks parses there
   and fails only when it runs, so only running the suites holds the floor. Called by `test.yml`'s
-  `packages (Python 3.13 floor)` job, under Xvfb, on a full run: before a release ships, and nightly.
+  `packages (Python 3.11 floor)` job, under Xvfb, on a full run: before a release ships, and nightly.
 - `test-api.sh` — `npm --prefix apps/api test`: the version feed's and the
   telemetry receiver's tests, which need no install. Called by `test.yml` (`static`, on every
   change) and `deploy-api.yml`.
-- `test-installed.sh` — builds the library's, the server's and the shim's wheels (or accepts
+- `test-installed.sh` — builds the `cad` wheel and its aliases' (or accepts
   `--wheels DIR` to test the exact artifacts already built), installs them together into a
-  scratch venv and exercises them from outside the repo, including `cad-mcp` serving the
+  scratch venv and exercises them from outside the repo, including `cad mcp` serving the
   packaged CAD app over stdio and a manufacturing check of a built part for each process
-  (the checks' measuring modules, loaded from the wheel). Called by `test.yml` and
-  `release-publish.yml`.
+  (the checks' measuring modules, loaded from the wheel); installs the same wheels as the uv tool
+  the install command makes (`uv tool install cad`, offered them above PyPI's newest), where
+  `cad update auto` and `cad plugin update auto` answer, and as an updater of 0.10.0 to 0.11.11
+  brings a release. Called by `test.yml` and `release-publish.yml`.
+- `rehearse-update.py [ROUTE ...] [--old RELEASE]` — rehearses cad's updates on private computers (each its
+  own home, state, engine, cache and `cad` command folders), with real uv and real servers. `self`: cad, a uv
+  tool, updating itself (idle, typed with `cad update` with and without a server running, at a server's
+  start, switched off, past a release
+  whose server cannot start, back from one uv cannot install, inside its major with a higher major out and
+  across it only by `cad update --major`, by pipx), and the new cad's server running `cad plugin
+  update` once, as its own run under a deadline, where `cad plugin update auto` is on and cad got newer, by
+  itself or by a typed `cad update`, never after a failed update.
+  `bridge`: a computer on a shipped release (0.11.11, or `--old`'s) arriving at this build by its updater,
+  its automatic update, its typed `cad update`, the install command and the uv line, this build's server
+  running the install command once where the computer had it, installing cad with uv itself where the
+  computer had only a store's copy or the install command failed, and handing over to the uv tool's server;
+  this build's servers there tend themselves every two seconds (`CAD_ENGINE_TEND_SECONDS`). It installs the
+  real releases from PyPI and publishes this tree as later releases. Needs uv and the network. Called by
+  `test.yml`'s `update-rehearsal` job on Linux, macOS and Windows.
+- `real-install.py --wheels DIR [--require claude,codex,gemini] [--keep] [--work DIR]` — the install script
+  run for real against the real `claude`, `codex` and `gemini` found on PATH, on a private computer
+  (`real_computer.py`: its own home and folders, each program told its configuration folder there, the
+  machine's own home compared before and after and never changed). The script runs as a person runs it
+  (piped to `sh`; on Windows handed to `Invoke-Expression` by Windows PowerShell 5.1), cad from this tree's
+  wheels in `DIR`, the plugin from this tree's `latest` copy (`plugin_branch.py`) in a local repository the
+  computer's git reads for every address of ours on GitHub (Gemini CLI still asks GitHub's API for a release
+  first, and finds none). It checks each program's own list (ours, once, this run's copy), `cad` (a uv tool
+  at this run's release, `cad update auto` on, `cad plugin update auto` turned on by the script, no server
+  started), a model built and its page; then the script again (cad installed already and left alone, each
+  copy updated); then each program moved from the state 0.11.10's installer left. It cannot test the desktop
+  apps, or GitHub's `latest` branch before a release. A program missing is skipped and said, unless
+  `--require` names it. Called by `real-install.yml`, which `test.yml`'s `real-install` job calls, on
+  Windows, macOS and Linux, with each program pinned there. The few files of the machine's own apps and cad
+  are watched before and after (`real_computer.Sentinels`): by their times, and Claude Desktop's config by
+  its `mcpServers` section alone, which the running app does not rewrite. `real_computer.py` is the computer
+  alone, for another test to run real programs on; `real_computer.py stamp` prints the release every
+  rehearsal writes this tree's wheels again as (this tree's major and minor, a patch of 9000 or more, so uv,
+  offered them beside PyPI, installs them), and `real_computer.py publish` writes them.
 - `test-viewer-launch.sh` — launches `cad viewer` against the built client and
   verifies reuse, the engine serving a tiny test-owned STEP and the bundled client
   drawing it. Called by `test.yml`'s `viewer-e2e` job.
@@ -139,16 +172,17 @@ where those files ship, so these scripts are what produces them.
 - `bump-version.sh major|minor|patch|X.Y.Z [--base REF] [--dry-run]` — makes a
   branch a release: sets `VERSION` past the one on `REF` (default `origin/main`,
   fetched first; it must already be merged into the branch) and stamps the
-  derived metadata and every pin of the release's own (`sync-version.mjs`). Relative to `REF`,
+  derived metadata and every mention of the release's own (`sync-version.mjs`). Relative to `REF`,
   so a second run changes nothing. `--check-incremented-from REF` compares
   `VERSION` against a ref, for `check-version.sh`. Run by hand and by
   `release-prepare.yml`; see `CONTRIBUTING.md`, "Shipping a release".
 - `check-pr-version.sh HEAD_REPO` — on a pull request's merge commit, says what
   merging it releases: nothing when `VERSION` is unchanged against the target
   branch; otherwise the bump must come from a branch of this repository (never a
-  fork) and pass both the target's version and the latest tag, and a release that
-  installs itself (a patch below 1.0, a patch or minor from 1.0) may not add or change
-  a migration guide. Called by `test.yml` (`static`); see `CONTRIBUTING.md`,
+  fork) and pass both the target's version and the latest tag, and a patch, which
+  breaks nothing, may not add a migration guide, though it may correct one already
+  there (a minor may carry one: it installs itself on every computer of its major,
+  `release-tags.sh`'s `version_installs_itself`). Called by `test.yml` (`static`); see `CONTRIBUTING.md`,
   "Which number a release bumps".
 - `pypi_release.py --project NAME --version X.Y.Z --built DIR --upload DIR --released DIR`
   (or `--wait`) — what a release uploads to PyPI of one of its four projects
@@ -160,49 +194,59 @@ where those files ship, so these scripts are what produces them.
   index until it lists the version (ten minutes at most). Called by
   `release-publish.yml`'s `pypi` job, project by project.
 - `check-version.sh [--incremented-from REF]` — `VERSION` is valid semver, the four
-  `pyproject.toml`s are `VERSION` and pin the library at it, the one-line installer falls back
-  to `VERSION`, and (with the flag)
+  `pyproject.toml`s, the plugin manifests, Codex's server line and the release the skills name are
+  `VERSION`, no skill command names a version, and (with the flag)
   `VERSION` is greater than the one at `REF`. Called by `test.yml` (`static`), `release-publish.yml`,
   `publish-github-release.sh`.
 - `sync-version.mjs [--check]` — stamps the derived versions (package, plugin,
-  lockfile and `pyproject.toml` metadata, the `cad`, `cad-server` and `cad-mcp`
-  pins, and the one-line installer's fallback release) from
+  lockfile and `pyproject.toml` metadata, the aliases' `cad==` pins, Codex's server line
+  `cad@<VERSION>`, and the release each skill's Setup block names) from
   `VERSION`. Called by `bump-version.sh`, `bundle.sh`, `test.yml` (`static`), `release-publish.yml`.
-- `check-wheel-contents.sh` — builds the four wheels and asserts each carries its own
-  top-level packages alone (the alias none, and only the library at the release as
-  its requirement); that the library's and the shim's carry their Python modules, the
-  library's the engine's page and environment image; that the server's carries its modules,
-  the engine's README and `_runtime/{viewer,mcp,plugin}` with each page's third-party notice, and
-  nothing else at the top of `_runtime`, the runtime with bytes identical to the bundled
-  source, and its plugin the repository's own files and `skills/`, byte for byte
-  (`wheel_contents.py plugin`); and that no engine test golden ships. The only gate on package data, which fails
+- `check-wheel-contents.sh` — builds the four wheels and asserts the aliases carry no package of
+  their own and only `cad` at the release as their requirement; that the `cad` wheel carries the
+  modules of `cad`, `cad_server` and `cad_mcp`, the engine's page and environment image,
+  the engine's README and `_runtime/{viewer,mcp}` with each page's third-party notice, and
+  nothing else at the top of `_runtime`, and the runtime with bytes identical to the bundled
+  source; and that no engine test golden ships. The only gate on package data, which fails
   quietly. `CAD_KEEP_WHEEL=1` keeps the wheels in `CAD_WHEEL_OUT_DIR`. Called by `test.yml`
   and `release-publish.yml`.
 - `plugin_zip.py --out PATH | --check` — builds the plugin ZIP OpenAI's plugin
   submission portal takes (the archive's root holding `.codex-plugin/`, `skills/`,
   `LICENSE` and every file the manifest names, with the MCP config as the root
-  `.mcp.json`) and checks it against the portal's documented package rules.
+  `.mcp.json`) and checks it against the portal's documented package rules. Its skills are the
+  repository's as they are: each Setup block installs cad by uv's one line, `uv tool install cad`, the
+  same in every copy, and a file that names our install script fails the build (`text_errors`). The same
+  build is the `codex` copy `plugin_branch.py` commits.
   Called by `release-publish.yml`; tested by
   `tests/python/global/test_plugin_zip.py`.
-- `plugin_branch.py --check | --commit --copy latest|directory [--parent REF]` —
+- `plugin_branch.py --check | --commit --copy latest|directory|codex [--parent REF]` —
   builds the plugin alone, as the branches installers follow take it (the
   manifests and icon, the MCP configs they name, `skills/`, `LICENSE`, and the
   README with outside links pinned to the release commit), checks it against
   claude.ai's file rules, and with `--commit` commits it on `REF` and prints the
-  commit. The `latest` copy adds the marketplace catalog and Codex's manifest
-  and config; the `directory` copy names claude.ai's directory
-  as its channel. Called by `release-publish.yml`, whose `branches` job pushes
-  the `latest` copy to `latest` and the `directory` copy to `claude-plugin`,
-  together; tested by `tests/python/global/test_plugin_branch.py`.
+  commit. The `latest` copy holds every app's manifest and config and the
+  marketplace catalogs; the `directory` copy is Claude's manifest and the skills alone, no MCP
+  server and no hooks, every file one of the types claude.ai's directory accepts from an
+  unverified organization (any other fails `--check`). Every copy carries main's skills byte
+  for byte, so the same Setup block, which installs cad by uv's line; no copy names our
+  install script or holds a download piped to a shell
+  (`plugin_zip.text_errors`, `PIPE_TO_SHELL`). Its README, like `latest`'s, installs cad by
+  uv's line rather than the install script, and it leaves out the manifest's four listing
+  links; each substitution fails `--check` when what it replaces is not there exactly once
+  (`CONTRIBUTING.md`, "The install branches"). The `codex` copy is the files of
+  `plugin_zip.py`'s ZIP, from the same build. Called by
+  `release-publish.yml`, whose `branches` job pushes the `latest` copy to `latest`, the
+  `directory` copy to `claude-plugin` and the `codex` copy to `codex-plugin`, together;
+  tested by `tests/python/global/test_plugin_branch.py`.
 - `publish-github-release.sh [--target REF] [--dry-run] [--publish]` — creates and
   pushes the `v<VERSION>` tag and the GitHub Release (a draft unless
   `--publish`). Called by `release-publish.yml`; a local run on the merged release
   commit is the manual fallback.
 - `release-tags.sh` — sourced helpers for tag spelling (`v0.5.0`, and the bare
   `0.4.x` releases before 0.5.0) and for comparing versions, Semantic Versioning's
-  among them: the part a release bumps, the breaking part, and whether a device takes a
-  release by itself (`version_installs_itself`, the release check's copy of the server's
-  `auto_updates.takes`, which a test holds equal to it). Sourced by
+  among them: the part a release bumps, the breaking part, and whether a computer on an earlier
+  release installs it by itself (`version_installs_itself`: a later release of the same major, which
+  a test holds to that rule). Sourced by
   `bump-version.sh`, `check-pr-version.sh`, `publish-github-release.sh`,
   `release-publish.yml`.
 - `unavailable-versions.txt` — the versions no release can take (the PyPI project `cad`'s
@@ -252,28 +296,32 @@ where those files ship, so these scripts are what produces them.
 `install/` — the one-line installer, and local testing.
 
 - `install.sh`, `install.ps1` — the one-line installer texttocad.dev serves (`curl -fsSL
-  https://texttocad.dev/install.sh | sh`; `irm https://www.texttocad.dev/install.ps1 | iex`): finds uv or
-  installs it with uv's own installer, resolves the newest release from the version feed (else the
-  release stamped into the script, `sync-version.mjs`; `--version` picks one), and runs that
-  release's `cad setup` through uvx (with `--uninstall`, `cad uninstall`), every other argument
-  passed on. The docs site copies both into its `public/` as it builds
-  (`apps/docs/scripts/install-scripts.mjs`), and `release-publish.yml` attaches them, with their
-  `SHA256SUMS`, to each GitHub Release. Their structure and behaviour are tested by
-  `tests/python/packages/cad_server/test_setup.py`; `.github/workflows/install-windows.yml` rehearses
-  `install.ps1` on a Windows runner, against this tree's wheel or, dispatched with `published`, the release
-  people install today, and `.github/workflows/install-linux.yml` `install.sh` on Linux, the same two ways.
+  https://texttocad.dev/install.sh | sh`; `irm https://www.texttocad.dev/install.ps1 | iex`), thin and with no
+  options (given one, they say so and change nothing): they find uv or install it with uv's own installer,
+  download `install.py` from beside themselves on the site, and run it with uv's Python 3.14.
+- `install.py` — the installer itself, the standard library alone, carrying no version and taking no
+  options, with one behaviour whether a person or cad (`cad plugin update`) runs it: installs cad as a uv
+  tool, PyPI's newest, only where no cad is installed (a cad that starts is left as it is: it updates
+  itself; one that does not start is installed again; a cad installed with pipx is left as it is, or
+  installed again with pipx where it does not start), puts cad's folder on the PATH with uv's own
+  `uv tool update-shell` (unless `UV_NO_MODIFY_PATH` is set), installs or updates the plugin in each app found
+  with that app's own command from the repository's `latest` branch (or copies the skills into an agent's
+  own skills folder), removes our own older copies there, turns on `cad plugin update auto` where the run
+  ends with exit status 0, and prints a line per app. It reads no version feed. `APPS` is the one table of apps; each row says how its commands
+  were verified. The docs site copies the three into its `public/` as it builds
+  (`apps/docs/scripts/install-scripts.mjs`). Tested by `tests/python/global/test_install_script.py` (a
+  temporary home, stand-in CLIs on PATH); `.github/workflows/install-windows.yml` and
+  `install-linux.yml` rehearse the scripts on fresh runners, against this tree's wheel or, dispatched
+  with `published`, what people install today.
 
-- `dev_install.py <host> [--uninstall] [--no-build] [--restart] [--wheel]` — installs this
-  checkout into an agent app: the development plugin `text-to-cad@earthtojake-dev`
-  for `claude` (which Cursor and Grok Build load too), `codex`, `cursor`, `grok`
-  and `gemini` (skills copied, server run by `.venv`, serving a copy of the page
-  taken at install, assembled under `tmp/<host>-dev`), made the current installation the
-  skills' `cad` command runs, with the install command in their setup a note that it is a
-  development install; `--wheel` builds the checkout's wheel and
-  runs both through `uvx --from <wheel>`; the server alone for `claude-desktop`. Refuses a host where another copy of the plugin, or this
-  repository's skills installed loose, would load. Developer step in
-  `CONTRIBUTING.md` ("Test In Agent Apps"); its assembly and loose-skill check are
-  tested by `tests/python/global/test_dev_install.py`.
+- `dev_install.py [APP...]` / `dev_install.py --release` — installs this checkout into the agent apps
+  (every app found, or those named by `install.py`'s keys), and goes back to the published release. It
+  installs the checkout as the `cad` uv tool, editable, with automatic updates off, writes the plugin into
+  `tmp/dev-plugin/text-to-cad` (its version `<VERSION>-dev.<time>`, Codex's CAD server `cad mcp`, the
+  catalog `earthtojake-dev`) and hands that folder to `install.py`'s table in place of GitHub, so
+  each app's published copy of ours goes and the development copy comes in; `--release` uninstalls the
+  editable tool and runs `install.py` as it is. Developer step in `CONTRIBUTING.md` ("Test In Agent Apps"); tested with
+  `install.py` by `tests/python/global/test_install_script.py`.
 
 `git-hooks/pre-commit` — the body `.githooks/pre-commit` runs: `bundle.sh --check`
 when staged paths touch `packages`, `apps`, `skills` or `scripts/bundle`. It is
@@ -305,12 +353,12 @@ only their pure helpers are tested (`tests/python/global/test_bench_helpers.py`)
 
 | Workflow | Branches/events | Purpose |
 | -------- | --------------- | ------- |
-| `test.yml` | pushes to and PRs against `main` and `build-test`; nightly on `main`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run whole on its one flag, only when the change selects it (`select_checks.py`; `docs/contributing/testing.md#ci` lists the jobs): `static` always (the version check, the tracked tree's rules, the light contracts, the API's tests; on a pull request, what merging it releases); the package suites on Linux and Windows, in shards (`packages (Linux I/2)`, `packages (Windows I/3)`); `routing (macOS)`; `skills`; `js-core`, `js-ui`, `js-web`, `js-mcp`, `docs`; `fea`, `kicad`, `blender`; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheels and runs the installed-mode tests; `viewer-e2e` serves that bundle's viewer through the backend to the launch smoke test and the browser gates. A full run (a `VERSION` change, the nightly, a dispatch, `Publish Release`'s call) adds the release tier: the package suites on Python 3.13 and the installer rehearsals. `CI`, the one required check, fails when any job did. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
+| `test.yml` | pushes to and PRs against `main` and `build-test`; nightly on `main`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run whole on its one flag, only when the change selects it (`select_checks.py`; `docs/contributing/testing.md#ci` lists the jobs): `static` always (the version check, the tracked tree's rules, the light contracts, the API's tests; on a pull request, what merging it releases); the package suites on Linux and Windows, in shards (`packages (Linux I/2)`, `packages (Windows I/3)`); `routing (macOS)`; `skills`; `js-core`, `js-ui`, `js-web`, `js-mcp`, `docs`; `fea`, `kicad`, `blender`; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheels and runs the installed-mode tests; `viewer-e2e` serves that bundle's viewer through the backend to the launch smoke test and the browser gates. A full run (a `VERSION` change, the nightly, a dispatch, `Publish Release`'s call) adds the release tier: the package suites on Python 3.11, the installer rehearsals and the update rehearsal (`update-rehearsal`, on Linux, macOS and Windows). `CI`, the one required check, fails when any job did. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
 | `release-prepare.yml` (`Prepare Release`) | manual dispatch (`bump` or `set_version`; `target`, `dry_run`) | Opens a release pull request of what the target already has: `bump-version.sh` on `release/X.Y.Z`, pushed and opened with `PREPARE_RELEASE_TOKEN` so its checks run. It never merges: merging the pull request releases it. `target=build-test` rehearses. |
-| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test` that change `VERSION` (a release pull request's merge); manual dispatch (resume the commit that last moved `VERSION`) | Gate (`VERSION` past the latest tag); the record of a run that tested that tree in full, or else every `test.yml` job on it; the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin trees; bundle, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then — on `main` only — PyPI upload (its own `pypi` job in the `release` environment, the only job that may mint a PyPI token; a file PyPI already holds is taken from PyPI, not uploaded again), a wait until PyPI's index lists the version, the plugin committed onto `latest` and `claude-plugin`, and after them the docs deploy and the `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP. On `build-test` it prints what it would have uploaded, pushed and tagged, and stops. |
+| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test` that change `VERSION` (a release pull request's merge); manual dispatch (resume the commit that last moved `VERSION`) | Gate (`VERSION` past the latest tag); the record of a run that tested that tree in full, or else every `test.yml` job on it; the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin trees; bundle, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then — on `main` only — PyPI upload (its own `pypi` job in the `release` environment, the only job that may mint a PyPI token; a file PyPI already holds is taken from PyPI, not uploaded again), a wait until PyPI's index lists the version, the plugin committed onto `latest`, `claude-plugin` and `codex-plugin`, and after them the docs deploy and the `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP. On `build-test` it prints what it would have uploaded, pushed and tagged, and stops. |
 | `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
 | `deploy-api.yml` (`Deploy API`) | pushes to `main` that change `apps/api`; manual dispatch | Deploys `api.texttocad.dev` (`apps/api`) to Vercel production after its tests (`test-api.sh`). It follows no release. |
-| `install-linux.yml` (`Linux installer rehearsal`) | called by `test.yml` (a full run; a change under `scripts/install`); manual dispatch | Runs `install.sh`, piped, on `ubuntu-latest` and in `python:3.12-slim-bookworm`, against this tree's wheel or, dispatched with `published`, the site's `install.sh` and PyPI; checks `cad --version` and `cad doctor`. |
+| `install-linux.yml` (`Linux installer rehearsal`) | called by `test.yml` (a full run; a change under `scripts/install`); manual dispatch | Runs `install.sh`, piped, on `ubuntu-latest` and in `python:3.12-slim-bookworm`, against this tree's wheel or, dispatched with `published`, the site's `install.sh` and PyPI; checks `cad --version`, both switches on, a model and `cad doctor`. |
 | `install-windows.yml` (`Windows installer rehearsal`) | called by `test.yml` (a full run; a change under `scripts/install`); manual dispatch | Runs `install.ps1` on a fresh Windows runner against the wheel the tree builds, or, dispatched with `published`, the site's `install.ps1` and PyPI. |
 
 `Prepare Release` opens a release pull request, or a pull request carries its own

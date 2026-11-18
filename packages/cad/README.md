@@ -1,15 +1,24 @@
 # cad
 
 The library: CAD models written as Python, imported as `cad`, built by the engine (`cad.engine`) into live XCAF documents and the files those models
-declare (XBF, STEP, GLB, STL, 3MF, DXF). It is one of three distributions released together, at one
-version: the library; the server, `cad-server` (imported as `cad_server`), the computer's one
-daemon that builds, keeps and serves the documents, with the CAD Viewer, the CAD app's MCP endpoint
-and the command that runs them all; and the shim, `cad-mcp` (`cad_mcp`), the stdio transport
-an agent app starts. The server ships what is not Python: the CAD Viewer's client and the CAD app
-page, which it serves, built from their JavaScript packages and bundled in at build time (the JS
-*source* never ships). Snapshots are drawn by OCCT (a KiCad board's flat, with Pillow), never in a
-browser. This file holds the laws of
-all three.
+declare (XBF, STEP, GLB, STL, 3MF, DXF). The same distribution, `cad`, holds the server (imported as
+`cad_server`), the computer's one daemon that builds, keeps and serves the documents, with the CAD
+Viewer, the CAD app's MCP endpoint and the `cad` command that runs them all; and the stdio transport
+an agent app starts (`cad_mcp`, run as `cad mcp`). The server ships what is not Python: the CAD
+Viewer's client and the CAD app page, which it serves, built from their JavaScript packages and
+bundled in at build time (the JS *source* never ships). Snapshots are drawn by OCCT (a KiCad board's
+flat, with Pillow), never in a browser. This file holds the laws of all three parts.
+
+Install it as a uv tool, which gives the computer its one `cad`:
+
+```bash
+uv tool install cad
+```
+
+It runs on Python 3.11 and newer. `cad server start` starts the server; cad then updates itself to each
+new release of its major version (`cad update auto off` stops that); `cad update` updates it now; a new
+major version installs only with `cad update --major`; `cad doctor` reports what is installed. `cad-server`, `cad-mcp` and `cadgen` are empty aliases of this
+distribution, kept so older installs keep working.
 
 A **document** is what a person reviews: one instance of a **document type** (below), either a file read on
 its own or one built from code -- a model, built by the engine. Documents exist so that a person can review the
@@ -35,7 +44,7 @@ cad run arm.py                                 # builds it in the engine's warm 
 cad model export <id> arm.3mf --tolerance 0.01 # the model as the engine holds it, by that id
 cad xbf export XBF/arm.xbf arm.glb arm.stl     # more translations of the document it wrote
 cad xbf snapshot XBF/arm.xbf arm.png           # a still of it, drawn by OCCT
-cad serve XBF/arm.xbf                          # the document on a local page
+cad viewer XBF/arm.xbf                         # the document on the running server's page
 cad xbf inspect XBF/arm.xbf                    # what it holds, then its build closure
 ```
 
@@ -56,15 +65,19 @@ These words mean one thing each, in the code, the commands and every document.
   `xbf` is the `.xbf` file the engine writes of one, and takes files alone. A document type is a file cad
   shows: each has a view. A file cad writes or checks and never shows is none, whatever cad does with it: an
   MJCF, MuJoCo's own model file, is an export's destination and the mujoco integration's to check, and
-  MuJoCo Studio shows it.
+  MuJoCo Studio shows it; an OrcaSlicer preset is the orcaslicer integration's to write complete, and
+  OrcaSlicer reads it.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`),
+  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`, `orcaslicer`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
-  for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
-  kind: in-process, separate process, or both. An integration has operations of its own only on a file of its
-  tool's that is no document type (`cad mujoco check robot.xml`, `cad.mujoco.check`): a closed set too,
-  `check` today, answering findings as a type's check does.
+  for it needs, where it needs any (`orcaslicer`'s code is the standard library alone, so it has none); our
+  code for it -- helpers that take its objects, producers and operations; and a process kind: in-process,
+  separate process, or both. An integration has operations of its own only on its tool's own files that are
+  no document type: one file it checks (`cad mujoco check robot.xml`, `cad.mujoco.check`), or the files the
+  tool keeps in its own folders, named as the tool names them (`cad orcaslicer presets machine`, `cad
+  orcaslicer complete`, `cad.orcaslicer.complete`): a closed set too, `check`, answering findings as a type's
+  check does, `presets`, answering names, and `complete`, answering the files it wrote.
 - **Dependency**: one installable package or binary, named only in the distribution's metadata and lock
   files, never in the API, the CLI or the docs. It becomes an integration only when we write code for that
   tool: OCP is a dependency of `build123d`, not an integration.
@@ -87,9 +100,10 @@ its operations and what writes it.
 **PURPOSE** — the engine and its command surface: models built in a warm worker whose memo
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
-launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
+launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a MuJoCo model's
-check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); a 3D
+check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); OrcaSlicer's
+presets written complete for its command line (`cad.orcaslicer`); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
 exact geometry measured by the build123d integration, a mesh by trimesh, judged against general, cited rules); a
 B-rep document's interference check (`cad.<type>.interference(source, poses=..., fits=...)`: every
@@ -120,9 +134,9 @@ build123d integration: a
 third-party technology and the application layer over it are an integration, named for the
 technology, and its extra carries the same name.
 
-**DEPENDED ON BY** — the server, `cad-server`, which pins it at its own release, and through
-the server every skill that runs `cad`; the deprecated alias `cadgen`, which installs it at the same
-release.
+**DEPENDED ON BY** — the server and the `cad` command (`cad_server`), in the same distribution, and
+through them every skill that runs `cad`; the empty aliases `cad-server`, `cad-mcp` and `cadgen`,
+which install it at the same release.
 The CAD Viewer is the server's: it serves `cad_server.viewer`’s client, HTTP application and
 every STEP and `.xbf` a page opens on one authenticated listener, without a relay.
 
@@ -133,7 +147,9 @@ the two disagree, the engine's README is right.
 
 | Document | What it is for | Go there when |
 |---|---|---|
-| The engine's README, `cad_server/engine/README.md` in the server's distribution (`cad-server`) | The engine: models and decorators, the engine server and its workers, the door, progress, the viewer and the snapshot, exports, kinematics, couplings and configuration sequences, materials, imports, placements, the mesh and its wire format, element names, references, body retention, queries, memo functions and the build closure | changing anything a build, an export, a snapshot or a served document does |
+| The server's README, `src/cad_server/README.md` | The server's shape, its commands, cad's own update and where it keeps things | changing a command, the server's folders or the update |
+| The transport's README, `src/cad_mcp/README.md` | What `cad mcp` does between an agent app and the server | changing how an agent app reaches the server |
+| The engine's README, `src/cad_server/engine/README.md` | The engine: models and decorators, the engine server and its workers, the door, progress, the viewer and the snapshot, exports, kinematics, couplings and configuration sequences, materials, imports, placements, the mesh and its wire format, element names, references, body retention, queries, memo functions and the build closure | changing anything a build, an export, a snapshot or a served document does |
 
 ## The design laws
 
@@ -168,11 +184,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    state in the user's state folder (`cad`): settings, Recents' small previews, and the registry of the
    documents it has built, been handed or opened, one record each that points at its script or
    file, the user's one page token, the engine's record (the port it rolled to while 3245 is another
-   program's; both this user's alone), each registered installation's record
-   (`installations/<version>.json`: its python, its console script, its environment) and which one
-   is current (`installations/current`: the release whose engine the device runs), and the
-   releases an update installed (`releases/<version>`: each one's environment, made by uv from its
-   cache; the one before the current kept as the way back);
+   program's; both this user's alone);
    never geometry and never source. In the
    platform's cache folder (`~/.cache/cad`, on Windows too) it keeps, under `documents/`, the
    engine's cache for documents, and nowhere else there: each model document's bytes as it last
@@ -183,14 +195,18 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    `documents/<id>/kicad/<key>/`), so a changed file is a new entry and nothing stale is served --
    every one regenerable, kept until the document is deleted (`cad delete`, the home's Delete), which
    deletes it with them -- nothing evicts it; under `pycache/` the bytecode its own processes compile of the libraries they load
-   (`PYTHONPYCACHEPREFIX`, a folder per installation), regenerable too, so nothing is written
-   beside a library or a model; and under `base/` the environment the engine's kernel processes run in, an
-   installation's base, `cad[build123d]` at its release, made by uv from its cache on first need, and
+   (`PYTHONPYCACHEPREFIX`), regenerable too, so nothing is written
+   beside a library or a model; and under `base/` the environment the engine's kernel processes run in, the
+   base, `cad[build123d]` at its release, made by uv from its cache on first need, and
    beside it each environment a program's run made (`cad run`: the library pinned with the integrations
-   its imports use, and the packages it names), regenerable as well, those of the release before the
-   current kept as the way back (the engine's **Running a model**); and under `homes/` the private settings
+   its imports use, and the packages it names), regenerable as well (the engine's **Running a model**); and under `homes/` the private settings
    folders a run hands a tool that would otherwise read the person's own (Blender's, for a script that
-   imports bpy: `homes/blender`), empty but for what the tool itself writes there. The code stays the only source of truth: a document is what its
+   imports bpy: `homes/blender`), empty but for what the tool itself writes there. One state folder, one cache
+   folder and one engine folder a user, whatever release of cad runs -- the layout of 0.11.11 and earlier, kept as
+   it was, so an update keeps the person's settings, records and links, and every path is `cad.engine.places`'
+   (`CAD_STATE_DIR`, `CAD_CACHE_DIR` and `CAD_ENGINE_DIR` move them, for a test or an experiment). `cad cache
+   prune` removes what this release cannot use, `cad cache clean` all of the cache, and nothing else of cad deletes
+   a past release's files. The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
    sidecar, record of a build beside a model, index, memo, mesh or parsed document (but the file
@@ -208,7 +224,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    or a `cad` command: the daemon, the registry, the CAD Viewer's and the CAD app's servers, every
    verb, the environment makers, telemetry -- imports the library's kernel-free modules, and never
    the kernel or an integration's code (law 28). The shim (`cad_mcp`), the stdio transport
-   an agent app starts, is the standard library alone. The server reaches into the library, never the
+   an agent app starts, is the standard library, the engine's client, the server's MCP protocol and what cad's own
+   update knows of the global `cad` (whose server it starts, and which it installs where the computer has none),
+   and loads no kernel. The server reaches into the library, never the
    other way: its telemetry is an observer the engine calls with plain facts (`engine.api.observers`),
    which the server's commands append.
 4. **A model's document is XCAF; files are explicit.** *Every document.* A model's document is
@@ -287,23 +305,34 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     (`mechanism_state_representation`), `configuration_sequence`
     (`interpolated_configuration_sequence`), and `gear_pair`, `rack_and_pinion_pair` and
     `screw_pair`, each refusing a joint its pair does not relate.
-14. **Each distribution ships alone.** *The package.* An installed distribution is the whole world: its Python,
+14. **The distribution ships alone.** *The package.* An installed distribution is the whole world: its Python,
     what it bundles (the server's `_runtime/`), and its documents. It works with the repository it
     was built from gone -- and its markdown must read that way, referring to nothing outside its
-    own distribution, another one's files included.
-    *Pressure-test*: every sentence in a distribution's markdown must be true and actionable for
-    someone who only ran `pip install cad==<release>` (or `cad-server`, or `cad-mcp`). Naming a bundled thing ("the JavaScript runtime
+    own distribution.
+    *Pressure-test*: every sentence in the distribution's markdown must be true and actionable for
+    someone who only ran `uv tool install cad` or `pip install cad==<release>`. Naming a bundled thing ("the JavaScript runtime
     bundled at build time") passes; a repository path to its source, a repository script, or a
-    repository workflow does not. This README also holds the laws of all three distributions, so a
-    law may name another distribution's file, said as that distribution's ("the server's
-    `updates.py`").
+    repository workflow does not. A law may name a file of the server's or the transport's, said as
+    theirs ("the server's `updates.py`").
 15. **Compatibility, by who pays for a break.** *The package.* A change is judged by who absorbs it and whether
     they can. Four tiers:
 
+    **Which releases reach a computer by themselves.** cad installs by itself every newer release of the
+    major version it is on, a patch or a minor, a minor that breaks included; a release of a higher major
+    never arrives by itself: the person runs `cad update --major`. The bound lives in the update a computer
+    already has (`cad>=<installed>,<<next major>`, worked out from the installed release each time). So below
+    1.0, where a break bumps the minor, a breaking release reaches every computer by itself with its migration
+    guide; from 1.0, where a break bumps the major, it waits for the person. The tiers below hold within a
+    major as across one.
+
     **Tier 1: what an agent reads each session** -- the skills, the `cad` command's verbs and flags,
-    the CAD tools' arguments, the wording of docs. Hard cutovers only, release over release. A retired
-    surface does not exist: no alias, no shim, and no error that recognizes its old spelling to
-    explain what replaced it. A removed command, flag, argument, key, module or name gets what the
+    the CAD tools' arguments, the wording of docs. cad moves to the newest release of its major on every
+    computer while a store's copy of the skills may be weeks older, so a command, flag or tool the skills used
+    keeps working for 30 days after the release whose skills stopped using it, hidden if need be; CI
+    checks each release against the skill text released in the last 30 days. Past that window, hard
+    cutovers only, in any release: removing or renaming one is not a breaking change and needs no
+    migration guide. A retired surface does not exist: no alias, no shim, and no error that
+    recognizes its old spelling to explain what replaced it. A removed command, flag, argument, key, module or name gets what the
     current contract's ordinary validation says -- an unknown command, an unrecognized argument, an
     unknown key, an `ImportError`, an `AttributeError`.
     *Pressure-test*: use a removed spelling; the error must read exactly as it would for a name that
@@ -322,11 +351,10 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     gets. An alias is kept out of every `__all__` and every document but the migration guide; a test pins the
     table of them (`cad._internal.aliases`). An agent migrates a project on first touch.
 
-    **Tier 3: a person's data** -- documents, the state folder and its records, Recents, settings,
-    receipts, the plugin folder. A release reads what the previous shipped release wrote, writes the
+    **Tier 3: a person's data** -- documents, the state folder and its records, Recents, settings. A release reads what the previous shipped release wrote, writes the
     current form, and migrates on first touch, once: never the old form written, never a downgrade.
     Opening, viewing, importing and exporting a saved document never requires its source or a rebuild
-    because text-to-cad was upgraded: the engine reads `xbf/8` and `xbf/9` and converts `xbf/8` in
+    because cad was upgraded: the engine reads `xbf/8` and `xbf/9` and converts `xbf/8` in
     memory, without executing model code or changing source or cache bytes, under a migration record
     that leaves the original build closure and toolchain provenance unchanged; an explicit export to
     another XBF path saves the upgraded document atomically, and opening one does not rewrite it;
@@ -335,23 +363,22 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     retains no retired authoring API. The engine's README's **Build closure** describes the conversion.
 
     **Tier 4: protocols where two releases meet while both run** -- the door, the CAD app's server and
-    its page, the update handshake, the HTTP API (`/api/v1`), a page's reload probe, the version feed,
+    its page, the hidden `cad setup --engine-update` that the updaters of 0.10.0 to 0.11.11 call, the HTTP API (`/api/v1`), a page's reload probe, the version feed,
     the installation and release records, the analytics schemas, and the PyPI names old pins resolve
     through. Each is numbered or frozen in a golden, so a break is never silent: a change within a
     number is additive, and unknown keys and ops are ignored; a breaking change bumps the number.
     Whether the newer side keeps answering the previous number is decided case by case, by what a
     mismatch would strand and whether the stranded side can say what to do. Where it does not, the
     side that meets a number it does not speak says so in one line and names which package to update,
-    and to what release, never how to install it: the person or the agent has their own way -- but
-    for the server, whose one way the line names (`cad update`): installing `cad-server` into a
-    project's environment neither registers nor moves the device's server. The analytics receiver
+    and to what release, never how to install it: the person or the agent has their own way; installing
+    `cad` into a project's environment neither replaces nor moves the computer's cad. The analytics receiver
     keeps every schema a released client sends. The worker contract (`cad.engine.contract`: the worker
     protocol's number, the document format, the kernel), by which a script run with a Python of its
     own and the server meet, is decided so: a contract the server does not speak is refused before any
     worker starts, in that one line, with no window; one contract of two releases builds, and the
     script says once which package to update. 0.8's door had no number, and 0.10
-    meets 0.8 by stopping it, never by answering it: 0.8's engines keep their own folder, no process
-    of 0.10's speaks to one of 0.8's, and `cad setup` stops 0.8's server with 0.8's own `cadgen stop`.
+    meets 0.8 by never answering it: 0.8's engines keep their own folder, and no process of 0.10's speaks
+    to one of 0.8's.
 
     **The earlier name.** `cadgen` is the library's deprecated alias, still published at every
     release for backwards compatibility. The `cadgen` distribution installs `cad` at the same
@@ -367,22 +394,26 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 17. **Loud failure or correct output, nothing between.** *The package.* The cardinal sin is plausible-wrong
     output at exit 0. No silent fallbacks, no globs, no guessing; a failed write or render leaves
     no file this run wrote; an earlier file stays byte for byte.
-18. **Nothing waits on the network.** *The package.* Once installed, text-to-cad works offline: every command,
+18. **Nothing waits on the network.** *The package.* Once installed, cad works offline: every command,
     build, snapshot, server and page. Its own requests are two: telemetry (the server's `analytics.py`, usage
     counts under a random id, sent by default once a `cad` command has said so -- never its help, nor an
     answer in JSON, which no person reads --, and never
     after the person's no) and the hourly version check (the server's `updates.py`). Both run in the
-    background and fail silently: no start, command, build, request or tool call waits on them.
-    An update waits on the network because a person asked for it -- the update button, `cad
-    update`, the install command run again --: it reads the feed then, and uv installs the release
-    from its cache and the network for what that lacks; one that cannot reach it says so in a line
-    and leaves everything as it was. `cad update --dry-run`, asked what an update would do, reads the
-    feed the same bounded way and keeps nothing of it, saying so in a line when it cannot reach it. An automatic update (on by default, `cad update auto off` to
-    leave every update to the person) waits on nothing: the server installs the release in the
-    background and switches only once it has been idle for a minute. It takes a release that breaks
-    nothing, as Semantic Versioning numbers it -- a patch release below 1.0, a patch or minor release
-    from 1.0 --; one that may (a minor or major release below 1.0, a major one from 1.0) waits for the
-    person's click.
+    background and fail silently: no start, command, build, request or tool call waits on them -- but three a
+    person or an app asks for by name: `cad update`, typed to get the newest release of its major now (`--major`:
+    the newest of all), which waits on PyPI (5 s at most) and the install, and says in one line when either fails;
+    `cad plugin update`, the hosted install command in the foreground; and `cad mcp` run from uv's cache on a
+    computer with no global cad, which installs one first, the newest of its own major (four minutes at most).
+    A global install of cad (`uv tool install cad`) updates itself unless the person turned it off (`cad
+    update auto off`), and when asked (`cad update`): its server, at its start, after a failed start or once nothing
+    has run for a minute, where the feed as last read names a newer release of its major, hands the update to a
+    detached helper (the server's `_internal/auto_update.py`), which stops it, runs the installer's own upgrade
+    bounded to that major (`uv tool install --upgrade "cad>=<installed>,<<next major>"`) and starts it again (where no
+    server runs, `cad update` hands it over itself, and the helper starts none); a higher major only by `cad update
+    --major` (`uv tool install --upgrade "cad>=<installed>"`). Where `cad plugin update auto` is on and cad is newer than the release
+    the install command last ended well for, however it got newer, its server runs `cad plugin update` once,
+    detached, stopped with all it started after 15 minutes. Nothing waits on the install but a start that would
+    otherwise start the release it replaces.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
     `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
     it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot
@@ -395,7 +426,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     and the viewer's background sends take, and a command or the daemon that finds it has waited more
     than a window, with no other process sending, starts a sender detached that sends it and exits
     (the server's `_internal/telemetry_send.py`). A process that exits sends nothing either: its last batch is
-    kept beside the settings, and the next process that sends sends it, in the background. One
+    kept beside the settings, and the next process that sends sends it, in the background -- each row saying the
+    version and app that counted it, each kept batch under its own id, so a resend of a batch counts once. One
     wait remains, bounded: `cad telemetry off`, which waits for the deletion it asks for.
     The pages load nothing from the internet: everything they show ships in the wheel.
     *Pressure-test*: with an installed server, each integration's environment made by its first
@@ -413,15 +445,17 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     document out of memory, for the engine's cache to give back, only when nothing watches it (the
     engine's **Document lifetime**).
 
-20. **One engine serves the device; tabs select documents at `/<uuid>`.** *Every document.* It is the current
-    installation's: every client, whatever its release, attaches to it or starts it -- a client with
-    no installation registered starts none: the library never starts a server of its own environment
-    -- and only an
-    update moves it to another release -- one the person asks for, or an automatic patch update once
-    the engine is idle (law 18) -- on the same port with the same token (the engine's **Starting and
-    updating**). A tab names a model's id, or a file's id after a launcher
+20. **One engine per computer; tabs select documents at `/<uuid>`.** *Every document.* Every process reaches the
+    one engine, through the one door in the engine folder, whatever release it is -- one of 0.11.11 or earlier
+    too. Only `cad server start` and `cad mcp` start it; every other client that finds none says so in one line
+    and starts none, and the library never starts a server of its own environment. A start of a newer release
+    replaces an older release's engine; an older one joins a newer engine that runs (forward only); a `cad mcp` that
+    is not the global `cad` installed on the computer runs that cad's own `cad server start` and joins its engine,
+    whatever the two releases are, and one run from uv's cache on a computer with no global cad installs one first;
+    a `cad` command of another release than the engine says so in one line. cad's own update stops the engine, installs
+    the new release and starts it again (the engine's **Starting and updating**). A tab names a model's id, or a file's id after a launcher
     registers it; Python scripts are never documents. A page never replaces or re-executes the engine. Its one page and document reads
-    share its authenticated HTTP listener. `serve` and `viewer` always start or reuse it, with no
+    share its authenticated HTTP listener. `serve` and `viewer` reuse it and start none, with no
     standalone serving mode, and no Python function starts, stops or serves it (law 21). Launchers
     exit; clients closing never stop it. Kernel operations run in child processes, never in the
     engine's request threads. There are no page sessions: the explorer opens where it was last, else
@@ -463,7 +497,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     migration**): it hashes existing scripts once for older records, without importing them or
     reading or writing an XBF.
     *Pressure-test*: build a model, then edit its script, its modules and the files its bodies
-    read, without running it: every page, the home, every verb and tool and `cad status` answer
+    read, without running it: every page, the home, every verb and tool and `cad server status` answer
     as they did before the edit, and no process of the engine has opened a file of the model's code
     since its run.
 
@@ -472,8 +506,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     single source of every layer: each type's id, extensions, MIME type, how it is viewed (an engine
     document, a mesh, a drawing, a robot, a plot), the content it carries, its operations and the
     integration each needs, and whether it has a decorator or an edit; each integration's name, extra,
-    process kind, the operations it has on a file of its tool's own that is no document type, with the
-    suffixes they take (`mujoco`: `check` on `.xml` and `.mjcf`), and, for an external program, its probe (the program, the oldest version our code supports, the
+    process kind, the operations it has on its tool's own files that are no document type, with the
+    suffixes those on one file take (`mujoco`: `check` on `.xml` and `.mjcf`; `orcaslicer`'s `presets` and
+    `complete` take preset names and no file), and, for an external program our code runs, its probe (the program, the oldest version our code supports, the
     install hint -- for a program that comes with an extra, as kicad-cli comes with `cad[kicad]`, that
     extra -- and the variable that names a program outright, as `CAD_KICAD_CLI` does). A document type
     either has files (its extensions) or has none (`model`, a document in memory, named by its id): a
@@ -497,8 +532,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     registers for the types they make; it re-exports nothing of the tool (`import build123d as bd` stays
     build123d's), and imports only its own extra's dependencies. Every extra, every `cad.<name>` namespace
     and every `cad/<name>/` package is a registered integration or document type. cad supports a tool only
-    where cad's own code calls it: a tool only the agent runs, a remote service, or a desktop app the person
-    uses is no integration.
+    where cad's own code calls it, or makes a file the tool needs and cannot make itself (`orcaslicer`: a
+    complete preset, which OrcaSlicer's command line reads and the agent runs): a tool only the agent runs
+    with nothing of ours between, a remote service, or a desktop app the person uses is no integration.
     *The signature rule* decides where a helper goes: one taking only paths, plain values or our own types
     goes under the document type; one taking a third-party library's objects goes under that integration.
 
@@ -509,8 +545,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     type per document type; a return none takes fails loudly, naming the types the document is made of and
     the integration that would add more.
 
-27. **The CLI is `cad <document_type> <operation> <file>`, and `cad <integration> <operation> <file>` for a
-    tool's own file.** *Every document.* `export` and `snapshot` are shared by every
+27. **The CLI is `cad <document_type> <operation> <file>`, and `cad <integration> <operation> [<file>]` for a
+    tool's own files.** *Every document.* `export` and `snapshot` are shared by every
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
     for what it does -- `dfm` a 3D type's manufacturing check, `interference` a B-rep type's check that no two
     parts share volume, `solve` a B-rep type's stress study, `ranges` a
@@ -526,15 +562,22 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     command: what cad does with it is its tool's integration's operation, `cad <integration> <operation>
     <file>`, one to one with `cad.<integration>.<operation>` (`cad mujoco check robot.xml`: a MuJoCo
     model, which MuJoCo Studio shows). The noun is still the file, named by the tool that owns its format.
+    Where the tool keeps its files in its own folders and a person knows them by the names the tool shows,
+    never by a path, the operation takes those names and no file: OrcaSlicer's presets, which `cad
+    orcaslicer presets machine` lists and `cad orcaslicer complete --printer … --process … --filament …`
+    writes complete for OrcaSlicer's command line. The noun is still the tool's own files.
     A name is a type's or an integration's, never both; an operation lives in one place, so a file that
     has a document type has its operations there and its integration has none for it (no `cad kicad drc`
     beside `cad kicad_pcb drc`); and an integration is never a way to name the means of a type's
     operation (`cad stl dfm` is trimesh's and nobody says so). An integration's operations are a closed
-    set too (`check`, answering findings as a type's check does).
+    set too: `check` takes one file and answers findings as a type's check does; `presets` answers the
+    names of a tool's presets of one kind; `complete` writes chosen presets complete and, as `export`
+    does, says the files it wrote.
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
-    --help` groups the commands: the document types, the integrations with operations of their own, the rest. The commands that are no document's -- setup, update,
-    uninstall, doctor, plugin, viewer, status, stop, server, telemetry, run, serve and delete -- stay
-    top-level.
+    --help` groups the commands: the document types, the integrations with operations of their own, the rest. The commands that are no document's -- setup,
+    doctor, cache, viewer, status, stop, server, telemetry, update (and its `update auto`), plugin, mcp, run,
+    requirement, serve and delete -- stay top-level; the bridge's (setup, status, stop) and those for programs
+    rather than people (serve, requirement) run but are not listed.
 
 28. **An integration runs where its extra is installed.** *The package.* An integration's code runs
     in the command's own process when that environment holds the integration's extra, else in that
@@ -542,23 +585,28 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     installation on first need, as `cad run` makes a program's -- run as a subprocess, the library's
     runner of one operation (`cad._internal.operation`; the server's `_internal/integration_env.py`).
     No module of the server imports an integration's code: the runner does, in whichever process
-    runs it. A function of the library called where its integration is missing says which extra to
+    runs it. An integration with no extra (`orcaslicer`, the standard library alone) is held by every
+    environment the library is in, so its operations always run in the command's own process: no
+    environment made, no engine asked. A function of the library called where its integration is missing says which extra to
     add, or to run the script with `cad run`. A command line an integration's extra installs
     (`kicad-cli`, the registry's `commands`) runs the same way: `cad run kicad-cli …` adds the extra,
     and the integration's `_command` module runs the environment's own command there, headless in
     private homes, never one on PATH. A tool built for one Python alone (blender's bpy, CPython 3.13) is
     an integration like any other, its extra installing it only there: the registry names that Python, the
     platforms it has builds for and the folders its settings are read from, an environment with it is
-    made on that Python with the library pinned in it, and a run's settings folders are private. That is
-    why the library's floor is Python 3.13 while the server's installations run on a newer one.
+    made on that Python with the library pinned in it, and a run's settings folders are private. So the
+    library runs on Python 3.13 for blender's sake while cad itself, installed as a uv tool, runs on a newer
+    one; its floor, 3.11, admits both.
 
 29. **cad wraps a tool only where it adds something.** *The package.* Nothing is a superficial wrapper:
     a helper in the library and a typed command alike are added because something is missing without
     them, and each can say what. `cad <type> <operation>` (and an integration's own `cad <integration>
     <operation>`) runs a tool for a reason the tool's own line lacks: one result shape (law 27's
     findings, the files an export wrote), a safety guarantee (a board's folder left as found, a refused
-    output path), parity with the viewer (the same check, the same export), or a fact the tool does not
-    report (what a MuJoCo model collides as, which `cad mujoco check` says beside MuJoCo's own compile).
+    output path), parity with the viewer (the same check, the same export), a fact the tool does not
+    report (what a MuJoCo model collides as, which `cad mujoco check` says beside MuJoCo's own compile), or
+    a file the tool's own line needs and cannot make (a complete OrcaSlicer preset, every parent merged in,
+    which `cad orcaslicer complete` writes and OrcaSlicer's command line then slices with, run as it is).
     A helper of an integration's (`cad.<integration>.<name>`) takes the tool's objects for a reason of
     the same kind: it ties them to our documents (a part found by its label path), does what the tool
     leaves undone (a spec saved with its files, so the folder travels), or reports what it does not.
@@ -695,8 +743,8 @@ src/cadgen/              # the deprecated import alias: every name and every mod
                          #   own (law 15's earlier name)
 ```
 
-The server, `cad-server`, and the shim, `cad-mcp`, say their own shapes and commands in
-their own READMEs.
+The server and the transport say their own shapes and commands in their own READMEs,
+`src/cad_server/README.md` and `src/cad_mcp/README.md`.
 
 ## Native KiCad files
 
@@ -886,13 +934,13 @@ holds of it, the same check of an unchanged document answered from the result th
 millimetres.
 The measurements are facts and always reported (`measurements`). The verdicts are general: each process has
 one table of rules: general practice from published design guides, each rule citing its guide as the
-evidence, and text-to-cad's own floors where no guide states a limit, each labelled as its own -- no rule
+evidence, and cad's own floors where no guide states a limit, each labelled as its own -- no rule
 is a shop's limit, and every result says so (`rules_general`). A shop's own limits are
 compared with the measurements; what a person knows of their own shop is a plain option (`--tools`,
 `--bend-radius`, `--k-factor`, `--sheet-size`, `--build-volume`, ...). A failing rule is one finding for
 each feature that fails it, coded by its id, at the feature's most specific ref (a corner's edge, not one of
 its two faces), with the verdict as data -- `rule`, `value`, `limit`, `unit`, `op` (`min` or `max`),
-`source` (the guide's publisher and title, or `text-to-cad` for a floor of its own) and `refs` (every ref the feature names, `location` first) --
+`source` (the guide's publisher and title, or `cad` for a floor of its own) and `refs` (every ref the feature names, `location` first) --
 and a hint saying what to change; an error is a limit the part breaks, a warning a recommendation. The
 command says a rule once -- its hint, its source and how many places -- then a short line a place, and its
 last line leads with the state and the counts, which are the findings': `FAILED part.step: 4 error(s), 2

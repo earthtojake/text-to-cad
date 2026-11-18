@@ -91,10 +91,10 @@ it('an engine the probe reaches runs the whole card over direct HTTP: the link a
   const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
     asked.push({ url, headers: new Headers(init.headers), credentials: init.credentials });
     const path = new URL(url).pathname;
-    if (path === '/api/v1/server') return json({ app: 'cad-viewer', notice: null });
+    if (path === '/api/v1/server') return json({ app: 'cad-viewer' });
     if (path === '/api/v1/documents') return json({ documents: [] });
     if (path === '/api/v1/settings') return json({ language: { locale: null }, telemetry: { share: false, policy: 'https://www.texttocad.dev/privacy-policy' } });
-    return json({ notice: null });
+    return json({});
   });
   render(<Connection bridge={bridge as any} server={server} channel={channel} launch={launch} presentation="inline" fetchImpl={fetchImpl as any} />);
   await waitFor(() => expect(viewer.props).not.toBeNull());

@@ -9,7 +9,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/common.sh"
 python_candidate="${VIEWER_PYTHON:-$PYTHON_BIN}"
 PYTHON="$(command -v "$python_candidate" 2>/dev/null || true)"
-RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cad-server/src/cad_server/_runtime/viewer}"
+RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cad/src/cad_server/_runtime/viewer}"
 HOST=127.0.0.1
 
 # The checkout's own packages (common.sh's PACKAGE_SOURCES), ahead of whatever is installed.
@@ -54,12 +54,8 @@ else
 fi
 log="$(mktemp)"
 viewer_pidfile="$project/viewer.pid"
-# The model library every Viewer writes: the test's own, never the user's. It registers this
-# interpreter as its current installation, as an installation registers itself: the engine a
-# command starts there is this checkout's (a client with no installation starts none).
+# The model library every Viewer writes: the test's own, never the user's.
 export CAD_STATE_DIR="$project/state"
-"$PYTHON" -c 'import sys; sys.path.append(sys.argv[1]); from tests.python.support.engine_daemon import register
-register(sys.argv[2])' "$REPO_ROOT" "$CAD_STATE_DIR"
 # The engine that builds the fixtures and serves the STEP and .xbf ones to the page: this
 # test's own daemon, one part meshed at a time, stopped on the way out.
 export CAD_ENGINE_DIR="$project/engine" CAD_ENGINE_MESH=inline CAD_CACHE_DIR="$project/no-0.7-store"
@@ -69,6 +65,12 @@ cleanup() {
   rm -rf "$project" "$log"
 }
 trap cleanup EXIT
+# No command starts it: this checkout's server is started here, as a person or an agent starts one.
+if ! (cd "$project" && "$PYTHON" -m cad_server.cli server start) >"$log" 2>&1; then
+  echo "FAIL: this checkout's server did not start" >&2
+  sed 's/^/    /' "$log" >&2
+  exit 1
+fi
 
 # The STEP the gates open: one cylinder, written by build123d's own STEP export, which the engine
 # imports as it does any STEP it did not write. It is made here so that no CAD file is committed.

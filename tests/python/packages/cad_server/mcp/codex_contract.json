@@ -39,7 +39,6 @@
    "structuredContent": {
     "launch": {
      "model": "<tmp>/project/parts/bracket.stl",
-     "notice": "<notice>",
      "page": "viewer",
      "pick": "<pick>",
      "platform": "<platform>",
@@ -62,7 +61,6 @@
    "structuredContent": {
     "launch": {
      "model": null,
-     "notice": "<notice>",
      "page": "home",
      "pick": "<pick>",
      "platform": "<platform>",
@@ -86,7 +84,6 @@
    "structuredContent": {
     "launch": {
      "model": "<tmp>/project/parts/bracket.stl",
-     "notice": "<notice>",
      "page": "viewer",
      "pick": "<pick>",
      "platform": "<platform>",
@@ -130,7 +127,6 @@
    "structuredContent": {
     "launch": {
      "model": "<tmp>/project/parts/bracket.stl",
-     "notice": "<notice>",
      "page": "viewer",
      "pick": "<pick>",
      "platform": "<platform>",

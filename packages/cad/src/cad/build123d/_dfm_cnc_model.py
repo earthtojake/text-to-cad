@@ -30,7 +30,7 @@ SAME = 0.9999
 ALONG = 0.02
 #: A cavity's wall rises from its floor within this many degrees of the tool's axis (its draft): a drafted wall
 #: is a wall, cut by a tapered end mill's flank or stepped down with a ball -- the same pocket, the same reach.
-#: text-to-cad's own bound: tapered end mills are catalogued to about 20 degrees a side, and a face 30 degrees
+#: cad's own bound: tapered end mills are catalogued to about 20 degrees a side, and a face 30 degrees
 #: off the axis is a 60-degree chamfer mill's (a V groove's flank, a countersink), no wall. A face leaning over
 #: its floor (past ``ALONG`` the other way) is an undercut, never a wall.
 DRAFT_MAX_DEG = 25.0

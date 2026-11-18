@@ -1,5 +1,6 @@
 """The engine server: its folder holds its door and lock, and one others could take is refused; it is
-started by a client only where one can be, in an installation's environment, standing a worker by, and
+started by ``cad server start`` alone (``client.start``), where one can be, standing a worker by, a command
+finding none saying so in one line, and it
 never stops on a timer, only when told or its door is gone, removing its own files; and what it serves
 through the daemon -- a document's page, its exports and snapshots -- with its meshing processes started
 only for a page."""
@@ -79,33 +80,95 @@ class ConnectTest(unittest.TestCase):
             self.assertEqual(list((Path(engine) / "clients").iterdir()), [], "its pair went with it")
         self.assertEqual([w for w in caught if issubclass(w.category, ResourceWarning)], [])
 
+    def test_a_client_starts_none_and_a_cad_command_reaches_its_own_release_alone(self) -> None:
+        """A client starts no server: none answering is ``NotRunning`` in one line (or None, asked with ``start``
+        false). A ``cad`` command (``RELEASE``) is refused a server of another release, in one line naming both and
+        the ways on; every other process -- a person's own Python, a client of 0.10.0 to 0.11.11 -- reaches
+        whichever runs, its builds held to the worker contract alone."""
+        from cad.engine import client
+
+        def answering(release: str | None) -> tuple:
+            connection = mock.Mock(release=release)
+            return mock.patch.object(client, "_connect", return_value=connection), connection
+
+        with mock.patch.object(client, "_connect", return_value=None), \
+                mock.patch.object(client, "_spawn", side_effect=AssertionError("a server was started")):
+            with self.assertRaises(client.NotRunning) as said:
+                client.request({"op": "status"})
+            self.assertEqual(str(said.exception), "the cad server is not running: run `cad server start`")
+            self.assertIsNone(client.request({"op": "status"}, start=False))
+        for release, words in (("0.11.11", "the running server is 0.11.11: install cad 0.11.11, or run `cad server "
+                                            "start` to run 0.11.12's server"),
+                               ("0.11.13", "the running server is 0.11.13: install cad 0.11.13"),
+                               (None, "the running server is an earlier release's: run `cad server start` to run "
+                                      "0.11.12's server")):
+            patch, connection = answering(release)
+            with patch, mock.patch.object(client, "RELEASE", "0.11.12"), self.assertRaises(client.OtherRelease) as said:
+                client.connect()
+            self.assertEqual(str(said.exception), f"cad here is 0.11.12; {words}")
+            connection.close.assert_called_once_with()
+            patch, connection = answering(release)
+            with patch, mock.patch.object(client, "RELEASE", None):
+                self.assertIs(client.connect(), connection, "a process that is no cad command reaches it")
+        patch, connection = answering("0.11.12")
+        with patch, mock.patch.object(client, "RELEASE", "0.11.12"):
+            self.assertIs(client.connect(), connection)
+
 
 class SandboxTest(unittest.TestCase):
     """In a shell whose sandbox refuses the loopback port the engine's HTTP server needs, no engine
-    is started: the client says so at once, and so does one whose daemon could not listen."""
+    is started: the start says so at once, and so does one whose daemon could not listen. Whether it may is asked
+    of the system (a loopback port bound and let go), never read from the sandbox's variables, which an app hands a
+    command it runs outside its sandbox too (Codex's, approved)."""
+
+    SANDBOX = {"CODEX_SANDBOX": "seatbelt", "CODEX_SANDBOX_NETWORK_DISABLED": "1"}
 
     def setUp(self) -> None:
         from unittest import mock
 
-        self.engine = tempfile.mkdtemp(prefix="eng-")
+        self.engine = tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)
         self.addCleanup(shutil.rmtree, self.engine, True)
         cleared = {key: value for key, value in os.environ.items() if not key.startswith("CODEX_SANDBOX")}
         patched = mock.patch.dict(os.environ, {**cleared, "CAD_ENGINE_DIR": self.engine}, clear=True)
         patched.start()
         self.addCleanup(patched.stop)
 
-    def test_no_engine_in_a_sandbox_without_network_is_said_in_one_line_and_starts_none(self) -> None:
+    def test_no_engine_where_the_loopback_port_is_refused_is_said_in_one_line_and_starts_none(self) -> None:
+        import errno
+        import socket
         from unittest import mock
 
         from cad.engine import client
 
-        self.assertIn(("CODEX_SANDBOX_NETWORK_DISABLED", "1"), client.SANDBOXES, "cadgen's host adapter names it")
-        with mock.patch.dict(os.environ, {"CODEX_SANDBOX": "seatbelt", "CODEX_SANDBOX_NETWORK_DISABLED": "1"}), \
-                mock.patch.object(client, "_start", side_effect=AssertionError("a daemon was started")):
-            with self.assertRaises(ConnectionError) as said:
-                client.request({"op": "status"})
-        self.assertEqual(str(said.exception), client.SANDBOXED)
+        class Refused(socket.socket):  # the sandbox: Seatbelt refuses the bind
+            def bind(self, address):
+                raise PermissionError(errno.EPERM, "Operation not permitted")
+
+        for variables in (self.SANDBOX, {}):  # the system says so, whatever the variables say
+            with self.subTest(variables=variables), mock.patch.dict(os.environ, variables), \
+                    mock.patch.object(client.socket, "socket", Refused), \
+                    mock.patch.object(client, "_spawn", side_effect=AssertionError("a daemon was started")):
+                with self.assertRaises(client.NotRunning) as said:
+                    client.request({"op": "status"})
+                self.assertEqual(str(said.exception), client.NOT_RUNNING)
+                with self.assertRaises(ConnectionError) as said:
+                    client.start()
+                self.assertEqual(str(said.exception), client.SANDBOXED)
         self.assertNotIn("\n", client.SANDBOXED)
+
+    def test_a_command_run_outside_the_sandbox_with_its_variables_still_set_starts_the_server(self) -> None:
+        """Codex hands a command it approved to run outside its sandbox the sandbox's variables still: ``cad server
+        start`` there starts the server, and every later command finds it."""
+        from unittest import mock
+
+        from cad.engine import api, client
+
+        self.addCleanup(api.stop)  # before the folder goes: this test's engine, where ``setUp`` names it
+        with mock.patch.dict(os.environ, self.SANDBOX):
+            self.assertFalse(client._sandboxed())
+            said = client.start()
+            self.assertEqual(said, f"started the cad server (cad {client.version()})")
+            self.assertEqual(client.request({"op": "pid"})["ok"], True)
 
     def test_a_daemon_that_cannot_listen_leaves_its_reason_and_the_client_says_it_at_once(self) -> None:
         import errno
@@ -135,13 +198,13 @@ class SandboxTest(unittest.TestCase):
             def poll(self) -> int:
                 return 1
 
-        with mock.patch.object(client, "_start", lambda: Exited(note)):
+        with mock.patch.object(client, "_spawn", lambda _port: Exited(note)):
             with self.assertRaisesRegex(ConnectionError, "^" + re.escape(client.SANDBOXED)
                                         + r" \(the engine server cannot listen on a local port: Operation not permitted\)$"):
-                client.connect(timeout=30)
-        with mock.patch.object(client, "_start", lambda: Exited({"reason": "it broke", "denied": False})):
+                client.start()
+        with mock.patch.object(client, "_spawn", lambda _port: Exited({"reason": "it broke", "denied": False})):
             with self.assertRaisesRegex(ConnectionError, r"^the engine server did not start: it broke$"):
-                client.connect(timeout=30)
+                client.start()
 
 
 class EngineFolderTest(unittest.TestCase):
@@ -163,9 +226,9 @@ class EngineFolderTest(unittest.TestCase):
             os.chmod(self.engine, 0o777)
             refusal = places.folder_refusal(places.engine_dir())
             self.assertIn("can be written by others", refusal)
-            with mock.patch.object(client, "_start", side_effect=AssertionError("a daemon was started")):
+            with mock.patch.object(client, "_spawn", side_effect=AssertionError("a daemon was started")):
                 with self.assertRaisesRegex(ConnectionError, "can be written by others"):
-                    client.connect()
+                    client.start()
             with self.assertRaisesRegex(PermissionError, "can be written by others"):
                 places.lock()
             self.assertEqual(sorted(self.engine.iterdir()), [], "nothing was made in the refused folder")
@@ -199,7 +262,7 @@ class EngineFolderTest(unittest.TestCase):
             for verb in ("status", "stop"):
                 with mock.patch("sys.stderr", new_callable=io.StringIO) as said, mock.patch("sys.stdout"):
                     self.assertEqual(cli.run(verb, []), 1)
-                self.assertRegex(said.getvalue(), rf"^cad {verb}: the system denies cad-server's engine "
+                self.assertRegex(said.getvalue(), rf"^cad {verb}: the system denies the cad server's engine "
                                  r"\(taking the lock in the engine's folder .+: Permission denied\); .+ "
                                  r"run this command outside it, or with the sandbox's permission\n$")
 
@@ -288,7 +351,7 @@ class WindowsTokenFirstTest(unittest.TestCase):
         from cad_server.engine import daemon
 
         handled = []
-        engine = types.SimpleNamespace(token="ab" * 16, refusal=None, unsaid="",
+        engine = types.SimpleNamespace(token="ab" * 16, refusal=None, unsaid="", ended=lambda request: None,
                                        handle=lambda request, send: handled.append(request) or send({"ok": True}))
         server_side, client_side = socket.socketpair()
         self.addCleanup(client_side.close)
@@ -312,7 +375,10 @@ class WindowsTokenFirstTest(unittest.TestCase):
 
         token = "ab" * 16
         request = b'{"token": "' + token.encode() + b'", "op": "status"}\n'
-        for hello, greeting in ((door.hello(token), b"ok 1\n"), (token.encode() + b" 9 later\n", b"ok 1\n")):
+        from cad.engine.previous import version
+
+        greeting = door.greeting(1, version())  # the server's release, which a reader of 0.11.11 and earlier skips
+        for hello in (door.hello(token), token.encode() + b" 9 later\n"):
             said: list[bytes] = []
             handled, _token = self.serve(hello + request, said)
             self.assertEqual(handled, [{"token": token, "op": "status"}], hello)
@@ -410,7 +476,7 @@ class WindowsTokenFirstTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, folder, True)
         listener = socket.create_server(("127.0.0.1", 0))  # any free port, never the engine's
         self.addCleanup(listener.close)
-        engine = types.SimpleNamespace(token=token, refusal=None, unsaid="",
+        engine = types.SimpleNamespace(token=token, refusal=None, unsaid="", ended=lambda request: None,
                                        handle=lambda request, send: send({"ok": True}))
         spoken: list[int] = []
         serving = daemon._serve
@@ -479,6 +545,17 @@ class NoTimerTest(unittest.TestCase):
         door.unlink()  # its folder cleaned up: no one can reach it
         engine.tend()
         self.assertTrue(engine.stopping.is_set())
+
+    def test_it_tends_every_half_minute_unless_a_test_s_computer_says_otherwise(self) -> None:
+        from cad_server.engine import daemon
+
+        with mock.patch.dict(os.environ):
+            os.environ.pop(daemon.TEND_ENV, None)
+            self.assertEqual(daemon.tend_seconds(), daemon.TEND_SECONDS)
+            self.assertEqual(daemon.TEND_SECONDS, 30.0)
+            for given, seconds in (("2", 2.0), ("0", 1.0), ("soon", 30.0)):
+                os.environ[daemon.TEND_ENV] = given
+                self.assertEqual(daemon.tend_seconds(), seconds, given)
 
 
 class BusyTest(unittest.TestCase):
@@ -633,53 +710,8 @@ class StandbyStartTest(unittest.TestCase):
 
 
 class DaemonEnvironmentTest(unittest.TestCase):
-    """The daemon serves every later client, so the client that starts it does not hand it a
-    per-process telemetry switch: those are the person's saved choice's to decide. And it is an
-    installation's: a client starts no server of its own environment."""
-
-    def test_with_no_installation_a_client_starts_nothing_and_says_so_in_one_line(self) -> None:
-        from unittest import mock
-
-        from cad.engine import client, places, said
-        from cad_server._internal import installations
-
-        state = tempfile.mkdtemp(prefix="no-installation-")
-        self.addCleanup(shutil.rmtree, state, True)
-
-        def refused(words) -> str:
-            with mock.patch.dict(os.environ, {"CAD_STATE_DIR": state}), mock.patch.object(places, "HOME", None), \
-                    mock.patch.object(said, "UNREGISTERED", words), \
-                    mock.patch.object(client.subprocess, "Popen", side_effect=AssertionError("a daemon was started")):
-                with self.assertRaises(ConnectionError) as caught:
-                    client._start()
-            return str(caught.exception)
-
-        # A model's process, the library alone: the server is what is missing.
-        self.assertEqual(refused(None), "cad-server is not installed on this computer: install cad-server and run "
-                                        "`cad doctor` once, then run this again")
-        # A process of cad-server's own: never that cad-server is not installed, but what is true of it.
-        self.assertEqual(said.UNREGISTERED.__module__, "cad_server", "importing the server says its own words")
-        with mock.patch.object(installations, "here", return_value=None), \
-                mock.patch.object(installations, "own_version", return_value="0.10.0"):
-            self.assertEqual(refused(said.UNREGISTERED), "this cad-server is not registered on this computer: run "
-                                                         "`cad doctor` once, which registers it, then run this again")
-        from cad.engine.previous import version
-
-        with mock.patch.object(installations, "here", return_value=None), \
-                mock.patch.object(installations, "own_version", return_value=None):
-            self.assertEqual(refused(said.UNREGISTERED), "this cad-server is a source tree, which registers only as a "
-                                                         "version it is named: run `cad doctor` once with "
-                                                         f"CAD_INSTALLATION_VERSION={version()}-dev.0 set, then run this "
-                                                         "again")
-        with mock.patch.object(installations, "here", return_value={"version": "0.10.0"}):
-            self.assertEqual(refused(said.UNREGISTERED), "no cad-server is current on this computer: run `cad doctor` "
-                                                         "once, which makes this one current, then run this again")
-        # A base an installation made (``cad run``'s) starts its installation's engine, current or not.
-        base = {"executable": sys.executable, "prefix": sys.prefix, "root": str(Path(state, "server"))}
-        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": state}), mock.patch.object(places, "HOME", base), \
-                mock.patch.object(client.subprocess, "Popen") as started:
-            client._start()
-        self.assertEqual(started.call_args.args[0][0], sys.executable)
+    """The daemon serves every later client, so the start that starts it does not hand it a
+    per-process telemetry switch: those are the person's saved choice's to decide."""
 
     def test_an_interpreter_with_no_console_script_registers_with_one_beside_its_record(self) -> None:
         # A test's interpreter that reads the packages from PYTHONPATH: never left unregistered.
@@ -712,7 +744,7 @@ class DaemonEnvironmentTest(unittest.TestCase):
 
         with mock.patch.dict(os.environ, {"DO_NOT_TRACK": "1", "CAD_TELEMETRY": "1", "PATH": os.environ.get("PATH", "")}), \
                 mock.patch.object(client.subprocess, "Popen", FakePopen):
-            client._start()
+            client._spawn(None)
         self.assertNotIn("DO_NOT_TRACK", captured)
         self.assertNotIn("CAD_TELEMETRY", captured)
 
@@ -741,7 +773,7 @@ class DaemonEnvironmentTest(unittest.TestCase):
                     if "PYTHONPYCACHEPREFIX" not in given:
                         os.environ.pop("PYTHONPYCACHEPREFIX", None)
                     with self.assertRaises(Captured):
-                        client._start()
+                        client._spawn(None)
                 with mock.patch.dict(os.environ, found["daemon"], clear=True), self.assertRaises(Captured):
                     script = str(cache / "model.py")
                     Process.start(WORKER, script, script, dict(given))  # in the daemon, for a run in ``given``
@@ -763,14 +795,14 @@ class DaemonEnvironmentTest(unittest.TestCase):
 
 
 class SweepTest(unittest.TestCase):
-    """``cad stop`` stops the engine of its engine folder, and ``stop`` and ``status`` take away the files
-    of a dead one."""
+    """``cad server stop`` stops the engine of its engine folder, and ``stop`` and ``status`` take away the
+    files of a dead one."""
 
     def setUp(self) -> None:
         self.state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
         self.addCleanup(shutil.rmtree, self.state, True)
         self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(self.state)},
-                                         self.addCleanup)
+                                         self.addCleanup, started=False)
 
     def cli(self, *args: str) -> subprocess.CompletedProcess:
         return engine_daemon.run([sys.executable, "-m", "cad_server.engine", *args], env=self.env)
@@ -787,31 +819,119 @@ class SweepTest(unittest.TestCase):
         lock.write_text("", encoding="utf-8")
         done = self.cli("status")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(done.stdout.strip(), "no engine server is running")
+        self.assertEqual(done.stdout.strip(), "the cad server is not running: run `cad server start`")
         self.assertIn(f"removed stale engine file {path}", done.stderr)
         self.assertIn(f"removed stale engine file {lock}", done.stderr)
         self.assertEqual(list(self.state.iterdir()), [])
         os.mkfifo(path, 0o600)
         done = self.cli("stop")
-        self.assertEqual((done.returncode, done.stdout), (0, "no engine server is running\n"), done.stderr)
+        self.assertEqual((done.returncode, done.stdout), (0, "the cad server is not running\n"), done.stderr)
         self.assertEqual(done.stderr, f"removed stale engine file {path}\n", "a swept file a line on stderr")
 
-    def test_status_starts_no_engine_a_verb_that_starts_one_says_so_and_stop_leaves_none(self) -> None:
+    def test_a_command_finds_no_server_until_cad_server_start_starts_one(self) -> None:
+        """No command but ``cad server start`` starts a server: one that needs it says so in one line (exit 1;
+        ``not_running``, and the command that starts it, under ``--json``), ``status`` that none runs (exit 0),
+        ``stop`` that none ran (exit 0). A start says what it did: a second does nothing."""
+        from cad.engine.client import NOT_RUNNING
+        from cad.engine.previous import version
+
         own = Path(tempfile.mkdtemp(prefix="own-"))
         self.addCleanup(shutil.rmtree, own, True)
-        self.env.update(CAD_STATE_DIR=str(own / "state"), CAD_CACHE_DIR=str(own / "cache"))
-        engine_daemon.register(self.env["CAD_STATE_DIR"])  # the installation whose engine a verb starts
-        for _ in range(2):
-            done = self.cli("status")
-            self.assertEqual((done.returncode, done.stdout, done.stderr), (0, "no engine server is running\n", ""))
-        self.assertEqual(list(self.state.iterdir()), [], "status started nothing")
+        self.env.update(CAD_STATE_DIR=str(own / "state"), CAD_CACHE_DIR=str(own / "cache"), DO_NOT_TRACK="1")
+
+        def cad(*args: str) -> tuple[int, str, str]:
+            done = engine_daemon.run([sys.executable, "-m", "cad_server.cli", *args], env=self.env)
+            return done.returncode, done.stdout, done.stderr
+
         unknown = "00000000-0000-5000-8000-000000000000"
-        first, again = self.cli("inspect", unknown), self.cli("inspect", unknown)
-        self.assertEqual((first.returncode, first.stderr.splitlines()[0]), (2, "engine started"), first.stderr)
-        self.assertNotIn("engine started", again.stderr, "said only by the verb that started it")
-        self.assertEqual(self.cli("stop").returncode, 0)
-        done = self.cli("status")
-        self.assertEqual((done.returncode, done.stdout, done.stderr), (0, "no engine server is running\n", ""))
+        for words in (("server", "status"), ("status",)):  # the short form, for skill text of 0.10.0 to 0.11.11
+            self.assertEqual(cad(*words), (0, f"{NOT_RUNNING}\n", ""))
+        self.assertEqual(cad("server", "status", "--json")[:2], (0, "null\n"))
+        self.assertEqual(cad("serve", unknown), (1, "", f"cad serve: {NOT_RUNNING}\n"))
+        # A client build of its own: a checkout's apps/web is built on one computer and not on another (CI).
+        (own / "dist").mkdir()
+        (own / "dist" / "index.html").write_text("<!doctype html>\n", encoding="utf-8")
+        code, out, _err = cad("viewer", unknown, "--json", "--dist", str(own / "dist"))
+        self.assertEqual((code, json.loads(out)), (1, {"ok": False, "error": NOT_RUNNING, "reason": "not_running",
+                                                       "next": ["cad server start"]}))
+        self.assertEqual(list(self.state.iterdir()), [], "nothing started a server")
+        said = f"the cad server (cad {version()})"
+        self.assertEqual(cad("server", "start"), (0, f"started {said}\n", ""))
+        self.assertEqual(cad("server", "start"), (0, f"{said} is already running\n", ""))
+        self.assertEqual(cad("serve", unknown)[0], 2, "the server answers: a document it does not hold")
+        self.assertEqual(cad("server", "stop")[0], 0)
+        for words in (("server", "stop"), ("stop",)):
+            self.assertEqual(cad(*words), (0, "the cad server is not running\n", ""))
+        self.assertEqual(cad("server", "status"), (0, f"{NOT_RUNNING}\n", ""))
+
+    def test_a_start_replaces_a_server_of_another_release_and_starts_at_once_end_with_one(self) -> None:
+        """A server of another release refuses a ``cad`` command in one line, never a person's own Python;
+        ``cad server start`` stops it at once and starts its own, which keeps the release it started as and the one
+        before (``started``). Starts at the same moment end with one server."""
+        from cad.engine import client
+        from cad.engine.previous import version
+        from cad_server._internal import started
+
+        own = Path(tempfile.mkdtemp(prefix="own-"))
+        self.addCleanup(shutil.rmtree, own, True)
+        self.env.update(CAD_STATE_DIR=str(own / "state"), CAD_CACHE_DIR=str(own / "cache"), DO_NOT_TRACK="1")
+        older = subprocess.Popen([sys.executable, "-c", "from cad_server.engine import daemon; daemon.version = lambda: "
+                                  "'0.0.1'; raise SystemExit(daemon.main([]))"], env=self.env, stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(engine_daemon.reap, older)
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.state)}):
+            deadline = time.monotonic() + 60
+            while (found := client._connect()) is None:
+                self.assertLess(time.monotonic(), deadline, "the older server's door answered")
+                time.sleep(0.05)
+            found.close()
+        refused = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "serve", "00000000-0000-5000-8000-000000000000"],
+                                    env=self.env)
+        self.assertEqual((refused.returncode, refused.stderr),
+                         (1, f"cad serve: cad here is {version()}; the running server is 0.0.1: install cad 0.0.1, or run "
+                             f"`cad server start` to run {version()}'s server\n"))
+        theirs = engine_daemon.run([sys.executable, "-c", "from cad.engine.client import request; "
+                                    "print(request({'op': 'pid'})['pid'])"], env=self.env)
+        self.assertEqual(theirs.stdout.split(), [str(older.pid)], "a person's own Python reaches it")
+        starts = [subprocess.Popen([sys.executable, "-m", "cad_server.cli", "server", "start"], env=self.env,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(3)]
+        outputs = [starting.communicate(timeout=120) for starting in starts]
+        said = {out for out, _err in outputs}
+        self.assertEqual([starting.returncode for starting in starts], [0, 0, 0], [err for _out, err in outputs])
+        self.assertLessEqual(said, {f"started the cad server (cad {version()})\n",
+                                    f"the cad server (cad {version()}) is already running\n"})
+        self.assertEqual(older.wait(timeout=60), 0, "the older server stopped")
+        answer = engine_daemon.run([sys.executable, "-c", "from cad.engine.client import request; "
+                                    "print(request({'op': 'pid'})['pid'])"], env=self.env)
+        deadline = time.monotonic() + 30
+        while (alive := [pid for role, pid in engine_daemon._processes(self.env)
+                         if role == "daemon" and engine_daemon._alive(pid)]) != [int(answer.stdout)]:
+            self.assertLess(time.monotonic(), deadline, f"one server alone, {answer.stdout.strip()}: {alive}")
+            time.sleep(0.05)
+        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": self.env["CAD_STATE_DIR"]}):
+            self.assertEqual(started.read(), {"release": version(), "before": "0.0.1"})
+        engine_daemon.run([sys.executable, "-m", "cad_server.cli", "server", "stop"], env=self.env)
+
+
+class TendTest(unittest.TestCase):
+    def test_every_server_reads_the_version_feed_and_looks_after_the_hand_over_as_it_tends_itself(self) -> None:
+        # The "newer version" line is said from the feed the server reads (``updates.refresh``), whoever runs it; and
+        # cad's own update is asked with what is in flight and what has run (``auto_update.tend``).
+        from cad.engine.previous import version
+        from cad_server import updates
+        from cad_server._internal import auto_update
+        from cad_server.engine import daemon
+
+        engine = mock.Mock(address=None, door=None, draining=False, worked=5.0, began=5.0)
+        engine.stopping.is_set.return_value = False
+        engine.working.return_value = False
+        with mock.patch.object(updates, "refresh") as refresh, mock.patch.object(daemon, "_send_counts"), \
+                mock.patch.object(auto_update, "tend", return_value=False) as tended:
+            daemon.Daemon.tend(engine)
+        refresh.assert_called_once_with()
+        self.assertEqual(tended.call_args.kwargs["working"], False)
+        self.assertEqual(tended.call_args.kwargs["ran"], False, "nothing has run since the server started")
+        self.assertEqual(engine.handover.tend.call_args.args[0], version(), "the bridge's, named by this release")
 
 
 class OwnFilesTest(unittest.TestCase):
@@ -825,7 +945,7 @@ class OwnFilesTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, own, True)
         self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(self.state),
                                           "CAD_STATE_DIR": str(own / "state"), "CAD_CACHE_DIR": str(own / "cache"),
-                                          "CAD_ENGINE_STANDBY": "0"}, self.addCleanup)
+                                          "CAD_ENGINE_STANDBY": "0"}, self.addCleanup, started=False)
         patch = mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.state)})
         patch.start()
         self.addCleanup(patch.stop)
@@ -915,7 +1035,7 @@ class StateDirSpellingTest(unittest.TestCase):
         self.assertIsNotNone(found, "the plain spelling reaches the server the dotted one started")
         self.assertEqual(str(found["pid"]), started.stdout.split()[-1])
         done = engine_daemon.run([sys.executable, "-m", "cad_server.engine", "stop"], env=plain_env)
-        self.assertEqual((done.returncode, done.stdout), (0, f"stopped the engine server at {address}\n"), done.stderr)
+        self.assertEqual((done.returncode, done.stdout), (0, f"stopped the cad server at {address}\n"), done.stderr)
         with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": dotted}):
             self.assertIsNone(client.request({"op": "status"}, start=False), "stopped under either spelling")
 
@@ -1129,6 +1249,8 @@ class DaemonServerTest(daemon_fixtures.DaemonCase):
         self.own()
         env = {name: value for name, value in self.env.items() if name != "CAD_ENGINE_MESH"}
         env["CAD_ENGINE_STANDBY"] = "0"
+        self.stopped(self.state, self.env)
+        engine_daemon.start(env)  # the server reads its environment as it starts
         self.script.write_text(textwrap.dedent(MODEL.format(size=3)), encoding="utf-8")
         done = self.run_script("block.py", env=env)
         self.assertEqual(done.returncode, 0, done.stderr)

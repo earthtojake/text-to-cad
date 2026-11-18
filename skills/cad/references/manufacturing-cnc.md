@@ -92,7 +92,7 @@ The rules are general, no shop's: a shop's own machine sizes, lathe capacity and
 narrowest engraved line, its turned diameters and grooves) are compared with the measurements
 (`stock`, `turning`, `turned_diameters`, `grooves`, `holes`). An error means no general shop makes
 the part as drawn; a warning that it is made, dearer or less true. A finding names its
-`source`: the guide's, or `text-to-cad` for a floor of its own (its reason in the rule's note,
+`source`: the guide's, or `cad` for a floor of its own (its reason in the rule's note,
 `measurements.rules`). A part of over 4000 faces is not measured, and says so (the bound on a
 check's time: check it in smaller pieces). An assembly's every occurrence is judged and counted,
 however its instances are turned. A mesh is refused: check the STEP or the model.

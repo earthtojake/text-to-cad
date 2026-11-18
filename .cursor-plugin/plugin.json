@@ -24,6 +24,5 @@
     "gcode"
   ],
   "logo": ".claude-plugin/icon.png",
-  "skills": "./skills/",
-  "mcpServers": "./cursor.mcp.json"
+  "skills": "./skills/"
 }

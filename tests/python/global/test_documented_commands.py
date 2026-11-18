@@ -39,7 +39,6 @@ FENCE = re.compile(r"^\s*```")
 # form (what follows a `...` is by definition not written out).
 ELISION = "..."
 
-
 def _command_forms(text: str) -> list[tuple[list[str], bool]]:
     """The `cad` argv forms inside this document's fenced code blocks.
 
@@ -74,6 +73,11 @@ def _command_forms(text: str) -> list[tuple[list[str], bool]]:
             if token == ELISION:
                 elided = True
                 break
+            if token in ("&&", "||", "|"):
+                break  # the next command of a compound line: only the first is cad's
+            if token.endswith(";"):
+                argv.append(token[:-1].strip("[]"))
+                break  # PowerShell's separator, as in `cad server stop; ...`
             argv.append(token.strip("[]"))
         if argv:
             forms.append((argv, elided))
@@ -130,7 +134,7 @@ class DocumentedCommands(unittest.TestCase):
         for source, argv, elided in _documented_forms():
             split = _split_command(argv)
             if split is None or elided:
-                continue  # reported by the test above / not a complete invocation
+                continue  # reported by the test above / not a complete invocation / not answered yet
             name, rest = split
             with self.subTest(source=str(source), form=" ".join(argv)):
                 errors = io.StringIO()

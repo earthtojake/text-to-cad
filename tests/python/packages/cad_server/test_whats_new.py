@@ -62,7 +62,22 @@ class WhatsNewTest(unittest.TestCase):
         self.path.mkdir()  # settings.json a folder: neither read nor written
         self.assertEqual(whats_new.read(path=self.path, release="0.11", installed=lambda: ["0.10.3"]),
                          {"seen": ["0.11"], "release": "0.11"})
-        whats_new.settle(path=self.path, release="0.11")  # never fails what it rides on
+
+    def test_the_release_the_server_started_as_before_makes_an_update(self) -> None:
+        # A cad that is a uv tool keeps no installation record: the server's record of its starts (``started.json``,
+        # in the state folder every release reads) says the release before, and so that this device was updated.
+        import os
+        from unittest import mock
+
+        from cad_server._internal import started
+
+        state = self.path.parent
+        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(state)}):
+            started.note("0.11.0")
+            self.assertEqual(whats_new.read(path=self.path, release="0.11")["seen"], ["0.11"], "a first start")
+            started.note("0.12.0")
+            updated = self.path.with_name("updated.json")
+            self.assertEqual(whats_new.read(path=updated, release="0.12")["seen"], [], "started as 0.11.0 before")
 
     def test_a_release_is_named_by_its_minor(self) -> None:
         self.assertEqual([whats_new.minor(v) for v in ("0.11.2", "0.11.0-dev.3", "0.11.0rc1", "1.0", "dev", None)],

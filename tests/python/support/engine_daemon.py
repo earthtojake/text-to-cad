@@ -1,9 +1,11 @@
 """Running a command that reaches the engine daemon so that, when it does not finish, the test
 says why.
 
-``watched(env, cleanup)`` adds a journal to a test's environment: every Python process the
-command starts -- the command, the daemon it starts, the daemon's workers -- records itself
-there (``engine_journal/sitecustomize.py``). ``run``/``communicate`` stand in for
+A command starts no server (``cad server start`` alone does, ``client.start``): the runner starts one
+for each test file (``scripts/test/unittest_files.py``), and ``start`` one for a test's own engine folder.
+``watched(env, cleanup)`` adds a journal to a test's environment, and starts a server there with it:
+every Python process the test runs and the server starts -- the command, the daemon, the daemon's
+workers -- records itself there (``engine_journal/sitecustomize.py``). ``run``/``communicate`` stand in for
 ``subprocess.run``/``Popen.communicate`` with a timeout, and fail early, with the journal,
 the state folder and the command's output in the message, when:
 
@@ -46,9 +48,8 @@ def register(state: str | os.PathLike, python: str | None = None, prefix: str | 
     """The interpreter ``python`` (this one), of the environment ``prefix`` (this one's), registered as
     the current installation in the state folder ``state``, as a real installation registers itself
     (``cad_server._internal.installations``): its record (``installations/<version>.json``: its Python,
-    its ``cad`` console script and its environment) and ``installations/current``. A client of a test
-    then starts the engine of the test's own interpreter, where with no installation registered it
-    starts none (``cad.engine.client._start``). An environment with no ``cad`` console script -- an
+    its ``cad`` console script and its environment) and ``installations/current``, which a test's device
+    reads as a person's would. An environment with no ``cad`` console script -- an
     interpreter that reads the packages from ``PYTHONPATH`` -- gets one beside the record, which runs the
     server's command with that interpreter. The standard library alone: the runner registers each file's
     state folder before the file imports anything (``scripts/test/unittest_files.py``). True; raises
@@ -80,15 +81,15 @@ def register(state: str | os.PathLike, python: str | None = None, prefix: str | 
     return True
 
 
-def isolate(cleanup: Callable[..., Any]) -> dict[str, str]:
+def isolate(cleanup: Callable[..., Any], *, started: bool = True) -> dict[str, str]:
     """An engine, a state and a cache folder of the caller's own (``CAD_ENGINE_DIR``,
-    ``CAD_STATE_DIR``, ``CAD_CACHE_DIR``) in ``os.environ`` until ``cleanup`` (a module's
-    ``unittest.addModuleCleanup``, a test's ``addCleanup``) stops an engine started there, puts the
-    environment back and removes them: so an engine a test starts, and every environment built from
-    ``os.environ`` after, runs, records and caches its documents there, never in the developer's. The
-    state folder registers this interpreter as its current installation (``register``), whose engine a
-    client there starts. The runner gives each file its own (``scripts/test/unittest_files.py``); this is
-    the same for a file run directly. The variables set."""
+    ``CAD_STATE_DIR``, ``CAD_CACHE_DIR``) in ``os.environ``, and a server started there -- but ``started`` false,
+    for a caller that starts its own with an environment of its own (``watched``) --, until ``cleanup`` (a
+    module's ``unittest.addModuleCleanup``, a test's ``addCleanup``) stops the server running there, puts the
+    environment back and removes them: so the server, and every environment built from ``os.environ`` after,
+    runs, records and caches its documents there, never in the developer's. The state folder registers this
+    interpreter as its current installation (``register``). The runner gives each file its own
+    (``scripts/test/unittest_files.py``); this is the same for a file run directly. The variables set."""
     from unittest import mock
 
     folder = tempfile.mkdtemp(prefix="cadgen-test-")
@@ -103,12 +104,41 @@ def isolate(cleanup: Callable[..., Any]) -> dict[str, str]:
     cleanup(shutil.rmtree, engine, True)
     cleanup(patch.stop)
     cleanup(_stop_engine, engine)
+    if started:
+        start()
     return given
+
+
+def start(env: dict[str, str] | None = None, cleanup: Callable[..., Any] | None = None) -> None:
+    """A server started where ``env`` -- this process's environment, by default -- names the engine's folder
+    (``CAD_ENGINE_DIR``: never the developer's own, where none is named), with that environment, by a process of
+    its own as ``cad server start`` starts one (``client.start``: so the server is no child of this one), and
+    stopped by ``cleanup``; nothing where one runs there already (the runner's, or one a test started)."""
+    from unittest import mock
+
+    from cad.engine import client
+    from tests.python.support.paths import SOURCE_PATH
+
+    given = dict(os.environ if env is None else env)
+    engine = given["CAD_ENGINE_DIR"]
+    with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": engine}):
+        found = client._connect()
+    if found is not None:
+        found.close()
+        return  # one runs there already
+    code = "from cad.engine import client\nif client.request({'op': 'pid'}, start=False) is None:\n    client.start()"
+    path = os.pathsep.join(item for item in (SOURCE_PATH, given.get("PYTHONPATH", "")) if item)
+    done = subprocess.run([sys.executable, "-P", "-c", code], env={**given, "PYTHONPATH": path}, capture_output=True,
+                          text=True, timeout=TIMEOUT_SECONDS)
+    if done.returncode:
+        raise AssertionError(f"no server started in {engine}: {done.stdout}{done.stderr}")
+    if cleanup is not None:
+        cleanup(_stop_engine, engine)
 
 
 def _stop_engine(engine: str) -> None:
     """The engine in folder ``engine`` stopped, when one runs there."""
-    if not any(name.endswith((".door", ".port")) for name in os.listdir(engine)):
+    if not any(name.endswith((".door", ".port")) for name in (os.listdir(engine) if os.path.isdir(engine) else ())):
         return
     from unittest import mock
 
@@ -129,18 +159,22 @@ def unwritable(folder: Path | str) -> str:
     return str(path)
 
 
-def watched(env: dict[str, str], cleanup: Callable[..., Any]) -> dict[str, str]:
-    """``env`` with a journal of its own; ``cleanup`` (a test's ``addCleanup`` or
-    ``addClassCleanup``) removes it. A state folder ``env`` names (``CAD_STATE_DIR``) with no current
-    installation registers this interpreter as its current one (``register``): the engine its command
-    starts there is this interpreter's, as the runner's and ``isolate``'s are."""
+def watched(env: dict[str, str], cleanup: Callable[..., Any], *, started: bool = True) -> dict[str, str]:
+    """``env`` with a journal of its own, and a server started with it where ``env`` names the engine's
+    folder (``start``) -- but ``started`` false, for a test of a server's start or of none running;
+    ``cleanup`` (a test's ``addCleanup`` or ``addClassCleanup``) stops the server and removes the journal. A
+    state folder ``env`` names (``CAD_STATE_DIR``) with no current installation registers this interpreter as
+    its current one (``register``), as the runner's and ``isolate``'s are."""
     state = env.get("CAD_STATE_DIR")
     if state and not os.path.exists(os.path.join(state, "installations", "current")):
         register(state)
     folder = tempfile.mkdtemp(prefix="engine-journal-")
     cleanup(shutil.rmtree, folder, True)
     path = os.pathsep.join(item for item in (str(SITE), env.get("PYTHONPATH", "")) if item)
-    return {**env, "PYTHONPATH": path, JOURNAL: folder}
+    journaled = {**env, "PYTHONPATH": path, JOURNAL: folder}
+    if started and journaled.get("CAD_ENGINE_DIR"):
+        start(journaled, cleanup)
+    return journaled
 
 
 def run(command: Sequence[str], *, env: dict[str, str], timeout: float = TIMEOUT_SECONDS, input: str | None = None,
@@ -225,9 +259,15 @@ def _say_stacks(env: dict[str, str]) -> None:
 
 
 def _text(data: bytes) -> str:
-    """As ``text=True`` reads a command's output: in the locale's encoding (cp1252 on the Windows
-    runner, where cadgen's ``·`` is 0xB7), with universal newlines."""
-    return data.decode(locale.getpreferredencoding(False), errors="replace").replace("\r\n", "\n")
+    """A command's output as its writer wrote it, with universal newlines: UTF-8, which the ``cad`` command and
+    ``cad run``'s program write to a pipe on every system; else, for a plain Python program's (a model script run by
+    itself, ``python -m cad_server.engine``), the locale's encoding, as ``text=True`` reads it (cp1252 on the Windows
+    runner, where ``·`` is 0xB7, no UTF-8 on its own)."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        text = data.decode(locale.getpreferredencoding(False), errors="replace")
+    return text.replace("\r\n", "\n")
 
 
 def _state(env: dict[str, str]) -> Path | None:

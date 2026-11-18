@@ -478,7 +478,7 @@ class TypeSideTest(unittest.TestCase):
             result = checked(placed)
             (limit,) = [f for f in result.findings if f.severity == "error"]
             self.assertEqual((limit.code, limit.value, limit.limit), ("sheet.flat_length_limit", 20000.0, 12192.0))
-            self.assertTrue(limit.source.startswith("text-to-cad, its own figure"), limit.source)
+            self.assertTrue(limit.source.startswith("cad, its own figure"), limit.source)
         # one such a plate holds is over the standard sheet assumed, a warning; and the shop's own sheet rules
         self.assertEqual({code for severity, code in verdicts(checked(bd.Box(12000, 3000, 2)))},
                          {"units_suspect", "sheet.flat_length", "sheet.flat_width"})
@@ -591,12 +591,12 @@ class RecognitionTest(unittest.TestCase):
                 self.assertIn(said, finding.message)  # the same words wherever it stands
         for placed in self.placements(bd.Box(100, 100, 12)):
             self.assertEqual(verdicts(checked(placed)), [("warning", "sheet.thickness_max")])
-        # past an inch it is plate, no sheet shop's work: text-to-cad's own floor, said as its own -- and an
+        # past an inch it is plate, no sheet shop's work: cad's own floor, said as its own -- and an
         # inch plate is within the inch its note says
         self.assertEqual(verdicts(checked(bd.Box(160, 120, 25.4))), [("warning", "sheet.thickness_max")])
         (plate,) = [f for f in checked(bd.Box(160, 120, 26)).findings if f.severity in ("error", "warning")]
         self.assertEqual((plate.severity, plate.code), ("error", "sheet.thickness_limit"))
-        self.assertTrue(plate.source.startswith("text-to-cad, its own figure"), plate.source)
+        self.assertTrue(plate.source.startswith("cad, its own figure"), plate.source)
 
     def test_a_tube_is_a_closed_section_and_a_rolled_sheet_is_sheet_not_checked(self) -> None:
         tube = bd.Cylinder(20, 100) - bd.Cylinder(18, 100)
@@ -632,14 +632,14 @@ class RecognitionTest(unittest.TestCase):
 
 
 class NotJudgedTest(unittest.TestCase):
-    """What is measured with no guide's limit is said so, and text-to-cad's own lines are said as its own."""
+    """What is measured with no guide's limit is said so, and cad's own lines are said as its own."""
 
     def test_a_radius_of_many_thicknesses_is_no_single_hit_of_a_brake(self) -> None:
         rolled = checked(bent([("line", 20), ("bend", 120, 50), ("line", 20)], 2.0, 60))  # r = 25 t
         (warned,) = [f for f in rolled.findings if f.severity in ("error", "warning")]
         self.assertEqual((warned.severity, warned.code), ("warning", "sheet.bend_radius_max"))
         self.assertIn("25 ratio is over the 10 ratio recommended maximum", warned.message)
-        self.assertTrue(warned.source.startswith("text-to-cad, its own figure"), warned.source)
+        self.assertTrue(warned.source.startswith("cad, its own figure"), warned.source)
 
     def test_relief_depth_and_channel_proportions_are_said_measured_not_judged(self) -> None:
         shallow = checked(tabbed(relief=(3.0, 0.5)))  # wide enough, 0.5 mm past the tangent line

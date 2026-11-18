@@ -59,7 +59,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   document; where it cannot it is plain text. The ⋯
   is the file menu, stock shadcn items and submenus (`DropdownMenuSub`), the menu and each
   submenu shadcn's own width (`min-w-[8rem]`, sized to its items: no width of their own), in this order:
-  **Copy path**; **Copy link** (the document's page with a fresh link, `<engine origin>/<id>?token=<link>`,
+  **Copy path**; **Copy link** (the document's page with its link, `<engine origin>/<id>?token=<link>`,
   the address the page itself holds: on every document, model or file of any kind, always enabled,
   its source there or not; copied silently, as Copy path is; `fileActions.perform["copy-link"]`); **Open in**, a submenu of **Browser** (the document's page in the person's
   browser: the CAD app's, where a launch carried the web viewer's page, `fileActions.perform.browser`)
@@ -98,20 +98,18 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   no right-click menu and there are no crumbs. The left's controls sit edge to edge, spaced
   by their own padding alone: the logo's 24px button, Back, Forward and the ⋯ in 20px ones,
   and the name 4px in from its edges, so about 7px separate one glyph from the next. Right,
-  kept clean for the update's nudge, only what a host or a file adds, in this order: first, while
+  only what a host or a file adds, in this order: first, while
   a person has put an alert card away, the card's own icon (a circle
   with an exclamation mark, red for an error and amber for a warning, named and hinted by
   the alert's title), which brings the card back and goes with it — the renderer's one
   navbar action. Then the host's own actions (`actions`): inline, where the host can show the view full size,
   **Full size** (the CAD app's: two diagonal arrows, a ghost icon button) — today the slot's
-  only control. Last, outermost, the update — the blue update button (a download icon and
-  nothing else, no popover), there only while the host's install is behind, which updates when
-  pressed. Export and Open in are the file menu's, never here. A CAD file publishes no
+  only control. Export and Open in are the file menu's, never here. A CAD file publishes no
   navbar action but that icon. The person's own settings, the theme among them, are never here: they are the app
   menu's.
 
-  *Design note: the navbar carries nothing the view needs.* What a host or the file adds (the
-  update, an alert's icon, the host's actions) is the navbar's right end; what can be done with
+  *Design note: the navbar carries nothing the view needs.* What a host or the file adds (an
+  alert's icon, the host's actions) is the navbar's right end; what can be done with
   the document (copy its path, open it elsewhere, export it) is its ⋯, beside its name. The view's own
   controls are the view's, in every host, with or without a navbar: how the model is looked at —
   **Projection** and **Display**, a board's **Flip**, **2D/3D** and **Display** — and **Preview** end the
@@ -123,7 +121,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 
   A host's home has the same navbar, with only the logo and its app menu (without Back to
   files) and, where the host keeps the view's history, **Back** and **Forward** at the left
-  (a desktop's alone) and, at the right end, the host's actions and, last, its update, when there is one — the same
+  (a desktop's alone) and, at the right end, the host's actions, when there are any — the same
   buttons, sizes and places as over a file. Under it,
   the page, after Figma's Recents, with no hero (no wordmark, tagline or links: GitHub and
   Discord are the app menu's, X its footer's "Made by"; no light/dark button: Theme is the
@@ -173,9 +171,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   over a page that will not open: no logo or app menu, no Back and Forward, no name or name menu,
   no ⋯ (so no Export and no Open in). What it still adds is its corner at the viewport's
   top-right, first in the column of the host's notice and Quick Edit (`ViewportTopRight`): where
-  the host can show the view full size, **Full size**; then, while its install is behind, the
-  blue update button, the navbar's own: an icon, no text and no popover, which updates when
-  pressed. In Preview it is gone with the rest of the column.
+  the host can show the view full size, **Full size**. In Preview it is gone with the rest of the column.
 - **Name menu** is a popover under the file's name, aligned to the name's left edge, 17.5rem
   (280px, the explorer's natural width) wide and never resized: two stock shadcn Tabs on top,
   **Models** and **Files**, in the explorer's type (`text-xs`, a 28px list) and each as wide as its
@@ -266,7 +262,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 - **Quick Edit** at top-right, 8px in, a STEP's or a robot's: the box of the note a
   person writes to their agent, there only while something is picked, drawn or measured
   (see [Quick Edit](#quick-edit)), under the host's notice where there is one (the CAD app's
-  file handler's corner: Full size and its update). The rest of the right side of the view is clear.
+  file handler's corner: Full size). The rest of the right side of the view is clear.
 - **View cube** at bottom-right, its 6rem box 2px from the right edge and 8px off the bottom
   (`VIEWPORT_CORNER_INSET_PX`, `VIEWPORT_CUBE_BOTTOM`), so its axes and their labels stay inside the
   view: enlarged face/edge/corner hit areas and neutral hover and XYZ guides, and nothing beside it
@@ -1182,7 +1178,7 @@ Settings are the person's, never a file's, and live in the app menu: one dropdow
 navbar's logo over every file and over the home (FileViewer builds it from the host's `links`, the
 `appSettings` `CadViewer` hands it and `environment.platform`, while a model loads and after
 it failed to as well). Its rows, a rule between each group, are only
-what the host supplies, the person's settings in the order Language, Telemetry, Automatic updates,
+what the host supplies, the person's settings in the order Language, Telemetry,
 Theme:
 
 - **Back to home**, where the host has a home
@@ -1207,14 +1203,7 @@ Theme:
   come, checked at the right; a press turns one without closing the menu. An info icon after
   a setting's name, where the host gives its meaning (`info`), shows it as a hint to the
   menu's right. **Telemetry**, in both apps: anonymous usage data and crash reports, never
-  prompts, models or files. **Automatic updates**, in both apps, after it: whether the server
-  installs a newer release that breaks nothing by itself and restarts on it once nothing runs (a
-  patch release below 1.0, a patch or minor release from 1.0; one that may break something waits for
-  the update button) (the server's
-  `cad_server/auto_updates.py`, the same setting `cad update auto` changes), on by default; one
-  the environment turned off (`CAD_UPDATE_CHECK=0`, CI) shows unchecked and fixed, saying so in
-  its label, as Telemetry does. Neither adds anything to the navbar: an automatic update shows
-  as the update button's own restart, and only once it switches.
+  prompts, models or files. It adds nothing to the navbar.
 - **Theme**, where the host hands the person's colour scheme (`colorScheme`, both apps): one
   row, its name and then **System**, **Light** and **Dark** as a segmented control of their
   glyphs (each a radio item, named), the one in force lit; a press changes it without closing
@@ -1492,7 +1481,7 @@ In the navbar's place, over the view's top edge, is **Preview's bar**: the navba
 phone's 48px) on no surface, the model showing through, with the file's or model's name at its
 left as plain words, muted as its controls are (no logo, menu, dropdown or glyph), and at its right **Preview settings** (a
 sliders icon, pressed while its panel is open, a second press closing it) and the way out, an X
-(**Exit preview**), their hints below them; nothing else, in every host (no Full size, no update,
+(**Exit preview**), their hints below them; nothing else, in every host (no Full size,
 no Quick Edit). It and the playbar, where the file has routines, come and go together, as a
 video player's controls do (`usePreviewIdle`): up as Preview opens, gone after two seconds with no
 pointer movement over the view (counted from the frame that shows them, ending at a frame, so a slow
@@ -1642,8 +1631,8 @@ delay. No native `title` anywhere in chrome. Prefer one or two words; show a
 full technical name only when it is truncated (`overflowOnly`). Quick Edit's buttons, the
 strip's buttons (Preview among them; a tool with a key shows it after its name,
 muted), the drawing row's tools (each with its key), the corner's buttons (the zoom's),
-the navbar's right-hand controls (the
-update, an alert's icon, the host's actions: the CAD app's Full size), Preview's bar (Preview
+the navbar's right-hand controls (an
+alert's icon, the host's actions: the CAD app's Full size), Preview's bar (Preview
 settings, Exit preview) are hinted by name — the strip's and the zoom pill's hints above their
 buttons, the others' below; a state button
 (Projection, a board's 2D/3D and Flip) is hinted by what a press does ("Switch to Perspective",
@@ -1690,12 +1679,12 @@ moment, or, where the clipboard refuses, a line under the box saying so. Errors 
 the host's `onError` are the host's to show. A card the
 model survives (a failed update, a warning beside the model) has an X, **Dismiss**: it puts
 the card away for as long as that alert stands, and its icon, first of the navbar's
-right-hand controls (before the host's actions and the update button), brings it back. The dismissal goes once the alert changes or clears, or
+right-hand controls (before the host's actions), brings it back. The dismissal goes once the alert changes or clears, or
 another file opens; with the card back, so does the icon. Preview has no navbar, and so no
 icon.
 
 **What's new** is the one dialog the viewer opens by itself (`whats-new/WhatsNewDialog.tsx`): once
-after an update to a release with notes, never on a new person's first run, over the home or a
+after a release with notes is installed, never on a new person's first run, over the home or a
 file's view once its renderer is up (never a loading page, nor while the host's own notice covers
 the view). It is the stock shadcn Dialog (`primitives/dialog.jsx`, on the `text-ui` scale, no corner
 X): the release's title, its items as a list, each a bold title and, in the muted text, a few words on

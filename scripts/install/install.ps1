@@ -1,177 +1,186 @@
-# text-to-cad's installer for Windows:
+# text-to-cad's installer for Windows (Windows PowerShell 5.1 and PowerShell 7):
 #
 #   irm https://www.texttocad.dev/install.ps1 | iex
 #
-# It finds uv, or installs it with uv's own installer, then runs `cad setup` from the newest
-# release of text-to-cad's server through uvx: text-to-cad set up or updated in every agent app on this machine,
-# with nothing asked. Run it again to update; with --uninstall it runs `cad uninstall` instead.
-# For its options, run it as a script block:
-#
-#   & ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --help
-#
-# Everything happens inside Install-TextToCad, called on the last line: a download cut short runs
-# nothing, and a failure returns instead of closing the window.
+# It makes sure uv is here and new enough (installing it with uv's own installer when it is not), downloads
+# install.py from beside this script and runs it with uv's Python: that installs the cad command as a uv tool
+# where there is none (a cad that is here updates itself), and puts the plugin into every agent app on this
+# computer (install.py says how). Run it again to update the plugin. It takes no options, and names no release. Everything happens inside Install-TextToCad, called on the last
+# lines: a download cut short runs nothing, and a failure returns instead of closing the window. Where it fails
+# it ends by throwing (see the last lines), so every documented way of running it exits 1: `irm ... | iex` in
+# `powershell -Command`, the same through cmd, and `powershell -File install.ps1`.
 
 function Install-TextToCad {
-    $ErrorActionPreference = 'Stop'
-    # The release this script was published with, installed when the version feed cannot be read.
-    $CadVersion = "0.11.11"
-    # The first release whose `cad uninstall` asks before it destroys, and takes --yes for an answer.
-    $ConsentSince = '0.11.0'
-    $VersionFeed = 'https://api.texttocad.dev/v1/versions'
-    $Releases = 'https://github.com/earthtojake/text-to-cad/releases/download'
+    # 'Continue': a native command's line on stderr is never an error that stops the run (Windows PowerShell 5.1
+    # makes each such line an error record where stderr is redirected, as an agent's shell does). Each native
+    # command's $LASTEXITCODE is read instead, and each cmdlet that must stop says -ErrorAction Stop.
+    $ErrorActionPreference = 'Continue'
+    $InstallPy = 'https://www.texttocad.dev/install.py'
+    # The oldest uv that runs it: `--managed-python` came in uv 0.6.8, and a stable CPython 3.14 in uv 0.9.0
+    # (uv's changelog, changelogs/0.6.x.md and 0.9.x.md).
+    $UvMinimum = [Version]'0.9.0'
 
-    function Show-Usage {
-        Write-Host "text-to-cad's installer: installs or updates text-to-cad in every agent app on this machine. It"
-        Write-Host 'prints its plan and carries it out, asking nothing; --dry-run prints the plan alone.'
-        Write-Host ''
-        Write-Host '  irm https://www.texttocad.dev/install.ps1 | iex'
-        Write-Host '  & ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --dry-run'
-        Write-Host ''
-        Write-Host 'Options (all but --version, --from and --uninstall go to `cad setup`, or to `cad uninstall`):'
-        Write-Host '  --dry-run          print the plan and stop: nothing is changed'
-        Write-Host '  --only APP[,APP]   only these apps: claude, claude-desktop, codex, cursor, grok, gemini, or'
-        Write-Host '                     the agents the skills go to through the Skills CLI (cad setup --help)'
-        Write-Host '  --uninstall        take text-to-cad out again: runs cad uninstall (with --purge, its state and caches too)'
-        Write-Host '  --no-telemetry     turn telemetry off'
-        Write-Host "  --version X.Y.Z    install that release (default: the newest, from $VersionFeed,"
-        Write-Host "                     never older than this script's own, $CadVersion)"
-        Write-Host '  --from SPEC        run the server from SPEC instead: a wheel, a folder or a requirement'
-        Write-Host '                     (also the CAD_INSTALL_FROM variable); for testing a build before its release,'
-        Write-Host '                     with UV_FIND_LINKS naming the folder of the library''s wheel beside it'
-        Write-Host ''
-        Write-Host "uv comes from its own installer when it is missing; UV_NO_MODIFY_PATH=1 keeps it from editing"
-        Write-Host 'your PATH. To read this script before running it, or to keep to one release, take the copy'
-        Write-Host "attached to that release and check it against the release's SHA256SUMS:"
-        Write-Host ''
-        Write-Host "  irm $Releases/v$CadVersion/install.ps1 -OutFile install.ps1"
-        Write-Host "  irm $Releases/v$CadVersion/SHA256SUMS"
-        Write-Host '  (Get-FileHash install.ps1 -Algorithm SHA256).Hash'
-        Write-Host '  powershell -ExecutionPolicy ByPass -File install.ps1'
-        Write-Host ''
-        Write-Host 'On macOS and Linux: curl -fsSL https://texttocad.dev/install.sh | sh'
+    if ($args.Count) {
+        Write-Host 'This installer takes no options: run it as it is to install or update text-to-cad in every agent app'
+        Write-Host 'on this computer:  irm https://www.texttocad.dev/install.ps1 | iex'
+        Write-Host "To remove text-to-cad, run ``uv tool uninstall cad``, and each app's own remove command."
+        $global:LASTEXITCODE = 2
+        return
     }
 
-    # uvx: on PATH, else where uv's installer puts it before a new shell has it on PATH.
-    function Find-Uvx {
-        $command = Get-Command uvx -ErrorAction SilentlyContinue
+    # uv: on PATH, else where uv's installer puts it before a new shell has it on PATH.
+    function Find-Uv {
+        $command = Get-Command uv -ErrorAction SilentlyContinue
         if ($command) { return $command.Source }
         $folders = @($env:UV_INSTALL_DIR)
         if ($env:UV_INSTALL_DIR) { $folders += (Join-Path $env:UV_INSTALL_DIR 'bin') }
         $folders += @($env:XDG_BIN_HOME, (Join-Path $HOME '.local\bin'), (Join-Path $HOME '.cargo\bin'))
         foreach ($folder in $folders) {
-            if ($folder -and (Test-Path (Join-Path $folder 'uvx.exe'))) { return (Join-Path $folder 'uvx.exe') }
+            if ($folder -and (Test-Path (Join-Path $folder 'uv.exe'))) { return (Join-Path $folder 'uv.exe') }
         }
         return $null
     }
 
-    # Whether release $a is older than $b: the dotted numbers compared, a suffix ignored; never when
-    # either is no version. The feed lags a release by up to an hour, and this script never installs
-    # a release older than the one it was published with: that one has no `cad setup`.
-    function Test-Older($a, $b) {
-        try {
-            return ([version]($a -replace '[^0-9.].*$', '')) -lt ([version]($b -replace '[^0-9.].*$', ''))
-        } catch {
-            return $false
+    # The uv uv's own installer put in place, never PATH's: the first in its folders, in the order it picks one
+    # (UV_INSTALL_DIR, and its bin for a Cargo-style folder; XDG_BIN_HOME; XDG_DATA_HOME\..\bin; ~\.local\bin).
+    function Find-InstalledUv {
+        $folders = @($env:UV_INSTALL_DIR)
+        if ($env:UV_INSTALL_DIR) { $folders += (Join-Path $env:UV_INSTALL_DIR 'bin') }
+        $folders += @($env:XDG_BIN_HOME)
+        if ($env:XDG_DATA_HOME) { $folders += (Join-Path $env:XDG_DATA_HOME '..\bin') }
+        $folders += @((Join-Path $HOME '.local\bin'))
+        foreach ($folder in $folders) {
+            if ($folder -and (Test-Path (Join-Path $folder 'uv.exe'))) { return (Join-Path $folder 'uv.exe') }
         }
+        return $null
     }
 
-    # --version picks the release, --from a build outright and --uninstall the verb; every other
-    # argument goes to it, in order.
-    $version = $null
-    $from = $null
-    $verb = 'setup'
-    $rest = @()
-    for ($index = 0; $index -lt $args.Count; $index++) {
-        $argument = [string]$args[$index]
-        if ($argument -eq '-h' -or $argument -eq '--help') { Show-Usage; return }
-        if ($argument -eq '--version') {
-            if ($index + 1 -ge $args.Count) {
-                Write-Host "error: --version needs a release, as in --version $CadVersion" -ForegroundColor Red
-                return
-            }
-            $index++
-            $version = [string]$args[$index]
-            continue
-        }
-        if ($argument.StartsWith('--version=')) { $version = $argument.Substring(10); continue }
-        if ($argument -eq '--from') {
-            if ($index + 1 -ge $args.Count) {
-                Write-Host "error: --from needs a wheel, a folder or a requirement" -ForegroundColor Red
-                return
-            }
-            $index++
-            $from = [string]$args[$index]
-            continue
-        }
-        if ($argument.StartsWith('--from=')) { $from = $argument.Substring(7); continue }
-        if ($argument -eq '--uninstall') { $verb = 'uninstall'; continue }
-        $rest += $argument
-    }
-
-    if (-not $from -and $env:CAD_INSTALL_FROM) { $from = $env:CAD_INSTALL_FROM }
-    if ($from) {
-        # A build named outright (a wheel, a folder, a requirement): uvx takes it as it is, nothing refreshed.
-        $requirement = $from
-        $refresh = @()
-        $version = $from
-        $origin = 'as --from asked'
-    } else {
-        if ($version) {
-            $origin = 'as --version asked'
-        } else {
-            # An older Windows PowerShell may not offer TLS 1.2 on its own.
-            [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-            try {
-                $version = [string](Invoke-RestMethod -Uri $VersionFeed -TimeoutSec 3).latest
-            } catch {
-                $version = $null
-            }
-            if (-not $version) {
-                $version = $CadVersion
-                $origin = "this script's own: the version feed could not be read"
-            } elseif (Test-Older $version $CadVersion) {
-                $origin = "this script's own: the version feed still names $version"
-                $version = $CadVersion
-            } else {
-                $origin = 'the newest release'
-            }
-        }
-        if ($version -notmatch '^[0-9][0-9A-Za-z.+-]*$') {
-            Write-Host "error: not a release: $version" -ForegroundColor Red
-            return
-        }
-        $requirement = "cad-server==$version"
-        # The server, and the library it pins at its own release: uv reads both anew from the index.
-        $refresh = @('--refresh-package', 'cad-server', '--refresh-package', 'cad')
-    }
-
-    $uvx = Find-Uvx
-    if (-not $uvx) {
-        Write-Host "uv is not installed: installing it with uv's own installer (https://docs.astral.sh/uv/):"
-        Write-Host '  irm https://astral.sh/uv/install.ps1 | iex'
+    # uv's own installer, run by a PowerShell of the kind running this one, its output to the window (never the
+    # function's own output); its exit status.
+    function Install-Uv {
         $shell = (Get-Process -Id $PID).Path
-        & $shell -NoProfile -ExecutionPolicy ByPass -Command 'irm https://astral.sh/uv/install.ps1 | iex'
-        $uvx = Find-Uvx
-        if (-not $uvx) {
-            Write-Host 'error: uv was installed, but uvx was not found: open a new terminal and run this again' -ForegroundColor Red
+        & $shell -NoProfile -ExecutionPolicy ByPass -Command 'irm https://astral.sh/uv/install.ps1 | iex' | Out-Host
+        return $LASTEXITCODE
+    }
+
+    # uv's version, from "uv 0.9.5 (...)"; $null where it does not say. All of what uv prints is taken, then its
+    # first line read: never `| Select-Object -First 1` on a program whose $LASTEXITCODE is read. Windows PowerShell
+    # 5.1 ends the program once Select-Object has its line, and $LASTEXITCODE is then -1, not the program's status
+    # (measured with uv: the right line every time, and -1 on 298 of 300 calls; the first call a PowerShell makes
+    # usually gets 0). A current uv then read as one "of an unknown version", and the install stopped.
+    function Get-UvVersion($uv) {
+        $said = @(& $uv --version 2>$null)
+        if ($LASTEXITCODE -eq 0 -and $said.Count -gt 0 -and "$($said[0])" -match '^uv (\d+\.\d+(\.\d+)?)') {
+            return [Version]$Matches[1]
+        }
+        return $null
+    }
+
+    # An older Windows PowerShell may not offer TLS 1.2 on its own.
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+    $uv = Find-Uv
+    if (-not $uv) {
+        Write-Host "uv is not installed: installing it with uv's own installer (https://docs.astral.sh/uv/)."
+        $installed = Install-Uv
+        if ($installed) {
+            Write-Host "error: uv's installer could not be downloaded or failed (exit $installed; what it said is above): check the network connection, or install uv (https://docs.astral.sh/uv/), then run this again" -ForegroundColor Red
+            $global:LASTEXITCODE = 1
+            return
+        }
+        $uv = Find-Uv
+        if (-not $uv) {
+            Write-Host 'error: uv was installed, but not found: open a new terminal and run this again' -ForegroundColor Red
+            $global:LASTEXITCODE = 1
             return
         }
     }
-    # uvx's folder on PATH: `cad setup` writes uvx's absolute path into the apps' configs.
-    $env:Path = "$(Split-Path $uvx);$env:Path"
 
-    # --uninstall is the person's own word: `cad uninstall` is told yes for them (it would ask at a terminal),
-    # but a release from before it asked, which takes no --yes. A build named outright is taken as this one.
-    if ($verb -eq 'uninstall' -and ($from -or -not (Test-Older $version $ConsentSince))) { $rest += '--yes' }
-    # cad asks nothing here: every other argument goes to it as given.
-    $arguments = @('--no-config', '--managed-python', '--python', '3.14') + $refresh + @('--from', $requirement, 'cad', $verb) + $rest
-    Write-Host "text-to-cad: $version ($origin). The first run downloads it, which takes a minute."
-    Write-Host "Running: $uvx $($arguments -join ' ')"
-    & $uvx @arguments
-    if ($LASTEXITCODE) {
-        Write-Host "cad $verb exited $LASTEXITCODE; what it said is above." -ForegroundColor Red
+    $version = Get-UvVersion $uv
+    if (-not $version -or $version -lt $UvMinimum) {
+        $old = if ($version) { "uv $version" } else { 'uv of an unknown version' }
+        # uv's own installer leaves a receipt, which `uv self update` needs.
+        $receipt = Join-Path $(if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path $HOME 'AppData\Local' }) 'uv\uv-receipt.json'
+        if (Test-Path $receipt) {
+            Write-Host "$old is older than $UvMinimum, the first that installs Python 3.14: updating it (uv self update)."
+            & $uv self update
+            $version = Get-UvVersion $uv
+        }
+        # One that cannot update itself (winget's, pip's), or did not: uv's own installer puts a newer uv in its own
+        # folder, as where uv is missing, and this run uses that one, whatever PATH finds first.
+        if (-not $version -or $version -lt $UvMinimum) {
+            Write-Host "$old is older than $UvMinimum, the first that installs Python 3.14: installing a newer uv with uv's own installer (https://docs.astral.sh/uv/)."
+            $null = Install-Uv
+            $version = $null
+            $uv = Find-InstalledUv
+            if ($uv) { $version = Get-UvVersion $uv }
+            if (-not $version -or $version -lt $UvMinimum) {
+                Write-Host "error: $old is older than $UvMinimum, and uv's installer did not install a newer uv (what it said is above)." -ForegroundColor Red
+                $global:LASTEXITCODE = 1
+                return
+            }
+        }
+    }
+    # uv's folder on this window's PATH: a window open before uv's installer ran does not see it.
+    $env:Path = "$(Split-Path $uv);$env:Path"
+
+    $scratch = Join-Path ([IO.Path]::GetTempPath()) ("text-to-cad-" + [Guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Path $scratch -ErrorAction Stop | Out-Null
+        $script = Join-Path $scratch 'install.py'
+        # CAD_INSTALL_PY: a local install.py instead (the installer rehearsals run this checkout's).
+        if ($env:CAD_INSTALL_PY) {
+            Copy-Item -LiteralPath $env:CAD_INSTALL_PY -Destination $script -ErrorAction Stop
+        } else {
+            Invoke-WebRequest -Uri $InstallPy -OutFile $script -UseBasicParsing -ErrorAction Stop
+        }
+    } catch {
+        Write-Host "error: could not download $InstallPy ($($_.Exception.Message))" -ForegroundColor Red
+        Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
+        $global:LASTEXITCODE = 1
+        return
+    }
+    try {
+        & $uv run --no-config --managed-python --python 3.14 --no-project $script
+        $code = $LASTEXITCODE
+        # uv's Python could not be set up, so install.py never ran. Inside an app's package (the Claude app's) on a
+        # computer where uv has never made its Python folder, Windows keeps the new folder to that app and uv fails
+        # ("Missing expected target directory for Python minor version link", measured): once uv has run from an
+        # ordinary window, it works inside the app too.
+        if ($code) {
+            & $uv python find --no-config --system --managed-python 3.14 *> $null  # --system: no venv of the folder it ran in
+            if ($LASTEXITCODE) {
+                Write-Host "uv could not set up Python 3.14 here (what it said is above). If this ran inside an app (the Claude app, say), open PowerShell from the Start menu, run the install command there once, then go back to the app." -ForegroundColor Red
+            }
+        }
+        # The window that ran this finds cad at once: uv's bin folder on its PATH. Windows gives the user's PATH to a
+        # window or app as it starts, so one open before cad's folder was put there does not see it (measured).
+        $bin = & $uv tool dir --bin 2>$null | Select-Object -Last 1
+        if ($LASTEXITCODE -eq 0 -and $bin -and (Test-Path -LiteralPath $bin) -and
+                -not (($env:Path -split ';') -contains $bin)) {
+            $env:Path = "$bin;$env:Path"
+        }
+        if ($code) {
+            Write-Host "The installer exited $code; what it said is above." -ForegroundColor Red
+        }
+        $global:LASTEXITCODE = $code
+    } finally {
+        Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
+# Its status is $LASTEXITCODE, which it sets on every path (its output goes to the window as it comes).
+$global:LASTEXITCODE = 0
 Install-TextToCad @args
+# A failure ends in `throw`, a terminating error, the one form that sets the exit status of every way it is run
+# without closing a window a person typed it into:
+# - `powershell -Command "irm ... | iex"` (and through cmd) exits 1 when its command ends in an unhandled terminating
+#   error; Invoke-Expression passes a `throw` in the script on as one. It ignores $LASTEXITCODE, and a Write-Error is
+#   non-terminating: the run it ends still counts as a success (measured on Windows 11: exit 0).
+# - `powershell -File install.ps1` exits 1 on a script that ends in an unhandled terminating error.
+# - Typed in a window (`irm ... | iex`), a throw prints the error and returns to the prompt. `exit` would end that
+#   PowerShell, closing the window (iex runs the script in the window's own session).
+# The exit status is 1 whatever the installer's own was: the message names that one.
+if ($LASTEXITCODE) {
+    throw "text-to-cad's installer did not finish (exit $LASTEXITCODE): see what it said above."
+}

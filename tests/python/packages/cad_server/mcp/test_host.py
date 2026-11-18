@@ -41,6 +41,12 @@ class LauncherTest(unittest.TestCase):
                 ([[NPM_CODEX, "resume", "--last"]], "codex resume", False),
                 ([UVX, *CODEX_APP], "codex app-server", True),
                 ([["codex", "app-server"]], "codex app-server", True),
+                # An option this does not know, its value spelled apart: the app server all the same.
+                ([["codex", "--log-dir", "/x", "app-server"]], "codex app-server", True),
+                # The Codex app's own Electron processes name no subcommand: never the app server.
+                ([["/Applications/Codex.app/Contents/MacOS/Codex", "--type=utility",
+                   "--utility-sub-type=node.mojom.NodeService"]], "codex", False),
+                ([["/Applications/Codex.app/Contents/MacOS/Codex"]], "codex", False),
                 ([UVX, *CLAUDE_CODE], "claude code", False),
                 (CLAUDE_DESKTOP, "claude desktop", True),
                 (CLAUDE_DESKTOP[1:], "claude desktop", True),
@@ -83,28 +89,32 @@ class LauncherTest(unittest.TestCase):
 
 class PresentationTest(unittest.TestCase):
     CODEX = {"name": "codex-mcp-client", "title": "Codex"}
+    CURSOR = {"name": "cursor-vscode"}
     OTHER = {"name": "some-host"}
     UI = {"extensions": {host.UI_EXTENSION: {"mimeTypes": [host.MIME]}}}
-    TABS = {"extensions": {host.TABS_EXTENSION: {"entrypoints": ["global", "thread", "file"]}}}
 
-    def test_a_declaration_then_the_launcher_then_the_name_and_the_name_never_claims_a_tab(self) -> None:
+    def test_tools_go_to_the_codex_app_alone_whatever_an_app_declares(self) -> None:
         # What the transport reads of each launcher (``cad_mcp.host.host_of``), as it hands it to the server.
         execd = {"host": "codex exec", "renders": False}
         app = {"host": "codex app-server", "renders": True}
-        claude = {"host": "claude code", "renders": False}
+        desktop = {"host": "claude desktop", "renders": True}
         for client, offered, launched, expected in (
-                (self.OTHER, self.TABS, execd, ("tabs", True)),      # what a host declares wins
-                (self.CODEX, self.UI, execd, ("tabs", True)),        # Codex shows what it renders as tabs
-                (self.OTHER, self.UI, claude, ("inline", True)),     # Claude Code with CLAUDE_CODE_MCP_APPS_HOST=1
-                (self.CODEX, {}, execd, ("text", False)),            # codex exec, whatever its calls carry
-                (self.CODEX, {}, {"host": "codex", "renders": False}, ("text", False)),
-                (self.CODEX, {}, app, ("tabs", True)),               # the Codex app
+                (self.CODEX, self.UI, app, ("tabs", True)),          # the Codex app (0.169 declares the extension)
+                (self.CODEX, {}, app, ("tabs", True)),               # the Codex app through 0.163, which declares nothing
+                (self.CODEX, self.UI, execd, ("text", False)),       # codex exec: the declaration alone gives no tabs
+                (self.CODEX, {}, {"host": "codex", "renders": False}, ("text", False)),  # its terminal UI
+                (self.CODEX, self.UI, None, ("tabs", True)),         # no launcher read (Windows): tabs, as before
                 (self.CODEX, {}, None, ("tabs", None)),              # the name alone: Codex's catalog, no claim
-                (self.CODEX, {}, claude, ("tabs", None)),            # a launcher that is not Codex says nothing of it
-                (self.OTHER, {}, claude, ("text", False)),
+                (self.CURSOR, self.UI, None, ("text", False)),       # Cursor declares views: no tools
+                (self.OTHER, self.UI, desktop, ("text", False)),     # an unknown app that declares views: no tools
                 (self.OTHER, {}, None, ("text", False))):
             with self.subTest(client=client["name"], offered=list(offered.get("extensions", {})), launched=(launched or {}).get("host")):
                 self.assertEqual(host.presentation(client, offered, launched)[:2], expected)
+
+    def test_the_development_switch_forces_a_presentation_on_any_client(self) -> None:
+        for told in ("inline", "tabs", "text"):
+            for client in (self.CURSOR, self.CODEX):
+                self.assertEqual(host.presentation(client, {}, None, told)[:2], (told, told != "text"))
 
     def test_a_codex_exec_turn_is_told_by_its_metadata(self) -> None:
         self.assertTrue(host.headless({"x-codex-turn-metadata": {"turn_trigger": "exec"}}))

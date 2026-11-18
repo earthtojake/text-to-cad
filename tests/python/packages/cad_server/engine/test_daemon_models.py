@@ -52,7 +52,7 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
             self.assertEqual(inspected.returncode, 0, inspected.stderr)
         self.assertEqual((self.folder / "XBF/block.xbf").read_bytes(), saved)
         self.assertFalse(marker.exists())
-        self._stop_daemon()
+        self._restart_daemon()
         # After a restart the registry knows it: refused with the command that builds it again, run by no one.
         missing = self.cli("inspect", ident, "face 1")
         self.assertEqual(missing.returncode, 2)
@@ -82,7 +82,7 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
         before = get_json(endpoint, token)
         (self.folder / "bracket.py").write_text(textwrap.dedent(BARE.format(size=2)), encoding="utf-8")
         second = self.built("bracket")
-        self.assertEqual(urlparse(second["url"])[:3], url[:3], "one address, each URL with a fresh link")
+        self.assertEqual(second["url"], first["url"], "one address, and the same link: the view line is the same text")
         from cad.engine.ids import model_id
 
         self.assertEqual((first["id"], second["id"], doc), (model_id(self.folder / "bracket.py", "bracket"),) * 3,
@@ -96,7 +96,7 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
         self.assertEqual([row["id"] for row in models], [address])
         self.assertEqual([path.name for path in self.folder.iterdir()], ["bracket.py"],
                          "no cache, document, or thumbnail on disk")
-        self._stop_daemon()
+        self._restart_daemon()
         missing = self.cli("inspect", f"{address}#face 1")
         self.assertEqual(missing.returncode, 2)
         self.assertIn(f"bracket ({address}) is not saved: the engine's cache holds no file of its last build; "
@@ -206,7 +206,7 @@ if __name__ == '__main__':
         # A daemon started again with no build serves the model from its cache cold: no worker
         # holds a trace of it, so ``made_by`` is null -- and every fact the kernel measures is
         # what it was. Nothing of the provenance was written anywhere.
-        self._stop_daemon()
+        self._restart_daemon()
         cold = self.where("block/face 1", ident)
         self.assertIsNone(cold.pop("made_by"))
         self.assertEqual({k: v for k, v in cold.items() if k not in drop}, {k: v for k, v in face.items() if k not in drop})
@@ -253,7 +253,7 @@ if __name__ == '__main__':
                          ["XBF/block.xbf", "block.py", "peg.stl"])
 
     def test_decoration_only_declares_and_main_calls_only_its_selected_model(self) -> None:
-        self.own()  # no engine yet, so none an import started goes unseen
+        self.own()
         self.script.write_text(textwrap.dedent("""
             from cad import model, xbf
 
@@ -276,7 +276,6 @@ if __name__ == '__main__':
         declared = self.run_script("block.py")
         self.assertEqual((declared.returncode, declared.stdout.strip()), (0, "after definitions False"), declared.stderr)
         self.assertFalse((self.folder / "XBF").exists())
-        self.assertFalse(self.state.exists() and any(self.state.iterdir()), "importing starts no daemon")
         called = engine_daemon.run([sys.executable, "block.py", "call"], cwd=self.folder, env=self.env)
         self.assertEqual(called.returncode, 0, called.stderr)
         self.assertIn("after call", called.stdout)

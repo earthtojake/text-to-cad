@@ -23,7 +23,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 # Where each package of the family lives: the library's and the server's source trees.
 LIBRARY_SRC = REPO_ROOT / "packages" / "cad" / "src"
-SERVER_SRC = REPO_ROOT / "packages" / "cad-server" / "src"
+SERVER_SRC = REPO_ROOT / "packages" / "cad" / "src"
 OURS = ("cad", "cad_server", "cadgen")
 
 FAMILY = [

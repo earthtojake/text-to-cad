@@ -4,7 +4,7 @@ A **document type** is what is in a file: one lowercase underscore id, the same 
 the registry, the server, the viewer and the JavaScript. The definitions and the laws they bind
 are the library's README ([`packages/cad/README.md`](../../packages/cad/README.md), **Definitions**
 and laws 23 to 28); the mechanism is the engine README's **Document types and integrations**
-([`packages/cad-server/src/cad_server/engine/README.md`](../../packages/cad-server/src/cad_server/engine/README.md)).
+([`packages/cad/src/cad_server/engine/README.md`](../../packages/cad/src/cad_server/engine/README.md)).
 
 A document type is a file cad **shows**: every type has a view (`document`, `mesh`, `drawing`, `robot`,
 `plot`), is listed by the CAD Viewer and has a snapshot. A file cad only writes or checks is not one,
@@ -52,7 +52,7 @@ where a command or a program first needs it.
       shares), answering `cad.results.CheckResult` (findings with a severity, a code and a location). A
       new operation name is a change to the closed set (`cad.registry.OPERATIONS`); a new shared one
       must be code-free, frequently needed and meaningful across types.
-- [ ] **Its command module**, `packages/cad-server/src/cad_server/cli/<id>.py`, the same three lines
+- [ ] **Its command module**, `packages/cad/src/cad_server/cli/<id>.py`, the same three lines
       as every other type's; options of its own live with the type
       (`cad_server/cli/document_types.py`). Pin it in
       `tests/python/packages/cad_server/test_cli_commands.py`.

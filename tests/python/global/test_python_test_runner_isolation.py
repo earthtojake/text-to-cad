@@ -1,6 +1,7 @@
 """The Python test runner (``scripts/test/unittest_files.py``): each file in an interpreter of its
-own, with an engine directory of its own, and a daemon the file left there stopped after it; a test
-that writes where the developer's own cadgen keeps its state fails the run, by name."""
+own, with an engine directory of its own and a server started there before it runs (``cad server start``'s
+own start: a command starts none), and a daemon the file left there stopped after it; a test that writes
+where the developer's own cadgen keeps its state fails the run, by name."""
 
 from __future__ import annotations
 
@@ -26,11 +27,12 @@ spec.loader.exec_module(runner)
 
 def _stand_in(calls: list, *, child_error: Exception | None = None, leaves_a_daemon: bool = False):
     """subprocess.run for the runner: a file's interpreter runs (or raises ``child_error``), and
-    leaves a daemon's door in its engine directory when ``leaves_a_daemon``; a stop is recorded."""
+    leaves a daemon's door in its engine directory when ``leaves_a_daemon``; a server's start and a stop
+    are recorded."""
     def run(argv, *, env, **kwargs):
         calls.append((list(argv), dict(env)))
-        stopping = argv[1:3] == ["-P", "-c"]
-        if not stopping:
+        runners = argv[1:3] == ["-P", "-c"]  # the runner's own: a start or a stop
+        if not runners:
             if leaves_a_daemon:
                 Path(env["CAD_ENGINE_DIR"]).mkdir(parents=True, exist_ok=True)
                 Path(env["CAD_ENGINE_DIR"], "0123456789ab.door").write_text("", encoding="utf-8")
@@ -57,8 +59,11 @@ class PythonTestRunnerIsolation(unittest.TestCase):
                 mock.patch.object(runner.sys, "stderr", io.StringIO()):
             runner.run_files(["first.py", "second.py"], str(REPO_ROOT), 2, False)
             self.assertEqual(os.environ["CAD_ENGINE_DIR"], "developer-engine")
-        self.assertEqual(len(calls), 2, "no daemon was left, so none was stopped")
+        self.assertEqual(len(calls), 4, "a server started for each file before it ran; none left, so none stopped")
+        started = sorted(env["CAD_ENGINE_DIR"] for argv, env in calls if argv[-1].endswith("client.start()"))
+        calls = [(argv, env) for argv, env in calls if argv[1:3] != ["-P", "-c"]]
         engines = [env["CAD_ENGINE_DIR"] for _argv, env in calls]
+        self.assertEqual(started, sorted(engines), "each file's server in its own engine directory")
         self.assertNotIn("developer-engine", engines)
         self.assertNotEqual(engines[0], engines[1])
         self.assertEqual(Path(engines[0]).parent, Path(engines[1]).parent)
@@ -74,7 +79,9 @@ class PythonTestRunnerIsolation(unittest.TestCase):
         with mock.patch.object(runner.subprocess, "run", side_effect=_stand_in(calls, leaves_a_daemon=True)), \
                 mock.patch.object(runner.sys, "stderr", io.StringIO()):
             runner.run_files(["leaves.py"], str(REPO_ROOT), 1, False)
-        (_file_argv, file_env), (stop_argv, stop_env) = calls
+        (start_argv, start_env), (_file_argv, file_env), (stop_argv, stop_env) = calls
+        self.assertEqual(start_argv[1:], ["-P", "-c", "from cad.engine import client; client.start()"])
+        self.assertEqual(start_env["CAD_ENGINE_DIR"], file_env["CAD_ENGINE_DIR"])
         self.assertEqual(stop_argv[1:], ["-P", "-c", "from cad.engine import api; api.stop()"])
         self.assertEqual(stop_env["CAD_ENGINE_DIR"], file_env["CAD_ENGINE_DIR"])
 
@@ -85,7 +92,7 @@ class PythonTestRunnerIsolation(unittest.TestCase):
                 mock.patch.object(runner.sys, "stderr", io.StringIO()):
             with self.assertRaisesRegex(OSError, "test child could not run"):
                 runner.run_files(["failed.py"], str(REPO_ROOT), 1, False)
-        (_file_argv, file_env), (stop_argv, stop_env) = calls
+        _start, (_file_argv, file_env), (stop_argv, stop_env) = calls
         self.assertIn("api.stop()", stop_argv[-1])
         self.assertEqual(stop_env["CAD_ENGINE_DIR"], file_env["CAD_ENGINE_DIR"])
         self.assertFalse(Path(file_env["CAD_ENGINE_DIR"]).exists())
@@ -320,7 +327,7 @@ class HangGuard(unittest.TestCase):
                 "    handle.write('Fatal Python error: Segmentation fault\\n  File \"stub.py\", line 7 in load\\n')\n"
                 "sys.exit(1)\n")
         cleanups: list = []
-        env = engine_daemon.watched(dict(os.environ), lambda *call: cleanups.append(call))
+        env = engine_daemon.watched(dict(os.environ), lambda *call: cleanups.append(call), started=False)
         try:
             for script, said in ((stub, True), ("import sys; sys.exit(2)", False)):
                 with self.subTest(said=said), mock.patch.object(sys, "stderr", io.StringIO()) as err:
@@ -345,7 +352,7 @@ class HangGuard(unittest.TestCase):
         from tests.python.support import engine_daemon
 
         cleanups: list = []
-        env = engine_daemon.watched(dict(os.environ), lambda *call: cleanups.append(call))
+        env = engine_daemon.watched(dict(os.environ), lambda *call: cleanups.append(call), started=False)
         try:
             # Its argv names the module as the distribution starts it; it imports nothing of it.
             done = engine_daemon.run([sys.executable, "-c", "import sys", "cad_server._internal.engine_daemon"], env=env)

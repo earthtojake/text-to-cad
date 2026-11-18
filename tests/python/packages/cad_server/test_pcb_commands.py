@@ -36,7 +36,8 @@ class NativeBoardCommands(unittest.TestCase):
 
         def draw() -> bytes:
             done = subprocess.run([*CLI, "kicad_pcb", "snapshot", str(self.board), str(png), "--width", "320", "--height",
-                                   "240", "--json"], env=dict(os.environ), capture_output=True, text=True, timeout=120)
+                                   "240", "--json"], env=dict(os.environ), capture_output=True, text=True,
+                                  encoding="utf-8", timeout=120)
             self.assertEqual(done.returncode, 0, done.stderr)
             json.loads(done.stdout)
             with Image.open(png) as image:
@@ -50,7 +51,7 @@ class NativeBoardCommands(unittest.TestCase):
 
     def test_a_board_display_takes_board_modes_alone(self) -> None:
         done = subprocess.run([*CLI, "kicad_pcb", "snapshot", str(self.board), str(self.root / "x.png"), "--display", "wireframe"],
-                              env=dict(os.environ), capture_output=True, text=True, timeout=120)
+                              env=dict(os.environ), capture_output=True, text=True, encoding="utf-8", timeout=120)
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("a board's modes are board, copper, assembly, placement", done.stderr)
 
@@ -58,7 +59,7 @@ class NativeBoardCommands(unittest.TestCase):
         png = self.root / "window.png"
         done = subprocess.run([*CLI, "kicad_pcb", "snapshot", str(self.board), str(png), "--window", "3,13,13,17",
                                "--display", "copper", "--width", "400", "--json"],
-                              env=dict(os.environ), capture_output=True, text=True, timeout=120)
+                              env=dict(os.environ), capture_output=True, text=True, encoding="utf-8", timeout=120)
         self.assertEqual(done.returncode, 0, done.stderr)
         report = json.loads(done.stdout)
         self.assertEqual(([3, 13, 13, 17], "copper"), (report["boardDisplay"]["window"], report["boardDisplay"]["mode"]))
@@ -69,7 +70,8 @@ class NativeBoardCommands(unittest.TestCase):
                             (["--window", "3,13,13,17", "--camera", "top"], "takes no --camera")):
             with self.subTest(argv=argv):
                 done = subprocess.run([*CLI, "kicad_pcb", "snapshot", str(self.board), str(png), *argv, "--json"],
-                                      env=dict(os.environ), capture_output=True, text=True, timeout=120)
+                                      env=dict(os.environ), capture_output=True, text=True, encoding="utf-8",
+                                      timeout=120)
                 self.assertEqual(done.returncode, 2, done.stderr)
                 answer = json.loads(done.stdout)
                 self.assertEqual("invalid_argument", answer["reason"])
@@ -78,7 +80,7 @@ class NativeBoardCommands(unittest.TestCase):
     def test_drc_without_kicad_fails_saying_how_to_install_it(self) -> None:
         env = {**os.environ, "CAD_KICAD_CLI": str(self.root / "no-kicad-cli")}
         done = subprocess.run([*CLI, "kicad_pcb", "drc", str(self.board), "--json"], env=env, capture_output=True, text=True,
-                              timeout=60)
+                              encoding="utf-8", timeout=60)
         self.assertEqual(done.returncode, 1, done.stderr)
         result = json.loads(done.stdout)
         self.assertFalse(result["ok"])

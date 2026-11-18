@@ -34,6 +34,16 @@
  *             request the daemon served, a build, a command, a page), its type, and its innermost frames
  *             in code that may be named -- cadgen's, the standard library's, a dependency's, the page's
  *             assets -- with the person's own code a bare `<user>`. Never a message, a variable or a path.
+ *   arrival   one step of how a computer got to the sending version (schema 11's): its setup, its server serving
+ *             for the first time, or the hand-over that server runs after it (`ARRIVAL_OUTCOMES`), how it ended,
+ *             and where it failed why (`ARRIVAL_FAILURES`), a word cad chose; by which route (`ROUTES`), from
+ *             which version (`from`, `none` for none), and for a hand-over after how many attempts.
+ *   update    one attempt of cad's own update of itself that ended (schema 11's), counted once by the server that
+ *             runs after it: the version before (`from`), how it ended (`UPDATE_OUTCOMES`), for a failure which
+ *             step failed (`UPDATE_FAILURES`), a word cad chose, its tries, the installer (`UPDATE_INSTALLERS`),
+ *             whether it was typed (`asked`), and for a newer cad installed how the install command's run for it
+ *             ended (`plugin`, `UPDATE_PLUGIN`: `underway` where a new attempt began before it ended; `none` for any
+ *             other outcome).
  *
  * cadgen 0.7.7 to 0.7.15 (schemas 1 and 2) send `tool`, `view` and `file`: one distinct file, once a day,
  * by a salted code. Its code goes no further: a batch's are read as `files`, one of each format they name.
@@ -58,6 +68,17 @@
  * build failed, the server older than the library that asked it (`outdated`), earlier `export_error`. A model build's
  * `failed` from schema 10 counts the failures the system or the machine caused alone: a script that raised is in its
  * `count`, never `failed`. A schema before it sends none of these, and its rows are read, and keyed, as ever.
+ *
+ * Schema 11 (text-to-cad 0.11.12 on) describes an install with one field, `app`, the agent app running it, detected
+ * (`AGENT_APPS`): an open set, checked by its shape and not by a list. It sends no channel, and its rows carry none.
+ * A batch of schema 10 or earlier is translated on arrival (`translated`): its rows carry a `channel` and an `app`,
+ * worked out from the old combined channel and the MCP client's name, and the old channel as it was sent
+ * (`legacy_channel`). Every schema before it is still checked as it always was, and its rows keep their ids. A
+ * development build's schema 11 batch that still names a channel (no release sent one) is refused, as any batch
+ * with a field its schema lacks.
+ * Schema 11 adds `arrival`, which no schema before it sends: whether a computer's update or install reached the
+ * version, step by step, so a computer stuck on its way to one is counted; and `update`, which no schema before it
+ * sends either: whether each of cad's own updates of itself went, and where one did not, which step failed.
  */
 
 import { createHash } from 'node:crypto';
@@ -82,13 +103,31 @@ const TYPE = /^(?:<user>|<\?>|[A-Za-z_][A-Za-z0-9_.]{0,127})$/;
 export const MAX_BYTES = 64 * 1024;
 
 const SHARED = new Set(['schema', 'install', 'session', 'version', 'platform', 'arch', 'client', 'presentation', 'events']);
-// Where the install came from, as its plugin's startup command named it (`cad_server/_internal/channel.py`).
+// Schemas 2 to 10: where the install came from, as its plugin's startup command named it, a closed list.
 // `-github`: by hand from the repository, and through 0.11 the install command too; `-install`: the install
-// command. Within a schema, a new channel is an added word: every schema reads them all.
+// command. Every schema up to 10 reads them all; each is translated to schema 11's two fields (`translated`).
 const CHANNELS = new Set(['claude-github', 'codex-github', 'cursor-github', 'gemini-github', 'claude-install',
   'codex-install', 'cursor-install', 'gemini-install', 'claude-desktop', 'claude-directory', 'openai-directory',
   'cursor-marketplace', 'agent-plugins', 'dev', 'unknown']);
 const SOURCES = new Set(['store', 'manual']);
+// Schema 11's: the agent app running the copy. An open set, checked by its shape (`cad_server/_internal/engine_host.py`
+// makes it).
+const APP = /^[a-z0-9][a-z0-9._-]{0,39}$/;
+// The app an MCP client's name stands for, where the name is not the app's own: the same table as the server's
+// (`cad_server/_internal/engine_host.py`: `APPS`). Any other client's name is its own app, made a token (`appOfClient`).
+export const AGENT_APPS = {
+  'codex-mcp-client': 'codex', 'cursor-vscode': 'cursor', 'claude-code': 'claude-code', 'claude-ai': 'claude-desktop',
+  'gemini-cli': 'gemini', 'grok-build': 'grok', 'visual studio code': 'vscode', 'visual-studio-code': 'vscode',
+};
+// Client names that are no MCP client: the browser viewer's page names itself (`cad-viewer`, `cadgen-viewer` before
+// 0.10), and a client that could not say sends `unknown`. They name no app.
+const NO_APP = new Set(['cad-viewer', 'cadgen-viewer', 'unknown']);
+// A schema 10 or earlier channel, as the delivery channel it was: a store's copy carries the store's channel, every
+// copy of ours or a person's own is the default channel's, and `dev` and `unknown` stay as they were.
+const LEGACY_CHANNELS = { 'claude-directory': 'claude', 'openai-directory': 'codex', dev: 'dev', unknown: 'unknown' };
+// And the app it names, by its prefix, where the batch's MCP client said nothing.
+const LEGACY_APPS = [[/^claude-desktop$/, 'claude-desktop'], [/^claude-/, 'claude-code'], [/^(?:codex-|openai-directory$)/, 'codex'],
+  [/^cursor-/, 'cursor'], [/^gemini-/, 'gemini']];
 // Who sends, and the formats an event counts: each schema's own (`SCHEMAS`), the later a superset.
 const PROCESSES = new Set(['app', 'viewer', 'daemon']);
 const PROCESSES_6 = new Set([...PROCESSES, 'cli']);
@@ -192,6 +231,27 @@ const KERNEL_UNAVAILABLE = 'cad.engine.serve.KernelProcessesUnavailable';
 const SNAPSHOT_PARTS = new Set(['source', 'out', 'display', 'display.mode', 'display.exploded', 'display.clip',
   'display.grid', 'display.visibility', 'camera', 'pose', 'size', 'annotation', 'measurements', 'references', 'job',
   'other']);
+// How a computer got to a version, schema 11's (`cad_server/analytics.py`: `ROUTES`, `ARRIVAL_OUTCOMES`,
+// `ARRIVAL_FAILURES`): an earlier release's updater or `cad setup` itself; each step's endings; why a step failed, a
+// word cad chose where it failed (a step that cannot fail has none); and the version it came from, a version's name
+// or `none`, as short as a batch's `version`.
+const ROUTES = new Set(['updater', 'setup']);
+const ARRIVAL_OUTCOMES = {
+  setup: new Set(['ok', 'failed']), serving: new Set(['ok']), handover: new Set(['done', 'failed', 'gave_up', 'superseded']),
+};
+const ARRIVAL_FAILURES = { setup: new Set(['uv', 'network', 'denied', 'other']), handover: new Set(['no_report', 'setup', 'app', 'other']) };
+const EARLIER = /^(?:none|[0-9][0-9A-Za-z.+_-]{0,31})$/;
+const MAX_ATTEMPTS = 1000;
+// How cad's own update of itself ended, schema 11's (`cad_server/analytics.py`: `UPDATE_OUTCOMES`, `UPDATE_FAILURES`,
+// `UPDATE_INSTALLERS`, `UPDATE_PLUGIN`): a newer cad installed, nothing newer, failed, or failed and the release
+// before put back; for a failure which step, a word cad chose (the installer's upgrade, a release it may not end on,
+// and for one not put back the put-back too); the installer that made the global install; and the install command's
+// run for the cad an update installed (`ok`, `failed`, `underway` where a new attempt began before it ended; `none`
+// where none ran for it, and for any other outcome). Tries from 1, as many as attempts.
+const UPDATE_OUTCOMES = new Set(['installed', 'current', 'failed', 'restored']);
+const UPDATE_FAILURES = { failed: new Set(['upgrade', 'older', 'put_back']), restored: new Set(['upgrade', 'older']) };
+const UPDATE_INSTALLERS = new Set(['uv', 'pipx']);
+const UPDATE_PLUGIN = new Set(['none', 'ok', 'failed', 'underway']);
 // A batch's time, in whole seconds since 1970: any a clock can say (a wrong one included), never a fraction.
 const MAX_AT = 100_000_000_000;
 // Ours: the namespace every row's id is made in (`idOf`).
@@ -211,9 +271,17 @@ export const FIELDS = {
   health: ['workers', 'crashes', 'recycles', 'refusals'],
   control: ['control', 'count', 'seconds'],
   exception: ['where', 'tool', 'type', 'handled', 'status', 'frames', 'count'],
+  arrival: ['step', 'route', 'from', 'outcome', 'reason', 'attempts', 'count'], // `reason`, `attempts` where they apply
+  update: ['from', 'outcome', 'reason', 'tries', 'installer', 'asked', 'plugin', 'count'], // `reason` for a failure
 };
 
 export class Invalid extends Error {}
+/**
+ * A batch of a schema newer than this receiver reads: a release that reached people before the receiver that reads
+ * its schema was deployed. Never refused, which the sender would take as final: answered "try later" (503), so the
+ * sender keeps it and sends it again once this receiver reads it.
+ */
+export class Later extends Error {}
 
 const fail = message => { throw new Invalid(message); };
 const token = (value, name, limit = 64) =>
@@ -364,6 +432,41 @@ const READERS = {
     }
     return { key: `exception ${JSON.stringify(crash)}`, fields };
   },
+  // A reason only with `failed`, attempts only for a hand-over: each where it applies and nowhere else.
+  arrival(event, at) {
+    only(event, ['name', ...FIELDS.arrival], at);
+    const step = typeof event.step === 'string' && Object.hasOwn(ARRIVAL_OUTCOMES, event.step)
+      ? event.step : fail(`${at}.step is not one of ${Object.keys(ARRIVAL_OUTCOMES).join(', ')}`);
+    const route = oneOf(event.route, ROUTES, `${at}.route`);
+    const from = matches(event.from, EARLIER, `${at}.from`);
+    const outcome = oneOf(event.outcome, ARRIVAL_OUTCOMES[step], `${at}.outcome`);
+    const reason = outcome === 'failed' ? oneOf(event.reason, ARRIVAL_FAILURES[step], `${at}.reason`)
+      : (event.reason === undefined ? null : fail(`${at}.reason: only a failed step names one`));
+    const attempts = step === 'handover'
+      ? (Number.isInteger(event.attempts) && event.attempts >= 0 && event.attempts <= MAX_ATTEMPTS
+        ? event.attempts : fail(`${at}.attempts is not a hand-over's attempts`))
+      : (event.attempts === undefined ? null : fail(`${at}.attempts: only a hand-over counts them`));
+    const count = some(event.count, `${at}.count`);
+    return { key: `arrival ${JSON.stringify([step, route, from, outcome, reason, attempts])}`,
+      fields: { step, route, from, outcome, reason, attempts, count } };
+  },
+  // A reason only with a failure (`failed`, `restored`), the install command's run only for a newer cad installed.
+  update(event, at) {
+    only(event, ['name', ...FIELDS.update], at);
+    const from = matches(event.from, EARLIER, `${at}.from`);
+    const outcome = oneOf(event.outcome, UPDATE_OUTCOMES, `${at}.outcome`);
+    const reason = Object.hasOwn(UPDATE_FAILURES, outcome) ? oneOf(event.reason, UPDATE_FAILURES[outcome], `${at}.reason`)
+      : (event.reason === undefined ? null : fail(`${at}.reason: only a failed update names one`));
+    const tries = Number.isInteger(event.tries) && event.tries >= 1 && event.tries <= MAX_ATTEMPTS
+      ? event.tries : fail(`${at}.tries is not an update's tries`);
+    const installer = oneOf(event.installer, UPDATE_INSTALLERS, `${at}.installer`);
+    if (typeof event.asked !== 'boolean') fail(`${at}.asked is not true or false`);
+    const plugin = oneOf(event.plugin, UPDATE_PLUGIN, `${at}.plugin`);
+    if (plugin !== 'none' && outcome !== 'installed') fail(`${at}.plugin: only an update that installed a newer cad ran it`);
+    const count = some(event.count, `${at}.count`);
+    return { key: `update ${JSON.stringify([from, outcome, reason, tries, installer, event.asked, plugin])}`,
+      fields: { from, outcome, reason, tries, installer, asked: event.asked, plugin, count } };
+  },
 };
 
 // Before schema 3 only the apps sent, and the browser viewer said so by how it shows CAD.
@@ -411,7 +514,40 @@ const SCHEMAS = new Map([
   [10, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_8,
     origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7, parts: true,
     snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_10, toolFailures: FAILURES_10, causes: true }],
+  // Schema 10 with the install described by the agent app alone, checked by its shape, and no channel: a row of it
+  // carries none (`null`, which no store is sent). Every earlier schema's batch is translated (`translated`). And how a
+  // computer got to the version, and how each of cad's own updates went.
+  [11, { fields: ['app', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control', 'arrival', 'update']), kinds: KINDS_8,
+    origin: batch => ({ channel: null, app: matches(batch.app, APP, 'app'),
+      legacy_channel: null, source: null, process: oneOf(batch.process, PROCESSES_6, 'process') }),
+    current: true, named: true, maxEvents: MAX_EVENTS_7, parts: true,
+    snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_10, toolFailures: FAILURES_10, causes: true }],
 ]);
+const NEWEST = Math.max(...SCHEMAS.keys()); // a later schema is a newer release's (`Later`), never a refusal
+
+/**
+ * The app an MCP client's name stands for (`AGENT_APPS`), else the name itself made a token: lower case, a run of
+ * anything else one `-`, at most 40 characters. `null` where it names nothing.
+ */
+export function appOfClient(name) {
+  if (typeof name !== 'string') return null;
+  const lowered = name.trim().toLowerCase();
+  if (Object.hasOwn(AGENT_APPS, lowered)) return AGENT_APPS[lowered];
+  if (NO_APP.has(lowered)) return null;
+  return lowered.replace(/[^a-z0-9._-]+/g, '-').replace(/^[^a-z0-9]+/, '').slice(0, 40) || null;
+}
+
+/**
+ * A schema 10 or earlier batch's install, as schema 11 describes it: the delivery channel its old channel was, the
+ * app its MCP client names (else the one the old channel names, else `unknown`), and the old channel as sent.
+ */
+export function translated(legacy, client) {
+  return {
+    channel: LEGACY_CHANNELS[legacy] ?? 'default',
+    app: appOfClient(client) ?? LEGACY_APPS.find(([prefix]) => prefix.test(legacy))?.[1] ?? 'unknown',
+    legacy_channel: legacy,
+  };
+}
 
 export function isUuid(value) {
   return typeof value === 'string' && UUID.test(value);
@@ -432,6 +568,7 @@ export const idOf = (batch, key) => uuidV5(`${batch}/${key}`);
 /** The rows a batch stores, or `Invalid`. */
 export function rowsOf(batch) {
   if (!batch || typeof batch !== 'object' || Array.isArray(batch)) fail('a batch is an object');
+  if (Number.isInteger(batch.schema) && batch.schema > NEWEST) throw new Later(`schema ${batch.schema} is newer than ${NEWEST}`);
   const schema = SCHEMAS.get(batch.schema) ?? fail(`schema is not one of ${[...SCHEMAS.keys()].join(', ')}`);
   for (const key of Object.keys(batch)) if (!schema.fields.includes(key) && !SHARED.has(key)) fail(`unknown field ${key}`);
   if (!isUuid(batch.install)) fail('install is not a uuid');
@@ -439,14 +576,18 @@ export function rowsOf(batch) {
   const client = batch.client ?? {};
   if (typeof client !== 'object' || Array.isArray(client)) fail('client is an object');
   only(client, ['name', 'version'], 'client');
+  const clientName = client.name === undefined ? null : token(client.name, 'client.name');
+  const origin = schema.origin(batch);
   const context = {
     install_id: batch.install,
     session_id: batch.session,
     version: token(batch.version, 'version', 32),
-    ...schema.origin(batch),
+    ...origin,
+    // Before schema 11 the channel said where the copy came from and, often, which app: read as the two it was.
+    ...(schema.current ? {} : translated(origin.channel, clientName)),
     platform: oneOf(batch.platform, PLATFORMS, 'platform'),
     arch: batch.arch === undefined ? null : token(batch.arch, 'arch', 16),
-    client: client.name === undefined ? null : token(client.name, 'client.name'),
+    client: clientName,
     client_version: client.version === undefined ? null : token(client.version, 'client.version', 32),
     presentation: batch.presentation === undefined ? null : oneOf(batch.presentation, PRESENTATIONS, 'presentation'),
   };

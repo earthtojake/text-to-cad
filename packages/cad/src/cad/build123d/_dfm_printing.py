@@ -73,7 +73,7 @@ OVERHANG_REACH_MM = mo.OVERHANG_REACH_MM
 _OVERHANG_METHOD = ("each down-facing face's angle from horizontal off the plate; a slope, ceiling or cantilever "
                     "under area_floor_mm2 below the limit, or a cantilever reaching under reach_floor_mm (the "
                     "nozzle given, else one bead), is listed with counted false and judged by no rule: "
-                    "text-to-cad's own floors, no guide states them")
+                    "cad's own floors, no guide states them")
 #: An embossed or engraved step is a detail (text, a logo, a mark) only while it is narrower than this, mm:
 #: wider steps -- a lid's groove, a locating land, a ledge -- are the part's geometry, which the wall and gap
 #: rules judge.
@@ -1236,7 +1236,7 @@ def _details(ctx: Context) -> dict[str, Any]:
         item["faces"] = item["faces"][:12]
     return {"items": items, "count": count, "step_ceiling_mm": DETAIL_CEILING, "across_below_mm": DETAIL_ACROSS_MM,
             "method": "steps between parallel planes up to step_ceiling_mm high, by sides of any surface; a step "
-                      "is a detail while it is narrower than across_below_mm (text-to-cad's own figure: no guide states one) and its steps "
+                      "is a detail while it is narrower than across_below_mm (cad's own figure: no guide states one) and its steps "
                       "bound the raised top or the sunk floor all round (an island or a pocket: text, a logo, a "
                       "mark); wider, or a step running on across a face, is the part's geometry, which the walls and "
                       "gaps judge"}

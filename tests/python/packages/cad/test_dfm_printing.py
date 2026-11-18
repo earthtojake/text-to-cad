@@ -107,7 +107,7 @@ class OverhangTest(unittest.TestCase):
         knife = next(f for f in result.findings if f.code == "printing.knife_edge")
         self.assertEqual(knife.severity, "warning", "the 30 deg tip is a knife, reported once: it prints rounded")
         self.assertIn("the tip prints rounded", knife.message)
-        self.assertTrue(knife.source.startswith("text-to-cad, its own figure"), knife.source)  # no publisher's
+        self.assertTrue(knife.source.startswith("cad, its own figure"), knife.source)  # no publisher's
 
     def test_the_overhang_rule_follows_the_angle_limit_given(self) -> None:
         # a 50 deg underside: over FDM's cited 45, under a printer's 55 given; a 30 deg one passes a 25 given
@@ -880,7 +880,7 @@ class RulesTest(unittest.TestCase):
                     self.assertEqual((walls[0].value, walls[0].limit, walls[0].unit, walls[0].op), (0.6, 0.8, "mm", "min"))
                 elif walls:
                     self.assertIn("2 beads of the 0.6 mm nozzle given", walls[0].message)
-                    self.assertTrue(walls[0].source.startswith("text-to-cad, its own figure"), walls[0].source)
+                    self.assertTrue(walls[0].source.startswith("cad, its own figure"), walls[0].source)
                     self.assertEqual((walls[0].value, walls[0].limit), (0.6, 1.2))
 
     def test_rules_with_no_figure_for_the_technology_judge_nothing_and_say_so(self) -> None:

@@ -1,18 +1,19 @@
-"""Where cadgen's things are on this computer, and how a process of the engine's is started.
+"""Where cad's things are on this computer, and how a process of the engine's is started.
 
 Every process reads this: a model's script and its worker, in the CAD kernel environment where only the
 library is installed; the engine's server; each client of it. So each finds the same folders, the same
 engine and the same installation by the same rules, from the standard library alone and with no kernel.
 
-- **The user's folders**: the state folder (``state_dir``: settings, the documents' records, the
+- **The user's folders**: the state folder (``state_dir``: settings, the documents' records, Recents, the
   installations' records, the page token) and the cache folder (``cache_dir``: each model document's
-  bytes, the bytecode the engine's processes compile, the kernel environment).
+  bytes, the bytecode the engine's processes compile, the kernel environment). One of each a user, whatever
+  release of cad runs: the layout of 0.11.11 and earlier, kept as it was.
 - **The engine folder** (``engine_dir``): the device's one engine's door (a named pipe; on Windows a
-  port file), lock and failure note, in a folder only this user can write (``folder_refusal``), each named
+  port file), lock, failure note and pages note, in a folder only this user can write (``folder_refusal``), each named
   ``engine`` (``NAME``) whatever release runs it.
 - **The installation** a process belongs to: the version it runs as (``installation``), the base's
-  marker naming the installation of a process that runs in the base (``HOME``), and the current one,
-  whose engine a client starts when none answers (``current``, ``engine``).
+  marker naming the installation of a process that runs in the base (``HOME``), and the current one the
+  clients of 0.11.11 and earlier start (``current``).
 - **Starting a process** of the engine's: with no window on Windows (``windowless``), outliving its
   starter (``detached``), its bytecode kept in the cache folder (``bytecode``), and on the Python of the
   environment the kernel is in (``kernel``, which the server makes as ``KERNEL``: the installation's base,
@@ -35,9 +36,9 @@ from typing import Any, Callable
 
 __all__ = ["BYTECODE", "DISPLAY", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME", "RESTARTS", "RUN_WITH", "WINDOWS", "XAUTHORITY", "Endpoint", "address",
            "alive", "appdata_cache_dir", "appdata_engine_dir", "appdata_state_dir", "bytecode", "bytecode_tag",
-           "cache_dir", "current", "detached", "door_path", "earlier_cache_dir", "earlier_state_dir", "endpoints", "engine", "engine_dir", "engine_root", "extras", "failure_path",
-           "folder_refusal", "home", "installation", "kernel", "lock", "lock_path", "port_path", "registered",
-           "run_with", "state_dir", "windowless"]
+           "cache_dir", "current", "detached", "door_path", "earlier_cache_dir", "earlier_state_dir", "endpoints",
+           "engine_dir", "engine_root", "extras", "failure_path", "folder_refusal", "home", "installation", "kernel",
+           "lock", "lock_path", "make_engine_dir", "port_path", "registered", "run_with", "state_dir", "windowless"]
 
 WINDOWS = os.name == "nt"
 # The engine's name in its engine folder: its lock, door (on Windows its port file) and failure note
@@ -65,7 +66,8 @@ XAUTHORITY = "CAD_ENGINE_XAUTHORITY"
 # The folder of the engine's bytecode in the cache folder: one folder per installation in it
 # (``bytecode_tag``).
 PYCACHE = "pycache"
-# The installations' records in the state folder, and the file naming the current one's version.
+# The installations' records in the state folder, and the file naming the current one's version: what the
+# clients of 0.11.11 and earlier start a server by (``current``).
 INSTALLATIONS = "installations"
 CURRENT = f"{INSTALLATIONS}/current"
 VERSION = re.compile(r"[0-9][0-9A-Za-z.+_-]*")
@@ -81,8 +83,8 @@ MARKER_SCHEMA = "cad env/2"
 # suffix), and the earlier releases' (named for cadgen, the library's earlier name). What this release
 # keeps of an earlier state folder (``ADOPTED``) it moves into its own (``adopt``): what the person owns
 # -- their settings (the telemetry answer, so a no stays a no, and the language), the documents' records
-# and what the homes show of them (Recents) -- and setup's receipt, which ``cad setup`` reads for the
-# skills and the configs 0.8's setup touched, and ``cad uninstall`` for what it did. Not 0.8's
+# and what the homes show of them (Recents) -- and the receipt 0.8's setup wrote, by which ``cad setup --engine-update``
+# tells a computer our own setup reached. Not 0.8's
 # installations' records, its engines' records or its page token, which only 0.8 runs by, nor its
 # install channels, the locks, or the telemetry it noted and did not send. The person's telemetry no
 # stays in the earlier folder too, for the earlier release still installed (``adopt``).
@@ -116,7 +118,9 @@ def _appdata() -> Path:
 
 def state_dir() -> Path:
     """Where this user's CAD state lives (``CAD_STATE_DIR`` overrides it): ``cad`` in the platform's
-    place for state (``_local_state``)."""
+    place for state (``_local_state``). Every release of cad reads and writes the same one: settings, the
+    documents' records, Recents, the page token and port, the telemetry spool, the version feed's cache, the
+    installations' records."""
     override = os.environ.get("CAD_STATE_DIR")
     if override:
         return Path(override)
@@ -131,7 +135,7 @@ def appdata_state_dir() -> Path | None:
 
 def appdata_cache_dir() -> Path | None:
     """Where 0.10.0 kept its cache on Windows, ``%LOCALAPPDATA%\\cad``: its documents' bytes move with their
-    records (``adopt_earlier``), the rest is left to ``cad doctor --prune``; None elsewhere, or where
+    records (``adopt_earlier``), the rest is left where it is; None elsewhere, or where
     ``CAD_CACHE_DIR`` names the cache folder."""
     return _appdata() / APPDATA_CACHE if WINDOWS and not os.environ.get("CAD_CACHE_DIR", "").strip() else None
 
@@ -160,10 +164,10 @@ def earlier_state_dir() -> Path:
 
 
 def adopt_earlier() -> list[str]:
-    """What this release keeps of an earlier release's state folder moved into its own (``adopt``), where no
-    state folder is named (``CAD_STATE_DIR``): what an installation's registration
-    (``cad_server._internal.installations``), ``cad setup`` and ``cad doctor`` do before they write there.
-    Each thing moves once: once this release's folder has it, the earlier one's stays. The names moved."""
+    """What this release keeps of an earlier release's state folder moved into its own (``adopt``: the state
+    folder and ``cache_dir``), where no state folder is named (``CAD_STATE_DIR``): what ``cad setup
+    --engine-update`` does as it takes over from 0.10.0 on Windows before it writes there. Each thing moves
+    once: once this release's folder has it, the earlier one's stays. The names moved."""
     if os.environ.get("CAD_STATE_DIR"):
         return []
     moved: list[str] = []
@@ -226,13 +230,14 @@ def _said_no(settings: Path) -> dict[str, Any] | None:
 
 
 def cache_dir() -> Path:
-    """Where the engine caches documents' bytes (``documents/<id>/document.xbf``): the platform's
-    cache location, which the system and the person treat as disposable -- wiping it loses no
-    state, the records stay in ``state_dir``. ``CAD_CACHE_DIR`` when set (a relative one made
-    absolute once, and written back, so a worker after a ``chdir`` names the same folder), else
-    ``$XDG_CACHE_HOME/cad`` when set, else ``~/.cache/cad`` -- on Windows too, out of the local application
-    data an app package virtualizes (``APPDATA_STATE``). An earlier release's cache (named for cadgen, or
-    0.10.0's on Windows) is not read: it is a cache."""
+    """Where cad caches what it can make again -- documents' bytes (``documents/<id>/document.xbf``), hulls,
+    MJCF assets, integrations' homes, the kernel environments, the engine's bytecode --: the platform's cache
+    location, which the system and the person treat as disposable -- wiping it loses no state, the records
+    stay in ``state_dir``. ``CAD_CACHE_DIR`` when set (a relative one made absolute once, and written back, so
+    a worker after a ``chdir`` names the same folder), else ``$XDG_CACHE_HOME/cad`` when set, else
+    ``~/.cache/cad`` -- on Windows too, out of the local application data an app package virtualizes
+    (``APPDATA_STATE``). An earlier release's cache (named for cadgen, or 0.10.0's on Windows) is not read: it
+    is a cache."""
     return _cache_dir(CACHE, appdata=False)
 
 
@@ -265,11 +270,22 @@ def _cache_dir(name: str, appdata: bool) -> Path:
 
 
 def engine_dir() -> Path:
-    """Where the engine's door and lock live: ``CAD_ENGINE_DIR``, else ``default_engine_dir``.
-    Resolved once, here, for the client and the server alike (``os.path.realpath``): a ``..``, a
-    symlink or a trailing slash in either spelling names the same door, lock and port file."""
+    """Where the engine's door and lock live: ``CAD_ENGINE_DIR``, else ``default_engine_dir`` -- the folder every
+    release of cad finds, 0.11.11 and earlier among them. Resolved once, here, for the client and the server
+    alike (``os.path.realpath``): a ``..``, a symlink or a trailing slash in either spelling names the same
+    door, lock and port file. It stays in the temporary (runtime) folder, never under the state folder: a
+    sandboxed client must make its pipes there (``door.CLIENTS``), and a sandbox lets it write the temporary
+    folder alone."""
     override = os.environ.get("CAD_ENGINE_DIR")
     return Path(os.path.realpath(override if override else default_engine_dir()))
+
+
+def make_engine_dir() -> Path:
+    """The engine folder (``engine_dir``) made where it is not, this user's alone (mode 700). ``PermissionError``
+    when the system refuses."""
+    folder = engine_dir()
+    folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return folder
 
 
 def default_engine_dir() -> str:
@@ -369,6 +385,13 @@ def failure_path() -> Path:
     return engine_dir() / f"{NAME}.failed"
 
 
+def pages_path() -> Path:
+    """The port the last server stopped here served pages on, as JSON (``{"port": N}``): noted by the client that
+    stopped it (``client.sweep``), taken by the next server as it starts, which serves pages there at once
+    (``daemon.resumed``), so a page open in a browser reconnects to the server that replaced its own."""
+    return engine_dir() / f"{NAME}.pages"
+
+
 @dataclass(frozen=True)
 class Endpoint:
     """Where the daemon listens and locks: its door (on Windows, its port file) and its lock."""
@@ -386,12 +409,13 @@ def lock(path: Path | None = None) -> Any:
     """The daemon's lock (or the one at ``path``), held for its life; None when
     another daemon holds it. A lock file is removed by whoever holds it (``daemon.let_go``,
     ``client.sweep``), so a lock taken on a file whose name has gone, or names another file now,
-    is no lock: it is let go and the file the name names now is taken instead (``names``)."""
-    engine_dir().mkdir(parents=True, exist_ok=True, mode=0o700)
-    refusal = folder_refusal(engine_dir())
+    is no lock: it is let go and the file the name names now is taken instead (``names``). Its folder is
+    made first, and must be this user's alone (``folder_refusal``)."""
+    path = path or lock_path()
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    refusal = folder_refusal(path.parent)
     if refusal is not None:
         raise PermissionError(refusal)
-    path = path or lock_path()
     while True:
         handle = open(path, "a+")
         try:
@@ -531,8 +555,8 @@ def _read(path: Path) -> bytes | None:
 
 def current(state: Path | None = None) -> dict[str, Any] | None:
     """The current installation's record (``installations/current`` names its version), while its
-    interpreter and console script are there (``alive``): the installation whose engine every client
-    starts or attaches to. None with none current, or one that is gone."""
+    interpreter and console script are there (``alive``): the installation whose engine every client of
+    0.11.11 and earlier starts or attaches to. None with none current, or one that is gone."""
     folder = Path(state or state_dir())
     data = _read(folder / CURRENT)
     version = data.decode("utf-8", "replace").strip() if data is not None else ""
@@ -544,17 +568,6 @@ def current(state: Path | None = None) -> dict[str, Any] | None:
     return record
 
 
-def engine() -> dict[str, Any] | None:
-    """The installation whose engine a client starts when none answers (``client._start``): the current
-    one (``current``), read now -- its Python, its environment and its version; None with none current. A
-    client of any release starts that one, never its own."""
-    try:
-        found = current()
-    except (OSError, ValueError):
-        return None
-    return None if found is None else {"python": found["python"], "prefix": found["prefix"], "version": found["version"]}
-
-
 def _home_prefix() -> str:
     """The environment of the installation this process belongs to (``HOME``), else its own."""
     return HOME["prefix"] if HOME else sys.prefix
@@ -562,11 +575,10 @@ def _home_prefix() -> str:
 
 def installation() -> str:
     """The version this installation runs as -- the one name its client, its daemon and its workers
-    all go by (``status``, its bytecode): ``CAD_INSTALLATION_VERSION`` when it names one (the
-    ``cadgen`` command sets it for a development install, which reports its release's version), else
-    the version this environment is registered as (``registered``: a dev environment's
-    ``python model.py`` run directly), else the release declared beside this code
-    (``previous.version``)."""
+    all go by (``status``, its bytecode): ``CAD_INSTALLATION_VERSION`` when it names one (a development
+    build's name, which reports its release's version), else the version this environment is registered as
+    (``registered``: a dev environment's ``python model.py`` run directly), else the release declared beside
+    this code (``previous.version``)."""
     from cad.engine.previous import version
 
     named = os.environ.get(INSTALLATION_ENV, "")
@@ -657,15 +669,14 @@ def detached() -> dict[str, Any]:
 
 def bytecode(env: dict[str, str]) -> dict[str, str]:
     """``env`` (the daemon's, or a worker's), its bytecode set as the engine's processes keep it:
-    cached under ``pycache/`` in the cache folder (``PYTHONPYCACHEPREFIX``), so a worker's start
+    cached under ``pycache/`` in the cache folder (``PYTHONPYCACHEPREFIX``, ``pycache``), so a worker's start
     imports the kernel's pure-Python libraries from bytecode (a uvx installation compiles nothing
     on install: every start compiled them, seconds each) and nothing is written beside a library
     or a model. A ``PYTHONPYCACHEPREFIX`` already given is honoured. A caller's
     ``PYTHONDONTWRITEBYTECODE`` is not: the daemon and its workers serve every later client, and
-    write their bytecode in a folder of their own, ``pycache/<installation>`` (``bytecode_tag``). With no
-    cache folder this user alone can write -- one others can write to -- nothing is written:
-    ``PYTHONDONTWRITEBYTECODE``. A model's own modules are compiled from their source whatever this
-    says (``build._SourceOnlyLoader``)."""
+    write their bytecode in a folder of their own. With no such folder this user alone can write -- one
+    others can write to, or one a sandbox refuses -- nothing is written: ``PYTHONDONTWRITEBYTECODE``. A
+    model's own modules are compiled from their source whatever this says (``build._SourceOnlyLoader``)."""
     if not env.get("PYTHONPYCACHEPREFIX"):
         env.pop("PYTHONPYCACHEPREFIX", None)
         folder = pycache()
@@ -678,8 +689,8 @@ def bytecode(env: dict[str, str]) -> dict[str, str]:
 
 
 def pycache() -> str | None:
-    """This installation's folder under ``pycache/`` in the cache folder, made this user's alone and
-    marked in use (its time); None where there is none to use."""
+    """This installation's folder under ``pycache/`` in the cache folder (``bytecode_tag``), made this user's
+    alone and marked in use (its time), which the daemon prunes; None where there is none to use."""
     root = cache_dir() / PYCACHE
     folder = root / bytecode_tag()
     try:

@@ -38,8 +38,6 @@ const root = createRoot(element, {
   // Logged as React logs one, and counted: the page went on, with the view's "could not display".
   onCaughtError: (error, info) => { console.error(error, info.componentStack); reportCrash(error, { handled: true }); },
 });
-// The shell that loaded this page takes it down to load the engine's next release in its place (an update).
-globalThis.__cadApp = { unmount: () => root.unmount() };
 
 function applyTheme(context: HostContext) {
   const dark = context.theme === 'dark';
@@ -71,8 +69,8 @@ async function start() {
     else await bridge.initialize({ name: 'CAD', version }, presentation === 'inline' ? { displayModes: ['inline', 'fullscreen'] } : undefined);
     hostLocale = bridge.hostContext.locale || hostLocale;
     // The page starts on its launch alone: the launch carries what the server is (its protocol,
-    // version and platform). One from another build -- a tab the host restored after an update, a
-    // past chat's card -- says so: this page reads only its own protocol's.
+    // version and platform). One from another build -- a tab the host restored after another release
+    // was installed, a past chat's card -- says so: this page reads only its own protocol's.
     const { launch, result } = await launched;
     if (launch.protocol !== PROTOCOL) {
       root.render(<Notice title={say('cad.updated.title')} message={say('cad.updated.message')} t={say} details={`view ${PROTOCOL} · launch ${launch.protocol}${launch.version ? ` (${launch.version})` : ''}`} />);

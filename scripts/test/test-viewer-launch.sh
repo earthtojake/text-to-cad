@@ -8,7 +8,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 HOST="127.0.0.1"
 # VIEWER_RUNTIME_DIR points the smoke test at a client bundled somewhere else
 # (CAD_RUNTIME_CHECK_DIR-style scratch builds). CI uses the default.
-RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cad-server/src/cad_server/_runtime/viewer}"
+RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cad/src/cad_server/_runtime/viewer}"
 
 echo "==> CAD Viewer launch smoke test (\$PYTHON -m cad_server.viewer)"
 
@@ -64,7 +64,7 @@ if ! pick_interpreter; then
   exit 1
 fi
 export VIEWER_RUNTIME_DIR="$RUNTIME"
-"$PYTHON" - "$REPO_ROOT" <<'PYTHON'
+"$PYTHON" - <<'PYTHON'
 import json, os, subprocess, sys, tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -77,17 +77,17 @@ with tempfile.TemporaryDirectory(prefix="cv-") as temporary:
            "CAD_STATE_DIR": str(root / "state"), "CAD_ENGINE_MESH": "inline",
            "CAD_CACHE_DIR": str(root / "no-0.7-store"), "CAD_ENGINE_PORT": "0",
            "CAD_ENGINE_STANDBY": "0"}
-    # The state folder registers this interpreter as its current installation, as an installation
-    # registers itself: the engine the launch starts is this one's (with none, a client starts none).
-    sys.path.append(sys.argv[1])
-    from tests.python.support.engine_daemon import register
-    register(env["CAD_STATE_DIR"])  # raises where it cannot: the launch never runs unregistered
     def launch(*options):
         result = subprocess.run([sys.executable, "-m", "cad_server.viewer", "--json", *options],
                                 cwd=root, env=env, capture_output=True, text=True, timeout=120)
-        assert result.returncode == 0, result.stderr
+        assert result.returncode == 0, result.stderr or result.stdout
         return json.loads(result.stdout)
     try:
+        # A launch starts no server: this checkout's is started first, as a person or an agent starts one
+        # (`cad server start`), in this test's own folders, and stopped on the way out.
+        started = subprocess.run([sys.executable, "-m", "cad_server.cli", "server", "start"], cwd=root, env=env,
+                                 capture_output=True, text=True, timeout=180)
+        assert started.returncode == 0, started.stderr or started.stdout
         first = launch()
         again = launch()
         assert first["pid"] == again["pid"] and first["port"] == again["port"]

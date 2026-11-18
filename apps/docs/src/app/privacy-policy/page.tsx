@@ -4,13 +4,13 @@ import { IssuesLink, LegalPage, LegalSection } from "@/components/legal-page";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "How Thompson Labs LLC handles personal data for text-to-cad: what is collected, including text-to-cad's telemetry (usage counts and crash reports) and its hourly version check, why, who receives it, how long it is kept, and your controls.",
+    "How Thompson Labs LLC handles personal data for text-to-cad: what is collected, including text-to-cad's telemetry (usage counts and crash reports), its hourly version check and its automatic updates, why, who receives it, how long it is kept, and your controls.",
   alternates: { canonical: "/privacy-policy" },
 };
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="November 7, 2026">
+    <LegalPage title="Privacy Policy" updated="November 17, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -43,12 +43,8 @@ export default function PrivacyPolicyPage() {
                 clock, so that a batch sent again after a failed send is counted once;
               </li>
               <li>
-                which of them sent it, the text-to-cad version, where it was installed from (a plugin
-                directory, the Cursor Marketplace, GitHub, or a development install, as the plugin’s
-                CAD app names it and notes on your computer for the viewer and text-to-cad’s commands to
-                report too), your operating
-                system and processor type, and the name and version of your agent app and how it shows
-                CAD (or that it is the browser viewer);
+                which of them sent it, the text-to-cad version, your operating system and processor type, and which agent app ran it: its name and
+                version, and how it shows CAD (or that it is the browser viewer);
               </li>
               <li>
                 counts, added up over those five minutes: how many times each CAD tool was called and
@@ -83,6 +79,13 @@ export default function PrivacyPolicyPage() {
                 want of memory);
               </li>
               <li>
+                when an earlier release of text-to-cad updates your computer to the current one, or text-to-cad
+                updates itself: whether that finished, and if it did not, which step failed and why, each as one
+                of a few fixed words, with how many tries it took and the version your computer came from; for
+                its own updates, also which installer it used (uv or pipx), whether you asked for the update,
+                and whether updating the plugin in your apps afterwards worked;
+              </li>
+              <li>
                 crash reports, when text-to-cad’s own code fails unexpectedly: the error’s type (such as
                 “KeyError”), whether the program carried on, and where in code it failed -- file paths
                 inside text-to-cad, Python’s standard library, text-to-cad’s own open-source dependencies or the
@@ -100,20 +103,27 @@ export default function PrivacyPolicyPage() {
             <code>cad</code> command or model script sends nothing itself: it keeps what it counted (a
             build, an export, a snapshot, a drawing, a crash) on your computer for the next part of text-to-cad
             that sends; when nothing has sent it for five minutes, the next <code>cad</code> command
-            starts a short-lived sender in the background, which sends it and exits. Like any
+            starts a short-lived sender in the background, which sends it and exits; how such an update from
+            an earlier release went is sent by such a sender started right away. Like any
             request over the internet, each one also reaches our host with your IP address, the time
-            and a user agent (just “cadgen”, the software’s name before 0.10); see section 4 for what happens to them.
+            and a user agent that names text-to-cad’s software; see section 4 for what happens to them.
             Section 5 says when telemetry is on and how to turn it off.
           </li>
           <li>
-            <strong>The version check:</strong> at most once an hour, text-to-cad (the CAD app or the CAD viewer)
-            asks api.texttocad.dev which text-to-cad release is the
-            newest, so it can tell you when there is an update. The request carries no ID and nothing
-            about you or your work; like any request, it reaches our host with your IP address, the
-            time and a user agent (“cadgen”). It is never made in CI or for a copy that a plugin directory
-            or the Cursor Marketplace updates, and section 5 says how to turn it off. An update you ask
-            for (CAD’s update button, or <code>cad update</code>) asks again, then downloads the
-            release from PyPI, as the install command does.
+            <strong>The version check and automatic updates:</strong> at most once an hour, text-to-cad’s
+            software on your computer asks api.texttocad.dev which text-to-cad release is the newest. The
+            request carries no ID and nothing about you or your work; like any request, it reaches our host
+            with your IP address, the time and a user agent that names text-to-cad’s software. It is not
+            made in CI. Automatic updates are on unless you turned them off. While they are on, and the answer
+            names a newer release of the major version you have, text-to-cad downloads the newest such release
+            from the Python Package Index (PyPI) and installs it; a new major version is installed only when you
+            ask for it. Where the plugin’s automatic updates are on (our
+            install command turns them on) and text-to-cad is newer than when our install script last ran and ended well,
+            however it got newer, text-to-cad then downloads that script from this website and runs it, which updates the
+            text-to-cad plugin in your agent apps. When an earlier release that updated itself brings your
+            computer to the current one, text-to-cad installs itself from PyPI the same way, and runs our
+            install script once if our install command set up your computer before. Section 5 says how to turn
+            the check and the updates off.
           </li>
           <li>
             <strong>This website:</strong> page views, with the referring page, browser, device type
@@ -161,8 +171,11 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <strong>Services the software contacts directly</strong>, under their own privacy
-            policies. The agent app installs the pinned text-to-cad runtime from the Python Package Index
-            (PyPI) the first time it starts after an install or an update. Skills reach the
+            policies. Our install command and updates download text-to-cad from the Python Package Index
+            (PyPI), uv from its makers, Astral, when it is missing or too old, and the plugin from GitHub;{" "}
+            <code>cad update</code> asks PyPI which release is newest; some agent apps, such as Codex, also
+            download text-to-cad from PyPI themselves the first time they start it after an install or an
+            update, and install it if your computer has none. Skills reach the
             services you ask your agent to use, such as a fabrication service’s public specifications
             or your own printer on your local network. These requests send no personal data of ours;
             each service sees the request’s IP address, time and user agent.
@@ -199,7 +212,8 @@ export default function PrivacyPolicyPage() {
       <LegalSection title="5. Your choices and controls">
         <ul>
           <li>
-            The plugin works without contacting us, apart from the hourly version check.
+            The plugin works without contacting us, apart from the hourly version check and, where
+            automatic updates are on, the downloads that install an update (section 1).
           </li>
           <li>
             <strong>Telemetry is on once text-to-cad has told you.</strong> The first <code>cad</code>{" "}
@@ -209,8 +223,9 @@ export default function PrivacyPolicyPage() {
             policy describes, text-to-cad says so again before it does. Nothing is sent by default in CI or
             from a development install. Your choice is kept on your computer, as the{" "}
             <code>telemetry</code> setting in text-to-cad’s settings file, through restarts and updates, and
-            one choice counts for every part of text-to-cad; a no stays a no. Turning telemetry off also turns
-            off analytics in an earlier version still installed, and deletes what it sent. Nothing waits to
+            one choice counts for every part of text-to-cad; a no stays a no. Turning telemetry off turns it
+            off in every version of text-to-cad on your computer, and asks our server to delete everything
+            stored under their install IDs. Nothing waits to
             send: what a command or a model script counts, and what any part of text-to-cad counted since its
             last send when it exits, wait in small files beside that setting until the next part of text-to-cad
             sends them, or a sender the next command starts once they have waited five minutes; turning
@@ -235,9 +250,11 @@ export default function PrivacyPolicyPage() {
             own, a viewer started in the background and the short-lived sender, go by your setting.
           </li>
           <li>
-            Setting <code>CAD_UPDATE_CHECK=0</code> (<code>CADGEN_UPDATE_CHECK=0</code> before 0.10) where text-to-cad
-            runs turns the hourly version check
-            off; CAD then never says when there is an update.
+            To turn automatic updates off, run <code>cad update auto off</code>;{" "}
+            <code>cad update auto on</code> turns them on again. <code>cad plugin update auto off</code> stops
+            text-to-cad from running our install script on its own. Setting <code>CAD_UPDATE_CHECK=0</code> where
+            text-to-cad runs turns the hourly version check, and with it automatic updates, off for that
+            process.
           </li>
           <li>
             You can uninstall the plugin at any time. Deleting text-to-cad’s cache and state folders

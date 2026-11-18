@@ -45,7 +45,7 @@ from cad.engine import formats
 from cad.engine.formats.buffer import buffer, feature_edges
 from cad.engine.render import context
 from cad.engine.snapshot import SnapshotRefused, Still, parse_display, snapshot
-from tests.python.support import opengl
+from tests.python.support import engine_daemon, opengl
 from tests.python.support.paths import SOURCE_PATH
 
 GOLDEN = Path(__file__).resolve().parent / "formats_golden"
@@ -1210,6 +1210,7 @@ class DaemonFileTest(unittest.TestCase):
 
         self.cli = cli
         self.addCleanup(cli, "stop")
+        engine_daemon.start(env)
 
     def snapshot(self, out: str) -> dict:
         done = self.cli("snapshot", "part.stl", out, "--width", "200", "--height", "150", "--json")

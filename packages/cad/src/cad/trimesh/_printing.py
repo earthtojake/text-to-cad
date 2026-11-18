@@ -347,7 +347,7 @@ def _overhang_facts(mesh: trimesh.Trimesh, angle_limit: float, layer: float = 0.
                   f"those within {OVERHANG_JOIN} down-facing triangles of each other one region; "
                   "one under area_floor_mm2, "
                   "or a cantilever reaching under reach_floor_mm (the nozzle given, else one bead), is listed with "
-                  "counted false and judged by no rule: text-to-cad's own floors, no guide states them; the "
+                  "counted false and judged by no rule: cad's own floors, no guide states them; the "
                   "down-facing area counts the regions that need support (bridges and plate-edge rounds aside), "
                   "as on exact geometry",
     }

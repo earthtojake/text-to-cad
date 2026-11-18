@@ -6,6 +6,7 @@ from retiring nor counts as an active client."""
 from __future__ import annotations
 
 import socket
+import threading
 import time
 import types
 import unittest
@@ -103,6 +104,43 @@ class GateOrderTest(unittest.TestCase):
         self.assertEqual(seen[-1], ("served", 1))
         self.assertEqual(app.active_requests, 0)
         self.assertGreaterEqual(server.touch.call_count, 1)
+
+    def test_a_build_s_page_is_served_while_its_kernel_processes_still_start(self) -> None:
+        # A model built in an environment of its own leaves the CAD kernel's unmade, and the page's warm of its
+        # processes waits while uv makes it: the page is answered at once all the same, never after that wait, and
+        # loaded again meanwhile it starts no second warm. Once that one ends, a page load warms again.
+        app, server = self.engine()
+        warms, made = [], threading.Event()
+        self.addCleanup(made.set)
+        server.holds = lambda _ident: True
+        server.warm = lambda: (warms.append(True), made.wait(30))
+        ident = "31eaed41-89d6-5b23-ada5-2f249f1ebb9d"
+        request = types.SimpleNamespace(header=lambda name, default="": {"host": "127.0.0.1:4242"}.get(name, default),
+                                        query={"token": app.token},
+                                        path=f"/{ident}", method="GET")
+        served = []
+
+        def load(times):
+            for _ in range(times):
+                app.handle(request, types.SimpleNamespace(also=()))
+
+        with mock.patch.object(app, "default_app") as default:
+            default.return_value.handle.side_effect = lambda _request, _response: served.append(True)
+            loading = threading.Thread(target=load, args=(10,), daemon=True)
+            loading.start()
+            try:
+                loading.join(5)
+                self.assertFalse(loading.is_alive(), "the page is served while its warm waits on the environment")
+                self.assertEqual(len(served), 10)
+                self.assertTrue(until(lambda: warms), "the page's load starts its kernel processes")
+                self.assertEqual(warms, [True], "ten loads during one warm start it once")
+                made.set()
+                self.assertTrue(until(lambda: not app._warming), "the warm ends with the making")
+                load(1)
+                self.assertTrue(until(lambda: len(warms) == 2), "a later load warms again")
+            finally:
+                made.set()
+                loading.join(10)  # a load still waiting ends under the patch
 
 
 if __name__ == "__main__":
