@@ -49,7 +49,7 @@ class StateFolderTest(unittest.TestCase):
                                           "DO_NOT_TRACK": "", "CAD_TELEMETRY": ""}):
             language.change({"locale": "ja"})
             analytics.choose(True, by="cli")
-            self.assertEqual(updates.feed(get=lambda _url: {"latest": "9.9.9"}), {"latest": "9.9.9"})
+            self.assertEqual(updates.feed(get=lambda _url: {"latest": "9.9.9"}), {"latest": "9.9.9", "lines": {}})
             self.assertTrue(analytics.spool({"builds": [{"kind": "xbf", "via": "script", "outcome": "ok", "seconds": 1.0}]}))
             later = time.time() + analytics.FLUSH_SECONDS + 1
             started: list[Path] = []

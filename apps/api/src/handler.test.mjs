@@ -840,12 +840,22 @@ test('health fails without a setting, or with keys the service refuses, naming n
 });
 
 test('the version feed is the same for everyone, kept at the edge, and answers without the telemetry service', async () => {
-  const feed = { latest: '0.9.0' };
+  // Its two addresses: `/v1/releases` (cad 0.11.12 on) and the frozen `/v1/versions` (0.7.12 to 0.11.11).
+  const feeds = { releases: { latest: '1.0.0', lines: { 0: '0.12.3', 1: '1.0.0' } }, versions: { latest: '0.11.14' } };
   const down = { ...memory(), async ready() { throw new Error('unreachable'); } };
-  const reply = await handle(new Request('https://api.texttocad.dev/v1/versions/'), down, { versions: async () => feed, missing: ['POSTHOG_REGION'] });
-  assert.deepEqual([reply.status, reply.headers.get('content-type'), await reply.json()], [200, 'application/json', feed]);
-  assert.equal(reply.headers.get('cache-control'), 'public, s-maxage=300, stale-while-revalidate=60, stale-if-error=604800');
+  const options = { releases: async () => feeds.releases, versions: async () => feeds.versions, missing: ['POSTHOG_REGION'] };
+  for (const [path, feed] of [['/v1/releases', feeds.releases], ['/v1/versions/', feeds.versions]]) {
+    // Whatever the request says of itself: the same answer.
+    for (const headers of [{}, { 'user-agent': 'cadgen' }, { 'user-agent': 'cad', 'x-cad-version': '0.11.3' }]) {
+      const reply = await handle(new Request(`https://api.texttocad.dev${path}?release=0.11.3`, { headers }), down, options);
+      assert.deepEqual([reply.status, reply.headers.get('content-type'), await reply.json()], [200, 'application/json', feed]);
+      assert.equal(reply.headers.get('cache-control'), 'public, s-maxage=300, stale-while-revalidate=60, stale-if-error=604800');
+      assert.equal(reply.headers.get('vary'), null);
+    }
+  }
   // No feed to give: an error the edge keeps nowhere, which a released cadgen takes as a check that failed.
-  const none = await handle(new Request('https://api.texttocad.dev/v1/versions'), down, { versions: async () => null });
-  assert.deepEqual([none.status, none.headers.get('cache-control')], [503, 'no-store']);
+  for (const path of ['/v1/releases', '/v1/versions']) {
+    const none = await handle(new Request(`https://api.texttocad.dev${path}`), down, { releases: async () => null, versions: async () => null });
+    assert.deepEqual([none.status, none.headers.get('cache-control')], [503, 'no-store']);
+  }
 });

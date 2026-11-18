@@ -147,9 +147,12 @@ and `plugin.auto_update`, whether the server runs the install command once where
 release it last ended well for, off unless turned on (`cad plugin update auto`; the install command turns it
 on where its run ends well).
 
-The server reads the version feed (`updates.py`, at most once an hour, in the background; never waited on).
-It asks whether to update as it starts, and as it tends itself: the switch on, this cad a global install
-whose installer is found, the feed's release newer than this one. Then, once nothing is in flight (at a
+The server reads the version feed (`updates.py`, at most once an hour, in the background; never waited on):
+`api.texttocad.dev/v1/releases`, the newest release (`latest`) and the newest of each major version (`lines`,
+`updates.newest_of_major`), kept in the state folder's `versions.json` (an answer with `latest` alone is read with
+no `lines`). The releases before this design read `/v1/versions`, which names nothing from 0.12.0 on; nothing
+here reads it. It asks whether to update as it starts, and as it tends itself: the switch on, this cad a global
+install whose installer is found, the feed's `latest` newer than this one. Then, once nothing is in flight (at a
 start, at once; otherwise once nothing has run for a minute), a detached helper that is neither the `cad`
 executable nor run from cad's environment (`_internal/auto_update_helper.py`) stops the server, runs the
 installer's upgrade, `uv tool install cad@latest` (no version, no Python flags: the environment keeps its

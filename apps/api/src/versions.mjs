@@ -1,11 +1,22 @@
 /**
- * GET /v1/versions: the feed every installed text-to-cad reads (`cad_server/updates.py` in packages/cad-server):
+ * The version feed, at two addresses, each the same for everyone, both read from one read of PyPI:
  *
- *   {"latest": "0.9.0"}
+ *   GET /v1/releases   {"latest": "1.2.0", "lines": {"0": "0.12.3", "1": "1.2.0"}}
+ *   GET /v1/versions   {"latest": "0.11.14"}
  *
- * `latest` is THE POINTER: a cad older than it updates itself. cad's own update then installs PyPI's newest
- * (`uv tool install cad@latest`), and the install command installs PyPI's newest too, neither reading the feed; only
- * releases 0.10.0 to 0.11.11 install the release the feed names, exactly, as `cad-server==X`. It is the newest release that
+ * `/v1/releases` is what cad 0.11.12 and later reads (`cad_server/updates.py` in packages/cad): `latest`, the newest
+ * release, and `lines`, the newest release of each major version that has one (its major as a string, the JSON key).
+ * `latest` is THE POINTER: a cad older than it updates itself, and its update then installs PyPI's newest
+ * (`uv tool install cad@latest`); the install command installs PyPI's newest too, reading no feed.
+ *
+ * `/v1/versions` is frozen: the releases 0.7.12 to 0.11.11 read it, and nothing newer will. It names the newest
+ * release BELOW 0.12.0 (`OLD_BELOW`), in the shape it always had, `{latest}` alone. 0.11.0 to 0.11.11 install by
+ * themselves exactly the release it names, but only a patch of their own minor, and 0.10.0 to 0.10.4 install it
+ * on a click: naming 0.12.0 or later there would stop every 0.11.x computer updating by itself, while the newest
+ * 0.11.x carries the bridge onto the design that updates itself freely (docs/contributing/decisions.md, "Old
+ * releases are carried through the newest 0.11"). Until a release 0.12.0 exists, it answers exactly what it did.
+ *
+ * Every release either address names is the newest that
  *   1. has a file PyPI's simple index lists unyanked (a pre-release is no release here: the server reads only
  *      `X.Y.Z`), read from `cadgen`'s index: a release uploads its projects one at a time, `cad`, `cad-server`,
  *      `cad-mcp`, then `cadgen`, each only once PyPI lists the one before (.github/workflows/release-publish.yml),
@@ -16,8 +27,8 @@
  *      its release not old enough;
  *   3. is not held: `held` is a set of `X.Y.Z` the feed never names, from the Vercel project's `CAD_HELD_RELEASES`
  *      (`heldOf`, README "Holding a release").
- * A release that is held or too new is passed over, never answered as nothing: the feed names the newest release
- * that qualifies.
+ * A release that is held or too new is passed over, never answered as nothing: each address names the newest
+ * release that qualifies (and `/v1/versions`, the newest below 0.12.0 that does).
  *
  * Each instance keeps what it last read for a few minutes, and keeps answering it while PyPI fails. With
  * nothing read yet and PyPI failing, there is no feed (`null`): the handler answers 503, which a released
@@ -27,6 +38,9 @@
 
 export const INDEX = 'https://pypi.org/simple/cadgen/';
 export const MIN_AGE_MS = 60 * 60 * 1000; // a release is named an hour after its last file reached PyPI
+// `/v1/versions` names nothing at or above it: the releases that read that address install by themselves only a
+// patch of their own minor (0.11.x), so the newest 0.11.x is the one they can reach, and it carries them over.
+export const OLD_BELOW = '0.12.0';
 const RELEASE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/; // `cad_server/updates.py`'s own `_RELEASE`
 const FILE = /^cadgen-([^-]+?)(?:-.+\.whl|\.tar\.gz|\.zip)$/; // a wheel's or an sdist's name, and its version
 const UPLOADED = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/; // PEP 700's ISO 8601
@@ -60,10 +74,10 @@ export function heldOf(env = {}, log = console.error) {
 }
 
 /**
- * The pointer an index page (PEP 691 JSON) gives at `now`: the newest release with an unyanked file, every
- * unyanked file of it uploaded at least an hour before `now`, and not in `held`; `null` when none is.
+ * The releases an index page (PEP 691 JSON) offers at `now`, oldest first: each with an unyanked file, every
+ * unyanked file of it uploaded at least an hour before `now`, and not in `held`.
  */
-export function latestOf(page, { now = Date.now(), held = new Set() } = {}) {
+function readyOf(page, { now = Date.now(), held = new Set() } = {}) {
   const uploaded = new Map(); // release -> when its last unyanked file was uploaded, or null when unknown
   for (const file of Array.isArray(page?.files) ? page.files : []) {
     if (!file || typeof file !== 'object' || !unyanked(file)) continue;
@@ -74,15 +88,37 @@ export function latestOf(page, { now = Date.now(), held = new Set() } = {}) {
     uploaded.set(version, at === null || before === null ? null : Math.max(before, at));
   }
   const ready = [...uploaded].filter(([version, at]) => at !== null && now - at >= MIN_AGE_MS && !held.has(version));
-  return ready.map(([version]) => version).sort(newer).at(-1) ?? null;
+  return ready.map(([version]) => version).sort(newer);
+}
+
+/** The pointer an index page gives at `now`: the newest release it offers (`readyOf`); `null` when none is. */
+export function latestOf(page, options) {
+  return readyOf(page, options).at(-1) ?? null;
 }
 
 /**
- * The feed, read from PyPI: a function the handler calls, which answers `{latest}` or `null`, and never
- * throws.
+ * Both addresses' answers from one index page at `now`, `null` when it offers no release at all:
+ * `releases`, `{latest, lines}` (`/v1/releases`), and `versions`, `{latest}` naming the newest release below
+ * `OLD_BELOW` (`/v1/versions`), or `null` when none below it qualifies.
  */
-export function pypiVersions({ fetch = globalThis.fetch, now = Date.now, log = console.error, timeout = TIMEOUT_MS, held = new Set() } = {}) {
-  let kept = null; // { feed, at }; a failed first read keeps a null feed until the next attempt
+export function feedsOf(page, options) {
+  const ready = readyOf(page, options);
+  if (!ready.length) return null;
+  const lines = {};
+  for (const version of ready) lines[parts(version)[0]] = version; // oldest first: each major ends on its newest
+  const old = ready.filter(version => newer(version, OLD_BELOW) < 0).at(-1);
+  return {
+    releases: Object.freeze({ latest: ready.at(-1), lines: Object.freeze(lines) }),
+    versions: old ? Object.freeze({ latest: old }) : null,
+  };
+}
+
+/**
+ * The feed, read from PyPI: two functions the handler calls, `releases` (`{latest, lines}`) and `versions`
+ * (`{latest}`), sharing one read of PyPI, each answering its feed or `null`, and never throwing.
+ */
+export function pypiFeeds({ fetch = globalThis.fetch, now = Date.now, log = console.error, timeout = TIMEOUT_MS, held = new Set() } = {}) {
+  let kept = null; // { feeds, at }; a failed first read keeps no feeds until the next attempt
   let asking = null;
   async function ask() {
     try {
@@ -91,20 +127,21 @@ export function pypiVersions({ fetch = globalThis.fetch, now = Date.now, log = c
         signal: AbortSignal.timeout(timeout),
       });
       if (!response.ok) throw Object.assign(new Error('PyPI refused'), { code: `pypi_${response.status}` });
-      const latest = latestOf(await response.json(), { now: now(), held });
-      if (!latest) throw Object.assign(new Error('no release'), { code: 'pypi_no_release' });
-      kept = { feed: Object.freeze({ latest }), at: now() };
+      const feeds = feedsOf(await response.json(), { now: now(), held });
+      if (!feeds) throw Object.assign(new Error('no release'), { code: 'pypi_no_release' });
+      kept = { feeds, at: now() };
     } catch (error) {
       log('version feed: PyPI failed:', error?.code ?? error?.name ?? 'error');
       // What was read stands, and PyPI is asked again in a few minutes, not on every request meanwhile.
-      kept = { feed: kept?.feed ?? null, at: now() };
+      kept = { feeds: kept?.feeds ?? null, at: now() };
     }
   }
-  return async function versions() {
+  const read = name => async () => {
     if (!kept || now() - kept.at >= FRESH_MS) {
       asking ??= ask().finally(() => { asking = null; });
       await asking;
     }
-    return kept?.feed ?? null;
+    return kept?.feeds?.[name] ?? null;
   };
+  return { releases: read('releases'), versions: read('versions') };
 }

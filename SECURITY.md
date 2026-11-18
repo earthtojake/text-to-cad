@@ -141,7 +141,8 @@ the newest release, not that one.
 **Automatic updates.** A cad installed globally (`uv tool install cad`) installs
 new releases by itself, with no one asked, unless you turn that off with
 `cad update auto off`. At most once an hour, and as its server starts, cad asks
-`api.texttocad.dev/v1/versions` which release is newest. The feed names a release
+`api.texttocad.dev/v1/releases` which release is newest (releases before 0.11.12 ask
+`api.texttocad.dev/v1/versions`, which names nothing from 0.12.0 on). The feed names a release
 only once it has been on PyPI for an hour, and we can hold a release back from it.
 When the feed names a release newer than cad's and nothing has run for a minute,
 cad stops its server, runs its installer's own upgrade (`uv tool install

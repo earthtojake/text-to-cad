@@ -4,8 +4,9 @@
  * sends every /v1 path to). A plain fetch handler over a `store` (PostHog's, posthog.mjs), so the host it runs on and
  * the service behind it can change without a release of anything that calls it (README.md).
  *
- *   GET    /v1/versions        the version feed, PyPI's latest (versions.mjs) -> 200, the same for everyone,
- *                              or 503 while PyPI cannot be read and nothing has been
+ *   GET    /v1/releases        the version feed, PyPI's latest and the latest of each major (versions.mjs) ->
+ *                              200, the same for everyone, or 503 while PyPI cannot be read and nothing has been
+ *   GET    /v1/versions        the frozen feed of 0.7.12 to 0.11.11: the latest below 0.12.0, likewise
  *   POST   /v1/events          a batch of counts (events.mjs) -> 204, or 503 for a schema newer than this
  *                              receiver reads (`Later`), which the sender keeps and sends again
  *   POST   /v1/forget          {install}: forget everything sent under an install id -> 204, or 429 past
@@ -76,12 +77,13 @@ async function json(request) {
  * @param {Request} request
  * @param {{ insert(rows: object[], context: { country: string | null }): Promise<void>, forget(id: string): Promise<void>,
  *   ready(): Promise<void> }} store `ready`: throws when the service will not take a batch (health asks).
- * @param {{ missing?: string[], country?: string | null, versions?: () => Promise<object | null> }} [options] `missing`: settings the host
+ * @param {{ missing?: string[], country?: string | null, versions?: () => Promise<object | null>,
+ *   releases?: () => Promise<object | null> }} [options] `missing`: settings the host
  *   lacks, by name (health says so). `country`: where the host places the request, from its IP address.
- *   `versions`: the version feed (versions.mjs). `limiter`: how often one caller may ask to forget (limit.mjs),
- *   by `client`, the address the host says the request came from, and by install id.
+ *   `releases` and `versions`: the version feed's two addresses (versions.mjs). `limiter`: how often one caller may
+ *   ask to forget (limit.mjs), by `client`, the address the host says the request came from, and by install id.
  */
-export async function handle(request, store, { missing = [], country, versions, limiter, client } = {}) {
+export async function handle(request, store, { missing = [], country, versions, releases, limiter, client } = {}) {
   const { pathname } = new URL(request.url);
   const path = pathname.replace(/\/+$/, '');
   let batch; // what /v1/events parsed, for the line a refusal logs
@@ -89,11 +91,12 @@ export async function handle(request, store, { missing = [], country, versions, 
     // Unhealthy without its settings, or with a service that will not take its keys: a deploy's check fails
     // rather than shipping an API that drops every batch or cannot delete what an opt-out asks it to. The
     // service's answer by its code alone.
-    // One feed for everyone, never a reply to anything a request says: PyPI's, which the edge keeps five minutes
-    // and serves on while PyPI or the function fails. It asks no telemetry service, so it answers even when
-    // telemetry cannot. With no feed at all, a 503 the edge keeps nowhere.
-    if (path === '/v1/versions' && request.method === 'GET' && versions) {
-      const feed = await versions();
+    // One feed for everyone at each address, never a reply to anything a request says: PyPI's, which the edge
+    // keeps five minutes and serves on while PyPI or the function fails. It asks no telemetry service, so it
+    // answers even when telemetry cannot. With no feed at all, a 503 the edge keeps nowhere.
+    const feedOf = path === '/v1/releases' ? releases : path === '/v1/versions' ? versions : undefined;
+    if (feedOf && request.method === 'GET') {
+      const feed = await feedOf();
       return feed ? reply(200, feed, FEED_CACHE) : reply(503, { error: 'no version feed' });
     }
     if (path === '/v1/health' && request.method === 'GET') {

@@ -9,7 +9,8 @@ name: Deploy API
 # The project's Root Directory is apps/api, which has no dependencies and no build: Vercel bundles
 # api/v1.js with what it imports, and serves nothing else but public/. Its PostHog settings live in the Vercel
 # project only, so the deploy checks /v1/health, which answers 503 while one is missing or PostHog
-# refuses its keys, and /v1/versions, which answers 503 while PyPI cannot be read.
+# refuses its keys, and the version feed's two addresses, /v1/releases and /v1/versions, which answer 503
+# while PyPI cannot be read.
 
 on:
   push:
@@ -65,4 +66,4 @@ jobs:
           scripts/github-workflows/deploy-vercel-app.sh \
             --label "API" \
             --project-id "$VERCEL_API_PROJECT_ID" \
-            --public-urls "https://api.texttocad.dev/v1/health https://api.texttocad.dev/v1/versions"
+            --public-urls "https://api.texttocad.dev/v1/health https://api.texttocad.dev/v1/releases https://api.texttocad.dev/v1/versions"

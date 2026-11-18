@@ -1,14 +1,17 @@
 """Which release is newest: the version feed, as cad's own automatic update reads it, and PyPI, as ``cad update`` asks.
 
-At most once an hour, a server reads the version feed (``GET /v1/versions``, ``cad_server/_internal/api.py``)::
+At most once an hour, a server reads the version feed (``GET /v1/releases``, ``cad_server/_internal/api.py``)::
 
-    {"latest": "0.10.0"}
+    {"latest": "1.2.0", "lines": {"0": "0.12.3", "1": "1.2.0"}}
 
-in the background (``refresh``), never waited on. It is one anonymous request: no id, no path, nothing about the
-person or their machine beyond what any web request carries. ``CAD_UPDATE_CHECK=0`` turns it off, and it never runs
-in CI (``CI`` set) or for a development build (``cad_server._internal.editable.development``). The feed as last read
-is kept in the state folder (``versions.json``), where every process of the person's reads it: ``latest`` is the
-release cad's own automatic update moves to (``cad_server._internal.auto_update``). Nothing here updates anything, and
+in the background (``refresh``), never waited on: ``latest`` the newest release, ``lines`` the newest release of each
+major version (``newest_of_major``). Releases 0.7.12 to 0.11.11 read ``/v1/versions``, which names ``latest`` alone and
+never a release from 0.12.0 on: it is kept for them as it is, and nothing here reads it. It is one anonymous request:
+no id, no path, nothing about the person or their machine beyond what any web request carries.
+``CAD_UPDATE_CHECK=0`` turns it off, and it never runs in CI (``CI`` set) or for a development build
+(``cad_server._internal.editable.development``). The feed as last read is kept in the state folder (``versions.json``), where every process of the person's reads it: ``latest`` is the
+release cad's own automatic update moves to (``cad_server._internal.auto_update``). A feed with ``latest`` alone (a
+stand-in's, or the file as an earlier build kept it) is read with no ``lines``. Nothing here updates anything, and
 nothing here says anything to a person or an agent.
 
 ``cad update`` asks PyPI instead (``newest``: ``GET https://pypi.org/pypi/cad/json``, its ``info.version``, which
@@ -36,6 +39,7 @@ from cad._internal.atomic_replace import write_bytes_atomic
 LOG = logging.getLogger("cad_server.updates")
 
 FILE = "versions.json"  # the feed as last read, in the state folder
+ADDRESS = "/releases"  # the feed's address under the service's base (``api_url``)
 CHECK_SECONDS = 60 * 60  # how old the feed may get before it is read again
 TIMEOUT_SECONDS = 5
 MAX_BYTES = 64 * 1024  # a feed is a few dozen bytes
@@ -51,11 +55,26 @@ def parse_release(value: Any) -> tuple[int, int, int] | None:
 
 
 def parse_feed(data: Any) -> dict[str, Any] | None:
-    """The feed as the server reads it: a release as ``latest`` (``None`` when there is none). Anything
-    else in it is left out, so the feed can grow without a release of cad."""
+    """The feed as the server reads it: a release as ``latest`` (``None`` when there is none), and ``lines``, each major
+    version's newest release by its number as a string (``{"0": "0.12.3"}``): an entry whose release is of another
+    major, or no release, is left out, and a feed with none is read with ``lines`` empty. Anything else in it is left
+    out, so the feed can grow without a release of cad."""
     if not isinstance(data, dict) or parse_release(data.get("latest")) is None:
         return None
-    return {"latest": data["latest"]}
+    given = data.get("lines")
+    lines = {major: release for major, release in (given.items() if isinstance(given, dict) else ())
+             if isinstance(major, str) and (numbers := parse_release(release)) is not None
+             and str(numbers[0]) == major}
+    return {"latest": data["latest"], "lines": lines}
+
+
+def newest_of_major(major: int, known: dict[str, Any] | None) -> str | None:
+    """The newest release of major version ``major`` that the feed ``known`` (as ``feed`` returns it) names in its
+    ``lines``; None where it names none (a feed with ``latest`` alone, or no feed)."""
+    lines = known.get("lines") if isinstance(known, dict) else None
+    found = lines.get(str(major)) if isinstance(lines, dict) else None
+    numbers = parse_release(found)
+    return found if numbers is not None and numbers[0] == major else None
 
 
 def checking() -> bool:
@@ -134,7 +153,7 @@ def _read(path: Path, now: float, known: dict[str, Any] | None,
     # The hour's attempt is spent before it is made: a process that exits mid-request, or a feed
     # that never answers, costs one wait an hour.
     _save(path, now, known)
-    fresh = parse_feed((get or _get)(f"{api_url()}/versions"))
+    fresh = parse_feed((get or _get)(f"{api_url()}{ADDRESS}"))
     if fresh is not None:
         _save(path, now, fresh)
     return fresh

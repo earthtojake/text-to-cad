@@ -1,5 +1,6 @@
 """The version feed (`cad_server/updates.py`): read at most once an hour by a server, in the background, for cad's own
-update; and PyPI, asked at once for `cad update`; never said to anyone. No test reaches the real feed or PyPI: each
+update, at its address for this release on (`/v1/releases`: the newest release, and each major's); and PyPI, asked at
+once for `cad update`; never said to anyone. No test reaches the real feed or PyPI: each
 answer is handed in, kept as just read, or a stand-in's on loopback."""
 
 from __future__ import annotations
@@ -62,7 +63,8 @@ class UpdatesTest(unittest.TestCase):
         get = lambda url: asked.append(url) or answers.pop(0)  # noqa: E731
         start = 1_000_000.0
         self.assertEqual(updates.feed(get=get, now=start)["latest"], "0.9.0")
-        self.assertEqual(asked, ["https://api.texttocad.dev/v1/versions"])
+        # The new address: `/v1/versions` is the frozen one of 0.7.12 to 0.11.11, never read here.
+        self.assertEqual(asked, ["https://api.texttocad.dev/v1/releases"])
         updates.feed(get=get, now=start + updates.CHECK_SECONDS - 60)
         self.assertEqual(len(asked), 1)
         # Unreachable an hour later: the feed as last read stands, and is not asked again that hour.
@@ -118,16 +120,40 @@ class UpdatesTest(unittest.TestCase):
         response = mock.MagicMock()
         response.__enter__.return_value.read.return_value = b'{"latest": "0.9.1"}'
         with mock.patch("urllib.request.urlopen", return_value=response) as opened:
-            self.assertEqual(updates._get("http://127.0.0.1:9/v1/versions"), {"latest": "0.9.1"})
+            self.assertEqual(updates._get("http://127.0.0.1:9/v1/releases"), {"latest": "0.9.1"})
         request = opened.call_args.args[0]
         self.assertEqual((request.get_header("User-agent"), request.get_header("Accept")), ("cad", "application/json"))
 
     def test_a_feed_is_read_for_what_this_cadgen_knows(self) -> None:
         self.assertEqual(updates.parse_feed({"latest": "1.2.3", "minimum": {"claude-directory": "1.0.0"}, "notices": []}),
-                         {"latest": "1.2.3"})
-        for broken in (None, [], {}, {"latest": "v1.2.3"}, {"latest": 1}):
+                         {"latest": "1.2.3", "lines": {}})
+        for broken in (None, [], {}, {"latest": "v1.2.3"}, {"latest": 1}, {"lines": {"0": "0.12.0"}}):
             with self.subTest(broken=broken):
                 self.assertIsNone(updates.parse_feed(broken))
+        # Each major's newest release; an entry that is not one (a pre-release, another major's, a number) left out.
+        self.assertEqual(updates.parse_feed({"latest": "2.0.0", "lines": {
+            "0": "0.12.3", "1": "1.4.0", "2": "2.0.0", "3": "2.0.0", "01": "1.4.0", "4": "4.0.0rc1", "5": 5, "x": "0.1.0"}}),
+            {"latest": "2.0.0", "lines": {"0": "0.12.3", "1": "1.4.0", "2": "2.0.0"}})
+        for lines in (None, [], "0.12.3", [["0", "0.12.3"]]):
+            with self.subTest(lines=lines):
+                self.assertEqual(updates.parse_feed({"latest": "0.12.3", "lines": lines}), {"latest": "0.12.3", "lines": {}})
+
+    def test_each_major_s_newest_release_is_kept_and_a_feed_without_lines_is_read_with_none(self) -> None:
+        answer = {"latest": "1.4.0", "lines": {"0": "0.12.3", "1": "1.4.0"}}
+        self.assertEqual(updates.feed(get=lambda _url: answer, now=1_000_000.0), answer)
+        kept = json.loads((self.tmp / updates.FILE).read_text(encoding="utf-8"))
+        self.assertEqual(kept, {"checked": 1_000_000.0, "feed": answer}, "kept in the file it always was")
+        known = updates.feed(fetch=False)
+        self.assertEqual([updates.newest_of_major(major, known) for major in (0, 1, 2)], ["0.12.3", "1.4.0", None])
+        # The file as an earlier build kept it, or a stand-in that answers `latest` alone: no lines, nothing else lost.
+        self.just_read({"latest": "0.11.11"})
+        known = updates.feed(fetch=False)
+        self.assertEqual(known, {"latest": "0.11.11", "lines": {}})
+        self.assertIsNone(updates.newest_of_major(0, known))
+        self.assertEqual(updates.feed(get=lambda _url: {"latest": "0.11.14"}, force=True), {"latest": "0.11.14", "lines": {}})
+        for nothing in (None, {}, {"latest": "1.0.0", "lines": {"1": "2.0.0"}}, {"latest": "1.0.0", "lines": None}):
+            with self.subTest(nothing=nothing):
+                self.assertIsNone(updates.newest_of_major(1, nothing))
 
     def test_nothing_is_checked_when_turned_off_in_ci_or_for_a_development_build(self) -> None:
         self.just_read(FEED)

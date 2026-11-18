@@ -16,7 +16,10 @@ waits for a minute with nothing run still waits that minute. No real agent app i
 Every computer has a folder of releases of its own, holding only those that are out (``Box.out``): the install command
 installs PyPI's newest, and an upgrade is ``uv tool install cad@latest``, so a release not out yet must not be there.
 
-The install command cad runs counts its runs on every computer (``Box.runs``).
+The install command cad runs counts its runs on every computer (``Box.runs``), and the feed which address each cad
+read it at (``addresses``): this build's the new one, ``/v1/releases``, a shipped release's the old, ``/v1/versions``;
+a route where one read the other's fails, ``self-update`` checks this build read the new one and ``updater`` the
+shipped release the old.
 
 **cad updating itself** (a computer the install command set up: cad a uv tool, its automatic updates on).
 
@@ -670,11 +673,29 @@ def caught_up(box: Box, release: str, runs: int) -> dict:
     return record
 
 
+def read_feed(box: Box, address: str, agent: str) -> None:
+    """The feed's ``address`` (``versions`` or ``releases``) read on this computer by ``agent`` (its ``User-Agent``)."""
+    if (address, agent) not in box.feed.reads:
+        raise Failed(f"{box.label}: {agent} never read /{address} (the feed's reads: {sorted(set(box.feed.reads))})")
+
+
+def addresses(box: Box) -> str:
+    """Which of the feed's addresses each cad read on this computer, never the other's: this build's
+    (``User-Agent: cad``) the new one, ``releases``, a shipped release's (``cadgen``) the old one, ``versions``. The
+    route's line."""
+    reads = sorted(set(box.feed.reads))
+    crossed = [read for read in reads if read in (("versions", "cad"), ("releases", "cadgen"))]
+    if crossed:
+        raise Failed(f"{box.label}: the feed read at the other's address: {crossed}")
+    return ", ".join(f"{agent or 'no agent'} read /{address}" for address, agent in reads) or "nothing read the feed"
+
+
 def self_update(box: Box) -> None:
     box.set_up("on")
     box.out(NEXT)
     box.hour_later()
     updated(box, NEXT)
+    read_feed(box, "releases", "cad")
     box.tool_serves(NEXT)
     box.is_tool(NEXT)
     # Then `cad plugin update`, once, by the new cad's server: kept in its record, its output in the log.
@@ -1058,6 +1079,7 @@ def no_plugin(box: Box) -> dict:
 def updater(box: Box, old: str) -> None:
     box.install_old(old)
     box.button(NEW)
+    read_feed(box, "versions", "cadgen")
     if box.old_state == box.state:
         box.switched(old, NEW)
     else:
@@ -1350,6 +1372,7 @@ def main(argv: list[str] | None = None) -> int:
         for name in chosen:
             before = rc.Sentinels.here()
             alone = WINDOWS and args.old == "0.10.0" and name in BRIDGE
+            feed.reads.clear()
             box = Box(name, feed, wheels, shared, named_state=not alone, pypi=pypi, counted=True)
             say(f"-- {name}: a computer in {box.work}")
             began = time.monotonic()
@@ -1362,6 +1385,7 @@ def main(argv: list[str] | None = None) -> int:
                     routes[name](box)
                 else:
                     routes[name](box, args.old)
+                say(f"        the feed: {addresses(box)}")
                 say(f"ok      {name}{'' if name in SELF else f', from {args.old}'} ({time.monotonic() - began:.0f} s)")
             except (rc.Failed, subprocess.TimeoutExpired, OSError, ValueError, KeyError) as failure:
                 failed += 1

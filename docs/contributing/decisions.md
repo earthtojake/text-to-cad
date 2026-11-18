@@ -88,8 +88,9 @@ An upper bound on Python would make a resolver on a newer Python fall back to an
 
 ## The feed says when
 
-**Decision.** The version feed, `api.texttocad.dev/v1/versions`, names one release, `latest`, once
-it has been on PyPI for an hour, and we can hold a release back from it. cad's automatic update
+**Decision.** The version feed, `api.texttocad.dev/v1/releases`, names the newest release, `latest`,
+once it has been on PyPI for an hour, and the newest such release of each major version, `lines`; we
+can hold a release back from it. cad's automatic update
 begins only when the feed names a release newer than its own, and then runs the installer's own
 upgrade, which installs PyPI's newest. Everything else asks PyPI: `cad update`, the install command,
 the skills' line and the CAD app's line.
@@ -202,6 +203,24 @@ design without a person doing anything.
 **What it costs.** A few commands stay for those releases: `cad setup --engine-update`; plain
 `cad setup`, which a `cad update` typed on those releases runs; and the hidden short forms
 `cad status` and `cad stop` their skill text uses.
+
+## Old releases are carried through the newest 0.11
+
+**Decision.** The old address of the version feed, `api.texttocad.dev/v1/versions`, which every
+release from 0.7.12 to 0.11.11 reads, is frozen: it names the newest release below 0.12.0, in the shape
+it always had (`latest` alone), under the feed's hour and holds. The releases from 0.11.12 on read
+their own address, `api.texttocad.dev/v1/releases`, which names the newest release and the newest of
+each major version. A computer on an old release reaches the newest 0.11.x, whose bridge brings it onto
+the design that updates itself, and that cad goes on from there.
+
+**Why.** Releases 0.11.0 to 0.11.11 install by themselves exactly the release the feed names, but only a
+patch of their own minor: the day the feed named 0.12.0, every computer on 0.11.x would stop updating by
+itself. Releases 0.10.0 to 0.10.4 install what it names on a click, with no rule on the number. The
+newest 0.11.x carries the bridge, and nothing shipped can be changed to read anything else.
+
+**What it costs.** The last 0.11.x must stay on PyPI, with its bridge, for as long as old computers
+run. No old computer ever installs 0.12 or later directly: it always goes
+through the newest 0.11.x first. Two addresses are kept by the service, and the old one never changes.
 
 ## No version left behind
 

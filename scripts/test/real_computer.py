@@ -19,8 +19,9 @@ program could write and fails before anything runs where one is not the computer
 (3245) on CI alone, where nothing else serves; elsewhere a free one of its own (``CAD_ENGINE_DEFAULT_PORT``), never a
 person's.
 
-``Feed`` is the version feed served on loopback: any path ending ``versions`` (``<api>/versions`` of 0.10.0 to
-0.11.11 and of this tree, ``CAD_API_URL``; the install command reads no feed). ``publish`` writes this tree's wheels
+``Feed`` is the version feed served on loopback (``CAD_API_URL``), at both its addresses: any path ending ``versions``
+(``<api>/versions``, which 0.10.0 to 0.11.11 read) and any ending ``releases`` (``<api>/releases``, this tree's); the
+install command reads no feed. ``publish`` writes this tree's wheels
 again as another release, or a variant of one (a file replaced, its commands taken out), from wheels already built;
 ``stamp`` names that release: this tree's ``VERSION``'s major and minor, a patch far above any real one, so the wheels
 offered to uv (``UV_FIND_LINKS``) are newer than PyPI's newest and the install command's ``uv tool install cad`` takes
@@ -140,19 +141,30 @@ def default_free() -> bool:
 
 
 class Feed(http.server.ThreadingHTTPServer):
-    """The version feed (any path ending ``versions``) saying ``latest``; anything else (telemetry) is not found.
-    ``asked``: how many times it was read."""
+    """The version feed saying ``latest`` at both its addresses: the old one (any path ending ``versions``), ``latest``
+    alone, as releases 0.10.0 to 0.11.11 read it, and the new one (any path ending ``releases``), with ``lines``
+    naming ``latest`` for its own major; anything else (telemetry) is not found. ``asked``: how many times it was
+    read; ``reads``: each read, its address (``versions`` or ``releases``) and the reader's ``User-Agent``."""
 
     def __init__(self, latest: str) -> None:
         self.latest = latest
         self.asked = 0
+        self.reads: list[tuple[str, str]] = []
         feed = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802 - http.server's name
-                found = self.path.split("?", 1)[0].rstrip("/").endswith("versions")
-                feed.asked += found
-                self.answer(json.dumps({"latest": feed.latest}).encode() if found else None)
+                path = self.path.split("?", 1)[0].rstrip("/")
+                address = next((name for name in ("versions", "releases") if path.endswith(name)), None)
+                if address is None:
+                    self.answer(None)
+                    return
+                feed.asked += 1
+                feed.reads.append((address, self.headers.get("User-Agent") or ""))
+                answer: dict = {"latest": feed.latest}
+                if address == "releases":
+                    answer["lines"] = {feed.latest.split(".", 1)[0]: feed.latest}
+                self.answer(json.dumps(answer).encode())
 
             def do_POST(self) -> None:  # noqa: N802
                 self.answer(None)

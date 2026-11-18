@@ -640,8 +640,12 @@ the agents running them reach for them, and nothing shipped later can change wha
    releases' skills and documents name them, and cad runs them (`cad plugin update`, after an
    automatic update, and the bridge). The Windows line names `www.` because Windows PowerShell 5.1
    does not follow the redirect from `texttocad.dev`.
-2. **The version feed, `api.texttocad.dev/v1/versions`, and its `latest` field.** Every shipped release
-   reads it to learn of a newer one.
+2. **The version feed's two addresses.** `api.texttocad.dev/v1/versions` and its `latest` field, alone,
+   naming the newest release below 0.12.0: every release from 0.7.12 to 0.11.11 reads it to learn of a
+   newer one, and 0.11.x installs by itself only a patch of its own minor, so it is frozen and never names
+   0.12.0 or later ([decisions](docs/contributing/decisions.md), "Old releases are carried through the
+   newest 0.11"). `api.texttocad.dev/v1/releases`, its `latest` and its `lines` (the newest release of
+   each major): every release from 0.11.12 on reads it.
 3. **`uv tool install cad`, with no flags, as the one line that installs cad.** Every skill's Setup
    block runs it, and the docs give it, so the newest `cad` on PyPI must install a working `cad`
    command on any Python from the floor up. No upper bound on `requires-python`: a resolver on a
@@ -989,8 +993,10 @@ skill and policy scans still run after upload.
 
 ### The version feed
 
-`api.texttocad.dev/v1/versions` (`apps/api/src/versions.mjs`) names one release, `latest`: the
-newest on PyPI that has been there for at least an hour and is not held back. It says when: cad's
+`api.texttocad.dev/v1/releases` (`apps/api/src/versions.mjs`) names `latest`: the newest release on
+PyPI that has been there for at least an hour and is not held back; and `lines`, the newest such release
+of each major version. Releases 0.7.12 to 0.11.11 read `api.texttocad.dev/v1/versions` instead, which
+names `latest` alone and, under the same rules, the newest such release below 0.12.0. It says when: cad's
 automatic update begins only when the feed names a release newer than the one installed
 (`cad_server/updates.py` reads it, at most once an hour), and the update then installs PyPI's newest
 (`uv tool install cad@latest`). The install command, `cad update`, the plugin's server line and the
@@ -998,7 +1004,7 @@ skills' `uv tool install cad` read no feed: they take PyPI's newest. So holding 
 (`CAD_HELD_RELEASES`, an environment variable of the Vercel project, then `gh workflow run
 deploy-api.yml --ref main`) stops automatic updates only on computers already on the feed's release;
 to pull a release from everyone, yank it on PyPI. The releases 0.10.0 to 0.11.11 install the release
-the feed names. The feed reads the index of `cadgen`, the last of the four projects a release
+`/v1/versions` names, so the newest 0.11.x carries them over. The feed reads the index of `cadgen`, the last of the four projects a release
 uploads, so a release it names is installable under every name. Telemetry passes through the same API to PostHog:
 a deploy (`Deploy API`, on every change to `apps/api` on `main`) needs the project's PostHog
 settings in Vercel, which `/v1/health` checks (`apps/api/README.md`). A release that sends a new

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { INDEX, MIN_AGE_MS, heldOf, latestOf, pypiVersions } from './versions.mjs';
+import { INDEX, MIN_AGE_MS, OLD_BELOW, feedsOf, heldOf, latestOf, pypiFeeds } from './versions.mjs';
 
 // The clock the tests read: an hour is the age a release must reach before the feed names it.
 const NOW = Date.parse('2026-11-17T12:00:00Z');
@@ -52,7 +52,7 @@ test("PyPI's index is read once for every request a few minutes bring, and kept 
   let clock = NOW;
   let answer = () => json(PAGE);
   const index = pypi(() => answer());
-  const versions = pypiVersions({ fetch: index.fetch, now: () => clock, log: quiet });
+  const { versions } = pypiFeeds({ fetch: index.fetch, now: () => clock, log: quiet });
   const [first, second] = await Promise.all([versions(), versions()]);
   assert.deepEqual([first, second], [{ latest: '0.7.18' }, { latest: '0.7.18' }]);
   assert.deepEqual(index.asked, [[INDEX, 'application/vnd.pypi.simple.v1+json']]);
@@ -75,7 +75,7 @@ test("PyPI's index is read once for every request a few minutes bring, and kept 
 
 test('with nothing read and PyPI failing there is no feed, and a hang is a failure', async () => {
   const logged = [];
-  const down = pypiVersions({ fetch: async () => new Response('', { status: 502 }), log: (...line) => logged.push(line.join(' ')) });
+  const down = pypiFeeds({ fetch: async () => new Response('', { status: 502 }), log: (...line) => logged.push(line.join(' ')) }).versions;
   assert.equal(await down(), null);
   // Its status alone is logged.
   assert.deepEqual(logged, ['version feed: PyPI failed: pypi_502']);
@@ -85,7 +85,7 @@ test('with nothing read and PyPI failing there is no feed, and a hang is a failu
     const held = setInterval(() => {}, 1000);
     signal.addEventListener('abort', () => { clearInterval(held); reject(signal.reason); });
   });
-  const hung = pypiVersions({ fetch: hang, log: quiet, timeout: 1 });
+  const hung = pypiFeeds({ fetch: hang, log: quiet, timeout: 1 }).versions;
   assert.equal(await hung(), null);
 });
 
@@ -93,7 +93,7 @@ test('a failed first read waits before retrying PyPI, then recovers when the int
   let clock = NOW;
   let answer = () => new Response('', { status: 503 });
   const index = pypi(() => answer());
-  const versions = pypiVersions({ fetch: index.fetch, now: () => clock, log: quiet });
+  const { versions } = pypiFeeds({ fetch: index.fetch, now: () => clock, log: quiet });
   assert.deepEqual(await Promise.all([versions(), versions()]), [null, null]);
   assert.equal(index.asked.length, 1);
   assert.equal(await versions(), null);
@@ -177,10 +177,10 @@ test("another owner's yanked releases are never named, whatever their number or 
   assert.equal(latestOf(pageWith(file('cadgen-1.1.2-py3-none-any.whl', '', ago(24 * 60))), at), '0.7.18');
 });
 
-test('the answer keeps its shape, {latest} alone, held releases or not', async () => {
+test("the old address's answer keeps its shape, {latest} alone, held releases or not", async () => {
   const page = pageWith(release('0.9.0', ago(3 * 60)), release('0.9.1', ago(30)));
   for (const held of [new Set(), new Set(['0.9.0'])]) {
-    const versions = pypiVersions({ fetch: async () => json(page), now: () => NOW, log: quiet, held });
+    const { versions } = pypiFeeds({ fetch: async () => json(page), now: () => NOW, log: quiet, held });
     const feed = await versions();
     assert.deepEqual(Object.keys(feed), ['latest']);
     assert.match(feed.latest, /^\d+\.\d+\.\d+$/);
@@ -191,7 +191,7 @@ test('the answer keeps its shape, {latest} alone, held releases or not', async (
 test('a release becomes the feed an hour after PyPI took it, on the read after that', async () => {
   let clock = NOW;
   const page = pageWith(release('0.9.0', new Date(NOW).toISOString()));
-  const versions = pypiVersions({ fetch: async () => json(page), now: () => clock, log: quiet });
+  const { versions } = pypiFeeds({ fetch: async () => json(page), now: () => clock, log: quiet });
   assert.deepEqual(await versions(), { latest: '0.7.18' });
   clock += 59 * MINUTE;
   assert.deepEqual(await versions(), { latest: '0.7.18' });
@@ -202,7 +202,64 @@ test('a release becomes the feed an hour after PyPI took it, on the read after t
 test('every release held or too new with nothing read before: no feed, as when PyPI fails', async () => {
   const page = { files: release('0.9.0', ago(10)) };
   const logged = [];
-  const versions = pypiVersions({ fetch: async () => json(page), now: () => NOW, log: (...line) => logged.push(line.join(' ')) });
+  const { versions } = pypiFeeds({ fetch: async () => json(page), now: () => NOW, log: (...line) => logged.push(line.join(' ')) });
   assert.equal(await versions(), null);
   assert.deepEqual(logged, ['version feed: PyPI failed: pypi_no_release']);
+});
+
+// The two addresses: `/v1/releases` (`releases`) for cad 0.11.12 and later, `/v1/versions` (`versions`) frozen for
+// 0.7.12 to 0.11.11, which names nothing at or above 0.12.0.
+const LATER = pageWith(
+  release('0.11.11', ago(30 * 24 * 60)), release('0.11.14', ago(3 * 60)), release('0.12.0', ago(2 * 60)),
+  release('0.12.3', ago(90)), release('1.0.2', ago(80)), release('1.4.0', ago(70)), release('2.0.0', ago(65)),
+);
+
+test('the old address names the newest 0.11.x once later releases exist, and the new one each major and the newest', () => {
+  assert.equal(OLD_BELOW, '0.12.0');
+  const { releases, versions } = feedsOf(LATER, at);
+  assert.deepEqual(versions, { latest: '0.11.14' });
+  assert.deepEqual(releases, { latest: '2.0.0', lines: { 0: '0.12.3', 1: '1.4.0', 2: '2.0.0' } });
+  // One entry per major, keyed by its number as JSON keys are, smallest first.
+  assert.equal(JSON.stringify(releases), '{"latest":"2.0.0","lines":{"0":"0.12.3","1":"1.4.0","2":"2.0.0"}}');
+  assert.equal(JSON.stringify(versions), '{"latest":"0.11.14"}');
+  // 0.12.0 alone above 0.11 is enough to keep it out of the old address.
+  assert.deepEqual(feedsOf(pageWith(release('0.11.14', ago(3 * 60)), release('0.12.0', ago(2 * 60))), at).versions,
+    { latest: '0.11.14' });
+});
+
+test('with nothing at or above 0.12.0, the old address answers exactly what it did, and the new one the same latest', () => {
+  for (const page of [PAGE, pageWith(release('0.9.0', ago(61))), pageWith(release('0.11.14', ago(61)), release('0.11.9', ago(600)))]) {
+    const { releases, versions } = feedsOf(page, at);
+    assert.deepEqual(versions, { latest: latestOf(page, at) });
+    assert.deepEqual(releases, { latest: versions.latest, lines: { 0: versions.latest } });
+  }
+  assert.equal(feedsOf({ files: release('0.9.0', ago(10)) }, at), null, 'no release at all: no feed at either');
+});
+
+test('a held or too new release is passed over at both addresses', () => {
+  // Too new: 2.0.0 (an hour less a minute) and 0.11.15; held: 1.4.0 and 0.11.14.
+  const page = pageWith(LATER.files, release('2.0.0', ago(59)), release('0.11.15', ago(30)));
+  const held = new Set(['1.4.0', '0.11.14']);
+  const { releases, versions } = feedsOf(page, { ...at, held });
+  assert.deepEqual(versions, { latest: '0.11.11' });
+  assert.deepEqual(releases, { latest: '1.0.2', lines: { 0: '0.12.3', 1: '1.0.2' } });
+  // A major whose every release is held or too new has no line, never an empty one.
+  assert.equal('2' in releases.lines, false);
+  // Every release at or above 0.12.0 qualifies and nothing below it does: the old address has no feed (503), the new one does.
+  const above = feedsOf({ files: [...release('0.11.14', ago(10)), ...release('0.12.0', ago(120))] }, at);
+  assert.deepEqual([above.versions, above.releases], [null, { latest: '0.12.0', lines: { 0: '0.12.0' } }]);
+});
+
+test('both addresses come from one read of PyPI, each in its own shape', async () => {
+  const index = pypi(() => json(LATER));
+  const { releases, versions } = pypiFeeds({ fetch: index.fetch, now: () => NOW, log: quiet });
+  const [both, old] = await Promise.all([releases(), versions()]);
+  assert.deepEqual(Object.keys(both), ['latest', 'lines']);
+  assert.deepEqual(Object.keys(old), ['latest']);
+  assert.deepEqual([both.latest, old.latest], ['2.0.0', '0.11.14']);
+  assert.deepEqual(await releases(), both);
+  assert.equal(index.asked.length, 1);
+  // PyPI failing with nothing read: neither has a feed.
+  const down = pypiFeeds({ fetch: async () => new Response('', { status: 502 }), log: quiet });
+  assert.deepEqual([await down.releases(), await down.versions()], [null, null]);
 });
