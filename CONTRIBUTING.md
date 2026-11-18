@@ -208,8 +208,9 @@ make sure uv is there, then download and run `scripts/install/install.py`, which
 tool (PyPI's newest) only where none is installed or the one there does not start, installs the
 plugin from the `latest` branch in each agent app it finds with that app's own command, removes our
 own older copies, puts cad's folder on the PATH with `uv tool update-shell`, and, wherever cad is
-there, turns on `cad plugin update auto`, telling cad whether its run is ending with exit status 0
-(`CAD_INSTALL_FAILED`). It has no modes and reads no feed:
+there, turns on `cad plugin update auto`, telling cad whether its run is ending well
+(`CAD_INSTALL_FAILED`: not where it exits non-zero, nor where it skipped an app whose route runs git
+because git is not here, which alone is no failure and exits 0). It has no modes and reads no feed:
 `cad plugin update` runs the same script. Its `APPS` table is the one list of apps; `docs/install.md` is the same list for people.
 `tests/python/global/test_install_script.py` runs it against stand-in app commands in a home of its
 own.

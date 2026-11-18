@@ -20,14 +20,18 @@ It does six things, and nothing else:
    is installed already, it leaves it as it is: cad updates itself. Where that cad does not start,
    it installs it again.
 3. Installs or updates the plugin in each agent app it finds, with that app's own command (below),
-   all but Kimi Code, which you install by hand. It prints one line per app.
+   all but Kimi Code, which you install by hand. It prints one line per app. Claude Code, Codex,
+   Cursor, Gemini CLI, Qwen Code and Pi get the plugin with [git](https://git-scm.com/downloads):
+   where git is not installed, it skips those apps, says so, and says how to get git. Install git,
+   then run the command again.
 4. Removes what earlier releases of text-to-cad left in those apps.
 5. Where cad's folder is not on your PATH, runs uv's own `uv tool update-shell`, which adds it for
    new terminals (on macOS and Linux in your shell's profile, on Windows in your user PATH). Setting
    `UV_NO_MODIFY_PATH` stops that. cad sets it when cad itself runs the install command
    (`cad plugin update`, and when cad has been updated), so only your own run changes the PATH.
 6. Where cad is there, turns on the plugin's automatic updates ([Updating](#updating)). Where
-   something above failed, it tells cad so, and cad runs the install command again later.
+   something above failed, or an app was skipped for want of git, it tells cad so, and cad runs the
+   install command again later.
 
 It takes no options and does not start anything. Run it again at any time to bring the plugin up
 to date in every app.

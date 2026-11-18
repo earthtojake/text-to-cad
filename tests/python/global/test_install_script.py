@@ -967,6 +967,61 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("cad itself was not installed", done.stdout)
         self.assertEqual(self.calls("cad"), [], "no cad to switch on")
 
+    def test_without_git_an_app_that_installs_with_it_is_skipped_and_the_run_ends_well_for_the_person(self) -> None:
+        # Codex clones its GitHub catalog with git (measured on Windows 11, no git: "program not found", exit 1).
+        self.programs("codex")
+        (self.bin / "git").unlink()
+        report = self.root / "report.json"
+        done = self.run_install(CAD_INSTALL_REPORT=str(report))
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        self.assertEqual(self.calls("codex"), [], "nothing of Codex runs")
+        self.assertIn("Codex: skipped: Codex installs plugins with git, and git is not installed here\n", done.stdout)
+        advice = install.git_advice(install.Here(self.environ()), ["Codex"])
+        self.assertTrue(done.stdout.rstrip().endswith(advice), done.stdout)
+        self.assertTrue(advice.startswith("Codex needs git to get the plugin: install git (") and
+                        advice.endswith("), then run this again."), advice)
+        windows = install.git_advice(install.Here(self.environ(), "win32"), ["Codex"])
+        self.assertIn("winget install --id Git.Git", windows)
+        self.assertNotIn("No app got the plugin", done.stdout)
+        # cad is installed, and told the run did not end well: it keeps no release for the install command
+        # (install-command.json's `for` is not written), so a later run tries Codex again.
+        self.assertEqual(self.installs(), [["--managed-python", "--python", "3.14", "cad"]])
+        self.assertEqual(self.switched(), ["1"])
+        found = json.loads(report.read_text(encoding="utf-8"))
+        self.assertEqual((found["setup"], found["apps"]["codex"]), (0, "skipped"))
+        # With git here, nothing of this: Codex installs, and the run ends well.
+        self.programs("git")
+        done = self.run_install()
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        self.assertIn("Codex: installed\n", done.stdout)
+        self.assertNotIn("needs git", done.stdout)
+        self.assertEqual(self.switched(), [""])
+
+    def test_without_git_an_app_failing_for_another_reason_still_fails_the_run(self) -> None:
+        # Grok Build is not known to need git: it runs, and its failure is a failure. Every app tried failed.
+        self.programs("codex", "grok")
+        (self.bin / "git").unlink()
+        done = self.run_install(FAKE_FAIL="grok")
+        self.assertEqual(1, done.returncode, done.stdout)
+        self.assertIn("Grok Build: failed: `plugin install` said: grok: something went wrong", done.stdout)
+        self.assertIn("Codex: skipped: Codex installs plugins with git", done.stdout)
+        self.assertIn("No app got the plugin: see each app's line above, then run this again.", done.stdout)
+        self.assertIn("Codex needs git to get the plugin", done.stdout)
+
+    def test_on_macos_the_git_stub_without_the_developer_tools_is_no_git(self) -> None:
+        # /usr/bin/git opens a dialog offering Apple's command line tools until they are installed: never run.
+        here = install.Here(self.environ(), "darwin")
+        stub = os.path.realpath
+        with mock.patch.object(install.os.path, "realpath",
+                               lambda path: "/usr/bin/git" if str(path).endswith("/git") else stub(path)):
+            with mock.patch.object(install.Here, "run", return_value=install.Ran(2, "xcode-select: error")) as ran:
+                self.assertIsNone(install.find_git(here, on_path=True))
+            self.assertEqual(ran.call_args[0][0], ["/usr/bin/xcode-select", "-p"])
+            tools = self.root / "Developer"
+            self.write("../Developer/usr/bin/git", "")
+            with mock.patch.object(install.Here, "run", return_value=install.Ran(0, f"{tools}\n")):
+                self.assertEqual(install.find_git(here, on_path=True), str(self.bin / "git"))
+
     def test_the_report_cad_s_hand_over_reads_changes_nothing_the_run_says(self) -> None:
         # CAD_INSTALL_REPORT (set by cad's own hand-over, cad_server._internal.install_script): what the run did, each
         # app by its key, written whole; the run's output and exit status as without it, and a report that cannot be

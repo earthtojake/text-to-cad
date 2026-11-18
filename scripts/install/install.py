@@ -18,20 +18,24 @@ person or by cad (``cad plugin update``). It does these things alone:
    ``cad.exe`` that runs is renamed out of uv's way (``set_aside``), never a reason to stop; what a run set aside and
    could not delete, a later run deletes (``tidy``);
 3. installs or updates the plugin in each agent app it finds, with that app's own command, from the GitHub
-   repository's ``latest`` branch, or copies the skills into the agent's own skills folder;
+   repository's ``latest`` branch, or copies the skills into the agent's own skills folder. An app whose route runs
+   git (its row's ``git``: Claude Code, Codex, Cursor, Gemini CLI, Qwen Code, Pi) is skipped where git is not here
+   (``find_git``, ``without_git``), in one line that says so, and nothing of that app is run or changed; one line at
+   the end says how to get git, then to run this again (``git_advice``);
 4. only then removes what earlier releases left in that app (each row of ``APPS``), Claude Desktop's server,
    and the loose copies of our skills (``remove_loose_skills``): the new copy is in place before an old one
    goes, so a failed download or a GitHub outage leaves every app with what it had;
 5. wherever cad is here, turns on ``cad plugin update auto`` with that cad (``switch_on``), so the plugin follows cad's
    automatic updates, and tells cad how this run is ending in the environment of that one call (``FAILED_ENV``, ``1``
-   where it is ending with a non-zero exit status): turning it on is how cad keeps the release the install command
-   last ended well for, which a run that is ending badly does not write, so where an earlier run ended well cad's
-   server runs the command again; and a computer whose runs keep failing still has the plugin kept. A cad that has no
-   such command says so in one line, and the install has not failed.
+   where it is ending with a non-zero exit status or skipped an app for want of git): turning it on is how cad keeps
+   the release the install command last ended well for, which a run that is ending badly does not write, so where an
+   earlier run ended well cad's server runs the command again; and a computer whose runs keep failing still has the
+   plugin kept. A cad that has no such command says so in one line, and the install has not failed.
 
 It prints one line per app as it finishes. One app failing, even with an error no row foresaw, never stops the
 others; where the cad step failed, the apps are still done. It exits nonzero when cad was needed and could not be
-installed, or every app it found failed. It never starts cad's server.
+installed, or every app it tried failed (an app skipped for want of git was not tried: that alone is no failure). It
+never starts cad's server.
 
 What it removes is only what is provably ours: our names AND a sign that it is ours (our catalog, a path in
 cad's state folder, a git origin naming our repository, a SKILL.md whose front matter or provenance line
@@ -247,6 +251,33 @@ def _stop(process: "subprocess.Popen[bytes]") -> None:
         process.communicate(timeout=10)
     except (OSError, ValueError, subprocess.SubprocessError):
         pass
+
+
+def find_git(here: Here, on_path: bool = False) -> Optional[str]:
+    """git, where it is here and runs: as ``Here.which`` finds a command, or (``on_path``) on PATH alone, where an app's
+    own command looks for it. macOS's ``/usr/bin/git`` is only a stub until Apple's command line developer tools are
+    installed (running it then opens a dialog offering them): it counts only where ``xcode-select -p`` names a folder
+    that holds git."""
+    found = shutil.which("git", path=here.environ.get("PATH", os.defpath)) if on_path else here.which("git")
+    if found and here.platform == "darwin" and os.path.realpath(found) == "/usr/bin/git":
+        ran = here.run(["/usr/bin/xcode-select", "-p"], timeout=30)
+        lines = ran.out.strip().splitlines() if ran.ok else []
+        if not lines or not (Path(lines[-1].strip()) / "usr" / "bin" / "git").is_file():
+            return None
+    return found
+
+
+def git_advice(here: Here, names: Sequence[str]) -> str:
+    """The run's last word for the apps skipped for want of git: how to get git here, then to run this again."""
+    who = names[0] if len(names) == 1 else ", ".join(names[:-1]) + f" and {names[-1]}"
+    if here.windows:
+        how = "winget install --id Git.Git -e --source winget, or from https://git-scm.com/downloads/win"
+    elif here.platform == "darwin":
+        how = "xcode-select --install installs Apple's"
+    else:
+        how = "with your system's package manager, such as sudo apt install git"
+    return (f"{who} {'needs' if len(names) == 1 else 'need'} git to get the plugin: install git ({how}), then run "
+            "this again.")
 
 
 def version_key(text: Any) -> Tuple[int, ...]:
@@ -500,7 +531,7 @@ class Source:
         if self.local:
             return
         if self._reachable is None:
-            git = here.which("git")
+            git = find_git(here)
             if git:
                 ran = here.run([git, "ls-remote", "--exit-code", "--heads", URL, BRANCH], timeout=60)
                 self._reachable = "" if ran.ok else ran.last()
@@ -531,7 +562,7 @@ class Source:
     def _fetch(self, here: Here) -> Path:
         self._scratch = tempfile.mkdtemp(prefix="text-to-cad-")
         target = Path(self._scratch) / "repo"
-        git = here.which("git")
+        git = find_git(here)
         if git and here.run([git, "clone", "--quiet", "--depth", "1", "--branch", BRANCH, URL, target]).ok:
             self.skills_dir = target / "skills"
             return self.skills_dir
@@ -582,6 +613,7 @@ class Outcome:
     words: str = ""
     removed: List[str] = field(default_factory=list)
     has_ours: Optional[bool] = None  # whether the app now has our plugin; by default, installed or updated
+    git: bool = False  # skipped because its route runs git and git is not here (``without_git``): not tried
 
     @property
     def ours(self) -> bool:
@@ -598,6 +630,15 @@ class Outcome:
 
 NOT_FOUND = Outcome("skipped", "not found")
 QUIET = Outcome("skipped")  # nothing to do and nothing worth a line (Claude Desktop with nothing of ours)
+
+
+def without_git(app: "App", here: Here, context: Context, words: str = "") -> Optional[Outcome]:
+    """For an app that is here and whose route from GitHub runs git (its row's ``git``): where git is not on PATH
+    (``find_git``), the app skipped, saying why, before anything of it runs; else None. A local folder's install
+    (dev_install.py) runs no git."""
+    if not app.git or context.source.local or find_git(here, on_path=True):
+        return None
+    return Outcome("skipped", words or f"{app.name} installs plugins with git, and git is not installed here", git=True)
 
 
 def fill(templates: Sequence[Sequence[str]], source: Source, here: Optional[Here] = None) -> List[List[str]]:
@@ -617,7 +658,11 @@ class App:
     already; without it, ``update`` runs first and ``install`` where that fails. ``handler``: an app whose old
     copies need more than its commands (Claude Code, Codex, Cursor, Gemini CLI, Grok Build, Claude Desktop,
     Hermes Agent, Antigravity).
-    ``folder``: an agent with no plugin command, given the skills in its own folder; ``marks`` find it."""
+    ``folder``: an agent with no plugin command, given the skills in its own folder; ``marks`` find it.
+    ``git``: its route from GitHub runs git (the app's own command clones with it, or Cursor's clone is ours): where
+    git is not here, the app is skipped (``without_git``). Set where that is known: measured, or read in the app's
+    source or docs (each row's comment or handler says which); an app not known to need git is run, and says itself
+    what it lacks."""
 
     key: str
     name: str
@@ -629,6 +674,7 @@ class App:
     handler: Optional[Callable[["App", Here, Context], Outcome]] = None
     folder: Optional[Callable[[Here], Path]] = None
     marks: Optional[Callable[[Here], List[Path]]] = None
+    git: bool = False
 
     def run(self, here: Here, context: Context) -> Outcome:
         if self.handler is not None:
@@ -643,6 +689,9 @@ def plugin_command(app: App, here: Here, context: Context) -> Outcome:
     cli = here.which(app.command or "")
     if not cli:
         return NOT_FOUND
+    skipped = without_git(app, here, context)
+    if skipped is not None:
+        return skipped
     source = context.source
     if source.local:
         if not app.local:
@@ -714,6 +763,9 @@ def marketplace_app(app: App, here: Here, context: Context, cli: Optional[str], 
     commands, by what they do; ``verbs["readd"]`` makes the command that adds a recorded catalog again."""
     if not cli:
         return NOT_FOUND
+    skipped = without_git(app, here, context)
+    if skipped is not None:
+        return skipped
     source = context.source
     target = source.catalog
     ours = f"{PLUGIN}@{target}"
@@ -799,7 +851,8 @@ def claude_code(app: App, here: Here, context: Context) -> Outcome:
     keeps for itself. Verified: `claude plugin --help` and its subcommands
     (2.1.316, 2.1.325: `marketplace remove --scope user`); docs https://code.claude.com/docs/en/discover-plugins
     (`owner/repo#ref` pins a branch; `marketplace remove` uninstalls its plugins; `plugin update
-    <plugin>@<marketplace>`)."""
+    <plugin>@<marketplace>`). Its GitHub catalog is a git clone: without git on PATH, `marketplace add` fails
+    ("Executable not found in $PATH: "git"", measured, 2.1.316)."""
     cli = here.which("claude")
     context.claude_found = bool(cli)
     folder = claude_dir(here) / "plugins"
@@ -878,7 +931,8 @@ def codex(app: App, here: Here, context: Context) -> Outcome:
     Verified: `codex plugin --help` and its subcommands (0.169: `marketplace add <owner/repo> --ref`, `marketplace
     upgrade`, `add`, `remove`); docs https://developers.openai.com/codex/plugins/build (`--ref`, `upgrade`). `add`
     again after `upgrade` copies the plugin again: Codex keeps a copy, and the docs do not say an upgrade refreshes
-    it."""
+    it. Its GitHub catalog is a git clone: without git on PATH, `marketplace add` fails ("failed to run git clone",
+    measured, 0.169.0, on macOS and on Windows 11)."""
     config = read_toml(Path(here.environ.get("CODEX_HOME") or here.home / ".codex") / "config.toml")
     plugins = list(table(config.get("plugins")).keys())
     catalogs = {}
@@ -919,7 +973,7 @@ def git_origin(folder: Path) -> Optional[str]:
 def clone_problem(here: Here, path: Path) -> Optional[str]:
     """Why a git clone of ours may not be updated or removed, or None: it must have no change of its own (``git
     status --porcelain`` empty), be on the ``latest`` branch, tracking it, with no commit of its own."""
-    git = here.which("git")
+    git = find_git(here)
     if not git:
         return "git is needed to check it"
     ran = here.run([git, "-C", path, "status", "--porcelain=v1", "--branch"], timeout=60)
@@ -994,7 +1048,7 @@ def cursor(app: App, here: Here, context: Context) -> Outcome:
         clear(local / PLUGIN)
         return Outcome("installed", "; ".join([f"a copy of {source.folder}", *notes]), removed)
     what, why = kind(target)
-    git = here.which("git")
+    git = find_git(here)
     if what == "link":
         return Outcome("skipped", f"{why} (Cursor does not load a link: put a clone there to use it)")
     if what == "kept":
@@ -1002,7 +1056,7 @@ def cursor(app: App, here: Here, context: Context) -> Outcome:
     if what == "other":
         raise Failed(f"{here.shown(target)} holds something else: left alone (move it away, then run this again)")
     if not git:
-        raise Failed("git is needed to install it")
+        return Outcome("skipped", "its plugin is a git clone, and git is not installed here", git=True)
     if what == "clone":
         here.must([git, "-C", target, "fetch", "--quiet", "--depth", "1", "origin", BRANCH])
         here.must([git, "-C", target, "checkout", "--quiet", "-B", BRANCH, "FETCH_HEAD"])
@@ -1024,7 +1078,8 @@ def cursor(app: App, here: Here, context: Context) -> Outcome:
 def gemini(app: App, here: Here, context: Context) -> Outcome:
     """Gemini CLI: its extension, installed from GitHub at ``latest`` (a copy), and installed again to update it:
     ``extensions update`` asks twice (to clone, since GitHub has no release ``latest``; to accept the skills) and
-    takes no ``--consent``, so with no one to answer it waits for ever (measured, 0.62.0).
+    takes no ``--consent``, so with no one to answer it waits for ever (measured, 0.62.0). Having no release
+    ``latest``, the install clones with git (its source, 0.62.0: ``cloneFromGit``, simple-git, which runs git).
     0.10.0-0.11.11 linked ``<state>/plugin`` under the same name, which must go for ours to come in: GitHub is
     checked first, the old extension's folder and the enablement file are kept aside, and put back where the new
     one does not install. Read from ``~/.gemini/extensions/text-to-cad/.gemini-extension-install.json`` (``type``,
@@ -1034,7 +1089,10 @@ def gemini(app: App, here: Here, context: Context) -> Outcome:
     cli = here.which("gemini")
     if not cli:
         return NOT_FOUND
-    extensions = Path(here.environ.get("GEMINI_CLI_HOME") or here.home) / ".gemini" / "extensions"
+    skipped = without_git(app, here, context)
+    if skipped is not None:
+        return skipped
+    extensions =Path(here.environ.get("GEMINI_CLI_HOME") or here.home) / ".gemini" / "extensions"
     folder = extensions / PLUGIN
     source = context.source
 
@@ -1558,19 +1616,21 @@ def _folder_agent(key: str, name: str, folder: Callable[[Here], Path], *marks: C
 # THE TABLE. Order matters only where it says: Claude Code first (Cursor and Grok Build load its plugin; Claude
 # Desktop says what to do where no `claude` command was found).
 APPS: Tuple[App, ...] = (
-    App("claude", "Claude Code", command="claude", handler=claude_code),
+    # `git`: the routes known to run git (each handler says how it is known). Grok Build's binary carries a git library
+    # of its own; Factory Droid's, Devin CLI's, Antigravity's and GitHub Copilot CLI's are not known: they run.
+    App("claude", "Claude Code", command="claude", handler=claude_code, git=True),
     App("claude-desktop", "Claude Desktop", handler=claude_desktop),
-    App("codex", "Codex", command="codex", handler=codex),
-    App("cursor", "Cursor", handler=cursor),
-    App("gemini", "Gemini CLI", command="gemini", handler=gemini),
+    App("codex", "Codex", command="codex", handler=codex, git=True),
+    App("cursor", "Cursor", handler=cursor, git=True),
+    App("gemini", "Gemini CLI", command="gemini", handler=gemini, git=True),
     App("grok", "Grok Build", command="grok", handler=grok),
     # Qwen Code. Docs https://qwenlm.github.io/qwen-code-docs/en/users/extension/introduction/ (install, update) and its
     # source, packages/cli/src/commands/extensions/install.ts (--ref, --consent). Not run. Where it keeps an extension
-    # (~/.qwen/extensions/<name>) is Gemini CLI's layout, unverified.
+    # (~/.qwen/extensions/<name>) is Gemini CLI's layout, unverified; so is its git clone, Gemini CLI's code.
     App("qwen", "Qwen Code", command="qwen",
         install=[["extensions", "install", "{url}", "--ref", "{branch}", "--consent"]],
         update=[["extensions", "update", "{plugin}"]],
-        local=[["extensions", "install", "{folder}", "--consent"]], installed=_qwen_installed),
+        local=[["extensions", "install", "{folder}", "--consent"]], installed=_qwen_installed, git=True),
     # Hermes Agent (``hermes``, above): the skills in its own folder, and the plugin of ours 0.11.x installed removed.
     App("hermes", "Hermes Agent", command="hermes", handler=hermes),
     # Factory Droid. Docs https://docs.factory.com/cli/configuration/plugins: it reads .claude-plugin/marketplace.json;
@@ -1593,11 +1653,11 @@ APPS: Tuple[App, ...] = (
         install=[["plugin", "marketplace", "add", "{repo}#{branch}"], ["plugin", "install", "{plugin}@{catalog}"]],
         update=[["plugin", "update", "{plugin}"]]),
     # Pi. Docs https://docs.pi.dev/latest/packages (`pi install git:github.com/o/r@ref`; personal installs are recorded
-    # in ~/.pi/agent/settings.json; `pi update` never moves a configured ref, so an update is the install again).
-    # Lane C ran the install from a local copy; not run against GitHub here.
+    # in ~/.pi/agent/settings.json; `pi update` never moves a configured ref, so an update is the install again; a
+    # `git:` source is a git clone). Lane C ran the install from a local copy; not run against GitHub here.
     App("pi", "Pi", command="pi",
         install=[["install", "git:github.com/{repo}@{branch}"]], update=[["install", "git:github.com/{repo}@{branch}"]],
-        local=[["install", "{folder}"]], installed=_pi_installed),
+        local=[["install", "{folder}"]], installed=_pi_installed, git=True),
     # Muse (Meta's Muse Code). From superpowers' practice and Muse's changelog; not run. It installs a plugin from a local
     # folder and copies it into its own cache (so the fetched `latest` is temporary), then `approve` lets it load;
     # `update <name>`, else the install again. It reads .muse-plugin/plugin.json.
@@ -1983,15 +2043,17 @@ def install_cad(here: Here) -> Cad:
     return Cad(tool.version if tool else None, 0, (tool.commands.get("cad") if tool else None) or command)
 
 
-# What tells cad's `cad plugin update auto on` that this run is ending badly (``switch_on``): cad then turns the switch
-# on and keeps no release as the one this command is up to date for (cad's ``plugin_catch_up.FAILED_ENV``).
+# What tells cad's `cad plugin update auto on` that this run is ending badly, or skipped an app for want of git
+# (``switch_on``): cad then turns the switch on and keeps no release as the one this command is up to date for (cad's
+# ``plugin_catch_up.FAILED_ENV``).
 FAILED_ENV = "CAD_INSTALL_FAILED"
 
 
 def switch_on(here: Here, cad: Cad, failed: bool = False) -> None:
     """Step 5: ``cad plugin update auto on``, by the cad on this computer, so the plugin follows cad's automatic
-    updates, wherever cad is here; ``failed``, this run is ending with a non-zero exit status, which cad is told
-    (``FAILED_ENV``: ``1``, else empty, never the caller's). Whatever it answers, the install is done."""
+    updates, wherever cad is here; ``failed``, this run has not ended well (a non-zero exit status, or an app skipped
+    for want of git), which cad is told (``FAILED_ENV``: ``1``, else empty, never the caller's). Whatever it answers,
+    the install is done."""
     ran = here.run([cad.command, "plugin", "update", "auto", "on"], timeout=120,
                    environ={FAILED_ENV: "1" if failed else ""})
     if ran.ok:
@@ -2011,10 +2073,12 @@ def switch_on(here: Here, cad: Cad, failed: bool = False) -> None:
 
 @dataclass
 class Report:
-    """What the app phase did: its lines, in the order printed, and each app's outcome by key."""
+    """What the app phase did: its lines, in the order printed, each app's outcome by key, and the names of the apps
+    skipped for want of git (``without_git``)."""
 
     lines: List[str]
     outcomes: Dict[str, Outcome]
+    git: List[str] = field(default_factory=list)
 
     def __contains__(self, line: str) -> bool:
         return line in self.lines
@@ -2029,7 +2093,9 @@ class Report:
 
     @property
     def all_failed(self) -> bool:
-        return bool(self.found) and all(outcome.status == "failed" for outcome in self.found)
+        """Whether every app it tried failed: an app skipped for want of git was not tried."""
+        tried = [outcome for outcome in self.found if not outcome.git]
+        return bool(tried) and all(outcome.status == "failed" for outcome in tried)
 
 
 def install_apps(here: Here, source: Source, apps: Sequence[App] = APPS,
@@ -2068,7 +2134,7 @@ def install_apps(here: Here, source: Source, apps: Sequence[App] = APPS,
         tell(loose.line("Loose skills"))
     if missing:
         tell(f"{len(missing)} other supported apps were not found here.")
-    return Report(lines, outcomes)
+    return Report(lines, outcomes, [app.name for app in apps if outcomes[app.key].git])
 
 
 REPORT_SCHEMA = "text-to-cad install report/1"
@@ -2138,13 +2204,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         source.close()
     print("", flush=True)
     failed = bool(cad.code) or report.all_failed
-    if cad.command:  # on wherever cad is; only a run that ends well keeps its release (cad's ``plugin_catch_up``)
-        switch_on(here, cad, failed)
+    # On wherever cad is; only a run that ends well keeps its release (cad's ``plugin_catch_up``). A run that skipped
+    # an app for want of git exits 0, yet has not ended well: cad keeps no release for it, so a later run (cad's, once
+    # git may be here) tries that app again.
+    if cad.command:
+        switch_on(here, cad, failed or bool(report.git))
     if cad.code:
         print("cad itself was not installed (what went wrong is above), and the plugin's skills need it: run this "
               "again.", flush=True)
     elif report.all_failed:
         print("No app got the plugin: see each app's line above, then run this again.", flush=True)
+    if report.git:
+        print(git_advice(here, report.git), flush=True)
     if report.changed:
         print("Start a new session in each app to use it.", flush=True)
     write_report(here, cad.release, cad.code, report.outcomes)
