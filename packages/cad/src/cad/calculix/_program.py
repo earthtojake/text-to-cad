@@ -125,21 +125,15 @@ def _version(path: Path) -> str | None:
 
 
 def _packaged_version(path: Path) -> str | None:
-    """The CalculiX version of the ``cad-ccx`` package's own ``ccx``, read from the package, where ``path`` is that
-    program and it said none. The Windows build prints its version to a console and nothing into a pipe (it ends
-    through Fortran's ``stop`` with its output unflushed), so ``ccx -v`` says nothing there (#871). The package's version
-    is the CalculiX it carries: cad-ccx 2.23.0 is CalculiX 2.23. ``None`` for any other program: one ``CAD_CCX`` names
-    is asked, never assumed."""
+    """The CalculiX version of the ``cad-ccx`` package's own ``ccx``, as the package states it (``cad_ccx.version()``,
+    which runs nothing), where ``path`` is that program and it said none. The Windows build prints its version to a
+    console and nothing into a pipe (it ends through Fortran's ``stop`` with its output unflushed), so ``ccx -v`` says
+    nothing there (#871). ``None`` for any other program: one ``CAD_CCX`` names is asked, never assumed."""
     if all(Path(found).absolute() != path for found in _installed()):
         return None
-    from importlib import metadata
+    import cad_ccx
 
-    try:
-        release = metadata.version("cad-ccx")
-    except metadata.PackageNotFoundError:
-        return None
-    found = re.match(r"(\d+\.\d+)", release)
-    return found.group(1) if found else None
+    return cad_ccx.version()
 
 
 def _on_one_thread(env: dict[str, str]) -> dict[str, str]:
