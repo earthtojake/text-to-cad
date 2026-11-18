@@ -380,7 +380,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/installer"
           cp scripts/install/install.sh scripts/install/install.ps1 scripts/install/install.py "$RUNNER_TEMP/installer/"
           (cd "$RUNNER_TEMP/installer" && sha256sum install.sh install.ps1 install.py > SHA256SUMS)
-          for file in dist/* "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/installer/*; do args+=(--asset "$file"); done
+          for file in dist/cad-*.whl dist/cad-*.tar.gz "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/installer/*; do
+            args+=(--asset "$file")
+          done
           scripts/release/publish-github-release.sh "${args[@]}"
 
   # The upload alone, and the one job that may mint a token PyPI takes (id-token): it runs in the
@@ -645,9 +647,9 @@ jobs:
           (cd "$RUNNER_TEMP/installer" && sha256sum install.sh install.ps1 install.py > SHA256SUMS && cat SHA256SUMS)
 
       # A push-triggered run has no `publish` input: it publishes. Only a manual
-      # dispatch can ask for a draft. The wheel, sdist, plugin ZIP, source maps and the installer's
-      # scripts are attached to the release; a resumed run attaches them to the release that already
-      # exists.
+      # dispatch can ask for a draft. cad's wheel and sdist (the aliases' are empty, and PyPI keeps them),
+      # the plugin ZIP, the source maps and the installer's scripts are attached to the release; a resumed
+      # run attaches them to the release that already exists.
       - name: Create release tag and GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -658,7 +660,7 @@ jobs:
             args+=(--publish)
           fi
           ls -l "$RUNNER_TEMP/dist" "$RUNNER_TEMP/plugin" "$RUNNER_TEMP/sourcemaps" "$RUNNER_TEMP/installer"
-          for file in "$RUNNER_TEMP"/dist/*.whl "$RUNNER_TEMP"/dist/*.tar.gz "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/sourcemaps/*.zip \
+          for file in "$RUNNER_TEMP"/dist/cad-*.whl "$RUNNER_TEMP"/dist/cad-*.tar.gz "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/sourcemaps/*.zip \
               "$RUNNER_TEMP"/installer/install.sh "$RUNNER_TEMP"/installer/install.ps1 "$RUNNER_TEMP"/installer/install.py \
               "$RUNNER_TEMP"/installer/SHA256SUMS; do
             [ -f "$file" ] && args+=(--asset "$file")

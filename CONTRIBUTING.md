@@ -920,8 +920,9 @@ green: that is the release. `Publish Release`, on the merge commit:
    an installer see the version.
 7. **Announce** (on `main` only), after the branches: `Deploy Docs`, whose
    header names the release; and the `v<VERSION>`
-   tag and the GitHub Release, with the four projects' wheels and sdists as PyPI
-   serves them (the `pypi` job's artifact, `dist-<version>-released`),
+   tag and the GitHub Release, with `cad`'s wheel and sdist as PyPI
+   serves them (the `pypi` job's artifact, `dist-<version>-released`; the aliases' are empty,
+   and PyPI keeps them),
    the plugin ZIP and the source maps (`text-to-cad-sourcemaps-<version>.zip`, to
    upload a version's maps again) attached as release assets (PyPI stays the
    install channel; the release page is the provenance copy), and beside them the

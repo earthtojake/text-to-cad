@@ -254,6 +254,24 @@ class PublishGate(unittest.TestCase):
             self.assertIn(f'"$RUNNER_TEMP"/installer/{name}', attach)
         self.assertIn('"$RUNNER_TEMP"/installer/*', JOBS["publish"].split("- name: Rehearsal summary (build-test)", 1)[1])
 
+    def test_the_release_carries_cad_s_distributions_not_the_empty_aliases(self):
+        # The aliases (cad-server, cad-mcp, cadgen) are empty and PyPI keeps them: the release page carries cad's
+        # wheel and sdist alone, in a release and a rehearsal alike. `cad-*` names cad's files and none of the
+        # aliases' (cad_server-, cad_mcp-, cadgen-).
+        import fnmatch
+
+        attach = JOBS["tag-release"].split("- name: Create release tag and GitHub Release\n", 1)[1]
+        rehearsal = JOBS["publish"].split("- name: Rehearsal summary (build-test)", 1)[1]
+        for body, folder in ((attach, '"$RUNNER_TEMP"/dist/'), (rehearsal, "dist/")):
+            self.assertIn(f"{folder}cad-*.whl", body)
+            self.assertIn(f"{folder}cad-*.tar.gz", body)
+            self.assertNotIn(f"{folder}*", body.replace(f"{folder}cad-*", ""))
+        built = ["cad-0.11.13-py3-none-any.whl", "cad-0.11.13.tar.gz", "cad_server-0.11.13-py3-none-any.whl",
+                 "cad_server-0.11.13.tar.gz", "cad_mcp-0.11.13-py3-none-any.whl", "cad_mcp-0.11.13.tar.gz",
+                 "cadgen-0.11.13-py3-none-any.whl", "cadgen-0.11.13.tar.gz"]
+        attached = [name for name in built if fnmatch.fnmatch(name, "cad-*.whl") or fnmatch.fnmatch(name, "cad-*.tar.gz")]
+        self.assertEqual(attached, ["cad-0.11.13-py3-none-any.whl", "cad-0.11.13.tar.gz"])
+
 
 pypi_release = load("pypi_release", "scripts/release/pypi_release.py")
 
