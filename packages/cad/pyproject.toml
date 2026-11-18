@@ -85,7 +85,7 @@ build123d = [
   # A stress study (`cad <type> solve`) finds the parts of an assembly that touch with scipy (a KD-tree
   # of sampled faces) in the kernel's process, beside the B-rep it reads. build123d brings it already;
   # it is named here because the library imports it itself.
-  "scipy>=1.14,<2",
+  "scipy>=1.17.1,<2",
 ]
 # The kicad integration's extra: kicode, KiCad's headless command line (kicad-cli) and its IPC API client
 # (KiPy, as `kicode`) in one package -- what a check, an export and an edit (kicad_pcb.edit) run; a
@@ -126,7 +126,7 @@ calculix = [
 trimesh = [
   "trimesh>=4.6,<6",
   "rtree>=1.2,<2",
-  "scipy>=1.14,<2",
+  "scipy>=1.17.1,<2",
   "networkx>=3.2,<4",
 ]
 # The mujoco integration's extra: MuJoCo's headless core -- the compiler and the Python bindings, numpy their
