@@ -32,44 +32,13 @@ the page the person has open updates. Files are exports, made when asked.
 
 ## Setup and paths
 
-This skill was written for `cad==0.11.10`. The first time you use it in a chat, run `cad --version` in
-the shell. Then:
+Written for `cad==0.11.11`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
-- `cad` is not found: run the install line below, then carry on.
-- It prints a version older than the one above: run the update line below, then carry on.
-- It prints a version newer than the one above: carry on. This skill is older than cad.
-
-Install line:
-
-```bash
-uv tool install --managed-python --python 3.14 cad==0.11.10
-```
-
-Update line, on macOS and Linux:
-
-```bash
-cad server stop && uv tool install --managed-python --python 3.14 cad==0.11.10 && cad server start
-```
-
-On Windows, in PowerShell:
-
-```powershell
-cad server stop; uv tool install --managed-python --python 3.14 cad==0.11.10; cad server start
-```
-
-If `uv` is not found, install it as uv's install page says,
-https://docs.astral.sh/uv/getting-started/installation/, then run the line again.
-
-When a `cad` command prints that:
-
-- the cad server is not running: run `cad server start`, then run the command again.
-- the command and the server are different versions: do what that line says.
-- a newer version of cad is available: carry on. The store that installed this plugin updates it.
-
-Run models with `cad run`.
-
-A project written for an earlier text-to-cad may need changes. The migration guides say what, one per
-version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
+If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
+https://github.com/earthtojake/text-to-cad
+A project written for an earlier version may need changes; the migration guides say what:
+https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
 One server runs: `cad server start` starts it, every run and every
 command goes through it, and it serves the viewer. `cad server status` lists its workers
@@ -145,18 +114,18 @@ cad run src/bracket.py
 built src/bracket.py::bracket cold in 2.61s: bodies 1 run; 6 misses, 0 hits; body 0.01s, names 0.00s, document 0.00s
   parts 1 · bounds 40 × 20 × 6 mm · joints 0 · sequences 0
   id: 0dc50a92-a21f-5895-a245-ebdeb5352f3b
-  view: http://127.0.0.1:54360/0dc50a92-a21f-5895-a245-ebdeb5352f3b?token=...
+  view: http://127.0.0.1:<port>/<id>?token=<token>
 built src/bracket.py::bracket_wide warm in 0.01s: bodies 1 run; 6 misses, 0 hits; body 0.01s, names 0.00s, document 0.00s
   parts 1 · bounds 60 × 20 × 6 mm · joints 0 · sequences 0
   id: 966d03a5-7b43-5bed-b75c-eb67d56c72d2
-  view: http://127.0.0.1:54360/966d03a5-7b43-5bed-b75c-eb67d56c72d2?token=...
+  view: http://127.0.0.1:<port>/<id>?token=<token>
 ```
 
 Each call the script's `__main__` makes prints how its model built, the delta under it
 (parts, bounds, joints and sequences), its document's `id:` and its page, `view:` (the
 handle's `.id` and `.url`). An unchanged rerun prints `took ... nothing ran` instead. Give the
-user the page once ([Show the model](#show-the-model)) and use the id for every command
-after it. The id comes from the
+user the page your run's `view:` line printed, once ([Show the model](#show-the-model)), and use
+the id for every command after it. The id comes from the
 script's path and the function's name, or the script's folder and an explicit `@model(name="...")`,
 so it is the same run after run, and the open page follows every run. A model's name is its identity
 within its namespace, the function's name by default, `name=` gives it another. The namespace

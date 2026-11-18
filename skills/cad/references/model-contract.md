@@ -404,7 +404,7 @@ built src/assembly.py::assembly warm in 0.03s: bodies 2 run, 1 replayed; 3 misse
   src/plate.py::plate, a child
   src/standoff.py::standoff_m3, a child
   id: 7a9724e8-f676-5676-acaa-160d7c6cc5fa
-  view: http://127.0.0.1:54360/7a9724e8-f676-5676-acaa-160d7c6cc5fa?token=...
+  view: http://127.0.0.1:<port>/<id>?token=<token>
 ```
 
 That run followed an edit of the plate's depth: the plate's body and the assembly's ran,

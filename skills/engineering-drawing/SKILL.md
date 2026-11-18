@@ -23,44 +23,13 @@ toolpaths, not documents, and a different job.
 
 ## Setup
 
-This skill was written for `cad==0.11.10`. The first time you use it in a chat, run `cad --version` in
-the shell. Then:
+Written for `cad==0.11.11`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
-- `cad` is not found: run the install line below, then carry on.
-- It prints a version older than the one above: run the update line below, then carry on.
-- It prints a version newer than the one above: carry on. This skill is older than cad.
-
-Install line:
-
-```bash
-uv tool install --managed-python --python 3.14 cad==0.11.10
-```
-
-Update line, on macOS and Linux:
-
-```bash
-cad server stop && uv tool install --managed-python --python 3.14 cad==0.11.10 && cad server start
-```
-
-On Windows, in PowerShell:
-
-```powershell
-cad server stop; uv tool install --managed-python --python 3.14 cad==0.11.10; cad server start
-```
-
-If `uv` is not found, install it as uv's install page says,
-https://docs.astral.sh/uv/getting-started/installation/, then run the line again.
-
-When a `cad` command prints that:
-
-- the cad server is not running: run `cad server start`, then run the command again.
-- the command and the server are different versions: do what that line says.
-- a newer version of cad is available: carry on. The store that installed this plugin updates it.
-
-Run models with `cad run`.
-
-A project written for an earlier text-to-cad may need changes. The migration guides say what, one per
-version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
+If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
+https://github.com/earthtojake/text-to-cad
+A project written for an earlier version may need changes; the migration guides say what:
+https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
 ## Workflow
 

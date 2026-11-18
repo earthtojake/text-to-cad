@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/earthtojake/text-to-cad/raw/bfac906ece127d0934f28d43dd5cbdc4c23d76b4/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
+<img src="https://github.com/earthtojake/text-to-cad/raw/a8b3764deac0a4e43ba10f152b93feceb1dd403a/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
 
 Design physical products with AI.
 
@@ -21,11 +21,11 @@ Design physical products with AI.
 ## 🚀 Quickstart
 
 ```bash
-uv tool install --managed-python --python 3.14 cad==0.11.10
+uv tool install cad
 ```
 
-The skills run the `cad` command. The line above installs cad 0.11.10 with
-[uv](https://docs.astral.sh/uv/). The first time a skill needs `cad`, your agent runs the line, with your
+The skills run the `cad` command. The line above installs cad with [uv](https://docs.astral.sh/uv/), and cad
+keeps itself up to date from then on. The first time a skill needs `cad`, your agent runs the line, with your
 permission, or you run it yourself.
 
 Then ask your agent for a part or an assembly: it writes the model as a Python
@@ -36,7 +36,7 @@ Devin CLI, Factory Droid, GitHub Copilot CLI, Kimi Code, Muse, Pi, Qwen Code, Am
 Cline, Goose, Hermes Agent, Kilo Code, Kiro CLI, OpenClaw, OpenCode, Roo Code,
 Trae and Windsurf.
 
-Installing by hand, app by app, updating and removing: [docs/install.md](https://github.com/earthtojake/text-to-cad/blob/bfac906ece127d0934f28d43dd5cbdc4c23d76b4/docs/install.md)
+Installing by hand, app by app, updating and removing: [docs/install.md](https://github.com/earthtojake/text-to-cad/blob/a8b3764deac0a4e43ba10f152b93feceb1dd403a/docs/install.md)
 
 ## ✨ Features
 
@@ -51,19 +51,25 @@ The text-to-cad plugin gives your agent local workflows to generate 3D models as
 - [**Fabrication services**](skills/sendcutsend/SKILL.md): [Checks DXF and STEP files against SendCutSend's guide](skills/sendcutsend/SKILL.md) before you upload them, and [slices 3D prints](skills/print3d/SKILL.md) with OrcaSlicer and sends them to Bambu Connect or Bambu Studio.
 - [**Robotics and simulation**](skills/robot-simulation/SKILL.md): Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and MJCF for MuJoCo.
 
+## 🌐 Community
+
+Projects built on top of text-to-cad, and projects that text-to-cad uses.
+
+- **Studio**: An open-source desktop CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand. [Website](https://texttocad.studio) · [GitHub](https://github.com/amywork777/studio)
+
 ## 🛠️ Contributing
 
 text-to-cad is MIT-licensed and built in the open.
 
 - **Bugs and plugin requests**: [open an issue](https://github.com/earthtojake/text-to-cad/issues/new).
-  A bug report with the model script and the output of `cad doctor --check` is the
+  A bug report with the model script and the output of `cad doctor` is the
   fastest to fix, and an agent app without a plugin gets one on request. A
-  security problem is reported privately, as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/bfac906ece127d0934f28d43dd5cbdc4c23d76b4/SECURITY.md) says.
+  security problem is reported privately, as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/a8b3764deac0a4e43ba10f152b93feceb1dd403a/SECURITY.md) says.
 - **Questions, ideas and what you made**: the [Discord](https://discord.gg/5FGB9DwJYU).
   Say what the skills got wrong, too: that is what improves them.
 - **Code, skills and models**: a new skill (a fabrication service, a printer, a
   CAD workflow) goes in `skills/`, an example model in `models/`, and fixes
-  anywhere. [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/bfac906ece127d0934f28d43dd5cbdc4c23d76b4/CONTRIBUTING.md) has the local setup, how to
+  anywhere. [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/a8b3764deac0a4e43ba10f152b93feceb1dd403a/CONTRIBUTING.md) has the local setup, how to
   test in the agent apps, and the guidance for agents working in the repository.
 
 By default, text-to-cad sends usage stats and crash reports, tagged with a random
@@ -71,6 +77,3 @@ ID and never including your files, paths or prompts. The
 [privacy policy](https://www.texttocad.dev/privacy-policy) says what is sent and
 how to turn it off, and the [terms of service](https://www.texttocad.dev/terms-of-service)
 govern using text-to-cad.
-
-
-<a href="https://trendshift.io/repositories/26559"><img src="https://trendshift.io/api/badge/repositories/26559" alt="earthtojake/text-to-cad | Trendshift" width="250" height="55"></a>
