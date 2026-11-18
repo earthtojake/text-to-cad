@@ -1148,9 +1148,9 @@ def bridged(box: Box, old: str) -> None:
     entry = json.loads((box.state / "installations" / f"{current}.json").read_text(encoding="utf-8")) if current else {}
     if current != NEW or not rc._within(Path(entry.get("prefix") or "/nowhere"), Path(tool["env"])):
         raise Failed(f"{box.label}: installations/current names {current!r}: {entry}")
-    move = box.read("handover-move.json")
-    if move.get("outcome") not in ("current", "installed") or str(move.get("started", "")).startswith("not started"):
-        raise Failed(f"{box.label}: the move to the uv tool's server: {move}")
+    # The helper writes its record after the server it starts answers, so the tool's server serving is no sign
+    # the record is there yet: awaited, as every end of the bridge awaits it.
+    handed_over(box)
     switches = box.read("settings.json").get("auto_update") or {}
     if switches.get("on") is False:
         raise Failed(f"{box.label}: automatic updates off after the bridge: {switches}")
