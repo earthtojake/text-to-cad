@@ -79,6 +79,12 @@ files alone: it never runs OrcaSlicer, and works offline.
    give `--filament` once per material, and `--profiles` another folder of
    presets to search first.
 
+   OrcaSlicer 2.5 and later keeps its built-in presets in binary caches
+   (`.opc`) that `cad orcaslicer` can't read. When a command says so, there
+   is no preset to slice headless with: open the model in the app instead
+   ([Open in OrcaSlicer](#open-in-orcaslicer)), unless the person has a
+   folder of complete preset JSON files to give with `--profiles`.
+
 3. Slice. Give `--outputdir` an absolute path:
 
    ```bash
