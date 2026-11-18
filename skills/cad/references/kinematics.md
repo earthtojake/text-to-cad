@@ -161,7 +161,7 @@ if __name__ == "__main__":
 leaves out as built (a state that names none is the as-built pose under a name: a key, a
 `--zero`), and returns the assembly. A cylindrical joint takes
 `(angle, distance)` and a ball joint its three angles; a coupling takes its value
-(`curl=0.5`). Mechanism states are what the viewer's Position lists as presets, and what
+(`bend=0.5`). Mechanism states are what the viewer's Position lists as presets, and what
 a snapshot's `--pose` names.
 
 A file of the mechanism in another pose is a model of its own: `posed(hinge(), state)`
@@ -218,7 +218,7 @@ import build123d as bd
 from cad import model
 from cad.build123d import configuration_sequence, gear_pair
 
-CURL = {"index_mcp": 90, "index_pip": 100, "index_dip": 70}           # degrees at a full curl
+BEND = {"index_mcp": 90, "index_pip": 100, "index_dip": 70}           # degrees at a full bend
 BONES = {"base": 30, "proximal": 40, "middle": 25, "distal": 20}     # lengths along +X
 
 
@@ -229,22 +229,22 @@ def index_finger():
         bone = bd.Pos(x, 0, 0) * bd.Box(length, 16, 12, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
         bone.label, x = name, x + length
         bones.append(bone)
-    for joint, parent, child in zip(CURL, bones, bones[1:]):
+    for joint, parent, child in zip(BEND, bones, bones[1:]):
         knuckle = bd.Axis(child.location.position, (0, 1, 0))
-        hinge = bd.RevoluteJoint(joint, parent, axis=knuckle, angular_range=(0, CURL[joint]))
+        hinge = bd.RevoluteJoint(joint, parent, axis=knuckle, angular_range=(0, BEND[joint]))
         bd.RigidJoint(joint, child, hinge.location)
         hinge.connect_to(child.joints[joint], angle=0)   # as built: straight
     finger = bd.Compound(children=bones, label="index_finger")
-    gear_pair(finger, "index_curl", **CURL)                             # 0 straight, 1 a fist
-    return configuration_sequence(finger, "grip", [(0, {"index_curl": 0}), (1.5, {"index_curl": 1}),
-                                                   (3, {"index_curl": 0})])
+    gear_pair(finger, "index_bend", **BEND)                             # 0 straight, 1 a fist
+    return configuration_sequence(finger, "grip", [(0, {"index_bend": 0}), (1.5, {"index_bend": 1}),
+                                                   (3, {"index_bend": 0})])
 
 
 if __name__ == "__main__":
     index_finger()
 ```
 
-`--pose '{"index_curl": 0.6}'` poses the knuckles at 54, 60 and 42 degrees; its range,
+`--pose '{"index_bend": 0.6}'` poses the knuckles at 54, 60 and 42 degrees; its range,
 `[0, 1]`, is where every knuckle stays within its own. The viewer shows the coupling's
 slider and none of its joints', and setting one of its joints alone is refused. A
 planetary stage turns its carrier and planets from the sun, ranged by the sun's limits;
