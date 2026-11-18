@@ -56,7 +56,7 @@ vets the bump (a branch of this repository only, a version past
 (`release-publish.yml`) runs on the merge: it builds the plugin ZIP, the bundle
 and the wheel and sdist of each of the release's four projects on PyPI (`cad`, and its
 empty aliases `cad-server`, `cad-mcp` and `cadgen`), uploads
-them one project at a time, `cad` first, waiting until PyPI lists each,
+them `cad` first, then `cad-server` and `cad-mcp` together, then `cadgen`, waiting until PyPI lists each,
 and only then writes the install branches (`latest`, `claude-plugin`, `codex-plugin`), deploys
 the docs site, tags `v<VERSION>` and publishes the GitHub Release. A run that
 stopped partway is finished by dispatching `Publish Release` on `main`;

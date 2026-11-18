@@ -235,7 +235,7 @@ where those files ship, so these scripts are what produces them.
   links; each substitution fails `--check` when what it replaces is not there exactly once
   (`CONTRIBUTING.md`, "The install branches"). The `codex` copy is the files of
   `plugin_zip.py`'s ZIP, from the same build. Called by
-  `release-publish.yml`, whose `branches` job pushes the `latest` copy to `latest`, the
+  `release-publish.yml`, whose `tag-release` job first pushes the `latest` copy to `latest`, the
   `directory` copy to `claude-plugin` and the `codex` copy to `codex-plugin`, together;
   tested by `tests/python/global/test_plugin_branch.py`.
 - `publish-github-release.sh [--target REF] [--dry-run] [--publish]` — creates and

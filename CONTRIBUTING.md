@@ -904,22 +904,25 @@ green: that is the release. `Publish Release`, on the merge commit:
    (`@cad/core/chunk-ids`; rolldown's own names the code alone): one id
    names one map in every page and version, so no page's or version's map
    overwrites another's, and a later release that ships the same chunk and map
-   uploads it once. Then the `pypi` job uploads the four projects, one at a time:
+   uploads it once. Then the `pypi` job uploads the four projects:
    the only job that may mint a PyPI token, in the `release` environment (below,
    "Repository settings"). `cad` goes first, since each alias pins it at its own release, then
-   `cad-server`, `cad-mcp` and `cadgen`, whose index the version feed reads (`PROJECTS` in
-   `scripts/release/pypi_release.py`); each is listed by PyPI's simple index, which
-   uv resolves a pin through, before the next goes up (`--wait`: usually seconds).
+   `cad-server` and `cad-mcp` together, in one upload (neither requires the other; the token PyPI
+   mints covers every project that trusts this workflow), then `cadgen`, whose index the version
+   feed reads (`PROJECTS` in `scripts/release/pypi_release.py`); each step is listed by PyPI's simple
+   index, which uv resolves a pin through, before the next goes up (`--wait`: usually seconds).
    It uploads only what PyPI does not hold yet, so a resumed release uploads nothing
    twice, and what PyPI already holds is downloaded and checked against PyPI's
    sha256 for the GitHub Release to attach; a file PyPI holds that the run did not
    build stops the release.
-6. **Install branches** (on `main` only). `plugin_branch.py` commits the plugin
+6. **Install branches** (on `main` only), the first step of the tag's job (one runner for both, so a
+   busy queue costs the release one wait, not two). `plugin_branch.py` commits the plugin
    alone onto `latest`, `claude-plugin` and `codex-plugin` (the ZIP's files: [The install
    branches](#the-install-branches)), in one atomic push. Only now does
    an installer see the version.
 7. **Announce** (on `main` only), after the branches: `Deploy Docs`, whose
-   header names the release; and the `v<VERSION>`
+   header names the release (it starts once the tag's job ends, and runs where the branches moved
+   though the tag failed); and the `v<VERSION>`
    tag and the GitHub Release, with `cad`'s wheel and sdist as PyPI
    serves them (the `pypi` job's artifact, `dist-<version>-released`; the aliases' are empty,
    and PyPI keeps them),
