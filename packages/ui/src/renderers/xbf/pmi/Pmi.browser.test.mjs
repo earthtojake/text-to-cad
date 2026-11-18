@@ -172,7 +172,7 @@ test('PMI is drawn on the model and stays legible as the camera moves; a pick li
   assert.deepEqual(await labels(), ['A', 'thickness']);
 
   // The engine's plate as a model-based definition (`pmi_plate/v4`), its part placed 30 along y: the
-  // section reads it as a drawing is read, its views, notes, coverage and annotations. View A-A
+  // section reads it as a drawing is read, its views, notes and annotations. View A-A
   // picked is seen from the front, cut across y where its section is in the part's frame (0 there,
   // 30 here), keeping the far side, and draws only the four callouts it shows; picked again, the
   // camera, the Clip and the PMI are as they were.
@@ -186,7 +186,7 @@ test('PMI is drawn on the model and stays legible as the camera moves; a pick li
   assert.equal(await label('thickness').getAttribute('aria-label'), '9.8\u201310.2');
   assert.equal(await label('mask').innerText(), '3');
   await showPmi(pane);
-  assert.deepEqual(await pane.locator('[data-tool-panel-id="pmi"] h2').allInnerTexts(), ['Views', 'Notes', 'Coverage', 'Annotations']);
+  assert.deepEqual(await pane.locator('[data-tool-panel-id="pmi"] h2').allInnerTexts(), ['Views', 'Notes', 'Annotations']);
   const read = () => page.evaluate(`({ state: ${controller}.readState(), camera: window.__cadCamera(), cut: window.__cadStage().cut })`);
   const unpicked = await read();
   const section = pane.getByRole('button', { name: 'A-A', exact: true });

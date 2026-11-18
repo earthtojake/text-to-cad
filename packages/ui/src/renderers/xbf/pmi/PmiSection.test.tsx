@@ -86,12 +86,11 @@ it('says a nominal another system\'s file gives as the file\'s, and one the engi
   expect(document.querySelector('[title="Measured on the geometry by the engine"]')).toBeNull();
 });
 
-// ---- the MBD panel, over the engine's v4 plate: its views, notes, coverage and annotations ----------
+// ---- the MBD panel, over the engine's v4 plate: its views, notes and annotations ----------
 // The plate's served document (`pmi_plate/v4`), its part on a scene that knows no geometry: what is
 // drawn is drawn where its code (or a view) placed it.
 const FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
 const V4 = JSON.parse(readFileSync(join(FIXTURES, 'pmi_plate', 'v4', 'structure.json'), 'utf8'));
-const V4_BOTTOM = 'plate/f:edit_plate.body_make_box1.5;M:edit_plate.body';
 const PLATE = { min: [-50, -30, -5], max: [50, 30, 5] };
 const EIGHTH_Z = [Math.SQRT1_2, Math.SQRT1_2, 0, 0, -Math.SQRT1_2, Math.SQRT1_2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const BEFORE = { position: [100, -100, 100], target: [0, 0, 0], up: [0, 0, 1] };
@@ -121,10 +120,10 @@ const headings = () => screen.getAllByRole('heading', { level: 2 }).map(heading 
 const rowsOf = (title: string) => within(screen.getByRole('region', { name: title })).queryAllByRole('listitem').map(row => row.textContent);
 const ALL_DRAWN = ['0:A', '0:thickness', '0:hole-diameter', '0:hole-from-front', '0:hole-from-left', '0:top-flatness', '0:hole-position', '0:hole-profile', '0:mask'];
 
-it('groups views, notes, coverage and annotations under static headings', () => {
+it('groups views, notes and annotations under static headings', () => {
   // A view "A" beside the datum A: a view and an annotation may share a key, and are kept apart.
   openMbd(structure => ({ ...structure, pmi_views: [...structure.pmi_views, { ...structure.pmi_views[1], name: 'A', shows: ['A'] }] }));
-  expect(headings()).toEqual(['Views', 'Notes', 'Coverage', 'Annotations']);
+  expect(headings()).toEqual(['Views', 'Notes', 'Annotations']);
   // Nothing folds: every group is open, its heading no button.
   expect(screen.queryByRole('button', { name: 'Views' })).toBeNull();
   expect(rowsOf('Views')).toEqual(['A-A4 annotations', 'isoAll', 'A1 annotation']);
@@ -132,7 +131,6 @@ it('groups views, notes, coverage and annotations under static headings', () => 
   // The flag note its flag, the general profile its profile, a general note none.
   expect([...document.querySelectorAll('[data-pmi-note]')].map(row => row.querySelector('[data-pmi-glyph]')?.getAttribute('data-pmi-glyph') || ''))
     .toEqual(['surface_profile', '', 'flag']);
-  expect(within(screen.getByRole('region', { name: 'Coverage' })).getByText('Every face has a requirement')).toBeTruthy();
   // The annotations as before, but the notes: limits stacked in words as the callout says them.
   expect([...screen.getByRole('region', { name: 'Annotations' }).querySelectorAll('[data-pmi-pick]')].map(row => row.getAttribute('aria-label')))
     .toEqual(['Datum A', '9.8–10.2', '⌀10.0 +0.1/0', '30 basic', '50 basic', 'Flatness 0.05', 'Position ⌀0.1 | A', 'Surface profile 0.2 | A']);
@@ -169,11 +167,11 @@ it("two parts' views of one name each say their part, as their notes do", () => 
 
 it('says there is no PMI yet only where a document has none at all, views included', () => {
   // Views alone: listed, and no word of there being nothing.
-  openMbd(structure => ({ ...structure, pmi: [], pmi_coverage: [] }));
+  openMbd(structure => ({ ...structure, pmi: [] }));
   expect(headings()).toEqual(['Views']);
   expect(screen.queryByText(/No PMI yet/)).toBeNull();
   cleanup();
-  openMbd(structure => ({ ...structure, pmi: [], pmi_views: [], pmi_coverage: [] }));
+  openMbd(structure => ({ ...structure, pmi: [], pmi_views: [] }));
   expect(screen.getByText("No PMI yet: add some from a face's menu.")).toBeTruthy();
 });
 
@@ -197,39 +195,6 @@ it("a view's row applies its camera, section and PMI, and a second pick leaves i
   expect(store.getSnapshot().display.clip).toBeUndefined();
   expect(drawnKeys()).toEqual(ALL_DRAWN);
   expect(live.constructions.get('0:hole-diameter').label).toEqual([20, 15, 5]);
-});
-
-it('the coverage checkbox lights the faces with no requirement', () => {
-  // Test-owned coverage: the bottom uncovered, a datum nothing names.
-  openMbd(structure => ({ ...structure, pmi_coverage: [{ part: 0, uncovered: [V4_BOTTOM],
-    conflicts: [{ kind: 'unused_datum', ids: ['B'], problem: 'datum B is named by no tolerance' }] }] }));
-  const coverage = within(screen.getByRole('region', { name: 'Coverage' }));
-  expect(coverage.getByText('1 face has no requirement')).toBeTruthy();
-  const conflict = coverage.getByRole('status');
-  expect(conflict.textContent).toBe('B: datum B is named by no tolerance');
-  expect(conflict.className).toMatch(/text-amber-500/);
-  // Off, it lights nothing, and the section still says what it found.
-  const show = screen.getByRole('checkbox', { name: 'Show faces with no requirement' });
-  expect(show.getAttribute('aria-checked')).toBe('false');
-  expect(live.highlight.selected).toEqual([]);
-  fireEvent.click(show);
-  expect(show.getAttribute('aria-checked')).toBe('true');
-  expect(live.highlight.selected).toEqual(['i0/face/5']);
-  fireEvent.click(show);
-  expect(live.highlight.selected).toEqual([]);
-});
-
-it('coverage asks what the requirements leave open, with the answer the engine suggests', () => {
-  // Test-owned: the engine's words, drawn as given; a question, never a warning.
-  openMbd(structure => ({ ...structure, pmi_coverage: [{ part: 0, uncovered: [], conflicts: [],
-    suggestions: [{ kind: 'hole', faces: [V4_BOTTOM], question: 'What is the 9 mm hole for?',
-      answer: 'dimensional_size("hole-1-size", ...)', why: "9 mm is ISO 273's medium clearance hole for M8" }] }] }));
-  const coverage = within(screen.getByRole('region', { name: 'Coverage' }));
-  expect(coverage.getByText('What is the 9 mm hole for?')).toBeTruthy();
-  const answer = coverage.getByText('dimensional_size("hole-1-size", ...)');
-  expect(answer.tagName).toBe('CODE');
-  expect(coverage.queryByRole('status')).toBeNull();
-  expect(answer.closest('[data-pmi-suggestion]')?.getAttribute('data-pmi-suggestion')).toBe('hole');
 });
 
 it("a view whose section is off the placement's axes says so and applies its camera alone", () => {

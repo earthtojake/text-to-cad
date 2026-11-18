@@ -675,7 +675,7 @@ a drawing's Layers (handed in); a 3D view's its renderer's sections in their ord
 name: a STEP assembly's **Model** — a part file, whose tree would be its one row, has none —
 then **Position**, where the file has joints to move, then **PMI**, where an engine document carries
 PMI or one is being made for it (its manufacturing annotations, read as a drawing is: its Views,
-Notes, Coverage and Annotations under static headings, each a list of the trees' rows,
+Notes and Annotations under static headings, each a list of the trees' rows,
 [PMI](pmi.md)); a robot's **Links**, an `.sdf`'s **SDF**, then
 **Position**), Position's Reset on its pose row, the Model's Show all and PMI's New and eye on a line
 over their rows, and the trees searched by the panel's search box. A file's routines are no tab:
@@ -1117,10 +1117,7 @@ It shows all groups under static section headings and dividers, with no collapsi
 sections or cascading settings menus. A heading is 24px of regular `text-tiny` in the
 foreground colour, a rule above every one but the first. A feature that switches on and off
 (Orbit, Floor) is the checkbox at its heading's right end, the title naming it; there is no
-separate row for it. While the feature is off its section is that heading alone. A checkbox that
-only shows something of what its section reads (PMI's Coverage: **Show faces with no
-requirement**) sits there too, named and hinted by its own words, and the section keeps its rows
-while it is off (`FileSheetSettingsSection`'s `switchLabel`). Every
+separate row for it. While the feature is off its section is that heading alone. Every
 setting is one 24px row: its label in a 4rem muted column, its control filling the rest, so
 a form's controls start on one line. A label is short under its heading ("Colour",
 "Opacity" under Floor); the control's accessible name stays whole ("Floor opacity"). A

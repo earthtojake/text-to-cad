@@ -35,7 +35,7 @@ const PMI = [
 ];
 
 test("the document's PMI is read as it is served, and a document without any has none", () => {
-  assert.deepEqual(readXbfPmi({ name: "bracket" }), { entries: [], views: [], notes: [], coverage: [] });
+  assert.deepEqual(readXbfPmi({ name: "bracket" }), { entries: [], views: [], notes: [] });
   const read = entriesOf({ pmi: PMI });
   assert.deepEqual(read.map(entry => [entry.id, entry.kind, entry.supported]), [
     ["A", "datum", true], ["thickness", "dimension", true], ["hole-dia", "dimension", true], ["top-flat", "geometric_tolerance", true], ["hole-pos", "geometric_tolerance", true]]);
@@ -411,18 +411,6 @@ test("views carry their camera, section, shows and placements, keyed by part", (
     section: { axis: "y", at: 0, invert: true }, shows: ["hole-diameter", "hole-position", "hole-profile", "mask"],
     place: { "hole-diameter": { anchor: [5, 0, 0], offset: [15, 0, 10] } }, supported: true, unsupported: "" });
   assert.deepEqual([iso.key, iso.camera.preset, iso.section, iso.shows, iso.place], ["0:iso", "iso", null, null, {}]);
-  // What coverage found, its part's.
-  // Every face covered; its material is still to be said, asked as the engine words it.
-  assert.deepEqual(read.coverage.map(item => [item.part, item.uncovered, item.conflicts, item.suggestions.map(said => said.kind)]),
-    [[0, [], [], ["material"]]]);
-  assert.equal(read.coverage[0].suggestions[0].question, "What is the part made of?");
-  const conflict = { kind: "unused_datum", ids: ["B"], problem: "datum B is named by no tolerance" };
-  const said = { kind: "hole", faces: [V4_TOP], question: "What is the 9 mm hole for?", answer: "dimensional_size(...)", why: "ISO 273" };
-  assert.deepEqual(readXbfPmi({ pmi: [], pmi_coverage: [{ part: 1, uncovered: [V4_TOP, 4], conflicts: [conflict, "x"],
-    suggestions: [said, { ...said, answer: "" }, 7] }] }).coverage,
-  [{ part: 1, uncovered: [V4_TOP], conflicts: [conflict], suggestions: [said] }]);
-  // A document served before suggestions were: none.
-  assert.deepEqual(readXbfPmi({ pmi: [], pmi_coverage: [{ part: 0, uncovered: [], conflicts: [] }] }).coverage[0].suggestions, []);
   // Two parts' views of one name are two, each its part's.
   const view = (part, name, camera = { preset: "front", direction: [0, -1, 0], up: [0, 0, 1], projection: "orthographic" }, extra = {}) => ({ part, name, label: null, camera, section: null, shows: null, place: {}, ...extra });
   assert.deepEqual(readXbfPmi({ pmi: [], pmi_views: [view(0, "front"), view(1, "front")] }).views.map(item => item.key), ["0:front", "1:front"]);

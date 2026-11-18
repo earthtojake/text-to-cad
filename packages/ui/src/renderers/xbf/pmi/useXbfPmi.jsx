@@ -10,9 +10,9 @@ import { createPmiRefResolver, pmiDrawnAt, pmiFeatureIds, resolvePmiEntryRefs } 
 import { pmiViewAt, pmiViewFromHere, pmiViewPlacements, pmiViewShows } from "./pmiViews.js";
 
 // An engine document's PMI in the viewer: what the document carries (`structure.pmi`), found on
-// the page, drawn and picked; its numbered notes, its parts' named views and what coverage found
-// (`readXbfPmi`); which of it the person has hidden (the file's view, `xbfViewSlices`), the view
-// picked and whether the faces no requirement is on are lit; and the changes asked for it -- a new
+// the page, drawn and picked; its numbered notes and its parts' named views
+// (`readXbfPmi`); which of it the person has hidden (the file's view, `xbfViewSlices`) and the view
+// picked; and the changes asked for it -- a new
 // annotation or note, a view from where the viewport looks now, a value edited, a label moved --
 // each the `cad.build123d` call it would make the code say, which Quick Edit hands the agent
 // (`changeChips`). The viewer writes nothing: the model's code is the document's source, and a
@@ -69,11 +69,6 @@ export function useXbfPmi({ scene, tree, bounds, moving, editable, hiddenParts =
     const byKey = new Map(entries.map(entry => [entry.key, entry]));
     return served.notes.map(note => byKey.get(note.key));
   }, [served, entries]);
-  // What coverage found of each part: the faces no requirement is on, found on the page on every
-  // occurrence of the part, and the requirements that cannot both hold.
-  const coverage = useMemo(() => served.coverage.map(item => ({ ...item, partName: partNameOf(item.part),
-    faceIds: pmiFeatureIds({ part: item.part, refs: [{ ids: item.uncovered.flatMap(ref => resolver.resolve(ref)) }] }, instances) })),
-  [served, partNameOf, resolver, instances]);
 
   const [hoveredKey, setHoveredKey] = useState("");
   const [hiddenKeys, setHiddenKeys] = useState(EMPTY);
@@ -82,7 +77,6 @@ export function useXbfPmi({ scene, tree, bounds, moving, editable, hiddenParts =
   const [datumFocus, setDatumFocus] = useState("");
   useEffect(() => { setDatumFocus(""); }, [selectedKey, structure]);
   const [viewKey, setViewKey] = useState("");
-  const [uncoveredShown, setUncoveredShown] = useState(false);
   const restore = useCallback((slice) => { setHiddenKeys(slice?.hidden || EMPTY); setOff(Boolean(slice?.off)); }, []);
   const known = useMemo(() => new Set(entries.map(entry => entry.key)), [entries]);
   const selected = known.has(selectedKey) ? selectedKey : "";
@@ -144,12 +138,10 @@ export function useXbfPmi({ scene, tree, bounds, moving, editable, hiddenParts =
   }, [drawnAt, entries]);
   const selectedEntry = entries.find(entry => entry.key === selected) || null;
   const focusedDatum = entries.find(entry => entry.key === datumFocus && entry.kind === "datum" && entry.part === selectedEntry?.part) || null;
-  // And, where asked, the faces no requirement is on.
-  const uncoveredIds = useMemo(() => (uncoveredShown ? coverage.flatMap(item => item.faceIds) : EMPTY), [uncoveredShown, coverage]);
   const highlight = useMemo(() => {
     const picks = drawnFeatureIds((focusedDatum || selectedEntry)?.key);
-    return { selected: uncoveredIds.length ? unique([...picks, ...uncoveredIds]) : picks, hovered: drawnFeatureIds(hovered)[0] || null };
-  }, [drawnFeatureIds, focusedDatum, selectedEntry, hovered, uncoveredIds]);
+    return { selected: picks, hovered: drawnFeatureIds(hovered)[0] || null };
+  }, [drawnFeatureIds, focusedDatum, selectedEntry, hovered]);
 
   // ---- changes: what Quick Edit hands the agent -------------------------------------------------
   const edit = useCallback((key, values, { placementOnly = false } = {}) => setChanges((now) => {
@@ -215,12 +207,11 @@ export function useXbfPmi({ scene, tree, bounds, moving, editable, hiddenParts =
   }), [changes, remove, t]);
 
   return {
-    entries, notes, coverage, items, constructions, selectedKey: selected, hoveredKey: hovered, selectedEntry, highlight, drawnFeatureIds,
+    entries, notes, items, constructions, selectedKey: selected, hoveredKey: hovered, selectedEntry, highlight, drawnFeatureIds,
     select: onSelect, hover: setHoveredKey, datumFocus,
     // The views, each where it is seen from (`at`, null where its part is not shown); the one picked
     // (`viewKey`) and, placed, what applying it takes (`view`: `usePmiViewApplied`'s); a second pick leaves it.
     views, viewKey: view ? viewKey : "", view, chooseView: key => setViewKey(now => (now === key ? "" : key)),
-    uncoveredShown, showUncovered: setUncoveredShown,
     focusDatum: key => setDatumFocus(now => (now === key ? "" : key)),
     hiddenKeys, off, setOff, restore,
     toggleHidden: key => setHiddenKeys(now => (now.includes(key) ? now.filter(item => item !== key) : [...now, key])),

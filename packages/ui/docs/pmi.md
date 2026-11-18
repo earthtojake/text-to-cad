@@ -2,7 +2,7 @@
 
 An engine document's PMI — its product and manufacturing information: dimensions with their
 tolerances or limits, datum features, geometric tolerances (GD&T) and numbered notes, with each
-part's named views and what its coverage check found — in the CAD viewer: read from the document,
+part's named views — in the CAD viewer: read from the document,
 drawn on the model, picked, hidden, walked view by view, and asked for. It is the document's own,
 not the person's: ink (Pencil and Shapes, [annotation](annotation.md)) is a note on a view and goes
 with a prompt; PMI is what the part is made to, and goes with the part.
@@ -12,7 +12,8 @@ writes an AP242 entity named after it (`annotate(body, datum("A", ...), dimensio
 flatness_tolerance(...), ...)`; `note` and `view`, the xbf's alone, write none), the engine writes
 its requirements into the document's XCAF GD&T attributes, which its AP242 export reads, and the
 served structure carries it (`structure.pmi`, absent where there is none; beside it
-`pmi_views`, the xbf's alone, and `pmi_coverage`, served for a STEP's PMI too).
+`pmi_views`, the xbf's alone, and `pmi_coverage`, served for a STEP's PMI too, which the agent
+reads and the viewer does not list).
 So the viewer writes
 nothing: a change asked for in the viewer is the call the model's code should make, which Quick
 Edit hands the agent, and the change reaches the view as the engine's next version.
@@ -20,11 +21,10 @@ Edit hands the agent, and the change reaches the view as the engine's next versi
 ## What is said, and where it comes from
 
 `@cad/core/lib/xbf/xbfPmi.js` reads the structure (`readXbfPmi`), each field read as it is
-or as nothing, never guessed, into `{ entries, notes, views, coverage }`: every annotation
+or as nothing, never guessed, into `{ entries, notes, views }`: every annotation
 and note (`entries`); the ones said as each part's numbered notes, in their numbers (`notes`: its
 general profile Note 1, then its notes); each part's named views in the code's order, keyed by
-part and name (`views`); and, of each part carrying PMI, the faces no requirement is on and the
-requirements that cannot both hold (`coverage`). An entry is one of:
+part and name (`views`). An entry is one of:
 
 - A **dimension** (`distance` between two parallel flat faces, `diameter` of a round one): its
   nominal is the engine's, measured on the geometry (`source: "geometry"`), or as another system's
@@ -151,12 +151,6 @@ document with no annotation, note or view at all says "No PMI yet" instead):
   Note 1 with its profile glyph, a flag note with its flag, a general note bare), each part's said
   where several parts have notes. A pick opens its words whole under its row; a flag note's lights
   its faces, and its eye hides its flag.
-- **Coverage**: of each part, "N faces have no requirement" or "Every face has a requirement",
-  then each conflict the engine found, in the warning colour, by its ids and the engine's words: a
-  datum no tolerance's frame names, a flag note linked to nothing, and each requirement that cannot
-  hold with another. **Show faces with no requirement**, the checkbox at the heading's right end,
-  lights those faces as a pick is lit; the group's lines stay either way. It warns, as the engine
-  does: nothing here fails.
 - **Annotations**: every other entry, as below.
 
 ## Picking, hiding, and asking

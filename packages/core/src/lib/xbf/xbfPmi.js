@@ -1,7 +1,7 @@
 // An engine document's PMI -- its manufacturing annotations: dimensions with their tolerances,
-// datum features, geometric tolerances and numbered notes, with each part's named views and
-// coverage -- as the page reads them from the document the engine serves
-// (`structure.pmi`, `pmi_views` and `pmi_coverage`, the document's XCAF GD&T,
+// datum features, geometric tolerances and numbered notes, with each part's named views -- as
+// the page reads them from the document the engine serves
+// (`structure.pmi` and `pmi_views`, the document's XCAF GD&T,
 // notes and views read by `cad.engine.pmi`), and as the viewer says them and asks for them.
 //
 // What is said comes from the document alone: a dimension's nominal is the engine's, measured on
@@ -231,36 +231,23 @@ const partRank = part => (part === null ? Number.MAX_SAFE_INTEGER : part);
  */
 
 /**
- * The document's PMI as the viewer reads it (`structure.pmi`, and beside it `pmi_views` and
- * `pmi_coverage`, each served wherever `pmi` is; none where a key is absent),
+ * The document's PMI as the viewer reads it (`structure.pmi`, and beside it `pmi_views`, served
+ * wherever `pmi` is; none where it is absent),
  * read defensively: a field missing or of the wrong type is null, never guessed.
  *
  * - `entries`: each annotation and note.
  * - `notes`: the entries said as a part's numbered notes, each part's by its number: its general
  *   profile (Note 1, where it has one), then its notes. The same objects as in `entries`.
  * - `views`: each part's named views, in the code's order, keyed by part and name.
- * - `coverage`: of each part carrying PMI, the faces no requirement names, the requirements that
- *   cannot both hold, and what its requirements leave unsaid: each a question for the person who
- *   knows the part, the standard answer the engine suggests (the call that says it) and why.
  *
  * @param {object | null} structure  A served document's structure.
- * @returns {{ entries: XbfPmiEntry[], notes: XbfPmiEntry[], views: XbfPmiView[],
- *   coverage: Array<{ part: number | null, uncovered: string[], conflicts: Array<{ kind: string, ids: string[], problem: string }>,
- *     suggestions: Array<{ kind: string, faces: string[], question: string, answer: string, why: string }> }> }}
+ * @returns {{ entries: XbfPmiEntry[], notes: XbfPmiEntry[], views: XbfPmiView[] }}
  */
 export function readXbfPmi(structure) {
   const entries = keyedByPart(structure?.pmi, item => text(item.id), readEntry);
   const notes = entries.filter(entry => noteNumber(entry) !== null)
     .sort((a, b) => partRank(a.part) - partRank(b.part) || noteNumber(a) - noteNumber(b));
-  const coverage = (Array.isArray(structure?.pmi_coverage) ? structure.pmi_coverage : []).filter(isRecord).map(item => ({
-    part: partOf(item.part), uncovered: words(item.uncovered),
-    conflicts: (Array.isArray(item.conflicts) ? item.conflicts : []).filter(isRecord)
-      .map(conflict => ({ kind: text(conflict.kind), ids: words(conflict.ids), problem: text(conflict.problem) })),
-    suggestions: (Array.isArray(item.suggestions) ? item.suggestions : []).filter(isRecord)
-      .map(said => ({ kind: text(said.kind), faces: words(said.faces), question: text(said.question),
-        answer: text(said.answer), why: text(said.why) }))
-      .filter(said => said.question && said.answer) }));
-  return { entries, notes, views: keyedByPart(structure?.pmi_views, item => text(item.name), readView), coverage };
+  return { entries, notes, views: keyedByPart(structure?.pmi_views, item => text(item.name), readView) };
 }
 
 // ---- saying it --------------------------------------------------------------------------------

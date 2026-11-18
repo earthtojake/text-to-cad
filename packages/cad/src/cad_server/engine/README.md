@@ -3147,7 +3147,7 @@ return annotate(body,
   hole less fastener), a coarse thread's tap drill (a thread note, 6H, and a position by the
   fixed-fastener formula, half the mating medium clearance hole less the fastener), else a bore
   (H7). Each is `{"kind", "faces", "question", "answer", "why"}`, its answer the call that says it
-  on the face's canonical ref; the viewer lists them under the part's coverage.
+  on the face's canonical ref; the agent asks them in the chat (the viewer lists none).
 - **Coverage.** Every face of a part is to have a requirement, most of them through its general
   profile, and what is not is said (`pmi.coverage(entries, faces)`, pure, of one part's
   structure entries and the canonical refs of all its faces). A face is covered by an `ok`
@@ -3223,7 +3223,7 @@ return annotate(body,
   direction from the part toward the eye (a preset's from the stills' table, `preset` its name;
   null for `camera`'s), and all of it in the part's frame, which a viewer places through the
   part's placement (empty where none); served wherever `pmi` is, as `pmi_coverage` is
-  (**Coverage**).
+  (**Coverage**, read by the agent: the viewer lists none of it).
 - **A document another system wrote** (a vendor's STEP, or an xbf converted from one) lists its
   GD&T as XCAF reads it, and never blocks a conversion or an export. What this does not hold
   whole is `unsupported`, with its `xcaf_type`, its values and a `reason`: another
