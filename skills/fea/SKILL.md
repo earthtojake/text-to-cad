@@ -148,7 +148,8 @@ g (9.81 m/s²) for gravity and acceleration. Restate every load in them before y
 
 For anything the summary does not answer (the stress at the mounting holes, the sag along an
 edge, how much of the part is above some stress), read `result.vtu` rather than solving again.
-meshio or PyVista read it as it is (`uv run --with meshio`):
+meshio or PyVista can read the file directly. Save this example as `read-stress.py` and run it
+with `cad run --with meshio read-stress.py`.
 
 ```python
 import meshio, numpy as np
