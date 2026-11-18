@@ -120,8 +120,9 @@ where those files ship, so these scripts are what produces them.
   own home, state, engine, cache and `cad` command folders), with real uv and real servers. `self`: cad, a uv
   tool, updating itself (idle, typed with `cad update` with and without a server running, at a server's
   start, switched off, past a release
-  whose server cannot start, back from one uv cannot install), and the helper running `cad plugin install`
-  once after an automatic update where `cad plugin auto-update` is on, never after a typed or a failed one.
+  whose server cannot start, back from one uv cannot install), and the new cad's server running `cad plugin
+  install` once where `cad plugin auto-update` is on and cad got newer, by itself or by a typed `cad update`,
+  never after a failed update.
   `bridge`: a computer on a shipped release (0.11.11, or `--old`'s) arriving at this build by its updater,
   its automatic update, its typed `cad update`, the install command and the uv line, this build's server
   running the install command once where the computer had it, installing cad with uv itself where the

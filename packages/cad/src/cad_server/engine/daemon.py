@@ -561,16 +561,19 @@ def switch_auto_update(request: dict[str, Any]) -> dict[str, Any]:
 
 
 def switch_plugin(request: dict[str, Any]) -> dict[str, Any]:
-    """Whether cad's own automatic update runs the install command after it, switched by the server (``{"op":
-    "plugin_auto_update", "on"}``: ``cad plugin auto-update on|off`` where a server runs), as ``switch_auto_update``
-    keeps its own: ``{"ok": true, "on"}``, or ``{"failed"}`` in one line."""
+    """Whether the server runs the install command once where cad is newer than the release it last ended well for
+    (``plugin_catch_up``), switched by the server (``{"op": "plugin_auto_update", "on", "release"}``: ``cad plugin
+    auto-update on|off`` where a server runs; ``release``, the asking cad's, which turning it on takes the install
+    command as up to date for; this server's where it names none), as ``switch_auto_update`` keeps its own: ``{"ok":
+    true, "on"}``, or ``{"failed"}`` in one line."""
     from cad_server._internal import auto_update
 
     on = request.get("on")
     if type(on) is not bool:
         return {"failed": "not a switch: on is true or false"}
+    asking = request.get("release")
     try:
-        return {"ok": True, "on": auto_update.change_plugin(on)}
+        return {"ok": True, "on": auto_update.change_plugin(on, asking if isinstance(asking, str) else None)}
     except OSError as error:
         return {"failed": str(error)}
 
@@ -659,6 +662,11 @@ class Daemon:
 
         self.handover = Carrier(time.monotonic())
         self.bridge = Tending()
+        # The install command's one run where cad is newer than the release it last ended well for
+        # (``plugin_catch_up``), held while it runs.
+        from cad_server._internal.plugin_catch_up import Catcher
+
+        self.catching = Catcher()
         from cad_server.engine.models import Models
 
         self.models = Models(self)
@@ -1861,8 +1869,25 @@ class Daemon:
 
     def watch(self) -> None:
         seconds = tend_seconds()
+        self.caught_up()  # at its start: nothing has run
         while not self.stopping.wait(seconds):
             self.tend()
+
+    def caught_up(self) -> None:
+        """What follows cad's own update, at the server's start and at each quiet tending (``tend``): the install
+        command run once where cad is newer than the release it last ended well for and the person's switch says so
+        (``plugin_catch_up``), then the last update attempt counted once, where it ended and nothing it waits for is
+        underway (``auto_update.report``). Never on a server that stops; never fails the server."""
+        if self.draining or self.stopping.is_set():
+            return
+        told = lambda line: print(f"cad: {line}", file=sys.stderr, flush=True)  # noqa: E731
+        try:
+            from cad_server._internal import auto_update
+
+            self.catching.tend(told)
+            auto_update.report()
+        except Exception as error:  # noqa: BLE001 - the engine's tending never fails for what follows an update
+            told(f"what follows cad's update could not be looked after: {type(error).__name__}: {error}")
 
     def reached_by(self, address: Path) -> None:
         """Clients reach this engine at ``address`` from now on (``tend`` watches it)."""
@@ -1876,10 +1901,10 @@ class Daemon:
         first, to the cache, as they are loaded (``serve.Server.trim``); telemetry's spool is handed to a sender
         once it has waited a window (``_send_counts``); the version check's feed is read in the background where it
         is due (``updates.refresh``), and cad updated where that is due and nothing is in flight
-        (``auto_update.tend``: the update stops this server and starts the next, and runs the install command after it
-        where the person's switch says); then, BRIDGE-ONLY, the install command run once where it is owed for a
-        computer a shipped updater brought (``install_script.Carrier``), and the bridge's part (``cli.setup.Tending``:
-        such a server, once cad is installed globally, hands over to the global cad's). The engine stops on
+        (``auto_update.tend``: the update stops this server and starts the next); then, BRIDGE-ONLY, the install
+        command run once where it is owed for a computer a shipped updater brought (``install_script.Carrier``), and
+        the bridge's part (``cli.setup.Tending``: such a server, once cad is installed globally, hands over to the
+        global cad's); then, where nothing is in flight, what follows cad's update (``caught_up``). The engine stops on
         ``stop``, a terminate, another installation's
         retiring it (``bind``), and here when its door is gone (its folder removed, a temporary
         folder cleaned up) or another's: no one can reach it, so it stops as ``stop`` does, saving
@@ -1903,11 +1928,14 @@ class Daemon:
             print("cad: updating cad: this server stops, and the update starts the next", file=sys.stderr, flush=True)
             return
         told = lambda line: print(f"cad: {line}", file=sys.stderr, flush=True)  # noqa: E731
+        quiet = not working and (not ran or quiet_for >= auto_update.IDLE_SECONDS)
         try:
             self.handover.tend(version(), told)
-            self.bridge.tend(version(), told, quiet=not working and (not ran or quiet_for >= auto_update.IDLE_SECONDS))
+            self.bridge.tend(version(), told, quiet=quiet)
         except Exception as error:  # noqa: BLE001 - the engine's tending never fails for the install command
             told(f"the install command's run could not be looked after: {type(error).__name__}: {error}")
+        if quiet:
+            self.caught_up()
 
     def working(self) -> bool:
         """Whether anything an update's drain waits for is in flight: a build, a draw, an export, a

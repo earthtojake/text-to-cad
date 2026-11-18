@@ -48,16 +48,17 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     return 0
 
 
-def _by_the_server(op: str, on: bool) -> bool | None:
+def _by_the_server(op: str, on: bool, **more: str) -> bool | None:
     """A switch changed by the server running, of any release that knows the request (``{"op": "auto_update"}``,
-    ``{"op": "plugin_auto_update"}``), as every other command a skill runs has the server do its writing: so a shell
+    ``{"op": "plugin_auto_update"}``, with ``more`` beside it: the plugin's switch names the release of the cad that
+    asks), as every other command a skill runs has the server do its writing: so a shell
     whose sandbox may not write cad's state folder (an agent app's) changes it with no permission asked. The switch as
     it kept it; None where no server answers, or one too old to know the request: then the command writes it itself.
     ``OSError`` in the server's words where it could not keep it."""
     from cad.engine import client
 
     try:
-        answer = client.request({"op": op, "on": on}, start=False, timeout=STATUS_SECONDS)
+        answer = client.request({"op": op, "on": on, **more}, start=False, timeout=STATUS_SECONDS)
     except ConnectionError:
         return None  # none this shell may reach: written here, as with none running
     if not isinstance(answer, dict) or str(answer.get("failed", "")).startswith("unknown request"):

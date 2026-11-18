@@ -2,11 +2,13 @@
 into every agent app it finds.
 
 - ``cad plugin install``: the install command run in the foreground (``install_script.run``), its output and exit
-  status this command's. ``CAD_INSTALL_BY_CAD=1`` is set for it, as for every run of it cad starts.
-- ``cad plugin auto-update [status|on|off]``: whether cad's own automatic update runs ``cad plugin install`` after it
-  installed a newer cad (``auto_update.plugin_switch``), off by default; the install command turns it on. Kept by the
-  server where one runs, as ``cad auto-update`` is, so a shell whose sandbox may not write the state folder needs no
-  permission.
+  status this command's. ``CAD_INSTALL_BY_CAD=1`` is set for it, as for every run of it cad starts. As it ends, the
+  release it ended well for is kept, or the one before put back where it failed (``plugin_catch_up.ended``).
+- ``cad plugin auto-update [status|on|off]``: whether the server runs ``cad plugin install`` once where this cad is
+  newer than the release the install command last ended well for, however cad got newer (``plugin_catch_up``), off by
+  default; the install command turns it on, and turning it on takes the install command as up to date for the cad
+  that turned it on. Kept by the server where one runs, as ``cad auto-update`` is, so a shell whose sandbox may not
+  write the state folder needs no permission.
 
 Bare ``cad plugin`` prints this help. ``--refresh``, hidden, does nothing: the updater of 0.11.10 runs ``cad plugin
 --refresh`` after it moves a computer.
@@ -33,9 +35,10 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
                                     "Windows irm https://www.texttocad.dev/install.ps1 | iex), which puts the plugin "
                                     "into every agent app it finds. Its output and exit status are this command's.")
     switch = commands.add_parser("auto-update", help="show or change whether cad's updates run the install command",
-                                 description="Show or change whether cad runs the install command after it updates "
-                                             "itself automatically, so the plugin stays as new as cad. Off by "
-                                             "default; the install command turns it on.")
+                                 description="Show or change whether cad runs the install command once each time it "
+                                             "is newer than the release that command last ran for, however it was "
+                                             "updated, so the plugin stays as new as cad. Off by default; the install "
+                                             "command turns it on.")
     switch.add_argument("action", nargs="?", choices=("status", "on", "off"), default="status")
     return parser
 
@@ -44,14 +47,18 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     parser = build_parser(prog)
     args = parser.parse_args(list(sys.argv[1:] if argv is None else argv))
     if args.command == "install":
-        from cad_server._internal import install_script
+        from cad_server._internal import install_script, plugin_catch_up
         from cad_server._internal.cli_errors import Failure, write
 
+        before = plugin_catch_up.read().get("for")
         try:
-            return install_script.run()
+            code = install_script.run()
         except OSError as error:
+            plugin_catch_up.ended(None, before)
             return write(Failure(f"the install command could not start: {error}"), prog=f"{prog} install",
                          as_json=False)
+        plugin_catch_up.ended(code, before)
+        return code
     if args.command == "auto-update":
         return _switch(args.action, f"{prog} auto-update")
     if not args.refresh:
@@ -68,7 +75,7 @@ def _switch(action: str, prog: str) -> int:
     if action != "status":
         on = action == "on"
         try:
-            found = _by_the_server("plugin_auto_update", on)
+            found = _by_the_server("plugin_auto_update", on, release=auto_update._version())
             found = auto_update.change_plugin(on) if found is None else found
         except OSError as error:
             return write(Failure(f"could not save the choice: {error}"), prog=prog, as_json=False)

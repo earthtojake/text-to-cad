@@ -71,8 +71,9 @@ command (its `APPS` table is the one list of apps), removes our own older copies
 the PATH with `uv tool update-shell`, and turns on `cad plugin auto-update`. It never starts the
 server. cad alone is installed by one promised line, `uv tool install cad`, which is what every
 skill's Setup block runs; no skill runs the install command. A global install updates itself, on by
-default (`cad auto-update`); `cad update` updates it now. After an automatic update that succeeded,
-where `cad plugin auto-update` is on, cad runs `cad plugin install` (the install command) once. A
+default (`cad auto-update`); `cad update` updates it now. Where `cad plugin auto-update` is on and
+cad is newer than the release the install command last ended well for, however it got newer, cad's
+server runs `cad plugin install` (the install command) once. A
 store updates its own copy. cad knows no app or skill, and of plugins only `cad plugin`
 ([decisions](docs/contributing/decisions.md)).
 
@@ -195,8 +196,8 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
   runtime lookup path. Skills are independent of each other, not of everything.
 - cad knows no app or skill: it never names, installs, removes, updates or carries them (the MCP
   server may read which app connected). Of plugins it knows one command, `cad plugin`, which runs
-  the hosted install command (`cad plugin install`, and once after an automatic update where
-  `cad plugin auto-update` is on). Knowledge of the apps lives in the plugin and
+  the hosted install command (`cad plugin install`, and once where cad is newer than the release it
+  last ended well for and `cad plugin auto-update` is on). Knowledge of the apps lives in the plugin and
   `scripts/install/install.py`.
 - Shared runtime comes from the **`cad` distribution**. A skill that uses it runs plain `cad`
   commands, with no version, and says how to get cad in its SKILL.md's Setup block (the same in

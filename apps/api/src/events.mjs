@@ -38,6 +38,11 @@
  *             for the first time, or the hand-over that server runs after it (`ARRIVAL_OUTCOMES`), how it ended,
  *             and where it failed why (`ARRIVAL_FAILURES`), a word cad chose; by which route (`ROUTES`), from
  *             which version (`from`, `none` for none), and for a hand-over after how many attempts.
+ *   update    one attempt of cad's own update of itself that ended (schema 11's), counted once by the server that
+ *             runs after it: the version before (`from`), how it ended (`UPDATE_OUTCOMES`), for a failure which
+ *             step failed (`UPDATE_FAILURES`), a word cad chose, its tries, the installer (`UPDATE_INSTALLERS`),
+ *             whether it was typed (`asked`), and for a newer cad installed how the install command's run for it
+ *             ended (`plugin`, `UPDATE_PLUGIN`; `none` for any other outcome).
  *
  * cadgen 0.7.7 to 0.7.15 (schemas 1 and 2) send `tool`, `view` and `file`: one distinct file, once a day,
  * by a salted code. Its code goes no further: a batch's are read as `files`, one of each format they name.
@@ -71,7 +76,8 @@
  * development build's schema 11 batch that still names a channel (no release sent one) is refused, as any batch
  * with a field its schema lacks.
  * Schema 11 adds `arrival`, which no schema before it sends: whether a computer's update or install reached the
- * version, step by step, so a computer stuck on its way to one is counted.
+ * version, step by step, so a computer stuck on its way to one is counted; and `update`, which no schema before it
+ * sends either: whether each of cad's own updates of itself went, and where one did not, which step failed.
  */
 
 import { createHash } from 'node:crypto';
@@ -235,6 +241,15 @@ const ARRIVAL_OUTCOMES = {
 const ARRIVAL_FAILURES = { setup: new Set(['uv', 'network', 'denied', 'other']), handover: new Set(['no_report', 'setup', 'app', 'other']) };
 const EARLIER = /^(?:none|[0-9][0-9A-Za-z.+_-]{0,31})$/;
 const MAX_ATTEMPTS = 1000;
+// How cad's own update of itself ended, schema 11's (`cad_server/analytics.py`: `UPDATE_OUTCOMES`, `UPDATE_FAILURES`,
+// `UPDATE_INSTALLERS`, `UPDATE_PLUGIN`): a newer cad installed, nothing newer, failed, or failed and the release
+// before put back; for a failure which step, a word cad chose (the installer's upgrade, an older release than asked,
+// and for one not put back the put-back too); the installer that made the global install; and the install command's
+// run for the cad an update installed (`none` for any other outcome). Tries from 1, as many as attempts.
+const UPDATE_OUTCOMES = new Set(['installed', 'current', 'failed', 'restored']);
+const UPDATE_FAILURES = { failed: new Set(['upgrade', 'older', 'put_back']), restored: new Set(['upgrade', 'older']) };
+const UPDATE_INSTALLERS = new Set(['uv', 'pipx']);
+const UPDATE_PLUGIN = new Set(['none', 'ok', 'failed']);
 // A batch's time, in whole seconds since 1970: any a clock can say (a wrong one included), never a fraction.
 const MAX_AT = 100_000_000_000;
 // Ours: the namespace every row's id is made in (`idOf`).
@@ -255,6 +270,7 @@ export const FIELDS = {
   control: ['control', 'count', 'seconds'],
   exception: ['where', 'tool', 'type', 'handled', 'status', 'frames', 'count'],
   arrival: ['step', 'route', 'from', 'outcome', 'reason', 'attempts', 'count'], // `reason`, `attempts` where they apply
+  update: ['from', 'outcome', 'reason', 'tries', 'installer', 'asked', 'plugin', 'count'], // `reason` for a failure
 };
 
 export class Invalid extends Error {}
@@ -432,6 +448,23 @@ const READERS = {
     return { key: `arrival ${JSON.stringify([step, route, from, outcome, reason, attempts])}`,
       fields: { step, route, from, outcome, reason, attempts, count } };
   },
+  // A reason only with a failure (`failed`, `restored`), the install command's run only for a newer cad installed.
+  update(event, at) {
+    only(event, ['name', ...FIELDS.update], at);
+    const from = matches(event.from, EARLIER, `${at}.from`);
+    const outcome = oneOf(event.outcome, UPDATE_OUTCOMES, `${at}.outcome`);
+    const reason = Object.hasOwn(UPDATE_FAILURES, outcome) ? oneOf(event.reason, UPDATE_FAILURES[outcome], `${at}.reason`)
+      : (event.reason === undefined ? null : fail(`${at}.reason: only a failed update names one`));
+    const tries = Number.isInteger(event.tries) && event.tries >= 1 && event.tries <= MAX_ATTEMPTS
+      ? event.tries : fail(`${at}.tries is not an update's tries`);
+    const installer = oneOf(event.installer, UPDATE_INSTALLERS, `${at}.installer`);
+    if (typeof event.asked !== 'boolean') fail(`${at}.asked is not true or false`);
+    const plugin = oneOf(event.plugin, UPDATE_PLUGIN, `${at}.plugin`);
+    if (plugin !== 'none' && outcome !== 'installed') fail(`${at}.plugin: only an update that installed a newer cad ran it`);
+    const count = some(event.count, `${at}.count`);
+    return { key: `update ${JSON.stringify([from, outcome, reason, tries, installer, event.asked, plugin])}`,
+      fields: { from, outcome, reason, tries, installer, asked: event.asked, plugin, count } };
+  },
 };
 
 // Before schema 3 only the apps sent, and the browser viewer said so by how it shows CAD.
@@ -481,8 +514,8 @@ const SCHEMAS = new Map([
     snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_10, toolFailures: FAILURES_10, causes: true }],
   // Schema 10 with the install described by the agent app alone, checked by its shape, and no channel: a row of it
   // carries none (`null`, which no store is sent). Every earlier schema's batch is translated (`translated`). And how a
-  // computer got to the version.
-  [11, { fields: ['app', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control', 'arrival']), kinds: KINDS_8,
+  // computer got to the version, and how each of cad's own updates went.
+  [11, { fields: ['app', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control', 'arrival', 'update']), kinds: KINDS_8,
     origin: batch => ({ channel: null, app: matches(batch.app, APP, 'app'),
       legacy_channel: null, source: null, process: oneOf(batch.process, PROCESSES_6, 'process') }),
     current: true, named: true, maxEvents: MAX_EVENTS_7, parts: true,

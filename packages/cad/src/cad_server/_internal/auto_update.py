@@ -13,9 +13,9 @@ Another installer is one more entry of ``INSTALLERS``; nothing that asks changes
 uv's is the one ``installed_tool`` finds.
 
 **The switches** are the person's, in cad's settings (``settings.json`` in the state folder): ``auto_update.on``,
-whether cad updates itself, ON where nothing is kept; and ``plugin.auto_update``, whether cad's own update runs the
-install command after it (``cad plugin install``), OFF where nothing is kept. ``cad auto-update`` and ``cad plugin
-auto-update`` change them.
+whether cad updates itself, ON where nothing is kept; and ``plugin.auto_update``, whether the server runs the install
+command (``cad plugin install``) once where cad is newer than the release that command last ended well for
+(``plugin_catch_up``), OFF where nothing is kept. ``cad auto-update`` and ``cad plugin auto-update`` change them.
 
 **The check** (``due``): switch on, the check not turned off for this process (``updates.checking``:
 ``CAD_UPDATE_CHECK=0``, CI), this cad a global install whose installer is found, and the version feed's ``latest`` newer
@@ -32,20 +32,32 @@ helper, never the ``cad`` executable and never run from cad's environment (``aut
 environment was made from), stops the server, runs the installer's upgrade command, and starts the server with whatever
 cad is there. On Windows it renames each ``cad.exe`` of the tool aside before the installer runs and puts a copy back,
 because an installer cannot remove one that is running (a ``cad update`` that waits, a ``cad server start``); that works
-because cad takes its launcher off ``sys.path`` as it starts (``cad_server/__init__.py``). After an automatic update
-that installed a newer cad, with ``plugin.auto_update`` on, the helper then runs the new cad's ``cad plugin install``
-once (``INSTALL_LOG``: its output). The attempt is kept in the state folder (``RECORD``), which ``cad doctor`` shows.
+because cad takes its launcher off ``sys.path`` as it starts (``cad_server/__init__.py``). The helper runs no install
+command: the server of the newer cad does, by ``plugin_catch_up``'s rule, whatever brought cad there. The attempt is
+kept in the state folder (``RECORD``: ``release``, ``from``, ``at``, ``tries``, ``installer``, ``asked`` -- a typed
+update --, then the helper's ``ended``, ``outcome``, ``detail``, ``restored``, ``started``), which ``cad doctor``
+shows.
+
+**Counted** (``report``), once per attempt that ended, by the server that runs after it, at its start and as it tends
+itself, once nothing is in flight (and by a trigger, before a new attempt takes the record's place): one ``update``
+event (``analytics.update``) -- the release before, how it ended (``installed``, ``current``, ``failed``, or
+``restored`` where the helper put the release before back), which step failed (``upgrade``: the installer's upgrade
+never ended well; ``older``: it ended well with an older release than asked; ``put_back``: the release before could
+not be put back either), the tries, the installer, whether it was typed, and, for a newer cad installed, how the
+install command's run for it ended (``plugin_catch_up.last``: ``none``, ``ok``, ``failed``; the event waits while that
+run is underway). The record is marked ``reported`` as it is counted. A failed update leaves the old cad, whose server
+counts it; one that installed a newer cad is counted by the new cad's server. The helper counts nothing.
 
 **Asked for** (``cad update``, which the server it asks judges, ``asked``, and begins, ``begin``; with no server
 running, the command itself, whose helper then starts none): PyPI asked now which
 release is newest (``updates.newest``); the switch, ``TRIES`` and ``RETRY_SECONDS`` do not apply (a typed update always
 updates); where PyPI cannot be reached, the upgrade runs all the same, and says what it got; the update begun as soon as
 nothing is in flight, not after the idle minute, or joined where one is underway. Counted in the record as any attempt
-is, so the automatic tries stay bounded. It never runs the install command.
+is, so the automatic tries stay bounded. It never runs the install command itself, and says nothing of it.
 
 Imports the standard library alone; what it asks of cad it imports as it asks: ``cad.engine.places`` (the folders),
-``cad_server.updates`` (the feed, PyPI), ``cad._internal.atomic_replace`` (the attempt kept) and, to change a switch,
-``cad_server.settings``.
+``cad_server.updates`` (the feed, PyPI), ``cad._internal.atomic_replace`` (the attempt kept), ``cad_server.analytics``
+(the attempt counted) and, to change a switch, ``cad_server.settings``.
 """
 
 from __future__ import annotations
@@ -68,7 +80,7 @@ from typing import Any
 SECTION = "auto_update"
 PLUGIN_SECTION = "plugin"
 RECORD = "auto-update.json"  # the last attempt, in the state folder
-INSTALL_LOG = "install-command.log"  # the output of the last `cad plugin install` an automatic update ran
+INSTALL_LOG = "install-command.log"  # the output of the last `cad plugin install` the server ran (``plugin_catch_up``)
 IDLE_SECONDS = 60.0
 TRIES = 2  # how many times one release is tried: once, and once more at a later check
 RETRY_SECONDS = 60 * 60.0  # how long after an attempt (underway, or ended) its release may be tried again
@@ -133,15 +145,22 @@ def change(on: bool) -> dict[str, Any]:
 
 
 def plugin_switch(path: Path | None = None) -> bool:
-    """Whether cad's own automatic update runs ``cad plugin install`` after it: off unless ``true`` is kept."""
+    """Whether the server runs ``cad plugin install`` once where cad is newer than the release it last ended well for
+    (``plugin_catch_up``): off unless ``true`` is kept."""
     return _section(PLUGIN_SECTION, path).get("auto_update") is True
 
 
-def change_plugin(on: bool) -> bool:
-    """``plugin.auto_update`` changed under the state folder's lock. ``OSError`` where it cannot be written."""
+def change_plugin(on: bool, release: str | None = None) -> bool:
+    """``plugin.auto_update`` changed under the state folder's lock; turned on, the install command is taken as up to
+    date for ``release``, the cad that turned it on (this one's by default: ``plugin_catch_up.noted``). ``OSError``
+    where it cannot be written."""
     from cad_server.settings import update_section
 
     update_section(PLUGIN_SECTION, lambda kept: {**kept, "auto_update": on})
+    if on:
+        from cad_server._internal import plugin_catch_up
+
+        plugin_catch_up.noted(release)
     return plugin_switch()
 
 
@@ -466,31 +485,31 @@ def due(*, fetch: bool = False, now: float | None = None) -> str | None:
 
 
 def helper_command(target: str | None, *, now: float, version: str, prefix: str | None = None, uv: str = "uv",
-                   base: str | None = None, record: str = RECORD, tries: int = 1, then_install: bool = False,
+                   base: str | None = None, record: str = RECORD, tries: int = 1, asked: bool = False,
                    windows: bool = os.name == "nt", install: Global | None = None, start: bool = True) -> list[str]:
     """The helper's command line: the Python this environment was made from (``base``: ``sys._base_executable``,
     never this environment's), isolated, running the helper's source, and its one argument: the commands of
     ``install``'s installer (by default uv's, its program ``uv``, for the environment ``prefix``), whose variables
-    (``Installer.environ``) the trigger sets in the helper's environment; ``target``, the
-    release asked for (None: whatever the upgrade gets); ``then_install``, whether ``cad plugin install`` runs after
-    an update that installed a newer cad, its output in ``INSTALL_LOG`` beside ``record``; ``start``, whether it starts
-    the server after the update."""
+    (``Installer.environ``) the trigger sets in the helper's environment, and its name (``installer``); ``target``, the
+    release asked for (None: whatever the upgrade gets); ``asked``, a typed update; ``start``, whether it starts the
+    server after the update. The installer's name and ``asked`` the helper keeps in the attempt's record."""
     prefix = str(install.prefix) if install is not None else prefix or sys.prefix
     installer, program = (install.installer, install.program or [uv]) if install is not None else (UV, [uv])
     told = {"cad": str(tool_command(Path(prefix), windows)), "target": target, "prefix": prefix, "record": record,
             "from": version, "at": now, "tries": tries, "upgrade": installer.upgrade(program),
             "put_back": installer.put_back(program, version), "launchers": installer.launchers(program),
-            "then_install": then_install, "install_log": str(Path(record).with_name(INSTALL_LOG)), "start": start}
+            "installer": installer.name, "asked": asked, "start": start}
     python = base or getattr(sys, "_base_executable", None) or sys.executable
     return [python, "-I", "-S", "-c", HELPER.read_text(encoding="utf-8"), json.dumps(told)]
 
 
 def trigger(target: str | None, *, automatic: bool = True, start: bool = True) -> bool:
-    """The update to ``target`` (None: whatever the upgrade gets) begun: its attempt kept (``RECORD``, outcome
-    ``underway``), and the helper started, detached, with no window, in an environment that points at nothing of this
-    one (``_UNSET``) and holds the installer's variables (``Installer.environ``); ``automatic``, the server's own
-    update, runs ``cad plugin install`` after it where ``plugin.auto_update`` is on; ``start``, the helper starts the
-    server after it (false: none ran when it began). Whether it started; never raises."""
+    """The update to ``target`` (None: whatever the upgrade gets) begun: the attempt before it counted where it was
+    not (``report``), this one kept (``RECORD``, outcome ``underway``), and the helper started, detached, with no
+    window, in an environment that points at nothing of this one (``_UNSET``) and holds the installer's variables
+    (``Installer.environ``); ``automatic``: the server's own update, else a typed one (``asked`` in the record);
+    ``start``, the helper starts the server after it (false: none ran when it began). Whether it started; never
+    raises."""
     try:
         from cad.engine.places import detached
 
@@ -501,11 +520,13 @@ def trigger(target: str | None, *, automatic: bool = True, start: bool = True) -
         now, version, record, tries = time.time(), _version(), _data() / RECORD, _tries(named) + 1
         found = Global(found.installer, found.prefix, outside_copy(found.program, str(found.prefix)))
         command = helper_command(target, now=now, version=version, record=str(record), tries=tries,
-                                 then_install=automatic and plugin_switch(), install=found, start=start)
+                                 asked=not automatic, install=found, start=start)
         inside = os.path.normcase(os.path.realpath(sys.prefix)).rstrip(os.sep) + os.sep
         if os.path.normcase(os.path.realpath(command[0])).startswith(inside):
             return False  # no Python outside this environment to run it with
-        _keep(record, {"release": named, "from": version, "at": now, "tries": tries, "outcome": "underway"})
+        report()  # the attempt before, where nobody counted it yet: this one takes its place in the record
+        _keep(record, {"release": named, "from": version, "at": now, "tries": tries, "outcome": "underway",
+                       "installer": found.installer.name, "asked": not automatic})
         env = {**{name: value for name, value in os.environ.items() if name not in _UNSET},
                **found.installer.environ(found.prefix)}
         subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -610,3 +631,68 @@ def begin(target: str | None, *, start: bool = True) -> dict[str, Any] | None:
             return None
         found = last()
         return found if found is not None and found["release"] == (target or LATEST) else None
+
+
+# --- an attempt counted -----------------------------------------------------------------------------------------------
+
+ENDED = frozenset({"installed", "current", "failed"})  # the helper's outcomes: the attempt ended
+WAIT = object()  # ``event``: not yet, the install command's run for the new cad still underway
+
+
+def event(found: dict[str, Any]) -> dict[str, Any] | object | None:
+    """The ``update`` event an ended attempt (``found``, the record) is counted as (``analytics.update``'s arguments),
+    ``WAIT`` while the install command's run for the cad it installed is underway, or None for a record that is none
+    of an ended attempt."""
+    outcome = found.get("outcome")
+    if outcome not in ENDED:
+        return None
+    reason = None
+    if outcome == "failed":
+        detail = found.get("detail")
+        reason = "older" if isinstance(detail, str) and detail.startswith("it installed ") else "upgrade"
+        if found.get("restored") is True:
+            outcome = "restored"
+        elif found.get("restored") is False:
+            reason = "put_back"
+    plugin = "none"
+    if outcome == "installed":
+        from cad_server._internal import plugin_catch_up
+
+        ran = plugin_catch_up.last(str(found.get("release")))
+        if ran == plugin_catch_up.UNDERWAY:
+            return WAIT
+        plugin = ran or "none"
+    installer = found.get("installer")
+    if installer not in {each.name for each in INSTALLERS}:  # a record kept before it named one: this cad's
+        installer = next((each.name for each in INSTALLERS if each.owns(Path(sys.prefix))), None)
+    tries = found.get("tries", 1)
+    return {"earlier": found.get("from"), "outcome": outcome, "reason": reason,
+            "tries": tries if type(tries) is int else 1, "installer": installer, "asked": found.get("asked") is True,
+            "plugin": plugin}
+
+
+def report() -> bool:
+    """The last attempt counted (see the module), once: where it ended and is not ``reported`` yet, and nothing it
+    waits for is underway (``event``), the record marked ``reported`` under the state folder's lock, then the event
+    kept for the sender (``analytics.update``, under the rules every count goes by). Whether it was counted now; never
+    raises."""
+    try:
+        from cad_server._internal.file_lock import state
+
+        folder = _data()
+        if not (folder / RECORD).is_file():
+            return False
+        with state(folder):
+            found = last()
+            if found is None or found.get("reported"):
+                return False
+            counted = event(found)
+            if not isinstance(counted, dict):
+                return False
+            _keep(folder / RECORD, {**found, "reported": True})
+        from cad_server import analytics
+
+        analytics.update(**counted)
+        return True
+    except Exception:  # noqa: BLE001 - a count never fails the server, nor the update
+        return False

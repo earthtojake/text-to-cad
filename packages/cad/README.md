@@ -401,9 +401,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     has run for a minute, where the feed as last read names a newer release, hands the update to a detached helper
     (the server's `_internal/auto_update.py`), which stops it, runs the installer's own upgrade (`uv tool install
     cad@latest`) and starts it again (where no server runs, `cad update` hands it over itself, and the helper starts
-    none). After an automatic update that succeeded, where `cad plugin auto-update` is on, the helper runs `cad
-    plugin install` once. Nothing waits on the install but a start that would otherwise start the release it
-    replaces.
+    none). Where `cad plugin auto-update` is on and cad is newer than the release the install command last ended
+    well for, however it got newer, its server runs `cad plugin install` once, detached. Nothing waits on the
+    install but a start that would otherwise start the release it replaces.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
     `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
     it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot

@@ -25,7 +25,7 @@ It does six things, and nothing else:
 5. Where cad's folder is not on your PATH, runs uv's own `uv tool update-shell`, which adds it for
    new terminals (on macOS and Linux in your shell's profile, on Windows in your user PATH). Setting
    `UV_NO_MODIFY_PATH` stops that. cad sets it when cad itself runs the install command
-   (`cad plugin install`, and after an automatic update), so only your own run changes the PATH.
+   (`cad plugin install`, and when cad has been updated), so only your own run changes the PATH.
 6. Turns on the plugin's automatic updates ([Updating](#updating)).
 
 It takes no options and does not start anything. Run it again at any time to bring the plugin up
@@ -330,9 +330,13 @@ cad server start
 
 ### The plugin
 
-The install command turns on the plugin's automatic updates: each time cad updates itself, it then
-runs the install command once, which puts the newest plugin in every agent app it finds. An update
-you start with `cad update` does not. To update the plugin now, run the install command again, or:
+The install command turns on the plugin's automatic updates: each time cad is newer than the
+release the install command last ran for, cad runs the install command once, in the background,
+which puts the newest plugin in every agent app it finds. That holds however cad got newer: by
+itself, by `cad update`, or by `uv tool upgrade cad` or `pipx upgrade cad`. It happens the next time
+cad's server starts or looks after itself with nothing running; where the run fails, cad tries again
+an hour later, at most three times for one release. To update the plugin now, run the install
+command again, or:
 
 ```bash
 cad plugin install

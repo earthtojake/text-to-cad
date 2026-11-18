@@ -110,9 +110,9 @@ cad_server/
   server, and is refused unless this cad is a global install. It waits until the update ends and says how, in
   one line, on Windows too.
 - **`cad plugin install`**: the hosted install command run in the foreground, its output and exit status the
-  command's (`_internal/install_script.py`). **`cad plugin auto-update [status|on|off]`**: whether an
-  automatic update of cad runs it after it, off by default, kept by the server as `cad auto-update` is. That
-  is all cad knows of plugins.
+  command's (`_internal/install_script.py`). **`cad plugin auto-update [status|on|off]`**: whether the server
+  runs it once where cad is newer than the release it last ended well for (below), off by default, kept by the
+  server as `cad auto-update` is. That is all cad knows of plugins.
 - **`cad telemetry [status|on|off]`**: the person's answer about usage stats and crash reports.
 
 No command removes cad, and installing it is uv's (`uv tool install cad`, `uv tool uninstall cad`).
@@ -140,8 +140,9 @@ PowerShell pipeline is still wrong there, and that is PowerShell's to set.
 (`uv tool install cad`: uv's receipt in its environment). Each installer is one entry (`INSTALLERS`): its
 upgrade command, the command that puts a release back, and where its launchers are. Two switches in the
 person's settings: `auto_update.on`, whether cad updates itself, on unless turned off (`cad auto-update`);
-and `plugin.auto_update`, whether an automatic update runs the install command after it, off unless turned
-on (`cad plugin auto-update`; the install command turns it on).
+and `plugin.auto_update`, whether the server runs the install command once where cad is newer than the
+release it last ended well for, off unless turned on (`cad plugin auto-update`; the install command turns it
+on).
 
 The server reads the version feed (`updates.py`, at most once an hour, in the background; never waited on).
 It asks whether to update as it starts, and as it tends itself: the switch on, this cad a global install
@@ -159,10 +160,26 @@ server cannot start still updates. Forward only: nothing moves to an older relea
 running server of a newer release rather than replacing it. With no answer from the feed, nothing happens.
 `CAD_UPDATE_CHECK=0` in a process's environment turns the check off for it.
 
-After an automatic update that installed a newer cad, with `plugin.auto_update` on, the helper runs the
-new cad's `cad plugin install` once, after the server has started: its exit status in the record
-(`install_command`), its output in `install-command.log` in the data folder. No retry: a failure waits for
-the next update.
+**The plugin catches up** (`_internal/plugin_catch_up.py`). Where `plugin.auto_update` is on and this cad is
+newer than the release the install command last ended well for, the server runs this cad's own `cad plugin
+install` once, detached, its output in `install-command.log` in the data folder. It asks at its start and at
+each tending once nothing is in flight, so it holds however cad got newer: its own update, a typed `cad
+update`, `uv tool upgrade cad` or `pipx upgrade cad` by hand. That release is kept in `install-command.json`
+in the data folder, beside the update's own record: written when `cad plugin install` ends 0 (a failed run
+puts back the one before) and when the switch is turned on (the install command's last step, right after it
+put the plugin in place; turned on by hand, it means "from this release on"). With no record and the switch
+on, the record is written for this release and nothing runs, so a fresh install runs nothing again. A run
+that failed, or never said how it ended, is tried again an hour later at the earliest, at a later start or
+tending, at most three times for one release. Never where the update check is off for the process
+(`CAD_UPDATE_CHECK=0`, CI, a development build), where `CAD_ENGINE_UPDATE_INSTALLER` names no command (a
+test's), for a cad that is no global install, or while the bridge owes its own run of the install command.
+The helper and `cad update` run none. `cad doctor` shows the record.
+
+**Each attempt is counted once** (`auto_update.report`), where telemetry is on, as every count is: the server
+that runs after it, at its start or a quiet tending, sends one `update` event from the record (the release
+before, how it ended, which step failed, the tries, the installer, whether it was typed, and how the install
+command's run for a newer cad went) and marks the record `reported`. A failed update is counted by the old
+cad's server, a successful one by the new cad's; a new attempt counts the one before it first.
 
 `cad update` asks the server that runs (`{"op": "update"}`, which an agent's sandboxed shell may send with no
 permission): it asks PyPI which release is newest (`updates.newest`, 5 s at most; `CAD_PYPI_URL` names a

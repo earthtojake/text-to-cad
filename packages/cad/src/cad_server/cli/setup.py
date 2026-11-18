@@ -529,7 +529,8 @@ def once(told: Callable[[str], None]) -> subprocess.Popen | None:
     ran on this computer before (``ours``), install mode is not owed, there is an install command, and the person's
     switch ``plugin.auto_update`` was never set: the switch turned on, under the settings' lock, then the install
     command started, detached, its output in ``auto_update.INSTALL_LOG``. The switch goes on first: it being set is
-    how this runs once, and where this run fails, the next automatic update runs the command. The command's process,
+    how this runs once, and where this run fails, the next newer cad runs the command (``plugin_catch_up``, which
+    takes this release as up to date, the switch being on with no record of its own). The command's process,
     where it started; else None. Never raises."""
     try:
         from cad.engine.places import detached, state_dir

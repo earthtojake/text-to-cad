@@ -72,7 +72,8 @@ class DoctorTests(unittest.TestCase):
         self.assertIn(f"  cache    {self.root / 'cache'}: nothing for `cad cache prune` to remove\n", out)
         self.assertRegex(out, r"  server   not running \(.+\): run `cad server start`\n"
                               r"  update   no auto-update: this cad is not a global install, so it never updates "
-                              r"itself; plugin auto-update off\n  uv       .+\n  attempt  none\n$")
+                              r"itself; plugin auto-update off\n  uv       .+\n  attempt  none\n"
+                              r"  plugin   no record of the install command ending well on this computer\n$")
 
     def test_the_cache_line_says_what_cad_cache_prune_would_free(self) -> None:
         from cad_server._internal import base

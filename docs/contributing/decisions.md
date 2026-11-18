@@ -21,8 +21,8 @@ install script, never the software.
 **What it costs.** cad cannot repair a broken plugin install or tell which app a person uses it
 from. Three exceptions are allowed: the MCP server reads which app connected, to choose how to show
 a model; the viewer's "Open in" menu names apps; and `cad plugin` runs the hosted install command,
-when asked (`cad plugin install`) and once after an automatic update where `cad plugin auto-update`
-is on (below). Nothing else in cad may name an app, a plugin or a skill.
+when asked (`cad plugin install`) and once where cad is newer than the release it last ended well for
+and `cad plugin auto-update` is on (below). Nothing else in cad may name an app, a plugin or a skill.
 
 ## cad says `cad`; the views may say text-to-cad
 
@@ -115,9 +115,12 @@ updates itself.
 
 The plugin is the install command's. Run by a person, or by cad (`cad plugin install`), it puts the
 newest plugin in every app it finds. It turns on `cad plugin auto-update`, which is off until then:
-after each automatic update of cad that succeeded, cad runs it once. A failed run waits for the next
-update, with nothing stored or retried. A plugin store (Codex's directory, Claude's) updates the copy
-it installed.
+where cad is newer than the release the install command last ended well for, cad's server runs it
+once. cad keeps that release in a small record of its state folder, written when the command ends well
+and when the switch is turned on. The rule asks what cad is, not how it got there, so a typed `cad
+update` or `uv tool upgrade cad` by hand brings the plugin along as cad's own update does, with one
+mechanism. A failed run is tried again an hour later, at most three times for one release. A plugin
+store (Codex's directory, Claude's) updates the copy it installed.
 
 **Why.** People install and forget, and they should get our fixes without being asked. Nothing of
 ours asks a person to update: in blind tests, agents would not install without the person's say-so,

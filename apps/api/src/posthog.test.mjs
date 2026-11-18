@@ -63,7 +63,7 @@ test("the build daemon's counts are PostHog events of their own, each a window's
   const countsOf = event => Object.fromEntries(Object.entries(event).filter(([key]) => key !== 'name'));
   assert.deepEqual(batch.map(event => event.properties), DAEMON.events.map(event => ({ ...context, ...countsOf(event) })));
   assert.deepEqual(Object.keys(EVENTS).sort(), ['arrival', 'build', 'build_failure', 'control', 'exception', 'feature', 'files',
-    'health', 'snapshot', 'snapshot_failure', 'tool', 'tool_failure', 'view']);
+    'health', 'snapshot', 'snapshot_failure', 'tool', 'tool_failure', 'update', 'view']);
   // Schemas before 5 name no batch: PostHog makes up each event's uuid and stamps it as it arrives, as ever.
   assert.ok(batch.every(event => !('uuid' in event) && !('timestamp' in event)));
 });
@@ -126,6 +126,22 @@ test("how a computer got to a version is PostHog's version_arrival: by version, 
   assert.ok(!('channel' in served.properties) && !('legacy_channel' in served.properties), 'schema 11 sends no channel, and none is made up');
   assert.equal(served.properties.app, 'unknown');
   assert.ok(served.uuid && served.timestamp, 'named, so a batch sent again counts once');
+});
+
+test("each of cad's own updates is PostHog's cad_updated: by version, from, outcome, reason, tries, installer, asked and plugin", async () => {
+  const [failed, installed] = await at(JSON.parse(JSON.stringify({ ...NAMED, schema: 11, process: 'cli', channel: undefined, app: 'unknown', events: [
+    { name: 'update', from: '0.11.12', outcome: 'failed', reason: 'upgrade', tries: 2, installer: 'uv', asked: false, plugin: 'none', count: 1 },
+    { name: 'update', from: '0.11.12', outcome: 'installed', tries: 1, installer: 'pipx', asked: true, plugin: 'ok', count: 1 },
+  ] })));
+  const own = event => Object.fromEntries(['from', 'outcome', 'reason', 'tries', 'installer', 'asked', 'plugin', 'count']
+    .filter(key => key in event.properties).map(key => [key, event.properties[key]]));
+  assert.deepEqual([failed.event, installed.event], ['cad_updated', 'cad_updated']);
+  assert.deepEqual(own(failed), { from: '0.11.12', outcome: 'failed', reason: 'upgrade', tries: 2, installer: 'uv', asked: false,
+    plugin: 'none', count: 1 });
+  assert.deepEqual(own(installed), { from: '0.11.12', outcome: 'installed', tries: 1, installer: 'pipx', asked: true, plugin: 'ok',
+    count: 1 });
+  assert.deepEqual([installed.properties.version, installed.properties.process], ['0.8.0', 'cli']);
+  assert.ok(installed.uuid && installed.timestamp, 'named, so a batch sent again counts once');
 });
 
 test('a batch sent again is the same PostHog events, uuid and time alike, so PostHog counts it once', async () => {

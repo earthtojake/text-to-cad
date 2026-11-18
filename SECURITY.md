@@ -123,14 +123,15 @@ and nothing asked:
   left as it is. Where cad's folder is not on the PATH, it runs uv's own
   `uv tool update-shell`, which adds it to your shell profile (on Windows, your
   user PATH); `UV_NO_MODIFY_PATH` stops that. cad sets it whenever cad itself runs
-  the install command (`cad plugin install`, and after an automatic update), so only
+  the install command (`cad plugin install`, and when cad has been updated), so only
   a person's own run changes the PATH.
 - The plugin, from this repository's `latest` branch on GitHub, installed in each
   agent app it finds with that app's own command. It removes what earlier releases
   left there, among them the CAD server they wrote into Claude Desktop's config
   (keeping a `.bak`).
-- `cad plugin auto-update on`, so that after each automatic update of cad
-  (below) it runs the install command again. `cad plugin install` runs it too.
+- `cad plugin auto-update on`, so that each time cad is newer than the release the
+  install command last ended well for, however it got newer (below), cad runs the
+  install command again, once. `cad plugin install` runs it too.
 
 It starts no server. To read the scripts first, take the copies attached to a
 release on GitHub and check them against the release's `SHA256SUMS`; they install
@@ -145,11 +146,13 @@ When the feed names a release newer than cad's and nothing has run for a minute,
 cad stops its server, runs its installer's own upgrade (`uv tool install
 cad@latest`), which downloads PyPI's newest release of `cad`, and starts the server
 again. It never installs an older release; where a failed upgrade left no `cad`, it
-puts back the release that ran. Then, where `cad plugin auto-update` is on, cad
-downloads and runs the hosted install command once, unattended: it fetches
-`install.sh` or `install.ps1` and `install.py` from texttocad.dev, and the plugin
-from GitHub. A typed `cad update` asks PyPI which release is newest and runs the
-same upgrade, and never the install command. So with automatic updates on, whoever
+puts back the release that ran. A typed `cad update` asks PyPI which release is
+newest and runs the same upgrade. Then, where `cad plugin auto-update` is on, the
+server of the newer cad (however it got newer: by itself, by `cad update`, or by an
+upgrade by hand) downloads and runs the hosted install command once, unattended: it
+fetches `install.sh` or `install.ps1` and `install.py` from texttocad.dev, and the
+plugin from GitHub; a run that fails is tried again an hour later, at most three
+times for one release. So with automatic updates on, whoever
 controls `api.texttocad.dev` (which decides only when), `texttocad.dev`, the `cad`
 project on PyPI or this repository's `latest` branch can run code as you.
 

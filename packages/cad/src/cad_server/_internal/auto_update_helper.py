@@ -4,8 +4,9 @@ with no window, and hands it one JSON argument: ``cad`` (the environment's own `
 asked for, or null: whatever the upgrade gets), ``prefix`` (the environment), ``record`` (the last attempt's file),
 ``from``, ``at`` and ``tries``; the installer's commands, ``upgrade`` (cad upgraded to the newest release),
 ``put_back`` (the release that ran before installed again) and ``launchers`` (prints the folder its launchers are in);
-``then_install`` and ``install_log``; and ``start``, whether it starts the server at the end (false where ``cad update``
-found none running: it leaves none running).
+``installer`` (its name) and ``asked`` (a typed update), which it keeps in the record for the server to count; and
+``start``, whether it starts the server at the end (false where ``cad update`` found none running: it leaves none
+running).
 
 In order: the server stopped (``cad server stop``, which waits until it is gone); unless the environment already holds
 ``target`` or newer (forward only), the upgrade, tried again on failure, until it ends 0 with a release installed, and
@@ -13,10 +14,9 @@ that release ``target`` or newer where there is one; where every try failed and 
 whole tool when an install fails after it has begun), the release that ran before put back (``from``: no way back from a
 good update, only what a failed one destroyed); the server started with whatever cad is there, where ``start`` says
 so; and the outcome written to ``record``. The release the record names is the one installed after the upgrade, where
-it ended well; the one asked for where it did not. Then, where ``then_install`` is true and the upgrade installed a
-release newer than ``from``, the new cad's ``cad plugin install``, once, after the record said so (``then_install``),
-its output in ``install_log`` and its exit status in the record (``install_command``). The standard library alone, and
-nothing else of cad.
+it ended well; the one asked for where it did not. It runs no install command and counts nothing: the server that
+starts after it does both (``auto_update.report``, ``plugin_catch_up``). The standard library alone, and nothing else
+of cad.
 
 On Windows an installer cannot remove a ``cad.exe`` that runs (a ``cad update`` waiting, a ``cad server start``), and an
 install that meets one fails halfway. A running ``cad.exe`` can be renamed, though, once cad holds it only as a running
@@ -42,7 +42,7 @@ WINDOWS = os.name == "nt"
 NO_WINDOW = 0x08000000 if WINDOWS else 0  # CREATE_NO_WINDOW: no console flashes for uv or cad
 # A cad.exe set aside in the launchers' folder (``set_aside``): ``<stamp>`` names the try, ``<n>`` the file.
 ASIDE = ".cad.exe.{stamp}.{n}.old"
-# How long an install, and the install command after it, may run.
+# How long an install may run.
 INSTALL_SECONDS = 900
 
 
@@ -74,21 +74,6 @@ def run(command, timeout):
         return None, f"{type(error).__name__}: {error}"
     lines = [line.strip() for line in done.stdout.splitlines() if line.strip()]
     return done.returncode, lines[-1] if lines else ""
-
-
-def logged(command, log, timeout):
-    """``command`` run, its output (both streams) written to the file ``log``: its exit status, None where it could
-    not run or did not end in time (said in the file)."""
-    try:
-        with open(log, "w", encoding="utf-8") as out:
-            try:
-                return subprocess.run(command, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
-                                      timeout=timeout, creationflags=NO_WINDOW).returncode
-            except (OSError, subprocess.SubprocessError) as error:
-                out.write(f"\n{type(error).__name__}: {error}\n")
-                return None
-    except OSError:
-        return None
 
 
 def bin_folder(told, run):
@@ -165,22 +150,11 @@ def update(told, run=run, sleep=time.sleep, windows=WINDOWS):
     code, said = run([told["cad"], "server", "start"], 120) if start else (None, "")
     if folder is not None:
         tidy(folder)
-    then = bool(told.get("then_install")) and outcome == "installed"
     return {"release": named(got) if got is not None else told["target"] or "latest", "from": told["from"],
             "at": told["at"], "tries": told.get("tries", 1), "ended": time.time(), "outcome": outcome,
             "detail": detail, **({} if restored is None else {"restored": restored}),
             **({"started": said if code == 0 else f"not started: {said}"} if start else {"start": False}),
-            **({"then_install": True} if then else {})}
-
-
-def chained(told, record, logged=logged):
-    """``record`` with the install command's exit status (``install_command``), where it runs after this update
-    (``then_install``: asked for, the server's own update with the person's switch on, and a newer cad installed). Run
-    once, by the new cad's own command, its output in ``install_log``."""
-    if not record.get("then_install"):
-        return record
-    code = logged([told["cad"], "plugin", "install"], told["install_log"], INSTALL_SECONDS)
-    return {**record, "install_command": code}
+            **{name: told[name] for name in ("installer", "asked") if name in told}}
 
 
 def keep(path, record):
@@ -192,19 +166,6 @@ def keep(path, record):
         pass
 
 
-def still(path, record):
-    """Whether the attempt kept at ``path`` is still ``record``'s (begun at its ``at``), and not one begun since."""
-    try:
-        with open(path, encoding="utf-8") as handle:
-            return json.load(handle).get("at") == record["at"]
-    except (OSError, ValueError, AttributeError):
-        return False
-
-
 if __name__ == "__main__":
     told = json.loads(sys.argv[1])
-    ended = update(told)
-    keep(told["record"], ended)  # said at once: the install command after it can take minutes
-    after = chained(told, ended)
-    if after is not ended and still(told["record"], ended):
-        keep(told["record"], after)
+    keep(told["record"], update(told))

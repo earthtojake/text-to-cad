@@ -1,0 +1,260 @@
+"""The install command catching up with cad: where ``plugin.auto_update`` is on (``auto_update.plugin_switch``) and
+this cad is newer than the release of cad the install command last ended well for, the server runs ``cad plugin
+install`` once.
+
+cad knows no app, plugin or skill. What it knows here is the hosted install command, which ``cad plugin install`` runs
+(``install_script.run``), and the release it last ended well for. The rule holds on every route by which cad gets newer
+-- its own automatic update, a typed ``cad update``, ``uv tool upgrade cad`` or ``pipx upgrade cad`` by hand --
+because it is the server of the newer cad that asks, whatever brought it.
+
+**The record** (``RECORD``, in the state folder beside ``auto-update.json``): ``for``, the release of cad the install
+command last ended well for -- written by ``cad plugin install`` as it ends 0 (``ended``; a run that fails puts back
+the one before, which its last step may have written), and as the switch is turned on (``noted``, from
+``auto_update.change_plugin``: the install command turns it on as its last step, right after it put the plugin in
+place, and a person who turns it on means "from this release on") --; and the last run the server began (``begin``):
+``release``, ``at``, ``tries`` (of that release), ``outcome`` (``underway``, then ``ok`` or ``failed``), ``code`` (its
+exit status, null where it could not start) and ``ended``. It is a state record, not a choice, so it lives in the state
+folder, as the update's own record does, and not in the person's settings. ``cad doctor`` shows it.
+
+**The rule** (``due``), asked by the server at its start and as it tends itself, only once nothing is in flight: the
+switch on; the update check not turned off for this process (``updates.checking``: ``CAD_UPDATE_CHECK=0``, CI, a
+development build); an install command to run (``install_script.installer``: ``CAD_ENGINE_UPDATE_INSTALLER``, a test's
+stand-in, or none where it is empty); this cad a global install (``tool``: an installer of ``auto_update.INSTALLERS``
+made its environment) of a plain release;
+install mode not owed (BRIDGE-ONLY: a computer the bridge still carries gets that run, ``install_script``, and no
+other); and this cad newer than ``for``. Where the record names no ``for`` (none yet, or unreadable), it is written
+for this release and nothing runs: a fresh install's command writes it itself, and a computer whose switch was on
+before is taken as up to date. Bounded: a run of this release underway, begun less than ``RETRY_SECONDS`` ago, is
+waited for; one that failed (or never said how it ended) is tried again not sooner than ``RETRY_SECONDS`` after it
+began, and at a later start or tending; at most ``TRIES`` runs for one release. Never in a loop.
+
+**A run** (``begin``): the record says ``underway`` first; then this cad's own ``cad`` command
+(``auto_update.tool_command``) runs ``cad plugin install``, detached, with no window, in an environment that points at
+nothing of this one (``auto_update._UNSET``) and names the run (``ATTEMPT_ENV``: its ``at``), its output in
+``install-command.log`` (``auto_update.INSTALL_LOG``). That command keeps how it ended (``ended``); where it exited
+without saying so, the server that started it keeps it as failed, with its exit status (``Catcher``). ``cad update``
+never runs it.
+
+Imports the standard library alone; what it asks of cad it imports as it asks.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import time
+from pathlib import Path
+from typing import Any
+
+RECORD = "install-command.json"
+# The run ``cad plugin install`` is, where the server began it: the ``at`` of the record's run.
+ATTEMPT_ENV = "CAD_INSTALL_ATTEMPT"
+TRIES = 3  # how many runs one release gets: once, and twice more, each an hour or more after the one before
+RETRY_SECONDS = 60 * 60.0
+UNDERWAY, OK, FAILED = "underway", "ok", "failed"
+
+
+def _folder() -> Path:
+    from cad.engine.places import state_dir
+
+    return state_dir()
+
+
+def _version() -> str:
+    from cad_server import __version__
+
+    return __version__
+
+
+def _numbers(text: Any) -> tuple[int, ...] | None:
+    """A release's numbers (a development build ``X.Y.Z-dev.<stamp>`` is its release's), or None."""
+    found = re.match(r"(\d+)\.(\d+)\.(\d+)", text) if isinstance(text, str) else None
+    return tuple(int(part) for part in found.groups()) if found else None
+
+
+def read() -> dict[str, Any]:
+    """The record, ``{}`` where there is none or it cannot be read."""
+    try:
+        found = json.loads((_folder() / RECORD).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return found if isinstance(found, dict) else {}
+
+
+def _change(change) -> dict[str, Any]:
+    """The record read, changed (``change`` gets a copy) and written, under the state folder's one lock. ``OSError``
+    where it cannot be written."""
+    from cad._internal.atomic_replace import write_bytes_atomic
+    from cad_server._internal.file_lock import state
+
+    folder = _folder()
+    folder.mkdir(parents=True, exist_ok=True)
+    with state(folder):
+        found = change(dict(read()))
+        write_bytes_atomic(folder / RECORD, (json.dumps(found, indent=1, sort_keys=True) + "\n").encode("utf-8"))
+    return found
+
+
+def noted(release: str | None = None) -> None:
+    """The switch turned on (``auto_update.change_plugin``): ``for`` is ``release`` (this cad's by default) from now
+    on. ``OSError`` where it cannot be written."""
+    named = release if _numbers(release) is not None else _version()
+    _change(lambda found: {**found, "for": named})
+
+
+def ended(code: int | None, before: Any) -> None:
+    """``cad plugin install`` ended with exit status ``code``: ``for`` this cad where it is 0, else ``before`` (what
+    ``for`` was as it began: its last step may have written this cad's), and, where the server began this run
+    (``ATTEMPT_ENV``), the run's outcome. Never raises."""
+    try:
+        attempt = os.environ.get(ATTEMPT_ENV)
+
+        def change(found: dict[str, Any]) -> dict[str, Any]:
+            if code == 0:
+                found["for"] = _version()
+            elif isinstance(before, str):
+                found["for"] = before
+            else:
+                found.pop("for", None)
+            if attempt and str(found.get("at")) == attempt and found.get("outcome") == UNDERWAY:
+                found.update(outcome=OK if code == 0 else FAILED, code=code, ended=time.time())
+            return found
+
+        _change(change)
+    except Exception:  # noqa: BLE001 - the command's own exit status is what it says
+        pass
+
+
+def tool() -> Path | None:
+    """This cad's environment where it is a global install (an installer of ``auto_update.INSTALLERS`` made it), else
+    None. Only whether it is one: the installer's program need not be found, as the update's must."""
+    import sys
+
+    from cad_server._internal import auto_update
+
+    prefix = Path(sys.prefix)
+    return prefix if any(installer.owns(prefix) for installer in auto_update.INSTALLERS) else None
+
+
+def _stale(found: dict[str, Any], now: float) -> bool:
+    """Whether the record's run began ``RETRY_SECONDS`` ago or more (a clock set back counts as long ago)."""
+    at = found.get("at")
+    return not isinstance(at, (int, float)) or not 0 <= now - float(at) < RETRY_SECONDS
+
+
+def due(*, now: float | None = None) -> bool:
+    """Whether the server runs ``cad plugin install`` now (see the module); a record with no ``for`` is written for
+    this release first, and nothing runs. Never raises."""
+    try:
+        from cad_server import updates
+        from cad_server._internal import auto_update, install_script
+
+        now = time.time() if now is None else now
+        version = _version()
+        if not auto_update.plugin_switch() or not updates.checking() or not install_script.installer():
+            return False
+        if auto_update.release(version) is None or tool() is None:
+            return False
+        owed = install_script.read()
+        if owed is not None and owed.get("state") == install_script.OWED:
+            return False  # BRIDGE-ONLY: the bridge's run, never a second
+        found, mine = read(), _numbers(version)
+        last_for = _numbers(found.get("for"))
+        if last_for is None:
+            noted(version)
+            return False
+        if mine is None or mine <= last_for:
+            return False
+        if found.get("release") != version:
+            return True
+        tries = found.get("tries")
+        if type(tries) is int and tries >= TRIES:
+            return False
+        return _stale(found, now)
+    except Exception:  # noqa: BLE001 - a rule that cannot be asked runs nothing
+        return False
+
+
+def begin(told, *, now: float | None = None) -> subprocess.Popen | None:
+    """A run begun (see the module): kept as ``underway``, then ``cad plugin install`` started. Its process, or None
+    where it could not start (kept as failed). Never raises."""
+    from cad.engine.places import detached
+    from cad_server._internal import auto_update
+
+    now = time.time() if now is None else now
+    version = _version()
+    try:
+        prefix = tool()
+        if prefix is None:
+            return None
+
+        def start(kept: dict[str, Any]) -> dict[str, Any]:
+            tries = kept.get("tries") if kept.get("release") == version else 0
+            kept = {key: value for key, value in kept.items() if key not in ("code", "ended")}
+            return {**kept, "release": version, "at": now, "tries": (tries if type(tries) is int else 0) + 1,
+                    "outcome": UNDERWAY}
+
+        _change(start)
+    except Exception as error:  # noqa: BLE001 - never a failure of the server's tending
+        told(f"the install command could not begin: {type(error).__name__}: {error}")
+        return None
+    folder = _folder()
+    env = {**{name: value for name, value in os.environ.items() if name not in auto_update._UNSET},
+           ATTEMPT_ENV: str(now)}
+    try:
+        with open(folder / auto_update.INSTALL_LOG, "w", encoding="utf-8") as out:
+            process = subprocess.Popen([str(auto_update.tool_command(prefix)), "plugin", "install"],
+                                       stdin=subprocess.DEVNULL,
+                                       stdout=out, stderr=subprocess.STDOUT, env=env, cwd=str(folder), **detached())
+    except (OSError, ValueError) as error:
+        told(f"the install command could not start: {error}")
+        try:
+            _change(lambda kept: {**kept, "outcome": FAILED, "code": None, "ended": time.time()}
+                    if kept.get("at") == now else kept)
+        except OSError:
+            pass
+        return None
+    told(f"cad {version} is newer than the one the install command last ran for: it runs once now, in the background")
+    return process
+
+
+class Catcher:
+    """The server's side (``daemon.Daemon``): the run it began last, held while it runs, so it begins no second, and
+    kept as failed, with its exit status, where it exited without saying how it ended."""
+
+    def __init__(self) -> None:
+        self.process: subprocess.Popen | None = None
+        self.at: float | None = None
+
+    def tend(self, told) -> bool:
+        """The rule asked (``due``) and a run begun where it says so; never while this server's last run still runs.
+        Whether one began."""
+        if self.process is not None:
+            code = self.process.poll()
+            if code is None:
+                return False
+            at, self.process = self.at, None
+            try:
+                _change(lambda found: {**found, "outcome": FAILED, "code": code, "ended": time.time()}
+                        if found.get("at") == at and found.get("outcome") == UNDERWAY else found)
+            except OSError:
+                pass
+        if not due():
+            return False
+        now = time.time()
+        self.process, self.at = begin(told, now=now), now
+        return self.process is not None
+
+
+def last(release: str, *, now: float | None = None) -> str | None:
+    """How the run for ``release`` went, for the update that installed it (``auto_update.report``): ``ok``, ``failed``
+    (it failed, could not start, or never said how it ended within ``RETRY_SECONDS``), ``underway``, or None where
+    the server began none for it."""
+    found = read()
+    if found.get("release") != release:
+        return None
+    if found.get("outcome") == UNDERWAY:
+        return FAILED if _stale(found, time.time() if now is None else now) else UNDERWAY
+    return OK if found.get("outcome") == OK else FAILED

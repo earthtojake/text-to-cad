@@ -282,10 +282,12 @@ last read names a newer release, a detached helper that is not cad (`auto_update
 environment was made from) stops the server, runs the installer's upgrade (`uv tool install cad@latest`), tried
 again on failure, and starts the server with whatever cad is there. A server that hands its start over exits
 `UPDATING`, and its starter waits for the next one; a `cad server start` that fails asks for the update before it
-gives up; a start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). After an
-automatic update that installed a newer cad, with `cad plugin auto-update` on, the helper runs the new cad's
-`cad plugin install` once (the hosted install command); a typed `cad update` never does. Where no server runs, a
-typed `cad update` begins the update itself (`cli/update.py`), and its helper starts no server after it.
+gives up; a start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). With
+`cad plugin auto-update` on, the server, at its start and at each quiet tending, runs `cad plugin install` (the
+hosted install command) once where its cad is newer than the release that command last ended well for, however it
+got newer (`_internal/plugin_catch_up.py`), then counts the last update attempt once (`auto_update.report`); the
+helper and `cad update` run no install command. Where no server runs, a typed `cad update` begins the update itself
+(`cli/update.py`), and its helper starts no server after it.
 
 The updaters of 0.10.0 to 0.11.11 are frozen on computers, though, and update by running a newer release's hidden
 `cad setup --engine-update` from a flat release folder they made (`<state>/releases/X`). The bridge

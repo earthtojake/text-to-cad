@@ -72,7 +72,13 @@ exits, each batch under an id of its own and stamped with the time it was made:
   folder it may not write, or none of these), its server serving for the first time (``serving``), and the
   hand-over that server runs after it (``handover``: ``done``, ``failed`` and why, ``gave_up`` or ``superseded``,
   with how many ``attempts`` it took) --, by which route (``ROUTES``: an earlier release's updater, or ``cad setup``
-  itself) and from which version (``from``: the one installed before it, ``none`` where none was).
+  itself) and from which version (``from``: the one installed before it, ``none`` where none was);
+- ``update`` (``update``): one attempt of cad's own update that ended, counted once by the server that runs after it
+  (``cad_server._internal.auto_update.report``) -- the release before (``from``), how it ended (``UPDATE_OUTCOMES``:
+  installed, current, failed, or failed and the release before put back), for a failure which step failed
+  (``UPDATE_FAILURES``), its ``tries``, the ``installer`` that made the global install (``uv``, ``pipx``), whether it
+  was typed (``asked``), and for a newer cad installed how the install command's run for it ended (``plugin``:
+  ``UPDATE_PLUGIN``).
 
 A command sends nothing itself. What it counts -- a build, a snapshot, a drawing, a crash -- is kept beside
 the settings for the next process that sends (``spool``): only while sharing is on, under the answer in
@@ -86,7 +92,8 @@ window, a command or the daemon starts a sender that sends it and exits (``cad_s
 An arrival (``arrival``) waits for no other process: the step that counts it may be the last this version ever runs
 on the computer -- a setup that failed, a server that never served. It is kept in a file of its own (``ARRIVALS``),
 which no earlier release's sender takes, and starts a sender at once, every time (``telemetry_send.start_now``), from
-whichever Python counted it: a version's own, uvx's, an updater's folder.
+whichever Python counted it: a version's own, uvx's, an updater's folder. An update (``update``) is kept and sent the
+same way: the server that counts it may be replaced by the next update within the minute.
 
 Never a path or a file name of the person's, a model, an argument, a message, a prompt or anything
 typed. A batch with nothing in it is never sent: a process the host started and nobody used counts
@@ -182,8 +189,8 @@ OWN = frozenset({"cad", "cadgen", "cad_server"})
 
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
 # 11: where a batch comes from is one field, ``app`` (the agent app, detected), one batch per app; the channel of 10
-# and earlier (an app's name joined to where its copy came from) is no longer sent; and how a computer got to a
-# version (``arrival``);
+# and earlier (an app's name joined to where its copy came from) is no longer sent; how a computer got to a
+# version (``arrival``); and how each of cad's own updates ended (``update``);
 # 10: a CAD tool's call the engine could start no kernel process for (``tool_failure``'s ``no_kernel``), and
 # why, on its crash (``exception``'s ``cause``);
 # 9: the part of a snapshot's request a refusal named (``snapshot_failure``'s ``part``);
@@ -214,7 +221,10 @@ SCHEMA = 11
 # ``arrival``: whether a version's setup, its server's first serving and the hand-over after it went, and where one did
 # not, which, in a word of ours -- cad failing, as a crash report says it fails, never a message or a path -- by which
 # of two routes, and the version it came from, which the same install id's batches said already as their ``version``
-# (every release reads the one settings file, and the id in it). No field of the person's, no new identity.
+# (every release reads the one settings file, and the id in it). No field of the person's, no new identity. Nor
+# schema 11's ``update``: whether cad's own update of itself went, and where it did not, which step, in a word of ours,
+# with the version before it (as ``arrival`` says it), the installer, a count of tries and whether it was typed --
+# cad failing or working, never a message, a path or anything of the person's, under the same ids.
 DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.
@@ -508,7 +518,17 @@ ARRIVAL_OUTCOMES = {"setup": frozenset({"ok", "failed"}), "serving": frozenset({
 # take the update (``app``), anything else (``other``).
 ARRIVAL_FAILURES = {"setup": frozenset({"uv", "network", "denied", "other"}),
                     "handover": frozenset({"no_report", "setup", "app", "other"})}
-MAX_ATTEMPTS = 1000  # a hand-over's attempts past this many are counted as this many
+MAX_ATTEMPTS = 1000  # a hand-over's attempts, and an update's tries, past this many are counted as this many
+# How cad's own update of itself ended (``update``, schema 11's), as its record says (``auto_update.event``): a newer
+# cad installed, nothing newer to install, failed, or failed and the release before put back; for a failure, which
+# step -- the installer's upgrade never ended well (``upgrade``), ended well with an older release than asked
+# (``older``), and for one not put back, putting back the release before failed too (``put_back``) --; the installer
+# that made the global install; and, for a newer cad installed, how the install command's run for it ended (``none``:
+# none ran for it).
+UPDATE_OUTCOMES = frozenset({"installed", "current", "failed", "restored"})
+UPDATE_FAILURES = {"failed": frozenset({"upgrade", "older", "put_back"}), "restored": frozenset({"upgrade", "older"})}
+UPDATE_INSTALLERS = frozenset({"uv", "pipx"})
+UPDATE_PLUGIN = frozenset({"none", "ok", "failed"})
 # The version a computer came from: a release's or a development build's name (``places.VERSION``'s shape, at most
 # the 32 characters a batch's ``version`` takes), or ``none``.
 _EARLIER = re.compile(r"none|[0-9][0-9A-Za-z.+_-]{0,31}")
@@ -528,6 +548,8 @@ EVENTS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "control": (("control",), ("count", "seconds")),
     # ``reason`` only with ``failed``, ``attempts`` only for a hand-over: a name that is None is not sent.
     "arrival": (("step", "route", "from", "outcome", "reason", "attempts"), ("count",)),
+    # ``reason`` only with ``failed`` or ``restored``.
+    "update": (("from", "outcome", "reason", "tries", "installer", "asked", "plugin"), ("count",)),
 }
 MAX_EVENTS = 256  # a batch's most (the receiver's too, from schema 7): any more wait for the next batch
 # A crash (``signature``): where it happened -- a CAD tool's call, a viewer's route, another request a
@@ -1501,7 +1523,55 @@ def _arrival(step: Any, route: Any, earlier: Any, outcome: Any, reason: Any = No
     return found
 
 
-def _take_spool(path: Path, name: str = SPOOL, key: str = "counts") -> list[dict[str, Any]]:
+def update(*, earlier: str | None, outcome: str, reason: str | None = None, tries: int = 1,
+           installer: str | None = None, asked: bool = False, plugin: str = "none") -> bool:
+    """Count one attempt of cad's own update that ended (``update``; ``auto_update.report`` calls it once per attempt):
+    from version ``earlier`` (None: ``none``), ended as ``outcome`` (``UPDATE_OUTCOMES``), a failure's ``reason``
+    (``UPDATE_FAILURES``), after ``tries`` (a whole number from 1, capped at ``MAX_ATTEMPTS``), by ``installer``
+    (``UPDATE_INSTALLERS``), typed (``asked``) or not, and the install command's run for the cad it installed
+    (``plugin``: ``UPDATE_PLUGIN``, ``none`` but where it installed one). A word outside these is not counted.
+    Kept and sent as an arrival is (``arrival``): under the answer in force, only while sharing is on, a sender started
+    at once. Never the network, never raises. Whether it was kept."""
+    try:
+        found = _update_event(earlier, outcome, reason, tries, installer, asked, plugin)
+        if found is None or refused():
+            return False
+        path = settings_path()
+        if not status(path=path, probe=False)["sharing"]:
+            return False
+        if not _keep(path, ARRIVALS, {"answer": list(_answer(_read(path) or {})), "at": round(time.time(), 3),
+                                      "source": source(), "update": found}):
+            return False
+        from cad_server._internal import telemetry_send
+
+        telemetry_send.start_now(path)
+        return True
+    except Exception:  # noqa: BLE001 - an update counted or not never fails the server
+        LOG.debug("could not count an update", exc_info=True)
+        return False
+
+
+def _update_event(earlier: Any, outcome: Any, reason: Any, tries: Any, installer: Any, asked: Any,
+                  plugin: Any) -> dict[str, Any] | None:
+    """An update as it is kept and sent (``EVENTS``' names): ``reason`` only with ``failed`` or ``restored``, a
+    ``plugin`` other than ``none`` only with ``installed``; or None for one that is not counted."""
+    came = "none" if earlier is None else earlier
+    if outcome not in UPDATE_OUTCOMES or not (isinstance(came, str) and _EARLIER.fullmatch(came)):
+        return None
+    if installer not in UPDATE_INSTALLERS or type(asked) is not bool or plugin not in UPDATE_PLUGIN:
+        return None
+    if type(tries) is not int or tries < 1 or (plugin != "none" and outcome != "installed"):
+        return None
+    found: dict[str, Any] = {"from": came, "outcome": outcome}
+    if outcome in UPDATE_FAILURES:
+        if reason not in UPDATE_FAILURES[outcome]:
+            return None
+        found["reason"] = reason
+    found.update(tries=min(tries, MAX_ATTEMPTS), installer=installer, asked=asked, plugin=plugin)
+    return found
+
+
+def _take_spool(path: Path, name: str = SPOOL, key: str | tuple[str, ...] = "counts") -> list[dict[str, Any]]:
     """What commands kept (``spool``), or exiting processes (``KEPT``, each line a ``batch``), taken whole
     by one process: moved aside under the state folder's one lock, so no line is taken twice or lost to a process
     appending meanwhile."""
@@ -1523,7 +1593,8 @@ def _take_spool(path: Path, name: str = SPOOL, key: str = "counts") -> list[dict
     for line in lines:
         with contextlib.suppress(ValueError):
             entry = json.loads(line)
-            if isinstance(entry, dict) and isinstance(entry.get(key), dict):
+            if isinstance(entry, dict) and any(isinstance(entry.get(each), dict)
+                                               for each in ((key,) if isinstance(key, str) else key)):
                 found.append(entry)
     return found
 
@@ -1971,8 +2042,24 @@ class Recorder:
             self._note("arrival", tuple(checked.get(name) for name in EVENTS["arrival"][0]), {"count": 1})
 
     @_guarded(lambda: None)
+    def updated(self, found: Any) -> None:
+        """One attempt of cad's own update (``update``), as it was kept: noted only if it is one ``update`` would keep."""
+        checked = (_update_event(*(found.get(name) for name in EVENTS["update"][0])) if isinstance(found, dict)
+                   else None)
+        if checked is not None:
+            self._note("update", tuple(checked.get(name) for name in EVENTS["update"][0]), {"count": 1})
+
+    def _arrived_or_updated(self, entry: dict[str, Any]) -> None:
+        """A line of ``ARRIVALS``: an arrival's step, or an update."""
+        if isinstance(entry.get("arrival"), dict):
+            self.arrived(entry["arrival"])
+        else:
+            self.updated(entry.get("update"))
+
+    @_guarded(lambda: None)
     def _drain(self) -> None:
-        """Take what commands and scripts kept for a sender (``spool``) and the arrivals counted (``ARRIVALS``) into
+        """Take what commands and scripts kept for a sender (``spool``) and the arrivals and updates counted
+        (``ARRIVALS``) into
         this ``cli`` recorder's tally: only what they counted under the answer in force now -- the rest was noted
         under another, and is dropped as this process's own would be. An app's or the viewer's recorder takes
         nothing: its ``cli`` recorder does (``_spooled``), so what was built never rides in a batch that names who
@@ -1981,14 +2068,15 @@ class Recorder:
             return
         settings = self.path or settings_path()
         answer = None
-        for name, key, take in ((SPOOL, "counts", self.take), (ARRIVALS, "arrival", self.arrived)):
+        for name, key, take in ((SPOOL, "counts", lambda entry: self.take(entry["counts"])),
+                                (ARRIVALS, ("arrival", "update"), self._arrived_or_updated)):
             kept = _take_spool(settings, name, key)
             if kept and answer is None:
                 answer = list(_answer(_read(settings) or {}))
             for entry in kept:
                 if entry.get("answer") == answer:
                     with self._counting(_kept_source(entry.get("source"))):
-                        take(entry[key])
+                        take(entry)
 
     @_guarded(lambda: False)
     def flush(self) -> bool:

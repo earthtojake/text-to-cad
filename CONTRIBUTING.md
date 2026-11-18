@@ -615,9 +615,12 @@ by case; the worker contract keeps no window, so a new worker contract always do
   cad@latest`: PyPI's newest) and starts the server again (`cad_server/_internal/auto_update.py`).
   `cad update` does the same now, asking PyPI rather than the feed. Forward only: nothing installs an
   older release.
-- **The plugin follows cad.** After an automatic update that succeeded, where `cad plugin
-  auto-update` is on (the install command turns it on), the helper runs `cad plugin install`, the
-  hosted install command, once. A typed `cad update` never does.
+- **The plugin follows cad.** Where `cad plugin auto-update` is on (the install command turns it
+  on) and cad is newer than the release the install command last ended well for, cad's server runs
+  `cad plugin install`, the hosted install command, once, at its start or a quiet tending, however
+  cad got newer: its own update, a typed `cad update`, or `uv tool upgrade cad` by hand
+  (`cad_server/_internal/plugin_catch_up.py`). A failed run is tried again an hour later, at most
+  three times for one release. `cad update` itself never runs it.
 - **The version feed says when.** It names a release an hour after it is on PyPI, unless the project
   holds it back ([The version feed](#the-version-feed)).
 - **A plugin store** (Codex's directory, claude.ai's) updates the copy it installed. Its skills may be

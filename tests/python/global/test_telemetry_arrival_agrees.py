@@ -1,5 +1,5 @@
-"""The sender and the receiver agree on ``arrival``: every shape cad's telemetry makes of it
-(``cad_server/analytics.py``: ``arrival``, sent by its real sender) is read by the real receiver
+"""The sender and the receiver agree on ``arrival`` and ``update``: every shape cad's telemetry makes of them
+(``cad_server/analytics.py``: ``arrival``, ``update``, sent by its real sender) is read by the real receiver
 (``apps/api/src/events.mjs``: ``rowsOf``) and made the PostHog event a dashboard reads (``posthog.mjs``: ``eventOf``).
 A word one end has and the other lacks would refuse a whole batch. The packages run from source, the receiver
 under node: nothing installed."""
@@ -87,6 +87,47 @@ class ArrivalSenderAndReceiverAgree(unittest.TestCase):
         self.assertEqual(stored, made)
         self.assertTrue(all(event["properties"]["count"] == 1 and event["properties"]["process"] == "cli"
                             for event in events))
+
+    def received(self, batches: list[dict]) -> list[dict]:
+        """The PostHog events the real receiver makes of ``batches``; every batch read."""
+        node = shutil.which("node")
+        self.assertIsNotNone(node, "node runs the receiver's code")
+        script = SCRIPT % {"events": json.dumps((API / "events.mjs").as_uri()),
+                           "posthog": json.dumps((API / "posthog.mjs").as_uri())}
+        done = subprocess.run([node, "--input-type=module", "-e", script], input=json.dumps(batches),
+                              capture_output=True, text=True, encoding="utf-8", timeout=60)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        read = json.loads(done.stdout)
+        self.assertEqual([found.get("refused") for found in read], [None] * len(batches))
+        return [event for found in read for event in found["events"]]
+
+    def test_every_update_the_sender_makes_is_one_the_receiver_reads(self) -> None:
+        from cad_server import analytics
+        from cad_server._internal import telemetry_send
+
+        settings = analytics.settings_path()
+        analytics.choose(True, by="cli", path=settings)
+        shapes = []
+        for outcome in sorted(analytics.UPDATE_OUTCOMES):
+            reasons = sorted(analytics.UPDATE_FAILURES.get(outcome, ())) or [None]
+            plugins = sorted(analytics.UPDATE_PLUGIN) if outcome == "installed" else ["none"]
+            for earlier, reason, tries, installer, asked, plugin in itertools.product(
+                    (None, "0.11.12", "0.11.12-dev.20261118120000"), reasons, (1, analytics.MAX_ATTEMPTS),
+                    sorted(analytics.UPDATE_INSTALLERS), (False, True), plugins):
+                shapes.append(dict(earlier=earlier, outcome=outcome, reason=reason, tries=tries, installer=installer,
+                                   asked=asked, plugin=plugin))
+        with mock.patch.object(telemetry_send, "start_now"):  # sent below, by the sender, in this process
+            for shape in shapes:
+                self.assertTrue(analytics.update(**shape), shape)
+        batches: list[dict] = []
+        telemetry_send.send(settings, send=lambda batch: batches.append(batch) or True)
+        self.assertEqual(sum(len(batch["events"]) for batch in batches), len(shapes))
+        events = self.received(batches)
+        self.assertEqual({event["event"] for event in events}, {"cad_updated"})
+        names = ("from", "outcome", "reason", "tries", "installer", "asked", "plugin")
+        made = {(shape["earlier"] or "none", *(shape[name] for name in names[1:])) for shape in shapes}
+        stored = {tuple(event["properties"].get(name) for name in names) for event in events}
+        self.assertEqual(stored, made)
 
 
 if __name__ == "__main__":

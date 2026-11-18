@@ -79,9 +79,11 @@ export default function PrivacyPolicyPage() {
                 want of memory);
               </li>
               <li>
-                when an earlier release of text-to-cad updates your computer to the current one: whether that
-                finished, and if it did not, which step failed and why, each as one of a few fixed words, with
-                how many tries it took and the version your computer came from;
+                when an earlier release of text-to-cad updates your computer to the current one, or text-to-cad
+                updates itself: whether that finished, and if it did not, which step failed and why, each as one
+                of a few fixed words, with how many tries it took and the version your computer came from; for
+                its own updates, also which installer it used (uv or pipx), whether you asked for the update,
+                and whether updating the plugin in your apps afterwards worked;
               </li>
               <li>
                 crash reports, when text-to-cad’s own code fails unexpectedly: the error’s type (such as

@@ -1,6 +1,7 @@
 """How a computer got to a version, counted (``cad_server.analytics.arrival``): each step a word of cad's and a
 number, under the rules every count goes by, and sent by a sender of its own -- a setup whose version never runs
-again on the computer is heard from all the same, with no server and no later command."""
+again on the computer is heard from all the same, with no server and no later command. Each of cad's own updates
+(``analytics.update``) is kept and sent the same way."""
 
 from __future__ import annotations
 
@@ -147,6 +148,42 @@ class ArrivalTest(unittest.TestCase):
         self.assertFalse(self.settings.with_name(analytics.ARRIVALS).exists(), "a no deletes what was kept")
         self.assertFalse(arrive())
         self.assertEqual(self.sent(), [])
+
+    def test_an_update_is_kept_with_the_arrivals_and_sent_as_words_and_numbers_under_the_same_rules(self) -> None:
+        update = analytics.update
+        failed = dict(earlier="0.11.12", outcome="failed", reason="upgrade", tries=2, installer="uv", asked=False)
+        self.tell()
+        with mock.patch.dict(os.environ, {"DO_NOT_TRACK": "1"}):
+            self.assertFalse(update(**failed), "the environment's no")
+        self.assertTrue(update(**failed))
+        self.assertTrue(update(**failed))
+        self.assertTrue(update(earlier="0.11.12", outcome="installed", tries=1, installer="pipx", asked=True,
+                               plugin="ok"))
+        self.assertTrue(update(earlier=None, outcome="restored", reason="older", installer="uv"))
+        for refused in (dict(failed, outcome="updated"), dict(failed, reason="uv could not reach pypi.org"),
+                        dict(failed, reason=None),
+                        dict(failed, outcome="restored", reason="put_back"), dict(failed, plugin="ok"),
+                        dict(failed, installer="pip"), dict(failed, installer=None), dict(failed, tries=0),
+                        dict(failed, tries=True), dict(failed, asked="no"), dict(failed, earlier="/Users/someone"),
+                        dict(failed, outcome="installed", reason=None, plugin="skipped")):
+            self.assertFalse(update(**refused), refused)
+        self.assertTrue(update(**dict(failed, outcome="current")), "a reason on no failure goes no further")
+        self.assertEqual(self.started, [self.settings] * 5, "a sender at once for each, as an arrival's")
+        self.assertTrue(analytics.arrival("setup", route="setup", earlier=None, outcome="ok"))
+        [batch] = self.sent()
+        self.assertEqual((batch["schema"], batch["process"], batch["version"]), (11, "cli", RELEASE))
+        self.assertEqual([event for event in batch["events"] if event["name"] == "update"], [
+            {"name": "update", "from": "0.11.12", "outcome": "current", "tries": 2, "installer": "uv", "asked": False,
+             "plugin": "none", "count": 1},
+            {"name": "update", "from": "0.11.12", "outcome": "failed", "reason": "upgrade", "tries": 2, "installer": "uv",
+             "asked": False, "plugin": "none", "count": 2},
+            {"name": "update", "from": "0.11.12", "outcome": "installed", "tries": 1, "installer": "pipx", "asked": True,
+             "plugin": "ok", "count": 1},
+            {"name": "update", "from": "none", "outcome": "restored", "reason": "older", "tries": 1, "installer": "uv",
+             "asked": False, "plugin": "none", "count": 1},
+        ])
+        self.assertEqual([event["name"] for event in batch["events"]].count("arrival"), 1, "beside the arrivals")
+        self.assertFalse(self.settings.with_name(analytics.ARRIVALS).exists(), "taken by the sender")
 
     def test_each_arrival_starts_a_sender_at_once_and_a_command_none_more_that_window(self) -> None:
         window = analytics.FLUSH_SECONDS

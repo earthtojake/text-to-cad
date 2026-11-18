@@ -3,7 +3,9 @@ folder, its cache folder and how much ``cad cache prune`` would free there, whet
 (``cad_server._internal.base``) and loads -- where it is not, the environment ``cad run`` made for a program that a
 build ran in, if one was (``extras.last_with_kernel``) --, where each integration's operations run, whether the server runs and
 its release, and cad's own update (``cad_server._internal.auto_update``: the switches, whether this cad is a global
-install and by which installer, whether that installer is found, and the last attempt); on Windows, uv's folder in
+install and by which installer, whether that installer is found, and the last attempt) and the install command's
+record (``cad_server._internal.plugin_catch_up``: the release it last ended well for, and the last run the server
+began for a newer cad, and how it went); on Windows, uv's folder in
 an app's private copy of AppData, a copy of cad or uv's leftovers, to delete (``private_folders``). It repairs,
 registers, starts, writes and deletes nothing: ``--check`` prints the same report.
 
@@ -100,7 +102,8 @@ def _report() -> list[dict]:
             *(_check("private", WARNING, line) for line in private_folders()),
             _check("data", INFO, str(state_dir())), read("cache", _cache), _kernel(),
             *(_check(line.split(" ", 1)[0], status, line.split(" ", 1)[1]) for status, line in _integrations()),
-            read("server", _server), read("update", _update), _installer(), read("attempt", _attempt)]
+            read("server", _server), read("update", _update), _installer(), read("attempt", _attempt),
+            read("plugin", _catch_up)]
 
 
 def private_folders() -> list[str]:
@@ -132,8 +135,9 @@ def _auto():
 
 
 def _update() -> tuple[str, str]:
-    """cad's own update: whether it updates itself, a global install alone (and by which installer), and whether its
-    automatic update runs the install command after it (``cad plugin auto-update``)."""
+    """cad's own update: whether it updates itself, a global install alone (and by which installer), and whether the
+    server runs the install command once where cad is newer than the release it last ended well for (``cad plugin
+    auto-update``)."""
     auto = _auto()
     found, word = auto.global_install(), {True: "on", False: "off"}
     plugin = f"plugin auto-update {word[auto.plugin_switch()]}"
@@ -168,6 +172,27 @@ def _attempt() -> tuple[str, str]:
     restored = {True: f"; {last.get('from')} put back", False: f"; {last.get('from')} not put back: cad is missing"}
     return INFO, (f"{last.get('from')} to {last['release']} on {when}: {last.get('outcome')}"
                   + (f" ({last['detail']})" if failed else "") + restored.get(last.get("restored"), ""))
+
+
+def _catch_up() -> tuple[str, str]:
+    """The install command's record: the release of cad it last ended well for, and the last run the server began
+    for a newer cad -- its release, when, how it went and its exit status, the try of how many."""
+    import time
+
+    from cad_server._internal import plugin_catch_up
+
+    found = plugin_catch_up.read()
+    named = found.get("for")
+    said = (f"the install command last ended well for cad {named}" if isinstance(named, str)
+            else "no record of the install command ending well on this computer")
+    if not isinstance(found.get("release"), str) or not isinstance(found.get("at"), (int, float)):
+        return INFO, said
+    when = time.strftime("%Y-%m-%d %H:%M", time.localtime(found["at"]))
+    code = found.get("code")
+    ended = found.get("outcome")
+    how = f"{ended} (exit {code})" if ended == plugin_catch_up.FAILED and code is not None else str(ended)
+    return INFO, (f"{said}; the last run, for cad {found['release']} on {when}: {how}, try {found.get('tries')} of "
+                  f"{plugin_catch_up.TRIES}")
 
 
 def _cache() -> tuple[str, str]:

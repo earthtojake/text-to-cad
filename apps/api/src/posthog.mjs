@@ -23,6 +23,7 @@ export const EVENTS = {
   tool: 'tool_used', view: 'view_used', files: 'files_shown', build: 'models_built', snapshot: 'snapshots_rendered',
   feature: 'feature_used', health: 'daemon_health', exception: '$exception', tool_failure: 'tool_failed',
   build_failure: 'build_failed', snapshot_failure: 'snapshot_failed', control: 'control_used', arrival: 'version_arrival',
+  update: 'cad_updated',
 };
 // Frames that name no file of ours: never in the app, whatever the code around them.
 const NOT_OURS = new Set(['<user>', '<?>', '<frozen>']);

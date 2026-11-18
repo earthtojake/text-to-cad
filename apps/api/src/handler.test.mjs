@@ -522,6 +522,53 @@ test('schema 11 counts how a computer got to a version: each step, its ending, a
   assert.equal((await send(memory(), 'POST', '/v1/events', older)).status, 400);
 });
 
+// Schema 11's update: one attempt of cad's own update of itself that ended, counted by the server after it.
+const update = fields => ({ name: 'update', from: '0.11.12', outcome: 'installed', tries: 1, installer: 'uv', asked: false,
+  plugin: 'none', count: 1, ...fields });
+
+test("schema 11 counts each of cad's own updates: how it ended, which step failed, the installer, typed or not, and the install command after it", async () => {
+  const shapes = [
+    ...['none', 'ok', 'failed'].map(plugin => ({ plugin })),
+    { outcome: 'current', asked: true, installer: 'pipx' },
+    ...['upgrade', 'older', 'put_back'].map(reason => ({ outcome: 'failed', reason, tries: 2 })),
+    ...['upgrade', 'older'].map(reason => ({ outcome: 'restored', reason, asked: true })),
+    { from: '0.11.12-dev.20261118120000', tries: 1000 },
+  ];
+  const store = memory();
+  const batch = { ...ARRIVING, events: shapes.map(update) };
+  assert.equal((await send(store, 'POST', '/v1/events', JSON.parse(JSON.stringify(batch)))).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf), shapes.map(update).map(({ name, ...shape }) => ({
+    id: idOf(batch.batch, `update ${JSON.stringify([shape.from, shape.outcome, shape.reason ?? null, shape.tries, shape.installer,
+      shape.asked, shape.plugin])}`),
+    at: batch.at, event: 'update', ...shape, reason: shape.reason ?? null,
+  })));
+  for (const bad of [
+    update({ outcome: 'updated' }), // an unknown ending
+    update({ outcome: 'failed' }), // a failure names its step
+    update({ outcome: 'failed', reason: 'network' }), // a word cad has not
+    update({ outcome: 'failed', reason: 'uv could not reach pypi.org' }), // never its words
+    update({ outcome: 'restored', reason: 'put_back' }), // put back: the put-back did not fail
+    update({ reason: 'upgrade' }), // a reason without a failure
+    update({ outcome: 'current', plugin: 'ok' }), // the install command after an update that installed nothing newer
+    update({ outcome: 'failed', reason: 'upgrade', plugin: 'failed' }),
+    ...[0, -1, 1.5, 1001, '2', true].map(tries => update({ tries })),
+    update({ installer: 'pip' }), update({ installer: undefined }),
+    ...['yes', 1, null].map(asked => update({ asked })), update({ asked: undefined }),
+    update({ plugin: 'skipped' }), update({ plugin: undefined }),
+    ...['/Users/someone/cad', 'latest', '', null].map(from => update({ from })),
+    { ...update({}), path: '/tmp' }, // nothing else
+    update({ count: 0 }),
+  ]) {
+    const body = JSON.parse(JSON.stringify({ ...ARRIVING, events: [bad] }));
+    assert.equal((await send(memory(), 'POST', '/v1/events', body)).status, 400, JSON.stringify(bad));
+  }
+  // One attempt's shape once per batch; and no schema before 11 sends one.
+  const twice = { ...ARRIVING, events: [update({}), update({})] };
+  assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(twice)))).status, 400);
+  const older = { ...PARTS, schema: 10, process: 'cli', events: [update({})] };
+  assert.equal((await send(memory(), 'POST', '/v1/events', older)).status, 400);
+});
+
 test('a schema newer than the receiver reads is "try later", never refused: the sender keeps it for when it does', async () => {
   // A release can reach people before the receiver that reads its schema is deployed: its batches wait, not lost.
   const store = memory();
