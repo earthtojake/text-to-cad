@@ -39,7 +39,9 @@ exact version, ask which one. A release pull request comes one of two ways:
 
 Releases follow Semantic Versioning: a breaking change, which always comes with a migration guide,
 bumps the minor below 1.0 and the major from 1.0, and `Test`'s version check refuses a new migration
-guide in a release that breaks nothing (an existing guide may be corrected in any release). A command
+guide in a patch (an existing guide may be corrected in any release). cad installs every newer release
+of its own major by itself, a minor that breaks included (this is a beta); a new major never arrives by
+itself, only by `cad update --major` ([decisions](docs/contributing/decisions.md)). A command
 the skills used keeps working for 30 days after they stop using it, which CI checks; otherwise a
 command, option or tool may change or go in any release. What breaks is law 15's tiers and the short
 list of what must stay the same
@@ -68,10 +70,12 @@ version and has one behaviour, whoever runs it: the bootstrap in `scripts/instal
 there and runs `install.py`, which installs cad as a uv tool only where none is installed or the one
 there does not start, installs the plugin from `latest` in each agent app it finds with that app's own
 command (its `APPS` table is the one list of apps), removes our own older copies, puts cad's folder on
-the PATH with `uv tool update-shell`, and, where it ends well, turns on `cad plugin update auto`. It
-never starts the server. cad alone is installed by one promised line, `uv tool install cad`, which is what every
-skill's Setup block runs; no skill runs the install command. A global install updates itself, on by
-default (`cad update auto`); `cad update` updates it now. Where `cad plugin update auto` is on and
+the PATH with `uv tool update-shell`, and turns on `cad plugin update auto`, keeping its release as the one
+it is up to date for only where it ends well. It never starts the server. cad alone is installed by one
+promised line, `uv tool install cad`, which is what every skill's Setup block runs; no skill runs the install
+command. A global install updates itself to every newer release of its own major version, on by default
+(`cad update auto`), never to a higher major; `cad update` updates it now inside its major, and `cad update
+--major` to the newest of all. Where `cad plugin update auto` is on and
 cad is newer than the release the install command last ended well for, however it got newer, cad's
 server runs `cad plugin update` (the install command) once. A
 store updates its own copy. cad knows no app or skill, and of plugins only `cad plugin`
@@ -85,7 +89,8 @@ are empty aliases published at every release so older installs keep working; `ca
 library's deprecated name. New text and examples name `cad`. A computer has one cad, installed
 globally (`uv tool install cad`), and one server, started only by `cad server start` or `cad mcp`
 (Codex's plugin line, `uvx --no-config --managed-python --python 3.14 cad@<VERSION> mcp`, which
-installs cad globally where the computer has none and uses that cad's server; no server runs from
+installs cad globally where the computer has none, the newest of `<VERSION>`'s major, and uses that cad's
+server; no server runs from
 uv's cache). cad runs on Python 3.11 and newer. Skills run plain `cad` commands, no version in them. The server installs `cad[build123d]` at its own release, with uv, on first need,
 into the base environment its kernel processes run in (`cad_server._internal.base`); `cad run` is
 `uv run` with the library pinned at that release and the integrations a program's imports use

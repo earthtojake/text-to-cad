@@ -9,14 +9,20 @@ major version (``newest_of_major``). Releases 0.7.12 to 0.11.11 read ``/v1/versi
 never a release from 0.12.0 on: it is kept for them as it is, and nothing here reads it. It is one anonymous request:
 no id, no path, nothing about the person or their machine beyond what any web request carries.
 ``CAD_UPDATE_CHECK=0`` turns it off, and it never runs in CI (``CI`` set) or for a development build
-(``cad_server._internal.editable.development``). The feed as last read is kept in the state folder (``versions.json``), where every process of the person's reads it: ``latest`` is the
-release cad's own automatic update moves to (``cad_server._internal.auto_update``). A feed with ``latest`` alone (a
-stand-in's, or the file as an earlier build kept it) is read with no ``lines``. Nothing here updates anything, and
-nothing here says anything to a person or an agent.
+(``cad_server._internal.editable.development``). The feed as last read is kept in the state folder (``FILE``,
+``releases.json``), where every process of the person's reads it: cad's own automatic update moves to the newest
+release of its own major that it names (``cad_server._internal.auto_update``). A file of its own: releases 0.10.0 to
+0.11.11 keep their feed, ``/v1/versions``'s, in ``versions.json`` in the same folder and read it while a computer is
+carried over, so a ``latest`` of 0.12.0 or later written there would reach them; nothing here reads or writes that
+file. A feed with ``latest`` alone (a stand-in's) is read with no ``lines``. Nothing here updates anything, and nothing
+here says anything to a person or an agent.
 
-``cad update`` asks PyPI instead (``newest``: ``GET https://pypi.org/pypi/cad/json``, its ``info.version``, which
-leaves yanked releases out), once, ``TIMEOUT_SECONDS`` at most, the asking thread waiting: the feed names a release up
-to an hour after PyPI does. ``CAD_PYPI_URL`` names another address for PyPI's JSON API (a test's stand-in).
+``cad update`` asks PyPI instead (``pypi``: ``GET https://pypi.org/pypi/cad/json``), once, ``TIMEOUT_SECONDS`` at most,
+the asking thread waiting: the feed names a release up to an hour after PyPI does. Its answer is read into the feed's
+shape: from PyPI's ``releases`` (every release, and each of its files with ``yanked``), the newest plain ``X.Y.Z`` with
+a file that is not yanked as ``latest``, and the newest such of each major as ``lines``; where PyPI's answer has no
+``releases``, its ``info.version`` (which leaves yanked releases out) as ``latest``, with no ``lines``.
+``CAD_PYPI_URL`` names another address for PyPI's JSON API (a test's stand-in).
 
 Nothing here ever raises, or waits longer than ``TIMEOUT_SECONDS``. Each hour's attempt is spent before it is made,
 so a feed that cannot be reached is tried once an hour.
@@ -38,7 +44,8 @@ from cad._internal.atomic_replace import write_bytes_atomic
 
 LOG = logging.getLogger("cad_server.updates")
 
-FILE = "versions.json"  # the feed as last read, in the state folder
+# The feed as last read, in the state folder: never ``versions.json``, the file of 0.10.0 to 0.11.11 (see the module).
+FILE = "releases.json"
 ADDRESS = "/releases"  # the feed's address under the service's base (``api_url``)
 CHECK_SECONDS = 60 * 60  # how old the feed may get before it is read again
 TIMEOUT_SECONDS = 5
@@ -194,13 +201,28 @@ def _get_within(url: str, seconds: float) -> Any:
     return found[0] if found else None
 
 
-def newest(*, get: Callable[[str], Any] | None = None) -> str | None:
-    """The newest release of cad on PyPI (``info.version`` of ``<CAD_PYPI_URL>/cad/json``), a plain ``X.Y.Z``; None
-    where PyPI could not be asked or said none. Asked once, ``TIMEOUT_SECONDS`` at most."""
+def pypi(*, get: Callable[[str], Any] | None = None) -> dict[str, Any] | None:
+    """cad's releases on PyPI (``<CAD_PYPI_URL>/cad/json``) in the feed's shape, ``{"latest", "lines"}`` (see the
+    module): only plain ``X.Y.Z`` releases with a file that is not yanked. None where PyPI could not be asked or named
+    no such release. Asked once, ``TIMEOUT_SECONDS`` at most."""
     found = (get or (lambda url: _get_within(url, TIMEOUT_SECONDS)))(f"{pypi_url()}/cad/json")
-    info = found.get("info") if isinstance(found, dict) else None
-    version = info.get("version") if isinstance(info, dict) else None
-    return version if parse_release(version) is not None else None
+    if not isinstance(found, dict):
+        return None
+    given = found.get("releases")
+    if not isinstance(given, dict):  # no list of releases: PyPI's own newest, which leaves yanked ones out
+        info = found.get("info")
+        version = info.get("version") if isinstance(info, dict) else None
+        return {"latest": version, "lines": {}} if parse_release(version) is not None else None
+    out = [numbers for version, files in given.items() if (numbers := parse_release(version)) is not None
+           and isinstance(files, list) and any(isinstance(file, dict) and file.get("yanked") in (None, False)
+                                               for file in files)]
+    if not out:
+        return None
+    lines: dict[str, tuple[int, int, int]] = {}
+    for numbers in out:
+        lines[str(numbers[0])] = max(lines.get(str(numbers[0]), numbers), numbers)
+    named = lambda numbers: ".".join(map(str, numbers))  # noqa: E731
+    return {"latest": named(max(out)), "lines": {major: named(numbers) for major, numbers in sorted(lines.items())}}
 
 
 def _quietly() -> None:

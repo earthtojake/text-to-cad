@@ -142,12 +142,14 @@ def default_free() -> bool:
 
 class Feed(http.server.ThreadingHTTPServer):
     """The version feed saying ``latest`` at both its addresses: the old one (any path ending ``versions``), ``latest``
-    alone, as releases 0.10.0 to 0.11.11 read it, and the new one (any path ending ``releases``), with ``lines``
-    naming ``latest`` for its own major; anything else (telemetry) is not found. ``asked``: how many times it was
-    read; ``reads``: each read, its address (``versions`` or ``releases``) and the reader's ``User-Agent``."""
+    alone, as releases 0.10.0 to 0.11.11 read it, and the new one (any path ending ``releases``), with ``lines``:
+    ``lines`` as set (each major's newest release, by its number), else ``latest`` for its own major; anything else
+    (telemetry) is not found. ``asked``: how many times it was read; ``reads``: each read, its address (``versions``
+    or ``releases``) and the reader's ``User-Agent``."""
 
     def __init__(self, latest: str) -> None:
         self.latest = latest
+        self.lines: dict[str, str] | None = None
         self.asked = 0
         self.reads: list[tuple[str, str]] = []
         feed = self
@@ -163,7 +165,8 @@ class Feed(http.server.ThreadingHTTPServer):
                 feed.reads.append((address, self.headers.get("User-Agent") or ""))
                 answer: dict = {"latest": feed.latest}
                 if address == "releases":
-                    answer["lines"] = {feed.latest.split(".", 1)[0]: feed.latest}
+                    answer["lines"] = (dict(feed.lines) if feed.lines is not None
+                                       else {feed.latest.split(".", 1)[0]: feed.latest})
                 self.answer(json.dumps(answer).encode())
 
             def do_POST(self) -> None:  # noqa: N802

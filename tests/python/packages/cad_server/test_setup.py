@@ -496,8 +496,11 @@ class Moving(Handing):
         told = json.loads(command[-1])
         self.assertEqual((told["cad"], told["target"], told["prefix"]),
                          (str(environment / "bin" / "cad"), "0.12.2", str(environment)))
+        # pipx's upgrade inside this release's major, which the helper runs only where the global cad holds less than
+        # the release it hands over to (here it holds it: nothing runs).
         self.assertEqual((told["upgrade"], told["launchers"]),
-                         (["/opt/pipx", "upgrade", "cad"], ["/opt/pipx", "environment", "--value", "PIPX_BIN_DIR"]))
+                         (["/opt/pipx", "upgrade", "cad", f"--pip-args=cad>={Y},<1"],
+                          ["/opt/pipx", "environment", "--value", "PIPX_BIN_DIR"]))
         self.assertEqual(self.envs[0]["PIPX_HOME"], str(self.root / "pipx"), "pipx acts on this cad's folder")
         self.assertEqual(installations.current()["prefix"], str(environment))
 

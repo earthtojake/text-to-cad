@@ -3,7 +3,9 @@ folder, its cache folder and how much ``cad cache prune`` would free there, whet
 (``cad_server._internal.base``) and loads -- where it is not, the environment ``cad run`` made for a program that a
 build ran in, if one was (``extras.last_with_kernel``) --, where each integration's operations run, whether the server runs and
 its release, and cad's own update (``cad_server._internal.auto_update``: the switches, whether this cad is a global
-install and by which installer, whether that installer is found, and the last attempt) and the install command's
+install and by which installer, the newest release of this cad's major the version feed as last read names and,
+where it names a release of a higher major, the one line that says how to get it (``auto_update.MAJOR_LINE``), whether
+that installer is found, and the last attempt) and the install command's
 record (``cad_server._internal.plugin_catch_up``: the release it is up to date for, and the last run the server
 began for a newer cad, and how it went); on Windows, uv's folder in
 an app's private copy of AppData, a copy of cad or uv's leftovers, to delete (``private_folders``). It repairs,
@@ -102,7 +104,7 @@ def _report() -> list[dict]:
             *(_check("private", WARNING, line) for line in private_folders()),
             _check("data", INFO, str(state_dir())), read("cache", _cache), _kernel(),
             *(_check(line.split(" ", 1)[0], status, line.split(" ", 1)[1]) for status, line in _integrations()),
-            read("server", _server), read("update", _update), _installer(), read("attempt", _attempt),
+            read("server", _server), read("update", _update), _newest(), _installer(), read("attempt", _attempt),
             read("plugin", _catch_up)]
 
 
@@ -145,6 +147,30 @@ def _update() -> tuple[str, str]:
         return INFO, f"this cad is not a global install, so it never updates itself; {plugin}"
     return INFO, (f"update auto {word[auto.switches()['on']]}, {plugin}; a global install by {found.installer.name} "
                   f"({found.prefix})")
+
+
+def _newest() -> dict:
+    """What the version feed as last read says of releases (read, never fetched): the newest release of this cad's
+    major it names, and, under it, the one line that says a release of a higher major is out and how to get it."""
+    try:
+        import cad_server
+        from cad_server import updates
+
+        auto = _auto()
+        version = cad_server.__version__
+        known = updates.feed(fetch=False)
+        numbers = auto.release(version)
+        if known is None:
+            return _check("newest", INFO, "the version feed has not been read on this computer yet")
+        if numbers is None:
+            return _check("newest", INFO, f"cad {known['latest']} is the newest release the version feed names")
+        named = updates.newest_of_major(numbers[0], known)
+        said = (f"cad {named} is the newest {numbers[0]}.x release the version feed names" if named else
+                f"the version feed names no {numbers[0]}.x release; its newest is cad {known['latest']}")
+        higher = auto.higher(known, version)
+        return _check("newest", INFO, said, [auto.MAJOR_LINE.format(release=higher)] if higher else None)
+    except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
+        return _check("newest", WARNING, f"unknown ({type(error).__name__}: {error})")
 
 
 def _installer() -> dict:

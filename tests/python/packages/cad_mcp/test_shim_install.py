@@ -114,9 +114,18 @@ class Install(unittest.TestCase):
         self.addCleanup(patch.stop)
         self.cad = self.bin / ("cad.exe" if os.name == "nt" else "cad")
 
-    def test_the_command_is_uv_tool_install_of_the_newest_cad_with_cad_s_own_python_flags(self) -> None:
-        self.assertEqual(tool_install.command("uv"),
-                         ["uv", "tool", "install", "--managed-python", "--python", launch.PYTHON, "cad"])
+    def test_the_command_is_uv_tool_install_of_the_newest_cad_of_this_major_with_cad_s_own_python_flags(self) -> None:
+        """The newest release of the major of the cad doing the installing, never of a higher one: a copy pinned to
+        this release may run long after a higher major is out. Worked out from the release, never a fixed number."""
+        import cad_server
+
+        for version, wanted in (("0.11.12", "cad<1"), ("0.12.0-dev.20261118", "cad<1"), ("1.4.2", "cad<2"),
+                                ("10.0.0", "cad<11"), ("not a release", "cad")):
+            with self.subTest(version=version):
+                self.assertEqual(tool_install.command("uv", version),
+                                 ["uv", "tool", "install", "--managed-python", "--python", launch.PYTHON, wanted])
+        with mock.patch.object(cad_server, "__version__", "2.3.4"):
+            self.assertEqual(tool_install.command("uv")[-1], "cad<3", "this cad's release by default")
         self.assertNotIn("--force", tool_install.command("uv"))
 
     def run_as_uv(self, code: str, timeout: float = 60.0) -> list[str]:

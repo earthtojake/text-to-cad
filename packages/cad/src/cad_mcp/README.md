@@ -13,8 +13,9 @@ It holds no tool, view or document: the server does. What it does on its own, in
   never a server of its own, which would not be the cad the agent's shell runs and would never update itself; the
   installed cad's own update brings the server forward. Where no cad is installed and this process runs from uv's
   cache (its environment is in the folder `uv cache dir` names), it first installs cad, once, with
-  `uv tool install --managed-python --python 3.14 cad` (the newest release; the Python flags are cad's own and may
-  change with any release), within four minutes, and then uses the installed cad's server the same way. It never
+  `uv tool install --managed-python --python 3.14 "cad<N>"` (the newest release of this cad's major version, `N` its
+  major + 1: a new major version is a person's to ask for; the Python flags are cad's own and may change with any
+  release), within four minutes, and then uses the installed cad's server the same way. It never
   passes `--force`: where uv refuses or fails, no server is started from the cache, the transport's log says why,
   and every request is answered with one line, ``cad is not installed: run `uv tool install cad` ``. Run from anywhere else (a
   project's Python, a development checkout), it installs nothing and does exactly as `cad server start` does: a

@@ -9,9 +9,14 @@ because it is the server of the newer cad that asks, whatever brought it.
 
 **The record** (``RECORD``, in the state folder beside ``auto-update.json``): ``for``, the release of cad the install
 command is up to date for -- written by ``cad plugin update`` as it ends with exit status 0 (``ended``), and as the
-switch is turned on (``noted``, from ``auto_update.change_plugin``: the install command turns it on as its last step
-only where its run is ending with exit status 0, right after it put the plugin in place, and a person who turns it on
-means "from this release on"); a run that fails writes nothing of it --; and the last run the server began
+switch is turned on (``noted``, from ``auto_update.change_plugin``): the install command turns it on as its last step
+wherever cad is there, right after it put the plugin in place, and tells cad how its run is ending in the environment
+of that call (``FAILED_ENV``): ending well, the switch is turned on and ``for`` written; ending badly, the switch is
+turned on and nothing written, so a computer whose runs keep failing still has the plugin kept: where an earlier run
+ended well (``for`` older than this cad), the server runs the command again for this release; where none ever did (no
+``for``), the rule below takes this release as up to date, and the command runs once cad is newer. A person who turns
+it on by hand, with no such variable, means "from this release on". A run that fails writes nothing of ``for``. Then
+the last run the server began
 (``begin``): ``release``, ``at``, ``tries`` (of that release), ``outcome`` (``underway``, then ``ok`` or ``failed``),
 ``code`` (its exit status, null where it could not start) and ``ended``. It is a state record, not a choice, so it
 lives in the state folder, as the update's own record does, and not in the person's settings. ``cad doctor`` shows it.
@@ -55,6 +60,15 @@ from typing import Any
 RECORD = "install-command.json"
 # The run ``cad plugin update`` is, where the server began it: the ``at`` of the record's run.
 ATTEMPT_ENV = "CAD_INSTALL_ATTEMPT"
+# Set to ``1`` by the install command (``scripts/install/install.py``) for its own ``cad plugin update auto on`` where
+# its run is ending badly: the switch turned on, and nothing taken as up to date (see the module). Empty or absent:
+# the run is ending well, or a person typed it.
+FAILED_ENV = "CAD_INSTALL_FAILED"
+
+
+def failing() -> bool:
+    """Whether this command was run by an install command whose run is ending badly (``FAILED_ENV``)."""
+    return os.environ.get(FAILED_ENV, "").strip() == "1"
 TRIES = 3  # how many runs one release gets: once, and twice more, each an hour or more after the one before
 RETRY_SECONDS = 60 * 60.0
 UNDERWAY, OK, FAILED = "underway", "ok", "failed"
@@ -121,8 +135,8 @@ def noted(release: str | None = None) -> None:
 
 def ended(code: int | None) -> None:
     """``cad plugin update`` ended with exit status ``code``: ``for`` this cad where it is 0 (a run that failed writes
-    none: the install command turns the switch on, which writes it, only where it ends with exit status 0), and, where
-    the server began this run (``ATTEMPT_ENV``), the run's outcome. Never raises."""
+    none: the install command turns the switch on as it ends badly too, but then tells cad so, ``FAILED_ENV``, and
+    nothing is written), and, where the server began this run (``ATTEMPT_ENV``), the run's outcome. Never raises."""
     try:
         attempt = os.environ.get(ATTEMPT_ENV)
 

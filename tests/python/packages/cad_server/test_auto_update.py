@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -29,6 +30,7 @@ from cad_server._internal import auto_update, auto_update_helper as helper
 from cad_server.cli import auto_update as command, plugin as plugin_command
 
 RECEIPT = '[tool]\nrequirements = [{ name = "cad", specifier = "==0.1.0" }]\nentrypoints = [{ name = "cad" }]\n'
+BOUNDED = "cad>=0.1.0,<1"  # the requirement of 0.1.0's upgrade: inside its major, never below it (``auto_update.bound``)
 
 
 class Case(unittest.TestCase):
@@ -56,8 +58,10 @@ class Case(unittest.TestCase):
             patch.start()
             self.addCleanup(patch.stop)
 
-    def feed(self, latest: str | None):
-        return mock.patch.object(updates, "feed", return_value=None if latest is None else {"latest": latest})
+    def feed(self, latest: str | None, lines: dict | None = None):
+        """The feed as last read, ``{"latest", "lines"}`` (no ``lines``: a feed with ``latest`` alone)."""
+        return mock.patch.object(updates, "feed", return_value=None if latest is None else
+                                 {"latest": latest, **({"lines": lines} if lines is not None else {})})
 
     def cli(self, *argv: str, main=None) -> tuple[int, str, str]:
         out, err = io.StringIO(), io.StringIO()
@@ -79,7 +83,10 @@ class GlobalInstallTest(Case):
         self.assertEqual([os.path.normcase(part) for part in found.program], [os.path.normcase(str(self.uv))])
         self.assertEqual(found.launcher, auto_update.tool_command(self.tool))
         uv = found.installer
-        self.assertEqual(uv.upgrade(["uv"]), ["uv", "tool", "install", "cad@latest"], "unpinned, and no Python flags")
+        self.assertEqual(uv.upgrade(["uv"], "0.1.0"), ["uv", "tool", "install", "--upgrade", "cad>=0.1.0,<1"],
+                         "inside the major of the release that runs, never below it, and no Python flags")
+        self.assertEqual(uv.cross(["uv"], "0.1.0"), ["uv", "tool", "install", "cad@latest"],
+                         "`cad update --major`: unbounded, and the range uv kept dropped")
         self.assertEqual(uv.put_back(["uv"], "0.1.0"),
                          ["uv", "tool", "install", "--managed-python", "--python", "3.14", "cad==0.1.0"])
         self.assertEqual(uv.launchers(["uv"]), ["uv", "tool", "dir", "--bin"])
@@ -102,9 +109,19 @@ class GlobalInstallTest(Case):
         (self.tool / "uv-receipt.toml").write_text('[tool]\nrequirements = ["cad==0.1.0"]\n', encoding="utf-8")
         self.assertEqual(auto_update.uv_tool(), self.tool, "a receipt's requirement as a string")
 
+    def test_the_bound_is_the_major_of_the_release_that_runs_and_its_floor_that_release(self) -> None:
+        for version, bound in (("0.11.12", "cad>=0.11.12,<1"), ("0.12.0", "cad>=0.12.0,<1"), ("1.4.2", "cad>=1.4.2,<2"),
+                               ("9.0.0", "cad>=9.0.0,<10"), ("10.2.3", "cad>=10.2.3,<11")):
+            with self.subTest(version=version):
+                self.assertEqual(auto_update.bound(version), bound)
+        for version in ("0.11.12-dev.1", "1.0", "", None):
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                auto_update.bound(version)
+
     def test_another_installer_is_one_more_entry(self) -> None:
         other = auto_update.Installer(name="other", owns=lambda prefix: (prefix / "other.json").is_file(),
-                                      find=lambda: ["/o/other"], upgrade=lambda other: [*other, "up", "cad"],
+                                      find=lambda: ["/o/other"], upgrade=lambda other, version: [*other, "up", version],
+                                      cross=lambda other, version: [*other, "up", "--all"],
                                       put_back=lambda other, release: [*other, "add", f"cad=={release}"],
                                       launchers=lambda other: [*other, "bin"])
         (self.tool / "uv-receipt.toml").unlink()
@@ -116,7 +133,9 @@ class GlobalInstallTest(Case):
         self.assertEqual(json.loads(line[5])["cad"], str(auto_update.tool_command(self.tool)))
         told = json.loads(line[5])
         self.assertEqual((told["upgrade"], told["put_back"], told["launchers"]),
-                         (["/o/other", "up", "cad"], ["/o/other", "add", "cad==0.1.0"], ["/o/other", "bin"]))
+                         (["/o/other", "up", "0.1.0"], ["/o/other", "add", "cad==0.1.0"], ["/o/other", "bin"]))
+        line = auto_update.helper_command(None, now=1.0, version="0.1.0", base="/py", install=found, major=True)
+        self.assertEqual(json.loads(line[5])["upgrade"], ["/o/other", "up", "--all"])
 
 
 class SwitchesTest(Case):
@@ -371,22 +390,36 @@ class PipxTest(Case):
         self.assertEqual((found.installer.name, found.prefix), ("pipx", self.env))
         self.assertEqual([os.path.normcase(part) for part in found.program], [os.path.normcase(str(self.pipx))])
         pipx = found.installer
-        self.assertEqual(pipx.upgrade(["pipx"]), ["pipx", "upgrade", "cad"])
+        # Inside the major, for this upgrade alone (measured: pipx keeps no range, so a person's own `pipx upgrade
+        # cad` takes the newest of all); one argument with no space or quote, which pipx's split leaves whole.
+        self.assertEqual(pipx.upgrade(["pipx"], "0.1.0"), ["pipx", "upgrade", "cad", "--pip-args=cad>=0.1.0,<1"])
+        self.assertEqual(pipx.upgrade(["pipx"], "1.4.2"), ["pipx", "upgrade", "cad", "--pip-args=cad>=1.4.2,<2"])
+        # `cad update --major`: the floor alone, which replaces the range pipx 1.18 keeps (measured: a plain `pipx
+        # upgrade cad` there stays inside it).
+        self.assertEqual(pipx.cross(["pipx"], "0.1.0"), ["pipx", "upgrade", "cad", "--pip-args=cad>=0.1.0"])
         self.assertEqual(pipx.put_back(["pipx"], "0.1.0"), ["pipx", "install", "--force", "cad==0.1.0"])
         self.assertEqual(pipx.launchers(["pipx"]), ["pipx", "environment", "--value", "PIPX_BIN_DIR"])
-        self.assertEqual(pipx.upgrade(["/py", "-P", "-m", "pipx"]), ["/py", "-P", "-m", "pipx", "upgrade", "cad"])
+        self.assertEqual(pipx.upgrade(["/py", "-P", "-m", "pipx"], "0.1.0"),
+                         ["/py", "-P", "-m", "pipx", "upgrade", "cad", "--pip-args=cad>=0.1.0,<1"])
         self.assertEqual(pipx.environ(self.env), {"PIPX_HOME": str(self.pipx_home)}, "the home that holds venvs/cad")
         told = json.loads(auto_update.helper_command("0.2.0", now=1.0, version="0.1.0", base="/py", install=found)[5])
         self.assertEqual((told["cad"], told["prefix"], told["upgrade"], told["put_back"], told["launchers"]),
-                         (str(auto_update.tool_command(self.env)), str(self.env), [*found.program, "upgrade", "cad"],
+                         (str(auto_update.tool_command(self.env)), str(self.env),
+                          [*found.program, "upgrade", "cad", "--pip-args=cad>=0.1.0,<1"],
                           [*found.program, "install", "--force", "cad==0.1.0"],
                           [*found.program, "environment", "--value", "PIPX_BIN_DIR"]))
+        told = json.loads(auto_update.helper_command("1.0.0", now=1.0, version="0.1.0", base="/py", install=found,
+                                                     major=True)[5])
+        self.assertEqual((told["upgrade"], told["major"]),
+                         ([*found.program, "upgrade", "cad", "--pip-args=cad>=0.1.0"], True))
         with self.feed("0.2.0"):
-            self.assertEqual(auto_update.due(), "0.2.0", "automatic updates on by default, as for uv's")
+            self.assertEqual(auto_update.due(), auto_update.Due("0.2.0", "0.2.0"),
+                             "automatic updates on by default, as for uv's")
             with mock.patch.object(auto_update, "find_pipx", return_value=None):
                 self.assertIsNone(auto_update.global_install().program, "pipx not found")
                 self.assertIsNone(auto_update.due(), "pipx not found: no automatic update")
-                self.assertEqual(auto_update.asked(newest=lambda: "0.2.0"), {"failed": auto_update.no_installer("pipx")})
+                self.assertEqual(auto_update.asked(pypi=lambda: {"latest": "0.2.0", "lines": {}}),
+                                 {"failed": auto_update.no_installer("pipx")})
         self.assertEqual(auto_update.no_installer("pipx"), "cad was installed with pipx, and the cad server cannot find "
                                                            "pipx, so it cannot update cad")
         self.assertEqual(self.cli(), (0, "update auto: on\n", ""))
@@ -422,7 +455,7 @@ class PipxTest(Case):
         self.assertEqual(options["env"]["PIPX_HOME"], str(self.pipx_home), "the home of the cad that runs")
         told = json.loads(line[5])
         self.assertEqual(([os.path.normcase(part) for part in told["upgrade"][:1]], told["upgrade"][1:]),
-                         ([os.path.normcase(str(self.pipx))], ["upgrade", "cad"]))
+                         ([os.path.normcase(str(self.pipx))], ["upgrade", "cad", "--pip-args=cad>=0.1.0,<1"]))
 
     def test_pipx_is_found_on_path_then_where_it_is_usually_installed_then_by_its_python(self) -> None:
         home = self.tmp / "home"
@@ -530,9 +563,11 @@ class PipxTest(Case):
 
 
 class DueTest(Case):
+    Due = auto_update.Due
+
     def test_every_condition_and_forward_only(self) -> None:
         with self.feed("0.2.0"):
-            self.assertEqual(auto_update.due(), "0.2.0", "on with nothing kept")
+            self.assertEqual(auto_update.due(), self.Due("0.2.0", "0.2.0"), "on with nothing kept")
         for latest in (None, "0.1.0", "0.0.9", "0.2.0-dev.1", "garbage"):  # no answer, the same, older, no release
             with self.subTest(latest=latest), self.feed(latest):
                 self.assertIsNone(auto_update.due())
@@ -547,6 +582,47 @@ class DueTest(Case):
             auto_update.change(False)
             self.assertIsNone(auto_update.due())
 
+    def test_the_newest_release_of_this_major_and_never_a_higher_major(self) -> None:
+        """The feed's ``lines`` name each major's newest: the update moves to this major's, never to a higher one, never
+        back. A feed whose ``lines`` name none of this major still updates inside it, by the bounded upgrade."""
+        for case, latest, lines, due in (
+                ("this major newer", "0.2.0", {"0": "0.2.0"}, self.Due("0.2.0", "0.2.0")),
+                ("both: this major's, never the higher", "1.3.0", {"0": "0.4.0", "1": "1.3.0"},
+                 self.Due("0.4.0", "0.4.0")),
+                ("a higher major alone, this major's not newer", "1.3.0", {"0": "0.1.0", "1": "1.3.0"}, None),
+                ("this major's older than this cad", "1.3.0", {"0": "0.0.9", "1": "1.3.0"}, None),
+                # No entry for this major: `latest` of this major, as before `lines`; of a higher one, the bounded
+                # upgrade all the same (no release named), counted by `latest`; of a lower one, nothing.
+                ("lines of other majors alone, latest higher", "1.3.0", {"1": "1.3.0"}, self.Due(None, "1.3.0")),
+                ("no lines, latest of this major", "0.3.0", {}, self.Due("0.3.0", "0.3.0")),
+                ("no lines, latest higher", "2.0.0", {}, self.Due(None, "2.0.0")),
+                ("latest alone (no lines key), this major", "0.3.0", None, self.Due("0.3.0", "0.3.0")),
+                ("latest alone (no lines key), higher", "1.0.0", None, self.Due(None, "1.0.0")),
+                ("latest alone, the same", "0.1.0", None, None)):
+            with self.subTest(case=case), self.feed(latest, lines):
+                self.assertEqual(auto_update.due(), due)
+        with mock.patch.object(cad_server, "__version__", "1.4.2"):  # from 1.0 the same rule
+            for lines, due in (({"0": "0.12.0", "1": "1.5.0", "2": "2.0.0"}, self.Due("1.5.0", "1.5.0")),
+                               ({"0": "0.12.0", "1": "1.4.2", "2": "2.0.0"}, None), ({"0": "0.12.0"}, None)):
+                with self.subTest(lines=lines), self.feed(max(lines.values(), key=auto_update.release), lines):
+                    self.assertEqual(auto_update.due(), due)
+
+    def test_the_upgrade_is_bounded_by_the_release_that_runs_each_time(self) -> None:
+        """The floor and the bound come from the release that runs, never a fixed number: what the helper is told."""
+        for version, upgrade in (("0.1.0", "cad>=0.1.0,<1"), ("0.12.3", "cad>=0.12.3,<1"), ("1.4.2", "cad>=1.4.2,<2")):
+            with self.subTest(version=version), mock.patch.object(cad_server, "__version__", version), \
+                    mock.patch.object(auto_update.subprocess, "Popen") as popen, \
+                    mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True):
+                (self.state / auto_update.RECORD).unlink(missing_ok=True)
+                self.assertTrue(auto_update.trigger(None, wanted="9.0.0"))
+                told = json.loads(popen.call_args.args[0][5])
+                self.assertEqual((told["upgrade"][-1], told["major"], told["target"]), (upgrade, False, None))
+        with mock.patch.object(cad_server, "__version__", "0.1.0-dev.1"), \
+                mock.patch.object(auto_update.subprocess, "Popen") as popen:
+            (self.state / auto_update.RECORD).unlink(missing_ok=True)
+            self.assertFalse(auto_update.trigger("0.2.0"), "no release to bound it by: none begins")
+        popen.assert_not_called()
+
     def test_the_feed_is_read_only_where_asked_and_a_failed_release_is_tried_once_more_never_in_a_loop(self) -> None:
         with self.feed("0.2.0") as feed:
             auto_update.due()
@@ -558,21 +634,111 @@ class DueTest(Case):
             self.assertTrue(auto_update.trigger("0.2.0"))
             now = auto_update.last()["at"]
             self.assertEqual((auto_update.last()["tries"], auto_update.due(now=now)), (1, None), "underway")
-            self.assertEqual(auto_update.due(now=now + auto_update.RETRY_SECONDS), "0.2.0", "a helper that died")
+            self.assertEqual(auto_update.due(now=now + auto_update.RETRY_SECONDS), self.Due("0.2.0", "0.2.0"),
+                             "a helper that died")
             auto_update._keep(record, {**auto_update.last(), "outcome": "failed"})
             self.assertIsNone(auto_update.due(now=now), "not by the server the failed update started")
-            self.assertEqual(auto_update.due(now=now + auto_update.RETRY_SECONDS), "0.2.0", "once more, later")
+            self.assertEqual(auto_update.due(now=now + auto_update.RETRY_SECONDS), self.Due("0.2.0", "0.2.0"),
+                             "once more, later")
+            self.assertFalse(auto_update.trigger("0.2.0"), "a trigger asks again in the step that begins it")
+            auto_update._keep(record, {**auto_update.last(), "at": now - auto_update.RETRY_SECONDS})  # an hour on
             self.assertTrue(auto_update.trigger("0.2.0"))
             auto_update._keep(record, {**auto_update.last(), "outcome": "failed"})
             self.assertEqual(auto_update.last()["tries"], 2)
             self.assertIsNone(auto_update.due(now=now + 10 * auto_update.RETRY_SECONDS), "and never again")
         with self.feed("0.2.1"):
-            self.assertEqual(auto_update.due(now=now), "0.2.1", "a newer release is no retry")
+            self.assertEqual(auto_update.due(now=now), self.Due("0.2.1", "0.2.1"), "a newer release is no retry")
+
+    def test_with_no_release_of_this_major_named_the_tries_are_counted_by_latest_never_in_a_loop(self) -> None:
+        """A feed without ``lines`` and ``latest`` of a higher major: the bounded upgrade, whose record names the release
+        it got (``current``: nothing newer), counted by ``latest`` all the same, at most ``TRIES`` times."""
+        record = self.state / auto_update.RECORD
+        with self.feed("1.0.0"), mock.patch.object(auto_update.subprocess, "Popen"), \
+                mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True):
+            for tries in (1, 2):
+                found = auto_update.due(now=time.time() + (tries - 1) * auto_update.RETRY_SECONDS)
+                self.assertEqual(found, self.Due(None, "1.0.0"))
+                self.assertTrue(auto_update.trigger(found.target, wanted=found.wanted))
+                begun = auto_update.last()
+                self.assertEqual((begun["release"], begun["wanted"], begun["tries"]), ("latest", "1.0.0", tries))
+                auto_update._keep(record, {**begun, "release": "0.1.0", "outcome": "current",
+                                           "at": begun["at"] - (2 - tries) * auto_update.RETRY_SECONDS})
+            self.assertIsNone(auto_update.due(now=time.time() + 10 * auto_update.RETRY_SECONDS), "never a third")
+        with self.feed("1.0.1"):
+            self.assertEqual(auto_update.due(), self.Due(None, "1.0.1"), "a newer latest: tried afresh")
+
+    def test_an_update_underway_under_any_name_holds_every_automatic_trigger_while_it_is_believed(self) -> None:
+        record = self.state / auto_update.RECORD
+        now = time.time()
+        auto_update._keep(record, {"release": "latest", "wanted": "latest", "from": "0.1.0", "at": now, "tries": 1,
+                                   "outcome": "underway", "asked": True})  # a typed `cad update`, of no release named
+        with self.feed("0.2.0"), mock.patch.object(auto_update.subprocess, "Popen") as popen, \
+                mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True):
+            self.assertIsNone(auto_update.due(now=now + 60), "underway, of another name")
+            self.assertFalse(auto_update.trigger("0.2.0"), "nor begun by a trigger asked anyway")
+            popen.assert_not_called()
+            self.assertEqual(auto_update.due(now=now + auto_update.RETRY_SECONDS), self.Due("0.2.0", "0.2.0"),
+                             "past the hour: a helper that died, no longer believed")
+
+
+class SecondProcessTest(Case):
+    """Starting an update is one step across processes: two processes that each start one at the same moment (two
+    servers starting at once, each asking ``at_start``) begin one between them, the other none (automatic) or joining
+    it (typed). Real processes, each with this test's computer, released together."""
+
+    SCRIPT = """
+import json, os, sys, time
+from pathlib import Path
+from unittest import mock
+import cad_server
+from cad_server import updates
+from cad_server._internal import auto_update
+tool, go, out, automatic = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), sys.argv[4] == "auto"
+with mock.patch.object(sys, "prefix", str(tool)), mock.patch.object(cad_server, "__version__", "0.1.0"), \\
+        mock.patch.object(updates, "checking", return_value=True), \\
+        mock.patch.object(sys, "_base_executable", str(tool.parent / "python3"), create=True), \\
+        mock.patch.object(auto_update.subprocess, "Popen") as popen:
+    while not go.exists():
+        time.sleep(0.001)
+    if automatic:
+        began = auto_update.trigger("0.2.0", wanted="0.2.0")
+        found = auto_update.last()
+    else:
+        found = auto_update.begin("0.2.0")
+        began = popen.called
+out.write_text(json.dumps({"began": began, "helpers": popen.call_count, "at": (found or {}).get("at")}))
+"""
+
+    def race(self, kinds: tuple[str, str]) -> list[dict]:
+        from tests.python.support.paths import repo_path
+
+        go = self.tmp / "go"
+        outs = [self.tmp / f"out{index}.json" for index in range(len(kinds))]
+        env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(repo_path("packages/cad/src")), str(repo_path("."))]),
+               "CAD_STATE_DIR": str(self.state)}
+        processes = [subprocess.Popen([sys.executable, "-c", self.SCRIPT, str(self.tool), str(go), str(out), kind],
+                                      env=env) for out, kind in zip(outs, kinds)]
+        self.state.mkdir(parents=True, exist_ok=True)
+        go.write_text("go", encoding="utf-8")
+        for process in processes:
+            self.assertEqual(process.wait(60), 0)
+        return [json.loads(out.read_text(encoding="utf-8")) for out in outs]
+
+    def test_two_servers_starting_at_once_begin_one_update(self) -> None:
+        said = self.race(("auto", "auto"))
+        self.assertEqual(sorted(found["began"] for found in said), [False, True], said)
+        self.assertEqual(sum(found["helpers"] for found in said), 1, "one helper started between them")
+        self.assertEqual((auto_update.last()["tries"], auto_update.last()["outcome"]), (1, "underway"))
+
+    def test_a_typed_update_and_a_server_at_once_one_begins_and_the_typed_one_joins_it(self) -> None:
+        said = self.race(("auto", "typed"))
+        self.assertEqual(sum(found["helpers"] for found in said), 1, said)
+        self.assertEqual(said[1]["at"], auto_update.last()["at"], "the typed one waits on the one attempt")
 
 
 class WhenTest(Case):
     def test_the_idle_rule(self) -> None:
-        with mock.patch.object(auto_update, "due", return_value="0.2.0"), \
+        with mock.patch.object(auto_update, "due", return_value=auto_update.Due("0.2.0", "0.2.0")), \
                 mock.patch.object(auto_update, "trigger", return_value=True) as trigger:
             self.assertFalse(auto_update.tend(working=True, ran=False, quiet_for=1e9), "never while work is in flight")
             self.assertFalse(auto_update.tend(working=False, ran=True, quiet_for=auto_update.IDLE_SECONDS - 1))
@@ -580,7 +746,7 @@ class WhenTest(Case):
             self.assertTrue(auto_update.tend(working=False, ran=False, quiet_for=0.0), "nothing has run: at once")
             self.assertTrue(auto_update.tend(working=False, ran=True, quiet_for=auto_update.IDLE_SECONDS))
             self.assertTrue(auto_update.at_start())
-        self.assertEqual(trigger.call_args_list, [mock.call("0.2.0")] * 3, "each an automatic update")
+        self.assertEqual(trigger.call_args_list, [mock.call("0.2.0", wanted="0.2.0")] * 3, "each an automatic update")
         with mock.patch.object(auto_update, "due", return_value=None):
             self.assertFalse(auto_update.at_start())
         self.assertEqual(client.UPDATING, auto_update.UPDATING)
@@ -596,12 +762,20 @@ class HelperCommandTest(Case):
                 self.assertEqual(line[4], auto_update.HELPER.read_text(encoding="utf-8"))
                 self.assertEqual(json.loads(line[5]), {
                     "cad": str(cad), "target": "0.2.0", "prefix": str(self.tool), "record": "/s/auto-update.json",
-                    "from": "0.1.0", "at": 5.0, "tries": 1, "upgrade": ["/u/uv", "tool", "install", "cad@latest"],
+                    "from": "0.1.0", "at": 5.0, "tries": 1,
+                    "upgrade": ["/u/uv", "tool", "install", "--upgrade", "cad>=0.1.0,<1"],
                     "put_back": ["/u/uv", "tool", "install", "--managed-python", "--python", "3.14", "cad==0.1.0"],
-                    "launchers": ["/u/uv", "tool", "dir", "--bin"], "installer": "uv", "asked": False,
-                    "start": True})
+                    "launchers": ["/u/uv", "tool", "dir", "--bin"], "installer": "uv", "wanted": "0.2.0",
+                    "asked": False, "major": False, "start": True})
+        told = json.loads(auto_update.helper_command("1.0.0", now=5.0, version="0.1.0", uv="/u/uv", base="/py",
+                                                     asked=True, major=True)[5])
+        self.assertEqual((told["upgrade"], told["major"], told["put_back"][-1]),
+                         (["/u/uv", "tool", "install", "cad@latest"], True, "cad==0.1.0"),
+                         "`cad update --major`: the newest release of all; a failure puts back the release that ran")
 
     def triggered(self, **options) -> tuple[list[str], dict]:
+        """A trigger with nothing underway (the record of one before it, underway, is taken away first)."""
+        (self.state / auto_update.RECORD).unlink(missing_ok=True)
         base = self.tmp / "python" / "bin" / "python3"
         with mock.patch.object(sys, "_base_executable", str(base), create=True), \
                 mock.patch.dict(os.environ, {"PYTHONPATH": "/src", "VIRTUAL_ENV": str(self.tool), "KEEP": "1"}), \
@@ -620,25 +794,37 @@ class HelperCommandTest(Case):
         self.assertEqual(options["start_new_session" if os.name != "nt" else "creationflags"],
                          True if os.name != "nt" else 0x08000000 | 0x00000200)
         self.assertEqual(auto_update.last()["outcome"], "underway")
+        (self.state / auto_update.RECORD).unlink()
         with mock.patch.object(sys, "_base_executable", str(self.tool / "bin" / "python"), create=True), \
                 mock.patch.object(auto_update.subprocess, "Popen") as popen:
             self.assertFalse(auto_update.trigger("0.2.1"), "never a Python of the environment it replaces")
         popen.assert_not_called()
+        self.assertIsNone(auto_update.last(), "and nothing kept as underway")
+        with mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True), \
+                mock.patch.object(auto_update.subprocess, "Popen", side_effect=OSError("no such file")):
+            self.assertFalse(auto_update.trigger("0.2.1"))
+        self.assertEqual((auto_update.last()["outcome"], auto_update.last()["detail"]),
+                         ("failed", "the update's helper could not start: OSError: no such file"),
+                         "a helper that never started holds nothing underway")
+        self.assertIsNone(auto_update.underway())
 
     def test_the_helper_and_the_record_are_told_the_installer_and_whether_it_was_typed_and_never_an_install(self):
         auto_update.change_plugin(True)  # the switch on: the helper runs no install command whatever it says
-        for automatic in (True, False):
-            with self.subTest(automatic=automatic):
-                told = json.loads(self.triggered(automatic=automatic)[0][5])
-                self.assertEqual((told["installer"], told["asked"]), ("uv", not automatic))
+        for automatic, major in ((True, False), (False, False), (False, True)):
+            with self.subTest(automatic=automatic, major=major):
+                told = json.loads(self.triggered(automatic=automatic, major=major)[0][5])
+                self.assertEqual((told["installer"], told["asked"], told["major"]), ("uv", not automatic, major))
                 self.assertNotIn("then_install", told)
-                self.assertEqual((auto_update.last()["installer"], auto_update.last()["asked"]), ("uv", not automatic))
+                kept = auto_update.last()
+                self.assertEqual((kept["installer"], kept["asked"], kept["major"], kept["wanted"]),
+                                 ("uv", not automatic, major, "0.2.0"))
         (self.state / auto_update.RECORD).unlink()  # none underway, which `cad update` would join
-        with mock.patch.object(auto_update.subprocess, "Popen"), \
-                mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True), \
-                mock.patch.object(auto_update, "trigger", wraps=auto_update.trigger) as trigger:
-            auto_update.begin("0.2.0")
-        trigger.assert_called_once_with("0.2.0", automatic=False, start=True)
+        with mock.patch.object(auto_update.subprocess, "Popen") as popen, \
+                mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True):
+            found = auto_update.begin("1.0.0", major=True)
+        told = json.loads(popen.call_args.args[0][5])
+        self.assertEqual((found["release"], found["asked"], found["major"], told["upgrade"][-1], told["start"]),
+                         ("1.0.0", True, True, "cad@latest", True))
 
     def test_the_helper_is_told_whether_to_start_the_server_after_it(self) -> None:
         self.assertTrue(json.loads(self.triggered()[0][5])["start"], "a server ran: it starts again")
@@ -648,7 +834,7 @@ class HelperCommandTest(Case):
 class HelperTest(unittest.TestCase):
     """What the helper runs, in order, and what it keeps."""
 
-    UPGRADE = ["uv", "tool", "install", "cad@latest"]
+    UPGRADE = ["uv", "tool", "install", "--upgrade", BOUNDED]
 
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
@@ -678,7 +864,7 @@ class HelperTest(unittest.TestCase):
                 for found in present:
                     found.rmdir()
                 if code == 0:
-                    (self.site / f"cad-{newest if line[-1] == 'cad@latest' else line[-1].split('==')[1]}.dist-info"
+                    (self.site / f"cad-{line[-1].split('==')[1] if '==' in line[-1] else newest}.dist-info"
                      ).mkdir()
                 elif not removes:
                     for found in present:
@@ -691,7 +877,7 @@ class HelperTest(unittest.TestCase):
         ran, run = self.fake([1, 1, 0])
         waited: list[float] = []
         found = helper.update(self.told, run=run, sleep=waited.append, windows=False)
-        self.assertEqual(ran, [["server", "stop"], *[["install", "cad@latest"]] * 3, ["server", "start"]])
+        self.assertEqual(ran, [["server", "stop"], *[["install", BOUNDED]] * 3, ["server", "start"]])
         self.assertEqual(waited, list(helper.WAITS[:3]))
         self.assertEqual((found["outcome"], found["release"], found["from"], found["started"]),
                          ("installed", "0.2.0", "0.1.0", "done"))
@@ -708,12 +894,70 @@ class HelperTest(unittest.TestCase):
                 done = helper.update({**self.told, "target": None}, run=run, sleep=lambda _s: None, windows=False)
                 self.assertEqual((done["outcome"], done["release"]), (outcome, got))
 
-    def test_an_upgrade_that_gets_an_older_release_than_asked_is_tried_again_then_failed(self) -> None:
-        ran, run = self.fake([0] * len(helper.WAITS), newest="0.1.5")
-        found = helper.update(self.told, run=run, sleep=lambda _s: None, windows=False)
-        self.assertEqual((found["outcome"], found["release"], found["detail"]),
-                         ("failed", "0.2.0", "it installed 0.1.5, not 0.2.0"))
-        self.assertEqual(ran.count(["install", "cad@latest"]), len(helper.WAITS))
+    def test_an_upgrade_that_gets_less_than_asked_is_tried_again_then_what_it_got_of_this_major_stands(self) -> None:
+        """The feed named 0.2.0 and the index offers 0.1.5 (or nothing newer): tried at each wait, then taken -- newer
+        is ``installed``, the release that ran ``current`` -- never a failure: nothing newer of this major is to be
+        had. Its tries stay counted by the release it was for, so it is not asked again within the hour."""
+        for newest, outcome in (("0.1.5", "installed"), ("0.1.0", "current")):
+            with self.subTest(newest=newest):
+                for found in self.site.glob("cad-*.dist-info"):
+                    found.rename(self.site / "cad-0.1.0.dist-info")
+                ran, run = self.fake([0] * len(helper.WAITS), newest=newest)
+                found = helper.update({**self.told, "wanted": "0.2.0"}, run=run, sleep=lambda _s: None, windows=False)
+                self.assertEqual((found["outcome"], found["release"], found["wanted"], found["detail"]),
+                                 (outcome, newest, "0.2.0", f"it installed {newest}, not 0.2.0"))
+                self.assertEqual(ran.count(["install", BOUNDED]), len(helper.WAITS))
+
+    def test_the_upgrade_ends_only_on_a_release_of_this_major_never_older(self) -> None:
+        """What the helper accepts: a release of the major of the one that ran, not older than it -- newer is
+        ``installed``, the same ``current``; anything else (an older release, another major's) a failure, as every
+        failure is: cad runs, so nothing is put back, and the event's step is ``older``."""
+        for newest, target, outcome in (("0.3.0", None, "installed"), ("0.1.0", None, "current"),
+                                        ("1.0.0", None, "failed"), ("0.0.9", None, "failed"),
+                                        ("1.0.0", "0.2.0", "failed")):
+            with self.subTest(newest=newest, target=target):
+                for found in self.site.glob("cad-*.dist-info"):
+                    found.rename(self.site / "cad-0.1.0.dist-info")
+                ran, run = self.fake([0] * len(helper.WAITS), newest=newest)
+                found = helper.update({**self.told, "target": target}, run=run, sleep=lambda _s: None, windows=False)
+                self.assertEqual(found["outcome"], outcome)
+                if outcome == "failed":
+                    self.assertEqual((found["release"], found["detail"], "restored" in found, ran[-2:]),
+                                     (target or "latest", f"it installed {newest}, which it may not end on", False,
+                                      [["--version"], ["server", "start"]]))
+                    self.assertEqual(auto_update.event({**found, "release": "x", "at": 1.0})["reason"], "older")
+                else:
+                    self.assertEqual((found["release"], ran.count(["install", BOUNDED])), (newest, 1))
+
+    def test_cad_update_major_accepts_a_higher_major_and_never_an_older_release(self) -> None:
+        told = {**self.told, "target": "1.0.0", "major": True, "upgrade": ["uv", "tool", "install", "cad@latest"]}
+        ran, run = self.fake([0], newest="1.0.0")
+        found = helper.update(told, run=run, sleep=lambda _s: None, windows=False)
+        self.assertEqual((found["outcome"], found["release"], found["major"], ran[1]),
+                         ("installed", "1.0.0", True, ["install", "cad@latest"]))
+        (self.site / "cad-1.0.0.dist-info").rename(self.site / "cad-0.1.0.dist-info")
+        ran, run = self.fake([0] * len(helper.WAITS), newest="0.0.9")
+        self.assertEqual(helper.update({**told, "target": None}, run=run, sleep=lambda _s: None,
+                                       windows=False)["outcome"], "failed", "older: never, --major or not")
+        # Asked for PyPI's newest of all, it ends below it (an installer that kept a range, as pipx 1.18 does): a
+        # failure said as one, never `current`, which would say this cad is the newest release.
+        for found in self.site.glob("cad-*.dist-info"):
+            found.rename(self.site / "cad-0.1.0.dist-info")
+        ran, run = self.fake([0] * len(helper.WAITS), newest="0.1.0")
+        found = helper.update(told, run=run, sleep=lambda _s: None, windows=False)
+        self.assertEqual((found["outcome"], found["release"], found["detail"], ran.count(["install", "cad@latest"])),
+                         ("failed", "1.0.0", "it installed 0.1.0, not 1.0.0", len(helper.WAITS)))
+
+    def test_an_environment_already_on_a_higher_major_is_never_taken_down_by_the_bounded_upgrade(self) -> None:
+        """A person's ``uv tool install cad@latest`` landed a higher major between the trigger and the helper: the
+        bounded upgrade, whose floor is the release that ran, would move it down. It is left as it is."""
+        (self.site / "cad-0.1.0.dist-info").rename(self.site / "cad-1.0.0.dist-info")
+        for target in (None, "0.2.0"):
+            with self.subTest(target=target):
+                ran, run = self.fake([])
+                found = helper.update({**self.told, "target": target}, run=run, windows=False)
+                self.assertEqual((found["outcome"], found["release"], ran),
+                                 ("current", "1.0.0", [["server", "stop"], ["server", "start"]]))
 
     def test_a_failed_install_still_starts_the_server_with_whatever_cad_is_there(self) -> None:
         ran, run = self.fake([1] * len(helper.WAITS))
@@ -724,7 +968,7 @@ class HelperTest(unittest.TestCase):
     def test_an_install_that_failed_and_took_the_tool_with_it_puts_back_the_release_that_ran_then_starts(self) -> None:
         ran, run = self.fake([1] * len(helper.WAITS) + [0], removes=True)
         found = helper.update(self.told, run=run, sleep=lambda _s: None, windows=False)
-        self.assertEqual(ran, [["server", "stop"], *[["install", "cad@latest"]] * len(helper.WAITS), ["--version"],
+        self.assertEqual(ran, [["server", "stop"], *[["install", BOUNDED]] * len(helper.WAITS), ["--version"],
                                ["install", "cad==0.1.0"], ["server", "start"]])
         self.assertEqual((found["outcome"], found["restored"], found["started"]), ("failed", True, "done"))
         self.assertEqual(helper.installed(self.tmp), (0, 1, 0), "the release that ran before, and no other")
@@ -735,7 +979,7 @@ class HelperTest(unittest.TestCase):
     def test_told_no_server_ran_it_starts_none(self) -> None:
         ran, run = self.fake([0])
         found = helper.update({**self.told, "start": False}, run=run, sleep=lambda _s: None, windows=False)
-        self.assertEqual(ran, [["server", "stop"], ["install", "cad@latest"]])
+        self.assertEqual(ran, [["server", "stop"], ["install", BOUNDED]])
         self.assertEqual((found["outcome"], found["start"]), ("installed", False))
         self.assertNotIn("started", found)
 
@@ -793,7 +1037,7 @@ class HelperTest(unittest.TestCase):
 
         found = helper.update(self.told, run=looking, sleep=lambda _s: None, windows=True)
         self.assertEqual(found["outcome"], "installed")
-        self.assertEqual(ran, [["dir"], ["server", "stop"], *[["install", "cad@latest"]] * 2, ["server", "start"]])
+        self.assertEqual(ran, [["dir"], ["server", "stop"], *[["install", BOUNDED]] * 2, ["server", "start"]])
         for tries, (bin_names, scripts, launcher, own) in enumerate(seen, start=1):
             aside = [name for name in bin_names if name != "cad.exe"]
             self.assertEqual(len(aside), 2 * tries, "both set aside at each try; the earlier run's tidied first")
@@ -818,7 +1062,7 @@ class HelperTest(unittest.TestCase):
         # uv cannot say where its bin folder is: nothing set aside, the install tried all the same.
         ran, run = self.fake([0])
         self.assertEqual(helper.update(self.told, run=run, sleep=lambda _s: None, windows=True)["outcome"], "installed")
-        self.assertEqual(ran, [["dir"], ["server", "stop"], ["install", "cad@latest"], ["server", "start"]])
+        self.assertEqual(ran, [["dir"], ["server", "stop"], ["install", BOUNDED], ["server", "start"]])
 
     def test_pipx_s_command_lines_run_as_handed_its_launchers_set_aside_and_its_release_put_back(self) -> None:
         """The helper knows no installer: pipx's upgrade, put-back and launchers' folder are the lines it is handed,
@@ -874,7 +1118,7 @@ class HelperTest(unittest.TestCase):
         env = {**os.environ, "PYTHONPATH": "/nowhere-at-all"}
         subprocess.run(line, check=True, env=env, cwd=self.tmp, timeout=60)
         self.assertEqual(log.read_text(encoding="utf-8").splitlines(),
-                         ["cad server stop", "uv tool install cad@latest", "cad server start"])
+                         ["cad server stop", "uv tool install --upgrade cad>=0.1.0,<1", "cad server start"])
         kept = json.loads(record.read_text(encoding="utf-8"))
         self.assertEqual((kept["outcome"], kept["release"], kept["installer"], kept["asked"]),
                          ("installed", "0.2.0", "uv", False))
@@ -1035,10 +1279,20 @@ class FailedStartTest(Case):
                 redirect_stderr(err), redirect_stdout(io.StringIO()):
             code = server.main(["start"])
         self.assertEqual(code, 1)
-        trigger.assert_called_once_with("0.2.0")
+        trigger.assert_called_once_with("0.2.0", wanted="0.2.0")
         self.assertEqual(feed.call_args.kwargs, {"fetch": True}, "the feed read where it is due: no server reads it")
         self.assertEqual(err.getvalue().splitlines(), ["cad: updating cad to 0.2.0, which then starts the server",
                                                        "cad server start: the engine server did not start"])
+        err = io.StringIO()
+        with self.feed("1.0.0"), \
+                mock.patch.object(client, "start", side_effect=ConnectionError("the engine server did not start")), \
+                mock.patch.object(auto_update, "trigger", return_value=True) as trigger, \
+                redirect_stderr(err), redirect_stdout(io.StringIO()):
+            server.main(["start"])
+        trigger.assert_called_once_with(None, wanted="1.0.0")
+        self.assertEqual(err.getvalue().splitlines()[0],
+                         "cad: updating cad to the newest 0.x release, which then starts the server",
+                         "a feed naming no release of this major: the bounded upgrade, never 1.0.0")
 
     def test_a_start_whose_files_an_update_removed_under_it_still_says_one_line(self) -> None:
         """As a failed install on Windows did: cad's own files gone while the start waited. What the failure needs was
@@ -1066,8 +1320,12 @@ class AskedTest(Case):
     """``cad update`` as the server judges it (``auto_update.asked``) and begins it (``begin``): PyPI asked now, and
     none of the automatic limits -- the switch, ``TRIES``, ``RETRY_SECONDS`` -- applies."""
 
-    def asked(self, newest: str | None) -> dict:
-        return auto_update.asked(newest=lambda: newest)
+    def asked(self, newest: str | None, major: bool = False, **lines: str) -> dict:
+        """``asked`` with PyPI's answer in the feed's shape: ``newest`` its newest of all (None: out of reach), and
+        ``lines`` (``m0="0.2.0"``) each major's newest; by default ``newest``'s own."""
+        known = None if newest is None else {"latest": newest, "lines": {key[1:]: value for key, value in lines.items()}
+                                             or {newest.split(".")[0]: newest}}
+        return auto_update.asked(major=major, pypi=lambda: known)
 
     def test_what_it_refuses_and_what_it_answers(self) -> None:
         auto_update.change(False)
@@ -1083,9 +1341,28 @@ class AskedTest(Case):
             self.assertEqual(self.asked("0.2.0"), {"failed": auto_update.no_installer("uv")})
         with mock.patch.object(sys, "prefix", str(self.tmp)):
             self.assertEqual(self.asked("0.2.0"), {"failed": auto_update.NOT_THE_TOOL})
-        with mock.patch.object(updates, "newest", return_value="0.3.0") as pypi:
+        with mock.patch.object(updates, "pypi", return_value={"latest": "0.3.0", "lines": {"0": "0.3.0"}}) as pypi:
             self.assertEqual(auto_update.asked()["updating"], "0.3.0")
         pypi.assert_called_once_with()
+
+    def test_it_stays_inside_the_major_and_names_a_higher_one(self) -> None:
+        """PyPI's newest release of this major (not yanked: ``updates.pypi``'s), never a higher major's, which the
+        answer names (``higher``); ``--major`` takes the newest of all."""
+        self.assertEqual(self.asked("1.0.0", m0="0.2.0", m1="1.0.0"),
+                         {"ok": True, "updating": "0.2.0", "from": "0.1.0", "higher": "1.0.0"}, "both out")
+        self.assertEqual(self.asked("1.0.0", m0="0.1.0", m1="1.0.0"),
+                         {"ok": True, "newest": "0.1.0", "higher": "1.0.0"}, "nothing newer in this major")
+        self.assertEqual(self.asked("1.0.0", m1="1.0.0"),
+                         {"ok": True, "updating": None, "from": "0.1.0", "higher": "1.0.0"},
+                         "none of this major named: the bounded upgrade all the same")
+        self.assertEqual(self.asked("1.0.0", major=True, m0="0.2.0", m1="1.0.0"),
+                         {"ok": True, "updating": "1.0.0", "from": "0.1.0", "major": True})
+        self.assertEqual(self.asked("0.2.0", major=True), {"ok": True, "updating": "0.2.0", "from": "0.1.0",
+                                                           "major": True}, "--major with no higher major: the newest")
+        self.assertEqual(self.asked("0.1.0", major=True), {"ok": True, "newest": "0.1.0"})
+        self.assertEqual(self.asked(None, major=True), {"ok": True, "updating": None, "from": "0.1.0", "major": True})
+        with mock.patch.object(cad_server, "__version__", "0.1.0-dev.1"):
+            self.assertIn("no release", self.asked("0.2.0")["failed"])
 
     def test_begin_starts_one_attempt_counted_as_any_and_joins_the_one_underway(self) -> None:
         with mock.patch.object(auto_update.subprocess, "Popen") as popen, \
@@ -1104,7 +1381,7 @@ class AskedTest(Case):
             unknown = auto_update.begin(None)
             self.assertEqual((unknown["release"], json.loads(popen.call_args.args[0][5])["target"]), ("latest", None),
                              "PyPI out of reach: whatever the upgrade gets")
-        with mock.patch.object(auto_update, "trigger", return_value=False):
+        with mock.patch.object(auto_update, "_start", side_effect=OSError("the state folder is read-only")):
             auto_update._keep(self.state / auto_update.RECORD, {**again, "outcome": "failed"})
             self.assertIsNone(auto_update.begin("0.2.0"))
 
@@ -1132,8 +1409,8 @@ class ServerUpdateTest(Case):
             judged = {"ok": True, "updating": newest, "from": "0.1.0"}
             with self.subTest(newest=newest), mock.patch.object(auto_update, "asked", return_value=judged), \
                     mock.patch.object(auto_update, "underway", return_value=None), \
-                    mock.patch.object(auto_update, "begin", side_effect=lambda _t: begun.set() or {"at": 1.0}) as begin, \
-                    redirect_stderr(io.StringIO()):
+                    mock.patch.object(auto_update, "begin", side_effect=lambda _t, major: begun.set() or {"at": 1.0}
+                                      ) as begin, redirect_stderr(io.StringIO()):
                 first = ask({"op": "update"})
                 self.assertEqual({key: first[key] for key in judged}, judged)
                 self.assertEqual(ask({"op": "update"})["since"], first["since"], "the same update, asked twice")
@@ -1144,8 +1421,23 @@ class ServerUpdateTest(Case):
                 for thread in threading.enumerate():
                     if thread.name == "cad-update":
                         thread.join(30)
-                begin.assert_called_once_with(newest)
+                begin.assert_called_once_with(newest, major=False)
                 self.assertIsNone(fake.asked_update)
+        # `cad update --major`: judged as such, begun as such.
+        working, begun = [False], threading.Event()
+        fake, ask = self.daemon(working)
+        judged = {"ok": True, "updating": "1.0.0", "from": "0.1.0", "major": True}
+        with mock.patch.object(auto_update, "asked", return_value=judged) as asked, \
+                mock.patch.object(auto_update, "underway", return_value=None), \
+                mock.patch.object(auto_update, "begin", side_effect=lambda _t, major: begun.set() or {"at": 1.0}
+                                  ) as begin, redirect_stderr(io.StringIO()):
+            ask({"op": "update", "major": True})
+            self.assertTrue(begun.wait(30))
+            for thread in threading.enumerate():
+                if thread.name == "cad-update":
+                    thread.join(30)
+        asked.assert_called_once_with(major=True)
+        begin.assert_called_once_with("1.0.0", major=True)
         underway = {"release": "0.2.0", "at": 5.0, "outcome": "underway"}
         with mock.patch.object(auto_update, "asked", return_value=judged), \
                 mock.patch.object(auto_update, "underway", return_value=underway), \
@@ -1174,7 +1466,7 @@ class UpdateCommandTest(Case):
     """``cad update`` (``cad_server/cli/update.py``): refused for a cad that is no global install, the one line with no
     server, an older server's answer; it waits and says how the update ended, on Windows as everywhere."""
 
-    def typed(self, answer=None, *, raises: Exception | None = None, looks=()):
+    def typed(self, answer=None, *, raises: Exception | None = None, looks=(), argv=()):
         from cad_server.cli import update as typed
 
         out, err = io.StringIO(), io.StringIO()
@@ -1182,8 +1474,67 @@ class UpdateCommandTest(Case):
         with mock.patch.object(client, "request", return_value=answer, side_effect=raises) as request, \
                 mock.patch.object(typed, "look", side_effect=lambda *_a: next(looks)), \
                 mock.patch.object(typed.time, "sleep"), redirect_stdout(out), redirect_stderr(err):
-            code = typed.main([])
+            try:
+                code = typed.main(list(argv))
+            except SystemExit as leaving:
+                code = leaving.code
         return code, out.getvalue(), err.getvalue(), request
+
+    def test_a_higher_major_is_named_in_one_line_and_major_installs_it(self) -> None:
+        line = auto_update.MAJOR_LINE.format(release="1.0.0")
+        self.assertEqual(line, "cad 1.0.0, a new major version, is out and does not install itself: `cad update "
+                               "--major` installs it (what changes: https://github.com/earthtojake/text-to-cad/tree/"
+                               "main/docs/migrations)")
+        self.assertEqual(self.typed({"ok": True, "newest": "0.1.0", "higher": "1.0.0"})[:3],
+                         (0, f"cad 0.1.0 is the newest 0.x release\n{line}\n", ""))
+        answer = {"ok": True, "updating": "0.2.0", "from": "0.1.0", "since": 5.0, "higher": "1.0.0"}
+        record = {"release": "0.2.0", "at": 5.0, "outcome": "installed", "started": "started"}
+        self.assertEqual(self.typed(answer, looks=[("0.2.0", record, None, True)])[:3],
+                         (0, f"cad 0.1.0 updated to 0.2.0\n{line}\n", ""))
+        current = {**record, "release": "0.1.0", "outcome": "current"}
+        self.assertEqual(self.typed({**answer, "updating": None}, looks=[("0.1.0", current, None, True)])[:3],
+                         (0, f"cad 0.1.0 is the newest 0.x release\n{line}\n", ""), "PyPI named none of this major")
+        failed = {**record, "outcome": "failed", "detail": "uv said no"}
+        self.assertNotIn(line, self.typed(answer, looks=[("0.1.0", failed, None, True)])[1], "said where it ended well")
+        # --major: asked of the server as such, and said as any update is.
+        major = {"ok": True, "updating": "1.0.0", "from": "0.1.0", "since": 5.0, "major": True}
+        code, out, err, request = self.typed(major, looks=[("1.0.0", {**record, "release": "1.0.0"}, None, True)],
+                                             argv=["--major"])
+        self.assertEqual((code, out, err), (0, "cad 0.1.0 updated to 1.0.0\n", ""))
+        self.assertEqual(request.call_args.args[0], {"op": "update", "major": True})
+        self.assertEqual(self.typed({"ok": True, "newest": "1.0.0"}, argv=["--major"])[:3],
+                         (0, "cad 1.0.0 is the newest release\n", ""))
+
+    def test_major_with_no_server_updates_here_by_the_crossing_command(self) -> None:
+        none = client.NotRunning(client.NOT_RUNNING)
+
+        def looks():
+            begun = auto_update.last()
+            yield None, {**begun, "release": "1.0.0", "outcome": "installed", "start": False}, None, False
+
+        with mock.patch.object(client, "_sandboxed", return_value=False), \
+                mock.patch.object(updates, "pypi", return_value={"latest": "1.0.0", "lines": {"0": "0.1.0", "1": "1.0.0"}}), \
+                mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True), \
+                mock.patch.object(auto_update.subprocess, "Popen") as popen:
+            self.assertEqual(self.typed(raises=none, looks=looks(), argv=["--major"])[:3],
+                             (0, "cad 0.1.0 updated to 1.0.0\n", ""))
+        told = json.loads(popen.call_args.args[0][5])
+        self.assertEqual((told["target"], told["major"], told["upgrade"][-1], told["start"]),
+                         ("1.0.0", True, "cad@latest", False))
+
+    def test_major_is_no_option_of_update_auto_and_the_help_says_the_rule(self) -> None:
+        for argv in (["--major", "auto"], ["auto", "--major"], ["--major", "auto", "status"]):
+            with self.subTest(argv=argv):
+                code, out, err, request = self.typed(argv=argv)
+                self.assertEqual((code, out), (2, ""))
+                request.assert_not_called()
+        self.assertFalse((self.state / "settings.json").exists(), "nothing written")
+        code, out, _err, _request = self.typed(argv=["--help"])
+        self.assertEqual(code, 0)
+        self.assertEqual(out.splitlines()[:2], ["usage: cad update [-h] [--major]",
+                                                "       cad update auto [{status,on,off}]"])
+        self.assertIn("cad installs every newer release of its major version by itself, and a new major version only "
+                      "when you run `cad update --major`.", " ".join(out.split()))
 
     def test_refused_never_started_and_an_older_server_s_answer(self) -> None:
         from cad_server.cli import update as typed
@@ -1232,7 +1583,7 @@ class UpdateCommandTest(Case):
         auto_update.change_plugin(True)  # the switch on: a typed update still never runs the install command
         none = client.NotRunning(client.NOT_RUNNING)
         with mock.patch.object(client, "_sandboxed", return_value=False), \
-                mock.patch.object(updates, "newest", return_value="0.1.0"):
+                mock.patch.object(updates, "pypi", return_value={"latest": "0.1.0", "lines": {"0": "0.1.0"}}):
             self.assertEqual(self.typed(raises=none)[:3], (0, "cad 0.1.0 is the newest release\n", ""))
         self.assertIsNone(auto_update.last(), "nothing begun")
 
@@ -1242,7 +1593,7 @@ class UpdateCommandTest(Case):
             yield None, {**begun, "outcome": "installed", "start": False}, None, False
 
         with mock.patch.object(client, "_sandboxed", return_value=False), \
-                mock.patch.object(updates, "newest", return_value="0.2.0"), \
+                mock.patch.object(updates, "pypi", return_value={"latest": "0.2.0", "lines": {"0": "0.2.0"}}), \
                 mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True), \
                 mock.patch.object(auto_update.subprocess, "Popen") as popen:
             seen = looks()
@@ -1305,6 +1656,31 @@ class DoctorTest(Case):
         self.assertEqual(doctor._update()[1], "this cad is not a global install, so it never updates itself; plugin "
                                               "update auto on")
         self.assertRegex(lines["attempt"], r"^0\.1\.0 to 0\.2\.0 on \S+ \S+: failed \(uv said no\); 0\.1\.0 put back$")
+
+    def test_doctor_and_the_switch_s_status_say_the_newest_of_this_major_and_a_higher_major_in_one_line(self) -> None:
+        from cad_server.cli import doctor
+
+        line = auto_update.MAJOR_LINE.format(release="1.2.0")
+        self.assertEqual(doctor._newest(), doctor._check("newest", doctor.INFO, "the version feed has not been read on "
+                                                                               "this computer yet"))
+        self.assertEqual(self.cli(), (0, "update auto: on\n", ""), "nothing to say without a feed")
+        known = {"checked": time.time(), "feed": {"latest": "1.2.0", "lines": {"0": "0.3.0", "1": "1.2.0"}}}
+        self.state.mkdir(parents=True, exist_ok=True)
+        (self.state / updates.FILE).write_text(json.dumps(known), encoding="utf-8")
+        with mock.patch.object(updates, "feed", wraps=updates.feed) as read:
+            self.assertEqual(doctor._newest(), doctor._check(
+                "newest", doctor.INFO, "cad 0.3.0 is the newest 0.x release the version feed names", [line]))
+            self.assertEqual(self.cli(), (0, f"update auto: on\n{line}\n", ""))
+            self.assertEqual(self.cli("off"), (0, "update auto: off\n", ""), "said by the status alone")
+        self.assertTrue(read.call_args_list and all(call.kwargs == {"fetch": False} for call in read.call_args_list),
+                        "read as last kept, never fetched")
+        known["feed"] = {"latest": "0.3.0", "lines": {"0": "0.3.0"}}
+        (self.state / updates.FILE).write_text(json.dumps(known), encoding="utf-8")
+        self.assertEqual(doctor._newest(), doctor._check("newest", doctor.INFO,
+                                                         "cad 0.3.0 is the newest 0.x release the version feed names"))
+        known["feed"] = {"latest": "1.2.0"}  # none of this major named
+        (self.state / updates.FILE).write_text(json.dumps(known), encoding="utf-8")
+        self.assertEqual(doctor._newest()["detail"], "the version feed names no 0.x release; its newest is cad 1.2.0")
 
     def test_doctor_shows_the_install_command_s_record(self) -> None:
         from cad_server._internal import plugin_catch_up
@@ -1491,6 +1867,47 @@ class PluginCatchUpTest(Case):
         self.assertFalse(self.catch_up.due(), "no second run after the bridge's")
         self.assertEqual(self.catch_up.read()["for"], "0.1.0")
 
+    def test_turned_on_by_an_install_run_ending_badly_it_is_on_and_nothing_is_taken_as_up_to_date(self) -> None:
+        """The install command turns the switch on wherever cad is there, and says how its run is ending
+        (``FAILED_ENV``): ending badly, the switch is on and ``for`` stays as it was, so the server runs the command
+        again for this release; ending well, or typed by a person, ``for`` is this release. By the command itself and
+        by the server alike."""
+        from cad_server.engine.daemon import switch_plugin
+
+        self.catch_up.noted("0.0.9")  # an earlier run ended well, for 0.0.9
+        for by_the_server in (False, True):
+            with self.subTest(by_the_server=by_the_server):
+                auto_update.change_plugin(False)
+                self.catch_up._change(lambda found: {**found, "for": "0.0.9"})
+                answer = (lambda request: switch_plugin(request)) if by_the_server else (lambda _r: {"failed":
+                                                                                                    "unknown request"})
+                with mock.patch.object(client, "request", side_effect=lambda request, **_o: answer(request)) as asked, \
+                        mock.patch.dict(os.environ, {self.catch_up.FAILED_ENV: "1"}):
+                    self.assertEqual(self.cli("update", "auto", "on", main=plugin_command.main),
+                                     (0, "plugin update auto: on\n", ""))
+                self.assertEqual(asked.call_args.args[0], {"op": "plugin_auto_update", "on": True, "release": "0.1.0",
+                                                           "note": False})
+                self.assertTrue(auto_update.plugin_switch())
+                self.assertEqual(self.catch_up.read()["for"], "0.0.9", "nothing taken as up to date")
+                self.assertTrue(self.catch_up.due(), "so the server runs the command again for this release")
+                for ending in ("", None):  # ending well (the install command says so), or a person typing it
+                    with mock.patch.object(client, "request", side_effect=lambda request, **_o: answer(request)) \
+                            as asked, mock.patch.dict(os.environ, {} if ending is None else
+                                                      {self.catch_up.FAILED_ENV: ending}):
+                        if ending is None:
+                            os.environ.pop(self.catch_up.FAILED_ENV, None)
+                        self.catch_up._change(lambda found: {**found, "for": "0.0.9"})
+                        self.cli("update", "auto", "on", main=plugin_command.main)
+                    self.assertNotIn("note", asked.call_args.args[0])
+                    self.assertEqual(self.catch_up.read()["for"], "0.1.0", "from this release on")
+        # No record at all (a computer where no run ever ended well), the run ending badly: nothing written; the rule
+        # for no record then takes this release as up to date, and the command runs once cad is newer.
+        (self.state / self.catch_up.RECORD).unlink()
+        with mock.patch.object(client, "request", return_value={"failed": "unknown request"}), \
+                mock.patch.dict(os.environ, {self.catch_up.FAILED_ENV: "1"}):
+            self.cli("update", "auto", "on", main=plugin_command.main)
+        self.assertFalse((self.state / self.catch_up.RECORD).exists())
+
     def test_turning_it_on_takes_the_command_as_up_to_date_for_the_cad_that_asked(self) -> None:
         from cad_server.engine.daemon import switch_plugin
 
@@ -1628,7 +2045,8 @@ class UpdateCountTest(Case):
 
 def _gone(pid: int, within: float = 30.0) -> bool:
     """Whether process ``pid`` has exited, awaited for up to ``within`` s: on Windows by its own termination signal; on
-    POSIX, gone or a zombie (its parent, stopped with it, no longer reaps it)."""
+    POSIX, gone or a zombie (its parent, stopped with it, no longer reaps it: in a container nothing may reap an
+    orphan). No program is needed where it is not there (``_state``)."""
     if os.name == "nt":
         from tests.python.support.engine_daemon import _windows_exited
 
@@ -1639,12 +2057,30 @@ def _gone(pid: int, within: float = 30.0) -> bool:
             os.kill(pid, 0)
         except ProcessLookupError:
             return True
-        state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
-        if not state or state.startswith("Z"):
+        state = _state(pid)
+        if state is not None and (not state or state.startswith("Z")):
             return True
         if time.monotonic() >= deadline:
             return False
         time.sleep(0.05)
+
+
+def _state(pid: int) -> str | None:
+    """The state of process ``pid`` as the system says it ('Z' a zombie), '' where it is no longer listed, None where
+    nothing here can say: on Linux ``/proc/<pid>/stat``, its field after the closing parenthesis of the command name
+    (which may itself hold spaces or parentheses); elsewhere ``ps`` where it is found (macOS). Some test jobs' Linux
+    has no ``ps``."""
+    if Path("/proc").is_dir():
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return ""
+        fields = stat[stat.rfind(")") + 1:].split()
+        return fields[0] if fields else ""
+    ps = shutil.which("ps")
+    if ps is None:
+        return None
+    return subprocess.run([ps, "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
 
 
 if __name__ == "__main__":

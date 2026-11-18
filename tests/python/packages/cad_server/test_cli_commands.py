@@ -78,7 +78,7 @@ class TheCommandTable(unittest.TestCase):
     def test_the_switches_are_update_auto_and_the_old_spellings_are_gone(self) -> None:
         """``cad update auto`` and ``cad plugin update [auto]``; ``cad auto-update``, ``cad plugin install`` and ``cad
         plugin auto-update`` answer as commands that never existed (no release had them)."""
-        for argv, usage in ((["update", "--help"], "usage: cad update [-h] [auto [{status,on,off}]]"),
+        for argv, usage in ((["update", "--help"], "usage: cad update [-h] [--major]"),
                             (["update", "auto", "--help"], "usage: cad update auto [-h] [{status,on,off}]"),
                             (["plugin", "update", "--help"], "usage: cad plugin update [-h] [auto [{status,on,off}]]"),
                             (["plugin", "update", "auto", "--help"],
@@ -87,7 +87,7 @@ class TheCommandTable(unittest.TestCase):
                 code, said, _ = _run(argv)
                 self.assertEqual((code, said.splitlines()[0]), (0, usage))
         for argv in (["auto-update"], ["auto-update", "on"], ["plugin", "install"], ["plugin", "auto-update", "on"],
-                     ["update", "auto", "maybe"]):
+                     ["update", "auto", "maybe"], ["update", "--major", "auto"], ["update", "auto", "--major"]):
             with self.subTest(argv=argv):
                 self.assertEqual(_run(argv)[0], 2)
 

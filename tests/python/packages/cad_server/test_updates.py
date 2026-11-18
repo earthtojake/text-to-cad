@@ -73,16 +73,25 @@ class UpdatesTest(unittest.TestCase):
         self.assertEqual(len(asked), 2)
         self.assertEqual(updates.feed(get=get, now=start + 2 * updates.CHECK_SECONDS)["latest"], "0.9.1")
 
-    def test_cad_update_asks_pypi_which_release_is_newest_and_keeps_nothing(self) -> None:
+    def test_cad_update_asks_pypi_for_each_major_s_newest_release_not_yanked_and_keeps_nothing(self) -> None:
         asked: list[str] = []
         answer = lambda found: lambda url: asked.append(url) or found  # noqa: E731
-        self.assertEqual(updates.newest(get=answer({"info": {"version": "0.9.1", "yanked": False}})), "0.9.1")
+        file = lambda yanked=False: {"filename": "cad.whl", "yanked": yanked, "yanked_reason": None}  # noqa: E731
+        releases = {"0.11.11": [file()], "0.12.0": [file(), file()], "0.12.1": [file(True), file()],  # one file left
+                    "0.12.2": [file(True)], "0.13.0rc1": [file()], "1.0": [file(True)], "1.1.2": [file(True)],
+                    "1.0.0": [file()], "2.0.0": [], "0.12.3": [{"filename": "cad.whl"}]}  # no `yanked`: not yanked
+        self.assertEqual(updates.pypi(get=answer({"info": {"version": "1.0.0"}, "releases": releases})),
+                         {"latest": "1.0.0", "lines": {"0": "0.12.3", "1": "1.0.0"}},
+                         "a release every file of which is yanked, or that has none, or a pre-release, is none")
         self.assertEqual(asked, ["https://pypi.org/pypi/cad/json"])
-        for found in (None, {}, {"info": None}, {"info": {"version": "0.9.2rc1"}}, {"info": {"version": 1}}):
+        self.assertEqual(updates.pypi(get=answer({"info": {"version": "0.9.1"}})), {"latest": "0.9.1", "lines": {}},
+                         "no list of releases: PyPI's own newest, which leaves yanked ones out")
+        for found in (None, {}, {"info": None}, {"info": {"version": "0.9.2rc1"}}, {"info": {"version": 1}},
+                      {"info": {"version": "0.9.1"}, "releases": {"0.9.1": [file(True)]}}, {"releases": []}):
             with self.subTest(found=found):
-                self.assertIsNone(updates.newest(get=answer(found)))
+                self.assertIsNone(updates.pypi(get=answer(found)))
         self.environment({updates.PYPI_ENV: "http://127.0.0.1:9/pypi/"})
-        updates.newest(get=answer(None))
+        updates.pypi(get=answer(None))
         self.assertEqual(asked[-1], "http://127.0.0.1:9/pypi/cad/json", "a test's stand-in")
         self.assertFalse((self.tmp / updates.FILE).exists(), "the feed's file untouched")
 
@@ -96,7 +105,8 @@ class UpdatesTest(unittest.TestCase):
                 if self.path.startswith("/slow/"):
                     quiet.set()
                     hold.wait(30)
-                body = json.dumps({"info": {"version": "0.9.3"}, "releases": {"0.9.3": []}}).encode()
+                body = json.dumps({"info": {"version": "0.9.3"},
+                                   "releases": {"0.9.3": [{"filename": "cad.whl", "yanked": False}]}}).encode()
                 self.send_response(200)
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
@@ -111,7 +121,7 @@ class UpdatesTest(unittest.TestCase):
         self.addCleanup(server.shutdown)
         self.addCleanup(hold.set)  # first: the slow request let go
         self.environment({updates.PYPI_ENV: f"http://127.0.0.1:{server.server_port}/pypi"})
-        self.assertEqual(updates.newest(), "0.9.3")
+        self.assertEqual(updates.pypi(), {"latest": "0.9.3", "lines": {"0": "0.9.3"}})
         self.assertIsNone(updates._get_within(f"http://127.0.0.1:{server.server_port}/slow/cad/json", 0.2))
         self.assertTrue(quiet.is_set(), "asked, and given up on")
 
@@ -142,10 +152,10 @@ class UpdatesTest(unittest.TestCase):
         answer = {"latest": "1.4.0", "lines": {"0": "0.12.3", "1": "1.4.0"}}
         self.assertEqual(updates.feed(get=lambda _url: answer, now=1_000_000.0), answer)
         kept = json.loads((self.tmp / updates.FILE).read_text(encoding="utf-8"))
-        self.assertEqual(kept, {"checked": 1_000_000.0, "feed": answer}, "kept in the file it always was")
+        self.assertEqual(kept, {"checked": 1_000_000.0, "feed": answer}, "kept in a file of its own")
         known = updates.feed(fetch=False)
         self.assertEqual([updates.newest_of_major(major, known) for major in (0, 1, 2)], ["0.12.3", "1.4.0", None])
-        # The file as an earlier build kept it, or a stand-in that answers `latest` alone: no lines, nothing else lost.
+        # A stand-in that answers `latest` alone: no lines, nothing else lost.
         self.just_read({"latest": "0.11.11"})
         known = updates.feed(fetch=False)
         self.assertEqual(known, {"latest": "0.11.11", "lines": {}})
@@ -154,6 +164,19 @@ class UpdatesTest(unittest.TestCase):
         for nothing in (None, {}, {"latest": "1.0.0", "lines": {"1": "2.0.0"}}, {"latest": "1.0.0", "lines": None}):
             with self.subTest(nothing=nothing):
                 self.assertIsNone(updates.newest_of_major(1, nothing))
+
+    def test_the_feed_is_kept_where_no_earlier_release_reads_it(self) -> None:
+        """Releases 0.10.0 to 0.11.11 keep their feed (``/v1/versions``'s) in ``versions.json`` in the same state
+        folder, and read it while a computer is carried over: this build's answer, which may name 0.12.0 or later, is
+        kept in a file of its own, and that one is neither read nor written."""
+        self.assertEqual(updates.FILE, "releases.json")
+        theirs = json.dumps({"checked": 5.0, "feed": {"latest": "0.11.11"}, "dismissed": "0.11.10"})
+        (self.tmp / "versions.json").write_text(theirs, encoding="utf-8")
+        self.assertIsNone(updates.feed(fetch=False), "theirs is not read")
+        answer = {"latest": "1.0.0", "lines": {"0": "0.12.3", "1": "1.0.0"}}
+        self.assertEqual(updates.feed(get=lambda _url: answer, now=1_000_000.0), answer)
+        self.assertEqual((self.tmp / "versions.json").read_text(encoding="utf-8"), theirs, "nor written")
+        self.assertEqual(json.loads((self.tmp / updates.FILE).read_text(encoding="utf-8"))["feed"], answer)
 
     def test_nothing_is_checked_when_turned_off_in_ci_or_for_a_development_build(self) -> None:
         self.just_read(FEED)

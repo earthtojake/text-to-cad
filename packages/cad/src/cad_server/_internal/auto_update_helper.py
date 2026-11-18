@@ -2,21 +2,29 @@
 the Python cad's environment was made from (``-I -S -c``: never cad's environment, never a module of it), detached and
 with no window, and hands it one JSON argument: ``cad`` (the environment's own ``cad`` command), ``target`` (the release
 asked for, or null: whatever the upgrade gets), ``prefix`` (the environment), ``record`` (the last attempt's file),
-``from``, ``at`` and ``tries``; the installer's commands, ``upgrade`` (cad upgraded to the newest release),
-``put_back`` (the release that ran before installed again) and ``launchers`` (prints the folder its launchers are in);
-``installer`` (its name) and ``asked`` (a typed update), which it keeps in the record for the server to count; and
-``start``, whether it starts the server at the end (false where ``cad update`` found none running: it leaves none
-running).
+``from``, ``at`` and ``tries``; the installer's commands, ``upgrade`` (cad upgraded to the newest release of the major
+of ``from``, never below it; with ``major``, to the newest release of all), ``put_back`` (the release that ran before
+installed again) and ``launchers`` (prints the folder its launchers are in); ``installer`` (its name), ``wanted`` (the
+release the attempt is for), ``asked`` (a typed update) and ``major`` (``cad update --major``), which it keeps in the
+record for the server to count and judge; and ``start``, whether it starts the server at the end (false where ``cad
+update`` found none running: it leaves none running).
 
 In order: the server stopped (``cad server stop``, which waits until it is gone); unless the environment already holds
-``target`` or newer (forward only), the upgrade, tried again on failure, until it ends 0 with a release installed, and
-that release ``target`` or newer where there is one; where every try failed and ``cad`` no longer runs (uv removes the
-whole tool when an install fails after it has begun), the release that ran before put back (``from``: no way back from a
-good update, only what a failed one destroyed); the server started with whatever cad is there, where ``start`` says
-so; and the outcome written to ``record``. The release the record names is the one installed after the upgrade, where
-it ended well; the one asked for where it did not. It runs no install command and counts nothing: the server that
-starts after it does both (``auto_update.report``, ``plugin_catch_up``). The standard library alone, and nothing else
-of cad.
+``target`` or newer, or (but for ``major``) a release of a higher major than ``from``'s, which a bounded upgrade would
+take down (forward only), the upgrade, tried again on failure, until it ends 0 with a release installed that it may end
+on (``accepted``: never older than ``from`` and, but for ``major``, of ``from``'s major), ``target`` or newer where
+there is one; where the last try ended 0 on such a release below ``target``, that one, but for ``major``; where every
+try failed and ``cad`` no longer runs (uv removes the whole tool when an install fails after it has begun), the release
+that ran before put back (``from``: no way back from a good update, only what a failed one destroyed); the server
+started with whatever cad is there, where ``start`` says so; and the outcome written to ``record``: ``installed`` for
+a newer release, ``current`` for the one that ran (nothing newer it may take), ``failed`` for anything else, as every
+failure is -- and for ``major``, which asks for ``target``, PyPI's newest of all, a release below it too. The release
+the record names is the one installed after the upgrade, where it ended well; the one asked for where it did
+not. It runs no install command and counts nothing: the server that starts after it does both
+(``auto_update.report``, ``plugin_catch_up``). The standard library alone, and nothing else of cad.
+
+Left as it is: a ``cad server start`` that arrives while this runs (a person's, an agent's, an app's server line) starts
+whatever cad is there at that moment; this helper's own start at the end meets it as any start meets a running server.
 
 On Windows an installer cannot remove a ``cad.exe`` that runs (a ``cad update`` waiting, a ``cad server start``), and an
 install that meets one fails halfway. A running ``cad.exe`` can be renamed, though, once cad holds it only as a running
@@ -113,36 +121,50 @@ def tidy(folder):
             pass
 
 
-def install(told, command, wanted, run, sleep, folder=None):
+def accepted(held, before, major):
+    """Whether the upgrade may end on release ``held``: never older than ``before``, the release that ran, and, but for
+    ``major`` (``cad update --major``), of ``before``'s major. Any release where ``before`` is not known."""
+    if held is None:
+        return False
+    return before is None or (held >= before and (major or held[0] == before[0]))
+
+
+def install(told, command, wanted, run, sleep, folder=None, accept=lambda held: held is not None, settle=False):
     """``command`` run, tried at each of ``WAITS``, each ``cad.exe`` set aside first where ``folder`` (the launchers'
-    folder, on Windows) is given, until it ends 0 with a release of cad installed, ``wanted`` or newer where it is
-    given: ``(the release installed, or None, the installer's last line)``."""
-    detail = "not tried"
+    folder, on Windows) is given, until it ends 0 with a release of cad installed that ``accept`` takes, ``wanted`` or
+    newer where it is given: ``(the release installed, or None, the installer's last line)``. With ``settle``, where the
+    last try ended 0 on a release ``accept`` takes, below ``wanted``, that release: nothing newer is to be had."""
+    detail, settled = "not tried", None
     for wait in WAITS:
         sleep(wait)
         if folder is not None:
             set_aside(told, folder)
         code, detail = run(command, INSTALL_SECONDS)
         held = installed(told["prefix"])
-        if code == 0 and held is not None and (wanted is None or held >= wanted):
+        if code == 0 and accept(held) and (wanted is None or held >= wanted):
             return held, detail
+        settled = held if settle and code == 0 and accept(held) else None
         if code == 0:
-            detail = f"it installed {named(held) if held else 'no cad'}, not {named(wanted)}"
-    return None, detail
+            detail = (f"it installed {named(held)}, not {named(wanted)}" if accept(held) else
+                      f"it installed {named(held) if held else 'no cad'}, which it may not end on")
+    return settled, detail
 
 
 def update(told, run=run, sleep=time.sleep, windows=WINDOWS):
     """The update ``told`` asks for; its outcome as the record keeps it."""
     target, before, restored = release(told["target"]), release(told["from"]), None
+    major = told.get("major") is True
     folder = bin_folder(told, run) if windows else None
     if folder is not None:
         tidy(folder)
     run([told["cad"], "server", "stop"], 120)
     held = installed(told["prefix"])
-    if held is not None and target is not None and held >= target:
+    above = held is not None and before is not None and not major and held[0] > before[0]
+    if held is not None and ((target is not None and held >= target) or above):
         outcome, detail, got = "current", f"cad {named(held)} is installed", held
     else:
-        got, detail = install(told, told["upgrade"], target, run, sleep, folder)
+        got, detail = install(told, told["upgrade"], target, run, sleep, folder,
+                              accept=lambda found: accepted(found, before, major), settle=not major)
         outcome = "failed" if got is None else "installed" if before is None or got > before else "current"
         if got is None and run([told["cad"], "--version"], 60)[0] != 0:
             restored = install(told, told["put_back"], before, run, sleep, folder)[0] is not None
@@ -154,7 +176,7 @@ def update(told, run=run, sleep=time.sleep, windows=WINDOWS):
             "at": told["at"], "tries": told.get("tries", 1), "ended": time.time(), "outcome": outcome,
             "detail": detail, **({} if restored is None else {"restored": restored}),
             **({"started": said if code == 0 else f"not started: {said}"} if start else {"start": False}),
-            **{name: told[name] for name in ("installer", "asked") if name in told}}
+            **{name: told[name] for name in ("installer", "wanted", "asked", "major") if name in told}}
 
 
 def keep(path, record):

@@ -272,15 +272,17 @@ server where the bridge pointed it there (below). Such a client's builds are ref
 
 The version feed (`cad_server.updates`): the server reads it in the background at most once an hour as it tends
 itself (`updates.refresh`), never waited on, for cad's automatic update alone; `cad update` asks PyPI instead
-(`updates.newest`), at once; nothing says a newer release to a person or an agent.
+(`updates.pypi`), at once; nothing says a newer release to a person or an agent unasked (`cad update` and `cad
+doctor` name a release of a higher major, which never installs itself).
 
 A global install of cad (`uv tool install cad`; `cad_server._internal.auto_update.global_install`) updates itself
-unless the person turned it off (`cad update auto off`), or when asked (`cad update`: `Daemon.update`, the update
-begun once nothing is in flight, whatever the switch says): first thing as a server starts, before its door opens,
-and as it tends itself once nothing has run for a minute (or nothing since it started), where the version feed as
-last read names a newer release, a detached helper that is not cad (`auto_update_helper`, run by the Python cad's
-environment was made from) stops the server, runs the installer's upgrade (`uv tool install cad@latest`), tried
-again on failure, and starts the server with whatever cad is there. A server that hands its start over exits
+to newer releases of its own major unless the person turned it off (`cad update auto off`), or when asked (`cad
+update`: `Daemon.update`, the update begun once nothing is in flight, whatever the switch says; `cad update --major`
+to the newest of all): first thing as a server starts, before its door opens, and as it tends itself once nothing
+has run for a minute (or nothing since it started), where the version feed as last read names a newer release of
+its major, a detached helper that is not cad (`auto_update_helper`, run by the Python cad's environment was made
+from) stops the server, runs the installer's upgrade bounded to that major (`uv tool install --upgrade
+"cad>=<installed>,<<next major>"`), tried again on failure, and starts the server with whatever cad is there. A server that hands its start over exits
 `UPDATING`, and its starter waits for the next one; a `cad server start` that fails asks for the update before it
 gives up; a start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). With
 `cad plugin update auto` on, the server, at its start and at each quiet tending, runs `cad plugin update` (the

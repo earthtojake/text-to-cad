@@ -73,9 +73,9 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "urdf validate": frozenset({"path", "strict", "packages", "verbose"}),
     # The person's telemetry choice: status, on or off.
     "telemetry": frozenset({"action"}),
-    # cad updated to the newest release now, by the server that runs: no options; or `auto`, whether cad updates
-    # itself (status, on or off).
-    "update": frozenset({"command", "auto"}),
+    # cad updated now to the newest release of its major, by the server that runs; `--major`, to the newest of all;
+    # or `auto`, whether cad updates itself (status, on or off).
+    "update": frozenset({"command", "auto", "major"}),
     # The install command run now (`update`), or (`update auto`) whether cad's automatic update runs it after it; and
     # the hidden --refresh the updater of 0.11.10 runs, which does nothing.
     "plugin": frozenset({"command", "update", "refresh"}),

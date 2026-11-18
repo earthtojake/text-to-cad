@@ -129,27 +129,31 @@ and nothing asked:
   agent app it finds with that app's own command. It removes what earlier releases
   left there, among them the CAD server they wrote into Claude Desktop's config
   (keeping a `.bak`).
-- Where the run ends well, `cad plugin update auto on`, so that each time cad is
-  newer than the release the install command last ended well for, however it got
-  newer (below), cad runs the install command again, once. `cad plugin update` runs
-  it too.
+- Where cad is there, `cad plugin update auto on`, so that each time cad is newer
+  than the release the install command last ended well for, however it got newer
+  (below), cad runs the install command again, once; a run that ends badly says so
+  to cad, which then keeps no release as up to date. `cad plugin update` runs it
+  too.
 
 It starts no server. To read the scripts first, take the copies attached to a
 release on GitHub and check them against the release's `SHA256SUMS`; they install
 the newest release, not that one.
 
 **Automatic updates.** A cad installed globally (`uv tool install cad`) installs
-new releases by itself, with no one asked, unless you turn that off with
-`cad update auto off`. At most once an hour, and as its server starts, cad asks
-`api.texttocad.dev/v1/releases` which release is newest (releases before 0.11.12 ask
-`api.texttocad.dev/v1/versions`, which names nothing from 0.12.0 on). The feed names a release
-only once it has been on PyPI for an hour, and we can hold a release back from it.
-When the feed names a release newer than cad's and nothing has run for a minute,
-cad stops its server, runs its installer's own upgrade (`uv tool install
-cad@latest`), which downloads PyPI's newest release of `cad`, and starts the server
-again. It never installs an older release; where a failed upgrade left no `cad`, it
-puts back the release that ran. A typed `cad update` asks PyPI which release is
-newest and runs the same upgrade. Then, where `cad plugin update auto` is on, the
+new releases of its own major version by itself, with no one asked, unless you turn
+that off with `cad update auto off`; a new major version installs only when a person
+runs `cad update --major`. At most once an hour, and as its server starts, cad asks
+`api.texttocad.dev/v1/releases` which release is newest, of each major (releases before
+0.11.12 ask `api.texttocad.dev/v1/versions`, which names nothing from 0.12.0 on). The feed
+names a release only once it has been on PyPI for an hour, and we can hold a release back
+from it. When the feed names a release of cad's major newer than cad's and nothing has
+run for a minute, cad stops its server, runs its installer's own upgrade bounded to that
+major (`uv tool install --upgrade "cad>=<installed>,<<next major>"`), which downloads
+PyPI's newest release of `cad` in that range, and starts the server again. It never
+installs an older release; where a failed upgrade left no `cad`, it puts back the
+release that ran. A typed `cad update` asks PyPI which release of its major is newest
+and runs the same upgrade; `cad update --major` runs `uv tool install cad@latest`,
+PyPI's newest of all. Then, where `cad plugin update auto` is on, the
 server of the newer cad (however it got newer: by itself, by `cad update`, or by an
 upgrade by hand) downloads and runs the hosted install command once, unattended: it
 fetches `install.sh` or `install.ps1` and `install.py` from texttocad.dev, and the
@@ -160,8 +164,8 @@ controls `api.texttocad.dev` (which decides only when), `texttocad.dev`, the `ca
 project on PyPI or this repository's `latest` branch can run code as you.
 
 **What else installs by itself.** The CAD app's server line in Codex's plugin
-(`uvx ... cad@<release> mcp`) runs `uv tool install` for PyPI's newest `cad` where
-the computer has no global cad. A computer that the updater of 0.10.0 to 0.11.11
+(`uvx ... cad@<release> mcp`) runs `uv tool install` for PyPI's newest `cad` of that
+release's major where the computer has no global cad. A computer that the updater of 0.10.0 to 0.11.11
 brought to this release installs cad the same way, and runs the hosted install
 command once, unattended, where our install command or an earlier release's update
 had put our plugin there.

@@ -61,7 +61,8 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # A page of the running server's; the launcher exits.
     "viewer": ("cad_server.cli.viewer", "open a viewer page on the running cad server"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
-    "update": ("cad_server.cli.update", "update cad to the newest release now; `update auto`: whether it does so itself"),
+    "update": ("cad_server.cli.update", "update cad now to the newest release of its major version (`--major`: of "
+                                     "all); `update auto`: whether it does so itself"),
     "plugin": ("cad_server.cli.plugin", "the plugin: `update` it now; `update auto`: whether cad's updates do"),
 }
 # Run, never listed. Only for releases 0.10.0 to 0.11.11 -- their skill text (`cad status`, `cad stop`) and their

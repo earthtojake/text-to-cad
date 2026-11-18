@@ -431,9 +431,10 @@ jobs:
   # servers and the real install command; this build's servers there tend themselves every 2 s, not every 30 s
   # (CAD_ENGINE_TEND_SECONDS). cad updating itself (`self`: idle, typed with and without a server running, at a start
   # whose starter waits for it, switched off, to a release whose server cannot start and on past it, to a release uv
-  # cannot install and back, and installed by pipx); and the bridge from the real shipped releases on PyPI (`bridge`:
-  # 0.11.11's update button and automatic update into this build, through its server's run of the install command in
-  # install mode to the uv tool's server, and the same where that run fails; a computer with no receipt of our
+  # cannot install and back, inside its major and never to a new major but by `cad update --major`, and installed by
+  # pipx); and the bridge from the real shipped releases on PyPI (`bridge`: 0.11.11's update button and automatic
+  # update into this build, through its server's run of the install command in install mode to the uv tool's server,
+  # and the same where that run fails; a computer with no receipt of our
   # installer, whose server installs cad with uv itself and runs no install command, by the button and by a typed
   # `cad update`; 0.11.11 going back from a build whose server cannot start; the install command, the typed update and
   # the uv line on a computer of 0.11.11, the uv line on one with no receipt too), and the button of 0.11.0 and 0.10.4,
@@ -471,7 +472,7 @@ jobs:
 
       # The rehearsal builds this tree's wheels from the source with the standard library alone
       # (tests/python/support/machine.py): nothing of cad is installed here.
-      - name: cad updating itself (idle, typed, typed with no server, at a start, switched off, past a broken server, back from an uninstallable release, by pipx)
+      - name: cad updating itself (idle, typed, typed with no server, at a start, switched off, past a broken server, back from an uninstallable release, inside its major, by pipx)
         timeout-minutes: 20
         run: python scripts/test/rehearse-update.py self --uv-cache "${{ runner.temp }}/uv"
 

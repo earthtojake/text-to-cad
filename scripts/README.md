@@ -120,7 +120,8 @@ where those files ship, so these scripts are what produces them.
   own home, state, engine, cache and `cad` command folders), with real uv and real servers. `self`: cad, a uv
   tool, updating itself (idle, typed with `cad update` with and without a server running, at a server's
   start, switched off, past a release
-  whose server cannot start, back from one uv cannot install), and the new cad's server running `cad plugin
+  whose server cannot start, back from one uv cannot install, inside its major with a higher major out and
+  across it only by `cad update --major`, by pipx), and the new cad's server running `cad plugin
   update` once, as its own run under a deadline, where `cad plugin update auto` is on and cad got newer, by
   itself or by a typed `cad update`, never after a failed update.
   `bridge`: a computer on a shipped release (0.11.11, or `--old`'s) arriving at this build by its updater,
@@ -178,9 +179,10 @@ where those files ship, so these scripts are what produces them.
 - `check-pr-version.sh HEAD_REPO` — on a pull request's merge commit, says what
   merging it releases: nothing when `VERSION` is unchanged against the target
   branch; otherwise the bump must come from a branch of this repository (never a
-  fork) and pass both the target's version and the latest tag, and a release that
-  installs itself (a patch below 1.0, a patch or minor from 1.0) may not add a
-  migration guide, though it may correct one already there. Called by `test.yml` (`static`); see `CONTRIBUTING.md`,
+  fork) and pass both the target's version and the latest tag, and a patch, which
+  breaks nothing, may not add a migration guide, though it may correct one already
+  there (a minor may carry one: it installs itself on every computer of its major,
+  `release-tags.sh`'s `version_installs_itself`). Called by `test.yml` (`static`); see `CONTRIBUTING.md`,
   "Which number a release bumps".
 - `pypi_release.py --project NAME --version X.Y.Z --built DIR --upload DIR --released DIR`
   (or `--wait`) — what a release uploads to PyPI of one of its four projects
@@ -242,9 +244,9 @@ where those files ship, so these scripts are what produces them.
   commit is the manual fallback.
 - `release-tags.sh` — sourced helpers for tag spelling (`v0.5.0`, and the bare
   `0.4.x` releases before 0.5.0) and for comparing versions, Semantic Versioning's
-  among them: the part a release bumps, the breaking part, and whether a release breaks nothing
-  for a computer on an earlier one (`version_installs_itself`, which a test holds to Semantic
-  Versioning's rule). Sourced by
+  among them: the part a release bumps, the breaking part, and whether a computer on an earlier
+  release installs it by itself (`version_installs_itself`: a later release of the same major, which
+  a test holds to that rule). Sourced by
   `bump-version.sh`, `check-pr-version.sh`, `publish-github-release.sh`,
   `release-publish.yml`.
 - `unavailable-versions.txt` — the versions no release can take (the PyPI project `cad`'s

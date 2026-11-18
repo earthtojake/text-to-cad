@@ -115,8 +115,9 @@ export default function PrivacyPolicyPage() {
             request carries no ID and nothing about you or your work; like any request, it reaches our host
             with your IP address, the time and a user agent that names text-to-cad’s software. It is not
             made in CI. Automatic updates are on unless you turned them off. While they are on, and the answer
-            names a newer release than the one you have, text-to-cad downloads the newest release from the
-            Python Package Index (PyPI) and installs it. Where the plugin’s automatic updates are on (our
+            names a newer release of the major version you have, text-to-cad downloads the newest such release
+            from the Python Package Index (PyPI) and installs it; a new major version is installed only when you
+            ask for it. Where the plugin’s automatic updates are on (our
             install command turns them on) and text-to-cad is newer than when our install script last ran,
             however it got newer, text-to-cad then downloads that script from this website and runs it, which updates the
             text-to-cad plugin in your agent apps. When an earlier release that updated itself brings your

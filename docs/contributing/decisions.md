@@ -59,8 +59,9 @@ itself, which is why the CAD app's line installs cad first.
 ## uv's own commands
 
 **Decision.** cad is installed, updated and removed with its installer's own commands: `uv tool
-install cad`, `uv tool install cad@latest` (what cad's update runs) and `uv tool uninstall cad`. cad
-has no installer, uninstaller or launcher of its own.
+install cad`, `uv tool install --upgrade "cad>=<installed>,<<next major>"` (what cad's update runs),
+`uv tool install cad@latest` (what `cad update --major` runs) and `uv tool uninstall cad`. cad has no
+installer, uninstaller or launcher of its own.
 
 **Why.** uv already installs a tool in place, replaces it on update, and removes it cleanly. Code of
 our own that did the same was how earlier releases got into trouble.
@@ -91,35 +92,63 @@ An upper bound on Python would make a resolver on a newer Python fall back to an
 **Decision.** The version feed, `api.texttocad.dev/v1/releases`, names the newest release, `latest`,
 once it has been on PyPI for an hour, and the newest such release of each major version, `lines`; we
 can hold a release back from it. cad's automatic update
-begins only when the feed names a release newer than its own, and then runs the installer's own
-upgrade, which installs PyPI's newest. Everything else asks PyPI: `cad update`, the install command,
-the skills' line and the CAD app's line.
+begins only when the feed names a release of its own major newer than its own, and then runs the
+installer's own upgrade inside that major, which installs PyPI's newest of the major. Everything else
+asks PyPI: `cad update`, the install command, the skills' line and the CAD app's line.
 
 **Why.** The hour keeps automatic updates from spreading a release the moment it is out, and a hold
-stops them without a new release. The upgrade names no version because an exact version makes uv
-skip the tool in a person's own `uv tool upgrade cad`. Someone who asks for an update wants the
-newest now, not the feed's hour-old answer.
+stops them without a new release. The upgrade names a range, never an exact version, because an
+exact version makes uv skip the tool in a person's own `uv tool upgrade cad`. Someone who asks for an
+update wants the newest now, not the feed's hour-old answer.
 
 **What it costs.** A hold is a brake, not a wall: it stops automatic updates only on computers
-already on the feed's release, since an update the feed starts takes PyPI's newest. To pull a bad
-release from everyone, yank it on PyPI. With no answer from the feed, no automatic update starts.
+already on the feed's release, since an update the feed starts takes PyPI's newest of the major. To
+pull a bad release from everyone, yank it on PyPI. With no answer from the feed, no automatic update
+starts.
+
+## A major version never installs itself
+
+**Decision.** cad installs by itself any newer release with the same major version number as its
+own, a patch and a minor alike; a release of a higher major never arrives by itself. A person asks for
+it: `cad update --major`, which `cad update` and `cad doctor` name, with the migration guides, when
+one is out. The automatic update and a typed `cad update` run the installer's upgrade bounded to the
+installed major, `uv tool install --upgrade "cad>=<installed>,<<next major>"` (pipx: `pipx upgrade cad
+--pip-args=...` with the same range), worked out from the installed release each time; the helper
+accepts only a release of that major, never an older one. The CAD app's line installs the newest of its
+own major where a computer has no cad. The hosted install command, which a person runs, installs the
+newest of all.
+
+**Why.** The bound lives in the updater a computer already has: a computer that sleeps for months
+wakes with the updater of the release it has, so the rule has to be in the first release of this
+updater, and in the commands it runs, not in a feed that can change. uv's own version range does it:
+the upgrade moves up, never past the bound and, with the floor, never down; it is safe to repeat; and
+uv keeps the range, so a person's own `uv tool upgrade cad` stays inside the major too.
+`uv tool install cad@latest` crosses it and drops it. A minor that breaks installs itself because
+text-to-cad is in beta: below 1.0 a break bumps the minor, comes with a migration guide, and the skills
+tell the person when cad is a version ahead of them.
+
+**What it costs.** A person on an old major stays there until they run `cad update --major`, and gets
+no fixes made only in a later major. A minor that breaks reaches everyone by itself. Before pipx 1.18,
+pipx keeps no range, so there a person's own `pipx upgrade cad` takes the newest of all; from 1.18 it
+keeps the last upgrade's, so `cad update --major` passes a floor alone to replace it.
 
 ## Who updates which copy
 
-**Decision.** cad and the plugin update separately. A global install of cad updates itself, on by
-default (`cad update auto off` stops it): when the feed names a newer release, as the server starts,
-after a failed start, or once nothing has run for a minute, a helper outside cad's environment stops
-the server, runs the installer's upgrade and starts the server again. `cad update` updates cad now,
-with or without a server running and with automatic updates off too, and touches nothing else. A cad
-that is not a global install, such as one installed with pip into a project's own Python, never
-updates itself.
+**Decision.** cad and the plugin update separately. A global install of cad updates itself, inside
+its major version, on by default (`cad update auto off` stops it): when the feed names a newer release
+of its major, as the server starts, after a failed start, or once nothing has run for a minute, a
+helper outside cad's environment stops the server, runs the installer's upgrade and starts the server
+again. `cad update` updates cad now, inside its major (`--major`: the newest of all), with or without a
+server running and with automatic updates off too, and touches nothing else. A cad that is not a global
+install, such as one installed with pip into a project's own Python, never updates itself.
 
 The plugin is the install command's. Run by a person, or by cad (`cad plugin update`), it puts the
-newest plugin in every app it finds. Where its run ends well (exit status 0), it turns on `cad plugin
-update auto`, which is off until then: where cad is newer than the release the install command last
-ended well for, cad's server runs it once. cad keeps that release in a small record of its state
-folder, written when the command ends with exit status 0 and when the switch is turned on; a run that
-fails writes none. The rule asks what cad is, not how it got there, so a typed `cad update` or `uv
+newest plugin in every app it finds. Wherever cad is there, it turns on `cad plugin update auto`, which
+is off until then, so a computer whose runs keep failing still has the plugin kept: where cad is newer
+than the release the install command last ended well for, cad's server runs it once. cad keeps that
+release in a small record of its state folder, written when the command ends with exit status 0 and
+when the switch is turned on by a run that is ending well (a run ending badly tells cad so, and writes
+none); a run that fails writes none. The rule asks what cad is, not how it got there, so a typed `cad update` or `uv
 tool upgrade cad` by hand brings the plugin along as cad's own update does, with one mechanism. A run
 cad's server began is stopped, with all it started, after 15 minutes. A failed run is tried again an
 hour or more later: at most three runs for one release. A plugin
@@ -157,7 +186,7 @@ who wants an older release installs it by hand, with automatic updates off
 using it, hidden if need be. CI checks each release against the skill text of every release in the
 last 30 days. Apart from that, a command, option or tool may change or go in any release.
 
-**Why.** cad moves to the newest release on every computer, while a store's copy of the skills can
+**Why.** cad moves to the newest release of its major on every computer, while a store's copy of the skills can
 lag by weeks. The rule keeps those skills working; the test keeps the rule.
 
 **What it costs.** An old spelling lives on for a month after the skills drop it. A person's own
@@ -172,7 +201,8 @@ carries no cad version and has one behaviour, whether a person or cad runs it. I
 there (an old uv that cannot update itself gets a newer one beside it), installs cad only where none
 is installed or the one there does not start, installs or updates the plugin in each app it finds
 with that app's own command, removes our own older copies, puts cad's folder on the PATH with uv's
-own `uv tool update-shell`, and, where it ends well, turns on `cad plugin update auto`. It never
+own `uv tool update-shell`, and turns on `cad plugin update auto`, telling cad whether its run ended
+well. It never
 updates a cad that works,
 never stops to ask the person anything, and starts no server. Its table of apps is the only list of
 apps and of past layouts in the repository.

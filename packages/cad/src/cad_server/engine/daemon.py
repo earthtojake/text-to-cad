@@ -562,10 +562,11 @@ def switch_auto_update(request: dict[str, Any]) -> dict[str, Any]:
 
 def switch_plugin(request: dict[str, Any]) -> dict[str, Any]:
     """Whether the server runs the install command once where cad is newer than the release it is up to date for
-    (``plugin_catch_up``), switched by the server (``{"op": "plugin_auto_update", "on", "release"}``: ``cad plugin
-    update auto on|off`` where a server runs; ``release``, the asking cad's, which turning it on takes the install
-    command as up to date for; this server's where it names none), as ``switch_auto_update`` keeps its own: ``{"ok":
-    true, "on"}``, or ``{"failed"}`` in one line."""
+    (``plugin_catch_up``), switched by the server (``{"op": "plugin_auto_update", "on", "release", "note"}``: ``cad
+    plugin update auto on|off`` where a server runs; ``release``, the asking cad's, which turning it on takes the install
+    command as up to date for; this server's where it names none; ``"note": false``, nothing taken as up to date: the
+    install command's run that turns it on is ending badly), as ``switch_auto_update`` keeps its own: ``{"ok": true,
+    "on"}``, or ``{"failed"}`` in one line."""
     from cad_server._internal import auto_update
 
     on = request.get("on")
@@ -573,7 +574,8 @@ def switch_plugin(request: dict[str, Any]) -> dict[str, Any]:
         return {"failed": "not a switch: on is true or false"}
     asking = request.get("release")
     try:
-        return {"ok": True, "on": auto_update.change_plugin(on, asking if isinstance(asking, str) else None)}
+        return {"ok": True, "on": auto_update.change_plugin(on, asking if isinstance(asking, str) else None,
+                                                            note=request.get("note") is not False)}
     except OSError as error:
         return {"failed": str(error)}
 
@@ -636,8 +638,9 @@ class Daemon:
         self.holders = 0
         # Draining for an update (``drain``): it stops once nothing is in flight.
         self.draining = False
-        # The update ``cad update`` asked for, until it begins (``update``): its release and when it was asked.
-        self.asked_update: tuple[str, float] | None = None
+        # The update ``cad update`` asked for, until it begins (``update``): its release (None: whatever the upgrade
+        # gets), when it was asked, and whether it is ``--major``.
+        self.asked_update: tuple[str | None, float, bool] | None = None
         self.listener: socket.socket | None = None  # on Windows, the port clients reach it by
         self.hosts: dict[str, int] = {}  # the holders per agent host they serve (``hold``)
         self.door = None  # on POSIX, the door clients reach it by (``door.Door``)
@@ -1716,11 +1719,13 @@ class Daemon:
             send({"failed": f"unknown request {op!r}"})
 
     def update(self, request: dict[str, Any]) -> dict[str, Any]:
-        """``cad update`` (``{"op": "update"}``): judged (``auto_update.asked``: PyPI asked now, this request's thread
-        waiting), then, where a newer release is out or PyPI could not say, the attempt underway joined, or the update
-        begun as soon as nothing is in flight (``_update_when_idle``) -- not after the idle minute, whatever the switch
-        says. ``{"ok": true, "updating", "from", "since"}`` (``updating``: the release PyPI names, or null; ``since``:
-        when the attempt that serves it began, or was asked for), else what ``asked`` answers. ``{"op": "update",
+        """``cad update`` (``{"op": "update"}``, ``"major": true`` for ``cad update --major``): judged
+        (``auto_update.asked``: PyPI asked now, this request's thread waiting), then, where a newer release is out or
+        PyPI could not say, the attempt underway joined, or the update begun as soon as nothing is in flight
+        (``_update_when_idle``) -- not after the idle minute, whatever the switch says. ``{"ok": true, "updating",
+        "from", "since"}`` (``updating``: the release PyPI names, or null; ``since``: when the attempt that serves it
+        began, or was asked for; ``higher``, where ``asked`` names a release of a higher major), else what ``asked``
+        answers. A second ``cad update`` while one waits to begin joins it, ``--major`` or not. ``{"op": "update",
         "begin": false}`` begins nothing: ``{"ok": true, "version", "last", "waiting"}``, this release, the last
         attempt (``auto_update.last``) and whether an update waits to begin (the release it waits for, or
         ``latest``), which ``cad update`` asks while it waits."""
@@ -1731,7 +1736,7 @@ class Daemon:
                 waiting = self.asked_update
             return {"ok": True, "version": auto_update._version(), "last": auto_update.last(),
                     "waiting": (waiting[0] or auto_update.LATEST) if waiting else None}
-        judged = auto_update.asked()
+        judged = auto_update.asked(major=request.get("major") is True)
         if "updating" not in judged:
             return judged
         found = auto_update.underway()
@@ -1739,21 +1744,23 @@ class Daemon:
             return {**judged, "updating": found["release"], "since": found["at"]}
         with self.busy_lock:
             first = self.asked_update is None
-            asked = self.asked_update = self.asked_update or (judged["updating"], time.time())
-        target, since = asked
+            asked = self.asked_update = self.asked_update or (judged["updating"], time.time(),
+                                                              judged.get("major") is True)
+        target, since, major = asked
         if first:
-            threading.Thread(target=self._update_when_idle, args=(target,), name="cad-update", daemon=True).start()
+            threading.Thread(target=self._update_when_idle, args=(target, major), name="cad-update",
+                             daemon=True).start()
         return {**judged, "updating": target, "since": since}
 
-    def _update_when_idle(self, target: str | None) -> None:
-        """The update ``cad update`` asked for, begun once nothing is in flight (``working``), on a thread of its own
-        (``auto_update.begin``); never on a server that stops."""
+    def _update_when_idle(self, target: str | None, major: bool = False) -> None:
+        """The update ``cad update`` asked for (``major``: ``--major``), begun once nothing is in flight (``working``),
+        on a thread of its own (``auto_update.begin``); never on a server that stops."""
         from cad_server._internal import auto_update
 
         try:
             while self.working() and not self.stopping.is_set():
                 time.sleep(0.05)
-            if not (self.draining or self.stopping.is_set()) and auto_update.begin(target) is not None:
+            if not (self.draining or self.stopping.is_set()) and auto_update.begin(target, major=major) is not None:
                 print("cad: updating cad, as `cad update` asked: this server stops, and the update starts the next",
                       file=sys.stderr, flush=True)
         finally:

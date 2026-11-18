@@ -9,9 +9,10 @@ into every agent app it finds.
   (``plugin_catch_up.deadline``); a person's own run has no deadline.
 - ``cad plugin update auto [status|on|off]``: whether the server runs ``cad plugin update`` once where this cad is
   newer than the release the install command is up to date for, however cad got newer (``plugin_catch_up``), off by
-  default; the install command turns it on where its run ends well, and turning it on takes the install command as up
-  to date for the cad that turned it on. Kept by the server where one runs, as ``cad update auto`` is, so a shell whose
-  sandbox may not write the state folder needs no permission.
+  default; the install command turns it on wherever cad is there, and turning it on takes the install command as up
+  to date for the cad that turned it on -- unless the install command that runs it says its run is ending badly
+  (``plugin_catch_up.FAILED_ENV``): then nothing is taken as up to date. Kept by the server where one runs, as ``cad
+  update auto`` is, so a shell whose sandbox may not write the state folder needs no permission.
 
 Bare ``cad plugin`` prints this help. ``--refresh``, hidden, does nothing: the updater of 0.11.10 runs ``cad plugin
 --refresh`` after it moves a computer.
@@ -77,16 +78,18 @@ def _update(prog: str) -> int:
 
 
 def _switch(action: str, prog: str) -> int:
-    from cad_server._internal import auto_update
+    from cad_server._internal import auto_update, plugin_catch_up
     from cad_server._internal.cli_errors import Failure, write
     from cad_server.cli.auto_update import _by_the_server
 
     found = None
     if action != "status":
         on = action == "on"
+        note = not plugin_catch_up.failing()  # the install command's run ending badly: nothing taken as up to date
         try:
-            found = _by_the_server("plugin_auto_update", on, release=auto_update._version())
-            found = auto_update.change_plugin(on) if found is None else found
+            found = _by_the_server("plugin_auto_update", on, release=auto_update._version(),
+                                   **({} if note else {"note": False}))
+            found = auto_update.change_plugin(on, note=note) if found is None else found
         except OSError as error:
             return write(Failure(f"could not save the choice: {error}"), prog=prog, as_json=False)
     print(f"plugin update auto: {'on' if (auto_update.plugin_switch() if found is None else found) else 'off'}")

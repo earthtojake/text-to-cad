@@ -58,7 +58,8 @@ STAND_IN = textwrap.dedent('''\
     name = Path(sys.argv[0]).name
     with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as log:
         log.write(json.dumps({{"name": name, "argv": sys.argv[1:], "cwd": os.getcwd(), "path": sys.argv[0],
-                               "trust": os.environ.get("GEMINI_CLI_TRUST_WORKSPACE")}}) + "\\n")
+                               "trust": os.environ.get("GEMINI_CLI_TRUST_WORKSPACE"),
+                               "failed": os.environ.get("CAD_INSTALL_FAILED")}}) + "\\n")
     if any(fail == name or (fail.partition(":")[0] == name and fail.partition(":")[2] in sys.argv[1:])
            for fail in os.environ.get("FAKE_FAIL", "").split(",")):
         print(f"{{name}}: something went wrong")
@@ -190,6 +191,12 @@ class InstallScriptTests(unittest.TestCase):
         found = [json.loads(line) for line in lines]
         return [call["argv"] for call in found if name is None or call["name"] == name]
 
+    def switched(self) -> list:
+        """What each ``cad plugin update auto on`` was told of how the run is ending (``CAD_INSTALL_FAILED``)."""
+        lines = self.log.read_text(encoding="utf-8").splitlines() if self.log.exists() else []
+        return [call["failed"] for call in map(json.loads, lines)
+                if call["name"] == "cad" and call["argv"] == ["plugin", "update", "auto", "on"]]
+
     def desktop(self) -> str:
         """Claude Desktop's config, where install.py looks for it on this platform, relative to the home."""
         return str(install.desktop_config(install.Here(self.environ())).relative_to(self.home))
@@ -227,6 +234,7 @@ class InstallScriptTests(unittest.TestCase):
         self.assertEqual(self.installs(), [["--managed-python", "--python", "3.14", "cad"]])
         self.assertIn("Installing cad with uv.", done.stdout)
         self.assertEqual(self.calls("cad"), [["plugin", "update", "auto", "on"]])
+        self.assertEqual(self.switched(), [""], "told the run is ending well: cad keeps this release")
         self.assertEqual(self.calls("claude"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"],
                                                 ["plugin", "install", "text-to-cad@earthtojake"]])
         self.assertEqual(self.calls("codex"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad", "--ref", "latest"],
@@ -693,11 +701,12 @@ class InstallScriptTests(unittest.TestCase):
         (self.home / ".cline").mkdir()
         old = self.write(".cline/skills/pcb/SKILL.md", OURS.format(name="pcb"))
         done = self.run_install(FAKE_FAIL="claude:add,codex:add,gemini:install,git:clone")
-        # Every app it found failed: the run says so, and fails; and turns no switch on, so cad keeps no release of
-        # the install command's for it (``plugin_catch_up``) and its server runs it again.
+        # Every app it found failed: the run says so, and fails; it turns the switch on all the same (cad is here), so
+        # the plugin is kept on a computer whose runs keep failing, and tells cad the run is ending badly, so cad keeps
+        # no release of the install command's for it (``plugin_catch_up``) and its server runs it again.
         self.assertEqual(1, done.returncode, done.stdout)
         self.assertIn("No app got the plugin", done.stdout)
-        self.assertNotIn(["plugin", "update", "auto", "on"], self.calls("cad"))
+        self.assertEqual(self.switched(), ["1"])
         self.assertNotIn("Start a new session", done.stdout)
         self.assertEqual(self.calls("claude"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"]])
         self.assertEqual(self.calls("codex"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad", "--ref", "latest"]])

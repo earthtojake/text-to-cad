@@ -22,11 +22,12 @@ person or by cad (``cad plugin update``). It does these things alone:
 4. only then removes what earlier releases left in that app (each row of ``APPS``), Claude Desktop's server,
    and the loose copies of our skills (``remove_loose_skills``): the new copy is in place before an old one
    goes, so a failed download or a GitHub outage leaves every app with what it had;
-5. only where the run is ending with exit status 0, turns on ``cad plugin update auto`` with the cad on this computer
-   (``switch_on``), so the plugin follows cad's automatic updates, from the release this run was for: turning it on is
-   how cad keeps the release the install command last ended well for, so a run that failed writes nothing of it, and
-   cad's server runs the command again for that release. A cad that has no such command says so in one line, and the
-   install has not failed.
+5. wherever cad is here, turns on ``cad plugin update auto`` with that cad (``switch_on``), so the plugin follows cad's
+   automatic updates, and tells cad how this run is ending in the environment of that one call (``FAILED_ENV``, ``1``
+   where it is ending with a non-zero exit status): turning it on is how cad keeps the release the install command
+   last ended well for, which a run that is ending badly does not write, so where an earlier run ended well cad's
+   server runs the command again; and a computer whose runs keep failing still has the plugin kept. A cad that has no
+   such command says so in one line, and the install has not failed.
 
 It prints one line per app as it finishes. One app failing, even with an error no row foresaw, never stops the
 others; where the cad step failed, the apps are still done. It exits nonzero when cad was needed and could not be
@@ -1977,11 +1978,17 @@ def install_cad(here: Here) -> Cad:
     return Cad(tool.version if tool else None, 0, (tool.commands.get("cad") if tool else None) or command)
 
 
-def switch_on(here: Here, cad: Cad) -> None:
+# What tells cad's `cad plugin update auto on` that this run is ending badly (``switch_on``): cad then turns the switch
+# on and keeps no release as the one this command is up to date for (cad's ``plugin_catch_up.FAILED_ENV``).
+FAILED_ENV = "CAD_INSTALL_FAILED"
+
+
+def switch_on(here: Here, cad: Cad, failed: bool = False) -> None:
     """Step 5: ``cad plugin update auto on``, by the cad on this computer, so the plugin follows cad's automatic
-    updates; ``main`` runs it only where the run is ending with exit status 0. Whatever it answers, the install is
-    done."""
-    ran = here.run([cad.command, "plugin", "update", "auto", "on"], timeout=120)
+    updates, wherever cad is here; ``failed``, this run is ending with a non-zero exit status, which cad is told
+    (``FAILED_ENV``: ``1``, else empty, never the caller's). Whatever it answers, the install is done."""
+    ran = here.run([cad.command, "plugin", "update", "auto", "on"], timeout=120,
+                   environ={FAILED_ENV: "1" if failed else ""})
     if ran.ok:
         for line in ran.out.splitlines():
             if line.strip():
@@ -2126,8 +2133,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         source.close()
     print("", flush=True)
     failed = bool(cad.code) or report.all_failed
-    if cad.command and not failed:  # only a run that ends well says so (``plugin_catch_up``'s record)
-        switch_on(here, cad)
+    if cad.command:  # on wherever cad is; only a run that ends well keeps its release (cad's ``plugin_catch_up``)
+        switch_on(here, cad, failed)
     if cad.code:
         print("cad itself was not installed (what went wrong is above), and the plugin's skills need it: run this "
               "again.", flush=True)

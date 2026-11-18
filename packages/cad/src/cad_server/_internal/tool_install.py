@@ -9,8 +9,11 @@ cache, ``uv cache dir``, asked both with ``--no-config`` (as a server line runs 
 folder, which is uv's own and changes with it. A project's Python, a development checkout and a global install are not
 in it, and nothing is installed from them.
 
-**The install** (``install``): ``uv tool install --managed-python --python 3.14 cad`` (``command``), the newest
-release, with the Python flags of cad's own uv calls (``launch.PYTHON``: they change with any release). Never
+**The install** (``install``): ``uv tool install --managed-python --python 3.14 "cad<N>"`` (``command``), the newest
+release of the major of the cad doing the installing (``N`` its major + 1, worked out from its release: a plugin copy
+pinned to this release may run long after a higher major is out, and a new major version is a person's to ask for, as
+cad's own update keeps it, ``auto_update``); uv keeps the range, so the cad installed stays in that major by itself
+too. With the Python flags of cad's own uv calls (``launch.PYTHON``: they change with any release). Never
 ``--force``: where uv refuses -- a ``cad`` executable uv did not install is in the way, there is no network -- nothing
 is forced, and ``Failed`` carries uv's last line. Bounded: a uv that hangs is stopped (``timeout``). Several at once
 make one install: uv locks its tool folder, the others wait, then find cad installed and say so (exit status 0).
@@ -97,11 +100,16 @@ def from_uv_cache(prefix: str | None = None, uv: str | None = None) -> bool:
     return False
 
 
-def command(uv: str) -> list[str]:
-    """``uv tool install`` of the newest ``cad``, with the Python flags of cad's own uv calls."""
+def command(uv: str, version: str | None = None) -> list[str]:
+    """``uv tool install`` of the newest ``cad`` of the major of release ``version`` (this cad's by default:
+    ``cad<N>``, ``N`` its major + 1), with the Python flags of cad's own uv calls. A version with no major to read
+    (none here) installs the newest of all."""
+    from cad_server import __version__
     from cad_server._internal.launch import COMMAND, PYTHON
 
-    return [uv, "tool", "install", "--managed-python", "--python", PYTHON, COMMAND]
+    found = re.match(r"(\d+)\.\d+\.\d+", __version__ if version is None else version)
+    wanted = f"{COMMAND}<{int(found[1]) + 1}" if found else COMMAND
+    return [uv, "tool", "install", "--managed-python", "--python", PYTHON, wanted]
 
 
 def old_launcher(path: Path) -> bool:

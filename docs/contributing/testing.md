@@ -57,7 +57,8 @@ enough. Every other job runs on the changes that reach it. The two there now:
   only a store's copy, `store-only`, the new server installs cad with uv itself), the shipped release's
   typed `cad update` (`typed`, `store-typed`), the uv line typed on a computer of 0.11.11 (`uv-line`,
   `store-uv-line`), and the install command on a computer of 0.11.11; then cad's own update, automatic
-  and typed with and without a server running, and cad installed by pipx (`self-pipx`). It is the one test
+  and typed with and without a server running, inside its major with a higher major out and across it by
+  `cad update --major` (`self-major`), and cad installed by pipx (`self-pipx`). It is the one test
   of the move every computer makes, unattended or by the install command. It runs with the installer
   rehearsals, and on a change to the rehearsal itself. A route runs alone too, as
   `scripts/test/rehearse-update.py store-only`.

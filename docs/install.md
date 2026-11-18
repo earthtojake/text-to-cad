@@ -26,7 +26,8 @@ It does six things, and nothing else:
    new terminals (on macOS and Linux in your shell's profile, on Windows in your user PATH). Setting
    `UV_NO_MODIFY_PATH` stops that. cad sets it when cad itself runs the install command
    (`cad plugin update`, and when cad has been updated), so only your own run changes the PATH.
-6. Where everything above ended well, turns on the plugin's automatic updates ([Updating](#updating)).
+6. Where cad is there, turns on the plugin's automatic updates ([Updating](#updating)). Where
+   something above failed, it tells cad so, and cad runs the install command again later.
 
 It takes no options and does not start anything. Run it again at any time to bring the plugin up
 to date in every app.
@@ -302,15 +303,24 @@ cad and the plugin update separately.
 
 ### cad
 
-cad updates itself. While its server runs, it looks for a new release about once an hour, and
-installs it once nothing has run for a minute. To update it now:
+cad updates itself to every new release of its major version (the first number: 0 in 0.12.3). While
+its server runs, it looks for a new release about once an hour, and installs it once nothing has run
+for a minute. To update it now:
 
 ```bash
 cad update
 ```
 
-That updates cad alone. Automatic updates are on unless you turn them off. To see whether they are
-on, or to turn them off or on:
+That updates cad alone. A new major version never installs itself, because it may need changes on
+your side: `cad update` and `cad doctor` say when one is out, and this installs it:
+
+```bash
+cad update --major
+```
+
+The [migration guides](https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations) say what
+changes. Automatic updates are on unless you turn them off. To see whether they are on, or to turn them
+off or on:
 
 ```bash
 cad update auto        # says whether they are on
@@ -327,6 +337,9 @@ cad server stop
 uv tool upgrade cad
 cad server start
 ```
+
+Once cad has updated itself, uv keeps it inside its major version, so `uv tool upgrade cad` does too;
+`uv tool install cad@latest` takes the newest of all.
 
 ### The plugin
 
@@ -351,8 +364,8 @@ cad plugin update auto off
 cad plugin update auto on
 ```
 
-They are off until a run of the install command that ended well turns them on: cad never changes your
-apps where you did not run it.
+They are off until a run of the install command turns them on: cad never changes your apps where you
+did not run it.
 
 A copy from a plugin store (Codex's or Claude's) is updated by that store, on its own schedule. Its
 skills may then be older than cad. That is fine: a command the skills used keeps working for at least

@@ -162,13 +162,14 @@ class PrVersionGuardTests(unittest.TestCase):
         self.commit("A migration guide")
 
     def test_below_1_0_a_migration_guide_takes_a_minor_release(self) -> None:
-        # Below 1.0 a patch release installs itself on every device; a minor or major one waits.
+        # A patch breaks nothing; a minor below 1.0 is the breaking slot, and installs itself all the same.
         self.released("0.10.4")
         self.migration_guide()
         self.bump_feature("0.10.5")
         result = self.check()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("VERSION 0.10.5 is a patch release, which installs itself on every device", result.stderr)
+        self.assertIn("VERSION 0.10.5 is a patch release, which breaks nothing and installs itself on every device",
+                      result.stderr)
         self.assertIn("pull request adds a migration guide", result.stderr)
         self.assertIn("docs/migrations/migrating-0.5-to-0.6.md", result.stderr)
         self.assertIn("a minor release below 1.0: scripts/release/bump-version.sh minor", result.stderr)
@@ -200,21 +201,22 @@ class PrVersionGuardTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("releases 0.10.5", result.stdout)
 
-    def test_from_1_0_a_migration_guide_takes_a_major_release(self) -> None:
-        # From 1.0 a patch or minor release installs itself on every device; a major one waits.
+    def test_from_1_0_a_migration_guide_is_refused_in_a_patch_alone(self) -> None:
+        # From 1.0 too a patch breaks nothing; a minor may carry a guide although it installs itself, and a major
+        # never installs itself. The refusal points at the breaking slot from 1.0, the major.
         self.released("1.2.3")
         self.migration_guide()
-        for version, part in (("1.2.4", "patch"), ("1.3.0", "minor")):
+        self.bump_feature("1.2.4")
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("VERSION 1.2.4 is a patch release, which breaks nothing and installs itself on every device",
+                      result.stderr)
+        self.assertIn("a major release from 1.0: scripts/release/bump-version.sh major", result.stderr)
+        for version in ("1.3.0", "2.0.0"):
             self.bump_feature(version)
             result = self.check()
-            self.assertNotEqual(result.returncode, 0, version)
-            self.assertIn(f"VERSION {version} is a {part} release, which installs itself on every device",
-                          result.stderr)
-            self.assertIn("a major release from 1.0: scripts/release/bump-version.sh major", result.stderr)
-        self.bump_feature("2.0.0")
-        result = self.check()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("releases 2.0.0", result.stdout)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"releases {version}", result.stdout)
 
     def test_it_refuses_anything_but_a_merge_commit(self) -> None:
         result = subprocess.run(
@@ -239,16 +241,15 @@ def _bump(have: str, want: str) -> str | None:
 
 
 def _installs_itself(have: str, want: str) -> bool:
-    """Semantic Versioning's rule as the release rules state it: a release that breaks nothing -- a patch below 1.0,
-    a patch or minor from 1.0 -- is one every device can take; one that bumps the breaking part is not."""
-    moved = _bump(have, want)
-    return moved == "patch" or (moved == "minor" and int(have.split(".")[0]) >= 1)
+    """The rule cad's own update keeps: a later release of the same major -- a patch or a minor, below 1.0 and from
+    1.0, a minor that breaks included -- is one every device takes by itself; a new major never is."""
+    return _bump(have, want) in ("patch", "minor")
 
 
 class TheGuardKeepsTheReleaseRuleTests(unittest.TestCase):
-    """The version check's rule (release-tags.sh: the release scripts import nothing of the packages, and its job
-    installs no Python) answers as Semantic Versioning's rule above: a release refused a new migration guide is
-    exactly one that breaks nothing."""
+    """The release scripts' rule (release-tags.sh: the release scripts import nothing of the packages, and its job
+    installs no Python) answers as the rule above: which part a release bumps, and whether a computer on the earlier
+    release installs it by itself."""
 
     def test_every_pair_of_releases_bumps_and_installs_itself_as_the_rule_says(self) -> None:
         pairs = [(have, want) for have in VERSIONS for want in VERSIONS]

@@ -15,9 +15,9 @@ Install it as a uv tool, which gives the computer its one `cad`:
 uv tool install cad
 ```
 
-It runs on Python 3.11 and newer. `cad server start` starts the server; cad then updates itself
-(`cad update auto off` stops that); `cad update` updates it now; `cad doctor` reports what is
-installed. `cad-server`, `cad-mcp` and `cadgen` are empty aliases of this
+It runs on Python 3.11 and newer. `cad server start` starts the server; cad then updates itself to each
+new release of its major version (`cad update auto off` stops that); `cad update` updates it now; a new
+major version installs only with `cad update --major`; `cad doctor` reports what is installed. `cad-server`, `cad-mcp` and `cadgen` are empty aliases of this
 distribution, kept so older installs keep working.
 
 A **document** is what a person reviews: one instance of a **document type** (below), either a file read on
@@ -317,9 +317,17 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 15. **Compatibility, by who pays for a break.** *The package.* A change is judged by who absorbs it and whether
     they can. Four tiers:
 
+    **Which releases reach a computer by themselves.** cad installs by itself every newer release of the
+    major version it is on, a patch or a minor, a minor that breaks included; a release of a higher major
+    never arrives by itself: the person runs `cad update --major`. The bound lives in the update a computer
+    already has (`cad>=<installed>,<<next major>`, worked out from the installed release each time). So below
+    1.0, where a break bumps the minor, a breaking release reaches every computer by itself with its migration
+    guide; from 1.0, where a break bumps the major, it waits for the person. The tiers below hold within a
+    major as across one.
+
     **Tier 1: what an agent reads each session** -- the skills, the `cad` command's verbs and flags,
-    the CAD tools' arguments, the wording of docs. cad moves to the newest release on every computer
-    while a store's copy of the skills may be weeks older, so a command, flag or tool the skills used
+    the CAD tools' arguments, the wording of docs. cad moves to the newest release of its major on every
+    computer while a store's copy of the skills may be weeks older, so a command, flag or tool the skills used
     keeps working for 30 days after the release whose skills stopped using it, hidden if need be; CI
     checks each release against the skill text released in the last 30 days. Past that window, hard
     cutovers only, in any release: removing or renaming one is not a breaking change and needs no
@@ -392,19 +400,20 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     answer in JSON, which no person reads --, and never
     after the person's no) and the hourly version check (the server's `updates.py`). Both run in the
     background and fail silently: no start, command, build, request or tool call waits on them -- but three a
-    person or an app asks for by name: `cad update`, typed to get the newest release now, which waits on PyPI
-    (5 s at most) and the install, and says in one line when either fails; `cad plugin update`, the hosted install
-    command in the foreground; and `cad mcp` run from uv's cache on a computer with no global cad, which installs
-    one first (four minutes at most).
+    person or an app asks for by name: `cad update`, typed to get the newest release of its major now (`--major`:
+    the newest of all), which waits on PyPI (5 s at most) and the install, and says in one line when either fails;
+    `cad plugin update`, the hosted install command in the foreground; and `cad mcp` run from uv's cache on a
+    computer with no global cad, which installs one first, the newest of its own major (four minutes at most).
     A global install of cad (`uv tool install cad`) updates itself unless the person turned it off (`cad
     update auto off`), and when asked (`cad update`): its server, at its start, after a failed start or once nothing
-    has run for a minute, where the feed as last read names a newer release, hands the update to a detached helper
-    (the server's `_internal/auto_update.py`), which stops it, runs the installer's own upgrade (`uv tool install
-    cad@latest`) and starts it again (where no server runs, `cad update` hands it over itself, and the helper starts
-    none). Where `cad plugin update auto` is on and cad is newer than the release the install command last ended
-    well for, however it got newer, its server runs `cad plugin update` once, detached, stopped with all it started
-    after 15 minutes. Nothing waits on the
-    install but a start that would otherwise start the release it replaces.
+    has run for a minute, where the feed as last read names a newer release of its major, hands the update to a
+    detached helper (the server's `_internal/auto_update.py`), which stops it, runs the installer's own upgrade
+    bounded to that major (`uv tool install --upgrade "cad>=<installed>,<<next major>"`) and starts it again (where no
+    server runs, `cad update` hands it over itself, and the helper starts none); a higher major only by `cad update
+    --major` (`uv tool install cad@latest`). Where `cad plugin update auto` is on and cad is newer than the release
+    the install command last ended well for, however it got newer, its server runs `cad plugin update` once,
+    detached, stopped with all it started after 15 minutes. Nothing waits on the install but a start that would
+    otherwise start the release it replaces.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
     `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
     it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot

@@ -99,10 +99,12 @@ cad_server/
   removes what this release cannot use (environments made for other releases, and the release folders
   0.11.11 and earlier left), `clean` removes all of it, refused while the server runs. Nothing else of cad
   deletes a past release's files.
-- **`cad update`**: cad, and only cad, updated to the newest release on PyPI now, by the server that runs,
-  or by the command itself where none runs (below), even with automatic updates off. It never starts a
-  server, and is refused unless this cad is a global install. It waits until the update ends and says how, in
-  one line, on Windows too. **`cad update auto [status|on|off]`**: whether cad updates itself (below), on by
+- **`cad update`**: cad, and only cad, updated now to the newest release of its major version on PyPI, by the
+  server that runs, or by the command itself where none runs (below), even with automatic updates off; where a
+  release of a higher major is out, one more line names it. **`cad update --major`**: the newest release of all,
+  a new major version included, which never installs itself. It never starts a server, and is refused unless
+  this cad is a global install. It waits until the update ends and says how, in one line, on Windows too.
+  **`cad update auto [status|on|off]`**: whether cad updates itself (below), on by
   default. `on` is refused unless this cad is a global install, and `status` says when it is not. Where a
   server runs, it keeps the switch (`{"op": "auto_update"}`), as it does every other command's writing, so a
   shell whose sandbox may not write cad's state folder needs no permission; with none running, the command
@@ -139,25 +141,37 @@ PowerShell pipeline is still wrong there, and that is PowerShell's to set.
 
 ## cad's own update
 
-`_internal/auto_update.py`. Only a global install updates itself: a cad whose environment an installer made
-(`uv tool install cad`: uv's receipt in its environment). Each installer is one entry (`INSTALLERS`): its
-upgrade command, the command that puts a release back, and where its launchers are. Two switches in the
+`_internal/auto_update.py`. **The rule**: cad installs by itself any newer release of its own major version,
+and never a release of a higher major, which a person asks for (`cad update --major`). Only a global install
+updates itself: a cad whose environment an installer made (`uv tool install cad`: uv's receipt in its
+environment). Each installer is one entry (`INSTALLERS`): its upgrade command inside the major, its command
+to the newest of all, the command that puts a release back, and where its launchers are. Two switches in the
 person's settings: `auto_update.on`, whether cad updates itself, on unless turned off (`cad update auto`);
 and `plugin.auto_update`, whether the server runs the install command once where cad is newer than the
 release it last ended well for, off unless turned on (`cad plugin update auto`; the install command turns it
-on where its run ends well).
+on wherever cad is there, and tells cad when its run is ending badly, so that run keeps no release).
 
 The server reads the version feed (`updates.py`, at most once an hour, in the background; never waited on):
 `api.texttocad.dev/v1/releases`, the newest release (`latest`) and the newest of each major version (`lines`,
-`updates.newest_of_major`), kept in the state folder's `versions.json` (an answer with `latest` alone is read with
-no `lines`). The releases before this design read `/v1/versions`, which names nothing from 0.12.0 on; nothing
-here reads it. It asks whether to update as it starts, and as it tends itself: the switch on, this cad a global
-install whose installer is found, the feed's `latest` newer than this one. Then, once nothing is in flight (at a
-start, at once; otherwise once nothing has run for a minute), a detached helper that is neither the `cad`
-executable nor run from cad's environment (`_internal/auto_update_helper.py`) stops the server, runs the
-installer's upgrade, `uv tool install cad@latest` (no version, no Python flags: the environment keeps its
-interpreter; tried again on failure, and the previous release put back where a failed install left no
-`cad`), and starts the server with whatever cad is there. The record keeps the release the upgrade got. On
+`updates.newest_of_major`), kept in the state folder's `releases.json` (an answer with `latest` alone is read with
+no `lines`). The releases before this design read `/v1/versions` and keep it in `versions.json` in the same
+folder, which they read while a computer is carried over; nothing here reads either, so no `latest` of 0.12.0 or
+later reaches them. It asks whether to update as it starts, and as it tends itself: the switch on, this cad a
+global install whose installer is found, no update underway (of any release, begun within the hour), and the
+feed's newest release of this cad's major newer than this one. Where the feed names none of this major, its
+`latest` where that is of this major; where `latest` is of a higher major, the bounded upgrade runs all the same,
+tried at most twice for one `latest`. Then, once nothing is in flight (at a start, at once; otherwise once
+nothing has run for a minute), the update begins in one step across processes (under the state folder's lock:
+nothing underway, then the attempt kept as underway, so two servers that start at once begin one), and a
+detached helper that is neither the `cad` executable nor run from cad's environment
+(`_internal/auto_update_helper.py`) stops the server, runs the installer's upgrade inside the major, `uv tool
+install --upgrade "cad>=<this release>,<<its major + 1>"` (pipx: `pipx upgrade cad --pip-args=...`, the same
+range), worked out from the release that runs each time (no Python flags: the environment keeps its
+interpreter; tried again on failure, and the previous release put back where a failed install left no `cad`),
+and starts the server with whatever cad is there. uv keeps the range, so a person's own `uv tool upgrade cad`
+stays inside the major too. The helper takes the result only where it is of the same major and not older:
+newer is `installed`, the same release `current`; anything else is a failure. The record keeps the release the
+upgrade got. On
 Windows uv cannot remove a `cad.exe` that is running, but it can rename one, so the helper renames each
 `cad.exe` of the tool aside before uv runs and puts a copy back. For that to work, cad takes its launcher
 off `sys.path` as it starts (`__init__.py`), so it never holds the file open. One release is tried at most
@@ -174,9 +188,9 @@ own). It asks at its start and at
 each tending once nothing is in flight, so it holds however cad got newer: its own update, a typed `cad
 update`, `uv tool upgrade cad` or `pipx upgrade cad` by hand. That release is kept in `install-command.json`
 in the data folder, beside the update's own record: written when `cad plugin update` ends with exit status 0
-and when the switch is turned on (the install command's last step, only where its run is ending with exit
-status 0, right after it put the plugin in place; turned on by hand, it means "from this release on"); a run
-that fails writes none. With no record and the switch on, the record is written for this release and nothing
+and when the switch is turned on (the install command's last step, right after it put the plugin in place,
+wherever cad is there, but written only where its run is ending with exit status 0: one ending badly says so,
+`CAD_INSTALL_FAILED=1`; turned on by hand, it means "from this release on"); a run that fails writes none. With no record and the switch on, the record is written for this release and nothing
 runs, so a fresh install runs nothing again. A run underway, of any release, begun less than an hour ago, is
 waited for, and the server that begins a run asks the record again under the state folder's lock as it keeps
 it, so two servers never both begin one. A run that failed, or never said how it ended, is tried again an
@@ -196,10 +210,16 @@ with no server running, in its own process), and counts it as it stands where th
 it is still underway (`underway`).
 
 `cad update` asks the server that runs (`{"op": "update"}`, which an agent's sandboxed shell may send with no
-permission): it asks PyPI which release is newest (`updates.newest`, 5 s at most; `CAD_PYPI_URL` names a
-stand-in), says `cad X is the newest release` where none is newer, and otherwise begins the same update as
-soon as nothing is in flight, with the switch off too and past the limits on automatic tries (it counts as a
-try all the same), or joins the one underway. Where PyPI cannot be reached it runs the upgrade all the same
+permission): it asks PyPI for the newest release of this cad's major that is not yanked (`updates.pypi`, 5 s
+at most; `CAD_PYPI_URL` names a stand-in), says `cad X is the newest release` where none is newer (`the newest
+0.x release` where a higher major is out), and otherwise begins the same update as soon as nothing is in
+flight, with the switch off too and past the limits on automatic tries (it counts as a try all the same), or
+joins the one underway, another process's too. Where a release of a higher major is out it adds one line
+naming it and `cad update --major`, with the migration guides' address; `cad doctor` says the same, and `cad
+update auto` with no argument. `cad update --major` (`{"op": "update", "major": true}`) begins the update to
+PyPI's newest of all, by `uv tool install cad@latest` (pipx: `pipx upgrade cad --pip-args=cad>=<installed>`),
+which also drops the range uv or pipx kept;
+the next automatic update keeps the new major's. Where PyPI cannot be reached it runs the upgrade all the same
 and says what it got. It updates cad alone: it never runs the install command. Where no server runs, the
 command judges and begins the update itself, in its own process, and the helper starts no server after it:
 an update typed with none running leaves none running. In a shell whose sandbox cannot start a server, it
