@@ -91,6 +91,21 @@ async function openBracket(t, options = { edit: withPmi }) {
   return { ...harness, ...opened, loaded, label, drawn, labels, view, capture, settle, center, controller, prompt };
 }
 
+
+// Select's Filter ticked to Faces alone, from its chevron's menu: its one row, Filter, opens the boxes; All
+// unticks every kind, Faces ticks its own, and Escape puts the menu away (one Filter menu since #818).
+async function facesOnly(page, pane) {
+  await pane.locator('[data-select-filter-trigger]').click();
+  const menu = page.locator('[role=menu][aria-label="Filter"]').first();
+  await page.locator('[data-select-filter-row]').click();
+  await page.locator('[data-select-filter="all"]').click();
+  await page.locator('[data-select-filter="all"][aria-checked="false"]').waitFor();
+  await page.locator('[data-select-filter="faces"]').click();
+  await page.locator('[data-select-filter="faces"][aria-checked="true"]').waitFor();
+  await page.keyboard.press('Escape');
+  await menu.waitFor({ state: 'detached' });
+}
+
 test('PMI is drawn on the model and stays legible as the camera moves; a pick lights its face; it hides, and stays hidden across a reopen; a named view applies and leaves', async (t) => {
   const { page, pane, errors, label, drawn, labels, view, capture, settle, center, loaded, update, controller, prompt } = await openBracket(t);
   await view({ position: [60, -80, 70], target: [0, 0, 2], up: [0, 0, 1], orthographicHalfHeight: 30 });
@@ -239,10 +254,7 @@ test('a change to PMI goes to Quick Edit as the code it asks for, and a rebuild 
   // A new annotation, of a face picked: the bottom, as a second datum would be. The menu says why
   // a kind the pick cannot make is off.
   await pane.getByRole('button', { name: 'Close Quick Edit', exact: true }).click();
-  await pane.locator('[data-select-filter-trigger]').click();
-  const filter = page.locator('[role=menu][aria-label="Selection filter"]');
-  await filter.locator('[data-select-filter="faces"]').click();
-  await filter.waitFor({ state: 'detached' });
+  await facesOnly(page, pane);
   const under = await view({ position: [0, 0, -100], target: [0, 0, 0], up: [0, 1, 0], orthographicHalfHeight: 20 });
   const bottom = under([10, 6, -2]);
   await page.mouse.click(bottom.x, bottom.y);
@@ -342,10 +354,7 @@ test('a file with no PMI has no tab for it, and a face\'s menu starts the first 
   const { page, pane, errors, view, loaded } = await openBracket(t, { fixture: 'bracket' });
   await loaded();
   assert.equal(await pane.locator('[data-tool-panel-id="pmi"]').count(), 0, 'no tab while there is no PMI');
-  await pane.locator('[data-select-filter-trigger]').click();
-  const filter = page.locator('[role=menu][aria-label="Selection filter"]');
-  await filter.locator('[data-select-filter="faces"]').click();
-  await filter.waitFor({ state: 'detached' });
+  await facesOnly(page, pane);
   const down = await view({ position: [0, 0, 100], target: [0, 0, 0], up: [0, 1, 0], orthographicHalfHeight: 20 });
   const top = down([10, 6, 2]);
   await page.mouse.click(top.x, top.y, { button: 'right' });
