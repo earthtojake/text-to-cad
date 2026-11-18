@@ -898,9 +898,12 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   measured and the check is `NOT CHECKED`, never an error of the part's. A face touching both faces of a pair
   is a cut edge; a cone between a skin and a coaxial
   hole wall is a countersink. A chamfer or a round of a skin's edge (a slanted plane, a convex cylinder of at
-  most `t` along it, a cone, torus or sphere about its normal, within the sheet) is an `edge_break`, and a
-  face square to the skin that reaches it and its opposite skin through breaks is a cut edge: its rays run
-  across the plate and measure its width, never its thickness. A bend's end is broken by a cone or a torus
+  most `t` along it, a cone, torus or sphere about its normal; along an ellipse or a spline, a face with no
+  axis to read whose sampled normals all face the skin's side, at a slant to it somewhere; within the sheet)
+  is an `edge_break`, and a face square to the skin (a plane across it, a cylinder about its normal, a face
+  with no axis square to it at every sample) that reaches it and its opposite skin through breaks is a cut
+  edge: its rays run across the plate and measure its width, never its thickness. A skin's rays that reach
+  the other skin's break are short by that break, which is its own finding, not the skin's. A bend's end is broken by a cone or a torus
   about the bend's axis, beside one of its cylinders and a cut edge or a flange's break, within the sheet:
   an `edge_break` too, and the bend's length runs to the cut. A cone, torus, sphere or freeform face whose
   rays cross `t` is `formed` (a cone between flanges is not a bend). A face square between two opposite planes that face away from each other,
@@ -952,7 +955,8 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   plate), and raises `ValueError`
   for a part with a corner modelled without a bend or a flat that does not hold all of its material. Holes, notches, tabs, webs, gaps, flange lengths, reliefs and every distance are measured on
   the flat pattern in the plane (`cad._internal.sheet_plane`, numpy), each place mapped back onto the
-  part for its ref. At K = 0.5 the flat area equals volume / t exactly (`neutral_area_ratio`); the flat's area
+  part for its ref. Its curves are sampled within `CHORD_MM` of them, an arc's and an ellipse's or a
+  spline's alike (at most 720 points; 48 to a curve left an 80 x 40 ellipse 79.957 long). At K = 0.5 the flat area equals volume / t exactly (`neutral_area_ratio`); the flat's area
   with each strip widened to K = 0.5, over volume / t, is `flat_material_fraction`: 1 where the flat holds
   all of the part's material. The volume is the sheet's as cut and bent: the part's, and what its
   countersinks and edge breaks cut from it afterwards (under each one's face, up to the skin it faces, or
