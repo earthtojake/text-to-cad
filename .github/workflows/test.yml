@@ -395,6 +395,8 @@ jobs:
           apt: xvfb libgl1-mesa-dri fonts-dejavu-core
 
       - name: Run the library's, the server's and the shim's suites on the floor
+        env:
+          PYTHON_BIN: python
         run: xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-floor.sh
 
   # The installer rehearsals: install.sh and install.ps1 on a fresh machine, the way a person
@@ -536,7 +538,7 @@ jobs:
       - name: Install the netgen and calculix integrations
         timeout-minutes: 5
         run: |
-          uv sync --locked --group fea
+          uv sync --locked --inexact --group fea
           python -c "import cad_ccx; print(cad_ccx.executable(), cad_ccx.version())"
 
       - name: Run the fea suite

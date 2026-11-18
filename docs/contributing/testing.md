@@ -264,7 +264,8 @@ and no step on any, a full run runs everything, and `CI` needs every job. A job
 is added, renamed, split or retimed without an edit there; a new job goes in
 `CI`'s `needs` (the same test fails one that is not there). Each job installs only
 what its tests need: npm workspaces by job, Python (the development environment,
-`uv sync --locked` from the one `uv.lock` contributors use, on the PATH as `.venv`) and the
+`uv sync --locked` from the one `uv.lock` contributors use, installed into the interpreter
+`setup-python` provides) and the
 two Playwright browsers on request, system packages through `setup-deps`'s `apt` input, and nothing beyond
 Python and Node for `static`.
 

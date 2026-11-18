@@ -7,7 +7,7 @@ description: Install the selected root npm workspaces and optional Python, brows
 
 inputs:
   python:
-    description: Make the development environment, .venv, from uv.lock (`uv sync --locked`) and put it on the PATH.
+    description: Install the development environment from uv.lock (`uv sync --locked`) into the interpreter setup-python provides.
     default: "true"
   python-version:
     description: The Python the environment is made on.
@@ -108,21 +108,18 @@ runs:
         "${apt[@]}" update
         "${apt[@]}" install -y "${missing[@]}"
 
-    # `--locked` refuses a lock that no longer matches the pyproject files rather than resolving
-    # again. The environment's folder goes first on the PATH, so every later step's `python` and
-    # `python3` is its interpreter, as the runners' `.venv` lookup (scripts/test/common.sh) finds it.
+    # The lock contributors sync into `.venv`, installed here into the interpreter setup-python put on
+    # the PATH (UV_PROJECT_ENVIRONMENT, its prefix), as CI always ran: a Windows venv's python.exe is a
+    # launcher that starts the interpreter as its child, and the suites that follow a process by its
+    # id would follow the launcher. `--locked` refuses a lock that no longer matches the pyproject
+    # files rather than resolving again; `--inexact` leaves the interpreter's own pip and setuptools.
+    # Later steps' uv commands (`uv sync --group fea`) take the same environment.
     - name: Install Python dependencies
       if: inputs.python == 'true'
       shell: bash
-      env:
-        PYTHON_PATH: ${{ steps.python.outputs.python-path }}
       run: |
-        uv sync --locked --python "$PYTHON_PATH"
-        if [ "$RUNNER_OS" = "Windows" ]; then
-          cygpath -w "$PWD/.venv/Scripts" >>"$GITHUB_PATH"
-        else
-          echo "$PWD/.venv/bin" >>"$GITHUB_PATH"
-        fi
+        echo "UV_PROJECT_ENVIRONMENT=$pythonLocation" >>"$GITHUB_ENV"
+        UV_PROJECT_ENVIRONMENT="$pythonLocation" uv sync --locked --inexact
 
     - name: Install the launch smoke test's browser
       if: inputs.python == 'true' && inputs.playwright == 'true'
