@@ -207,9 +207,9 @@ A person installs text-to-cad with the install command
 make sure uv is there, then download and run `scripts/install/install.py`, which installs cad as a uv
 tool (PyPI's newest) only where none is installed or the one there does not start, installs the
 plugin from the `latest` branch in each agent app it finds with that app's own command, removes our
-own older copies, puts cad's folder on the PATH with `uv tool update-shell`, and turns on
-`cad plugin auto-update`. It has no modes and reads no feed: `cad plugin install` runs the same
-script. Its `APPS` table is the one list of apps; `docs/install.md` is the same list for people.
+own older copies, puts cad's folder on the PATH with `uv tool update-shell`, and, where it is
+ending with exit status 0, turns on `cad plugin update auto`. It has no modes and reads no feed:
+`cad plugin update` runs the same script. Its `APPS` table is the one list of apps; `docs/install.md` is the same list for people.
 `tests/python/global/test_install_script.py` runs it against stand-in app commands in a home of its
 own.
 
@@ -608,19 +608,20 @@ by case; the worker contract keeps no window, so a new worker contract always do
 
 ### How a release reaches a computer
 
-- **cad updates itself**: a global install (`uv tool install cad`), on by default, `cad auto-update
+- **cad updates itself**: a global install (`uv tool install cad`), on by default, `cad update auto
   off` to stop it. The server reads the version feed in the background about once an hour; when the
   feed names a release newer than its own, as it starts, after a failed start, or once nothing has run
   for a minute, a helper stops the server, runs the installer's own upgrade (`uv tool install
   cad@latest`: PyPI's newest) and starts the server again (`cad_server/_internal/auto_update.py`).
   `cad update` does the same now, asking PyPI rather than the feed. Forward only: nothing installs an
   older release.
-- **The plugin follows cad.** Where `cad plugin auto-update` is on (the install command turns it
-  on) and cad is newer than the release the install command last ended well for, cad's server runs
-  `cad plugin install`, the hosted install command, once, at its start or a quiet tending, however
-  cad got newer: its own update, a typed `cad update`, or `uv tool upgrade cad` by hand
-  (`cad_server/_internal/plugin_catch_up.py`). A failed run is tried again an hour later, at most
-  three times for one release. `cad update` itself never runs it.
+- **The plugin follows cad.** Where `cad plugin update auto` is on (the install command turns it
+  on where its run ends well) and cad is newer than the release the install command last ended well
+  for, cad's server runs `cad plugin update`, the hosted install command, once, at its start or a
+  quiet tending, however cad got newer: its own update, a typed `cad update`, or `uv tool upgrade cad`
+  by hand (`cad_server/_internal/plugin_catch_up.py`). That run is stopped, with all it started,
+  after 15 minutes. A failed run is tried again an hour or more later: at most three runs for one
+  release. `cad update` itself never runs it.
 - **The version feed says when.** It names a release an hour after it is on PyPI, unless the project
   holds it back ([The version feed](#the-version-feed)).
 - **A plugin store** (Codex's directory, claude.ai's) updates the copy it installed. Its skills may be
@@ -636,7 +637,7 @@ Everything else may change in any release. These may not, because past releases,
 the agents running them reach for them, and nothing shipped later can change what they reach for:
 
 1. **`texttocad.dev/install.sh` and `www.texttocad.dev/install.ps1`, run with no options.** Past
-   releases' skills and documents name them, and cad runs them (`cad plugin install`, after an
+   releases' skills and documents name them, and cad runs them (`cad plugin update`, after an
    automatic update, and the bridge). The Windows line names `www.` because Windows PowerShell 5.1
    does not follow the redirect from `texttocad.dev`.
 2. **The version feed, `api.texttocad.dev/v1/versions`, and its `latest` field.** Every shipped release
@@ -677,7 +678,7 @@ As many past releases as reasonable can reach the latest one:
 - **0.10.0 to 0.11.11** update through their own updater, which installs the newest release the old
   way and runs its hidden `cad setup --engine-update`. Where our install command set that computer up
   before, the new cad's server then runs the hosted install command once, which installs cad as a uv
-  tool, installs the plugin in the apps and turns `cad plugin auto-update` on; elsewhere, or where
+  tool, installs the plugin in the apps and turns `cad plugin update auto` on; elsewhere, or where
   that run installed no cad, the server installs cad with uv itself. Either way it then hands over to
   the global cad's server, which updates itself from then on (`cad_server/cli/setup.py`, kept apart as
   bridge code, to be deleted in one change once those releases are gone).

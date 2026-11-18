@@ -17,6 +17,8 @@ installer runs (``cad_server._internal.auto_update_helper``). Everything the wai
 begins: from then on the files of this cad's environment change under it.
 
 A cad that is no global install does not update itself, and is refused.
+
+``cad update auto [status|on|off]`` shows or changes whether cad updates itself (``cad_server.cli.auto_update``).
 """
 
 from __future__ import annotations
@@ -41,15 +43,25 @@ OLD_SERVER = ("the cad server running cannot update cad: run `cad server stop`, 
 
 def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     from cad_server._internal.cli_parser import parser as command_parser
+    from cad_server.cli import auto_update
 
-    return command_parser(prog=prog, description=(
+    parser = command_parser(prog=prog, usage="%(prog)s [-h] [auto [{status,on,off}]]", description=(
         "Update cad to the newest release now, even with automatic updates off. cad asks PyPI which release is "
         "newest and, once nothing is running, installs it. A cad server that was running starts again; with none "
-        "running, none is started."))
+        "running, none is started. `cad update auto` shows or changes whether cad updates itself."))
+    commands = parser.add_subparsers(dest="command", metavar="{auto}")
+    auto_update.arguments(commands.add_parser("auto", prog=f"{prog} auto",
+                                              help="show or change whether cad updates itself: status, on, off",
+                                              description=auto_update.DESCRIPTION))
+    return parser
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
-    build_parser(prog).parse_args(argv)
+    args = build_parser(prog).parse_args(argv)
+    if args.command == "auto":
+        from cad_server.cli import auto_update as switch
+
+        return switch.switch(args.action, prog=f"{prog} auto")
     from cad.engine import client
     from cad_server._internal import auto_update
     from cad_server._internal.cli_errors import Failure, classify, write

@@ -275,7 +275,7 @@ itself (`updates.refresh`), never waited on, for cad's automatic update alone; `
 (`updates.newest`), at once; nothing says a newer release to a person or an agent.
 
 A global install of cad (`uv tool install cad`; `cad_server._internal.auto_update.global_install`) updates itself
-unless the person turned it off (`cad auto-update off`), or when asked (`cad update`: `Daemon.update`, the update
+unless the person turned it off (`cad update auto off`), or when asked (`cad update`: `Daemon.update`, the update
 begun once nothing is in flight, whatever the switch says): first thing as a server starts, before its door opens,
 and as it tends itself once nothing has run for a minute (or nothing since it started), where the version feed as
 last read names a newer release, a detached helper that is not cad (`auto_update_helper`, run by the Python cad's
@@ -283,9 +283,9 @@ environment was made from) stops the server, runs the installer's upgrade (`uv t
 again on failure, and starts the server with whatever cad is there. A server that hands its start over exits
 `UPDATING`, and its starter waits for the next one; a `cad server start` that fails asks for the update before it
 gives up; a start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). With
-`cad plugin auto-update` on, the server, at its start and at each quiet tending, runs `cad plugin install` (the
-hosted install command) once where its cad is newer than the release that command last ended well for, however it
-got newer (`_internal/plugin_catch_up.py`), then counts the last update attempt once (`auto_update.report`); the
+`cad plugin update auto` on, the server, at its start and at each quiet tending, runs `cad plugin update` (the
+hosted install command, stopped with all it started after 15 minutes) once where its cad is newer than the release
+that command last ended well for, however it got newer (`_internal/plugin_catch_up.py`), then counts the last update attempt once (`auto_update.report`); the
 helper and `cad update` run no install command. Where no server runs, a typed `cad update` begins the update itself
 (`cli/update.py`), and its helper starts no server after it.
 
@@ -303,7 +303,7 @@ record at itself, so a client of 0.11.11 or earlier that finds no server starts 
 text-to-cad from a store alone (no receipt or plugin folder of our earlier setup) nothing is owed: after the same five
 minutes the server installs cad globally itself (`tool_install`), as it does where install mode's run installed no
 cad, and hands over the same way. A global install's server on a computer our setup set up before, whose `cad plugin
-auto-update` was never set (the new cad arrived by the uv line), turns that switch on and runs the install command
+update auto` was never set (the new cad arrived by the uv line), turns that switch on and runs the install command
 once. 0.10.0's updater on
 Windows keeps its state in the local application data, so its switch could only go back: there the run stops 0.10.0's
 server by its own stop command first, moves its data once, points the records in both state folders at X, and starts

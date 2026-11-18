@@ -16,7 +16,7 @@ uv tool install cad
 ```
 
 It runs on Python 3.11 and newer. `cad server start` starts the server; cad then updates itself
-(`cad auto-update off` stops that); `cad update` updates it now; `cad doctor` reports what is
+(`cad update auto off` stops that); `cad update` updates it now; `cad doctor` reports what is
 installed. `cad-server`, `cad-mcp` and `cadgen` are empty aliases of this
 distribution, kept so older installs keep working.
 
@@ -44,7 +44,7 @@ cad run arm.py                                 # builds it in the engine's warm 
 cad model export <id> arm.3mf --tolerance 0.01 # the model as the engine holds it, by that id
 cad xbf export XBF/arm.xbf arm.glb arm.stl     # more translations of the document it wrote
 cad xbf snapshot XBF/arm.xbf arm.png           # a still of it, drawn by OCCT
-cad serve XBF/arm.xbf                          # the document on a local page
+cad viewer XBF/arm.xbf                         # the document on the running server's page
 cad xbf inspect XBF/arm.xbf                    # what it holds, then its build closure
 ```
 
@@ -393,16 +393,17 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     after the person's no) and the hourly version check (the server's `updates.py`). Both run in the
     background and fail silently: no start, command, build, request or tool call waits on them -- but three a
     person or an app asks for by name: `cad update`, typed to get the newest release now, which waits on PyPI
-    (5 s at most) and the install, and says in one line when either fails; `cad plugin install`, the hosted install
+    (5 s at most) and the install, and says in one line when either fails; `cad plugin update`, the hosted install
     command in the foreground; and `cad mcp` run from uv's cache on a computer with no global cad, which installs
     one first (four minutes at most).
     A global install of cad (`uv tool install cad`) updates itself unless the person turned it off (`cad
-    auto-update off`), and when asked (`cad update`): its server, at its start, after a failed start or once nothing
+    update auto off`), and when asked (`cad update`): its server, at its start, after a failed start or once nothing
     has run for a minute, where the feed as last read names a newer release, hands the update to a detached helper
     (the server's `_internal/auto_update.py`), which stops it, runs the installer's own upgrade (`uv tool install
     cad@latest`) and starts it again (where no server runs, `cad update` hands it over itself, and the helper starts
-    none). Where `cad plugin auto-update` is on and cad is newer than the release the install command last ended
-    well for, however it got newer, its server runs `cad plugin install` once, detached. Nothing waits on the
+    none). Where `cad plugin update auto` is on and cad is newer than the release the install command last ended
+    well for, however it got newer, its server runs `cad plugin update` once, detached, stopped with all it started
+    after 15 minutes. Nothing waits on the
     install but a start that would otherwise start the release it replaces.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
     `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
@@ -565,8 +566,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     does, says the files it wrote.
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
     --help` groups the commands: the document types, the integrations with operations of their own, the rest. The commands that are no document's -- setup,
-    doctor, cache, viewer, status, stop, server, telemetry, auto-update, update, run, serve and delete -- stay
-    top-level.
+    doctor, cache, viewer, status, stop, server, telemetry, update (and its `update auto`), plugin, mcp, run,
+    requirement, serve and delete -- stay top-level; the bridge's (setup, status, stop) and those for programs
+    rather than people (serve, requirement) run but are not listed.
 
 28. **An integration runs where its extra is installed.** *The package.* An integration's code runs
     in the command's own process when that environment holds the integration's extra, else in that

@@ -1,5 +1,6 @@
-"""The hosted install command as cad runs it: in the foreground for ``cad plugin install`` (``run``), and, BRIDGE-ONLY,
-once by the server for a computer a shipped updater brought (install mode).
+"""The hosted install command as cad runs it: in the foreground for ``cad plugin update`` (``run``; where a server
+began that run, stopped with what it started at its deadline), and, BRIDGE-ONLY, once by the server for a computer a
+shipped updater brought (install mode).
 
 cad knows no app, plugin or skill. What it knows is one fixed public command, the hosted install command (``curl -fsSL
 https://texttocad.dev/install.sh | sh``; on Windows PowerShell ``irm https://www.texttocad.dev/install.ps1 | iex``),
@@ -51,6 +52,7 @@ import os
 import shlex
 import signal
 import subprocess
+import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -90,6 +92,8 @@ DAY_SECONDS = 24 * 60 * 60.0
 # How long the command may run before it is stopped, with what it started: a minute or two, a few more on a slow line;
 # one that hangs (a prompt it should not show) would hold every later attempt.
 RUN_SECONDS = 2 * 60 * 60.0
+# The exit status of a run stopped at its deadline (``run``), as ``timeout(1)`` says one.
+STOPPED = 124
 
 
 # --- the command --------------------------------------------------------------------------------------------------
@@ -124,14 +128,29 @@ def environment(*, report: Path | None) -> dict[str, str]:
     return found
 
 
-def run() -> int:
-    """``cad plugin install``: the install command run in the foreground, its output this process's and its exit status
+def run(*, seconds: float | None = None) -> int:
+    """``cad plugin update``: the install command run in the foreground, its output this process's and its exit status
     returned (a signal's as a shell says it, 128 and its number); 0 where there is none to run. ``OSError`` where it
-    could not start."""
+    could not start. With ``seconds`` (the run a server began, ``plugin_catch_up``), it is started as an attempt is, in
+    a session or process group of its own (``Carrier.begin``), and stopped with every process it started once
+    ``seconds`` have passed (``_stop``, as ``Carrier.tend`` stops an attempt): then, said in one line on stderr,
+    ``STOPPED``. A person's own run has no deadline."""
     command = installer()
     if not command:
         return 0
-    code = subprocess.call(command, env=environment(report=None), stdin=subprocess.DEVNULL)
+    if seconds is None:
+        code = subprocess.call(command, env=environment(report=None), stdin=subprocess.DEVNULL)
+    else:
+        from cad.engine.places import detached
+
+        process = subprocess.Popen(command, env=environment(report=None), stdin=subprocess.DEVNULL, **detached())
+        try:
+            code = process.wait(seconds)
+        except subprocess.TimeoutExpired:
+            _stop(process)
+            print(f"the install command was stopped after {seconds:g} seconds, with everything it started",
+                  file=sys.stderr, flush=True)
+            return STOPPED
     return code if code >= 0 else 128 - code
 
 

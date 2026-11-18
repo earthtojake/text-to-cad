@@ -129,17 +129,20 @@ test("how a computer got to a version is PostHog's version_arrival: by version, 
 });
 
 test("each of cad's own updates is PostHog's cad_updated: by version, from, outcome, reason, tries, installer, asked and plugin", async () => {
-  const [failed, installed] = await at(JSON.parse(JSON.stringify({ ...NAMED, schema: 11, process: 'cli', channel: undefined, app: 'unknown', events: [
+  const [failed, installed, interrupted] = await at(JSON.parse(JSON.stringify({ ...NAMED, schema: 11, process: 'cli', channel: undefined, app: 'unknown', events: [
     { name: 'update', from: '0.11.12', outcome: 'failed', reason: 'upgrade', tries: 2, installer: 'uv', asked: false, plugin: 'none', count: 1 },
     { name: 'update', from: '0.11.12', outcome: 'installed', tries: 1, installer: 'pipx', asked: true, plugin: 'ok', count: 1 },
+    { name: 'update', from: '0.11.12', outcome: 'installed', tries: 1, installer: 'uv', asked: false, plugin: 'underway', count: 1 },
   ] })));
   const own = event => Object.fromEntries(['from', 'outcome', 'reason', 'tries', 'installer', 'asked', 'plugin', 'count']
     .filter(key => key in event.properties).map(key => [key, event.properties[key]]));
-  assert.deepEqual([failed.event, installed.event], ['cad_updated', 'cad_updated']);
+  assert.deepEqual([failed.event, installed.event, interrupted.event], ['cad_updated', 'cad_updated', 'cad_updated']);
   assert.deepEqual(own(failed), { from: '0.11.12', outcome: 'failed', reason: 'upgrade', tries: 2, installer: 'uv', asked: false,
     plugin: 'none', count: 1 });
   assert.deepEqual(own(installed), { from: '0.11.12', outcome: 'installed', tries: 1, installer: 'pipx', asked: true, plugin: 'ok',
     count: 1 });
+  assert.deepEqual(own(interrupted), { from: '0.11.12', outcome: 'installed', tries: 1, installer: 'uv', asked: false,
+    plugin: 'underway', count: 1 }, 'a new attempt began while the install command still ran');
   assert.deepEqual([installed.properties.version, installed.properties.process], ['0.8.0', 'cli']);
   assert.ok(installed.uuid && installed.timestamp, 'named, so a batch sent again counts once');
 });

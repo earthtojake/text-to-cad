@@ -2,12 +2,12 @@
 
 The plugin side knows cad; cad knows only that the install command exists. text-to-cad's distribution
 (``packages/cad``: the library, the server and the shim) never names a skill or an app, and its one knowledge of
-plugins is ``cad plugin``: ``install`` runs the hosted install command, which puts the plugin into the agent apps, and
-``auto-update`` says whether the server runs that command once where cad is newer than the release it last ended well
-for. So no string a package can print
+plugins is ``cad plugin``: ``update`` runs the hosted install command, which installs or updates the plugin in the
+agent apps, and ``update auto`` says whether the server runs that command once where cad is newer than the release it
+is up to date for. So no string a package can print
 or return -- every string literal in its sources but a docstring -- says "skill" anywhere, nor "plugin" but where that
 command needs the word: its own module, its name and one-line help in the command table, the settings section that
-keeps its switch, the command words where the server runs ``cad plugin install``, that switch and its record as
+keeps its switch, the command words where the server runs ``cad plugin update``, that switch and its record as
 ``cad doctor`` reports them, and the telemetry field that counts how that command's run went. Each of those is listed below,
 as exact strings wherever it can be. Everything else says what cad does without the word. The words a format uses for
 its own elements (SDF's ``<plugin>``) are not messages.
@@ -33,14 +33,15 @@ NOT_MESSAGES = {
     "cad_server/cli/setup.py": {"plugin"},
     # The command's name, its module and its one-line help in the command table, and the command named among those
     # that reach any release's server and that carry no notice (``cad plugin``).
-    "cad_server/cli/__init__.py": {"plugin", "cad_server.cli.plugin", "the plugin: install, auto-update"},
+    "cad_server/cli/__init__.py": {"plugin", "cad_server.cli.plugin",
+                                   "the plugin: `update` it now; `update auto`: whether cad's updates do"},
     # The settings section that keeps the command's switch (``plugin.auto_update``).
     "cad_server/_internal/auto_update.py": {"plugin"},
-    # The command words of ``cad plugin install``, which the server runs where cad is newer than the release that
-    # command last ended well for.
+    # The command words of ``cad plugin update``, which the server runs where cad is newer than the release that
+    # command is up to date for.
     "cad_server/_internal/plugin_catch_up.py": {"plugin"},
-    # ``cad doctor`` names the command's switch as it reports it (``cad plugin auto-update``), and its record's line.
-    "cad_server/cli/doctor.py": {"plugin auto-update ", "plugin"},
+    # ``cad doctor`` names the command's switch as it reports it (``cad plugin update auto``), and its record's line.
+    "cad_server/cli/doctor.py": {"plugin update auto ", "plugin"},
     # The ``update`` event's field that says how the command's run after an update went (``plugin``), a name the
     # receiver reads, never a message.
     "cad_server/analytics.py": {"plugin"},

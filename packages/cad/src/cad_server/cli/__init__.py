@@ -7,8 +7,8 @@ integration's, for its tool's own files, which are no document type, which cad c
 shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations``: ``cad mujoco check``,
 ``cad orcaslicer presets``), only for the integrations the registry gives operations. And the commands that are no file's: the server's (``server``: ``start``,
 ``stop``, ``status``), the CAD app an agent app starts (``mcp``), the engine's verbs (``serve``, ``delete``), ``run``,
-and the installation's (``setup``, ``doctor``, ``cache``, ``viewer``, ``telemetry``, ``auto-update``, ``update``,
-``plugin``).
+and the installation's (``requirement``, ``setup``, ``doctor``, ``cache``, ``viewer``, ``telemetry``, ``update``, whose
+``update auto`` is cad's own switch, and ``plugin``). ``cad --help`` lists them all but ``_UNLISTED``'s.
 
 A command that reaches the server holds it to its own release (``cad.engine.client.RELEASE``): one of another
 release is refused in one line. The server's own commands are not held to it (``_ANY_RELEASE``).
@@ -61,13 +61,13 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # A page of the running server's; the launcher exits.
     "viewer": ("cad_server.cli.viewer", "open a viewer page on the running cad server"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
-    "auto-update": ("cad_server.cli.auto_update", "show or change whether cad updates itself: status, on, off"),
-    "update": ("cad_server.cli.update", "update cad to the newest release now"),
-    "plugin": ("cad_server.cli.plugin", "the plugin: install, auto-update"),
+    "update": ("cad_server.cli.update", "update cad to the newest release now; `update auto`: whether it does so itself"),
+    "plugin": ("cad_server.cli.plugin", "the plugin: `update` it now; `update auto`: whether cad's updates do"),
 }
-# Only for releases 0.10.0 to 0.11.11 -- their skill text (`cad status`, `cad stop`) and their updaters (`cad setup`):
-# run, never listed, and gone with the bridge.
-_UNLISTED = frozenset({"status", "stop", "setup"})
+# Run, never listed. Only for releases 0.10.0 to 0.11.11 -- their skill text (`cad status`, `cad stop`) and their
+# updaters (`cad setup`) -- and gone with the bridge. And commands for programs, not people: `serve` (a document served
+# over HTTP, its URL printed) and `requirement` (the cad requirement a Python of a program's own installs).
+_UNLISTED = frozenset({"status", "stop", "setup", "serve", "requirement"})
 
 # Each document type's command, by its id: ``cad <type> <operation>`` (``cad_server.cli.document_types``).
 TYPE_COMMANDS: dict[str, str] = {document_type: f"cad_server.cli.{document_type}" for document_type in DOCUMENT_TYPES}
@@ -334,10 +334,10 @@ def _report(error: Exception) -> None:
 # Commands that reach a server of any release (``cad.engine.client.RELEASE``): the server's own -- which start this
 # release's in place of another's, stop whichever runs, and say which runs --, `mcp`, which decides it itself
 # (``cad_mcp.shim.start_server``), those that only ask whether one runs, and which (`doctor`, `cache`), and
-# `auto-update` and `plugin`, whose switches are the person's, kept for every release, which any server that knows how
+# `update auto` and `plugin`, whose switches are the person's, kept for every release, which any server that knows how
 # keeps, and `update`, which any server that knows how carries out (one that does not is said), and whose next server
 # is another.
-_ANY_RELEASE = frozenset({"server", "status", "stop", "mcp", "doctor", "cache", "auto-update", "update", "plugin"})
+_ANY_RELEASE = frozenset({"server", "status", "stop", "mcp", "doctor", "cache", "update", "plugin"})
 # Commands that never carry the analytics notice: the engine's server and `mcp`, writing nowhere a person reads;
 # `telemetry`, which says it its own way; `setup`, which an updater of 0.11.11 and earlier runs with no person to read
 # it, and `plugin`, which cad's own update runs with none, its output in a log; `run`, which is only the python it runs,

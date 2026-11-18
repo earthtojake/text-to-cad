@@ -8,7 +8,7 @@ The file is one JSON object with a section per feature, each owned by the module
 ``cad_server/language.py``; ``whats_new``: the releases whose What's new dialog the person has seen,
 ``{"seen": ["0.11"]}``, ``cad_server/whats_new.py``; ``auto_update``: whether cad updates itself,
 ``{"on": true|false}``, on where it is absent, ``cad_server/_internal/auto_update.py``; ``plugin``: whether the
-server runs the install command once where cad is newer than the release it last ended well for,
+server runs the install command once where cad is newer than the release it is up to date for,
 ``{"auto_update": true|false}``, off where it is absent, the same module and ``plugin_catch_up.py``, which keeps that
 release in a record of its own). A change reads,
 changes and writes its own section under the state folder's one lock (``update_section``,

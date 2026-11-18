@@ -114,15 +114,15 @@ where those files ship, so these scripts are what produces them.
   packaged CAD app over stdio and a manufacturing check of a built part for each process
   (the checks' measuring modules, loaded from the wheel); installs the same wheels as the uv tool
   the install command makes (`uv tool install cad`, offered them above PyPI's newest), where
-  `cad auto-update` and `cad plugin auto-update` answer, and as an updater of 0.10.0 to 0.11.11
+  `cad update auto` and `cad plugin update auto` answer, and as an updater of 0.10.0 to 0.11.11
   brings a release. Called by `test.yml` and `release-publish.yml`.
 - `rehearse-update.py [ROUTE ...] [--old RELEASE]` — rehearses cad's updates on private computers (each its
   own home, state, engine, cache and `cad` command folders), with real uv and real servers. `self`: cad, a uv
   tool, updating itself (idle, typed with `cad update` with and without a server running, at a server's
   start, switched off, past a release
   whose server cannot start, back from one uv cannot install), and the new cad's server running `cad plugin
-  install` once where `cad plugin auto-update` is on and cad got newer, by itself or by a typed `cad update`,
-  never after a failed update.
+  update` once, as its own run under a deadline, where `cad plugin update auto` is on and cad got newer, by
+  itself or by a typed `cad update`, never after a failed update.
   `bridge`: a computer on a shipped release (0.11.11, or `--old`'s) arriving at this build by its updater,
   its automatic update, its typed `cad update`, the install command and the uv line, this build's server
   running the install command once where the computer had it, installing cad with uv itself where the
@@ -138,7 +138,7 @@ where those files ship, so these scripts are what produces them.
   wheels in `DIR`, the plugin from this tree's `latest` copy (`plugin_branch.py`) in a local repository the
   computer's git reads for every address of ours on GitHub (Gemini CLI still asks GitHub's API for a release
   first, and finds none). It checks each program's own list (ours, once, this run's copy), `cad` (a uv tool
-  at this run's release, `cad auto-update` on, `cad plugin auto-update` turned on by the script, no server
+  at this run's release, `cad update auto` on, `cad plugin update auto` turned on by the script, no server
   started), a model built and its page; then the script again (cad installed already and left alone, each
   copy updated); then each program moved from the state 0.11.10's installer left. It cannot test the desktop
   apps, or GitHub's `latest` branch before a release. A program missing is skipped and said, unless
@@ -298,14 +298,14 @@ where those files ship, so these scripts are what produces them.
   options (given one, they say so and change nothing): they find uv or install it with uv's own installer,
   download `install.py` from beside themselves on the site, and run it with uv's Python 3.14.
 - `install.py` — the installer itself, the standard library alone, carrying no version and taking no
-  options, with one behaviour whether a person or cad (`cad plugin install`) runs it: installs cad as a uv
+  options, with one behaviour whether a person or cad (`cad plugin update`) runs it: installs cad as a uv
   tool, PyPI's newest, only where no cad is installed (a cad that starts is left as it is: it updates
   itself; one that does not start is installed again; a cad installed with pipx is left as it is, or
   installed again with pipx where it does not start), puts cad's folder on the PATH with uv's own
   `uv tool update-shell` (unless `UV_NO_MODIFY_PATH` is set), installs or updates the plugin in each app found
   with that app's own command from the repository's `latest` branch (or copies the skills into an agent's
-  own skills folder), removes our own older copies there, turns on `cad plugin auto-update`, and prints a
-  line per app. It reads no version feed. `APPS` is the one table of apps; each row says how its commands
+  own skills folder), removes our own older copies there, turns on `cad plugin update auto` where the run
+  ends with exit status 0, and prints a line per app. It reads no version feed. `APPS` is the one table of apps; each row says how its commands
   were verified. The docs site copies the three into its `public/` as it builds
   (`apps/docs/scripts/install-scripts.mjs`). Tested by `tests/python/global/test_install_script.py` (a
   temporary home, stand-in CLIs on PATH); `.github/workflows/install-windows.yml` and

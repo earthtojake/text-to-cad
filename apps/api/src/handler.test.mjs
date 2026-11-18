@@ -528,7 +528,7 @@ const update = fields => ({ name: 'update', from: '0.11.12', outcome: 'installed
 
 test("schema 11 counts each of cad's own updates: how it ended, which step failed, the installer, typed or not, and the install command after it", async () => {
   const shapes = [
-    ...['none', 'ok', 'failed'].map(plugin => ({ plugin })),
+    ...['none', 'ok', 'failed', 'underway'].map(plugin => ({ plugin })),
     { outcome: 'current', asked: true, installer: 'pipx' },
     ...['upgrade', 'older', 'put_back'].map(reason => ({ outcome: 'failed', reason, tries: 2 })),
     ...['upgrade', 'older'].map(reason => ({ outcome: 'restored', reason, asked: true })),
@@ -551,6 +551,7 @@ test("schema 11 counts each of cad's own updates: how it ended, which step faile
     update({ reason: 'upgrade' }), // a reason without a failure
     update({ outcome: 'current', plugin: 'ok' }), // the install command after an update that installed nothing newer
     update({ outcome: 'failed', reason: 'upgrade', plugin: 'failed' }),
+    update({ outcome: 'current', plugin: 'underway' }),
     ...[0, -1, 1.5, 1001, '2', true].map(tries => update({ tries })),
     update({ installer: 'pip' }), update({ installer: undefined }),
     ...['yes', 1, null].map(asked => update({ asked })), update({ asked: undefined }),

@@ -1,9 +1,10 @@
-"""``cad auto-update`` -- show or change whether cad updates itself (``cad_server._internal.auto_update``), on by
-default: ``status`` (the default) says it; ``on`` turns it on, refused unless this cad is a global install; ``off``
-turns it off. A cad that is no global install never updates itself, and ``status`` says so. Where a server runs, of any
-release that knows how, it keeps the switch (``_by_the_server``), so a shell whose sandbox may not write the state
-folder needs no permission; with none, this command writes it. ``CAD_UPDATE_CHECK=0`` in a process's environment keeps
-it from updating, whatever the switch says.
+"""``cad update auto`` (``cad_server.cli.update`` dispatches it here: ``switch``) -- show or change whether cad updates
+itself (``cad_server._internal.auto_update``), on by default: ``status`` (the default) says it; ``on`` turns it on,
+refused unless this cad is a global install; ``off`` turns it off. A cad that is no global install never updates
+itself, and ``status`` says so. Where a server runs, of any release that knows how, it keeps the switch
+(``_by_the_server``), so a shell whose sandbox may not write the state folder needs no permission; with none, this
+command writes it. ``CAD_UPDATE_CHECK=0`` in a process's environment keeps it from updating, whatever the switch
+says.
 """
 
 from __future__ import annotations
@@ -11,31 +12,40 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-DEFAULT_PROG = "cad auto-update"
+DEFAULT_PROG = "cad update auto"
+DESCRIPTION = ("Show or change whether cad updates itself to the newest release: once nothing has run for a minute, "
+               "the cad server stops, installs it and starts again. On by default, for a global install (`uv tool "
+               "install cad`).")
 NOT_GLOBAL = "this cad is not a global install, so it does not update itself (`uv tool install cad` makes one)"
 REFUSED = "refused: this cad is not a global install, and only a global install updates itself (`uv tool install cad`)"
+
+
+def arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    """The switch's one argument, on ``parser`` (``cad update``'s ``auto``, or this module's own)."""
+    parser.add_argument("action", nargs="?", choices=("status", "on", "off"), default="status")
+    return parser
 
 
 def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     from cad_server._internal.cli_parser import parser as command_parser
 
-    parser = command_parser(prog=prog, description=(
-        "Show or change whether cad updates itself to the newest release: once nothing has run for a minute, the cad "
-        "server stops, installs it and starts again. On by default, for a global install (`uv tool install cad`)."))
-    parser.add_argument("action", nargs="?", choices=("status", "on", "off"), default="status")
-    return parser
+    return arguments(command_parser(prog=prog, description=DESCRIPTION))
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
-    args = build_parser(prog).parse_args(argv)
+    return switch(build_parser(prog).parse_args(argv).action, prog=prog)
+
+
+def switch(action: str, *, prog: str = DEFAULT_PROG) -> int:
+    """The switch shown (``status``) or changed (``on``, ``off``), in one line: this command's exit status."""
     from cad_server._internal import auto_update
     from cad_server._internal.cli_errors import Failure, write
 
     found = None
-    if args.action == "on" and auto_update.global_install() is None:  # this command's own cad, wherever it is written
+    if action == "on" and auto_update.global_install() is None:  # this command's own cad, wherever it is written
         return write(Failure(REFUSED), prog=prog, as_json=False)
-    if args.action != "status":
-        on = args.action == "on"
+    if action != "status":
+        on = action == "on"
         try:
             found = _by_the_server("auto_update", on)
             found = auto_update.change(on)["on"] if found is None else found
@@ -44,7 +54,7 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     elif auto_update.global_install() is None:
         print(NOT_GLOBAL)
         return 0
-    print(f"auto-update: {'on' if (auto_update.switches()['on'] if found is None else found) else 'off'}")
+    print(f"update auto: {'on' if (auto_update.switches()['on'] if found is None else found) else 'off'}")
     return 0
 
 

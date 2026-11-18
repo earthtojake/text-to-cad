@@ -226,7 +226,7 @@ class InstallScriptTests(unittest.TestCase):
         # cad: PyPI's newest, as a uv tool; then the plugin's automatic updates turned on, by that cad.
         self.assertEqual(self.installs(), [["--managed-python", "--python", "3.14", "cad"]])
         self.assertIn("Installing cad with uv.", done.stdout)
-        self.assertEqual(self.calls("cad"), [["plugin", "auto-update", "on"]])
+        self.assertEqual(self.calls("cad"), [["plugin", "update", "auto", "on"]])
         self.assertEqual(self.calls("claude"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"],
                                                 ["plugin", "install", "text-to-cad@earthtojake"]])
         self.assertEqual(self.calls("codex"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad", "--ref", "latest"],
@@ -264,7 +264,7 @@ class InstallScriptTests(unittest.TestCase):
             self.assertEqual(0, done.returncode, done.stdout + done.stderr)
             self.assertEqual(self.installs(), [], there)
             self.assertIn(f"cad {there} is installed already: it is left as it is, and updates itself.", done.stdout)
-            self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "auto-update", "on"]])
+            self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "update", "auto", "on"]])
             self.assertEqual(json.loads((self.root / "uv.json").read_text(encoding="utf-8")), {"cad": there})
 
     def test_a_cad_that_does_not_start_is_installed_again(self) -> None:
@@ -277,7 +277,7 @@ class InstallScriptTests(unittest.TestCase):
         self.assertNotIn("Installing cad with uv.", done.stdout)
         self.assertEqual(self.installs(), [["--reinstall", *install.UV_TOOL_ARGS, "cad"]])
         self.assertEqual(json.loads((self.root / "uv.json").read_text(encoding="utf-8")), {"cad": "5.0.0"})
-        self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "auto-update", "on"]])
+        self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "update", "auto", "on"]])
         found = json.loads(report.read_text(encoding="utf-8"))
         self.assertEqual((found["release"], found["setup"]), ("5.0.0", 0))
         # The reinstall fails too: the run fails, and says which cad the computer still has.
@@ -315,7 +315,7 @@ class InstallScriptTests(unittest.TestCase):
         self.assertNotIn("another program's", done.stdout)
         self.assertEqual(self.calls("pipx"), [["environment", "--value", "PIPX_LOCAL_VENVS"],
                                               ["environment", "--value", "PIPX_BIN_DIR"]])
-        self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "auto-update", "on"]])
+        self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "update", "auto", "on"]])
         self.assertEqual({key: json.loads(report.read_text(encoding="utf-8"))[key] for key in ("release", "setup")},
                          {"release": "0.13.0", "setup": 0})
         # pipx 1.0, which has no `pipx environment`, and no link in ~/.local/bin: its list says where its cad is.
@@ -331,7 +331,7 @@ class InstallScriptTests(unittest.TestCase):
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertEqual((self.installs(), self.calls("pipx")), ([], []))
         self.assertIn("cad 0.13.0 is installed already: it is left as it is, and updates itself.", done.stdout)
-        self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "auto-update", "on"]])
+        self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "update", "auto", "on"]])
         # uv's cad is there too: uv's is the one, and pipx is not asked.
         self.programs("pipx")
         (self.root / "uv.json").write_text(json.dumps({"cad": "0.12.0"}), encoding="utf-8")
@@ -350,7 +350,7 @@ class InstallScriptTests(unittest.TestCase):
                       done.stdout)
         self.assertEqual(self.installs(), [], "never with uv")
         self.assertEqual(self.calls("pipx")[-1], ["install", "--force", "cad"])
-        self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "auto-update", "on"]])
+        self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "update", "auto", "on"]])
         self.assertEqual({key: json.loads(report.read_text(encoding="utf-8"))[key] for key in ("release", "setup")},
                          {"release": "0.14.0", "setup": 0})
         # pipx's install fails, or pipx is not found: said in one line, and the apps are done all the same.
@@ -544,13 +544,13 @@ class InstallScriptTests(unittest.TestCase):
         self.assertTrue(kept.is_file())
 
     def test_the_plugin_switch_is_tolerated_where_cad_does_not_know_it(self) -> None:
-        # A cad with no `cad plugin auto-update` (a usage error, exit 2): one line, and the install has not failed.
+        # A cad with no `cad plugin update auto` (a usage error, exit 2): one line, and the install has not failed.
         self.tools(cad="0.11.10")
         done = self.run_install(FAKE_FAIL="cad:plugin", FAKE_EXIT="2")
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "auto-update", "on"]])
-        said = [line for line in done.stdout.splitlines() if "auto-update" in line]
-        self.assertEqual(said, ["cad 0.11.10 has no `cad plugin auto-update`: the plugin will not follow cad's updates. "
+        self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "update", "auto", "on"]])
+        said = [line for line in done.stdout.splitlines() if "update auto" in line]
+        self.assertEqual(said, ["cad 0.11.10 has no `cad plugin update auto`: the plugin will not follow cad's updates. "
                                 "Run this command again to update the plugin."])
         # Any other failure: what cad said, in one line.
         done = self.run_install(FAKE_FAIL="cad:plugin")
@@ -693,9 +693,11 @@ class InstallScriptTests(unittest.TestCase):
         (self.home / ".cline").mkdir()
         old = self.write(".cline/skills/pcb/SKILL.md", OURS.format(name="pcb"))
         done = self.run_install(FAKE_FAIL="claude:add,codex:add,gemini:install,git:clone")
-        # Every app it found failed: the run says so, and fails.
+        # Every app it found failed: the run says so, and fails; and turns no switch on, so cad keeps no release of
+        # the install command's for it (``plugin_catch_up``) and its server runs it again.
         self.assertEqual(1, done.returncode, done.stdout)
         self.assertIn("No app got the plugin", done.stdout)
+        self.assertNotIn(["plugin", "update", "auto", "on"], self.calls("cad"))
         self.assertNotIn("Start a new session", done.stdout)
         self.assertEqual(self.calls("claude"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"]])
         self.assertEqual(self.calls("codex"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad", "--ref", "latest"]])
@@ -1104,7 +1106,7 @@ class InstallScriptTests(unittest.TestCase):
             self.assertEqual(dev_install.install_checkout(str(self.bin / "uv")), 0)
             self.assertEqual(self.installs(), [[*install.UV_TOOL_ARGS, "--reinstall-package", "cad", "--editable",
                                                 str(REPO_ROOT / "packages" / "cad")]])
-            self.assertEqual(self.calls("cad"), [["auto-update", "off"]])
+            self.assertEqual(self.calls("cad"), [["update", "auto", "off"]])
             self.assertTrue(dev_install.editable(str(self.bin / "uv")))
             self.log.unlink()
             with mock.patch.object(sys, "stdout", new=open(os.devnull, "w", encoding="utf-8")) as quiet:
@@ -1113,7 +1115,7 @@ class InstallScriptTests(unittest.TestCase):
             self.assertEqual([argv for argv in self.calls("uv") if argv[1] in ("install", "uninstall")],
                              [["tool", "uninstall", "cad"], ["tool", "install", *install.UV_TOOL_ARGS, "cad"]])
             # The install command leaves cad's own automatic updates as they are: --release turns them on again.
-            self.assertEqual(self.calls("cad"), [["plugin", "auto-update", "on"], ["auto-update", "on"]])
+            self.assertEqual(self.calls("cad"), [["plugin", "update", "auto", "on"], ["update", "auto", "on"]])
             self.assertFalse(dev_install.editable(str(self.bin / "uv")))
 
     def test_install_ps1_ends_a_failure_in_a_terminating_error(self) -> None:

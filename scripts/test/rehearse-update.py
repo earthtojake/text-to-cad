@@ -20,15 +20,15 @@ The install command cad runs counts its runs on every computer (``Box.runs``).
 
 **cad updating itself** (a computer the install command set up: cad a uv tool, its automatic updates on).
 
-- ``self-update``: with ``cad plugin auto-update on``, the feed names the next release and an hour passes; the running
+- ``self-update``: with ``cad plugin update auto on``, the feed names the next release and an hour passes; the running
   server, idle, stops, uv installs the next release, and its server answers; then that server, newer than the release
-  the install command last ended well for, runs its own ``cad plugin install`` once: exit 0, kept in its record
-  (``install-command.json``: ended well for the next release), its output in ``install-command.log``; the helper ran
+  the install command is up to date for, runs its own ``cad plugin update`` once: exit 0, kept in its record
+  (``install-command.json``: up to date for the next release), its output in ``install-command.log``; the helper ran
   none.
-- ``self-typed``: with ``cad auto-update off`` and the plugin's switch on, ``cad update`` is typed with nothing newer on
+- ``self-typed``: with ``cad update auto off`` and the plugin's switch on, ``cad update`` is typed with nothing newer on
   PyPI: it says so and nothing restarts; then PyPI names the next release and ``cad update`` is typed again: the
   server asks PyPI at once and updates cad to it; the command, a running ``cad`` of the tool, waits and says so; the uv
-  tool is the next release, its server answers, and the plugin catches up: that server runs ``cad plugin install``
+  tool is the next release, its server answers, and the plugin catches up: that server runs ``cad plugin update``
   once, as after an automatic update.
 - ``self-typed-stopped``: the same with no server running: ``cad update`` with nothing newer says so and starts no
   server; with the next release out it says ``cad <new> updated to <next>`` (exit 0, nothing on stderr), the record
@@ -40,7 +40,7 @@ The install command cad runs counts its runs on every computer (``Box.runs``).
   tool, waits for the update's server. It exits 0, the uv tool is the next release and serves, the attempt installed
   at its first try (on Windows this failed every time until cad's update set the running ``cad.exe`` aside), and no
   install command runs.
-- ``self-off``: with ``cad auto-update off``, the server reads the feed naming the next release, and a start of the
+- ``self-off``: with ``cad update auto off``, the server reads the feed naming the next release, and a start of the
   server starts the same cad: nothing updates.
 - ``self-broken``: an update to a release whose server cannot start (its daemon module raises): cad is that release, its
   server down; the feed then names the next, and ``cad server start``, failing, updates cad to it, whose server answers.
@@ -51,7 +51,7 @@ The install command cad runs counts its runs on every computer (``Box.runs``).
 - ``self-pipx``: cad installed by ``pipx install cad`` (pipx itself a uv tool of the computer's, on pip's backend, its
   folders in the home, pip offered this tree's releases by ``PIP_FIND_LINKS``): the install command leaves it as it is,
   installs no uv tool, and turns the plugin's switch on; the next release out and an hour passed, the server, idle,
-  updates it by ``pipx upgrade cad`` and the new cad's server runs ``cad plugin install`` once; then, automatic updates
+  updates it by ``pipx upgrade cad`` and the new cad's server runs ``cad plugin update`` once; then, automatic updates
   off, a typed ``cad update`` with nothing newer says so, and with the release after out updates pipx's cad to it,
   whose server runs the install command once more. Each time pipx's cad serves the new release, and an open page's
   port and token reach it.
@@ -173,13 +173,14 @@ OUTPUT = "install-command-output.log"
 # The install command cad runs on a computer: a wrapper, run by this run's own Python (``-I``), that adds a line to the
 # file that counts the runs, runs this tree's install command, and passes on everything it prints (as one stream)
 # while it copies it, and its exit status, to ``OUTPUT``. Its exit status is the command's. The server throws an
-# install mode run's output away; the failure dump shows this file. Its first line names the run's values.
-WRAPPER = """import subprocess, sys
+# install mode run's output away; the failure dump shows this file. Its first line names the run's values: the run a
+# server began, where one did (``CAD_INSTALL_ATTEMPT``, by which ``cad plugin update`` puts a deadline on it).
+WRAPPER = """import os, subprocess, sys
 if counted:
     with open(counted, "a", encoding="utf-8") as runs:
         runs.write("ran\\n")
 with open(output, "ab") as kept:
-    kept.write(b"--- the install command\\n")
+    kept.write(f"--- the install command (attempt {os.environ.get('CAD_INSTALL_ATTEMPT', 'none')})\\n".encode())
     kept.flush()
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     for line in process.stdout:
@@ -515,7 +516,7 @@ class Box:
 
     def set_up(self, plugin: str) -> None:
         """This tree's ``NEW`` installed by the install command: a uv tool, its automatic updates on (by default, or
-        as the install command left them); ``cad plugin auto-update`` then turned ``plugin`` (``on``, ``off``) by its
+        as the install command left them); ``cad plugin update auto`` then turned ``plugin`` (``on``, ``off``) by its
         own command; its server started."""
         self.out(NEW)
         self.install_command()
@@ -523,9 +524,9 @@ class Box:
         switches = self.read("settings.json").get("auto_update") or {}
         if switches.get("on") is False:
             raise Failed(f"{self.label}: the install command left cad's automatic updates off: {switches}")
-        said = self.run([self.cad(), "plugin", "auto-update", plugin]).stdout.strip()
-        if said != f"plugin auto-update: {plugin}":
-            raise Failed(f"{self.label}: cad plugin auto-update {plugin} said {said!r}")
+        said = self.run([self.cad(), "plugin", "update", "auto", plugin]).stdout.strip()
+        if said != f"plugin update auto: {plugin}":
+            raise Failed(f"{self.label}: cad plugin update auto {plugin} said {said!r}")
         started = self.run([self.cad(), "server", "start"]).stdout
         if f"cad {NEW}" not in started:
             raise Failed(f"{self.label}: cad server start said {started!r}")
@@ -643,9 +644,9 @@ def never_installed(box: Box, record: dict, why: str) -> None:
 
 
 def caught_up(box: Box, release: str, runs: int) -> dict:
-    """The server of ``release``, newer than the release the install command last ended well for, ran ``cad plugin
-    install`` once (``install-command.json``: its run for ``release`` ended 0, at the first try, and the command now
-    ended well for ``release``), its output in ``install-command.log``; the computer has run it ``runs`` times in all,
+    """The server of ``release``, newer than the release the install command is up to date for, ran ``cad plugin
+    update`` once (``install-command.json``: its run for ``release`` ended 0, at the first try, and the command now
+    up to date for ``release``), its output in ``install-command.log``; the computer has run it ``runs`` times in all,
     and the helper's record names none; the update counted once by that server (its record marked ``reported``). The
     record."""
     record = box.until(lambda: (lambda found: found if found.get("release") == release and found.get("outcome") in
@@ -657,6 +658,13 @@ def caught_up(box: Box, release: str, runs: int) -> dict:
             or box.runs() != runs or not log.is_file() or "then_install" in helper or "install_command" in helper:
         raise Failed(f"{box.label}: the install command after cad got newer: {record}, ran {box.runs()} times (not "
                      f"{runs}), log {log.is_file()}, the helper's record {helper}\n{box.said()}")
+    # The run was the server's own, so it ran under its deadline (``cad plugin update``, ``CAD_INSTALL_ATTEMPT``: the
+    # record's run): the wrapper's last run names it.
+    attempts = re.findall(r"^--- the install command \(attempt (.*)\)$", (box.work / OUTPUT).read_text(
+        encoding="utf-8", errors="replace"), re.M)
+    if not attempts or attempts[-1] != str(record.get("at")):
+        raise Failed(f"{box.label}: the install command's run for {release} was not the server's run "
+                     f"{record.get('at')} (the runs named {attempts}), so it had no deadline\n{box.said()}")
     # Then the update is counted, once: its record marked (the computer's telemetry is off, so nothing is sent).
     box.until(lambda: box.read("auto-update.json").get("reported") is True, "the update counted by the new server")
     return record
@@ -669,10 +677,10 @@ def self_update(box: Box) -> None:
     updated(box, NEXT)
     box.tool_serves(NEXT)
     box.is_tool(NEXT)
-    # Then `cad plugin install`, once, by the new cad's server: kept in its record, its output in the log.
+    # Then `cad plugin update`, once, by the new cad's server: kept in its record, its output in the log.
     caught_up(box, NEXT, 1)
     say(f"        {NEW} -> {NEXT} by itself, idle, as `uv tool install cad@latest` got it; then the new server ran "
-        "`cad plugin install`, once, exit 0")
+        "`cad plugin update`, once, exit 0")
     pages(box, NEXT)
 
 
@@ -687,9 +695,9 @@ def pages(box: Box, version: str) -> None:
 def self_typed(box: Box) -> None:
     # Automatic updates off, the plugin's switch on: a typed update needs neither; the plugin catches up all the same.
     box.set_up("on")
-    switched = box.run([box.cad(), "auto-update", "off"]).stdout.strip()
-    if switched != "auto-update: off":
-        raise Failed(f"{box.label}: cad auto-update off said {switched!r}")
+    switched = box.run([box.cad(), "update", "auto", "off"]).stdout.strip()
+    if switched != "update auto: off":
+        raise Failed(f"{box.label}: cad update auto off said {switched!r}")
     # Nothing newer on PyPI: said, and nothing restarts.
     done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
     if (done.returncode, done.stdout.strip()) != (0, f"cad {NEW} is the newest release") or box.read("auto-update.json"):
@@ -709,7 +717,7 @@ def self_typed(box: Box) -> None:
         raise Failed(f"{box.label}: after cad update: switches {box.read('settings.json').get('auto_update')}")
     caught_up(box, NEXT, 1)
     say(f"        `cad update` with nothing newer: 'cad {NEW} is the newest release', nothing restarted; then {NEW} -> "
-        f"{NEXT} with automatic updates off ({said!r}); then the new server ran `cad plugin install`, once, exit 0")
+        f"{NEXT} with automatic updates off ({said!r}); then the new server ran `cad plugin update`, once, exit 0")
     pages(box, NEXT)
     tendings(box, Path(box.tool()["env"]), 2)
     caught_up(box, NEXT, 1)  # and only once
@@ -719,9 +727,9 @@ def self_typed_stopped(box: Box) -> None:
     """``cad update`` typed with no server running: cad updates in the command's own process, the helper starts no
     server, and the install command never runs."""
     box.set_up("on")  # the plugin's switch on: a typed update still never runs the install command
-    switched = box.run([box.cad(), "auto-update", "off"]).stdout.strip()
-    if switched != "auto-update: off":
-        raise Failed(f"{box.label}: cad auto-update off said {switched!r}")
+    switched = box.run([box.cad(), "update", "auto", "off"]).stdout.strip()
+    if switched != "update auto: off":
+        raise Failed(f"{box.label}: cad update auto off said {switched!r}")
     python = rc.interpreter(Path(box.tool()["env"]))
     box.run([box.cad(), "server", "stop"])
     box.until(lambda: box.ask(python, "status") is None, "no server running")
@@ -781,9 +789,9 @@ def self_at_start(box: Box) -> None:
 
 def self_off(box: Box) -> None:
     box.set_up("off")
-    switched = box.run([box.cad(), "auto-update", "off"]).stdout.splitlines()
-    if switched != ["auto-update: off"]:
-        raise Failed(f"{box.label}: cad auto-update off said {switched}")
+    switched = box.run([box.cad(), "update", "auto", "off"]).stdout.splitlines()
+    if switched != ["update auto: off"]:
+        raise Failed(f"{box.label}: cad update auto off said {switched}")
     box.out(NEXT)
     box.hour_later()
     # The server reads the feed at its first tending; then a start, which updates first where the switch is on.
@@ -894,7 +902,7 @@ def pipx_serves(box: Box, env: Path, version: str) -> dict:
 
 def self_pipx(box: Box) -> None:
     """cad installed by ``pipx install cad``: the install command leaves it as it is and turns the plugin's switch on;
-    it updates itself by ``pipx upgrade cad`` (then ``cad plugin install`` once), and a typed ``cad update`` updates it
+    it updates itself by ``pipx upgrade cad`` (then ``cad plugin update`` once), and a typed ``cad update`` updates it
     the same way, with no install command after it."""
     env = with_pipx(box)
     box.out(NEW)
@@ -923,12 +931,12 @@ def self_pipx(box: Box) -> None:
     pipx_is(box, env, NEXT)
     caught_up(box, NEXT, 1)
     say(f"        {NEW} -> {NEXT} by itself, idle, as `pipx upgrade cad` got it; then the new server ran `cad plugin "
-        "install`, once, exit 0")
+        "update`, once, exit 0")
     pages(box, NEXT)
     # Typed, with automatic updates off: nothing newer, then the release after.
-    switched = box.run([box.cad(), "auto-update", "off"]).stdout.strip()
-    if switched != "auto-update: off":
-        raise Failed(f"{box.label}: cad auto-update off said {switched!r}")
+    switched = box.run([box.cad(), "update", "auto", "off"]).stdout.strip()
+    if switched != "update auto: off":
+        raise Failed(f"{box.label}: cad update auto off said {switched!r}")
     done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
     if (done.returncode, done.stdout.strip()) != (0, f"cad {NEXT} is the newest release"):
         raise Failed(f"{box.label}: cad update with nothing newer exited {done.returncode}: {done.stdout}{done.stderr}")
@@ -942,7 +950,7 @@ def self_pipx(box: Box) -> None:
     pipx_is(box, env, AFTER)
     caught_up(box, AFTER, 2)
     say(f"        `cad update` with nothing newer: 'cad {NEXT} is the newest release'; then {typed!r}, automatic updates "
-        "off; then the new server ran `cad plugin install`, once more, exit 0")
+        "off; then the new server ran `cad plugin update`, once more, exit 0")
     pages(box, AFTER)
 
 
@@ -1256,9 +1264,9 @@ def by_uv_line(box: Box, old: str, *, ours: bool) -> None:
         pages(box, NEW)
         return
     # The tool's server, at its first quiet tending: the switch on, then the install command once, run to the line its
-    # last step prints (``cad plugin auto-update on``'s).
+    # last step prints (``cad plugin update auto on``'s).
     log = box.state / "install-command.log"
-    box.until(lambda: box.runs() == 1 and log.is_file() and "plugin auto-update: on" in log.read_text(
+    box.until(lambda: box.runs() == 1 and log.is_file() and "plugin update auto: on" in log.read_text(
         encoding="utf-8", errors="replace"), "the install command run once by the tool's server, to its last step")
     if (box.read("settings.json").get("plugin") or {}).get("auto_update") is not True:
         raise Failed(f"{box.label}: the plugin's switch after the install command: {box.read('settings.json')}")

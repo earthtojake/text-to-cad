@@ -38,7 +38,10 @@ TYPES = {
     "kicad_sch": ("export", "snapshot", "inspect", "erc"),
 }
 COMMANDS = ("serve", "status", "stop", "delete", "server", "mcp", "run", "requirement", "doctor", "cache", "setup",
-            "viewer", "telemetry", "auto-update", "update", "plugin")
+            "viewer", "telemetry", "update", "plugin")
+# Run, never listed by `cad --help`: the bridge's (0.10.0 to 0.11.11's skill text and updaters), and the commands for
+# programs rather than people.
+UNLISTED = ("status", "stop", "setup", "serve", "requirement")
 
 
 def _run(argv: list[str]) -> tuple[int, str, str]:
@@ -60,6 +63,33 @@ class TheCommandTable(unittest.TestCase):
         self.assertEqual(sorted(COMMANDS), sorted(cli._COMMANDS))  # noqa: SLF001 - the table IS the subject
         for name, module in cli.TYPE_COMMANDS.items():
             self.assertEqual(f"cad_server.cli.{name}", module)
+
+    def test_help_lists_the_commands_a_person_uses_and_the_unlisted_still_run(self) -> None:
+        self.assertEqual(sorted(UNLISTED), sorted(cli._UNLISTED))  # noqa: SLF001 - the table IS the subject
+        code, said, _ = _run(["--help"])
+        self.assertEqual(0, code)
+        listed = {line.split()[0] for line in said.split("\ncommands:\n", 1)[1].split("\n\n", 1)[0].splitlines()}
+        self.assertEqual(listed, set(COMMANDS) - set(UNLISTED))
+        self.assertIn("mcp", listed)
+        for argv in (["serve", "--help"], ["requirement", "--help"]):
+            with self.subTest(argv=argv):
+                self.assertEqual(_run(argv)[0], 0, "unlisted, and parsed as ever")
+
+    def test_the_switches_are_update_auto_and_the_old_spellings_are_gone(self) -> None:
+        """``cad update auto`` and ``cad plugin update [auto]``; ``cad auto-update``, ``cad plugin install`` and ``cad
+        plugin auto-update`` answer as commands that never existed (no release had them)."""
+        for argv, usage in ((["update", "--help"], "usage: cad update [-h] [auto [{status,on,off}]]"),
+                            (["update", "auto", "--help"], "usage: cad update auto [-h] [{status,on,off}]"),
+                            (["plugin", "update", "--help"], "usage: cad plugin update [-h] [auto [{status,on,off}]]"),
+                            (["plugin", "update", "auto", "--help"],
+                             "usage: cad plugin update auto [-h] [{status,on,off}]")):
+            with self.subTest(argv=argv):
+                code, said, _ = _run(argv)
+                self.assertEqual((code, said.splitlines()[0]), (0, usage))
+        for argv in (["auto-update"], ["auto-update", "on"], ["plugin", "install"], ["plugin", "auto-update", "on"],
+                     ["update", "auto", "maybe"]):
+            with self.subTest(argv=argv):
+                self.assertEqual(_run(argv)[0], 2)
 
     def test_help_groups_the_commands_by_type(self) -> None:
         code, said, _ = _run(["--help"])

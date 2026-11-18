@@ -249,8 +249,8 @@ export default function PrivacyPolicyPage() {
             own, a viewer started in the background and the short-lived sender, go by your setting.
           </li>
           <li>
-            To turn automatic updates off, run <code>cad auto-update off</code>;{" "}
-            <code>cad auto-update on</code> turns them on again. <code>cad plugin auto-update off</code> stops
+            To turn automatic updates off, run <code>cad update auto off</code>;{" "}
+            <code>cad update auto on</code> turns them on again. <code>cad plugin update auto off</code> stops
             text-to-cad from running our install script on its own. Setting <code>CAD_UPDATE_CHECK=0</code> where
             text-to-cad runs turns the hourly version check, and with it automatic updates, off for that
             process.

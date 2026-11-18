@@ -1,6 +1,6 @@
 """The install command run by cad (``cad_server._internal.install_script``): BRIDGE-ONLY, in install mode once for a
 computer a shipped updater brought (the bridge, ``test_setup``); the install command has no other mode, and cad's own
-update runs it by ``cad plugin install`` (``test_auto_update``).
+update runs it by ``cad plugin update`` (``test_auto_update``).
 
 Here: the schedule (``plan``) and the server's side (``Carrier``) with a stand-in of the install command, a real
 process writing each kind of report. A real 0.11.10 handing over to this build is the update rehearsal's.

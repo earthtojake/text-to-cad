@@ -236,22 +236,22 @@ grep -q 'name = "cad"' "$UV_TOOL_DIR/cad/uv-receipt.toml" || fail "the tool's re
   export CAD_STATE_DIR="$WORK/tool-state" CAD_ENGINE_DIR="$WORK/tool-engine"
   [ "$("$UV_TOOL_BIN_DIR/cad" --version | head -n 1)" = "cad $STAMP" ] || fail "the tool's cad --version"
   # On by default for a global install, before anything is written; then turned on, as one line each.
-  [ "$("$UV_TOOL_BIN_DIR/cad" auto-update status)" = "auto-update: on" ] || fail "cad auto-update status, by default"
-  "$UV_TOOL_BIN_DIR/cad" auto-update on >"$WORK/auto-update.log" 2>&1 \
-    || { cat "$WORK/auto-update.log" >&2; fail "cad auto-update on, which only a global install may do"; }
-  [ "$(cat "$WORK/auto-update.log")" = "auto-update: on" ] || { cat "$WORK/auto-update.log" >&2; fail "auto-update not on"; }
+  [ "$("$UV_TOOL_BIN_DIR/cad" update auto status)" = "update auto: on" ] || fail "cad update auto status, by default"
+  "$UV_TOOL_BIN_DIR/cad" update auto on >"$WORK/update-auto.log" 2>&1 \
+    || { cat "$WORK/update-auto.log" >&2; fail "cad update auto on, which only a global install may do"; }
+  [ "$(cat "$WORK/update-auto.log")" = "update auto: on" ] || { cat "$WORK/update-auto.log" >&2; fail "update auto not on"; }
   # The plugin's switch, off by default; the install command turns it on.
-  [ "$("$UV_TOOL_BIN_DIR/cad" plugin auto-update status)" = "plugin auto-update: off" ] \
-    || fail "cad plugin auto-update status, by default"
-  [ "$("$UV_TOOL_BIN_DIR/cad" plugin auto-update on)" = "plugin auto-update: on" ] || fail "cad plugin auto-update on"
+  [ "$("$UV_TOOL_BIN_DIR/cad" plugin update auto status)" = "plugin update auto: off" ] \
+    || fail "cad plugin update auto status, by default"
+  [ "$("$UV_TOOL_BIN_DIR/cad" plugin update auto on)" = "plugin update auto: on" ] || fail "cad plugin update auto on"
   "$UV_TOOL_BIN_DIR/cad" doctor >"$WORK/tool-doctor.log" 2>&1 || true
-  grep -q "auto-update on, plugin auto-update on; a global install by uv " "$WORK/tool-doctor.log" \
+  grep -q "update auto on, plugin update auto on; a global install by uv " "$WORK/tool-doctor.log" \
     || { cat "$WORK/tool-doctor.log" >&2; fail "cad doctor does not say both switches on and a global install by uv"; }
   # The venv's cad is no global install: it is refused, in one line.
-  "$VENV/bin/cad" auto-update on >"$WORK/refused.log" 2>&1 && fail "a cad that is not a global install switched auto-update on"
+  "$VENV/bin/cad" update auto on >"$WORK/refused.log" 2>&1 && fail "a cad that is not a global install switched update auto on"
   grep -q "not a global install" "$WORK/refused.log" || { cat "$WORK/refused.log" >&2; fail "the refusal does not say why"; }
 ) || exit 1
-echo "   $UV_TOOL_BIN_DIR/cad: cad $STAMP, a global install by uv; cad auto-update on accepted there, refused in a venv"
+echo "   $UV_TOOL_BIN_DIR/cad: cad $STAMP, a global install by uv; cad update auto on accepted there, refused in a venv"
 TOOL_DIR="$UV_TOOL_DIR"
 
 # Until 0.11.11 cad-server was the server and carried the cad command, so a uv tool may be installed by that name. uv

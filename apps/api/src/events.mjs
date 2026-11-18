@@ -42,7 +42,8 @@
  *             runs after it: the version before (`from`), how it ended (`UPDATE_OUTCOMES`), for a failure which
  *             step failed (`UPDATE_FAILURES`), a word cad chose, its tries, the installer (`UPDATE_INSTALLERS`),
  *             whether it was typed (`asked`), and for a newer cad installed how the install command's run for it
- *             ended (`plugin`, `UPDATE_PLUGIN`; `none` for any other outcome).
+ *             ended (`plugin`, `UPDATE_PLUGIN`: `underway` where a new attempt began before it ended; `none` for any
+ *             other outcome).
  *
  * cadgen 0.7.7 to 0.7.15 (schemas 1 and 2) send `tool`, `view` and `file`: one distinct file, once a day,
  * by a salted code. Its code goes no further: a batch's are read as `files`, one of each format they name.
@@ -245,11 +246,12 @@ const MAX_ATTEMPTS = 1000;
 // `UPDATE_INSTALLERS`, `UPDATE_PLUGIN`): a newer cad installed, nothing newer, failed, or failed and the release
 // before put back; for a failure which step, a word cad chose (the installer's upgrade, an older release than asked,
 // and for one not put back the put-back too); the installer that made the global install; and the install command's
-// run for the cad an update installed (`none` for any other outcome). Tries from 1, as many as attempts.
+// run for the cad an update installed (`ok`, `failed`, `underway` where a new attempt began before it ended; `none`
+// where none ran for it, and for any other outcome). Tries from 1, as many as attempts.
 const UPDATE_OUTCOMES = new Set(['installed', 'current', 'failed', 'restored']);
 const UPDATE_FAILURES = { failed: new Set(['upgrade', 'older', 'put_back']), restored: new Set(['upgrade', 'older']) };
 const UPDATE_INSTALLERS = new Set(['uv', 'pipx']);
-const UPDATE_PLUGIN = new Set(['none', 'ok', 'failed']);
+const UPDATE_PLUGIN = new Set(['none', 'ok', 'failed', 'underway']);
 // A batch's time, in whole seconds since 1970: any a clock can say (a wrong one included), never a fraction.
 const MAX_AT = 100_000_000_000;
 // Ours: the namespace every row's id is made in (`idOf`).

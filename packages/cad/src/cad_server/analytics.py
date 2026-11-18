@@ -78,7 +78,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
   installed, current, failed, or failed and the release before put back), for a failure which step failed
   (``UPDATE_FAILURES``), its ``tries``, the ``installer`` that made the global install (``uv``, ``pipx``), whether it
   was typed (``asked``), and for a newer cad installed how the install command's run for it ended (``plugin``:
-  ``UPDATE_PLUGIN``).
+  ``UPDATE_PLUGIN``; ``underway`` where a new attempt began before it ended).
 
 A command sends nothing itself. What it counts -- a build, a snapshot, a drawing, a crash -- is kept beside
 the settings for the next process that sends (``spool``): only while sharing is on, under the answer in
@@ -528,7 +528,9 @@ MAX_ATTEMPTS = 1000  # a hand-over's attempts, and an update's tries, past this 
 UPDATE_OUTCOMES = frozenset({"installed", "current", "failed", "restored"})
 UPDATE_FAILURES = {"failed": frozenset({"upgrade", "older", "put_back"}), "restored": frozenset({"upgrade", "older"})}
 UPDATE_INSTALLERS = frozenset({"uv", "pipx"})
-UPDATE_PLUGIN = frozenset({"none", "ok", "failed"})
+# The install command's run for the cad an update installed: none ran for it, it ended well or failed, or it was still
+# underway when a new attempt took the record's place (``auto_update.report``).
+UPDATE_PLUGIN = frozenset({"none", "ok", "failed", "underway"})
 # The version a computer came from: a release's or a development build's name (``places.VERSION``'s shape, at most
 # the 32 characters a batch's ``version`` takes), or ``none``.
 _EARLIER = re.compile(r"none|[0-9][0-9A-Za-z.+_-]{0,31}")

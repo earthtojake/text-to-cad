@@ -25,8 +25,8 @@ It does six things, and nothing else:
 5. Where cad's folder is not on your PATH, runs uv's own `uv tool update-shell`, which adds it for
    new terminals (on macOS and Linux in your shell's profile, on Windows in your user PATH). Setting
    `UV_NO_MODIFY_PATH` stops that. cad sets it when cad itself runs the install command
-   (`cad plugin install`, and when cad has been updated), so only your own run changes the PATH.
-6. Turns on the plugin's automatic updates ([Updating](#updating)).
+   (`cad plugin update`, and when cad has been updated), so only your own run changes the PATH.
+6. Where everything above ended well, turns on the plugin's automatic updates ([Updating](#updating)).
 
 It takes no options and does not start anything. Run it again at any time to bring the plugin up
 to date in every app.
@@ -313,9 +313,9 @@ That updates cad alone. Automatic updates are on unless you turn them off. To se
 on, or to turn them off or on:
 
 ```bash
-cad auto-update        # says whether they are on
-cad auto-update off
-cad auto-update on
+cad update auto        # says whether they are on
+cad update auto off
+cad update auto on
 ```
 
 A cad installed with `uv tool install cad` updates itself; one installed with pip into a project's
@@ -331,28 +331,28 @@ cad server start
 ### The plugin
 
 The install command turns on the plugin's automatic updates: each time cad is newer than the
-release the install command last ran for, cad runs the install command once, in the background,
+release the install command last ended well for, cad runs the install command once, in the background,
 which puts the newest plugin in every agent app it finds. That holds however cad got newer: by
 itself, by `cad update`, or by `uv tool upgrade cad` or `pipx upgrade cad`. It happens the next time
-cad's server starts or looks after itself with nothing running; where the run fails, cad tries again
-an hour later, at most three times for one release. To update the plugin now, run the install
-command again, or:
+cad's server starts or looks after itself with nothing running. A run that fails, or that is still
+running after 15 minutes and is stopped, is tried again an hour or more later: at most three runs for
+one release. To update the plugin now, run the install command again, or:
 
 ```bash
-cad plugin install
+cad plugin update
 ```
 
 To update one app alone, run the update command under its name. To see whether the plugin's
 automatic updates are on, or to turn them off or on:
 
 ```bash
-cad plugin auto-update        # says whether they are on
-cad plugin auto-update off
-cad plugin auto-update on
+cad plugin update auto        # says whether they are on
+cad plugin update auto off
+cad plugin update auto on
 ```
 
-They are off until the install command turns them on: cad never changes your apps where you did not
-run it.
+They are off until a run of the install command that ended well turns them on: cad never changes your
+apps where you did not run it.
 
 A copy from a plugin store (Codex's or Claude's) is updated by that store, on its own schedule. Its
 skills may then be older than cad. That is fine: a command the skills used keeps working for at least
@@ -363,7 +363,7 @@ skills may then be older than cad. That is fine: a command the skills used keeps
 Turn automatic updates off, then install the release you want, for example 0.11.12:
 
 ```bash
-cad auto-update off
+cad update auto off
 cad server stop
 uv tool install cad==0.11.12
 cad server start

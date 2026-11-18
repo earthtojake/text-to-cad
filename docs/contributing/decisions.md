@@ -21,8 +21,8 @@ install script, never the software.
 **What it costs.** cad cannot repair a broken plugin install or tell which app a person uses it
 from. Three exceptions are allowed: the MCP server reads which app connected, to choose how to show
 a model; the viewer's "Open in" menu names apps; and `cad plugin` runs the hosted install command,
-when asked (`cad plugin install`) and once where cad is newer than the release it last ended well for
-and `cad plugin auto-update` is on (below). Nothing else in cad may name an app, a plugin or a skill.
+when asked (`cad plugin update`) and once where cad is newer than the release it last ended well for
+and `cad plugin update auto` is on (below). Nothing else in cad may name an app, a plugin or a skill.
 
 ## cad says `cad`; the views may say text-to-cad
 
@@ -106,20 +106,22 @@ release from everyone, yank it on PyPI. With no answer from the feed, no automat
 ## Who updates which copy
 
 **Decision.** cad and the plugin update separately. A global install of cad updates itself, on by
-default (`cad auto-update off` stops it): when the feed names a newer release, as the server starts,
+default (`cad update auto off` stops it): when the feed names a newer release, as the server starts,
 after a failed start, or once nothing has run for a minute, a helper outside cad's environment stops
 the server, runs the installer's upgrade and starts the server again. `cad update` updates cad now,
 with or without a server running and with automatic updates off too, and touches nothing else. A cad
 that is not a global install, such as one installed with pip into a project's own Python, never
 updates itself.
 
-The plugin is the install command's. Run by a person, or by cad (`cad plugin install`), it puts the
-newest plugin in every app it finds. It turns on `cad plugin auto-update`, which is off until then:
-where cad is newer than the release the install command last ended well for, cad's server runs it
-once. cad keeps that release in a small record of its state folder, written when the command ends well
-and when the switch is turned on. The rule asks what cad is, not how it got there, so a typed `cad
-update` or `uv tool upgrade cad` by hand brings the plugin along as cad's own update does, with one
-mechanism. A failed run is tried again an hour later, at most three times for one release. A plugin
+The plugin is the install command's. Run by a person, or by cad (`cad plugin update`), it puts the
+newest plugin in every app it finds. Where its run ends well (exit status 0), it turns on `cad plugin
+update auto`, which is off until then: where cad is newer than the release the install command last
+ended well for, cad's server runs it once. cad keeps that release in a small record of its state
+folder, written when the command ends with exit status 0 and when the switch is turned on; a run that
+fails writes none. The rule asks what cad is, not how it got there, so a typed `cad update` or `uv
+tool upgrade cad` by hand brings the plugin along as cad's own update does, with one mechanism. A run
+cad's server began is stopped, with all it started, after 15 minutes. A failed run is tried again an
+hour or more later: at most three runs for one release. A plugin
 store (Codex's directory, Claude's) updates the copy it installed.
 
 **Why.** People install and forget, and they should get our fixes without being asked. Nothing of
@@ -169,7 +171,8 @@ carries no cad version and has one behaviour, whether a person or cad runs it. I
 there (an old uv that cannot update itself gets a newer one beside it), installs cad only where none
 is installed or the one there does not start, installs or updates the plugin in each app it finds
 with that app's own command, removes our own older copies, puts cad's folder on the PATH with uv's
-own `uv tool update-shell`, and turns on `cad plugin auto-update`. It never updates a cad that works,
+own `uv tool update-shell`, and, where it ends well, turns on `cad plugin update auto`. It never
+updates a cad that works,
 never stops to ask the person anything, and starts no server. Its table of apps is the only list of
 apps and of past layouts in the repository.
 
@@ -186,7 +189,7 @@ run here. A row that is wrong fails for that app alone.
 **Decision.** Releases 0.10.0 to 0.11.11 shipped an updater of their own, which installs a newer
 release the old way and runs its hidden `cad setup --engine-update`. The new cad then runs the
 hosted install command once, which installs cad as a uv tool, installs the plugin and turns
-`cad plugin auto-update` on. A computer whose apps got text-to-cad only from a plugin store gets the new cad
+`cad plugin update auto` on. A computer whose apps got text-to-cad only from a plugin store gets the new cad
 alone: running the install command there would put our plugin in apps the person never asked us
 into. There, and where the install command failed before it installed cad, the new cad installs
 itself with uv, and that cad updates itself from then on. Where the new cad arrived by the uv line

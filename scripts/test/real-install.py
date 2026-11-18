@@ -13,8 +13,8 @@ repository the computer's git reads for every address of ours on GitHub. Gemini 
 named ``latest`` before it clones (there is none: it clones); that one request reaches GitHub.
 
 1. install: exit 0 and every line the app phase prints; cad installed as a uv tool at this run's release, its command
-   in uv's bin folder; ``cad --version``; cad's automatic updates on (``cad auto-update``) and the plugin's turned on
-   by the install (``cad plugin auto-update``); no server started by the install; each program holds our plugin (``text-to-cad@earthtojake``; Gemini CLI: the extension ``text-to-cad`` from
+   in uv's bin folder; ``cad --version``; cad's automatic updates on (``cad update auto``) and the plugin's turned on
+   by the install (``cad plugin update auto``); no server started by the install; each program holds our plugin (``text-to-cad@earthtojake``; Gemini CLI: the extension ``text-to-cad`` from
    GitHub at ``latest``) exactly once, copied from the local repository.
 2. cad: ``cad server start``; a box built by ``cad run`` and its page link answering with its token, refused without;
    a file shown by ``cad viewer`` the same way; ``cad doctor`` exit 0.
@@ -71,8 +71,8 @@ PLUGIN_VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 OLD = "v0.11.10"
 CATALOG, OLD_CATALOG, PLUGIN = "earthtojake", "text-to-cad", "text-to-cad"
 OURS, OLD_OURS = f"{PLUGIN}@{CATALOG}", f"{PLUGIN}@{OLD_CATALOG}"
-# What `cad plugin auto-update on` and `status` print, the install command passing it on.
-PLUGIN_SWITCH = "plugin auto-update: on"
+# What `cad plugin update auto on` and `status` print, the install command passing it on.
+PLUGIN_SWITCH = "plugin update auto: on"
 GITHUB = f"https://github.com/{rc.REPOSITORY}"
 CI = rc.CI
 BOX = '''from cad import model
@@ -261,9 +261,10 @@ class Run:
         said = self.cad("--version").lines()[:1]
         if said != [f"cad {VERSION}"]:
             raise rc.Failed(f"cad --version said {said}")
-        switches = self.cad("auto-update", "status").lines() + self.cad("plugin", "auto-update", "status").lines()
-        if switches[-2:] != ["auto-update: on", PLUGIN_SWITCH]:
-            raise rc.Failed(f"cad auto-update status and cad plugin auto-update status said {switches}")
+        switches = (self.cad("update", "auto", "status").lines()
+                    + self.cad("plugin", "update", "auto", "status").lines())
+        if switches[-2:] != ["update auto: on", PLUGIN_SWITCH]:
+            raise rc.Failed(f"cad update auto status and cad plugin update auto status said {switches}")
         status = self.cad("server", "status", "--json").out.strip().splitlines()[-1:]
         if status != ["null"]:
             raise rc.Failed(f"the install command started a server: {status}")
@@ -330,7 +331,7 @@ class Run:
         doctor = self.computer.run([self.cad_path, "doctor"])
         if doctor.code:
             raise rc.Failed(f"cad doctor exited {doctor.code}:\n{doctor.out}")
-        if f"auto-update on, {PLUGIN_SWITCH.replace(':', '')}; a global install by uv " not in doctor.out:
+        if f"update auto on, {PLUGIN_SWITCH.replace(':', '')}; a global install by uv " not in doctor.out:
             raise rc.Failed(f"cad doctor does not say both switches are on and cad is a global install by uv:\n"
                             f"{doctor.out}")
         say("ok    cad doctor: exit 0, both switches on, a global install by uv")

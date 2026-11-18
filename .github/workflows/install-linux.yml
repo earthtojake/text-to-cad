@@ -146,9 +146,9 @@ jobs:
           echo "$said"
           [ "$said" = "cad $CAD_RELEASE" ]
           [ -L "$HOME/.local/bin/cad" ] || { echo "~/.local/bin/cad is not uv's link to its tool"; exit 1; }
-          switches=$("$HOME/.local/bin/cad" auto-update status; "$HOME/.local/bin/cad" plugin auto-update status)
+          switches=$("$HOME/.local/bin/cad" update auto status; "$HOME/.local/bin/cad" plugin update auto status)
           echo "$switches"
-          [ "$switches" = "$(printf 'auto-update: on\nplugin auto-update: on')" ]
+          [ "$switches" = "$(printf 'update auto: on\nplugin update auto: on')" ]
           status=$("$HOME/.local/bin/cad" server status --json)
           [ "$status" = "null" ] || { echo "the install started a server: $status"; exit 1; }
 

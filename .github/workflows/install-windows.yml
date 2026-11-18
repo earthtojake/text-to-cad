@@ -158,8 +158,8 @@ jobs:
           $said = @(& $env:CAD_CMD --version)[0]
           if ($LASTEXITCODE) { throw "cad --version exited $LASTEXITCODE" }
           if ($said -ne "cad $env:CAD_RELEASE") { throw "cad --version said '$said', not 'cad $env:CAD_RELEASE'" }
-          $switches = (@(& $env:CAD_CMD auto-update status) + @(& $env:CAD_CMD plugin auto-update status)) -join "`n"
-          if ($switches -ne "auto-update: on`nplugin auto-update: on") { throw "cad auto-update status and cad plugin auto-update status said: $switches" }
+          $switches = (@(& $env:CAD_CMD update auto status) + @(& $env:CAD_CMD plugin update auto status)) -join "`n"
+          if ($switches -ne "update auto: on`nplugin update auto: on") { throw "cad update auto status and cad plugin update auto status said: $switches" }
           $status = (& $env:CAD_CMD server status --json) -join ''
           if ($status.Trim() -ne 'null') { throw "the install started a server: $status" }
           & $env:CAD_CMD doctor

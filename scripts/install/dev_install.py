@@ -19,8 +19,8 @@ checkout as the source instead of PyPI and GitHub:
 
 ``--release`` uninstalls the editable tool (only where the ``cad`` tool is one), then runs install.py as it is: the
 newest release of cad, every app moved back to the GitHub copy (the development copies, ``text-to-cad@earthtojake-dev``
-and the rest, are among the old copies it removes); then turns cad's automatic updates on again (``cad auto-update
-on``), which install.py leaves as they are. Run it again after a change; restart an app's session to load it. Run
+and the rest, are among the old copies it removes); then turns cad's automatic updates on again (``cad update
+auto on``), which install.py leaves as they are. Run it again after a change; restart an app's session to load it. Run
 ``scripts/bundle/bundle.sh`` once first: the CAD Viewer's page comes from the bundle.
 """
 
@@ -70,7 +70,7 @@ def install_checkout(uv: str) -> int:
     install.settle(here, moved, code == 0)
     if code == 0:
         cad = folder / ("cad.exe" if here.windows else "cad")
-        if subprocess.run([str(cad), "auto-update", "off"], capture_output=True).returncode == 0:
+        if subprocess.run([str(cad), "update", "auto", "off"], capture_output=True).returncode == 0:
             print("Automatic updates are off: an update would replace this checkout's cad with the release.")
     return code
 
@@ -155,7 +155,7 @@ def main(argv=None) -> int:
             return 1
         code = install.main([])
         cad = uv_folder(uv, "--bin") / ("cad.exe" if install.Here().windows else "cad")
-        if cad.exists() and subprocess.run([str(cad), "auto-update", "on"], capture_output=True).returncode == 0:
+        if cad.exists() and subprocess.run([str(cad), "update", "auto", "on"], capture_output=True).returncode == 0:
             print("Automatic updates are on again.")
         return code
     if install_checkout(uv) != 0:

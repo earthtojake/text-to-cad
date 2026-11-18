@@ -5,7 +5,7 @@ run with uv's Python (the standard library alone, nothing imported from this rep
     irm https://www.texttocad.dev/install.ps1 | iex           # Windows PowerShell
 
 It takes no options, carries no release of cad (nothing in it changes with one), and has one behaviour, run by a
-person or by cad (``cad plugin install``). It does these things alone:
+person or by cad (``cad plugin update``). It does these things alone:
 
 1. (``install.sh``, ``install.ps1``) makes sure uv is here;
 2. installs the ``cad`` command only where uv has no ``cad`` tool (``install_cad``): ``uv tool install
@@ -22,8 +22,11 @@ person or by cad (``cad plugin install``). It does these things alone:
 4. only then removes what earlier releases left in that app (each row of ``APPS``), Claude Desktop's server,
    and the loose copies of our skills (``remove_loose_skills``): the new copy is in place before an old one
    goes, so a failed download or a GitHub outage leaves every app with what it had;
-5. turns on ``cad plugin auto-update`` with the cad on this computer (``switch_on``), so the plugin follows cad's
-   automatic updates; a cad that has no such command says so in one line, and the install has not failed.
+5. only where the run is ending with exit status 0, turns on ``cad plugin update auto`` with the cad on this computer
+   (``switch_on``), so the plugin follows cad's automatic updates, from the release this run was for: turning it on is
+   how cad keeps the release the install command last ended well for, so a run that failed writes nothing of it, and
+   cad's server runs the command again for that release. A cad that has no such command says so in one line, and the
+   install has not failed.
 
 It prints one line per app as it finishes. One app failing, even with an error no row foresaw, never stops the
 others; where the cad step failed, the apps are still done. It exits nonzero when cad was needed and could not be
@@ -1975,15 +1978,16 @@ def install_cad(here: Here) -> Cad:
 
 
 def switch_on(here: Here, cad: Cad) -> None:
-    """Step 5: ``cad plugin auto-update on``, by the cad on this computer, so the plugin follows cad's automatic
-    updates. Whatever it answers, the install is done."""
-    ran = here.run([cad.command, "plugin", "auto-update", "on"], timeout=120)
+    """Step 5: ``cad plugin update auto on``, by the cad on this computer, so the plugin follows cad's automatic
+    updates; ``main`` runs it only where the run is ending with exit status 0. Whatever it answers, the install is
+    done."""
+    ran = here.run([cad.command, "plugin", "update", "auto", "on"], timeout=120)
     if ran.ok:
         for line in ran.out.splitlines():
             if line.strip():
                 print(line, flush=True)
     elif ran.code == 2:  # a usage error: a cad that has no such command
-        print(f"{f'cad {cad.release}' if cad.release else 'This cad'} has no `cad plugin auto-update`: the plugin will "
+        print(f"{f'cad {cad.release}' if cad.release else 'This cad'} has no `cad plugin update auto`: the plugin will "
               "not follow cad's updates. Run this command again to update the plugin.", flush=True)
     else:
         print(f"The plugin's automatic updates were not turned on (cad said: {ran.last()}). Run this command again to "
@@ -2121,7 +2125,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     finally:
         source.close()
     print("", flush=True)
-    if cad.command:
+    failed = bool(cad.code) or report.all_failed
+    if cad.command and not failed:  # only a run that ends well says so (``plugin_catch_up``'s record)
         switch_on(here, cad)
     if cad.code:
         print("cad itself was not installed (what went wrong is above), and the plugin's skills need it: run this "
@@ -2131,7 +2136,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if report.changed:
         print("Start a new session in each app to use it.", flush=True)
     write_report(here, cad.release, cad.code, report.outcomes)
-    return 1 if cad.code or report.all_failed else 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

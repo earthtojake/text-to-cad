@@ -4,7 +4,7 @@ folder, its cache folder and how much ``cad cache prune`` would free there, whet
 build ran in, if one was (``extras.last_with_kernel``) --, where each integration's operations run, whether the server runs and
 its release, and cad's own update (``cad_server._internal.auto_update``: the switches, whether this cad is a global
 install and by which installer, whether that installer is found, and the last attempt) and the install command's
-record (``cad_server._internal.plugin_catch_up``: the release it last ended well for, and the last run the server
+record (``cad_server._internal.plugin_catch_up``: the release it is up to date for, and the last run the server
 began for a newer cad, and how it went); on Windows, uv's folder in
 an app's private copy of AppData, a copy of cad or uv's leftovers, to delete (``private_folders``). It repairs,
 registers, starts, writes and deletes nothing: ``--check`` prints the same report.
@@ -135,15 +135,15 @@ def _auto():
 
 
 def _update() -> tuple[str, str]:
-    """cad's own update: whether it updates itself, a global install alone (and by which installer), and whether the
-    server runs the install command once where cad is newer than the release it last ended well for (``cad plugin
-    auto-update``)."""
+    """cad's own update: whether it updates itself (``cad update auto``), a global install alone (and by which
+    installer), and whether the server runs the install command once where cad is newer than the release it is up to
+    date for (``cad plugin update auto``)."""
     auto = _auto()
     found, word = auto.global_install(), {True: "on", False: "off"}
-    plugin = f"plugin auto-update {word[auto.plugin_switch()]}"
+    plugin = f"plugin update auto {word[auto.plugin_switch()]}"
     if found is None:
-        return INFO, f"no auto-update: this cad is not a global install, so it never updates itself; {plugin}"
-    return INFO, (f"auto-update {word[auto.switches()['on']]}, {plugin}; a global install by {found.installer.name} "
+        return INFO, f"this cad is not a global install, so it never updates itself; {plugin}"
+    return INFO, (f"update auto {word[auto.switches()['on']]}, {plugin}; a global install by {found.installer.name} "
                   f"({found.prefix})")
 
 
@@ -175,16 +175,17 @@ def _attempt() -> tuple[str, str]:
 
 
 def _catch_up() -> tuple[str, str]:
-    """The install command's record: the release of cad it last ended well for, and the last run the server began
-    for a newer cad -- its release, when, how it went and its exit status, the try of how many."""
+    """The install command's record: the release of cad it is up to date for -- the one it last ended with exit status
+    0 for, or the one that turned ``cad plugin update auto`` on --, and the last run the server began for a newer cad --
+    its release, when, how it went and its exit status, the try of how many."""
     import time
 
     from cad_server._internal import plugin_catch_up
 
     found = plugin_catch_up.read()
     named = found.get("for")
-    said = (f"the install command last ended well for cad {named}" if isinstance(named, str)
-            else "no record of the install command ending well on this computer")
+    said = (f"the install command is up to date for cad {named}" if isinstance(named, str)
+            else "no record of the install command being up to date on this computer")
     if not isinstance(found.get("release"), str) or not isinstance(found.get("at"), (int, float)):
         return INFO, said
     when = time.strftime("%Y-%m-%d %H:%M", time.localtime(found["at"]))

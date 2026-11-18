@@ -14,8 +14,8 @@ uv's is the one ``installed_tool`` finds.
 
 **The switches** are the person's, in cad's settings (``settings.json`` in the state folder): ``auto_update.on``,
 whether cad updates itself, ON where nothing is kept; and ``plugin.auto_update``, whether the server runs the install
-command (``cad plugin install``) once where cad is newer than the release that command last ended well for
-(``plugin_catch_up``), OFF where nothing is kept. ``cad auto-update`` and ``cad plugin auto-update`` change them.
+command (``cad plugin update``) once where cad is newer than the release that command is up to date for
+(``plugin_catch_up``), OFF where nothing is kept. ``cad update auto`` and ``cad plugin update auto`` change them.
 
 **The check** (``due``): switch on, the check not turned off for this process (``updates.checking``:
 ``CAD_UPDATE_CHECK=0``, CI), this cad a global install whose installer is found, and the version feed's ``latest`` newer
@@ -44,9 +44,12 @@ event (``analytics.update``) -- the release before, how it ended (``installed``,
 ``restored`` where the helper put the release before back), which step failed (``upgrade``: the installer's upgrade
 never ended well; ``older``: it ended well with an older release than asked; ``put_back``: the release before could
 not be put back either), the tries, the installer, whether it was typed, and, for a newer cad installed, how the
-install command's run for it ended (``plugin_catch_up.last``: ``none``, ``ok``, ``failed``; the event waits while that
-run is underway). The record is marked ``reported`` as it is counted. A failed update leaves the old cad, whose server
-counts it; one that installed a newer cad is counted by the new cad's server. The helper counts nothing.
+install command's run for it ended, a run begun since the attempt began (``plugin_catch_up.last``: ``none``, ``ok``,
+``failed``; the event waits while that run is underway, but where a new attempt begins first, it is counted as it
+stands, ``underway``). The record is marked ``reported`` as it is counted. A failed update leaves the old cad, and is
+counted by the next server of it that runs; one that installed a newer cad, by the new cad's server; either, where a new
+attempt begins before such a server ran, by whatever begins that attempt (a server, or a typed ``cad update`` with no
+server running, in its own process). The helper counts nothing.
 
 **Asked for** (``cad update``, which the server it asks judges, ``asked``, and begins, ``begin``; with no server
 running, the command itself, whose helper then starts none): PyPI asked now which
@@ -80,7 +83,7 @@ from typing import Any
 SECTION = "auto_update"
 PLUGIN_SECTION = "plugin"
 RECORD = "auto-update.json"  # the last attempt, in the state folder
-INSTALL_LOG = "install-command.log"  # the output of the last `cad plugin install` the server ran (``plugin_catch_up``)
+INSTALL_LOG = "install-command.log"  # the output of the last `cad plugin update` the server ran (``plugin_catch_up``)
 IDLE_SECONDS = 60.0
 TRIES = 2  # how many times one release is tried: once, and once more at a later check
 RETRY_SECONDS = 60 * 60.0  # how long after an attempt (underway, or ended) its release may be tried again
@@ -145,7 +148,7 @@ def change(on: bool) -> dict[str, Any]:
 
 
 def plugin_switch(path: Path | None = None) -> bool:
-    """Whether the server runs ``cad plugin install`` once where cad is newer than the release it last ended well for
+    """Whether the server runs ``cad plugin update`` once where cad is newer than the release it is up to date for
     (``plugin_catch_up``): off unless ``true`` is kept."""
     return _section(PLUGIN_SECTION, path).get("auto_update") is True
 
@@ -524,7 +527,7 @@ def trigger(target: str | None, *, automatic: bool = True, start: bool = True) -
         inside = os.path.normcase(os.path.realpath(sys.prefix)).rstrip(os.sep) + os.sep
         if os.path.normcase(os.path.realpath(command[0])).startswith(inside):
             return False  # no Python outside this environment to run it with
-        report()  # the attempt before, where nobody counted it yet: this one takes its place in the record
+        report(wait=False)  # the attempt before, where nobody counted it yet: this one takes its place in the record
         _keep(record, {"release": named, "from": version, "at": now, "tries": tries, "outcome": "underway",
                        "installer": found.installer.name, "asked": not automatic})
         env = {**{name: value for name, value in os.environ.items() if name not in _UNSET},
@@ -639,10 +642,11 @@ ENDED = frozenset({"installed", "current", "failed"})  # the helper's outcomes: 
 WAIT = object()  # ``event``: not yet, the install command's run for the new cad still underway
 
 
-def event(found: dict[str, Any]) -> dict[str, Any] | object | None:
+def event(found: dict[str, Any], *, wait: bool = True) -> dict[str, Any] | object | None:
     """The ``update`` event an ended attempt (``found``, the record) is counted as (``analytics.update``'s arguments),
-    ``WAIT`` while the install command's run for the cad it installed is underway, or None for a record that is none
-    of an ended attempt."""
+    ``WAIT`` while the install command's run for the cad it installed is underway (``wait`` false: the event as it
+    stands, that run ``underway``), or None for a record that is none of an ended attempt. That run is one begun since
+    the attempt began (``plugin_catch_up.last``, ``since``): a run begun before it is another's."""
     outcome = found.get("outcome")
     if outcome not in ENDED:
         return None
@@ -658,8 +662,9 @@ def event(found: dict[str, Any]) -> dict[str, Any] | object | None:
     if outcome == "installed":
         from cad_server._internal import plugin_catch_up
 
-        ran = plugin_catch_up.last(str(found.get("release")))
-        if ran == plugin_catch_up.UNDERWAY:
+        at = found.get("at")
+        ran = plugin_catch_up.last(str(found.get("release")), since=float(at) if isinstance(at, (int, float)) else 0.0)
+        if ran == plugin_catch_up.UNDERWAY and wait:
             return WAIT
         plugin = ran or "none"
     installer = found.get("installer")
@@ -671,11 +676,12 @@ def event(found: dict[str, Any]) -> dict[str, Any] | object | None:
             "plugin": plugin}
 
 
-def report() -> bool:
+def report(*, wait: bool = True) -> bool:
     """The last attempt counted (see the module), once: where it ended and is not ``reported`` yet, and nothing it
-    waits for is underway (``event``), the record marked ``reported`` under the state folder's lock, then the event
-    kept for the sender (``analytics.update``, under the rules every count goes by). Whether it was counted now; never
-    raises."""
+    waits for is underway (``event``; ``wait`` false, as a new attempt is about to take its place in the record: counted
+    as it stands, the install command's run ``underway``), the record marked ``reported`` under the state folder's
+    lock, then the event kept for the sender (``analytics.update``, under the rules every count goes by). Whether it was
+    counted now; never raises."""
     try:
         from cad_server._internal.file_lock import state
 
@@ -686,7 +692,7 @@ def report() -> bool:
             found = last()
             if found is None or found.get("reported"):
                 return False
-            counted = event(found)
+            counted = event(found, wait=wait)
             if not isinstance(counted, dict):
                 return False
             _keep(folder / RECORD, {**found, "reported": True})

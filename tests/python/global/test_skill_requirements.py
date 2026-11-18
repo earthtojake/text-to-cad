@@ -106,7 +106,7 @@ class SkillLaunchCommand(unittest.TestCase):
         # person whether to update (cad updates itself, and `cad update` asks nobody), and nothing that claims a
         # permission (agents refused the commands it named).
         # The commands, not the product's name: "the text-to-cad plugin" is the block's own words.
-        gone = re.compile(r"(?<![\w.-])cad(?:\.exe)? (?:plugin|setup|auto-update)\b|texttocad\.dev/install"
+        gone = re.compile(r"(?<![\w.-])cad(?:\.exe)? (?:plugin|setup|update auto)\b|texttocad\.dev/install"
                           r"|doctor --prune|--add \d|exit code says why"
                           r"|\.local/bin/cad|unknown command '\+|newer version of cad is available"
                           r"|ask whether to update|without asking", re.I)

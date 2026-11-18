@@ -544,7 +544,7 @@ def rotate_token(told: Callable[[str], None] = lambda _line: None) -> str | None
 
 
 def switch_auto_update(request: dict[str, Any]) -> dict[str, Any]:
-    """cad's own update switched by the server (``{"op": "auto_update", "on"}``: ``cad auto-update on|off`` where a
+    """cad's own update switched by the server (``{"op": "auto_update", "on"}``: ``cad update auto on|off`` where a
     server runs), which keeps the switch in the state folder as the command would (``auto_update.change``), so a shell
     whose sandbox may not write that folder (an agent app's) needs no permission: ``{"ok": true, "switches"}``, or
     ``{"failed"}`` in one line. Whether the cad that asked may turn it on (a global install) is that command's to
@@ -561,9 +561,9 @@ def switch_auto_update(request: dict[str, Any]) -> dict[str, Any]:
 
 
 def switch_plugin(request: dict[str, Any]) -> dict[str, Any]:
-    """Whether the server runs the install command once where cad is newer than the release it last ended well for
+    """Whether the server runs the install command once where cad is newer than the release it is up to date for
     (``plugin_catch_up``), switched by the server (``{"op": "plugin_auto_update", "on", "release"}``: ``cad plugin
-    auto-update on|off`` where a server runs; ``release``, the asking cad's, which turning it on takes the install
+    update auto on|off`` where a server runs; ``release``, the asking cad's, which turning it on takes the install
     command as up to date for; this server's where it names none), as ``switch_auto_update`` keeps its own: ``{"ok":
     true, "on"}``, or ``{"failed"}`` in one line."""
     from cad_server._internal import auto_update
@@ -662,7 +662,7 @@ class Daemon:
 
         self.handover = Carrier(time.monotonic())
         self.bridge = Tending()
-        # The install command's one run where cad is newer than the release it last ended well for
+        # The install command's one run where cad is newer than the release it is up to date for
         # (``plugin_catch_up``), held while it runs.
         from cad_server._internal.plugin_catch_up import Catcher
 
@@ -1875,7 +1875,7 @@ class Daemon:
 
     def caught_up(self) -> None:
         """What follows cad's own update, at the server's start and at each quiet tending (``tend``): the install
-        command run once where cad is newer than the release it last ended well for and the person's switch says so
+        command run once where cad is newer than the release it is up to date for and the person's switch says so
         (``plugin_catch_up``), then the last update attempt counted once, where it ended and nothing it waits for is
         underway (``auto_update.report``). Never on a server that stops; never fails the server."""
         if self.draining or self.stopping.is_set():
