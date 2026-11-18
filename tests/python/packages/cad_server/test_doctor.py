@@ -186,8 +186,9 @@ class PrivateFolderTests(unittest.TestCase):
     """On Windows a packaged app keeps a folder made from inside it under AppData in a private copy only it sees. uv's
     folder there holds a copy of cad that works in that app alone and wins over the real one there, or a failed try's
     leftovers, where every new Python uv installs from inside that app fails. `cad server start` and `cad doctor` name
-    each such folder with its reason and say to delete it; cad never deletes it. Off Windows they say nothing. A
-    stand-in %LOCALAPPDATA% here, so it runs on every system."""
+    each such folder with its reason and say to delete it in File Explorer (a delete from inside that app does not
+    reach it); cad never deletes it. Off Windows they say nothing. A stand-in %LOCALAPPDATA% here, so it runs on every
+    system."""
 
     def setUp(self) -> None:
         root = TemporaryDirectory()
@@ -227,9 +228,11 @@ class PrivateFolderTests(unittest.TestCase):
     def test_each_folder_is_named_with_its_reason_by_both_commands_and_never_deleted(self) -> None:
         copy, leftover = self.lines()
         self.assertEqual(copy, f"another copy of cad is in an app's private folder: {self.copy}. That app keeps using "
-                               "it instead of this one. Delete that folder so every app uses this cad.")
+                               "it instead of this one. Delete that folder in File Explorer so every app uses this "
+                               "cad; deleting it from inside that app does not work.")
         self.assertEqual(leftover, f"uv left files in an app's private folder: {self.leftover}. Inside that app a new "
-                                   "Python lands there and fails to install. Delete that folder.")
+                                   "Python lands there and fails to install. Delete that folder in File Explorer; "
+                                   "deleting it from inside that app does not work.")
         code, out, err = self.start()
         self.assertEqual((code, out), (0, "the cad server is running\n"))
         self.assertEqual(sorted(err.splitlines()), [f"cad: {copy}", f"cad: {leftover}"])

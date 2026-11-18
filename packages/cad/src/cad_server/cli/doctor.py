@@ -35,13 +35,16 @@ STATUS_SECONDS = 10.0
 # Windows: uv's folder in an app's private copy of AppData, under %LOCALAPPDATA%. A packaged app keeps a folder that
 # something inside it makes under AppData in a private copy only it sees: a cad installed from inside one works in
 # that app alone, and a failed try leaves a folder where every new Python uv installs there fails. cad names such a
-# folder, with the reason, and never deletes it.
+# folder, with the reason, and never deletes it. The lines say to delete it in File Explorer: a delete of that path
+# from inside the app reports the folder gone and leaves every file (measured with Remove-Item), and one from outside
+# the app removes it (measured).
 WINDOWS = os.name == "nt"
 PRIVATE = ("Packages/*/LocalCache/Roaming/uv",)
 COPY_LINE = ("another copy of cad is in an app's private folder: {path}. That app keeps using it instead of this one. "
-             "Delete that folder so every app uses this cad.")
+             "Delete that folder in File Explorer so every app uses this cad; deleting it from inside that app does "
+             "not work.")
 LEFTOVER_LINE = ("uv left files in an app's private folder: {path}. Inside that app a new Python lands there and fails "
-                 "to install. Delete that folder.")
+                 "to install. Delete that folder in File Explorer; deleting it from inside that app does not work.")
 
 
 def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:

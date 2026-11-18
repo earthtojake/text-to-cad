@@ -248,11 +248,14 @@ alone.
 keep what uv writes under AppData in a private copy only that app sees. We do not work around it.
 Where uv cannot set up Python there, `install.ps1` prints one line: run the install command once from
 PowerShell opened from the Start menu. `cad server start` and `cad doctor` name a uv folder in an
-app's private copy, say why it matters, and say to delete it; cad never deletes it.
+app's private copy, say why it matters, and say to delete it in File Explorer; cad never deletes it.
 
 **Why.** No tool we found works around it from inside someone else's package: a way out of the
 package is reported to fail inside these apps, and uv, pip and CPython document the problem and stop.
-Detecting and saying what to do is what they do.
+Detecting and saying what to do is what they do. The lines say File Explorer because a delete from
+inside the app does not reach the folder: `Remove-Item` on that path, run inside the package,
+reported the folder gone and left every file, and the same delete from outside the app removed it
+(both measured).
 
 **What it costs.** On such a computer a person may have to run one command or delete one folder by
 hand.

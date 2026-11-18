@@ -79,7 +79,8 @@ cad_server/
   `cad server start --foreground` runs it in this process; `cad server --rotate-token` replaces the page
   token. Nothing else starts the server but `cad mcp`. A command that needs it and finds none says so in
   one line (`the cad server is not running: run cad server start`) and exits 1. On Windows, `cad server
-  start` names any uv folder in an app's private copy of AppData, and says to delete it.
+  start` names any uv folder in an app's private copy of AppData, and says to delete it in File Explorer
+  (a delete from inside that app does not reach it).
 - **`cad mcp`**: the CAD app's stdio transport an agent app starts (Codex's plugin line). It starts the
   server once, as `cad server start` does. Run from uv's cache on a computer with no global cad, it
   installs one first (`_internal/tool_install.py`) and uses that cad's server
