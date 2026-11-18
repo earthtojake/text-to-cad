@@ -111,16 +111,14 @@ class FindCcx(unittest.TestCase):
         # CalculiX version the package carries; a silent program CAD_CCX names is still refused.
         with tempfile.TemporaryDirectory() as name:
             packaged = _silent(Path(name))
-            ccx = mock.Mock(executable=mock.Mock(return_value=Path(packaged)))
-            with mock.patch.dict(os.environ, {calculix.CCX_ENV: ""}), mock.patch.dict(sys.modules, {"cad_ccx": ccx}), \
-                    mock.patch("importlib.metadata.version", return_value="2.23.0"):
+            ccx = mock.Mock(executable=mock.Mock(return_value=Path(packaged)), version=mock.Mock(return_value="2.23"))
+            with mock.patch.dict(os.environ, {calculix.CCX_ENV: ""}), mock.patch.dict(sys.modules, {"cad_ccx": ccx}):
                 found = calculix.find_ccx()
             self.assertEqual((found.path, found.version), (packaged, "2.23"))
             other = Path(name) / "other"
             other.mkdir()
             named = _silent(other)
-            with mock.patch.dict(os.environ, {calculix.CCX_ENV: named}), mock.patch.dict(sys.modules, {"cad_ccx": ccx}), \
-                    mock.patch("importlib.metadata.version", return_value="2.23.0"):
+            with mock.patch.dict(os.environ, {calculix.CCX_ENV: named}), mock.patch.dict(sys.modules, {"cad_ccx": ccx}):
                 with self.assertRaisesRegex(calculix.CalculixMissingError, "reports no version"):
                     calculix.find_ccx()
 
