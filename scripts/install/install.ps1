@@ -63,10 +63,16 @@ function Install-TextToCad {
         return $LASTEXITCODE
     }
 
-    # uv's version, from "uv 0.9.5 (...)"; $null where it does not say.
+    # uv's version, from "uv 0.9.5 (...)"; $null where it does not say. All of what uv prints is taken, then its
+    # first line read: never `| Select-Object -First 1` on a program whose $LASTEXITCODE is read. Windows PowerShell
+    # 5.1 ends the program once Select-Object has its line, and $LASTEXITCODE is then -1, not the program's status
+    # (measured with uv: the right line every time, and -1 on 298 of 300 calls; the first call a PowerShell makes
+    # usually gets 0). A current uv then read as one "of an unknown version", and the install stopped.
     function Get-UvVersion($uv) {
-        $said = (& $uv --version 2>$null | Select-Object -First 1)
-        if ($LASTEXITCODE -eq 0 -and "$said" -match '^uv (\d+\.\d+(\.\d+)?)') { return [Version]$Matches[1] }
+        $said = @(& $uv --version 2>$null)
+        if ($LASTEXITCODE -eq 0 -and $said.Count -gt 0 -and "$($said[0])" -match '^uv (\d+\.\d+(\.\d+)?)') {
+            return [Version]$Matches[1]
+        }
         return $null
     }
 

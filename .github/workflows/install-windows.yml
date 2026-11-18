@@ -6,12 +6,13 @@ name: Windows installer rehearsal
 # (UV_FIND_LINKS): the install command's `uv tool install cad`, which installs the newest release uv is offered,
 # takes them, never an index's. uv installed by its own installer when the image has none; cad a uv tool, its
 # cad.exe in ~\.local\bin, cad's automatic updates on and the plugin's turned on by the install, no server
-# started; the doctor; the command again ("installed already"); then models built on it (a box, a box with a
-# hand-made wheel through `--with`, by a version range on the command line, through a script's header, from a
-# venv of the user's own with the library installed, and the page link's token), arguments cmd would have
-# parsed, a state folder named with accents and a non-Latin script, and `uv tool uninstall cad`. test.yml calls
-# it, as it does the Linux one, on a full run (so before a release ships) and on a change to the installers: the
-# selector's `installer` flag (scripts/github-workflows/select_checks.py). Dispatched by hand with `published`, the same steps run against
+# started; the doctor; the command again, in a PowerShell that has been used ("installed already"); then models
+# built on it (a box, a box with a hand-made wheel through `--with`, by a version range on the command line,
+# through a script's header, from a venv of the user's own with the library installed, and the page link's
+# token), arguments cmd would have parsed, a state folder named with accents and a non-Latin script, and
+# `uv tool uninstall cad`. test.yml calls it, as it does the Linux one, on a full run (so before a release
+# ships) and on a change to the installers: the selector's `installer` flag
+# (scripts/github-workflows/select_checks.py). Dispatched by hand with `published`, the same steps run against
 # what people install today: the docs site's install.ps1 and PyPI's newest release of cad, no wheel built.
 on:
   workflow_dispatch:
@@ -114,7 +115,9 @@ jobs:
             if (-not $release) { throw "PyPI names no release of cad" }
             New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\wheel" | Out-Null
           } else {
-            $release = (python scripts/test/real_computer.py stamp | Select-Object -First 1)
+            # All it prints, then the first line: a pipeline cut at its first line (Select-Object -First 1) can end
+            # the program early, and $LASTEXITCODE is then not its status (install.ps1's Get-UvVersion says how).
+            $release = @(python scripts/test/real_computer.py stamp)[0]
             if ($LASTEXITCODE -or -not $release) { throw "the release to stamp the wheels with: exit $LASTEXITCODE" }
             python scripts/test/real_computer.py publish "$env:RUNNER_TEMP\wheel" $release "$env:RUNNER_TEMP\stamped"
             if ($LASTEXITCODE) { throw "writing the wheels again as $release exited $LASTEXITCODE" }
@@ -152,7 +155,7 @@ jobs:
       - name: The cad command, its switches, the doctor and the install command again
         shell: pwsh
         run: |
-          $said = (& $env:CAD_CMD --version | Select-Object -First 1)
+          $said = @(& $env:CAD_CMD --version)[0]
           if ($LASTEXITCODE) { throw "cad --version exited $LASTEXITCODE" }
           if ($said -ne "cad $env:CAD_RELEASE") { throw "cad --version said '$said', not 'cad $env:CAD_RELEASE'" }
           $switches = (@(& $env:CAD_CMD auto-update status) + @(& $env:CAD_CMD plugin auto-update status)) -join "`n"
@@ -161,7 +164,11 @@ jobs:
           if ($status.Trim() -ne 'null') { throw "the install started a server: $status" }
           & $env:CAD_CMD doctor
           if ($LASTEXITCODE) { throw "cad doctor exited $LASTEXITCODE" }
-          $again = (powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:CAD_PIPED | Invoke-Expression" 2>&1 | ForEach-Object { "$_" }) -join "`n"
+          # Again in a PowerShell that has been used, as a person's window has: a program through a pipeline cut at
+          # its first line runs first. From the second such pipeline on, Windows PowerShell 5.1 gives -1 as the
+          # program's exit status; the first in a new PowerShell, every other run here, usually gets 0. install.ps1
+          # once read uv's version that way: a current uv was "of an unknown version", and the install stopped.
+          $again = (powershell -NoProfile -ExecutionPolicy Bypass -Command "cmd /c ver | Select-Object -First 1 | Out-Null; $env:CAD_PIPED | Invoke-Expression" 2>&1 | ForEach-Object { "$_" }) -join "`n"
           Write-Host $again
           if ($LASTEXITCODE) { throw "the install command again exited $LASTEXITCODE" }
           if ($again -notmatch "cad $([regex]::Escape($env:CAD_RELEASE)) is installed already") { throw "the install command again did not find cad installed" }
