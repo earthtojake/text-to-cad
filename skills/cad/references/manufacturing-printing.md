@@ -64,6 +64,12 @@ the verdicts:
 - `--material`: FDM's warping risk for the materials that warp (`warping_risk`). A metal with a plastic
   technology, or a plastic with `pbf`, is refused.
 - `--build-volume XxYxZ`: the person's printer, else a typical machine of the technology's, assumed.
+- `--printer FILE` (FDM): the person's printer, read from a file of its settings: a 3MF OrcaSlicer or Bambu
+  Studio saved (a sliced `.gcode.3mf` or a project), or a complete machine preset JSON. Its bed and height are
+  the build volume and its first nozzle the nozzle; `--build-volume` and `--nozzle` given win. Over the
+  printer's volume is an error naming the printer. A preset that holds only its differences from a parent
+  (`inherits`) has no volume: give a 3MF the slicer saved. Ask the person for the file once; do not copy the
+  printer's numbers into instructions.
 - `--layer-height` and `--nozzle` (FDM): stair-stepping and fine detail; the nozzle sets FDM's minimum
   wall, two of its beads (0.8 mm for the common 0.4 mm nozzle, assumed and said where none is given).
 - `--angle-limit`: the person's printer's self-supporting angle, from its datasheet: the overhangs are
