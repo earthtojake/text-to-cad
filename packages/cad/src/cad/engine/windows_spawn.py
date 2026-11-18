@@ -19,11 +19,17 @@ import multiprocessing.popen_spawn_win32 as win32  # pyrefly: ignore[missing-imp
 import multiprocessing.spawn as spawn
 import os
 from multiprocessing import reduction, util
-from subprocess import STARTF_FORCEOFFFEEDBACK, STARTUPINFO  # pyrefly: ignore[missing-module-attribute]
+from subprocess import STARTUPINFO  # pyrefly: ignore[missing-module-attribute]
 from typing import Any
 
 import _winapi  # pyrefly: ignore[missing-import]
 import msvcrt  # pyrefly: ignore[missing-import]
+
+try:
+    from subprocess import STARTF_FORCEOFFFEEDBACK  # pyrefly: ignore[missing-module-attribute]
+except ImportError:  # Python before 3.13 names no such constant; the floor is 3.11
+    # Win32's own value (winbase.h), the one 3.13's subprocess names: no busy cursor while a pool process starts.
+    STARTF_FORCEOFFFEEDBACK = 0x00000080
 
 __all__ = ["Context", "Popen", "Process", "context"]
 
