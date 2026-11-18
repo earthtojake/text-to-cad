@@ -96,8 +96,9 @@ uv's cache). cad runs on Python 3.11 and newer. Skills run plain `cad` commands,
 into the base environment its kernel processes run in (`cad_server._internal.base`); `cad run` is
 `uv run` with the library pinned at that release and the integrations a program's imports use
 (`cad_server._internal.extras`). A test or an experiment gets a server of its own with its own
-`CAD_STATE_DIR` and `CAD_ENGINE_DIR`. In a checkout, install `requirements-dev.txt` (cad editable,
-with its kernel: its own base) and test in agent apps with `scripts/install/dev_install.py [APP...]`,
+`CAD_STATE_DIR` and `CAD_ENGINE_DIR`. In a checkout, `uv sync` makes `.venv` from `uv.lock` (the root
+`pyproject.toml`, a uv workspace: cad editable, with its kernel, its own base; CI installs the same lock with
+`uv sync --locked`), `uv run ...` runs in it, and you test in agent apps with `scripts/install/dev_install.py [APP...]`,
 which installs the checkout as the `cad` tool, editable (`--release` goes back).
 
 ## Repo Map
@@ -295,13 +296,18 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
 
 ## Environments
 
-- Prefer `./.venv/bin/python` for CAD Python work.
+- Prefer `uv run` (the checkout's `.venv`, made by `uv sync`) for CAD Python work.
 - Keep new branch checkouts and git worktrees lightweight by default. Do not
-  copy `.venv/` or `models/` through `.worktreeinclude`; recreate `.venv/`
-  inside the worktree only when Python dependencies are needed for the workflow.
+  copy `.venv/` or `models/` through `.worktreeinclude`; run `uv sync` inside
+  the worktree only when Python dependencies are needed for the workflow.
 - In Codex or Claude Code worktrees, prefer the skill instructions and scripts
   under the current worktree's `skills/` directory over globally installed
   skills or plugins from another checkout.
+- Iterate inside a worktree, never on a global install: `uv sync`, then `uv run ...` with the worktree's own
+  `CAD_ENGINE_DIR`, `CAD_STATE_DIR`, `CAD_CACHE_DIR` (under its `tmp/`) and `CAD_UPDATE_CHECK=0`. A server is told
+  apart by its release, not its checkout, so without them the worktree's commands reach, and its
+  `cad server start` joins, the computer's global server ([CONTRIBUTING.md, "Work In A
+  Worktree"](CONTRIBUTING.md#work-in-a-worktree)). The global install is for end-to-end tests alone, below.
 - Test skills and the plugin in an agent app with
   `scripts/install/dev_install.py [APP...]` ([CONTRIBUTING.md, "Test In Agent
   Apps"](CONTRIBUTING.md#test-in-agent-apps)). One copy of the plugin per app: never the

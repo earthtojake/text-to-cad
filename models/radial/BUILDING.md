@@ -15,8 +15,8 @@ where it is.
 
 ## Environment
 
-- Python: the repo's `.venv/bin/python` (the library is installed there, from
-  `requirements-dev.txt`). CLI: `.venv/bin/cad`.
+- Python: the repo's `.venv/bin/python` (the library is installed there by
+  `uv sync`). CLI: `.venv/bin/cad`, or `uv run cad`.
 - Project root: `models/radial`. Run everything from there. Scratch work goes in
   `tmp/` (gitignored).
 - Skill docs: `skills/cad/SKILL.md`

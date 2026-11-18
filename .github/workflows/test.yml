@@ -337,24 +337,33 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Set up Python
+        id: python
         timeout-minutes: 5
         uses: actions/setup-python@v7
         with:
           python-version: "3.14"
 
+      - name: Set up uv
+        timeout-minutes: 5
+        uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      # The workspace's members and none of its groups: the library alone, from the lock.
       - name: Install the library alone
         timeout-minutes: 5
-        run: python -m pip install --editable ./packages/cad
+        env:
+          PYTHON_PATH: ${{ steps.python.outputs.python-path }}
+        run: uv sync --locked --no-default-groups --python "$PYTHON_PATH"
 
       - name: Run the router's unit files
-        env:
-          PYTHON_BIN: python
         run: scripts/test/test-routing.sh
 
   # ---- release tier: a full run, or a change to the thing itself ---------------------------------
 
   # The library's, the server's and the shim's suites on Python 3.11, the packages' floor
-  # (test-floor.sh), in an environment made here with requirements-dev.txt: a call the floor's
+  # (test-floor.sh), in the development environment made on it from uv.lock: a call the floor's
   # standard library lacks parses there and fails only when it runs (one reached the server
   # once: argparse's suggest_on_error), so only the suites hold the floor. A third run of
   # suites the packages jobs already run on the Python the server's installations use, for a
@@ -379,19 +388,15 @@ jobs:
         timeout-minutes: 10
         uses: ./.github/actions/setup-deps
         with:
+          # The packages' floor: the environment is made on it, from the same lock.
+          python-version: "3.11"
           playwright: "false"
           npm: none
           apt: xvfb libgl1-mesa-dri fonts-dejavu-core
 
-      - name: Make an environment on Python 3.11, the packages' floor
-        timeout-minutes: 10
-        run: |
-          uv venv --python 3.11 "$RUNNER_TEMP/floor"
-          uv pip install --python "$RUNNER_TEMP/floor/bin/python" -r requirements-dev.txt
-
       - name: Run the library's, the server's and the shim's suites on the floor
         env:
-          PYTHON_BIN: ${{ runner.temp }}/floor/bin/python
+          PYTHON_BIN: python
         run: xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-floor.sh
 
   # The installer rehearsals: install.sh and install.ps1 on a fresh machine, the way a person
@@ -526,15 +531,14 @@ jobs:
           # A solve draws a picture of each field with the engine's stills.
           apt: xvfb libgl1-mesa-dri fonts-dejavu-core
 
-      # The netgen and calculix integrations' extras, with netgen pinned to the version the accuracy tests'
-      # margins were measured with (the round rod's top-fibre stress is +8.6% against 10%); the extra keeps the
+      # The netgen and calculix integrations' extras, the lock's `fea` group (the root pyproject.toml), with
+      # netgen pinned to the version the accuracy tests' margins were measured with; the extra keeps the
       # floor. The calculix extra pins cad-ccx (conda-forge's CalculiX, repackaged: earthtojake/ccx), the wheel
       # PyPI has for this runner. A ccx that does not run fails here by name rather than as every solve failing.
       - name: Install the netgen and calculix integrations
         timeout-minutes: 5
         run: |
-          uv pip install --system --python python --editable "./packages/cad[build123d,trimesh,netgen,calculix]" \
-            "netgen-mesher==6.2.2608"
+          uv sync --locked --inexact --group fea
           python -c "import cad_ccx; print(cad_ccx.executable(), cad_ccx.version())"
 
       - name: Run the fea suite
@@ -831,9 +835,7 @@ jobs:
         env:
           CAD_KEEP_WHEEL: "1"
           CAD_WHEEL_OUT_DIR: ${{ runner.temp }}/cadgen-wheel-check
-        run: |
-          python -m pip install build
-          scripts/release/check-wheel-contents.sh
+        run: scripts/release/check-wheel-contents.sh
 
       # The CLIs the way a user gets them -- the three wheels pip-installed together, from a
       # directory that is not this repo -- which is the only place a missing package-data glob or

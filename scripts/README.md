@@ -101,8 +101,8 @@ where those files ship, so these scripts are what produces them.
   client libraries and OpenGL from the system.
 - `test-floor.sh` — the library's, the server's and the shim's suites on the oldest Python the packages declare
   (`requires-python`: 3.11, so pip, pipx or a plain `uv tool install` can put cad on an older system
-  Python). `PYTHON_BIN` names a Python of that line with `requirements-dev.txt`
-  installed; another is refused in one line. A call that Python's standard library lacks parses there
+  Python). Its Python is the development environment made on that line (`uv sync --python 3.11`, then
+  `uv run scripts/test/test-floor.sh`), or a `PYTHON_BIN` of that line; another is refused in one line. A call that Python's standard library lacks parses there
   and fails only when it runs, so only running the suites holds the floor. Called by `test.yml`'s
   `packages (Python 3.11 floor)` job, under Xvfb, on a full run: before a release ships, and nightly.
 - `test-api.sh` — `npm --prefix apps/api test`: the version feed's and the

@@ -54,13 +54,13 @@ if ! pick_interpreter; then
     echo "FAIL: VIEWER_PYTHON=$VIEWER_PYTHON cannot run, or cannot import the server (cad_server)." >&2
   elif [ -z "$FOUND_INTERPRETER" ]; then
     echo "FAIL: no Python interpreter found (tried the repo venv, python3, and python)." >&2
-    echo "      Set VIEWER_PYTHON to the one that installed requirements-dev.txt." >&2
+    echo "      Run uv sync, or set VIEWER_PYTHON to an interpreter that imports cad_server." >&2
     exit 1
   else
     echo "FAIL: the server (cad_server) is not importable from $FOUND_INTERPRETER." >&2
   fi
   echo "      This test imports a real STEP end to end, so the launching interpreter" >&2
-  echo "      needs the packages: pip install -r requirements-dev.txt, or set VIEWER_PYTHON." >&2
+  echo "      needs the packages: uv sync, or set VIEWER_PYTHON." >&2
   exit 1
 fi
 export VIEWER_RUNTIME_DIR="$RUNTIME"

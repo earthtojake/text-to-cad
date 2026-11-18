@@ -216,7 +216,7 @@ decide which tests reach it. The components:
 | `js-web` | `packages/ui`, `apps/web` and what its Markdown links to | The CAD Viewer client's type check and units |
 | `js-mcp` | `packages/ui`, `apps/mcp` | The CAD app's type check, units and one-file build |
 | `docs` | `apps/docs`, `scripts/brand`, the one-line installers | Lint, the Next build, icon verification, the brand marks |
-| `fea` | the packages, its suite | `test-fea.sh`, with netgen and CalculiX installed |
+| `fea` | the packages, its suite | `test-fea.sh`, with netgen and CalculiX installed (the lock's `fea` group) |
 | `kicad` | the packages, its suite | `test-kicad.sh`, in the environment of `cad[kicad]` |
 | `blender` | the packages, its suite | `test-blender.sh`, in the environment `cad run` makes for bpy; a test that skips there fails the run |
 | `packaging` | the packages, the UI, `apps/web`, `apps/mcp`: whatever ships in a wheel | Clean bundle, layout, the wheels' contents, the installed commands |
@@ -227,7 +227,7 @@ decide which tests reach it. The components:
 | `CI` | always | The one required check: every job that ran passed (`scripts/github-workflows/ci_gate.py`) |
 
 **A full run** is every job on every suite. `VERSION` (a release is tested
-whole), `package.json`, `package-lock.json`, `requirements-dev.txt`,
+whole), `package.json`, `package-lock.json`, the root `pyproject.toml` and `uv.lock`,
 `packages/core`, `scripts/build`, `tests/python/support`, the workflow,
 `setup-deps`, the selector, the gate, the runners' shared parts and any path the
 table does not name start one; so do a manual dispatch, `Publish Release`'s call
@@ -263,8 +263,10 @@ rule matches a tracked file and names tests that exist, every job runs on one fl
 and no step on any, a full run runs everything, and `CI` needs every job. A job
 is added, renamed, split or retimed without an edit there; a new job goes in
 `CI`'s `needs` (the same test fails one that is not there). Each job installs only
-what its tests need: npm workspaces by job, Python and the two Playwright browsers
-on request, system packages through `setup-deps`'s `apt` input, and nothing beyond
+what its tests need: npm workspaces by job, Python (the development environment,
+`uv sync --locked` from the one `uv.lock` contributors use, installed into the interpreter
+`setup-python` provides) and the
+two Playwright browsers on request, system packages through `setup-deps`'s `apt` input, and nothing beyond
 Python and Node for `static`.
 
 Every run records the tree it tested as an artifact, `tested-<tree>-<scope>`
@@ -292,7 +294,7 @@ stopping the merge.
 **Nothing waits long.** Every job has a timeout of about twice its slowest
 observed run (a job that runs Python test files, at least its slowest run and
 11 minutes, so the hang guard below fires before it), and every install step has
-one of its own (`setup-deps` as a whole, the pip and uv installs): a stalled
+one of its own (`setup-deps` as a whole, the uv installs): a stalled
 mirror fails in minutes rather than running out its job. The blender and KiCad
 suites fetch their environments as they run and the rehearsals are installs;
 their jobs' timeouts bound those. `setup-deps` installs system packages only when the image
@@ -339,10 +341,10 @@ Read the failing job, not the run: `CI` names the jobs that failed, and each job
 **The type check.** With the development environment active, check the distribution's Python sources with:
 
 ```sh
-python -m pyrefly check --config packages/cad/pyproject.toml
+uv run pyrefly check --config packages/cad/pyproject.toml
 ```
 
-Pyrefly is pinned in `requirements-dev.txt`. The package's `[tool.pyrefly]`
+Pyrefly is pinned in the root `pyproject.toml`'s `dev` group. The package's `[tool.pyrefly]`
 configuration uses the [basic preset](https://pyrefly.org/en/docs/configuration/#preset-basic)
 over its own `src`. It checks a limited set of diagnostics, including
 undefined names in annotations, and skips unannotated function bodies and broader
