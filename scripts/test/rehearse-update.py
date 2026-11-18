@@ -241,7 +241,7 @@ def installer_command(work: Path, counted: Path | None = None) -> str:
     return subprocess.list2cmdline(argv) if WINDOWS else shlex.join(argv)
 
 
-class PyPI(http.server.ThreadingHTTPServer):
+class PyPI(rc.Loopback):
     """PyPI's JSON API for cad (``CAD_PYPI_URL``): ``info.version`` what the feed names as newest, and ``releases``, each
     release that is out (``released``, set by ``Box.out``) with a file that is not yanked, as PyPI lists them."""
 
