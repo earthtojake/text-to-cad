@@ -24,7 +24,7 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
-from tests.python.support import engine_daemon
+from tests.python.support import engine_daemon, uv_cache
 from tests.python.support.paths import add_sources
 
 add_sources()
@@ -605,13 +605,14 @@ if __name__ == "__main__":
 
 
 class RunWithTest(unittest.TestCase):
-    """The real uv, offline: nothing here reaches the network."""
+    """The real uv, offline: nothing here reaches the network, but for the cache's warming before (``uv_cache.warm``)."""
 
     @classmethod
     def setUpClass(cls) -> None:
         engine_daemon.isolate(cls.addClassCleanup, started=False)  # its server is the one offline, below
         cls.project = Path(tempfile.mkdtemp(prefix="run-with-")).resolve()
         cls.addClassCleanup(shutil.rmtree, cls.project, True)
+        uv_cache.warm(cls.project)
         cls.wheel = _wheel(cls.project)
         cls.env = engine_daemon.watched({**os.environ, "UV_OFFLINE": "1", "CAD_ENGINE_MESH": "inline"},
                                         cls.addClassCleanup)

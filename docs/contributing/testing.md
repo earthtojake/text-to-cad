@@ -45,7 +45,8 @@ enough. Every other job runs on the changes that reach it. The two there now:
 
 - `packages (Python 3.11 floor)` is a third run of suites the packages jobs already run on the Python
   the server's installations use. It guards one kind of break, a call the floor's standard library
-  lacks, of which the repository has had one (argparse's `suggest_on_error`), at 11 minutes a run.
+  lacks, of which the repository has had one (argparse's `suggest_on_error`), at 11 to 17 minutes a run
+  whole, so it runs as two shards.
 - The installer rehearsals install this tree's wheel on a fresh machine. What they exercise changes in
   few pull requests, and before this layout they ran only after a merge (in November 2026 the Linux
   one had passed 7 runs of 7, the Windows one 23 pushes of 25); a release pull request runs every job,
@@ -216,18 +217,18 @@ decide which tests reach it. The components:
 | `js-web` | `packages/ui`, `apps/web` and what its Markdown links to | The CAD Viewer client's type check and units |
 | `js-mcp` | `packages/ui`, `apps/mcp` | The CAD app's type check, units and one-file build |
 | `docs` | `apps/docs`, `scripts/brand`, the one-line installers | Lint, the Next build, icon verification, the brand marks |
-| `fea` | the packages, its suite | `test-fea.sh`, with netgen and CalculiX installed |
+| `fea` | the packages, its suite | `test-fea.sh`, with netgen and CalculiX installed (the lock's `fea` group) |
 | `kicad` | the packages, its suite | `test-kicad.sh`, in the environment of `cad[kicad]` |
 | `blender` | the packages, its suite | `test-blender.sh`, in the environment `cad run` makes for bpy; a test that skips there fails the run |
 | `packaging` | the packages, the UI, `apps/web`, `apps/mcp`: whatever ships in a wheel | Clean bundle, layout, the wheels' contents, the installed commands |
 | `viewer-e2e` | the packages, the UI, `apps/web`, `tests/browser` | The bundle's viewer through the real backend: the launch smoke test and the format and camera gates in Chromium |
-| `packages (Python 3.11 floor)` | a full run | The three suites on the packages' oldest Python (`test-floor.sh`) |
+| `packages (Python 3.11 floor)` | a full run | The three suites on the packages' oldest Python (`test-floor.sh`), in two shards |
 | `install (Linux)`, `install (Windows)` | a full run; `scripts/install`, the two workflows | `install-linux.yml` and `install-windows.yml`: the one-line installers on a fresh machine, against this tree's wheel |
 | `real install` | a full run; `scripts/install`, its workflow, its runner | `real-install.yml`: the install script against the real `claude`, `codex` and `gemini` on Windows, macOS and Linux |
 | `CI` | always | The one required check: every job that ran passed (`scripts/github-workflows/ci_gate.py`) |
 
 **A full run** is every job on every suite. `VERSION` (a release is tested
-whole), `package.json`, `package-lock.json`, `requirements-dev.txt`,
+whole), `package.json`, `package-lock.json`, the root `pyproject.toml` and `uv.lock`,
 `packages/core`, `scripts/build`, `tests/python/support`, the workflow,
 `setup-deps`, the selector, the gate, the runners' shared parts and any path the
 table does not name start one; so do a manual dispatch, `Publish Release`'s call
@@ -247,7 +248,8 @@ already tested `main`'s tree in full.
 **Shards.** Run whole, the packages' suites are split over two jobs on Linux and
 three on Windows, each taking its share of every suite (`CAD_TEST_SHARD=I/N`,
 which any `run_python_unittest` honours); a narrowed selection runs in one. The
-first shard also runs the type check, once a platform because the checker reads
+floor's suites, which only a full run selects, are always split over two. The
+first shard of Linux and of Windows also runs the type check, once a platform because the checker reads
 the `win32` branches on Windows alone, and the package test files the change
 itself touches before the suite, so a break in a pull request's own test (most
 Windows failures are one: a POSIX path, a line ending) reports in a minute or
@@ -263,8 +265,10 @@ rule matches a tracked file and names tests that exist, every job runs on one fl
 and no step on any, a full run runs everything, and `CI` needs every job. A job
 is added, renamed, split or retimed without an edit there; a new job goes in
 `CI`'s `needs` (the same test fails one that is not there). Each job installs only
-what its tests need: npm workspaces by job, Python and the two Playwright browsers
-on request, system packages through `setup-deps`'s `apt` input, and nothing beyond
+what its tests need: npm workspaces by job, Python (the development environment,
+`uv sync --locked` from the one `uv.lock` contributors use, installed into the interpreter
+`setup-python` provides) and the
+two Playwright browsers on request, system packages through `setup-deps`'s `apt` input, and nothing beyond
 Python and Node for `static`.
 
 Every run records the tree it tested as an artifact, `tested-<tree>-<scope>`
@@ -292,7 +296,7 @@ stopping the merge.
 **Nothing waits long.** Every job has a timeout of about twice its slowest
 observed run (a job that runs Python test files, at least its slowest run and
 11 minutes, so the hang guard below fires before it), and every install step has
-one of its own (`setup-deps` as a whole, the pip and uv installs): a stalled
+one of its own (`setup-deps` as a whole, the uv installs): a stalled
 mirror fails in minutes rather than running out its job. The blender and KiCad
 suites fetch their environments as they run and the rehearsals are installs;
 their jobs' timeouts bound those. `setup-deps` installs system packages only when the image
@@ -339,10 +343,10 @@ Read the failing job, not the run: `CI` names the jobs that failed, and each job
 **The type check.** With the development environment active, check the distribution's Python sources with:
 
 ```sh
-python -m pyrefly check --config packages/cad/pyproject.toml
+uv run pyrefly check --config packages/cad/pyproject.toml
 ```
 
-Pyrefly is pinned in `requirements-dev.txt`. The package's `[tool.pyrefly]`
+Pyrefly is pinned in the root `pyproject.toml`'s `dev` group. The package's `[tool.pyrefly]`
 configuration uses the [basic preset](https://pyrefly.org/en/docs/configuration/#preset-basic)
 over its own `src`. It checks a limited set of diagnostics, including
 undefined names in annotations, and skips unannotated function bodies and broader

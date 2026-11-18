@@ -23,7 +23,7 @@ never starts a print.
 
 ## Setup
 
-Written for `cad==0.11.12`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+Written for `cad==0.11.13`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
 0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
 If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
@@ -78,6 +78,12 @@ files alone: it never runs OrcaSlicer, and works offline.
    `--printer`, `--process` and `--filament` also take a preset's JSON file;
    give `--filament` once per material, and `--profiles` another folder of
    presets to search first.
+
+   OrcaSlicer 2.5 and later keeps its built-in presets in binary caches
+   (`.opc`) that `cad orcaslicer` can't read. When a command says so, there
+   is no preset to slice headless with: open the model in the app instead
+   ([Open in OrcaSlicer](#open-in-orcaslicer)), unless the person has a
+   folder of complete preset JSON files to give with `--profiles`.
 
 3. Slice. Give `--outputdir` an absolute path:
 

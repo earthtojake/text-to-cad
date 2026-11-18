@@ -34,8 +34,12 @@ Push the branch to `origin` and open the pull request against
 
 ### Development environment
 
-Choose the setup for the environment where the tools and tests will run. Use
-Python 3.14, the Python the server's installations run on; the packages' floor is 3.11
+The Python side is a [uv](https://docs.astral.sh/uv/) project: the root `pyproject.toml` is a
+workspace whose one member is `packages/cad`, and `uv.lock` beside it pins every package the
+development environment holds, for contributors and CI alike. Install uv, then run `uv sync`
+once in the checkout (and again after a pull that changes the lock); `uv run <command>` runs a
+command in that environment, `.venv`. Use Python 3.14, the Python the server's installations run
+on (`uv sync --python 3.14`, which fetches it when it is missing); the packages' floor is 3.11
 (`requires-python`), which CI holds with the library's, the server's and the transport's suites on
 it before a release ships ([CI](docs/contributing/testing.md#ci), the release tier). Install Node.js 22 for the
 packaged runtime, Viewer, `@cad/core`, or documentation site; Python-only work
@@ -47,18 +51,17 @@ Use the POSIX shell. On WSL, install dependencies inside the distribution; do
 not reuse a Windows `.venv` or `node_modules` directory across the boundary.
 
 ```bash
-python3.14 -m venv .venv
-./.venv/bin/python -m pip install --upgrade pip
-./.venv/bin/python -m pip install -r requirements-dev.txt
+uv sync --python 3.14
+uv run scripts/test/test.sh
 ```
 
-Build the packaged runtime when the work needs it, and use the virtual
-environment's interpreter for direct CLI calls:
+Build the packaged runtime when the work needs it, and run CLI calls in the
+environment:
 
 ```bash
 scripts/bundle/bundle.sh
-./.venv/bin/python -m cad_server.cli xbf snapshot --help
-./.venv/bin/python -m cad_server.cli urdf validate --help
+uv run cad xbf snapshot --help
+uv run cad urdf validate --help
 ```
 
 The engine draws CAD snapshots with OCCT in an OpenGL context; a native KiCad board's
@@ -73,7 +76,7 @@ display nor Xvfb a snapshot fails, naming what to install.
 
 ```bash
 sudo apt-get install -y xvfb libgl1-mesa-dri fonts-dejavu-core
-xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-python.sh --select cadgen
+xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" uv run scripts/test/test-python.sh --select cadgen
 ```
 
 ### Native Windows
@@ -83,9 +86,7 @@ which runs the repository's checked-in `.sh` entry points just as Windows CI
 does.
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+uv sync --python 3.14
 ```
 
 Invoke repository scripts through Git Bash. The default installation path is
@@ -98,19 +99,19 @@ $gitBash = 'C:\Program Files\Git\bin\bash.exe'
 & $gitBash scripts/test/test-python.sh --select cadgen
 ```
 
-Use the Windows virtual-environment path for direct CLI calls, and the runner for a
-focused test, so the file builds on an engine daemon of its own:
+Use `uv run` for direct CLI calls, and the runner for a focused test, so the file
+builds on an engine daemon of its own:
 
 ```powershell
-.\.venv\Scripts\python.exe -m cad_server.cli xbf snapshot --help
+uv run cad xbf snapshot --help
 & $gitBash scripts/test/test-python.sh tests/python/packages/cad/test_urdf_source.py
 ```
 
 ### Development dependencies
 
-`requirements-dev.txt` installs the source package from `packages/cad` and the
-repository's own tooling. It installs `cad` editable, with its `build123d` extra (OCP,
-build123d and the rest), so the
+`uv sync` installs the root `pyproject.toml`'s `dev` group: the source package from
+`packages/cad` and the repository's own tooling (Playwright, `build`, distlib, Pyrefly). It
+installs `cad` editable, with its `build123d` extra (OCP, build123d and the rest), so the
 checkout's `.venv` carries the CAD kernel and is its own base environment: the server
 makes no base for it (`cad_server/_internal/base.py`; an installed cad makes its own on first
 need). The library comes with its `trimesh` extra too, so `cad
@@ -122,9 +123,10 @@ uv's cache where it holds it. The editable
 library installs `cad-lazy-kernel.pth` into the venv's site-packages as its wheel
 does (`packages/cad/setup.py`), so `import build123d` defers the kernel and a
 `python model.py` from a checkout costs what a user's does; a venv installed before
-that has no such file until `requirements-dev.txt` is installed again. This is
+that has no such file until it is synced again (`uv sync --reinstall-package cad`). This is
 the default Python environment for broad repo checks and source-checkout
-development. After pulling, reinstall `requirements-dev.txt` to refresh the
+development. The fea job's netgen and CalculiX are the `fea` group (`uv sync --group fea`);
+a plain `uv sync` takes them out again. After pulling, run `uv sync` to refresh the
 editable-install metadata: `cad.__version__` reports the installed
 dist-info by design — it is release-grained, so dev code is always newer than
 its number — and nothing behavioral consults it, but stale metadata makes the
@@ -154,7 +156,7 @@ Every build, export and snapshot runs in the engine server, a daemon: one per co
 `cad server start` (or `cad mcp`, which Codex's plugin line runs) and running until
 `cad server stop` (no timer stops it). A command that needs it and finds none says so in one line.
 A checkout's `.venv` reaches the same server as any client: to run a worktree's own engine, give it
-its own `CAD_ENGINE_DIR` and `CAD_STATE_DIR`. The engine folder, its door (a named pipe; on Windows,
+its own `CAD_ENGINE_DIR` and `CAD_STATE_DIR` ([Work In A Worktree](#work-in-a-worktree)). The engine folder, its door (a named pipe; on Windows,
 a port file) and lock live in `cad-engine` in `$XDG_RUNTIME_DIR`, else in the per-user temporary
 folder (on macOS the system's `/var/folders/...` one, whatever `$TMPDIR` a sandbox sets; else a
 per-user `$TMPDIR`), else in `/tmp/cad-<uid>` (Windows: the temporary folder); `CAD_ENGINE_DIR` moves
@@ -199,6 +201,56 @@ The robot validators used to be the exception, running on bare `python3` while
 their logic lived under `skills/`; that logic is the library's now (`cad.urdf`, `cad.sdf`, `cad.srdf`), run
 by `cad urdf|sdf|srdf validate`, so they need the server like everything else.
 
+## Work In A Worktree
+
+Iterate inside the worktree, on its own environment and its own server; install globally only to test
+end to end in an agent app ([Test In Agent Apps](#test-in-agent-apps)), one worktree at a time. Several
+worktrees can iterate at once: each has its own `.venv` (its own `packages/cad`, editable), `_runtime`,
+`node_modules` and server, and they share only uv's download cache, which uv locks.
+
+A worktree's `cad` (`uv run cad ...`, `.venv`'s) reaches the computer's one server unless it is given
+folders of its own, and a server is told apart by its release, never by its checkout: a worktree at
+0.11.12 and the published 0.11.12 are the same release, so its commands are served by the global
+server (the published code, or the code of whichever checkout last ran `dev_install.py`), and its
+`cad server start` joins that server rather than starting one. So give each worktree its own engine,
+state and cache folders (under `tmp/`, which is gitignored), and keep the server you start from
+updating itself:
+
+```bash
+uv sync --python 3.14
+npm ci && scripts/bundle/bundle.sh       # only for the CAD Viewer or the CAD app page
+export CAD_ENGINE_DIR=$PWD/tmp/engine CAD_STATE_DIR=$PWD/tmp/state CAD_CACHE_DIR=$PWD/tmp/cache CAD_UPDATE_CHECK=0
+uv run cad server start
+uv run python models/<model>/model.py    # builds on this worktree's server and prints its page
+uv run cad viewer                        # the home, served from this worktree's bundle
+```
+
+On Windows, in PowerShell:
+
+```powershell
+uv sync --python 3.14
+$env:CAD_ENGINE_DIR = "$PWD\tmp\engine"; $env:CAD_STATE_DIR = "$PWD\tmp\state"
+$env:CAD_CACHE_DIR = "$PWD\tmp\cache"; $env:CAD_UPDATE_CHECK = "0"
+uv run cad server start
+```
+
+An export lasts only in the shell it ran in. Where each command runs in a fresh shell (an agent's
+commands), set the variables in the same command as each `cad` command, from the worktree's root;
+a command without them reaches the computer's global server, which runs other code, and says nothing:
+
+```bash
+export CAD_ENGINE_DIR=$PWD/tmp/engine CAD_STATE_DIR=$PWD/tmp/state CAD_CACHE_DIR=$PWD/tmp/cache CAD_UPDATE_CHECK=0 && uv run cad server start
+```
+
+The server keeps the Python it started with: after editing `packages/cad/src`, run
+`uv run cad server stop` (with the same variables, so it stops this worktree's), and the next command
+starts the new code. Leave it running between edits of a model script: a build of the same script
+reuses its warm worker. Stop it when the worktree is done. Never stop a server you did not start.
+
+The test runners need none of this: `uv run scripts/test/test-python.sh <files>` gives each test file
+a server and folders of its own. Run plain `cad` (not `uv run cad`) and you get the global command,
+whatever the shell's folder.
+
 ## Test In Agent Apps
 
 A person installs text-to-cad with the install command
@@ -214,7 +266,9 @@ there, turns on `cad plugin update auto`, telling cad whether its run is ending 
 `tests/python/global/test_install_script.py` runs it against stand-in app commands in a home of its
 own.
 
-Test the skills the way users get them: as the plugin, with CAD's server. One script installs
+Test the skills the way users get them: as the plugin, with CAD's server. This is the global
+install, so one worktree at a time owns it: the last to run the script is the computer's `cad`, and
+the agent apps' (iterating needs none of it: [Work In A Worktree](#work-in-a-worktree)). One script installs
 this checkout into the agent apps, with the same table and each app's own command, the checkout
 in place of PyPI and GitHub:
 
@@ -377,8 +431,8 @@ trees from another checkout. Rebuild shared packages after editing them;
 Vite and Next consume their `dist` exports. `npm ci` without a
 workspace filter installs the whole workspace.
 
-Create this worktree's `.venv` with `requirements-dev.txt` when Python is
-needed. For web development, invoke Vite from a folder of models (the home shows it):
+Create this worktree's `.venv` with `uv sync` when Python is needed, and give it a server
+of its own ([Work In A Worktree](#work-in-a-worktree)). For web development, invoke Vite from a folder of models (the home shows it):
 
 ```bash
 cd <a folder of models>
@@ -410,12 +464,12 @@ viewer and cache. It never reads the sample-model corpus. The server itself need
 browser: OCCT draws its snapshots, and the wheel depends on no Playwright. The
 tests do: the UI/web tests and the browser suite drive npm Playwright's Chromium,
 and the viewer's launch smoke test (`scripts/test/test-viewer-launch.sh`) drives
-Python Playwright's headless shell, the one Python package `requirements-dev.txt`
+Python Playwright's headless shell, the one Python package the `dev` group
 installs for a browser. Install both; their revisions can differ:
 
 ```bash
 npx --no-install playwright install chromium                  # UI/web tests, browser suite
-.venv/bin/python -m playwright install --only-shell chromium  # the launch smoke test
+uv run playwright install --only-shell chromium               # the launch smoke test
 scripts/bundle/bundle.sh
 scripts/test/test-viewer-browser.sh
 scripts/test/test-viewer-browser.sh --only camera
@@ -858,24 +912,28 @@ green: that is the release. `Publish Release`, on the merge commit:
    (`@cad/core/chunk-ids`; rolldown's own names the code alone): one id
    names one map in every page and version, so no page's or version's map
    overwrites another's, and a later release that ships the same chunk and map
-   uploads it once. Then the `pypi` job uploads the four projects, one at a time:
+   uploads it once. Then the `pypi` job uploads the four projects:
    the only job that may mint a PyPI token, in the `release` environment (below,
    "Repository settings"). `cad` goes first, since each alias pins it at its own release, then
-   `cad-server`, `cad-mcp` and `cadgen`, whose index the version feed reads (`PROJECTS` in
-   `scripts/release/pypi_release.py`); each is listed by PyPI's simple index, which
-   uv resolves a pin through, before the next goes up (`--wait`: usually seconds).
+   `cad-server` and `cad-mcp` together, in one upload (neither requires the other; the token PyPI
+   mints covers every project that trusts this workflow), then `cadgen`, whose index the version
+   feed reads (`PROJECTS` in `scripts/release/pypi_release.py`); each step is listed by PyPI's simple
+   index, which uv resolves a pin through, before the next goes up (`--wait`: usually seconds).
    It uploads only what PyPI does not hold yet, so a resumed release uploads nothing
    twice, and what PyPI already holds is downloaded and checked against PyPI's
    sha256 for the GitHub Release to attach; a file PyPI holds that the run did not
    build stops the release.
-6. **Install branches** (on `main` only). `plugin_branch.py` commits the plugin
+6. **Install branches** (on `main` only), the first step of the tag's job (one runner for both, so a
+   busy queue costs the release one wait, not two). `plugin_branch.py` commits the plugin
    alone onto `latest`, `claude-plugin` and `codex-plugin` (the ZIP's files: [The install
    branches](#the-install-branches)), in one atomic push. Only now does
    an installer see the version.
 7. **Announce** (on `main` only), after the branches: `Deploy Docs`, whose
-   header names the release; and the `v<VERSION>`
-   tag and the GitHub Release, with the four projects' wheels and sdists as PyPI
-   serves them (the `pypi` job's artifact, `dist-<version>-released`),
+   header names the release (it starts once the tag's job ends, and runs where the branches moved
+   though the tag failed); and the `v<VERSION>`
+   tag and the GitHub Release, with `cad`'s wheel and sdist as PyPI
+   serves them (the `pypi` job's artifact, `dist-<version>-released`; the aliases' are empty,
+   and PyPI keeps them),
    the plugin ZIP and the source maps (`text-to-cad-sourcemaps-<version>.zip`, to
    upload a version's maps again) attached as release assets (PyPI stays the
    install channel; the release page is the provenance copy), and beside them the

@@ -143,11 +143,32 @@ export function planFromCamera({ position, target, halfHeight, perspective = fal
  * seen as the 2D view sees the back: mirrored left to right, not upside down. Turned about the
  * upright axis instead, the picture is the same but the world's up points down. Position and up, the
  * target kept.
+ *
+ * A camera the 3D views' orbit turned carries its screen's own up, which leans with its view (and,
+ * turned upside down, points down the world): kept as it is, it would roll the turned camera. Where it
+ * would, the turned camera's up is the world's, or its opposite for a camera upside down, so it is level
+ * and the world's up as it was on screen. Head on, the up is the 2D view's, kept.
  */
 export function cameraTurnedOver({ position, target, up }) {
   const offset = position.map((value, axis) => value - target[axis]);
   const turned = [offset[0], -offset[1], -offset[2]];
-  return { position: turned.map((value, axis) => value + target[axis]), target: [...target], up: [...up] };
+  return { position: turned.map((value, axis) => value + target[axis]), target: [...target], up: upTurnedOver(offset, turned, up) };
+}
+
+/** Which way `up` points on screen (1 up the world, -1 down it) for a camera looking back along `away`, unit. */
+function upSense(up, away) {
+  const along = up[0] * away[0] + up[1] * away[1] + up[2] * away[2];
+  return up[2] - along * away[2] < 0 ? -1 : 1;
+}
+
+function upTurnedOver(offset, turned, up) {
+  const length = Math.hypot(...offset);
+  if (!(length > 0) || Math.hypot(offset[0], offset[1]) <= 1e-9 * length) return [...up];
+  const away = offset.map((value) => value / length), turnedAway = turned.map((value) => value / length);
+  const sense = upSense(up, away);
+  // The turned camera's right is up × its view: level where that has no z.
+  const level = Math.abs(up[0] * turnedAway[1] - up[1] * turnedAway[0]) <= 1e-9 * Math.hypot(...up);
+  return level && upSense(up, turnedAway) === sense ? [...up] : [0, 0, sense];
 }
 
 /**

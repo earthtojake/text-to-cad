@@ -5,6 +5,7 @@ import { requestSceneFrame } from "../viewport/sceneFrames.js";
 import { CAMERA_TOUCH, fitCamera, touchCamera } from "./cameraTouch.js";
 import { perspectiveSnapshotEqual, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot } from "@cad/core/lib/perspective.js";
 import { VIEW_CUBE_DRAG_RAD_PER_PX, VIEW_PLANE_FACE_BY_ID, applyOrbitDelta, readViewPlaneOrientation, runtimeFramingBounds } from "./viewportCameraKit.js";
+import { turnSense } from "./turntable.js";
 
 /**
  * The camera of a mounted viewport, as React sees it: the perspective a session
@@ -146,16 +147,20 @@ export function useViewportCamera({
     return turned;
   }, []);
   // Dragging the view cube orbits the camera, as dragging Fusion's does: the cube turns with
-  // the pointer, so the camera turns the other way. Same orbit as the arrow keys.
-  const orbitFromViewCube = useCallback((dxPx, dyPx) => {
+  // the pointer, so the camera turns the other way. Same orbit as the arrow keys, over the poles
+  // too; the drag's sideways sense is picked on its first move (`starts`) and held to its end.
+  const viewCubeSenseRef = useRef(1);
+  const orbitFromViewCube = useCallback((dxPx, dyPx, starts = false) => {
     const runtime = runtimeRef.current;
     if (!runtime) {
       return false;
     }
+    if (starts) viewCubeSenseRef.current = turnSense(runtime.camera, runtime.controls?.target);
     cancelCameraTransition(runtime);
     // Interaction quality while the drag lasts, full quality once it rests: as the arrow keys.
     runtime.beginInteraction?.();
-    const orbited = applyOrbitDelta(runtime, -dxPx * VIEW_CUBE_DRAG_RAD_PER_PX, -dyPx * VIEW_CUBE_DRAG_RAD_PER_PX);
+    const orbited = applyOrbitDelta(runtime, -dxPx * VIEW_CUBE_DRAG_RAD_PER_PX, -dyPx * VIEW_CUBE_DRAG_RAD_PER_PX,
+      viewCubeSenseRef.current);
     runtime.scheduleIdleQuality?.();
     if (!orbited) {
       return false;

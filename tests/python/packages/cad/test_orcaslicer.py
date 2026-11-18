@@ -133,6 +133,32 @@ class OrcaSlicerPresets(unittest.TestCase):
                                 out=self.root / "out", profiles=(str(self.root),))
         self.assertFalse((self.root / "out").exists(), "every preset is resolved before a file is written")
 
+    def test_presets_kept_only_in_a_binary_cache_are_refused_by_name_not_listed_empty(self) -> None:
+        # OrcaSlicer 2.5+ ships each vendor's system presets as one binary <vendor>.opc and no preset JSONs (#850)
+        (self.root / "profiles").mkdir()
+        (self.root / "profiles" / "BBL.opc").write_bytes(b"\x00opc")
+        write(self.root, "profiles/blacklist.json", {"filaments": []})
+        with self.assertRaises(ArgumentRefused) as raised:
+            orcaslicer.presets("machine", profiles=(str(self.root / "profiles"),))
+        self.assertIn("BBL.opc", str(raised.exception))
+        self.assertIn("--profiles", str(raised.exception))
+        # a user preset whose parent is in the cache: the refusal says where the parent is
+        write(self.root, "profiles/user/machine/mine.json", {"type": "machine", "name": "My X1C", "from": "User",
+                                                             "inherits": "Bambu Lab X1 Carbon 0.4 nozzle"})
+        with self.assertRaisesRegex(ArgumentRefused, r"Can't resolve parent .*BBL\.opc"):
+            orcaslicer.complete(printer="My X1C", process="any", filament=("any",), out=self.root / "out",
+                                profiles=(str(self.root / "profiles"),))
+        self.assertFalse((self.root / "out").exists())
+
+    def test_with_presets_of_the_kind_a_cache_beside_them_changes_nothing(self) -> None:
+        profile_tree(self.root)
+        (self.root / "Other.opc").write_bytes(b"\x00opc")
+        self.assertEqual((), orcaslicer.presets("machine", match="No Such", profiles=(str(self.root),)).names)
+        self.assertEqual(("Acme One 0.4 nozzle",), orcaslicer.presets("machine", profiles=(str(self.root),)).names)
+        with self.assertRaisesRegex(ArgumentRefused, "No machine preset named 'No Such Printer'.*Other.opc"):
+            orcaslicer.complete(printer="No Such Printer", process="0.20mm @Acme", filament=("Generic PLA",),
+                                out=self.root / "out", profiles=(str(self.root),))
+
     def test_a_parent_chain_that_never_ends_is_refused(self) -> None:
         write(self.root, "Loop/process/loop.json", {"type": "process", "name": "Loop", "inherits": "Loop"})
         found, _ = _presets.index([self.root])

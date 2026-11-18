@@ -40,7 +40,10 @@ it('retains drag orbit without snapping after a drag, then permits the next clic
   fireEvent.pointerMove(window, { clientX: 11, clientY: 10 });
   expect(orbit).not.toHaveBeenCalled();
   fireEvent.pointerMove(window, { clientX: 30, clientY: 14 });
-  expect(orbit).toHaveBeenLastCalledWith(20, 4);
+  // The drag's first turn says it starts one (its orbit holds its sideways sense from there), the rest do not.
+  expect(orbit).toHaveBeenLastCalledWith(20, 4, true);
+  fireEvent.pointerMove(window, { clientX: 35, clientY: 14 });
+  expect(orbit).toHaveBeenLastCalledWith(5, 0, false);
   fireEvent.pointerUp(window); fireEvent.click(face);
   expect(activate).not.toHaveBeenCalled();
   fireEvent.pointerDown(face, { button: 0, clientX: 10, clientY: 10 });

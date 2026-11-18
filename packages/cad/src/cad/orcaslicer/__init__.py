@@ -57,17 +57,25 @@ def presets(kind: Literal["machine", "process", "filament"], *, match: str = "",
     """List the OrcaSlicer presets of one kind a person can select.
 
     They are searched in the folders given first, then the person's own OrcaSlicer presets, then the app's
-    built-in profiles (macOS, Windows, Linux and the Flathub build's folders).
+    built-in profiles (macOS, Windows, Linux and the Flathub build's folders). OrcaSlicer 2.5 and later ships
+    its system presets as binary caches (.opc), which are not read: where none of the kind is found and a cache
+    is there, the listing is refused, naming the cache, rather than empty.
 
     kind: machine (a printer), process or filament.
     match: only names containing this text, in any case.
     profiles: another folder of OrcaSlicer presets to search first; once per folder.
     """
+    from cad._internal.refused import ArgumentRefused
     from cad.orcaslicer import _presets
 
-    _found, selectable = _presets.index(_presets.roots(list(profiles)))
-    return Presets(kind, tuple(name for found_kind, name in sorted(selectable)
-                               if found_kind == kind and match.lower() in name.lower()))
+    roots = _presets.roots(list(profiles))
+    _found, selectable = _presets.index(roots)
+    of_kind = [name for found_kind, name in sorted(selectable) if found_kind == kind]
+    # None of the kind at all, beside caches it cannot read, is no answer: an empty list would say there are none.
+    why = "" if of_kind else _presets.unread_caches(roots)
+    if why:
+        raise ArgumentRefused(f"No {kind} preset found.{why}")
+    return Presets(kind, tuple(name for name in of_kind if match.lower() in name.lower()))
 
 
 def complete(*, printer: str, process: str, filament: tuple[str, ...] = (), out: Path = Path("presets"),
@@ -90,18 +98,26 @@ def complete(*, printer: str, process: str, filament: tuple[str, ...] = (), out:
 
     if not filament:
         raise ArgumentRefused("give at least one --filament")
-    found, _selectable = _presets.index(_presets.roots(list(profiles)))
-    printer_path = _presets.locate(found, "machine", printer)
-    machine, printer_system = _presets.merged(found, "machine", str(printer_path))
-    machine.update({"from": "User", "inherits": printer_system})
-    made_for = (printer_system, printer_path)
-    settings, process_system = _presets.merged(found, "process", process, made_for)
-    settings.update({"from": "User", "inherits": process_system, "compatible_printers": [printer_system]})
-    materials = []
-    for ref in filament:
-        material, filament_system = _presets.merged(found, "filament", ref, made_for)
-        material.update({"from": "User", "inherits": filament_system, "compatible_printers": [printer_system]})
-        materials.append(material)
+    roots = _presets.roots(list(profiles))
+    found, _selectable = _presets.index(roots)
+    try:
+        printer_path = _presets.locate(found, "machine", printer)
+        machine, printer_system = _presets.merged(found, "machine", str(printer_path))
+        machine.update({"from": "User", "inherits": printer_system})
+        made_for = (printer_system, printer_path)
+        settings, process_system = _presets.merged(found, "process", process, made_for)
+        settings.update({"from": "User", "inherits": process_system, "compatible_printers": [printer_system]})
+        materials = []
+        for ref in filament:
+            material, filament_system = _presets.merged(found, "filament", ref, made_for)
+            material.update({"from": "User", "inherits": filament_system, "compatible_printers": [printer_system]})
+            materials.append(material)
+    except ArgumentRefused as error:
+        # A preset or a parent not found may be in a cache this does not read: say so, not only that it is missing.
+        why = _presets.unread_caches(roots)
+        if not why:
+            raise
+        raise ArgumentRefused(f"{error}{why}") from None
     # Every preset is resolved before any file is written: a name that fails leaves the folder as it was.
     folder = Path(out).expanduser().resolve()
     folder.mkdir(parents=True, exist_ok=True)

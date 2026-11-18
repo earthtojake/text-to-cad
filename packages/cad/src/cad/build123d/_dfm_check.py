@@ -356,9 +356,11 @@ def molding(shape: Any, *, material: str | None = None, pull: Any = None,
 
 def printing(shape: Any, *, material: str | None = None, technology: str | None = None,
              build_volume: Any = None, angle_limit: float | None = None, layer_height: float | None = None,
-             nozzle: float | None = None, candidates: bool = False, strict: bool = False) -> Any:
+             nozzle: float | None = None, printer: Any = None, candidates: bool = False,
+             strict: bool = False) -> Any:
     """3D printing's check of ``shape``: ``dfm(shape, process="printing", ...)``."""
     return checked(shape, "printing", {"material": material, "technology": technology,
                                        "build_volume": build_volume, "angle_limit": angle_limit,
-                                       "layer_height": layer_height, "nozzle": nozzle}, candidates=candidates,
+                                       "layer_height": layer_height, "nozzle": nozzle,
+                                       "printer": printer}, candidates=candidates,
                    strict=strict)

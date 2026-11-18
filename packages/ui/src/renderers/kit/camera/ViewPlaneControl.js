@@ -245,12 +245,14 @@ function ViewPlaneControl({
     const startY = lastY;
     const move = (moveEvent) => {
       if (!draggedRef.current && Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 3) return;
-      if (!draggedRef.current) {
+      // The drag's first turn says so: the orbit holds its sideways sense from there to the drag's end.
+      const starts = !draggedRef.current;
+      if (starts) {
         draggedRef.current = true;
         setDragging(true);
         usage.used("view_cube_drag");
       }
-      orbitViewCube(moveEvent.clientX - lastX, moveEvent.clientY - lastY);
+      orbitViewCube(moveEvent.clientX - lastX, moveEvent.clientY - lastY, starts);
       lastX = moveEvent.clientX;
       lastY = moveEvent.clientY;
     };

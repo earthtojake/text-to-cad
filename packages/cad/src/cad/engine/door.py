@@ -178,16 +178,18 @@ def answering(door: Path) -> bool:
 
 class Connection:
     """One connection to the daemon: the lines it reads (``reader``) and writes (``writer``), the
-    door protocol it speaks (``protocol``, the greeting's) and the release its server runs (``release``,
-    the greeting's: None for a server of 0.11.11 or earlier)."""
+    door protocol it speaks (``protocol``, the greeting's), the release its server runs (``release``,
+    the greeting's: None for a server of 0.11.11 or earlier) and, on Windows, the token its hello said
+    (``token``, the port file's as it was read then), which its request carries too."""
 
     def __init__(self, reader: BinaryIO, writer: BinaryIO, *closing: Any, protocol: int = DOOR_PROTOCOL,
-                 release: str | None = None) -> None:
+                 release: str | None = None, token: str | None = None) -> None:
         self.reader = reader
         self.writer = writer
         self.closing = closing or (reader, writer)
         self.protocol = protocol
         self.release = release
+        self.token = token
 
     def close(self) -> None:
         for each in self.closing:

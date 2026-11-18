@@ -359,8 +359,8 @@ def _appdata_serving() -> str | None:
         try:
             connection = client._connect(door)
             if connection is not None:
-                answers.append(client._exchange(connection, {"op": "status", "internal": True}, address=door))
-        except (OSError, ValueError, ConnectionError, IndexError):
+                answers.append(client._exchange(connection, {"op": "status", "internal": True}))
+        except (OSError, ValueError, ConnectionError):
             pass
 
     asking = threading.Thread(target=ask, daemon=True)

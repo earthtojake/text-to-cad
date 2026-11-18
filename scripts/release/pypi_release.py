@@ -5,9 +5,10 @@ this run's files of that project, checked file by file against what PyPI already
     python3 scripts/release/pypi_release.py --project NAME --version X.Y.Z --built DIR --upload DIR --released DIR
     python3 scripts/release/pypi_release.py --project NAME --version X.Y.Z --wait
 
-A release is four projects on PyPI (``PROJECTS``), uploaded in that order, each listed by PyPI's index
+A release is four projects on PyPI (``PROJECTS``), uploaded in that order, each step listed by PyPI's index
 before the next goes (``--wait``): the library first, since the server and the alias pin it at their own
-release, then the server, the shim and the alias. Of ``--built`` (every file the run built), only
+release, then the server and the shim in one upload (neither pins the other: both calls name one
+``--upload`` folder), then the alias. Of ``--built`` (every file the run built), only
 ``--project``'s files are this call's: a wheel or sdist whose name is the project's, normalized, then the
 version.
 

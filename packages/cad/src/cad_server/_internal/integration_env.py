@@ -19,7 +19,7 @@ collision, the coacd integration's (``cad.engine.hulls``, for ``cad.mujoco.decom
 the integration's code there in a process of its own.
 
 An installation whose own environment carries the integration (one installed with its extra; a
-checkout's development environment for trimesh alone, as ``requirements-dev.txt`` installs the library
+checkout's development environment for trimesh alone, as the checkout's ``uv sync`` installs the library
 with that extra and not kicad's) runs the operation itself, in this process, as an installation that
 carries the kernel is its own base (``base``).
 """

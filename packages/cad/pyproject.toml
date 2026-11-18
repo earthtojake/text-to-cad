@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cad"
-version = "0.11.12"
+version = "0.11.13"
 description = "CAD models as Python: the library a model imports, built into documents (.xbf) and the STEP, GLB, STL, 3MF and DXF they declare, with the CAD kernel as its build123d extra; and the cad command, its server and the CAD Viewer."
 readme = "README.md"
 license = "MIT"
@@ -39,7 +39,7 @@ dependencies = [
   # The server makes the environment its workers run in, and each release's an update installs, with
   # uv: a dependency, so it is always there (its wheel carries the binary, `uv.find_uv_bin`), on a
   # machine with no uv on PATH too.
-  "uv>=0.7",
+  "uv>=0.13.8",
   # The CAD Viewer's DXF pane flattens a drawing with ezdxf in the server's own process.
   "ezdxf",
   # The DXF pane's raster and the Recents' previews are drawn with Pillow.
@@ -85,7 +85,7 @@ build123d = [
   # A stress study (`cad <type> solve`) finds the parts of an assembly that touch with scipy (a KD-tree
   # of sampled faces) in the kernel's process, beside the B-rep it reads. build123d brings it already;
   # it is named here because the library imports it itself.
-  "scipy>=1.14,<2",
+  "scipy>=1.17.1,<2",
 ]
 # The kicad integration's extra: kicode, KiCad's headless command line (kicad-cli) and its IPC API client
 # (KiPy, as `kicode`) in one package -- what a check, an export and an edit (kicad_pcb.edit) run; a
@@ -124,10 +124,10 @@ calculix = [
 # family dies on a ModuleNotFoundError. Meshes are read by the library's own readers (a 3MF and a GLB
 # written as an STL first), so trimesh's 3MF loader and lxml, which it alone needs, are not ours.
 trimesh = [
-  "trimesh>=4.6,<6",
+  "trimesh>=5.2.1,<6",
   "rtree>=1.2,<2",
-  "scipy>=1.14,<2",
-  "networkx>=3.2,<4",
+  "scipy>=1.17.1,<2",
+  "networkx>=3.6.1,<4",
 ]
 # The mujoco integration's extra: MuJoCo's headless core -- the compiler and the Python bindings, numpy their
 # one dependency (cad.mujoco) -- and MuJoCo Studio. `cad mujoco check` compiles a model with the core, so
@@ -140,7 +140,7 @@ trimesh = [
 # (MjSpec, the warning hook) and Studio's command line moved between majors.
 mujoco = [
   "mujoco-core>=4.0,<5",
-  "mujoco-studio>=4.0,<5",
+  "mujoco-studio>=4.0.1,<5",
 ]
 # The coacd integration's extra: cad.mujoco.decompose makes a part of a MuJoCo function's spec collide as
 # the convex hulls CoACD cuts its mesh into (cad.coacd), imported only by the decomposer's own process

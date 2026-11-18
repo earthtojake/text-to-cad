@@ -1403,7 +1403,16 @@ label and path — `Snapshot (cad <type> snapshot --annotation):` — or the com
 
 ## Camera, animation and Preview
 
-Cube face, edge and corner clicks turn the view and keep pan and zoom; dragging
+A drag on the model orbits as a turntable that goes over the top (`kit/camera/turntable.js`):
+sideways about the world's vertical, up and down about the view's own level right, with no stop
+at straight down or straight up — the view goes on over the pole and comes round upside down,
+never rolled. A sideways drag begun upside down turns the other way, so the model's near side
+follows the cursor; the drag keeps the sense it began with to its end, so one that crosses a pole
+never reverses under the cursor, and the next drag picks again. The arrow keys (held together, one
+gesture) and a drag across the cube orbit the same way.
+
+Cube face, edge and corner clicks turn the view and keep pan and zoom, and land upright: the top
+and bottom exactly down their axis, +Y up the screen; dragging
 the cube orbits. Reloading the page restores the camera the file on screen was left
 at, and its Display settings, Explode/Clip, the pose, hidden and isolated parts and
 the tree's expansion come back with it. A file left in the page — for another file or the

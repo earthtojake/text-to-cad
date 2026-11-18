@@ -109,7 +109,8 @@ def _connect(address: Path | None = None, *, stopping: bool = False) -> Connecti
                 stream.close()
                 connection.close()
                 return None
-            return Connection(stream, stream, stream, connection, protocol=spoken, release=released(line))
+            return Connection(stream, stream, stream, connection, protocol=spoken, release=released(line),
+                              token=token)
         door = address or places.door_path()
         if places.folder_refusal(door.parent) is not None or not door.exists():
             return None
@@ -413,7 +414,7 @@ def hold(*, start: bool = True, host: Callable[[], str | None] | None = None,
         if holder:
             message["holder"] = holder
         if places.WINDOWS:
-            message = {"token": places.port_path().read_text(encoding="utf-8").split()[1], **message}
+            message = {"token": connection.token, **message}
         connection.writer.write((json.dumps(message) + "\n").encode())
         connection.writer.flush()
         if json.loads(connection.reader.readline() or b"{}").get("ok") is not True:
@@ -469,9 +470,10 @@ def _within(seconds: float, work: Callable[[], Any]) -> Any:
 
 
 def _exchange(connection: Connection, message: dict[str, Any], on_log: Callable[[dict[str, Any]], None] = lambda _m: None,
-              on_progress: Callable[[dict[str, Any]], None] | None = None, address: Path | None = None) -> dict[str, Any]:
-    if places.WINDOWS:  # the token in the request too, which the daemon checks as it did the hello's
-        message = {"token": (address or places.port_path()).read_text(encoding="utf-8").split()[1], **message}
+              on_progress: Callable[[dict[str, Any]], None] | None = None) -> dict[str, Any]:
+    if places.WINDOWS:  # the token in the request too, which the daemon checks as it did the hello's: the hello's own,
+        # never the port file read again, which a server stopping meanwhile has removed and one starting rewritten
+        message = {"token": connection.token, **message}
     with connection:
         connection.writer.write((json.dumps(message) + "\n").encode())
         connection.writer.flush()
@@ -516,8 +518,7 @@ def _note_pages(address: Path) -> None:
         connection = _connect(address)
         if connection is None:
             return
-        answer = _within(PAGES_SECONDS, lambda: _exchange(connection, {"op": "status", "internal": True},
-                                                          address=address))
+        answer = _within(PAGES_SECONDS, lambda: _exchange(connection, {"op": "status", "internal": True}))
         serving = answer.get("serving") if isinstance(answer, dict) else None
         port = serving.get("port") if isinstance(serving, dict) else None
         if type(port) is not int or not 0 < port < 65536:
@@ -560,7 +561,7 @@ def sweep(*, stop: bool, seconds: float = 60.0, leave: str | None = None) -> dic
                 found["running"].append(str(endpoint.address))
                 continue
             try:
-                _exchange(connection, {"op": "stop"}, address=endpoint.address)
+                _exchange(connection, {"op": "stop"})
             except ConnectionError:
                 pass  # it closed the connection unanswered: stopping already (another start told it), as asked
             if not wait_gone(seconds, endpoint=endpoint, leave=leave):

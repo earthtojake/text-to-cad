@@ -173,7 +173,8 @@ RULES: tuple[Rule, ...] = (
     # Shared by every job, or the selection itself: everything runs.
     Rule((
         "VERSION",                       # a release is tested whole
-        "package.json", "package-lock.json", "requirements-dev.txt",
+        "package.json", "package-lock.json",
+        "pyproject.toml", "uv.lock",     # the development environment every Python job makes
         ".github/workflows/test.yml", ".github/actions/**",
         "scripts/github-workflows/select_checks.py", "scripts/github-workflows/tested_tree.py",
         "scripts/github-workflows/ci_gate.py",

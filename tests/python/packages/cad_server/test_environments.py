@@ -21,7 +21,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.python.support import engine_daemon
+from tests.python.support import engine_daemon, uv_cache
 from tests.python.support.paths import LIBRARY, add_sources
 
 add_sources()
@@ -76,6 +76,9 @@ class CoreAndBaseTest(unittest.TestCase):
                         "hardlink", "-e", str(LIBRARY)], check=True, capture_output=True)
         # The device's current installation, as setup registers it: the engine every client starts.
         assert engine_daemon.register(os.environ["CAD_STATE_DIR"], str(base.interpreter(cls.core)), str(cls.core))
+        # uv's cache holding what the base's offline install reads, warmed before uv is counted: an environment
+        # synced from a lock leaves it without, and the base would then ask uv a second time, from the network.
+        uv_cache.warm(cls.root)
         # A uv first on PATH that writes a line of what it is asked, then runs the real one.
         folder, cls.log = cls.root / "bin", cls.root / "uv.log"
         folder.mkdir()

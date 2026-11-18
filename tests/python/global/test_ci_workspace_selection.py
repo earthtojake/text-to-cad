@@ -158,6 +158,18 @@ class EveryTestRunsInCI(unittest.TestCase):
         self.assertIn("--select ui-${{ matrix.part }}", JOBS["js-ui"])
         for part in parts:
             self.assertIn(f"UI_TEST_PASS={part} npm --prefix packages/ui test", runner)
+        # The floor always runs whole (a full run alone selects it), so its shards are fixed: every
+        # one of them, each passed to the runner.
+        shards = re.search(r"shard: \[([\w/, ]+)\]", JOBS["packages-floor"])[1].split(", ")
+        self.assertEqual(shards, [f"{index}/{len(shards)}" for index in range(1, len(shards) + 1)])
+        self.assertIn("CAD_TEST_SHARD: ${{ matrix.shard }}", JOBS["packages-floor"])
+        # The update rehearsal's shards split its steps by hand: each step runs on a shard the matrix has, and
+        # each shard runs a step.
+        shards = re.search(r"shard: \[([\w/, ]+)\]", JOBS["update-rehearsal"])[1].split(", ")
+        named = re.findall(r"matrix\.shard == '([\w/]+)'", JOBS["update-rehearsal"])
+        self.assertEqual(sorted(set(named)), sorted(shards))
+        self.assertEqual(len(named), len(re.findall(r"(?m)^        run: python scripts/test/rehearse-update\.py",
+                                                    JOBS["update-rehearsal"])))
 
 
 class TheTableHoldsToTheTree(unittest.TestCase):
@@ -451,7 +463,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(route("some/new/kind/of.file")["full"], "true")
         self.assertEqual(jobs_for("some/new/kind/of.file"), GATED)
         # ...and so does what every job shares, and the selection itself.
-        for path in ("VERSION", "package-lock.json", "requirements-dev.txt", ".github/workflows/test.yml",
+        for path in ("VERSION", "package-lock.json", "pyproject.toml", "uv.lock", ".github/workflows/test.yml",
                      ".github/actions/setup-deps/action.yml", "scripts/github-workflows/select_checks.py",
                      "scripts/test/unittest_files.py", "tests/python/support/paths.py", "packages/core/package.json"):
             with self.subTest(path=path):
