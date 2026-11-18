@@ -1,6 +1,6 @@
 """The KiCad suite's KiCad: kicode, in the environment of ``cad[kicad]`` the server makes, as a person's gets.
 
-The test's own Python holds no kicode (``requirements-dev.txt`` installs no ``kicad`` extra), so the suite
+The test's own Python holds no kicode (the development environment, ``uv sync``, installs no ``kicad`` extra), so the suite
 runs KiCad where the ``cad`` command does: in the environment of the kicad integration, made by
 ``cad_server._internal.integration_env`` (the library from this checkout, editable, with kicode).
 ``scripts/test/test-kicad.sh`` makes it once and names its Python in ``CAD_TEST_KICODE_PYTHON``, so every

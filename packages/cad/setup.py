@@ -7,7 +7,7 @@ installer unpacks into site-packages. setuptools' ``data-files`` cannot put it t
 data scheme installs under the environment's prefix -- so ``build_py`` copies it beside the
 packages, as setuptools ships its own ``distutils-precedence.pth``. ``MANIFEST.in`` carries it
 into the sdist, which the wheel is built from. An editable install (a checkout's
-``requirements-dev.txt``) gets it too: its wheel holds what is installed at ``install_lib``, the
+development environment) gets it too: its wheel holds what is installed at ``install_lib``, the
 wheel's root, and nothing of ``build_lib``, so ``build_py`` copies it there as well.
 """
 

@@ -276,15 +276,12 @@ jobs:
       # Package data fails quietly: a glob that stops matching produces a wheel that
       # imports fine and cannot build a DXF preview or serve the Viewer.
       - name: Check the wheels' contents
-        run: |
-          python -m pip install build
-          scripts/release/check-wheel-contents.sh
+        run: scripts/release/check-wheel-contents.sh
 
       # The release's four projects on PyPI, a wheel and an sdist each, into one folder: cad, then its
       # aliases, in the order they are uploaded.
       - name: Build the four distributions
         run: |
-          python3 -m pip install --upgrade build
           for project in cad aliases/cad-server aliases/cad-mcp aliases/cadgen; do
             python3 -m build --outdir dist "packages/$project"
           done

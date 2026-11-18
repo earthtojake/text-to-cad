@@ -123,6 +123,11 @@ class PluginTreeTests(unittest.TestCase):
                 zipped = {info.filename: (archive.read(info), info.external_attr >> 16 & 0o111 != 0)
                           for info in archive.infolist() if not info.is_dir()}
         self.assertEqual(zipped, {path: (data, mode == "100755") for path, (mode, data) in codex.items()})
+        # The repository's development environment (the root pyproject.toml, a uv workspace, and its uv.lock) is
+        # main's alone: no copy carries a package manager's file, and claude.ai's directory refuses one.
+        self.assertTrue({"pyproject.toml", "uv.lock"} <= set(on_main))
+        for tree in (install, directory, codex):
+            self.assertEqual({"pyproject.toml", "uv.lock"} & set(tree), set())
 
     def test_the_readme_installs_by_the_skills_line(self) -> None:
         # The copies' README installs cad by the line every skill's setup block gives.

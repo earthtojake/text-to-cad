@@ -33,6 +33,11 @@ export const tomlTargets = [
   "packages/aliases/cadgen/pyproject.toml",
 ];
 
+// The development environment's lock (uv.lock, beside the root pyproject.toml): it records the version of cad, the
+// workspace's one member, and `uv sync --locked` refuses a lock whose cad is not the pyproject's. Its entry is
+// stamped as the pyproject is, so a release needs no `uv lock` of its own.
+export const lockTargets = [{ path: "uv.lock", name: "cad", source: "packages/cad" }];
+
 // The release written into a file the release does not stamp by a version field: cad as a requirement
 // (`cad==X`, with an extra or not: the aliases', each skill's setup block) or as uvx runs it (`cad@X`: Codex's
 // server line). `cad` stands alone (`my-cad==` is another name, `text-to-cad@earthtojake` a plugin) and the
@@ -244,6 +249,26 @@ function syncTomlTarget(relativePath, version) {
   };
 }
 
+function syncLockTarget(target, version) {
+  const text = readRequiredText(target.path);
+  const escape = (value) => value.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  const entry = new RegExp(
+    String.raw`^(\[\[package\]\]\r?\nname = "${escape(target.name)}"\r?\nversion = ")([^"]+)("\r?\nsource = \{ editable = "${escape(target.source)}" \})`,
+    "gm");
+  const matches = [...text.matchAll(entry)];
+  if (matches.length !== 1) {
+    throw new Error(`${target.path} must hold exactly one entry for ${target.name}, editable from ${target.source}`);
+  }
+  if (matches[0][2] === version) {
+    return null;
+  }
+  return {
+    path: target.path,
+    labels: [`${target.name} version`],
+    text: text.replace(entry, (_, head, _old, tail) => `${head}${version}${tail}`),
+  };
+}
+
 function syncPinTarget(relativePath, version, text = readRequiredText(relativePath)) {
   const pin = new RegExp(pinPattern.source, "g");
   const matches = [...text.matchAll(pin)];
@@ -318,6 +343,12 @@ function main() {
   }
   for (const target of tomlTargets) {
     const change = syncTomlTarget(target, version);
+    if (change) {
+      changes.push(change);
+    }
+  }
+  for (const target of lockTargets) {
+    const change = syncLockTarget(target, version);
     if (change) {
       changes.push(change);
     }

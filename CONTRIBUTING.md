@@ -34,8 +34,12 @@ Push the branch to `origin` and open the pull request against
 
 ### Development environment
 
-Choose the setup for the environment where the tools and tests will run. Use
-Python 3.14, the Python the server's installations run on; the packages' floor is 3.11
+The Python side is a [uv](https://docs.astral.sh/uv/) project: the root `pyproject.toml` is a
+workspace whose one member is `packages/cad`, and `uv.lock` beside it pins every package the
+development environment holds, for contributors and CI alike. Install uv, then run `uv sync`
+once in the checkout (and again after a pull that changes the lock); `uv run <command>` runs a
+command in that environment, `.venv`. Use Python 3.14, the Python the server's installations run
+on (`uv sync --python 3.14`, which fetches it when it is missing); the packages' floor is 3.11
 (`requires-python`), which CI holds with the library's, the server's and the transport's suites on
 it before a release ships ([CI](docs/contributing/testing.md#ci), the release tier). Install Node.js 22 for the
 packaged runtime, Viewer, `@cad/core`, or documentation site; Python-only work
@@ -47,18 +51,17 @@ Use the POSIX shell. On WSL, install dependencies inside the distribution; do
 not reuse a Windows `.venv` or `node_modules` directory across the boundary.
 
 ```bash
-python3.14 -m venv .venv
-./.venv/bin/python -m pip install --upgrade pip
-./.venv/bin/python -m pip install -r requirements-dev.txt
+uv sync --python 3.14
+uv run scripts/test/test.sh
 ```
 
-Build the packaged runtime when the work needs it, and use the virtual
-environment's interpreter for direct CLI calls:
+Build the packaged runtime when the work needs it, and run CLI calls in the
+environment:
 
 ```bash
 scripts/bundle/bundle.sh
-./.venv/bin/python -m cad_server.cli xbf snapshot --help
-./.venv/bin/python -m cad_server.cli urdf validate --help
+uv run cad xbf snapshot --help
+uv run cad urdf validate --help
 ```
 
 The engine draws CAD snapshots with OCCT in an OpenGL context; a native KiCad board's
@@ -73,7 +76,7 @@ display nor Xvfb a snapshot fails, naming what to install.
 
 ```bash
 sudo apt-get install -y xvfb libgl1-mesa-dri fonts-dejavu-core
-xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-python.sh --select cadgen
+xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" uv run scripts/test/test-python.sh --select cadgen
 ```
 
 ### Native Windows
@@ -83,9 +86,7 @@ which runs the repository's checked-in `.sh` entry points just as Windows CI
 does.
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+uv sync --python 3.14
 ```
 
 Invoke repository scripts through Git Bash. The default installation path is
@@ -98,19 +99,19 @@ $gitBash = 'C:\Program Files\Git\bin\bash.exe'
 & $gitBash scripts/test/test-python.sh --select cadgen
 ```
 
-Use the Windows virtual-environment path for direct CLI calls, and the runner for a
-focused test, so the file builds on an engine daemon of its own:
+Use `uv run` for direct CLI calls, and the runner for a focused test, so the file
+builds on an engine daemon of its own:
 
 ```powershell
-.\.venv\Scripts\python.exe -m cad_server.cli xbf snapshot --help
+uv run cad xbf snapshot --help
 & $gitBash scripts/test/test-python.sh tests/python/packages/cad/test_urdf_source.py
 ```
 
 ### Development dependencies
 
-`requirements-dev.txt` installs the source package from `packages/cad` and the
-repository's own tooling. It installs `cad` editable, with its `build123d` extra (OCP,
-build123d and the rest), so the
+`uv sync` installs the root `pyproject.toml`'s `dev` group: the source package from
+`packages/cad` and the repository's own tooling (Playwright, `build`, distlib, Pyrefly). It
+installs `cad` editable, with its `build123d` extra (OCP, build123d and the rest), so the
 checkout's `.venv` carries the CAD kernel and is its own base environment: the server
 makes no base for it (`cad_server/_internal/base.py`; an installed cad makes its own on first
 need). The library comes with its `trimesh` extra too, so `cad
@@ -122,9 +123,10 @@ uv's cache where it holds it. The editable
 library installs `cad-lazy-kernel.pth` into the venv's site-packages as its wheel
 does (`packages/cad/setup.py`), so `import build123d` defers the kernel and a
 `python model.py` from a checkout costs what a user's does; a venv installed before
-that has no such file until `requirements-dev.txt` is installed again. This is
+that has no such file until it is synced again (`uv sync --reinstall-package cad`). This is
 the default Python environment for broad repo checks and source-checkout
-development. After pulling, reinstall `requirements-dev.txt` to refresh the
+development. The fea job's netgen and CalculiX are the `fea` group (`uv sync --group fea`);
+a plain `uv sync` takes them out again. After pulling, run `uv sync` to refresh the
 editable-install metadata: `cad.__version__` reports the installed
 dist-info by design — it is release-grained, so dev code is always newer than
 its number — and nothing behavioral consults it, but stale metadata makes the
@@ -377,8 +379,12 @@ trees from another checkout. Rebuild shared packages after editing them;
 Vite and Next consume their `dist` exports. `npm ci` without a
 workspace filter installs the whole workspace.
 
-Create this worktree's `.venv` with `requirements-dev.txt` when Python is
-needed. For web development, invoke Vite from a folder of models (the home shows it):
+Create this worktree's `.venv` with `uv sync` when Python is needed: each worktree has
+its own, with its own `packages/cad` installed editable, and uv's cache makes the second one
+quick. The computer's `cad` command and its one server are not per worktree:
+`scripts/install/dev_install.py` points them at the worktree that ran it last, and a
+worktree's `.venv` reaches that server unless it has its own `CAD_ENGINE_DIR` and
+`CAD_STATE_DIR`. For web development, invoke Vite from a folder of models (the home shows it):
 
 ```bash
 cd <a folder of models>
@@ -410,12 +416,12 @@ viewer and cache. It never reads the sample-model corpus. The server itself need
 browser: OCCT draws its snapshots, and the wheel depends on no Playwright. The
 tests do: the UI/web tests and the browser suite drive npm Playwright's Chromium,
 and the viewer's launch smoke test (`scripts/test/test-viewer-launch.sh`) drives
-Python Playwright's headless shell, the one Python package `requirements-dev.txt`
+Python Playwright's headless shell, the one Python package the `dev` group
 installs for a browser. Install both; their revisions can differ:
 
 ```bash
 npx --no-install playwright install chromium                  # UI/web tests, browser suite
-.venv/bin/python -m playwright install --only-shell chromium  # the launch smoke test
+uv run playwright install --only-shell chromium               # the launch smoke test
 scripts/bundle/bundle.sh
 scripts/test/test-viewer-browser.sh
 scripts/test/test-viewer-browser.sh --only camera

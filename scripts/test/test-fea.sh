@@ -15,7 +15,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 cd "$REPO_ROOT"
 
-"$PYTHON_BIN" -c "import netgen.meshing" || { echo "test-fea.sh: netgen is not installed: install ./packages/cad[netgen]" >&2; exit 1; }
-"$PYTHON_BIN" -c "import cad_ccx; cad_ccx.executable()" || { echo "test-fea.sh: the cad-ccx package is not installed: install ./packages/cad[calculix]" >&2; exit 1; }
+"$PYTHON_BIN" -c "import netgen.meshing" || { echo "test-fea.sh: netgen is not installed: uv sync --group fea" >&2; exit 1; }
+"$PYTHON_BIN" -c "import cad_ccx; cad_ccx.executable()" || { echo "test-fea.sh: the cad-ccx package is not installed: uv sync --group fea" >&2; exit 1; }
 
 run_python_unittest "Stress study (solve, fea) Python tests" "tests/python/packages/fea" "${PACKAGE_SOURCES[@]}"

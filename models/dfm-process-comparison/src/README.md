@@ -1,6 +1,6 @@
 # Model catalog
 
-Run each script with the repository's Python environment (`requirements-dev.txt`). Each builds its model in
+Run each script with the repository's Python environment (`uv sync`, then `uv run python <script>`). Each builds its model in
 the engine and prints its id and page; `cad model export <id> STEP/<name>.step` (or `.stl`)
 writes a file of it when one is wanted.
 

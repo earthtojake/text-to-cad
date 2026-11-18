@@ -451,7 +451,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(route("some/new/kind/of.file")["full"], "true")
         self.assertEqual(jobs_for("some/new/kind/of.file"), GATED)
         # ...and so does what every job shares, and the selection itself.
-        for path in ("VERSION", "package-lock.json", "requirements-dev.txt", ".github/workflows/test.yml",
+        for path in ("VERSION", "package-lock.json", "pyproject.toml", "uv.lock", ".github/workflows/test.yml",
                      ".github/actions/setup-deps/action.yml", "scripts/github-workflows/select_checks.py",
                      "scripts/test/unittest_files.py", "tests/python/support/paths.py", "packages/core/package.json"):
             with self.subTest(path=path):
