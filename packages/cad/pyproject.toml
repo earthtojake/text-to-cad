@@ -127,7 +127,7 @@ trimesh = [
   "trimesh>=4.6,<6",
   "rtree>=1.2,<2",
   "scipy>=1.14,<2",
-  "networkx>=3.2,<4",
+  "networkx>=3.6.1,<4",
 ]
 # The mujoco integration's extra: MuJoCo's headless core -- the compiler and the Python bindings, numpy their
 # one dependency (cad.mujoco) -- and MuJoCo Studio. `cad mujoco check` compiles a model with the core, so
