@@ -365,7 +365,7 @@ class ManufacturingCheckCommand(unittest.TestCase):
                          {"step": "build123d", "stl": "trimesh"})
         found = base.Environment(sys.executable, sys.prefix, True)
         with mock.patch.object(base, "ensure", return_value=found) as kernel, \
-                mock.patch.object(extras, "ensure", return_value=found) as other:
+                mock.patch.object(extras, "_complete", return_value={"path": None}) as other:
             integration_env.environment("build123d", print)
             self.assertEqual((kernel.call_count, other.call_count), (1, 0))
             integration_env.environment("trimesh", print)

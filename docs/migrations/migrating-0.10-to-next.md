@@ -1,10 +1,9 @@
-# Migrating from 0.10 to the next release
+# Migrating from 0.10 to 0.11
 
-Draft: this guide is renamed for its release when it ships. It covers the skills, the library's
-imports, the `cad` command, what `cad run` runs a program in, and setting up and updating.
-The next release is a minor release, so it never installs itself: update with the update button or
-`cad update` when you are ready. Its patch releases then install themselves, with automatic updates on
-([Setting up and updating](#setting-up-and-updating)).
+This guide covers moving a project from 0.10 to 0.11: the skills, the library's imports, the `cad`
+command, what `cad run` runs a program in, and setting up and updating as 0.11.0 to 0.11.11 did it.
+How text-to-cad installs and updates today is in [docs/install.md](../install.md); the releases after
+0.11.11 need no migration.
 
 Each change names its tier of the compatibility law ([law 15](../../packages/cad/README.md#the-design-laws),
 "Compatibility, by who pays for a break"), which says what a change of its kind keeps working.

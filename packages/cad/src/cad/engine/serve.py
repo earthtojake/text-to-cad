@@ -518,8 +518,8 @@ _PREPARATION: Callable[[str], dict[str, Any]] | None = None
 
 def _end(pool: concurrent.futures.ProcessPoolExecutor) -> None:
     """A process pool shut down now: its queued jobs cancelled and each of its processes ended, a busy one
-    too. ``ProcessPoolExecutor.terminate_workers`` from Python 3.14; on 3.13, the packages' floor, the same
-    steps here: the processes noted, the pool shut down without waiting, each one still alive terminated."""
+    too. ``ProcessPoolExecutor.terminate_workers`` from Python 3.14; before it (the packages' floor is 3.11), the
+    same steps here: the processes noted, the pool shut down without waiting, each one still alive terminated."""
     if hasattr(pool, "terminate_workers"):
         pool.terminate_workers()
         return
@@ -1061,12 +1061,9 @@ class Server:
         self.on_close = lambda: None
         # A hold's client gone (``Daemon.hold``), by the name it held with: its MCP sessions end.
         self.on_hold_end: Callable[[str], None] = lambda _holder: None
-        # What an update's drain waits for beside the daemon's own work (``daemon.Daemon.working``): the
-        # application's exports and agents' MCP calls in flight, as the distribution's application says.
+        # What a drain waits for beside the daemon's own work (``daemon.Daemon.working``): the application's
+        # exports and agents' MCP calls in flight, as the distribution's application says.
         self.clients_working: Callable[[], bool] = lambda: False
-        # The daemon's drain for an update (``daemon.Daemon.drain``): ``retire(then)`` stops the engine once
-        # nothing is in flight, ``then`` first (the switch's helper started); the daemon sets it.
-        self.retire: Callable[..., None] = lambda then=None: None
         self.provenance = provenance
         self.load_lock = threading.RLock()
         self.changed = threading.Condition()

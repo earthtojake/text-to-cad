@@ -279,9 +279,11 @@ finally:
         from cad_mcp.shim import Proxy
         proxy = Proxy()
         context = RequestContext(1, {})
-        proxy.handle('initialize', {'protocolVersion': '2025-11-25',
-                     'capabilities': {'extensions': {'io.modelcontextprotocol/ui':
-                         {'mimeTypes': ['text/html;profile=mcp-app']}}}}, context)
+        # Cards, through the development switch: the tunnel is the same in a Codex tab.
+        with mock.patch.dict(os.environ, {'CAD_MCP_PRESENTATION': 'inline'}):
+            proxy.handle('initialize', {'protocolVersion': '2025-11-25',
+                         'capabilities': {'extensions': {'io.modelcontextprotocol/ui':
+                             {'mimeTypes': ['text/html;profile=mcp-app']}}}}, context)
         self.addCleanup(proxy.close)
         copy = self.base / "tunnelled.step"
         shutil.copyfile(self.step, copy)

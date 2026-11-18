@@ -145,7 +145,7 @@ const renderers = [createDxfRenderer({ client, preferences }), createGlbRenderer
 
 Public entry points include `/host`, `/file-viewer`, `/tab-store`, `/navigation`,
 `/renderers/dxf`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/xbf`, `/renderers/workspace`, `/file-viewer/presentation`,
-`/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the app menu's Telemetry row and its state), `/update` (the update button), `/whats-new` (the What's new dialog, its notes and when it shows), `/i18n` (the locales and the translation hook), `/i18n/locale` (which locale a person reads in, with no dictionary: for a page that says a few words before anything else loads), `/build-id` (what a Vite config names the build with), `/loading-icon`, `/utils`, `/primitives/*`,
+`/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the app menu's Telemetry row and its state), `/whats-new` (the What's new dialog, its notes and when it shows), `/i18n` (the locales and the translation hook), `/i18n/locale` (which locale a person reads in, with no dictionary: for a page that says a few words before anything else loads), `/build-id` (what a Vite config names the build with), `/loading-icon`, `/utils`, `/primitives/*`,
 `/tokens.css`, and `/styles.css`. `/catalog` (a CAD client as a `FileSource`, the file menu's
 Copy path and Reveal, and the one spelling of an absolute path: `normalizePath`, `baseName`,
 `joinPath`) and `/links` (the navbar's link defaults) are pure modules, with no React, for a
@@ -319,13 +319,13 @@ file (no glyph) — the name opens Models and Files — and offers its ⋯ menu 
 a submenu of Browser where the host has one and Finder, File Explorer or File manager; then
 Export, a submenu of the formats; a model's Copy path and file manager act on its script). They share one look: transparent until the
 pointer is on them or their menu is open, with no tooltip. At the right is only what a host
-or a file adds, kept for the update's nudge: a dismissed alert's icon, the host's actions (the
-CAD app's Full size) and, last, outermost, the host's update button; the view's own controls (a 3D view's Projection, Display and
+or a file adds: a dismissed alert's icon, the host's actions (the
+CAD app's Full size); the view's own controls (a 3D view's Projection, Display and
 Preview) end its tool strip, never the navbar. A host whose own frame is its navigation shows
 the view alone (`chrome: "bare"`, the CAD app's file handler), with no navbar at all. With no
 file a view shows the host's home, the model library, under the same navbar (its logo and menu,
 without Back to home, Back and Forward where the host keeps the view's history, and the host's
-update and actions): one control row (Recent; the type filter, the search, grid or list),
+actions): one control row (Recent; the type filter, the search, grid or list),
 then the library alone: the documents opened or built before, pinned first, as Figma-style
 tiles with their pictures or as a table of rows, each with its pin and a ⋯ menu ending in
 Delete, which asks first. A file that
@@ -334,7 +334,7 @@ does not exist shows "File does not exist" and its path, and any other failure t
 renderer's loading and update status is its own, in its viewport. An error appears as a
 card over the viewport; a failed update the
 model survives can be dismissed, leaving the previous version to inspect, and the card's own
-icon, the first of the navbar's right-hand controls (the update button last) while it is put
+icon, the first of the navbar's right-hand controls while it is put
 away, brings it back.
 Retry reloads only the selected renderer; Report Issue, where the host has a tracker, opens a
 new issue titled "Issue: ", labelled `bug`, filled in from the card, with the file's name and

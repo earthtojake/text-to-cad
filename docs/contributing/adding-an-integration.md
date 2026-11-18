@@ -1,8 +1,9 @@
 # Adding an integration
 
 An **integration** is our support for one third-party tool, named for the tool's own project
-(`build123d`, `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`), never for a capability.
-It is three things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs; our code for it --
+(`build123d`, `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`, `orcaslicer`), never for a
+capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs, where
+it needs any (`orcaslicer`'s is the standard library alone: no extra); our code for it --
 helpers that take its objects, producers and operations; and a process kind: in-process, separate
 process, or both. The definitions and laws are the library's README
 ([`packages/cad/README.md`](../../packages/cad/README.md), **Definitions** and laws 23 to 28); the
@@ -37,6 +38,7 @@ The integrations so far came out in different shapes, each from those answers:
 | `coacd` | convex decomposition of a mesh | nothing a person calls: it backs `cad.mujoco.decompose`, run in a process of its own, its hulls kept in the cache |
 | `blender` | all of Blender as a Python module, `bpy` | one helper, `cad.blender.load`: a GLB cad wrote, in Blender's scene, with each node's object by its name and its clips to play. The framing, the lights and the render are `bpy`'s own, in the script. No document type and no command |
 | `mujoco` | a compiler, a simulator, `MjSpec`, MuJoCo Studio | a document as an `MjSpec`, a part's collision chosen by its label path, a spec saved as a folder that travels, and one operation on a file that is no document type, `cad mujoco check` (below). No reader, no viewer and no still of an MJCF: Studio shows one |
+| `orcaslicer` | a slicer's command line and app, which keep presets as differences from a parent | the presets its command line cannot make: `cad orcaslicer presets` names those a person can select, and `cad orcaslicer complete` writes them with every parent merged in and the printer named as compatible (below). The slice stays OrcaSlicer's own command line, which our code never runs. Standard library alone: no extra, no probe |
 
 An integration that makes or checks a document type is added with that type, and the type's guide has
 a [walkthrough](adding-a-document-type.md#walkthrough-a-type-and-its-integration-together-kicad) that
@@ -66,6 +68,20 @@ its environment holds mujoco, else in the environment of `cad[mujoco]`, made onc
 `files=(".xml", ".mjcf")`. Give an integration an operation only for such a file: one that has a document
 type has its operations there (law 27). A script that imports `mujoco` gets the extra from `cad run`
 through the registry entry's `modules`.
+
+`orcaslicer` is the smallest shape: no extra, no probe, no helper that takes the tool's objects, two
+operations and nothing else. OrcaSlicer keeps a preset as its differences from a parent, and its command line
+neither fills the parent in nor reads compatibility conditions, so a preset as the app saved it slices with
+defaults or is refused. Its presets are its own files, shown in its own app, so they are no document type; a
+person knows them by the names the app shows and never by a path, so the operations take names and no FILE
+(law 27): `cad orcaslicer presets machine --match MK4S` (`cad.orcaslicer.presets`) lists the selectable ones,
+and `cad orcaslicer complete --printer … --process … --filament … --out presets` (`cad.orcaslicer.complete`)
+writes them complete and says the files it wrote. The registry entry names `operations` and no `files`
+(`FILE_OPERATIONS` are those that take one). Reading and writing JSON is the standard library alone, so the
+integration has no extra and its operations run in the `cad` command's own process (`integration_env.carries`
+holds an integration with no extra everywhere): no engine, no environment made, nothing on the network. The
+slice itself is OrcaSlicer's command line, which the skill runs as it is and our code never does, so there is no
+probe.
 
 How an integration gets installed on a person's computer is covered for a Python library alone: `cad
 run` makes a program's environment with the integrations its imports use, and an operation the `cad`
@@ -100,7 +116,8 @@ oldest such line, so the library runs there; CI holds it with the library's suit
 
 ## Is it really an integration?
 
-cad supports a tool only where cad's own code calls it. A **dependency** -- one package or binary --
+cad supports a tool only where cad's own code calls it, or makes a file the tool needs and cannot make itself
+(`orcaslicer`'s complete presets). A **dependency** -- one package or binary --
 becomes an integration only when we write code for that tool; it is named in `pyproject.toml` and
 the lock files alone, never in the API, the CLI or the docs. OCP is a dependency of `build123d`, not
 an integration.
@@ -110,7 +127,7 @@ an integration.
 | A | Python libraries model code imports | build123d, mujoco, pandas | yes, where we write helpers that take its objects or producers of its values |
 | B | Python libraries our producers call | ezdxf, Pillow, netgen | yes, where the code that calls it is ours for that tool |
 | C | External programs our code runs | kicad-cli, ccx, freecadcmd | yes: a probe, headless runs, one missing-tool result |
-| D | Tools only the agent runs | a slicer's CLI the agent calls | no: the skill teaches it, cad's code never calls it |
+| D | Tools only the agent runs | a slicer's CLI the agent calls | no: the skill teaches it, cad's code never calls it; yes where our code makes a file it needs and cannot make (`orcaslicer`'s complete presets), and only that |
 | E | Remote services | a quoting API | no |
 | F | Desktop apps the person uses, which cad never launches | KiCad's editor, FreeCAD's GUI | no: Open in hands the file to it, nothing more |
 
@@ -118,8 +135,9 @@ an integration.
 
 - [ ] **The three questions**, [above](#start-from-the-tool), answered in the pull request: what the
       tool already does, who looks at its files, what is missing without us.
-- [ ] **The definition test**, above: name the code of ours that calls the tool. If there is none, it
-      is not an integration; if the code is ours for a file format cad shows, it is a document type's.
+- [ ] **The definition test**, above: name the code of ours that calls the tool, or makes the file it
+      needs and cannot make. If there is none, it is not an integration; if the code is ours for a file
+      format cad shows, it is a document type's.
 - [ ] **The purpose test**, for each helper and each command we add: say what is missing without it.
       One that renames the tool's own function or command, or does again what the tool does, is not
       added (law 29).
@@ -136,10 +154,12 @@ an integration.
       `alongside`, the integrations its operations need in the same environment (calculix's: the kernel,
       which reads the B-rep a study solves, and netgen, which meshes it), which the environment the `cad`
       command makes for it holds too; `commands`, the tool's own command lines its extra installs; and,
-      only for a file of the tool's that is no document type, `operations` and the `files` they take.
-- [ ] **An operation of its own**, only for such a file: a function `cad.<name>.<operation>` that is
-      fully annotated and answers the result every check answers, named from the closed set
-      (`cad.registry.INTEGRATION_OPERATIONS`), and its command `cad <name> <operation> FILE`, generated
+      only for the tool's own files that are no document type, `operations` and the `files` those that
+      take one file take (`FILE_OPERATIONS`; none for operations on files found by name, as orcaslicer's).
+- [ ] **An operation of its own**, only for such files: a function `cad.<name>.<operation>` that is
+      fully annotated and answers its operation's one result (a check's findings; `presets`' names;
+      `complete`'s files written), named from the closed set (`cad.registry.INTEGRATION_OPERATIONS`), and
+      its command `cad <name> <operation> [FILE]`, generated
       from the function (`cad_server/cli/integrations.py`, with the two-line module
       `cad_server/cli/<name>.py`). Pin both in `tests/python/packages/cad/test_registry.py`,
       `test_cli_commands.py` and `test_public_surface.py`. A file that has a document type has its

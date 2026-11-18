@@ -101,7 +101,7 @@ SOURCES = {source.id: source for source in (
          "FDM 3D printing design tips: best practices and techniques for stronger prints",
          "https://xometry.pro/en/articles/fdm-design-tips/"),
     # a rule no fetched guide states (``printing.knife_edge``, ``printing.horizontal_hole``, a wall by the nozzle
-    # given): text-to-cad's own figure, said as such in every verdict of it
+    # given): cad's own figure, said as such in every verdict of it
     OWN,
 )}
 
@@ -120,13 +120,13 @@ LARGEST_VOLUMES: dict[str, tuple[float, float, float]] = {
     "fdm": (900, 600, 900), "sla": (1500, 750, 500), "sls": (750, 550, 550), "mjf": (380, 285, 380),
     "pbf": (500, 280, 360)}
 #: The nozzle Hubs's FDM wall minimum (0.8 mm) is two beads of: the common one. With ``--nozzle`` given the
-#: minimum is two beads of that nozzle (``NOZZLE_BEADS``), text-to-cad's own scaling of the cited figure (Hubs:
+#: minimum is two beads of that nozzle (``NOZZLE_BEADS``), cad's own scaling of the cited figure (Hubs:
 #: "wall thickness depends on nozzle diameter and how well passes fuse together").
 COMMON_NOZZLE_MM = 0.4
 NOZZLE_BEADS = 2.0
 #: FDM's skins lying in the layer plane (a wall whose faces lie within 45 deg of it: ``lying``) are laid layer on
 #: layer: under ``SKIN_LAYERS_MIN`` layers one is not laid at all (the floor, an error), under ``SKIN_LAYERS``
-#: it is one layer alone (a recommendation). text-to-cad's own: no guide states a figure for them.
+#: it is one layer alone (a recommendation). cad's own: no guide states a figure for them.
 SKIN_LAYERS_MIN = 1.0
 SKIN_LAYERS = 2.0
 
@@ -230,7 +230,7 @@ def _walls(supported: list[Row], free: list[Row]) -> list[Rule]:
                 rid, "wall_thickness", "thickness_mm", "min", {"fdm": NOZZLE_BEADS}, "mm", what, OWN.id,
                 severity="warning" if near else "error", by="technology", scale_by="nozzle",
                 when={"technology": "fdm", "nozzle_given": True}, item_when={**item_when, **standing}, fix=mended,
-                note=f"{NOZZLE_BEADS:g} beads of the nozzle given (--nozzle): text-to-cad's own scaling of Hubs's 0.8 "
+                note=f"{NOZZLE_BEADS:g} beads of the nozzle given (--nozzle): cad's own scaling of Hubs's 0.8 "
                      f"mm, two beads of the common {COMMON_NOZZLE_MM:g} mm nozzle",
                 detail=(_AT_LIMIT + "; " if near else "") + f"{NOZZLE_BEADS:g} beads of the {{nozzle:g}} mm nozzle given"))
     # a wall whose support could not be read, between the two minima: it passes if it is supported and fails
@@ -242,7 +242,7 @@ def _walls(supported: list[Row], free: list[Row]) -> list[Rule]:
                     "tells whether the wall is joined on two sides", {"supported": None, "between_minima": True},
                     when={"technology": tuple(row[0] for row in free), "nozzle_given": False})
     # FDM lays a skin that lies in the layer plane layer on layer: one thinner than a layer is not laid at all
-    # (the floor), one of a single layer has no second to tie its beads (the recommendation). text-to-cad's
+    # (the floor), one of a single layer has no second to tie its beads (the recommendation). cad's
     # own figures: the guides' wall minimum is of standing walls ("depends on nozzle diameter").
     for rid, layers, severity, said in (
             ("printing.skin_layer", SKIN_LAYERS_MIN, "error", "a skin thinner than one layer is not laid at all"),
@@ -252,7 +252,7 @@ def _walls(supported: list[Row], free: list[Row]) -> list[Rule]:
             "thickness of a skin lying in the layer plane", OWN.id, severity=severity, by="technology",
             scale_by="layer_height", when={"technology": "fdm"}, item_when={"lying": True},
             fix="thicken it to at least {limit:g} mm, or print finer layers (--layer-height)",
-            note=f"text-to-cad's own: {said}; FDM's two-bead wall minimum is a standing wall's",
+            note=f"cad's own: {said}; FDM's two-bead wall minimum is a standing wall's",
             detail=f"{layers:g} layer(s) of {{layer_height:g}} mm"))
     return found
 
@@ -336,7 +336,7 @@ def _general() -> tuple[Rule, ...]:
     for tech in ("sls", "mjf"):
         add("warp", tech, 177.8, "protolabs-7mistakes", "warning")
     add("section", "pbf", 10.0, "hubs-metal", "warning")
-    # text-to-cad's own threshold for FDM's horizontal holes (HORIZONTAL_HOLE_MM): no guide gives one
+    # cad's own threshold for FDM's horizontal holes (HORIZONTAL_HOLE_MM): no guide gives one
     add("hround", "fdm", HORIZONTAL_HOLE_MM, OWN.id, "warning")
     found: list[Rule] = _walls(rows["wall_s"], rows["wall_u"])
     found += _rules("printing.hole_diameter", "holes", "diameter_mm", "min", "mm", "hole diameter", rows["hole"],
@@ -357,7 +357,7 @@ def _general() -> tuple[Rule, ...]:
     found += _rules("printing.horizontal_hole", "holes", "diameter_mm", "max", "mm", "horizontal round hole diameter",
                     rows["hround"], "give it a teardrop or flat top, or turn the part so the hole stands vertical: "
                     "above {limit:g} mm its crown sags", {"orientation": "horizontal", "teardrop": False},
-                    "text-to-cad's own threshold: Hubs FDM gives no diameter, only that a horizontal hole's support "
+                    "cad's own threshold: Hubs FDM gives no diameter, only that a horizontal hole's support "
                     "is hard to remove and turning the part 90 deg removes it")
     # the rule judges a gap or a contact; bodies that pass through each other are their own finding
     found += _rules("printing.clearance", "clearances", "distance_mm", "min", "mm", "clearance between parts",
@@ -406,7 +406,7 @@ def _general() -> tuple[Rule, ...]:
                     rows["engrave_w"], "widen it to at least {limit:g} mm", {"kind": "engrave"})
     found += _rules("printing.warp_length", "build_volume", "max_dimension_mm", "max", "mm", "part length",
                     rows["warp"], "keep walls near a uniform 3.2 mm and hollow thick sections; parts this long warp")
-    # text-to-cad's own rule (no guide defines a knife edge), a warning: the tip prints rounded (Hubs SLS: "a
+    # cad's own rule (no guide defines a knife edge), a warning: the tip prints rounded (Hubs SLS: "a
     # radius of less than 0.4mm on a design is printed as 0.4mm") and the part is still made
     found += _rules("printing.knife_edge", "knife_edges", "thickness_mm", "min", "mm",
                     "material at a knife edge (a convex edge under 45 deg)",
@@ -423,7 +423,7 @@ def _general() -> tuple[Rule, ...]:
 def _ruled() -> RuleSet:
     rules = _general()
     cited = sorted({rule.source for rule in rules} | {source for _, source in BUILD_VOLUMES.values()})
-    return RuleSet("printing", "text-to-cad general rules", _VERSION, rules, tuple(SOURCES[ident] for ident in cited),
+    return RuleSet("printing", "cad general rules", _VERSION, rules, tuple(SOURCES[ident] for ident in cited),
                    note="general practice: per technology the first published design guide's figure (Hubs, then "
                         "Protolabs, then Xometry); the build volume the printer's given, else a typical machine "
                         "(Hubs's: a desktop FDM or SLA printer), assumed; no printer's or shop's own limits",

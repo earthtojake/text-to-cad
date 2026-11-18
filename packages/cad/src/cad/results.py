@@ -61,7 +61,7 @@ class CheckFinding:
     #: A rule's verdict, as data (a manufacturing check's; None and empty for any other finding): the rule's
     #: id (its ``code``), the figure measured, the limit it is held to, their unit, the comparison (``min``:
     #: the figure is at least the limit; ``max``: at most) and where the limit comes from (the guide's
-    #: publisher and title, or text-to-cad's own).
+    #: publisher and title, or cad's own).
     rule: str | None = None
     value: float | None = None
     limit: float | None = None

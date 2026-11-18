@@ -1,6 +1,6 @@
 {
   "name": "@cad/ui",
-  "version": "0.11.11",
+  "version": "0.11.12",
   "private": true,
   "type": "module",
   "files": [
@@ -60,10 +60,6 @@
     "./consent": {
       "types": "./dist/consent/index.d.ts",
       "import": "./dist/consent/index.js"
-    },
-    "./update": {
-      "types": "./dist/update/index.d.ts",
-      "import": "./dist/update/index.js"
     },
     "./whats-new": {
       "types": "./dist/whats-new/index.d.ts",

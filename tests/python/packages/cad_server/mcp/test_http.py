@@ -17,12 +17,16 @@ from cad.engine.client import request
 from cad_server.mcp.browser import OPENED
 from cad_mcp.protocol import RpcError
 from cad_server.mcp.protocol import RequestContext
-from cad_mcp.shim import Proxy
-from cad_mcp.engine import EngineClient
+from cad_mcp.shim import Proxy, call
 from tests.python.support import engine_daemon
+# A release's process: a checkout is a development build, never told of a release and sending nothing by default,
+# unless it is told the version it runs as (``cad_server/_internal/editable.py``).
+RELEASE = __import__("cad_server").__version__
 
 INIT = {'protocolVersion': '2025-11-25', 'clientInfo': {'name': 'codex-mcp-client'}, 'capabilities': {}}
 TEXT = {'protocolVersion': '2025-11-25', 'clientInfo': {'name': 'some-cli'}, 'capabilities': {}}
+# What a `codex exec` turn's call carries: the turn shows no app, so a show opens the person's browser.
+HEADLESS = {'x-codex-turn-metadata': {'turn_trigger': 'exec'}}
 # A ``BROWSER`` that records each page it is given, and who gave it (its parent's pid), and opens nothing.
 RECORDER = """import json, os, sys
 from urllib.parse import unquote, urlsplit
@@ -48,17 +52,17 @@ class HttpSessionsTest(unittest.TestCase):
         # own browser (macOS's osascript), which no test may reach.
         cls.opened = cls.root / 'opened.jsonl'
         cls.engine_browser = cls.browser('engine', 0)
-        # A plugin's engine that is told of releases (``cad_server.updates``), the feed never read.
+        # An engine that is told of releases (``cad_server.updates``), the feed never read: a release's, as the
+        # version it runs as is named to it (a checkout is a development build otherwise).
         cls.env = engine_daemon.watched({**os.environ, 'CAD_ENGINE_DIR': str(cls.root / 'engine'),
                    'CAD_STATE_DIR': str(cls.root / 'state'), 'CAD_ENGINE_MESH': 'inline',
-                   'CAD_VIEWER_DIST': str(cls.page), 'BROWSER': cls.engine_browser,
-                   'CAD_INSTALL_CHANNEL': 'claude-github', 'CAD_AUTO_UPDATED': '', 'CI': '',
-                   'CAD_UPDATE_CHECK': '0'}, cls.addClassCleanup)
+                   'CAD_VIEWER_DIST': str(cls.page), 'BROWSER': cls.engine_browser, 'CI': '',
+                   'CAD_UPDATE_CHECK': '0', 'CAD_INSTALLATION_VERSION': RELEASE}, cls.addClassCleanup)
         changed = patch.dict(os.environ, cls.env)
         changed.start()
         cls.addClassCleanup(changed.stop)
         cls.addClassCleanup(cls.stop_engine)
-        cls.endpoint = EngineClient().connect()
+        cls.endpoint = request({'op': 'http'})
         cls.model = cls.root / 'part.stl'
         cls.model.write_bytes(b'solid part\nendsolid part\n')
 
@@ -108,20 +112,20 @@ class HttpSessionsTest(unittest.TestCase):
             yield
 
     @unittest.skipIf(os.name == 'nt', 'a BROWSER command here is a script run by its #! line')
-    def test_a_text_hosts_cad_show_opens_the_browser_from_the_stdio_peer_never_the_engine(self):
+    def test_a_headless_turns_cad_show_opens_the_browser_from_the_stdio_peer_never_the_engine(self):
         # The engine runs in the environment of whatever started it -- here a BROWSER that records --
         # and the stdio peer in its host's: only the peer's BROWSER is given the page.
         engine = request({'op': 'status'})['pid']  # running, started with the engine's environment
         before = len(self.recorded())
         with self.peer_environment(BROWSER=self.browser('shim', 0)):
-            proxy = self.proxy(TEXT)
+            proxy = self.proxy()
             model = str(self.model.resolve())
-            shown = self.tool(proxy, 'cad_show', {'source': model})
+            shown = self.tool(proxy, 'cad_show', {'source': model}, HEADLESS)
             self.assertNotIn('_meta', shown)
             text = shown['content'][0]['text']
             self.assertRegex(text, r'^part\.stl opened in your browser at http://127\.0\.0\.1:\d+/[0-9a-f-]{36}\?token=')
             # Opened once: the peer told the engine it opened the page, and a second show opens nothing.
-            again = self.tool(proxy, 'cad_show', {'source': model})['content'][0]['text']
+            again = self.tool(proxy, 'cad_show', {'source': model}, HEADLESS)['content'][0]['text']
             self.assertTrue(again.startswith('part.stl is already open in your browser at '), again)
         opened = self.recorded()[before:]
         self.assertEqual([(row['who'], row['pid']) for row in opened], [('shim', os.getpid())])
@@ -141,30 +145,30 @@ class HttpSessionsTest(unittest.TestCase):
         model.write_bytes(b'solid part\nendsolid part\n')
         before = len(self.recorded())
         with self.peer_environment():
-            proxy = self.proxy(TEXT, opener=webbrowser.GenericBrowser(self.browser('failing', 1)).open)
+            proxy = self.proxy(opener=webbrowser.GenericBrowser(self.browser('failing', 1)).open)
             for attempt in (1, 2):
-                text = self.tool(proxy, 'cad_show', {'source': str(model.resolve())})['content'][0]['text']
+                text = self.tool(proxy, 'cad_show', {'source': str(model.resolve())}, HEADLESS)['content'][0]['text']
                 self.assertTrue(text.startswith('No browser can be opened from here (no browser could be started here'), (attempt, text))
                 self.assertIn("; failing.stl's page is http://127.0.0.1:", text)
         self.assertEqual([row['who'] for row in self.recorded()[before:]], ['failing', 'failing'])
 
     def test_a_client_with_no_stdio_peer_is_given_the_url_and_nothing_opens(self):
-        client = EngineClient()
         headers = {'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream'}
 
         def post(message, **more):
-            status, replied, body = client.call('POST', '/mcp', json.dumps(message).encode('utf-8'), {**headers, **more})
+            status, replied, body = call('POST', '/mcp', json.dumps(message).encode('utf-8'), {**headers, **more})
             self.assertEqual(status, 200, body)
             return {name.lower(): value for name, value in replied.items()}, json.loads(body)['result']
 
-        replied, _ = post({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': TEXT})
+        replied, _ = post({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': INIT})
         session = {'Mcp-Session-Id': replied['mcp-session-id'], 'MCP-Protocol-Version': '2025-11-25'}
-        self.addCleanup(client.call, 'DELETE', '/mcp', headers=session)
+        self.addCleanup(call, 'DELETE', '/mcp', headers=session)
         model = self.root / 'unopened.stl'
         model.write_bytes(b'solid part\nendsolid part\n')
         before = len(self.recorded())
         _, shown = post({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
-                         'params': {'name': 'cad_show', 'arguments': {'source': str(model.resolve())}}}, **session)
+                         'params': {'name': 'cad_show', 'arguments': {'source': str(model.resolve())},
+                                    '_meta': HEADLESS}}, **session)
         self.assertNotIn('_meta', shown)
         self.assertRegex(shown['content'][0]['text'], r'^unopened\.stl\'s page is http://127\.0\.0\.1:\d+/\S+; nothing was '
                                                       r'opened, as this client opens no browser\.\n')
@@ -172,13 +176,13 @@ class HttpSessionsTest(unittest.TestCase):
         # Its word that the page opened is no open the engine asked a peer for: nothing counts the page
         # as open, so a stdio peer's show of the model opens it.
         link = shown['content'][0]['text'].split(' is ', 1)[1].split('; ', 1)[0]
-        status, _, _ = client.call('POST', '/mcp', json.dumps({'jsonrpc': '2.0', 'method': OPENED, 'params': {
+        status, _, _ = call('POST', '/mcp', json.dumps({'jsonrpc': '2.0', 'method': OPENED, 'params': {
             'url': link, 'opened': True}}).encode('utf-8'), {**headers, **session})
         self.assertEqual(status, 202)
         opened = []
         with self.peer_environment():
-            proxy = self.proxy(TEXT, opener=lambda target: opened.append(target) or True)
-            text = self.tool(proxy, 'cad_show', {'source': str(model.resolve())})['content'][0]['text']
+            proxy = self.proxy(opener=lambda target: opened.append(target) or True)
+            text = self.tool(proxy, 'cad_show', {'source': str(model.resolve())}, HEADLESS)['content'][0]['text']
         self.assertTrue(text.startswith('unopened.stl opened in your browser at '), text)
         self.assertEqual((len(opened), self.recorded()[before:]), (1, []))
 
@@ -186,8 +190,15 @@ class HttpSessionsTest(unittest.TestCase):
     def call(proxy, method, params=None):
         return proxy.handle(method, params or {}, RequestContext(1, {}))
 
-    def tool(self, proxy, name, arguments=None):
-        return self.call(proxy, 'tools/call', {'name': name, 'arguments': arguments or {}})
+    def tool(self, proxy, name, arguments=None, meta=None):
+        return self.call(proxy, 'tools/call', {'name': name, 'arguments': arguments or {}, **({'_meta': meta} if meta else {})})
+
+    def test_an_app_that_declares_no_views_completes_its_connection_with_no_tools(self):
+        proxy = self.proxy(TEXT)
+        self.assertEqual(self.call(proxy, 'tools/list'), {'tools': []})
+        self.assertEqual(self.call(proxy, 'ping'), {})
+        with self.assertRaises(RpcError):
+            self.tool(proxy, 'cad_show', {'source': str(self.model.resolve())})
 
     def test_two_sessions_share_engine_and_router_but_not_conversation_views(self):
         first, second = self.proxy(), self.proxy()
@@ -230,11 +241,10 @@ class HttpSessionsTest(unittest.TestCase):
             self.assertEqual(page.status, 200, 'it opens the page')
 
     def test_http_transport_validation_and_session_lifecycle(self):
-        client = EngineClient()
         def post(message, **headers):
-            return client.call('POST', '/mcp', json.dumps(message).encode('utf-8'),
-                               {'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', **headers})
-        self.assertEqual(client.call('GET', '/mcp')[0], 405)
+            return call('POST', '/mcp', json.dumps(message).encode('utf-8'),
+                        {'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', **headers})
+        self.assertEqual(call('GET', '/mcp')[0], 405)
         self.assertEqual(post({'jsonrpc': '2.0', 'id': 1, 'method': 'ping'})[0], 400)
         self.assertEqual(post({'jsonrpc': '2.0', 'id': 1, 'method': 'ping'}, **{'Mcp-Session-Id': 'unknown'})[0], 404)
         self.assertEqual(post({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': INIT}, Origin='https://evil.example')[0], 403)
@@ -247,30 +257,8 @@ class HttpSessionsTest(unittest.TestCase):
         with self.assertRaises(RpcError) as failure:
             self.call(proxy, 'does/not/exist')
         self.assertEqual(failure.exception.code, -32601)
-        self.assertEqual(client.call('DELETE', '/mcp', headers=headers)[0], 200)
+        self.assertEqual(call('DELETE', '/mcp', headers=headers)[0], 200)
         self.assertEqual(post({'jsonrpc': '2.0', 'id': 2, 'method': 'ping'}, **headers)[0], 404)
-
-    def test_the_release_an_app_s_server_runs_shows_the_update_button_when_newer_with_no_network(self):
-        # Each stdio transport says its release as its session opens (``cad_mcp.shim``'s transport meta): one
-        # newer than the engine's proves a release is out, and the button shows it, with no feed read.
-        import cad_mcp
-        import cad_server
-
-        client = EngineClient()
-
-        def version():
-            status, _, body = client.call('GET', '/api/v1/server')
-            self.assertEqual(status, 200, body)
-            return json.loads(body)
-
-        release = cad_server.__version__
-        self.assertEqual(version()['release'], release)
-        with patch.object(cad_mcp, '_version', return_value='0.0.1'):
-            self.proxy()  # an older release's server: no release is out
-        self.assertIsNone(version()['notice'])
-        with patch.object(cad_mcp, '_version', return_value='999.0.0'):
-            self.proxy()
-        self.assertEqual(version()['notice'], {'latest': '999.0.0', 'version': release})
 
     def test_shim_opens_a_new_session_when_the_engine_session_ends(self):
         # A host initializes once: an expired session or a restarted engine must not leave the
@@ -288,19 +276,24 @@ class HttpSessionsTest(unittest.TestCase):
             self.assertEqual([view['view'] for view in self.tool(proxy, 'cad_view')['structuredContent']['views']], ['kept'])
 
         view_syncs()
-        self.assertEqual(EngineClient().call('DELETE', '/mcp', headers={'Mcp-Session-Id': first})[0], 200)
+        self.assertEqual(call('DELETE', '/mcp', headers={'Mcp-Session-Id': first})[0], 200)
         views = self.tool(proxy, 'cad_view')
         self.assertEqual(views['structuredContent'], {'views': []})
         second = proxy.session
         self.assertNotEqual(second, first)
         view_syncs()
+        # `cad server stop`: the transport starts no server, and says so in cad's one line, until one is started.
         from cad.engine.api import stop
+        from cad.engine.client import NOT_RUNNING, start
         pid = request({'op': 'status'})['pid']
         self.assertTrue(stop())
         self.assertEqual(self.call(proxy, 'ping'), {})
+        self.assertEqual(self.tool(proxy, 'cad_view'), {'content': [{'type': 'text', 'text': NOT_RUNNING}], 'isError': True})
+        self.assertIsNone(request({'op': 'pid'}, start=False), 'no server was started')
+        start()  # `cad server start`
+        self.assertIn('cad_open', [tool['name'] for tool in self.call(proxy, 'tools/list')['tools']])
         self.assertNotEqual(proxy.session, second)
         self.assertNotEqual(request({'op': 'status'})['pid'], pid)
-        self.assertIn('cad_open', [tool['name'] for tool in self.call(proxy, 'tools/list')['tools']])
         view_syncs()
         self.assertEqual(self.tool(proxy, 'cad_tab')['_meta']['dev.texttocad/httpToken'], token)
 
@@ -373,10 +366,10 @@ class HttpSessionsTest(unittest.TestCase):
             time.sleep(0.05)
 
     def test_shim_imports_no_tool_server_or_viewer_application(self):
-        # What the environment loads at its start (a checkout's .pth binds the lazy kernel) is not the shim's.
-        code = ("import sys; before = set(sys.modules); from cad_mcp.shim import Proxy; "
-                "assert not {name for name in set(sys.modules) - before "
-                "if name.partition('.')[0] in ('cad', 'cadgen', 'cad_server', 'OCP', 'build123d')}")
+        code = ("import sys; from cad_mcp.shim import Proxy; "
+                "assert not {name for name in sys.modules if name.partition('.')[0] in ('cadgen', 'OCP', 'build123d') "
+                "or name.startswith(('cad_server.mcp.server', 'cad_server.viewer', 'cad_server.engine'))}, "
+                "sorted(sys.modules)")
         done = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=20)
         self.assertEqual(done.returncode, 0, done.stderr)
 

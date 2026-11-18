@@ -35,12 +35,27 @@ class PluginZipTests(unittest.TestCase):
             with zipfile.ZipFile(out) as archive:
                 members = archive.namelist()
                 manifest = json.loads(archive.read(".codex-plugin/plugin.json"))
+                # The skills are the checkout's, byte for byte: each setup block installs cad by uv's line, the
+                # same in every copy.
+                version = manifest["version"]
+                skills = {name: archive.read(name).decode("utf-8") for name in members
+                          if name.startswith("skills/") and not name.endswith("/")}
+                changed = [name for name, text in skills.items()
+                           if text != (REPO_ROOT / name).read_text(encoding="utf-8")]
+                server = json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"]
+        # Every copy's server line is the repository's: uvx runs cad at the release, as `cad mcp`.
+        self.assertEqual(server["args"], json.loads((REPO_ROOT / "codex.mcp.json").read_text(encoding="utf-8"))["mcpServers"]["cad"]["args"])
+        self.assertEqual(server["args"][-2:], [f"cad@{version}", "mcp"])
         # The plugin is at the archive's root, each folder with an entry of its own: the
         # portal turned away a top-level folder without one as holding no plugin.
         names = {name for name in members if not name.endswith("/")}
         self.assertEqual({name for name in members if name.endswith("/")},
                          {f"{folder}/" for folder in plugin_zip.folders(names)})
         self.assertIn(".codex-plugin/", members)
+        self.assertEqual(changed, [])
+        for name in (name for name in skills if name.endswith("/SKILL.md")):
+            self.assertIn("run `uv tool install cad`", skills[name], name)
+            self.assertNotIn(plugin_zip.INSTALL_SCRIPT, skills[name], name)
         # Everything tracked under the plugin's roots ships, `.codex-plugin/` icons included,
         # plus exactly the files the archived manifest points at; nothing else from the repo.
         roots = set(git(REPO_ROOT, "ls-files", "--", *plugin_zip.ROOTS).split())
@@ -75,8 +90,10 @@ class PluginZipTests(unittest.TestCase):
             root = Path(directory)
             (root / ".codex-plugin").mkdir()
             (root / "skills/demo").mkdir(parents=True)
-            (root / "skills/demo/SKILL.md").write_text("---\nname: demo\ndescription: Demo.\n---\nSteps.\n", encoding="utf-8")
-            server = {"command": "uvx", "args": ["--from", "cad-mcp==1.0.0", "cad-mcp"]}
+            block = ("---\nname: demo\ndescription: Demo.\n---\nWritten for `cad==1.0.0`. If `cad` is missing, run "
+                     "`uv tool install cad`.\n\nWhen it says so.\n")
+            (root / "skills/demo/SKILL.md").write_text(block, encoding="utf-8")
+            server = {"command": "uvx", "args": ["cad@1.0.0", "mcp"]}
             (root / "codex.mcp.json").write_text(json.dumps({"mcpServers": {"cad": server}}), encoding="utf-8")
             git(root, "init", "-q")
 
@@ -89,11 +106,25 @@ class PluginZipTests(unittest.TestCase):
             with zipfile.ZipFile(root / "out.zip") as archive:
                 self.assertEqual(json.loads(archive.read(".codex-plugin/plugin.json"))["mcpServers"],
                                  "./.mcp.json")
-                # The package names its channel, OpenAI's directory, in its server's environment, which
-                # analytics report; CAD_AUTO_UPDATED leaves the copy to the directory, which updates it.
-                self.assertEqual(json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"],
-                                 {**server, "env": {"CAD_INSTALL_CHANNEL": "openai-directory", "CAD_AUTO_UPDATED": "1"}})
+                # The server config moves to the root as it is; the skill is the checkout's as it is.
+                self.assertEqual(json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"], server)
                 self.assertNotIn("codex.mcp.json", archive.namelist())
+                self.assertEqual(archive.read("skills/demo/SKILL.md").decode("utf-8"), block)
+
+            # Our install script named anywhere, in a skill or beside it, or a file that is not UTF-8 fails the package.
+            for name, text in (("SKILL.md", block + "Or, on Windows: irm https://www.texttocad.dev/install.ps1 | iex\n"),
+                               ("notes.md", "Or run curl -fsSL https://texttocad.dev/install.sh | sh"),
+                               ("notes.md", "caf\u00e9")):
+                with self.subTest(name=name, text=text[-30:]):
+                    path = root / "skills/demo" / name
+                    before = path.read_bytes() if path.exists() else None
+                    path.write_bytes(text.encode("latin-1" if text == "caf\u00e9" else "utf-8"))
+                    self.assertEqual({error.split(":")[0] for error in build(manifest)}, {f"skills/demo/{name}"})
+                    if before is None:
+                        path.unlink()
+                    else:
+                        path.write_bytes(before)
+            self.assertEqual(build(manifest), [])
 
             # The portal refuses a subtitle over 30 characters (main's, until this check).
             change = {"interface": {**manifest["interface"], "shortDescription": "Design physical products with AI."}}

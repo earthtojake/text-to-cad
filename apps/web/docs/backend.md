@@ -2,7 +2,7 @@
 
 The browser host talks to `cad_server.viewer`, the HTTP application hosted by the engine in the
 `cad-server` Python distribution. Its source lives in
-`packages/cad-server/src/cad_server/viewer/`; this app owns the React host and its build.
+`packages/cad/src/cad_server/viewer/`; this app owns the React host and its build.
 The wheel includes that build at `cad_server/_runtime/viewer`, beside the CAD app's one-file
 page (`cad_server/_runtime/mcp`); the engine's snapshots are OCCT's and need no browser. Skills
 invoke the installed distribution.
@@ -17,7 +17,7 @@ reads, meshes and measures it in processes of its own.
 ## Launching
 
 The engine serves every CAD file by absolute path on port 3245, or the port this
-installation rolled to when another program held it (`cad status` says which and why),
+engine rolled to when another program held it (`cad server status` says which and why),
 or the one `--port N` or `CAD_ENGINE_PORT` names. Run the installed CLI from anywhere:
 
 ```bash
@@ -46,9 +46,10 @@ home, `/`. `--json` prints the launch record without opening a browser. An expli
 must match a running engine. There is one page per engine and no page session: each launch's
 folder becomes the folder the home shows, replacing the last. Always use the printed URL,
 including its token query; the browser is given a same-site HTTP-only cookie for it, and the link
-stays in the address, which the page keeps fresh (`GET /api/v1/local/link`).
+stays in the address, which the page gives one where it has none (`GET /api/v1/local/link`). The
+link is the same text at every launch until the token is rotated.
 
-`cad stop` stops the installation's whole engine, including its workers and
+`cad server stop` stops the whole engine, including its workers and
 MCP sessions. Closing a page, a Vite process or a host's stdio shim does not stop it.
 Python source edits require restarting your own test engine. There is no viewer
 server process, source re-exec, detached launch log or per-port shutdown route.
@@ -187,8 +188,8 @@ document of another kind is a 404 naming the right one (`"<id> is a step"`).
 
 | Route | Purpose |
 |---|---|
-| `GET /api/v1/server` | Server identity: `app` (`cad-viewer`), `release` (the release the engine runs: a page that reconnects to another reloads), `identityToken`, `platform` (which file manager Reveal opens), `user`, `home` (the person's home folder: where a model's Files starts with nowhere else to start), `start` (the folder of the most recent launch, which its relative files are read from), `pick` (whether the home offers Open: the machine has a file chooser), `port`, `pid`; `instance`, a random token of this start of the engine (a page that reconnects to another reloads); `kinds` (`reads`, the document kinds, and `exports`, each kind's formats); and `notice` and `update` (below). |
-| `GET`/`PUT /api/v1/settings` | The person's settings, one for every CAD view: `{language: {locale}, telemetry: {share, reason, policy}, updates: {automatic, reason}}` (`cad_server/language.py`; whether usage stats are sent, and why: nothing asks; whether the engine updates by itself, and why: `cad_server/auto_updates.py`). PUT takes part of it, `{language: {locale}}` (null is Automatic), `{telemetry: {share}}` (the app menu's toggle; `saved` says whether it was kept) or `{updates: {automatic}}` (the app menu's Automatic updates), and answers the whole; it takes what GET answers, the read-only `reason` and `policy` ignored, so a page puts back what it read with one value changed. `telemetry` is null on a server that keeps no usage stats. |
+| `GET /api/v1/server` | Server identity: `app` (`cad-viewer`), `release` (the release the engine runs), `identityToken`, `platform` (which file manager Reveal opens), `user`, `home` (the person's home folder: where a model's Files starts with nowhere else to start), `start` (the folder of the most recent launch, which its relative files are read from), `pick` (whether the home offers Open: the machine has a file chooser), `port`, `pid`; `instance`, a random token of this start of the engine (a page that reconnects to another reloads); and `kinds` (`reads`, the document kinds, and `exports`, each kind's formats). |
+| `GET`/`PUT /api/v1/settings` | The person's settings, one for every CAD view: `{language: {locale}, telemetry: {share, reason, policy}}` (`cad_server/language.py`; whether usage stats are sent, and why: nothing asks). PUT takes part of it, `{language: {locale}}` (null is Automatic), `{telemetry: {share}}` (the app menu's toggle; `saved` says whether it was kept), and answers the whole; it takes what GET answers, the read-only `reason` and `policy` ignored, so a page puts back what it read with one value changed. `telemetry` is null on a server that keeps no usage stats. |
 | `GET /api/v1/look`, `/api/v1/look/environment` | The look the regular display modes are drawn in, and its Radiance image. |
 | `GET /api/v1/documents` | The model library every CAD view shares, `{documents}`: pinned first, then by last activity; each row with `opened` (when a page last opened it) and `updated` (a file's time on disk, a model's run: a script is never read for it), its document's `id`, `kind` and `api`, and its record's kind (`record`: `file`, `model`, `shape`). `?kind=`, `?q=` (in its name or path), `?limit=`; `?path=<abs>` one file's envelope (above). `GET /api/v1/documents/<kind>` is that kind's rows. |
 | `POST /api/v1/documents` | `{path}` (or `{id}`): a file opened as a document (above). |
@@ -204,10 +205,8 @@ document of another kind is a 404 naming the right one (`"<id> is a step"`).
 | `POST /api/v1/local/reveal` | `{path}`: show a file in the desktop's file manager. |
 | `POST /api/v1/local/pick` | Open the machine's own file chooser (`cad_server._internal.picker`) and answer the file picked; the home offers it where the server's `pick` says there is one. |
 | `POST /api/v1/local/clipboard` | A PNG onto this machine's clipboard: the web page's picture copy, which asks the browser for no permission. |
-| `GET /api/v1/local/link` | `{link, expires}`: a fresh link the page writes into its own address (`token=`), so the address copied into another browser on this machine opens the same page (`src/host/addressLink.js`). The page's alone: a CAD card's tunnel never reaches it. |
+| `GET /api/v1/local/link` | `{link, expires}`: the link (the same text every call until the token is rotated) the page writes into its own address (`token=`), so the address copied into another browser on this machine opens the same page (`src/host/addressLink.js`). The page's alone: a CAD card's tunnel never reaches it. |
 | `POST /api/v1/local/activity` | What the page did, for telemetry: `{touched: true}`, a person touched it; `{quickEdit: true}`, a Quick Edit went; `{controls: [{control, count, seconds}]}`, the view controls used (names from `cad_server.analytics.CONTROLS`); `{crash}`, the page crashed (core's `crashOf`: its type and frames, checked again by the server, never a message). Its body may run to 16 KiB. |
-| `GET /api/v1/local/update` | `{notice, release, instance, update}`: whether a newer text-to-cad is out (the update button's `notice`, `{latest, version}`, or null), the release the engine runs, and the update a press started (`state`: `idle`, `working`, `restarting` or `failed`; its `target`, its last `progress` frame, its `error`): on the engine a failed switch started again, `failed` with that switch's error, for minutes (`Update.recall`). `GET /api/v1/server` says the same. |
-| `POST /api/v1/local/update` | The update button's press (`cad_server._internal.update`): the newest release installed, set up and switched to; answers `202` with what `GET /api/v1/local/update` says, at once. Not on an engine that cannot hand itself over (409). |
 | `GET /app` | The CAD app's module (`app.js`), which the shell a host keeps loads (`cad_server.mcp.ui`); 404 with none built. |
 | `POST /api/v1/local/prompt-files` | `{name, input, views: [{label, camera, display?, kinematics?, jointValues?, animation?, selection?, width?, height?}], annotation?, acceptInline?}` (at most 16 views; Measure's measurements never travel in one): validate a Quick Edit's packet in memory and answer `200 {ok, inline}` (compact JSON up to 1024 bytes, only with `acceptInline: true`), else `200 {ok, snapshot}` (the absolute path of the `.snapshot.json` written, in a folder of the server's own under `/tmp` on POSIX, so a message names it without the home or the per-user temporary folder), or a 400. Nothing renders and no PNG is written: `cad <type> snapshot --job` draws the packet later. Carries `x-cad-viewer`, as the GET below does. |
 | `GET /api/v1/local/prompt-files/<name>` | One of those JSON files, from this process's prompt-files directory only. |

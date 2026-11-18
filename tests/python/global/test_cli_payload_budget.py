@@ -19,23 +19,19 @@ class CompactStdoutTests(unittest.TestCase):
     # Every source that writes JSON to stdout. `cad artifact` and `dxf artifact` were
     # missed by the first pass of this test and were still pretty-printing.
     STDOUT_JSON_SOURCES = (
-        # The installer's --json: its plan and what it did.
-        "packages/cad-server/src/cad_server/cli/setup.py",
-        # `cad plugin --json`: the plugin folder written, and the apps' copies brought along.
-        "packages/cad-server/src/cad_server/cli/plugin.py",
         # `cad requirement --json`: the requirement, its indexes and find-links.
-        "packages/cad-server/src/cad_server/cli/requirement.py",
-        # `cad doctor --json`: each check of the report, and what --prune removed.
-        "packages/cad-server/src/cad_server/cli/doctor.py",
+        "packages/cad/src/cad_server/cli/requirement.py",
+        # `cad doctor --json`: each check of the report.
+        "packages/cad/src/cad_server/cli/doctor.py",
         # Every command's failure under --json: the contract's one document.
-        "packages/cad-server/src/cad_server/_internal/cli_errors.py",
+        "packages/cad/src/cad_server/_internal/cli_errors.py",
         # The checks' Result dataclasses.
         "packages/cad/src/cad/results.py",
         # A document type's operation refused before it ran (`cad stl export part.glb --json`).
-        "packages/cad-server/src/cad_server/cli/document_types.py",
+        "packages/cad/src/cad_server/cli/document_types.py",
         # Every GENERATED CLI (`cadgen <format> <verb>`) serializes its Result
         # here rather than in its own module, so one entry covers all of them.
-        "packages/cad-server/src/cad_server/_internal/cli_from_function.py",
+        "packages/cad/src/cad_server/_internal/cli_from_function.py",
     )
 
     def test_the_source_list_covers_every_json_emitting_cli(self):
@@ -47,10 +43,10 @@ class CompactStdoutTests(unittest.TestCase):
         serializer every `<format> <verb>` command prints through.
         """
         repo = Path(repo_path("."))
-        cli_dir = Path(repo_path("packages/cad-server/src/cad_server/cli"))
+        cli_dir = Path(repo_path("packages/cad/src/cad_server/cli"))
         sources = [
             *cli_dir.rglob("*.py"),
-            Path(repo_path("packages/cad-server/src/cad_server/_internal/cli_from_function.py")),
+            Path(repo_path("packages/cad/src/cad_server/_internal/cli_from_function.py")),
         ]
         emitters = {
             path.relative_to(repo).as_posix()

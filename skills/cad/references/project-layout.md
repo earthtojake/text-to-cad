@@ -124,7 +124,7 @@ imports work, and the folder above its topmost package is on the path too, so
 
 ```bash
 cad run src/chassis/frame.py
-cd src && cad run -m chassis.frame
+cad run -m chassis.frame           # in src/
 ```
 
 Without packages, `PYTHONPATH` names the import root (`PYTHONPATH=src cad run

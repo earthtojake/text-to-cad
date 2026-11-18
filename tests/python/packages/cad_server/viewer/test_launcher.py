@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -24,13 +25,47 @@ class LinkLifetimeTest(unittest.TestCase):
         from cad_server.viewer import engine_app
 
         master = 'm' * 43
-        link = sign(master, 'link', engine_app.LINK_SECONDS)
+        link = engine_app.link_of(master)
         now = time.time()
-        for later in (86400 + 60, 10 * 365 * 86400):
+        for later in (86400 + 60, 10 * 365 * 86400, 200 * 365 * 86400):
             with mock.patch.object(engine_app.time, 'time', return_value=now + later):
                 self.assertEqual(engine_app.standing(master, 'link', link), 'ok', later)
         # The token rotated: no link it signed is one.
         self.assertIsNone(engine_app.standing('r' * 43, 'link', link))
+
+    def test_a_token_s_link_is_one_text_at_any_time_and_another_token_s_another(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from cad_server.viewer import engine_app
+
+        master = 'm' * 43
+        app = engine_app.EngineApp.__new__(engine_app.EngineApp)  # its link alone: no server, no recorders
+        app.token, app.lock = master, threading.RLock()
+        made = []
+        for at in (time.time(), time.time() + 5, time.time() + 50 * 365 * 86400):
+            with mock.patch.object(engine_app.time, 'time', return_value=at):
+                made += [app.link(), app.fresh_link()['link']]
+        self.assertEqual(len(set(made)), 1, 'one token, one link, whenever it is made')
+        self.assertEqual(engine_app.standing(master, 'link', made[0]), 'ok')
+        self.assertEqual(app.fresh_link()['expires'], engine_app.LINK_EXPIRES)
+        # Not sooner than a link signed the old way, now plus a hundred years.
+        self.assertGreater(engine_app.LINK_EXPIRES, time.time() + 100 * 365 * 86400)
+        # The view line a build prints carries it too, the same text at each build.
+        from cad_server.engine.models import Models
+
+        server = SimpleNamespace(url='http://127.0.0.1:1', http=SimpleNamespace(app=app))
+        self.assertEqual(Models.url(server, 'abc'), f'http://127.0.0.1:1/abc?token={made[0]}')
+        # Another token, and the token rotated: another text, which the first token refuses.
+        other = engine_app.link_of('r' * 43)
+        self.assertNotEqual(other, made[0])
+        self.assertIsNone(engine_app.standing(master, 'link', other))
+        app.retoken('r' * 43)
+        self.assertEqual(app.link(), other)
+        self.assertIsNone(engine_app.standing('r' * 43, 'link', made[0]))
+        # A link signed the old way (then plus a hundred years) is admitted as before.
+        old = sign(master, 'link', 100 * 365 * 86400, now=time.time() - 3 * 86400)
+        self.assertEqual(engine_app.standing(master, 'link', old), 'ok')
 
 
 class LauncherTest(unittest.TestCase):
@@ -192,8 +227,10 @@ class LauncherTest(unittest.TestCase):
         arrived = self.session(headers)
         self.assertEqual(self.get(launch, '/api/v1/server', token=False,
                                   headers={**arrived, 'Sec-Fetch-Site': 'same-origin'})[0], 200)
-        # The link a launch prints lasts until the token is rotated: its expiry a century out.
-        self.assertGreater(int(link.split('.')[0]), time.time() + 99 * 365 * 86400)
+        # The link a launch prints lasts until the token is rotated, and the next launch prints the same text.
+        self.assertGreater(int(link.split('.')[0]), time.time() + 100 * 365 * 86400)
+        again = self.launch()
+        self.assertEqual((again['token'], again['url']), (link, launch['url']))
         # One an earlier release printed, good for a day, still reads, and past its day still expires.
         old = sign(master, 'link', 24 * 60 * 60, now=time.time() - 2 * 86400)
         self.assertEqual(self.get(launch, f'/?token={old}', token=False, headers=navigation)[::2], (403, LINK_EXPIRED_PAGE))
@@ -210,12 +247,12 @@ class LauncherTest(unittest.TestCase):
                                              headers={**sent, **navigation, 'Sec-Fetch-Site': site})
             self.assertEqual((status, 'set-cookie' in headers), (200, False), (sent, site))
             self.assertIn(f'url=/?token={expired}'.encode(), body)
-        # The page's fresh link for its own address: the cookie's, as every route's, and none without.
+        # The link for the page's own address: the cookie's, as every route's, and none without.
         status, _, data = self.get(launch, '/api/v1/local/link', token=False, headers={**cookie, 'Sec-Fetch-Site': 'same-origin'})
         fresh = json.loads(data)
         self.assertEqual((status, set(fresh)), (200, {'link', 'expires'}))
         self.assertEqual(int(fresh['link'].split('.')[0]), fresh['expires'])
-        self.assertGreater(fresh['expires'], time.time() + 99 * 365 * 86400, 'a fresh link lasts until the token is rotated')
+        self.assertEqual(fresh['link'], link, 'the one link the launch printed, lasting until the token is rotated')
         self.assertEqual(self.get(launch, f"/?token={fresh['link']}", token=False)[0], 200, 'it opens the page')
         self.assertEqual(self.get(launch, '/api/v1/local/link', token=False)[0], 403)
         for body in (TOKEN_NEEDED_PAGE, LINK_EXPIRED_PAGE):

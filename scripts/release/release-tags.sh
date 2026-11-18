@@ -14,7 +14,9 @@
 #   version_greater 0.5.1 0.5.0       -> succeeds when the first X.Y.Z is the greater
 #   version_bump 0.11.3 0.12.0        -> minor: the part the second moves on (fails when it is no later)
 #   breaking_part 0.11.3              -> minor: the part a breaking change bumps (major from 1.0)
-#   version_installs_itself 1.4.2 1.5.0 -> succeeds when a device at the first takes the second itself
+#   version_installs_itself 0.11.3 0.12.0 -> succeeds when a device at the first takes the second itself (same major)
+#   version_breaks_nothing 1.4.0 1.5.0  -> succeeds when the second must break nothing (a patch below 1.0, a patch
+#                                          or a minor from 1.0)
 #
 # shellcheck shell=bash
 
@@ -91,10 +93,20 @@ breaking_part() {
   if [ "$((10#$major))" -ge 1 ]; then echo major; else echo minor; fi
 }
 
-# Whether a device at the first X.Y.Z installs the second by itself, with automatic updates on: a later
-# release that keeps the breaking part -- a patch below 1.0, a patch or minor from 1.0. The server's
-# auto_updates.takes is the rule; tests/python/global/test_pr_version_guard.py holds this copy to it.
+# Whether a computer on the first X.Y.Z installs the second by itself: a later release of the same major -- a patch
+# or a minor, below 1.0 and from 1.0, a minor that breaks included; a new major never installs itself (CONTRIBUTING.md,
+# "How a release reaches a computer"; cad's own update, cad_server/_internal/auto_update.py).
+# tests/python/global/test_pr_version_guard.py holds this to that rule.
 version_installs_itself() {
+  local bump
+  bump="$(version_bump "$1" "$2")" || return 1
+  [ "$bump" != major ]
+}
+
+# Whether the second X.Y.Z, a later release than the first, must break nothing, as Semantic Versioning numbers
+# releases: one that does not bump the breaking part (breaking_part) -- a patch below 1.0; a patch or a minor from
+# 1.0. Such a release may carry no new migration guide (check-pr-version.sh).
+version_breaks_nothing() {
   local bump
   bump="$(version_bump "$1" "$2")" || return 1
   [ "$bump" = patch ] || { [ "$bump" = minor ] && [ "$(breaking_part "$1")" = major ]; }

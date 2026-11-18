@@ -1266,7 +1266,7 @@ def _release_fields(release: dict[str, Any], points: np.ndarray, pull: np.ndarra
     slide = release.get("slide_depth_mm")
     allowance = BUMP_OFF_MM
     # A feature this shallow against the pull is stripped off it as the part ejects, or one no slide
-    # frees cleanly is scraped over its lip by the slide (BUMP_OFF_MM, text-to-cad's own figure).
+    # frees cleanly is scraped over its lip by the slide (BUMP_OFF_MM, cad's own figure).
     over = None
     if depth is not None and depth <= allowance and found in ("side_action", "lifter", "collapsible_core", "none"):
         over = "the pull"

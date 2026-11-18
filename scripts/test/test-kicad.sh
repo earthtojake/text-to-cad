@@ -7,9 +7,10 @@ set -euo pipefail
 # export, a STEP and mesh round trip, a schematic's ERC, exports and nets held to KiCad's netlist, a
 # board's and a schematic's edit (kicad_pcb.edit, kicad_sch.edit) through the headless api-server, and a
 # plan routed inside a board's edit (cad.kicad.route) and judged by DRC.
-# The environment is made once here, in folders of this run's own (no engine of the person's is asked
-# to make it), and named to the tests (CAD_TEST_KICODE_PYTHON); the runner gives each test file its own
-# engine, state and cache folders. No person's KiCad, no libraries, no browser.
+# The environment is made once here, by a server of this run's started in folders of its own and stopped
+# once it is made (no engine of the person's is asked to make it), and named to the tests
+# (CAD_TEST_KICODE_PYTHON); the runner gives each test file its own engine, state and cache folders. No
+# person's KiCad, no libraries, no browser.
 
 # shellcheck source=scripts/test/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
@@ -22,8 +23,13 @@ CAD_TEST_KICODE_PYTHON="$(
   CAD_CACHE_DIR="$scratch/cache" CAD_STATE_DIR="$scratch/state" CAD_ENGINE_DIR="$scratch/engine" \
     PYTHONPATH="$(IFS=:; echo "${PACKAGE_SOURCES[*]}")${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON_BIN" -c \
     "import sys
+from cad.engine import api, client
 from cad_server._internal import integration_env
-python = integration_env.environment('kicad', lambda line: print(line, file=sys.stderr))
+try:  # the server that makes it: this checkout's, started in those folders, as cad server start starts one
+    client.start()
+    python = integration_env.environment('kicad', lambda line: print(line, file=sys.stderr))
+finally:
+    api.stop()
 print(python)"
 )" || { echo "test-kicad.sh: the environment of cad[kicad] could not be made" >&2; exit 1; }
 "$CAD_TEST_KICODE_PYTHON" -c "import kicode; print(f'kicode {kicode.KICAD_VERSION} ({kicode.KICAD_COMMIT[:9]}): {kicode.executable()}')"

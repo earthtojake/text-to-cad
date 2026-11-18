@@ -108,11 +108,11 @@ class EngineTelemetryTest(unittest.TestCase):
         stopped = facts(ok=False, error=error("KeyboardInterrupt", here=True))
         self.assertEqual(engine_telemetry.counts(stopped, "script")["builds"][0]["outcome"], "cancelled")
 
-        # Kept as a command's counts are, and sent by the sender as the process ``cli``, in schema 10.
+        # Kept as a command's counts are, and sent by the sender as the process ``cli``, in schema 11.
         for found, via in ((built, "script"), (facts(ok=False, error=model), "script"), (died, "command")):
             self.assertTrue(analytics.spool(engine_telemetry.counts(found, via), path=self.settings))
         [payload] = self.sent()
-        self.assertEqual((payload["schema"], payload["process"]), (10, "cli"))
+        self.assertEqual((payload["schema"], payload["process"]), (11, "cli"))
         self.assertEqual(payload["events"], [
             {"name": "build", "kind": "model", "via": "command", "count": 1, "failed": 0, "crashed": 1, "cancelled": 0,
              "cached": 0, "seconds": 0.5, "longest": 0.5},
@@ -480,7 +480,7 @@ class EngineTelemetryTest(unittest.TestCase):
         self.assertFalse(self.settings.with_name(analytics.SPOOL).exists())
         [kept] = [json.loads(line) for line in self.settings.with_name(analytics.KEPT).read_text(encoding="utf-8").splitlines()]
         self.assertEqual((kept["batch"]["process"], kept["batch"]["schema"], kept["batch"]["events"][0]["kind"]),
-                         ("cli", 10, "xbf"))
+                         ("cli", 11, "xbf"))
 
 
 class ThroughTheDaemonTest(unittest.TestCase):
@@ -573,6 +573,11 @@ class ThroughTheDaemonTest(unittest.TestCase):
         self.assertEqual(died, analytics.died(3), "its exit status")
         self.assertNotIn("features", json.dumps(counted), "a build's features are usage: not counted")
         # The window, sent as the process ``cli``: no failure of the person's, no reason, no exception but the death.
+        # The engine stopped first: its CAD app's recorders are senders too, each sending what processes kept a moment
+        # after it starts (``Recorder.send_kept``, ``analytics.KEPT_SECONDS``): it takes the kept file aside and puts
+        # back what the receiver did not take, so a read of that file beside it may find none.
+        stopped = self.run_in("-m", "cad_server.engine", "stop")
+        self.assertEqual(stopped.returncode, 0, stopped.stderr)
         env = {**self.env, "CAD_API_URL": "http://127.0.0.1:9"}
         sent = subprocess.run([sys.executable, "-P", "-m", "cad_server._internal.telemetry_send"], env=env,
                               capture_output=True, text=True, timeout=120)

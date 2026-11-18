@@ -406,12 +406,12 @@ test('the person\'s settings are read once by all that read them, until one chan
     if (fails) return Response.json({ error: 'no' }, { status: 500 });
     reads.push(options.method || 'GET');
     if (options.body) telemetry = JSON.parse(options.body).telemetry;
-    return Response.json({ language: { locale: 'fr' }, telemetry, whats_new: { seen: [], release: '0.11' }, updates: { automatic: true } });
+    return Response.json({ language: { locale: 'fr' }, telemetry, whats_new: { seen: [], release: '0.11' } });
   } });
   t.after(() => client.dispose());
-  const everyReader = () => Promise.all([client.language(), client.consent(), client.whatsNew(), client.automaticUpdates()]);
+  const everyReader = () => Promise.all([client.language(), client.consent(), client.whatsNew()]);
   // A page's load: every reader at once, and one that reads after the answer (the page's first paint read the language).
-  assert.deepEqual((await everyReader()).map((answer) => Object.keys(answer)[0]), ['locale', 'share', 'seen', 'automatic']);
+  assert.deepEqual((await everyReader()).map((answer) => Object.keys(answer)[0]), ['locale', 'share', 'seen']);
   await client.language();
   assert.deepEqual(reads, ['GET']);
   // The person comes back: the readers read again, and share the one read.
@@ -444,7 +444,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     if (path === '/api/v1/local/pick') return Response.json({ path: '/models/picked.step' });
     if (path === '/api/v1/local/link') return Response.json({ link: '1700000000.mac', expires: 1700000000 });
     if (path === '/api/v1/documents') return Response.json({ documents: [{ id: 'd1', path: '/models/a.step', kind: 'step', record: 'file' }] });
-    if (path === '/api/v1/settings') return Response.json({ language: { locale: null }, telemetry: { share: true }, updates: { automatic: true, reason: 'default' } });
+    if (path === '/api/v1/settings') return Response.json({ language: { locale: null }, telemetry: { share: true } });
     return Response.json({ path });
   } });
   t.after(() => client.dispose());
@@ -472,10 +472,6 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
   assert.deepEqual(await client.language(), { locale: null }, 'the settings\' language');
   await client.language('zh-CN');
   await client.language(null);
-  await client.version();
-  assert.deepEqual(await client.automaticUpdates(), { automatic: true, reason: 'default' }, 'the settings\' updates');
-  await client.automaticUpdates(false);
-  await client.startUpdate();
   assert.deepEqual(await client.link(), { link: '1700000000.mac', expires: 1700000000 }, 'a fresh link for the address');
   client.reportActivity({ touched: true });
   await new Promise((resolve) => setImmediate(resolve));
@@ -492,9 +488,6 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     ['/api/v1/settings', 'PUT', '1', { telemetry: { share: true } }], ['/api/v1/settings', 'PUT', '1', { telemetry: { share: false } }],
     ['/api/v1/settings', 'GET', null, null],
     ['/api/v1/settings', 'PUT', '1', { language: { locale: 'zh-CN' } }], ['/api/v1/settings', 'PUT', '1', { language: { locale: null } }],
-    ['/api/v1/server', 'GET', null, null],
-    ['/api/v1/settings', 'GET', null, null], ['/api/v1/settings', 'PUT', '1', { updates: { automatic: false } }],
-    ['/api/v1/local/update', 'POST', '1', null],
     ['/api/v1/local/link', 'GET', null, null],
     ['/api/v1/local/activity', 'POST', '1', { touched: true }],
   ]);

@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
-__all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "INTEGRATION_OPERATIONS", "OPERATIONS", "PLATFORMS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
+__all__ = ["DOCUMENT_TYPES", "FILE_OPERATIONS", "INTEGRATIONS", "INTEGRATION_OPERATIONS", "OPERATIONS", "PLATFORMS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
            "Edit", "Integration", "Operation", "Probe", "Producer", "by_extension", "help_text", "integration_help",
            "integrations_of",
            "interference_check", "manufacturing_check", "platform_of", "producer_for", "producers_for",
@@ -44,9 +44,15 @@ __all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "INTEGRATION_OPERATIONS", "OPERATIO
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
 #: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
 OPERATIONS = ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges", "drc", "erc", "validate")
-#: What an integration does to a file of its tool's own that is no document type (a file we check and never
-#: show): a closed set too. ``check`` answers findings, as a type's check does (``cad.results.CheckResult``).
-INTEGRATION_OPERATIONS = ("check",)
+#: What an integration does to its tool's own files, which are no document type (files we check or write and
+#: never show): a closed set too. ``check`` takes one file and answers findings, as a type's check does
+#: (``cad.results.CheckResult``); ``presets`` lists the presets of one kind the tool's own folders hold, by name,
+#: and ``complete`` writes chosen ones complete for the tool's command line, answering the files it wrote (the
+#: orcaslicer integration's, whose presets are found by name, never handed over as a file).
+INTEGRATION_OPERATIONS = ("check", "presets", "complete")
+#: The integration operations that take a file of the tool's (``cad <integration> <operation> FILE``), whose
+#: suffixes the integration names (``files``).
+FILE_OPERATIONS = ("check",)
 #: How a type is viewed: an engine document (a B-rep scene the engine serves), a triangle mesh, a 2D
 #: drawing, a robot description, a plot.
 VIEWS = ("document", "mesh", "drawing", "robot", "plot")
@@ -101,9 +107,10 @@ class Integration:
     extra: str | None
     process: str
     probe: Probe | None = None
-    #: What it does to a file of its tool's own that is no document type (``INTEGRATION_OPERATIONS``): ``cad
-    #: <integration> <operation> FILE`` and ``cad.<integration>.<operation>``, one to one, as a type's are. A
-    #: file that has a document type has its operations there, never here; ``files`` are the suffixes it takes.
+    #: What it does to its tool's own files, which are no document type (``INTEGRATION_OPERATIONS``): ``cad
+    #: <integration> <operation>`` and ``cad.<integration>.<operation>``, one to one, as a type's are. A file
+    #: that has a document type has its operations there, never here; ``files`` are the suffixes its operations
+    #: on a file take (``FILE_OPERATIONS``), and an integration with none of those names none.
     operations: tuple[Operation, ...] = ()
     files: tuple[str, ...] = ()
     modules: tuple[str, ...] = ()
@@ -142,9 +149,9 @@ class Integration:
             if operation.name not in INTEGRATION_OPERATIONS:
                 raise ValueError(f"{self.name}: {operation.name!r} is not an integration's operation "
                                  f"({', '.join(INTEGRATION_OPERATIONS)})")
-        if bool(self.operations) != bool(self.files):
-            raise ValueError(f"{self.name}: an integration's operations take its tool's own files, and one with "
-                             "neither names neither")
+        if any(operation.name in FILE_OPERATIONS for operation in self.operations) != bool(self.files):
+            raise ValueError(f"{self.name}: an integration's operations on a file take its tool's own files, and one "
+                             "with neither names neither")
 
     @property
     def operation_names(self) -> tuple[str, ...]:
@@ -457,6 +464,21 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                "BLENDER_USER_EXTENSIONS"),
         # PyPI's wheels with what they need: 262 MB on macOS arm64, 356 on Windows x86-64, 429 on Linux x86-64.
         holds="Blender as a Python module", download_mb=430),
+    "orcaslicer": Integration(
+        "orcaslicer", "OrcaSlicer, the slicer, whose command line slices only with complete presets: `cad orcaslicer "
+                      "presets machine` lists the presets a person can select, from their own OrcaSlicer folders and "
+                      "the app's profiles, and `cad orcaslicer complete` writes a printer, a process and filaments "
+                      "complete, every parent merged in and the printer named as compatible, for OrcaSlicer's own "
+                      "command line to slice with",
+        # The person's own OrcaSlicer: our code never runs it (so no probe), and reads and writes its presets, JSON
+        # files, with the standard library alone (so no extra), in the process that calls it.
+        extra=None, process="in-process",
+        operations=(Operation("presets", "list the presets of one kind a person can select (machine, process or "
+                                         "filament), from their own OrcaSlicer folders and the app's profiles",
+                              "orcaslicer"),
+                    Operation("complete", "write a printer, a process and filaments complete for OrcaSlicer's "
+                                          "command line: every parent merged in, the printer named as compatible",
+                              "orcaslicer"))),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})
@@ -578,7 +600,7 @@ def integration_help(name: str) -> str:
     lines = [f"{entry.name}: {entry.summary}",
              "extra: " + (f"cad[{entry.extra}]" if entry.extra else "none (a program the person installs)")]
     if entry.operations:
-        lines.append(f"operations (on {', '.join(entry.files)}):")
+        lines.append(f"operations (on {', '.join(entry.files)}):" if entry.files else "operations:")
         width = max(len(operation.name) for operation in entry.operations)
         lines.extend(f"  {operation.name.ljust(width)}  {operation.summary}" for operation in entry.operations)
     else:

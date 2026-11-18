@@ -60,8 +60,8 @@ const send = (store, method, path, body, headers = {}, country = 'DE') => handle
   method, headers: { 'content-type': 'application/json', ...headers }, body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
 }), store, { country });
 
-const CONTEXT = ['install_id', 'session_id', 'version', 'channel', 'source', 'process', 'platform', 'arch', 'client', 'client_version',
-  'presentation'];
+const CONTEXT = ['install_id', 'session_id', 'version', 'channel', 'app', 'legacy_channel', 'source', 'process', 'platform', 'arch',
+  'client', 'client_version', 'presentation'];
 // A row's own fields, by its event.
 const fieldsOf = row => Object.fromEntries(Object.entries(row).filter(([key]) => !CONTEXT.includes(key)));
 
@@ -276,18 +276,49 @@ test('schema 7 counts the controls a person used, and how long a tool that stays
   ]) assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(bad)))).status, 400, JSON.stringify(bad).slice(0, 200));
 });
 
-test("the install command's channels are stored as what happened, and the -github a release before sent still is", async () => {
-  for (const channel of ['claude-install', 'codex-install', 'cursor-install', 'gemini-install',
-    'claude-github', 'codex-github', 'cursor-github', 'gemini-github']) {
-    for (const batch of [{ ...CONTROLS, schema: 8, channel }, { ...BATCH, channel }]) {
+test("an older release's channel is stored as the delivery channel and app it was, and as it was sent", async () => {
+  // [as sent, channel, app], where the batch's MCP client names no app.
+  const families = [
+    ['claude-install', 'default', 'claude-code'], ['codex-install', 'default', 'codex'], ['cursor-install', 'default', 'cursor'],
+    ['gemini-install', 'default', 'gemini'], ['claude-github', 'default', 'claude-code'], ['codex-github', 'default', 'codex'],
+    ['cursor-github', 'default', 'cursor'], ['gemini-github', 'default', 'gemini'], ['claude-desktop', 'default', 'claude-desktop'],
+    ['agent-plugins', 'default', 'unknown'], ['claude-directory', 'claude', 'claude-code'], ['openai-directory', 'codex', 'codex'],
+    ['cursor-marketplace', 'default', 'cursor'], ['dev', 'dev', 'unknown'], ['unknown', 'unknown', 'unknown'],
+  ];
+  for (const [sent, channel, app] of families) {
+    for (const batch of [{ ...CONTROLS, schema: 8, channel: sent }, { ...BATCH, channel: sent, client: undefined }]) {
       const store = memory();
-      assert.equal((await send(store, 'POST', '/v1/events', batch)).status, 204, channel);
-      assert.ok(store.rows.length > 0 && store.rows.every(row => row.channel === channel), channel);
+      assert.equal((await send(store, 'POST', '/v1/events', batch)).status, 204, sent);
+      assert.ok(store.rows.length > 0, sent);
+      assert.deepEqual([...new Set(store.rows.map(row => `${row.channel} ${row.app} ${row.legacy_channel}`))], [`${channel} ${app} ${sent}`]);
     }
   }
+  // Schema 1 named no channel: its rows keep how the install was made, and say so of the channel.
+  const first = memory();
+  assert.equal((await send(first, 'POST', '/v1/events', { ...SCHEMA_1, client: undefined })).status, 204);
+  assert.ok(first.rows.every(row => row.channel === 'unknown' && row.app === 'unknown' && row.legacy_channel === 'unknown'
+    && row.source === 'store'));
+  // The old list is checked as ever.
   const store = memory();
   assert.equal((await send(store, 'POST', '/v1/events', { ...BATCH, channel: 'claude-somewhere' })).status, 400);
+  assert.equal((await send(store, 'POST', '/v1/events', { ...BATCH, channel: 'default' })).status, 400, "schema 11's word, not 10's");
   assert.deepEqual(store.rows, []);
+});
+
+test("an older batch's app is its MCP client's first, and the old channel's only where the client names none", async () => {
+  for (const [client, sent, app] of [
+    ['codex-mcp-client', 'claude-directory', 'codex'], // the directory's copy, run by Codex
+    ['cursor-vscode', 'codex-install', 'cursor'], ['claude-code', 'cursor-github', 'claude-code'], ['claude-ai', 'claude-github', 'claude-desktop'],
+    ['gemini-cli', 'agent-plugins', 'gemini'], ['grok-build', 'agent-plugins', 'grok'], // as Gemini CLI and Grok Build call themselves
+    ['Visual-Studio-Code', 'agent-plugins', 'vscode'], // VS Code's name as an older sender carried it, its spaces made `-`
+    ['Zed:Agent', 'agent-plugins', 'zed-agent'], // any other client is its own app, made a token
+    ['unknown', 'gemini-install', 'gemini'], // a client that says nothing
+    ['cad-viewer', 'codex-install', 'codex'], ['cadgen-viewer', 'claude-desktop', 'claude-desktop'], // the browser viewer's page names no app
+  ]) {
+    const store = memory();
+    assert.equal((await send(store, 'POST', '/v1/events', { ...BATCH, channel: sent, client: { name: client } })).status, 204, client);
+    assert.deepEqual([store.rows[0].app, store.rows[0].client], [app, client], client);
+  }
 });
 
 test('schema 8 separates live models from XBF files without reinterpreting older batches', async () => {
@@ -415,6 +446,150 @@ test("schema 10's crash of no kernel process says which failure it was, a word o
   ]) assert.equal((await send(memory(), 'POST', '/v1/events', bad)).status, 400, JSON.stringify(bad));
 });
 
+// Schema 11: the install as one field, the agent app; no channel.
+const PINNED = { ...PARTS, schema: 11, channel: undefined, app: 'claude-code', client: { name: 'claude-code', version: '2.1.0' } };
+
+test('schema 11 names the agent app, checked by its shape, never against a list, and no channel', async () => {
+  for (const app of ['codex', 'claude-code', 'unknown', 'cursor', 'visual-studio-code', 'someone.else_2']) {
+    const store = memory();
+    assert.equal((await send(store, 'POST', '/v1/events', { ...PINNED, app })).status, 204, app);
+    assert.ok(store.rows.every(row => row.app === app && row.channel === null && row.legacy_channel === null), app);
+  }
+  // Named, so a batch sent again keeps its ids, made as every named schema's are.
+  const store = memory();
+  await send(store, 'POST', '/v1/events', PINNED);
+  assert.equal(store.rows[0].id, idOf(PINNED.batch, `snapshot ${PINNED.events[0].kind}`));
+  for (const bad of [
+    { ...PINNED, app: undefined }, // always
+    { ...PINNED, app: 'Claude Code' }, { ...PINNED, app: 'a'.repeat(41) }, { ...PINNED, app: '/Users/someone' },
+    { ...PINNED, app: '' }, { ...PINNED, app: 7 },
+    { ...PINNED, channel: 'claude' }, // only a development build sent one, and no release: refused as any unknown field
+    { ...PINNED, legacy_channel: 'claude-directory' }, // the receiver's word, never a sender's
+    { ...PINNED, source: 'store' },
+    { ...PINNED, schema: 10 }, // schema 10 sends no app
+  ]) assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(bad)))).status, 400, JSON.stringify(bad).slice(0, 120));
+});
+
+// Schema 11's arrival: one step of how a computer got to the sending version, from the sender a command starts.
+const ARRIVING = { ...PINNED, process: 'cli', client: undefined, presentation: undefined, app: 'unknown' };
+const arrival = fields => ({ name: 'arrival', route: 'updater', from: '0.11.10', count: 1, ...fields });
+
+test('schema 11 counts how a computer got to a version: each step, its ending, and why one failed, in words of its own', async () => {
+  const shapes = [
+    { step: 'setup', outcome: 'ok' },
+    ...['uv', 'network', 'denied', 'other'].map(reason => ({ step: 'setup', outcome: 'failed', reason })),
+    { step: 'serving', outcome: 'ok', route: 'setup', from: 'none' },
+    ...['done', 'gave_up', 'superseded'].map(outcome => ({ step: 'handover', outcome, attempts: 3 })),
+    ...['no_report', 'setup', 'app', 'other'].map(reason => ({ step: 'handover', outcome: 'failed', reason, attempts: 1 })),
+    { step: 'handover', outcome: 'done', attempts: 0, from: '0.11.11-dev.20261115120000' },
+    { step: 'handover', outcome: 'done', attempts: 1000 },
+  ];
+  const store = memory();
+  const batch = { ...ARRIVING, events: shapes.map(arrival) };
+  assert.equal((await send(store, 'POST', '/v1/events', JSON.parse(JSON.stringify(batch)))).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf), shapes.map(shape => ({
+    id: idOf(batch.batch, `arrival ${JSON.stringify([shape.step, shape.route ?? 'updater', shape.from ?? '0.11.10', shape.outcome,
+      shape.reason ?? null, shape.attempts ?? null])}`),
+    at: batch.at, event: 'arrival', step: shape.step, route: shape.route ?? 'updater', from: shape.from ?? '0.11.10',
+    outcome: shape.outcome, reason: shape.reason ?? null, attempts: shape.attempts ?? null, count: 1,
+  })));
+  assert.ok(store.rows.every(row => row.process === 'cli' && row.version === ARRIVING.version));
+  for (const bad of [
+    arrival({ step: 'install', outcome: 'ok' }), // an unknown step
+    arrival({ step: 'setup', outcome: 'done' }), // a hand-over's ending on a setup
+    arrival({ step: 'serving', outcome: 'failed', reason: 'other' }), // a first serving only happens
+    arrival({ step: 'setup', outcome: 'ok', reason: 'network' }), // a reason without `failed`
+    arrival({ step: 'setup', outcome: 'failed' }), // `failed` without a reason
+    arrival({ step: 'setup', outcome: 'failed', reason: 'no_report' }), // a hand-over's reason on a setup
+    arrival({ step: 'setup', outcome: 'failed', reason: 'uv could not reach pypi.org' }), // never its words
+    arrival({ step: 'setup', outcome: 'ok', attempts: 1 }), // attempts on a step that has none
+    arrival({ step: 'handover', outcome: 'done' }), // a hand-over's attempts, always
+    ...[-1, 1.5, 1001, '3', true].map(attempts => arrival({ step: 'handover', outcome: 'done', attempts })),
+    ...['/Users/someone/cad', 'latest', 'v0.11.10', '0.11.10 beta', '', '1'.repeat(33), null, 11].map(from =>
+      arrival({ step: 'setup', outcome: 'ok', from })), // a `from` that is no version's name
+    arrival({ step: 'setup', outcome: 'ok', route: 'store' }),
+    { ...arrival({ step: 'setup', outcome: 'ok' }), route: undefined },
+    { ...arrival({ step: 'setup', outcome: 'ok' }), path: '/tmp' }, // nothing else
+    arrival({ step: 'setup', outcome: 'ok', count: 0 }),
+  ]) {
+    const body = JSON.parse(JSON.stringify({ ...ARRIVING, events: [bad] }));
+    assert.equal((await send(memory(), 'POST', '/v1/events', body)).status, 400, JSON.stringify(bad));
+  }
+  // One step once per batch; and no schema before 11 sends one.
+  const twice = { ...ARRIVING, events: [arrival({ step: 'setup', outcome: 'ok' }), arrival({ step: 'setup', outcome: 'ok' })] };
+  assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(twice)))).status, 400);
+  const older = { ...PARTS, schema: 10, process: 'cli', events: [arrival({ step: 'setup', outcome: 'ok' })] };
+  assert.equal((await send(memory(), 'POST', '/v1/events', older)).status, 400);
+});
+
+// Schema 11's update: one attempt of cad's own update of itself that ended, counted by the server after it.
+const update = fields => ({ name: 'update', from: '0.11.12', outcome: 'installed', tries: 1, installer: 'uv', asked: false,
+  plugin: 'none', count: 1, ...fields });
+
+test("schema 11 counts each of cad's own updates: how it ended, which step failed, the installer, typed or not, and the install command after it", async () => {
+  const shapes = [
+    ...['none', 'ok', 'failed', 'underway'].map(plugin => ({ plugin })),
+    { outcome: 'current', asked: true, installer: 'pipx' },
+    ...['upgrade', 'older', 'put_back'].map(reason => ({ outcome: 'failed', reason, tries: 2 })),
+    ...['upgrade', 'older'].map(reason => ({ outcome: 'restored', reason, asked: true })),
+    { from: '0.11.12-dev.20261118120000', tries: 1000 },
+  ];
+  const store = memory();
+  const batch = { ...ARRIVING, events: shapes.map(update) };
+  assert.equal((await send(store, 'POST', '/v1/events', JSON.parse(JSON.stringify(batch)))).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf), shapes.map(update).map(({ name, ...shape }) => ({
+    id: idOf(batch.batch, `update ${JSON.stringify([shape.from, shape.outcome, shape.reason ?? null, shape.tries, shape.installer,
+      shape.asked, shape.plugin])}`),
+    at: batch.at, event: 'update', ...shape, reason: shape.reason ?? null,
+  })));
+  for (const bad of [
+    update({ outcome: 'updated' }), // an unknown ending
+    update({ outcome: 'failed' }), // a failure names its step
+    update({ outcome: 'failed', reason: 'network' }), // a word cad has not
+    update({ outcome: 'failed', reason: 'uv could not reach pypi.org' }), // never its words
+    update({ outcome: 'restored', reason: 'put_back' }), // put back: the put-back did not fail
+    update({ reason: 'upgrade' }), // a reason without a failure
+    update({ outcome: 'current', plugin: 'ok' }), // the install command after an update that installed nothing newer
+    update({ outcome: 'failed', reason: 'upgrade', plugin: 'failed' }),
+    update({ outcome: 'current', plugin: 'underway' }),
+    ...[0, -1, 1.5, 1001, '2', true].map(tries => update({ tries })),
+    update({ installer: 'pip' }), update({ installer: undefined }),
+    ...['yes', 1, null].map(asked => update({ asked })), update({ asked: undefined }),
+    update({ plugin: 'skipped' }), update({ plugin: undefined }),
+    ...['/Users/someone/cad', 'latest', '', null].map(from => update({ from })),
+    { ...update({}), path: '/tmp' }, // nothing else
+    update({ count: 0 }),
+  ]) {
+    const body = JSON.parse(JSON.stringify({ ...ARRIVING, events: [bad] }));
+    assert.equal((await send(memory(), 'POST', '/v1/events', body)).status, 400, JSON.stringify(bad));
+  }
+  // One attempt's shape once per batch; and no schema before 11 sends one.
+  const twice = { ...ARRIVING, events: [update({}), update({})] };
+  assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(twice)))).status, 400);
+  const older = { ...PARTS, schema: 10, process: 'cli', events: [update({})] };
+  assert.equal((await send(memory(), 'POST', '/v1/events', older)).status, 400);
+});
+
+test('a schema newer than the receiver reads is "try later", never refused: the sender keeps it for when it does', async () => {
+  // A release can reach people before the receiver that reads its schema is deployed: its batches wait, not lost.
+  const store = memory();
+  const lines = await logged(async () => {
+    for (const schema of [12, 40]) {
+      const later = await send(store, 'POST', '/v1/events', { ...PINNED, schema, somethingNew: true });
+      assert.deepEqual([later.status, later.headers.get('retry-after'), await later.json()],
+        [503, '3600', { error: 'schema not read yet' }], `schema ${schema}`);
+    }
+  });
+  assert.deepEqual(store.rows, []);
+  assert.deepEqual(lines.warn, ['telemetry /v1/events deferred 503: a schema newer than this receiver reads (schema 12, release 0.8.0)',
+    'telemetry /v1/events deferred 503: a schema newer than this receiver reads (schema 40, release 0.8.0)']);
+  // Anything else unknown is refused as ever: a schema that is not a whole number, or one no release sent.
+  for (const schema of [11.5, '12', 0, -1, null]) {
+    assert.equal((await send(memory(), 'POST', '/v1/events', { ...PINNED, schema })).status, 400, `schema ${schema}`);
+  }
+  assert.equal((await send(memory(), 'POST', '/v1/events', PINNED)).status, 204);
+});
+
 test('every schema a released cadgen sends is stored: a copy nobody updated keeps counting', async () => {
   const store = memory();
   assert.equal((await send(store, 'POST', '/v1/events', SCHEMA_1)).status, 204);
@@ -428,12 +603,22 @@ test('every schema a released cadgen sends is stored: a copy nobody updated keep
     [version, channel, source, process, 'files', 'step', 2],
     [version, channel, source, process, 'files', 'stl', 1],
   ];
-  assert.deepEqual(store.rows.map(row => [row.version, row.channel, row.source, row.process, row.event, row.kind ?? null, row.count ?? null]), [
+  assert.deepEqual(store.rows.map(row => [row.version, row.legacy_channel, row.source, row.process, row.event, row.kind ?? null, row.count ?? null]), [
     ...expected('0.7.11', 'unknown', 'store', 'app'),
     ...expected('0.7.15', 'claude-directory', null, 'app'),
     ...expected('0.7.15', 'claude-directory', null, 'viewer'),
   ]);
   assert.ok(store.rows.every(row => !('file' in row)));
+  // Translated, an older named batch keeps the row ids it had: sent twice, it is the same rows twice.
+  for (const [named, key] of [[NAMED, 'build step script'], [ENGINE, 'build xbf script'], [CONTROLS, 'control pencil'],
+    [PARTS, 'snapshot model'], [{ ...PARTS, schema: 10 }, 'snapshot model']]) {
+    const twice = memory();
+    await send(twice, 'POST', '/v1/events', named);
+    await send(twice, 'POST', '/v1/events', named);
+    const ids = twice.rows.map(row => row.id);
+    assert.deepEqual(ids.slice(ids.length / 2), ids.slice(0, ids.length / 2), `schema ${named.schema}`);
+    assert.equal(ids[0], idOf(named.batch, key), `schema ${named.schema}`);
+  }
 });
 
 test('a batch goes on with the country the host placed it in: never its address, nor anything finer', async () => {
@@ -655,12 +840,22 @@ test('health fails without a setting, or with keys the service refuses, naming n
 });
 
 test('the version feed is the same for everyone, kept at the edge, and answers without the telemetry service', async () => {
-  const feed = { latest: '0.9.0' };
+  // Its two addresses: `/v1/releases` (cad 0.11.12 on) and the frozen `/v1/versions` (0.7.12 to 0.11.11).
+  const feeds = { releases: { latest: '1.0.0', lines: { 0: '0.12.3', 1: '1.0.0' } }, versions: { latest: '0.11.14' } };
   const down = { ...memory(), async ready() { throw new Error('unreachable'); } };
-  const reply = await handle(new Request('https://api.texttocad.dev/v1/versions/'), down, { versions: async () => feed, missing: ['POSTHOG_REGION'] });
-  assert.deepEqual([reply.status, reply.headers.get('content-type'), await reply.json()], [200, 'application/json', feed]);
-  assert.equal(reply.headers.get('cache-control'), 'public, s-maxage=3600, stale-while-revalidate=86400, stale-if-error=604800');
+  const options = { releases: async () => feeds.releases, versions: async () => feeds.versions, missing: ['POSTHOG_REGION'] };
+  for (const [path, feed] of [['/v1/releases', feeds.releases], ['/v1/versions/', feeds.versions]]) {
+    // Whatever the request says of itself: the same answer.
+    for (const headers of [{}, { 'user-agent': 'cadgen' }, { 'user-agent': 'cad', 'x-cad-version': '0.11.3' }]) {
+      const reply = await handle(new Request(`https://api.texttocad.dev${path}?release=0.11.3`, { headers }), down, options);
+      assert.deepEqual([reply.status, reply.headers.get('content-type'), await reply.json()], [200, 'application/json', feed]);
+      assert.equal(reply.headers.get('cache-control'), 'public, s-maxage=300, stale-while-revalidate=60, stale-if-error=604800');
+      assert.equal(reply.headers.get('vary'), null);
+    }
+  }
   // No feed to give: an error the edge keeps nowhere, which a released cadgen takes as a check that failed.
-  const none = await handle(new Request('https://api.texttocad.dev/v1/versions'), down, { versions: async () => null });
-  assert.deepEqual([none.status, none.headers.get('cache-control')], [503, 'no-store']);
+  for (const path of ['/v1/releases', '/v1/versions']) {
+    const none = await handle(new Request(`https://api.texttocad.dev${path}`), down, { releases: async () => null, versions: async () => null });
+    assert.deepEqual([none.status, none.headers.get('cache-control')], [503, 'no-store']);
+  }
 });

@@ -1,5 +1,4 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
-import { toast } from 'sonner';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { CadViewerProps } from '@cad/ui/cad-viewer';
 import { version } from '../package.json';
@@ -19,8 +18,18 @@ vi.mock('@cad/ui/cad-viewer', async original => {
   return {
     ...await original<object>(),
     // What the host hands the navbar, and its notice (the file handler's corner), drawn as the real viewer would.
-    CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return <>{props.update ?? null}{props.fullSize ?? null}{props.notice ?? null}</>; },
+    CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return <>{props.fullSize ?? null}{props.notice ?? null}</>; },
   };
+});
+
+// Each view's sync, as the page made it: its handlers, through which a test says the server answered refusing.
+const syncs = vi.hoisted(() => ({ handlers: [] as { connection?: (connected: boolean, refused?: string) => void }[] }));
+vi.mock('./host/sync', async original => {
+  const real = await original<typeof import('./host/sync')>();
+  return { ...real, createViewSync: ((...args: Parameters<typeof real.createViewSync>) => {
+    syncs.handlers.push(args[2]);
+    return real.createViewSync(...args);
+  }) as typeof real.createViewSync };
 });
 
 // The toasts a view says (the real viewer's Toaster draws them): what this page asks it to say.
@@ -55,11 +64,9 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
     change(next: HostContext) { context = { ...context, ...next }; for (const listener of [...listeners]) listener(context); },
   };
   const answers: Record<string, Answer> = {
-    // The person's settings: read (no body), or changed (`{telemetry}`, `{language}`, `{updates}`).
+    // The person's settings: read (no body), or changed (`{telemetry}`, `{language}`).
     '/api/v1/settings': body => ({ language: { locale: body?.language?.locale ?? null },
-      telemetry: { share: Boolean(body?.telemetry?.share), policy: POLICY },
-      updates: body?.updates ? { automatic: body.updates.automatic, reason: 'choice' } : { automatic: true, reason: 'default' } }),
-    '/api/v1/server': () => ({ notice: null }),
+      telemetry: { share: Boolean(body?.telemetry?.share), policy: POLICY } }),
     '/api/v1/documents': () => ({ documents: [] }),
     '/api/v1/local/reveal': () => null,
   };
@@ -79,7 +86,7 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
     }),
     answers,
     asked: (path: string) => requests.filter(request => request.path === path).map(request => request.body),
-    /** The settings' reads (one, for the language, the consent, What's new and automatic updates), and the telemetry answers sent. */
+    /** The settings' reads (one, for the language, the consent and What's new), and the telemetry answers sent. */
     telemetry: () => requests.filter(request => request.path === '/api/v1/settings' && !request.body?.language && !request.body?.whats_new)
       .map(request => request.body && request.body.telemetry),
   };
@@ -262,17 +269,15 @@ it('every view has the navbar but the file handler: the sidebar\'s home, a threa
   // The file handler: the view alone, no navbar to hand anything, and no Open in browser even where a page is known.
   cleanup();
   render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'file', browser: page }} />);
-  expect([viewer.props!.chrome, viewer.props!.update, viewer.props!.fullSize, browser()]).toEqual(['bare', undefined, undefined, undefined]);
+  expect([viewer.props!.chrome, viewer.props!.fullSize, browser()]).toEqual(['bare', undefined, undefined]);
 });
 
-it('the file handler\'s corner is the viewport\'s top-right, the host\'s notice: Full size there where an inline host offers it, the update button under it', () => {
+it('the file handler\'s corner is the viewport\'s top-right, the host\'s notice: Full size there where an inline host offers it', () => {
   const { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] });
-  const notice = { latest: '0.9.0', version: '0.8.1' };
   const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline"
-    launch={{ protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'file', notice }} />);
+    launch={{ protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'file' }} />);
   expect(viewer.props!.chrome).toBe('bare');
   expect(container.querySelector('[data-card-corner] [aria-label="Full size"]')).not.toBeNull();
-  expect(screen.getByRole('button', { name: 'Update to 0.9.0' }).closest('[data-card-corner]')).not.toBeNull();
 });
 
 it("Open in › Browser is the file menu's where a launch carried the page: the server opens it from this computer, and only where it cannot is the launch's page opened through the host", async () => {
@@ -443,11 +448,10 @@ it('nothing asks about usage stats: the app menu shows the answer, and its toggl
   // text-to-cad's telemetry is on by default once a `cad` command has said so: the page never asks.
   expect(queryByRole('dialog')).toBeNull();
   expect(viewer.props!.notice).toBeFalsy();
-  // The settings read once, for the language, the consent, What's new and automatic updates together: no answer sent.
+  // The settings read once, for the language, the consent and What's new together: no answer sent.
   expect(server.telemetry()).toEqual([null]);
-  // The app menu: Telemetry, then Automatic updates, each the person's setting on the server.
-  expect(viewer.props!.appSettings).toEqual([expect.objectContaining({ id: 'analytics', checked: false }),
-    expect.objectContaining({ id: 'automatic-updates', checked: true, label: 'Automatic updates' })]);
+  // The app menu: Telemetry, the person's setting on the server.
+  expect(viewer.props!.appSettings).toEqual([expect.objectContaining({ id: 'analytics', checked: false })]);
   await act(async () => viewer.props!.appSettings![0].onCheckedChange(true));
   expect(server.telemetry().at(-1)).toEqual({ share: true });
   expect(viewer.props!.appSettings![0].checked).toBe(true);
@@ -456,7 +460,7 @@ it('nothing asks about usage stats: the app menu shows the answer, and its toggl
   expect(viewer.props!.appSettings![0].checked).toBe(false);
 });
 
-it("a tab says What's new once after an update, kept seen through the server; a card in a chat has no room for it, and reads nothing for it", async () => {
+it("a tab says What's new once after a release is installed, kept seen through the server; a card in a chat has no room for it, and reads nothing for it", async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   const seen: string[] = [];
   server.answers['/api/v1/settings'] = body => { seen.push(...(body?.whats_new?.seen ?? [])); return { language: { locale: null },
@@ -474,7 +478,7 @@ it("a tab says What's new once after an update, kept seen through the server; a 
     launch={{ ...home, surface: 'inline', view: 'cad-1-a', order: { createdAt: 1, seq: 1 } }} />);
   await act(async () => {});
   expect(viewer.props!.whatsNew).toBeUndefined();
-  // once, for the language, the consent and automatic updates
+  // once, for the language and the consent
   expect(card.server.asked('/api/v1/settings')).toEqual([null]);
 });
 
@@ -499,61 +503,4 @@ it('an answer is never undone by a read sent just before it, and a choice the en
   render(<App bridge={fixed.bridge as any} server={fixed.server as any} launch={home} />);
   await act(async () => {});
   expect(viewer.props!.appSettings![0]).toEqual(expect.objectContaining({ disabled: true, label: 'Telemetry (set by your environment)' }));
-});
-
-it('a newer release is the update button, an icon: a click updates through the engine, and once it comes back with the new release the card loads the engine\'s app in its own place', async () => {
-  const notice = { latest: '0.9.0', version: '0.8.1' };
-  const reload = vi.fn(async () => {});
-  vi.stubGlobal('__cadShell', { reload });
-  // The launch carries the notice as the server last read it: the button draws with the page, over the home too.
-  const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} });
-  let release = '0.8.1';
-  // The engine answers nothing until the button is drawn: the launch said it, nothing read for it.
-  let answering = false;
-  server.answers['/api/v1/local/update'] = () => ({ notice, release, update: { state: 'restarting', target: '0.9.0', progress: { stage: 'restart', done: 3, total: 4 } } });
-  server.answers['/api/v1/server'] = () => (answering ? { notice, release, update: { state: 'restarting', target: '0.9.0' } } : new Promise(() => {}));
-  const { findByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, notice, version: '0.8.1' }} />);
-  const update = await findByRole('button', { name: 'Update to 0.9.0' });
-  expect(update.closest('[data-card-corner]')).toBeNull();
-  expect(update.textContent).toBe('');  // an icon, and nothing else: no card opens
-  answering = true;
-  await act(async () => update.click());
-  await waitFor(() => expect(server.asked('/api/v1/local/update')).toHaveLength(1));
-  await findByRole('status', { name: 'Restarting with 0.9.0' });
-  expect(reload).not.toHaveBeenCalled();  // the engine has not come back yet
-  release = '0.9.0';  // the engine came back with the new release: the card loads its app in place
-  await waitFor(() => expect(reload).toHaveBeenCalledOnce(), { timeout: 3000 });
-  expect(bridge.request).not.toHaveBeenCalledWith('ui/message', expect.anything(), expect.anything());
-});
-
-it('the card loaded in place of one that followed an update says so once, and suggests restarting the app for its skills', async () => {
-  vi.mocked(toast.success).mockClear();
-  vi.mocked(toast.error).mockClear();
-  vi.stubGlobal('__cadFollowedUpdate', true);  // the card before it, the engine back with the new release (`loadNextRelease`)
-  const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} });
-  server.answers['/api/v1/server'] = () => ({ notice: null, release: '0.9.0', update: { state: 'idle', target: null } });
-  render(<App bridge={bridge as any} server={server as any} launch={{ ...home, version: '0.8.1' }} />);
-  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Updated to 0.9.0. Restart the app to load its new skills.'));
-  expect(globalThis.__cadFollowedUpdate).toBeUndefined();  // taken: a card loaded later says nothing
-  await act(async () => { window.dispatchEvent(new Event('focus')); });
-  expect(toast.success).toHaveBeenCalledOnce();
-  expect(toast.error).not.toHaveBeenCalled();
-});
-
-it('a switch that fails and goes back ends the card\'s restart: the update offered again, no other app loaded', async () => {
-  const notice = { latest: '0.9.0', version: '0.8.1' };
-  const reload = vi.fn(async () => {});
-  vi.stubGlobal('__cadShell', { reload });
-  const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} });
-  let update: Record<string, unknown> = { state: 'restarting', target: '0.9.0' };
-  server.answers['/api/v1/local/update'] = () => ({ notice, release: '0.8.1', update });
-  server.answers['/api/v1/server'] = () => ({ notice, release: '0.8.1', update });
-  const { findByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, notice, version: '0.8.1' }} />);
-  const button = await findByRole('button', { name: 'Update to 0.9.0' });
-  await act(async () => button.click());
-  await findByRole('status', { name: 'Restarting with 0.9.0' });
-  // The engine the failed switch started again: the card's own release, its update failed (`Update.recall`).
-  update = { state: 'failed', target: '0.9.0', error: "text-to-cad 0.9.0's engine did not start" };
-  await findByRole('button', { name: 'Update to 0.9.0' }, { timeout: 3000 });
-  expect(reload).not.toHaveBeenCalled();
 });

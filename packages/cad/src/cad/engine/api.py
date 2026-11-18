@@ -632,12 +632,12 @@ def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | No
     if unmet:
         # A server of a release before the option writes the files at its own, and says none.
         raise Outdated(f"the CAD server running meshed {', '.join(Path(p).name for p in destinations)} at its "
-                          f"own {' and '.join(unmet)}: it is older than this library. Update it (cad update) and "
-                          "export again")
+                          f"own {' and '.join(unmet)}: it is older than this library. Update cad "
+                          "and export again")
     if zero is not None and any(row.get("zero") != zero for row in done["files"]):
         # A server of a release before the zero describes the robot as built, and says no zero.
         raise Outdated(f"the CAD server running wrote {', '.join(Path(p).name for p in destinations)} as built, "
-                          "not at the zero state: it is older than this library. Update it (cad update) and export again")
+                          "not at the zero state: it is older than this library. Update cad and export again")
     return [Written(Path(row["path"]), row["kind"], row["bytes"], row["seconds"], row.get("written", True),
                     row.get("robot")) for row in done["files"]]
 

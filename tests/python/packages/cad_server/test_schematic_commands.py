@@ -25,7 +25,8 @@ CLI = [sys.executable, "-c", "from cad_server.cli import main; raise SystemExit(
 
 
 def cad(*args: str, env: dict | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run([*CLI, *args], env=env or dict(os.environ), capture_output=True, text=True, timeout=120)
+    return subprocess.run([*CLI, *args], env=env or dict(os.environ), capture_output=True, text=True,
+                          encoding="utf-8", timeout=120)
 
 
 class SchematicCommands(unittest.TestCase):

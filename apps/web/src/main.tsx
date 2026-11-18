@@ -59,12 +59,11 @@ function onPageHide(event: PageTransitionEvent) { if (!event.persisted) dispose(
 window.addEventListener('pagehide', onPageHide);
 if (import.meta.hot) import.meta.hot.dispose(dispose);
 root.render(<StartingView />);
-// The update notice comes with the server's description, so the update button draws with the page.
-// So is the person's language, so the page's first paint is in it.
-void Promise.all([client.serverInfo({ signal: controller.signal }), client.version().then(reply => reply.notice ?? null, () => null),
-  client.language().then(reply => reply.locale, () => null)]).then(([server, notice, language]) => {
+// The person's language comes with the server's description, so the page's first paint is in it.
+void Promise.all([client.serverInfo({ signal: controller.signal }),
+  client.language().then(reply => reply.locale, () => null)]).then(([server, language]) => {
   if (controller.signal.aborted) return;
-  root.render(<StrictMode><App client={client} server={server} tabStore={tabStore} notice={notice} language={language} /></StrictMode>);
+  root.render(<StrictMode><App client={client} server={server} tabStore={tabStore} language={language} /></StrictMode>);
 }).catch(error => {
   if (!controller.signal.aborted) root.render(<StartingView error={error} />);
 });

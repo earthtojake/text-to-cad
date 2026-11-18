@@ -6,8 +6,8 @@ beside the package, else the ``.dist-info`` installed beside it. Never the first
 its distribution on ``sys.path``: a machine carries several (a stale editable install's
 egg-info, a wheel in site-packages, the checkout's own), and the one ``importlib.metadata``
 finds first is whichever install happens to sort first, not the code that was imported --
-which reported an older release as the version of this tree. The library (``cad``) and
-the server (``cad-server``) each answer this way for themselves.
+which reported an older release as the version of this tree. The library, the server and the
+shim are one distribution (``cad``), and each package answers this way for itself.
 """
 
 from __future__ import annotations

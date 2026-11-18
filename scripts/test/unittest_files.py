@@ -20,10 +20,12 @@ CI job exists to run it whole, where a test that skips is a job that passed havi
 nothing.
 
 Each FILE runs in its own interpreter, ``--jobs`` at a time (default one), with an engine
-directory of its own (``CAD_ENGINE_DIR``): a build it asks for without naming one runs on
-an engine daemon of that file's alone, never on a developer's own, and a daemon the file left
-running there is stopped once it ends (``stop_engine``). Its ``CAD_CACHE_DIR``,
-``CAD_STATE_DIR`` and ``CAD_LAUNCHER_DIR`` are folders of its own, the state folder holding nothing but
+directory of its own (``CAD_ENGINE_DIR``) and a server started there before it runs (``start_engine``, as
+``cad server start`` starts one: nothing else does): a build it asks for without naming one runs on
+that file's server alone, never on a developer's own, and the server running there is stopped once it
+ends (``stop_engine``). Its ``CAD_CACHE_DIR``,
+``CAD_STATE_DIR``, ``CAD_LAUNCHER_DIR`` and uv's ``UV_TOOL_DIR`` (no tool in it) are folders of its own, the state
+folder holding nothing but
 this run's interpreter registered as its current installation (``engine_daemon.register``: the
 installation whose engine a client starts, where with none it starts none), so
 nothing a test starts reaches a developer's cadgen 0.7 store, their registry of documents, their
@@ -236,6 +238,10 @@ def run_in_process(files: list[str], top: str, verbose: bool, hang_seconds: floa
         resultclass=_Watching if places else None,
     )
     result = runner.run(suite)
+    # A build a test runs in its own process forgets every first-party module, the test's among them
+    # (``cad.engine.build.load_script``), and unittest then skips that module's cleanups -- the server
+    # ``engine_daemon.isolate`` started among them: they run as the file ends.
+    unittest.doModuleCleanups()
     return 0 if result.wasSuccessful() else 1
 
 
@@ -260,16 +266,24 @@ def _counts(output: str) -> dict[str, int]:
     return counts
 
 
-# The three packages' source trees under the checkout, the library's first (common.sh's
-# PACKAGE_SOURCES): what the run's own helpers import.
-SOURCES = (("packages", "cad", "src"), ("packages", "cad-server", "src"),
-           ("packages", "cad-mcp", "src"))
+# The packages' source tree under the checkout (common.sh's PACKAGE_SOURCES): what the run's own
+# helpers import.
+SOURCES = (("packages", "cad", "src"),)
 
 
 def _source_path(top: str) -> str:
     """``PYTHONPATH`` naming the checkout's packages, then whatever this run's already names."""
     return os.pathsep.join(filter(None, [*(os.path.join(top, *source) for source in SOURCES),
                                          os.environ.get("PYTHONPATH", "")]))
+
+
+def start_engine(top: str, env: dict[str, str]) -> str | None:
+    """A server started in a file's engine directory, with the file's environment (``client.start``): None, or
+    why it did not start."""
+    started = subprocess.run([sys.executable, "-P", "-c", "from cad.engine import client; client.start()"],
+                             env={**env, "PYTHONPATH": _source_path(top)}, capture_output=True, text=True,
+                             timeout=ENGINE_STOP_SECONDS)
+    return f"the test engine daemon did not start: {started.stdout}{started.stderr}" if started.returncode else None
 
 
 def stop_engine(top: str, engine_dir: str) -> None:
@@ -315,15 +329,15 @@ def engine_answers(top: str, door: str) -> bool:
 
 
 # Where the developer keeps what their own cadgen registers, which no test may write (every file has
-# folders of its own): the state folder (``cad_server.viewer.recents.state_dir``) and the ``cadgen``
-# command (``cad_server._internal.installations.proxy_path``), as this run's environment names them and
-# as the platform does where nothing names them; and the name this run's engines give their records
+# folders of its own): the state folder (``cad.engine.places.state_dir``, every version's data within)
+# and the ``cadgen`` command (``cad_server._internal.installations.proxy_path``), as this run's
+# environment names them and as the platform does where nothing names them; and the name this run's engines give their records
 # there (``places.NAME``: one engine a device, so one record).
 _PERSON_PLACES = (
     "import json, os\n"
     "from cad_server._internal.installations import proxy_path\n"
     "from cad.engine import places as engine\n"
-    "from cad_server.viewer.recents import state_dir\n"
+    "from cad.engine.places import state_dir\n"
     "places = [(str(state_dir()), proxy_path())]\n"
     "os.environ.pop('CAD_STATE_DIR', None)\n"
     "os.environ.pop('CAD_LAUNCHER_DIR', None)\n"
@@ -381,6 +395,9 @@ def _run_one_file(path: str, top: str, verbose: bool, env: dict[str, str],
     it hung, how (else None)."""
     started = time.perf_counter()
     try:
+        failed = start_engine(top, env)
+        if failed is not None:
+            return path, 1, f"{path}: {failed}\n", time.perf_counter() - started, None
         return _run_file(path, top, verbose, env, started, places,
                          FILE_HANG_SECONDS if hang_seconds is None else hang_seconds)
     finally:
@@ -426,9 +443,14 @@ def _run_file(path: str, top: str, verbose: bool, env: dict[str, str], started: 
 
 def _read_all(stream) -> str:
     stream.seek(0)
-    # What `text=True` did to a pipe: its encoding, and universal newlines. A Windows
-    # child ends lines with \r\n, and a summary line left ending in \r matches no regex.
-    text = stream.read().decode(locale.getpreferredencoding(False), errors="replace")
+    # As the file wrote it: UTF-8, which a test's `cad` command run in its own process makes of its
+    # streams on Windows, else what `text=True` did to a pipe, the locale's encoding; and universal
+    # newlines. A Windows child ends lines with \r\n, and a summary line left ending in \r matches no regex.
+    data = stream.read()
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        text = data.decode(locale.getpreferredencoding(False), errors="replace")
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
@@ -561,6 +583,9 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
                        "CAD_STATE_DIR": os.path.join(engines, f"s{index}"),
                        "CAD_CACHE_DIR": os.path.join(engines, f"c{index}"),
                        "CAD_LAUNCHER_DIR": os.path.join(engines, f"l{index}"),
+                       # uv's tools of its own, none: a `cad mcp` a test runs starts the server of the uv tool cad
+                       # installed (``cad_mcp.shim.start_server``), never a developer's.
+                       "UV_TOOL_DIR": os.path.join(engines, f"t{index}"),
                        # A board is drawn as saved, no kicode fetched, but where a suite runs KiCad (test-kicad.sh).
                        "CAD_KICAD_REFILL": os.environ.get("CAD_KICAD_REFILL", "0")}
                 register(env["CAD_STATE_DIR"])

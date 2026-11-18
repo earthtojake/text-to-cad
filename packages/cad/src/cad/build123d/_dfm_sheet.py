@@ -55,7 +55,7 @@ FAMILIES = ("parts", "not_sheet", "sharp_bends", "bends", "flanges", "channels",
             "hole_spacing", "hole_to_bend", "notches", "tabs", "webs", "gaps")
 ITEM_CAP = 300
 _PARALLEL = 0.9995
-#: A sheet's skin is at least this many times as wide as the sheet is thick (text-to-cad's own line, for which
+#: A sheet's skin is at least this many times as wide as the sheet is thick (cad's own line, for which
 #: of a part's opposite faces can be a sheet's two sides: a strip 7 mm wide of 2 mm sheet is cut from sheet; a
 #: grille's webs, a bar's sides, a block's faces and a tube's two ends are not). Read on each face in its own
 #: frame, so the same wherever the part stands.
@@ -63,7 +63,7 @@ SKIN_WIDTHS = 2.5
 #: Where no face is that wide, one this many times as wide, and ``STRIP_LENGTHS`` times as long, as the part is
 #: thick there still makes it a strip of sheet (a 100 x 4 mm strip of 2 mm sheet is laser cut; it has no wider
 #: face to outvote). Narrower it is as much a bar on its side (100 x 8 x 6 mm); shorter, a block (40 x 30 x 15
-#: mm). text-to-cad's own lines too.
+#: mm). cad's own lines too.
 STRIP_WIDTHS = 2.0
 STRIP_LENGTHS = 10.0
 #: A bend this far round or more is a hem (to 185 degrees, its inside diameter within ``sheet.HEM_DIAMETER_T``

@@ -431,7 +431,7 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit at the top-right
   alert card (`ViewerAlertCard`) carrying the SERVER's sentence (`failureAlert`,
   `kind: "http"`); a payload from
   a server that disagrees about `schemaVersion` gets its own alert whose recovery is to
-  update `cad-server` (the Update button or `cad update`) and reload.
+  reload the page, or restart the app that shows it.
 - **Host commands**: `resetCamera` fits the drawing again, `capture` hands over the
   PNG, `clearSelection` lets go of the picks, and `readState` reports `camera: null`,
   an empty `display`, the selection as references and `selectedEntities` (handles).
@@ -1552,8 +1552,8 @@ The file navbar is [FileViewer's](file-viewer.md#the-navbar-and-the-explorer): t
 which opens the app menu (Back to home, the person's settings, feedback, the links, the
 version), Back and Forward where the host keeps the view's history, the file's name (which
 opens the explorer) and its ⋯ menu at the left (the web viewer's Export is a submenu of the
-⋯); at the right only what a host or a file adds: the renderer's actions, the host's actions
-(the CAD app's Full size) and, last, outermost, the update. A host that shows the view alone (`chrome: "bare"`,
+⋯); at the right only what a host or a file adds: the renderer's actions, then, outermost, the host's actions
+(the CAD app's Full size). A host that shows the view alone (`chrome: "bare"`,
 the CAD app's file handler) has no navbar; in Preview no host has one. The CAD renderers publish one navbar action, and only while a person has put away an
 alert card the model survives: the card's own icon, which brings it back (see
 [Inspect, Render and live revisions](#inspect-render-and-live-revisions)). What a person
@@ -1788,7 +1788,7 @@ one the model survives (`blocking: false`, the previous version still on screen)
 has a Dismiss button, and stays dismissed until the alert changes, or clears and is
 raised again, or another file opens. The dismissal is the frame's (`useAlertDismissal`), so a
 trip to Preview keeps it, and while it stands the card's own icon, in its colour and named
-after the alert, is the first of the navbar's right-hand controls, before the host's actions and the update button
+after the alert, is the first of the navbar's right-hand controls, before the host's actions
 (the renderer's navigation action): pressing it brings the card back, and the icon goes. A warning is a card
 too, dismissible while the model is on screen:
 there is no other place a problem is listed. Full diagnostics stay expandable under

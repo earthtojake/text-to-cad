@@ -105,7 +105,7 @@ Never turn a rule's number into a physical law, or a shop's machine capacity int
   feature are one finding (`and 2 more at this ref`), and a warning on
   a figure that already fails an error, or a stricter recommendation, at the same place is left to
   `measurements.rules`. A limit no published guide states is text-to-cad's own floor, and its `source`
-  says so (`text-to-cad, its own figure: ...`): report it as that, never as a guide's. Other codes are
+  says so (`cad, its own figure: ...`): report it as that, never as a guide's. Other codes are
   facts the figures call for (`zero_draft_walls`, `cnc.live_tooling`, `sheet.bend_radius_differs`,
   `material_declared`: the material was read from the part; `several_solids`: one part of several
   solids, which a process makes as several parts -- fuse them or label each; `several_bodies`: several

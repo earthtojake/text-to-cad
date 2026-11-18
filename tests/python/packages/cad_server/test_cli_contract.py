@@ -67,8 +67,9 @@ class TheReasons(unittest.TestCase):
     def test_each_reason_has_one_class(self) -> None:
         # The table an agent branches on: a reason is added, never renamed, and its class sets the status.
         self.assertEqual(REASONS, {"usage": 2, "invalid_argument": 2, "wrong_type": 2, "not_found": 2,
-                                   "confirmation_required": 2, "declined": 1, "engine_unavailable": 1, "failed": 1,
-                                   "internal_error": 1, "canceled": 130})
+                                   "confirmation_required": 2, "declined": 1, "not_running": 1,
+                                   "other_release": 1, "engine_unavailable": 1,
+                                   "failed": 1, "internal_error": 1, "canceled": 130})
         with self.assertRaises(ValueError):
             Failure("words", "no_such_reason")
 
@@ -77,13 +78,18 @@ class TheReasons(unittest.TestCase):
             pass
 
         NotHeld.__module__ = "cad.engine.serve"
+        from cad.engine.client import NOT_RUNNING, NotRunning, OtherRelease
+
         cases = {ConnectionError("no engine"): ("engine_unavailable", 1), NotHeld("not held"): ("not_found", 2),
                  KeyboardInterrupt(): ("canceled", 130), RuntimeError("boom"): ("failed", 1),
-                 Failure("refused", "wrong_type"): ("wrong_type", 2)}
+                 Failure("refused", "wrong_type"): ("wrong_type", 2),
+                 # No server, and one of another release: an agent tells them from one that failed, and runs ``next``.
+                 NotRunning(NOT_RUNNING): ("not_running", 1), OtherRelease("cad here is 2"): ("other_release", 1)}
         for error, (reason, status) in cases.items():
             with self.subTest(error=type(error).__name__):
                 found = classify(error)
                 self.assertEqual((found.reason, found.status), (reason, status))
+                self.assertEqual(found.next, ("cad server start",) if isinstance(error, (NotRunning, OtherRelease)) else ())
 
     def test_the_document_carries_what_a_person_must_do(self) -> None:
         self.assertEqual(document(Failure("asked", "usage", next=["cad status --json"], user_action=True)),
@@ -196,18 +202,12 @@ class TheDispatcher(unittest.TestCase):
 
     def test_a_failure_s_words_are_on_stderr_and_stdout_keeps_the_answers(self) -> None:
         # A choice that could not be kept is the work's failure (exit 1), said on stderr as every command's is.
-        from cad_server import analytics, auto_updates
+        from cad_server import analytics
 
         with mock.patch.object(analytics, "choose", return_value={"saved": False}), mock.patch.object(cli, "_tell"):
             code, out, err = _cad(["telemetry", "on"])
         self.assertEqual((code, out), (1, ""))
         self.assertTrue(err.startswith("cad telemetry: could not save the choice: the state directory ("), err)
-        with mock.patch.object(auto_updates, "change", side_effect=PermissionError(13, "Permission denied")), \
-                mock.patch.object(cli, "_tell"):
-            code, out, err = _cad(["update", "auto", "off"])
-        self.assertEqual((code, out), (1, ""))
-        self.assertTrue(err.startswith("cad update auto: could not save the choice: ") and
-                        err.endswith("(Permission denied). Automatic updates are unchanged.\n"), err)
 
     def test_an_interrupt_is_canceled_with_the_shell_s_status(self) -> None:
         with mock.patch.object(cli, "_main", side_effect=KeyboardInterrupt):
@@ -260,7 +260,7 @@ class EndToEnd(unittest.TestCase):
                                  (["xbf", "export", "--json"], "usage"), (["stats", "--json"], "usage")):
                 with self.subTest(argv=argv):
                     done = subprocess.run([sys.executable, "-m", "cad_server.cli", *argv], cwd=folder, env=env,
-                                          capture_output=True, text=True, timeout=120)
+                                          capture_output=True, text=True, encoding="utf-8", timeout=120)
                     self.assertEqual(done.returncode, 2, done.stderr)
                     lines = done.stdout.splitlines()
                     self.assertEqual(len(lines), 1, done.stdout)

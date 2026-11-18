@@ -44,7 +44,7 @@ test("each of a batch's rows is one PostHog event, under the install id, with th
   assert.deepEqual([url, method, body.api_key], ['https://eu.i.posthog.com/batch/', 'POST', 'phc_project']);
   assert.deepEqual(body.batch.map(event => event.event), ['tool_used', 'view_used', 'files_shown']);
   const context = { distinct_id: INSTALL, session: SESSION, $session_id: SESSION, $geoip_disable: true, process: 'app', version: '0.8.0',
-    channel: 'claude-directory', platform: 'darwin', arch: 'arm64', client: 'codex-mcp-client', client_version: '0.159.0',
+    channel: 'claude', app: 'codex', legacy_channel: 'claude-directory', platform: 'darwin', arch: 'arm64', client: 'codex-mcp-client', client_version: '0.159.0',
     presentation: 'tabs', country: 'DE' };
   assert.deepEqual(body.batch.map(event => event.properties), [
     { ...context, tool: 'cad_show', calls: 3, errors: 1 },
@@ -59,11 +59,11 @@ test("the build daemon's counts are PostHog events of their own, each a window's
   const { batch } = asked[0].body;
   assert.deepEqual(batch.map(event => event.event), ['models_built', 'snapshots_rendered', 'feature_used', 'daemon_health']);
   const context = { distinct_id: INSTALL, session: SESSION, $session_id: SESSION, $geoip_disable: true, process: 'daemon', version: '0.8.0',
-    channel: 'claude-directory', platform: 'linux', arch: 'x86_64', country: 'NZ' };
+    channel: 'claude', app: 'claude-code', legacy_channel: 'claude-directory', platform: 'linux', arch: 'x86_64', country: 'NZ' };
   const countsOf = event => Object.fromEntries(Object.entries(event).filter(([key]) => key !== 'name'));
   assert.deepEqual(batch.map(event => event.properties), DAEMON.events.map(event => ({ ...context, ...countsOf(event) })));
-  assert.deepEqual(Object.keys(EVENTS).sort(), ['build', 'build_failure', 'control', 'exception', 'feature', 'files', 'health',
-    'snapshot', 'snapshot_failure', 'tool', 'tool_failure', 'view']);
+  assert.deepEqual(Object.keys(EVENTS).sort(), ['arrival', 'build', 'build_failure', 'control', 'exception', 'feature', 'files',
+    'health', 'snapshot', 'snapshot_failure', 'tool', 'tool_failure', 'update', 'view']);
   // Schemas before 5 name no batch: PostHog makes up each event's uuid and stamps it as it arrives, as ever.
   assert.ok(batch.every(event => !('uuid' in event) && !('timestamp' in event)));
 });
@@ -108,6 +108,43 @@ test("a viewer's controls are PostHog's control_used: uses and seconds on, by co
     measure.properties.process], ['control_used', 'measure', 1, 240, 'viewer']);
   assert.deepEqual([xray.event, xray.properties.control, xray.properties.count, xray.properties.seconds], ['control_used', 'display_xray', 2, 0]);
   assert.ok(measure.uuid && measure.timestamp === '2026-10-09T11:59:00.000Z', 'named as every schema 5 on is');
+});
+
+test("how a computer got to a version is PostHog's version_arrival: by version, from, route, step, outcome and reason", async () => {
+  const [failed, handedOver, served] = await at(JSON.parse(JSON.stringify({ ...NAMED, schema: 11, process: 'cli', channel: undefined, app: 'unknown', events: [
+    { name: 'arrival', step: 'setup', route: 'updater', from: '0.11.10', outcome: 'failed', reason: 'network', count: 2 },
+    { name: 'arrival', step: 'handover', route: 'updater', from: '0.11.10', outcome: 'gave_up', attempts: 5, count: 1 },
+    { name: 'arrival', step: 'serving', route: 'setup', from: 'none', outcome: 'ok', count: 1 },
+  ] })));
+  const own = event => Object.fromEntries(['step', 'route', 'from', 'outcome', 'reason', 'attempts', 'count']
+    .filter(key => key in event.properties).map(key => [key, event.properties[key]]));
+  assert.deepEqual([failed.event, handedOver.event, served.event], ['version_arrival', 'version_arrival', 'version_arrival']);
+  assert.deepEqual(own(failed), { step: 'setup', route: 'updater', from: '0.11.10', outcome: 'failed', reason: 'network', count: 2 });
+  assert.deepEqual(own(handedOver), { step: 'handover', route: 'updater', from: '0.11.10', outcome: 'gave_up', attempts: 5, count: 1 });
+  assert.deepEqual(own(served), { step: 'serving', route: 'setup', from: 'none', outcome: 'ok', count: 1 });
+  assert.deepEqual([served.properties.version, served.properties.process, served.properties.distinct_id], ['0.8.0', 'cli', INSTALL]);
+  assert.ok(!('channel' in served.properties) && !('legacy_channel' in served.properties), 'schema 11 sends no channel, and none is made up');
+  assert.equal(served.properties.app, 'unknown');
+  assert.ok(served.uuid && served.timestamp, 'named, so a batch sent again counts once');
+});
+
+test("each of cad's own updates is PostHog's cad_updated: by version, from, outcome, reason, tries, installer, asked and plugin", async () => {
+  const [failed, installed, interrupted] = await at(JSON.parse(JSON.stringify({ ...NAMED, schema: 11, process: 'cli', channel: undefined, app: 'unknown', events: [
+    { name: 'update', from: '0.11.12', outcome: 'failed', reason: 'upgrade', tries: 2, installer: 'uv', asked: false, plugin: 'none', count: 1 },
+    { name: 'update', from: '0.11.12', outcome: 'installed', tries: 1, installer: 'pipx', asked: true, plugin: 'ok', count: 1 },
+    { name: 'update', from: '0.11.12', outcome: 'installed', tries: 1, installer: 'uv', asked: false, plugin: 'underway', count: 1 },
+  ] })));
+  const own = event => Object.fromEntries(['from', 'outcome', 'reason', 'tries', 'installer', 'asked', 'plugin', 'count']
+    .filter(key => key in event.properties).map(key => [key, event.properties[key]]));
+  assert.deepEqual([failed.event, installed.event, interrupted.event], ['cad_updated', 'cad_updated', 'cad_updated']);
+  assert.deepEqual(own(failed), { from: '0.11.12', outcome: 'failed', reason: 'upgrade', tries: 2, installer: 'uv', asked: false,
+    plugin: 'none', count: 1 });
+  assert.deepEqual(own(installed), { from: '0.11.12', outcome: 'installed', tries: 1, installer: 'pipx', asked: true, plugin: 'ok',
+    count: 1 });
+  assert.deepEqual(own(interrupted), { from: '0.11.12', outcome: 'installed', tries: 1, installer: 'uv', asked: false,
+    plugin: 'underway', count: 1 }, 'a new attempt began while the install command still ran');
+  assert.deepEqual([installed.properties.version, installed.properties.process], ['0.8.0', 'cli']);
+  assert.ok(installed.uuid && installed.timestamp, 'named, so a batch sent again counts once');
 });
 
 test('a batch sent again is the same PostHog events, uuid and time alike, so PostHog counts it once', async () => {
@@ -213,7 +250,7 @@ test('where the host could not tell, an event names no country; what a schema le
     events: [BATCH.events[1], { name: 'file', file: '3f9a1c0be47d2a55', kind: 'step' }] }));
   await store.insert(rowsOf(schema1), { country: null });
   const context = { distinct_id: INSTALL, session: SESSION, $session_id: SESSION, $geoip_disable: true, process: 'app', version: '0.7.11', channel: 'unknown',
-    source: 'store', platform: 'darwin' };
+    app: 'unknown', legacy_channel: 'unknown', source: 'store', platform: 'darwin' };
   assert.deepEqual(asked[0].body.batch, [
     { event: 'view_used', properties: { ...context, calls: 7 } },
     { event: 'files_shown', properties: { ...context, kind: 'step', count: 1 } },

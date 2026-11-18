@@ -279,8 +279,8 @@ something is drawn. Open geometry is allowed only on a layer whose name's words 
 `dim`, `center`, `hidden` and the like).
 
 The same checks run on any `.dxf`, one no model wrote too. No `cad` command inspects an existing
-`.dxf`: read it with `ezdxf`, which comes with the build123d integration, in a script run by `cad
-run`. Such a script gets that integration by importing build123d or, as here, by naming it in its
+`.dxf`: read it with `ezdxf`, which comes with the build123d integration, in a script run by
+`cad run`. Such a script gets that integration by importing build123d or, as here, by naming it in its
 header; one that imports `ezdxf` alone runs without it (`No module named 'ezdxf'`):
 
 ```python

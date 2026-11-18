@@ -27,7 +27,7 @@ from tests.python.support.tmp_root import temporary_directory
 WORKFLOWS = REPO_ROOT / ".github/workflows"
 WORKFLOW = (WORKFLOWS / "test.yml").read_text(encoding="utf-8")
 JOBS = dict(re.findall(r"^  ([a-z][\w-]*):\n(.*?)(?=^  [a-z][\w-]*:\n|\Z)", WORKFLOW.split("\njobs:\n", 1)[1], re.M | re.S))
-REHEARSALS = ("install-linux.yml", "install-windows.yml")
+REHEARSALS = ("install-linux.yml", "install-windows.yml", "real-install.yml")
 
 
 def _load(name: str):
@@ -461,7 +461,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         # The light contracts read them, and static runs those on every change.
         for path in ("README.md", "CONTRIBUTING.md", "AGENTS.md", "docs/install.md", "docs/contributing/testing.md",
                      "skills/cad/SKILL.md", ".claude-plugin/plugin.json", "models/README.md",
-                     "packages/cad-server/src/cad_server/engine/README.md", "apps/api/package.json",
+                     "packages/cad/src/cad_server/engine/README.md", "apps/api/package.json",
                      ".github/workflows/release-publish.yml", "scripts/release/bump-version.sh"):
             with self.subTest(path=path):
                 self.assertEqual(jobs_for(path), set())
@@ -514,8 +514,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         cases = {
             # The packages: their suites whole on both platforms, and every job that runs them.
             "packages/cad/src/cad/__init__.py": packages,
-            "packages/cad-server/src/cad_server/viewer/__init__.py": packages,
-            "packages/cad-mcp/pyproject.toml": packages,
+            "packages/cad/src/cad_server/viewer/__init__.py": packages,
+            "packages/aliases/cad-mcp/pyproject.toml": packages,
             "scripts/bundle/bundle.sh": packages,
             # A distribution's README is its wheel's description; other prose there is no build's.
             "packages/cad/README.md": jobs_on("packaging"),
@@ -527,8 +527,16 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "apps/docs/package.json": jobs_on("docs", "core_js"),
             "tests/browser/viewer-e2e.mjs": jobs_on("web_viewer"),
             # The installer rehearsals: the installers, their folder and the workflows; a release.
-            "scripts/install/install.sh": jobs_on("installer", "docs", "packages"),
+            "scripts/install/install.sh": jobs_on("installer", "docs"),
+            "scripts/install/install.py": jobs_on("installer", "docs"),
             ".github/workflows/install-windows.yml": jobs_on("installer"),
+            ".github/workflows/real-install.yml": jobs_on("installer"),
+            "scripts/test/real-install.py": jobs_on("installer"),
+            # ...and the code of this build the update rehearsal runs, beside the packages' suites.
+            **{f"packages/cad/src/cad_server/{path}": packages | jobs_on("installer") for path in (
+                "cli/setup.py", "cli/auto_update.py", "_internal/install_script.py", "_internal/arrival.py",
+                "_internal/auto_update.py", "_internal/auto_update_helper.py", "_internal/installations.py",
+                "engine/daemon.py")},
             # A runner runs what it feeds.
             "scripts/test/test-js.sh": jobs_on("core_js", "web_ui", "web_client", "mcp"),
             "scripts/test/test-floor.sh": jobs_on("floor"),

@@ -147,10 +147,11 @@ if os.path.isfile(JOURNAL):
 def held_engine(case: unittest.TestCase, env: dict[str, str] | None = None) -> tuple[dict[str, str], Path]:
     """An engine of the test's own whose checks wait at the seam (``SEAM``), started in ``env`` beside it: the
     environment it was started in, which a command of the test's runs in, and the file a check waits for.
-    Stopped at the test's end, any check still waiting let go first."""
+    Stopped at the test's end, any check still waiting let go first, and the file's own started again."""
     from cad.engine import api
 
     api.stop()
+    case.addCleanup(engine_daemon.start)
     case.addCleanup(api.stop)
     folder = Path(os.path.realpath(tempfile.mkdtemp(prefix="engine-dfm-seam-")))
     case.addCleanup(shutil.rmtree, folder, True)
@@ -160,10 +161,9 @@ def held_engine(case: unittest.TestCase, env: dict[str, str] | None = None) -> t
     (folder / "site" / "sitecustomize.py").write_text(
         f"SECONDS = {JOIN_SECONDS}\nJOURNAL = {str(engine_daemon.SITE / 'sitecustomize.py')!r}\n{SEAM}", encoding="utf-8")
     found = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_TEST_CHECK_HOLD": str(hold),
-                                   **(env or {})}, case.addCleanup)
+                                   **(env or {})}, case.addCleanup, started=False)
     found["PYTHONPATH"] = os.pathsep.join((str(folder / "site"), found["PYTHONPATH"]))
-    started = engine_daemon.run([sys.executable, "-c", "from cad.engine import client; client.connect()"], env=found)
-    case.assertEqual(started.returncode, 0, started.stderr)
+    engine_daemon.start(found)
     return found, hold
 
 

@@ -89,6 +89,7 @@ jobs:
       - name: Open the release pull request
         if: ${{ !inputs.dry_run }}
         id: pr
+        shell: bash  # pipefail: the summary's tee never hides a failure before it
         env:
           GH_TOKEN: ${{ secrets.PREPARE_RELEASE_TOKEN }}
           TARGET: ${{ inputs.target }}
