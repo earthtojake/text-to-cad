@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAD"
+  short_description: "Generate and validate CAD artifacts."
+  default_prompt: "Use $cad to create or edit the CAD model I describe, then show me the result."

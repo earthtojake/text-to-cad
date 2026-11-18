@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "cad": {
+      "command": "uvx",
+      "args": [
+        "--no-config",
+        "--managed-python",
+        "--python",
+        "3.14",
+        "cad@0.11.12",
+        "mcp"
+      ],
+      "startup_timeout_sec": 300
+    }
+  }
+}
