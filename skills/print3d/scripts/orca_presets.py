@@ -123,10 +123,19 @@ def main() -> int:
     parser.add_argument("--out", default="presets", help="folder for the complete presets")
     args = parser.parse_args()
 
-    index, selectable = index_presets(profile_roots(args.profiles))
+    roots = profile_roots(args.profiles)
+    index, selectable = index_presets(roots)
     if args.list:
-        for kind, name in sorted(selectable):
-            if kind == args.list and args.match.lower() in name.lower():
+        names = sorted(name for kind, name in selectable if kind == args.list)
+        if not names:
+            cache = next((path for root in roots for path in root.glob("*.opc") if path.is_file()), None)
+            if cache is not None:
+                sys.exit(f"No selectable {args.list} preset JSONs found. OrcaSlicer 2.5+ stores system presets "
+                         f"in binary caches such as {cache}, which this command cannot read. "
+                         "Supply a JSON profile tree with --profiles or slice in the OrcaSlicer app.")
+        match = args.match.lower()
+        for name in names:
+            if match in name.lower():
                 print(name)
         return 0
     if not (args.printer and args.process and args.filament):

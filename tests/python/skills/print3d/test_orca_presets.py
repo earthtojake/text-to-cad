@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tests.python.support.paths import REPO_ROOT
 
@@ -82,6 +83,31 @@ class OrcaPresetsTests(unittest.TestCase):
             _, selectable = orca_presets.index_presets([Path(scratch)])
             self.assertIn(("machine", "Acme One 0.4 nozzle"), selectable)
             self.assertNotIn(("machine", "acme_common"), selectable)
+
+    def test_listing_cache_only_presets_reports_the_unsupported_format(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            (root / "Acme.opc").touch()
+            write(root, "blacklist.json", {"filaments": []})
+            with patch.object(orca_presets, "profile_roots", return_value=[root]), \
+                 patch.object(sys, "argv", [str(SCRIPT), "--list", "machine"]), \
+                 contextlib.redirect_stdout(io.StringIO()) as stdout, \
+                 self.assertRaises(SystemExit) as raised:
+                orca_presets.main()
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertIn("Acme.opc", str(raised.exception))
+            self.assertIn("--profiles", str(raised.exception))
+
+    def test_a_filter_miss_with_readable_presets_still_returns_an_empty_list(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            profile_tree(root)
+            (root / "Other.opc").touch()
+            with patch.object(orca_presets, "profile_roots", return_value=[root]), \
+                 patch.object(sys, "argv", [str(SCRIPT), "--list", "machine", "--match", "Unknown"]), \
+                 contextlib.redirect_stdout(io.StringIO()) as stdout:
+                result = orca_presets.main()
+            self.assertEqual((result, stdout.getvalue()), (0, ""))
 
     def test_written_presets_are_complete_and_name_the_printer(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:
