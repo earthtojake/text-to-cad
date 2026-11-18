@@ -234,8 +234,16 @@ $env:CAD_CACHE_DIR = "$PWD\tmp\cache"; $env:CAD_UPDATE_CHECK = "0"
 uv run cad server start
 ```
 
+An export lasts only in the shell it ran in. Where each command runs in a fresh shell (an agent's
+commands), set the variables in the same command as each `cad` command, from the worktree's root;
+a command without them reaches the computer's global server, which runs other code, and says nothing:
+
+```bash
+export CAD_ENGINE_DIR=$PWD/tmp/engine CAD_STATE_DIR=$PWD/tmp/state CAD_CACHE_DIR=$PWD/tmp/cache CAD_UPDATE_CHECK=0 && uv run cad server start
+```
+
 The server keeps the Python it started with: after editing `packages/cad/src`, run
-`uv run cad server stop` (in the same shell, so it stops this worktree's), and the next command
+`uv run cad server stop` (with the same variables, so it stops this worktree's), and the next command
 starts the new code. Leave it running between edits of a model script: a build of the same script
 reuses its warm worker. Stop it when the worktree is done. Never stop a server you did not start.
 

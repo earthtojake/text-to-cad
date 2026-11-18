@@ -303,11 +303,9 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
 - In Codex or Claude Code worktrees, prefer the skill instructions and scripts
   under the current worktree's `skills/` directory over globally installed
   skills or plugins from another checkout.
-- Iterate inside a worktree, never on a global install: `uv sync`, then `uv run ...` with the worktree's own
-  `CAD_ENGINE_DIR`, `CAD_STATE_DIR`, `CAD_CACHE_DIR` (under its `tmp/`) and `CAD_UPDATE_CHECK=0`. A server is told
-  apart by its release, not its checkout, so without them the worktree's commands reach, and its
-  `cad server start` joins, the computer's global server ([CONTRIBUTING.md, "Work In A
-  Worktree"](CONTRIBUTING.md#work-in-a-worktree)). The global install is for end-to-end tests alone, below.
+- Iterate inside a worktree on its own server, never on a global install (that is for end-to-end tests alone,
+  below): `CAD_ENGINE_DIR`, `CAD_STATE_DIR`, `CAD_CACHE_DIR` and `CAD_UPDATE_CHECK=0`, set in every command
+  ([CONTRIBUTING.md, "Work In A Worktree"](CONTRIBUTING.md#work-in-a-worktree)).
 - Test skills and the plugin in an agent app with
   `scripts/install/dev_install.py [APP...]` ([CONTRIBUTING.md, "Test In Agent
   Apps"](CONTRIBUTING.md#test-in-agent-apps)). One copy of the plugin per app: never the
