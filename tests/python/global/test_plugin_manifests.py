@@ -444,6 +444,23 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertTrue(section.startswith(f"{intro}\n"), "the README's Features open with the site's intro")
         self.assertEqual(re.findall(r"^- \[\*\*([^*]+)\*\*\]\(([^)]+)\): (.+)$", section, re.M), page)
 
+    def test_the_readme_and_the_docs_site_list_the_community_alike(self) -> None:
+        # The README's Community and the site's are one copy (apps/docs/README.md): the intro, then a
+        # bullet per project: its name, what it is, and its links side by side.
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        content = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
+        block = content.split("export const community = {", 1)[1].split("\n};", 1)[0]
+        intro = re.search(r'intro: "([^"]+)"', block).group(1)
+        items = re.findall(r'title: "([^"]+)",\s+body: "([^"]+)",\s+links: \[(.*?)\n      \],', block, re.S)
+        self.assertTrue(items, "no Community projects found in the docs site's copy")
+        lines = []
+        for title, body, listed in items:
+            links = re.findall(r'\{ text: "([^"]+)", href: "([^"]+)" \}', listed)
+            lines.append(f"- **{title}**: {body} " + " · ".join(f"[{text}]({href})" for text, href in links))
+        section = readme.split("\n## ✨ Features\n", 1)[1].split("\n## ", 2)[1]
+        self.assertEqual(section.strip().split("\n"), ["🌐 Community", "", intro, "", *lines],
+                         "the README's Community follows Features and lists what the site does")
+
     def test_skill_handoffs_name_skills_that_ship(self) -> None:
         # `$cad`, `$sendcutsend`: one skill hands the agent to another by name (shell variables are upper case).
         dangling = []
