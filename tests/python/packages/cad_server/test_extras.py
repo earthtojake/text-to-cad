@@ -24,7 +24,7 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
-from tests.python.support import engine_daemon
+from tests.python.support import engine_daemon, uv_cache
 from tests.python.support.paths import add_sources
 
 add_sources()
@@ -604,32 +604,15 @@ if __name__ == "__main__":
 """
 
 
-def _warm_uv_cache(folder: Path) -> None:
-    """What the offline runs below make their environments of -- this installation's library with its kernel, as
-    uv resolves it now -- installed once into a throwaway environment with the network, so uv's cache holds it:
-    the index pages an unlocked resolution reads and the wheels it picks. An environment synced from a lock
-    (``uv sync``: the checkout's, and CI's) reads neither index pages nor any wheel but the lock's. Where the
-    cache holds them already this downloads nothing; with no network it does nothing, and the runs read what the
-    cache holds."""
-    uv, own = base.find_uv(), base._own()
-    env = folder / "warm"
-    made = subprocess.run([uv, "venv", "--no-project", "--python", sys.executable, str(env)], capture_output=True)
-    if made.returncode == 0:
-        python = env / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-        subprocess.run([uv, "pip", "install", "--python", str(python), *own.requirement(), "numpy"],
-                       capture_output=True, cwd=folder)
-    shutil.rmtree(env, ignore_errors=True)
-
-
 class RunWithTest(unittest.TestCase):
-    """The real uv, offline: nothing here reaches the network, but for the cache's warming before (``_warm_uv_cache``)."""
+    """The real uv, offline: nothing here reaches the network, but for the cache's warming before (``uv_cache.warm``)."""
 
     @classmethod
     def setUpClass(cls) -> None:
         engine_daemon.isolate(cls.addClassCleanup, started=False)  # its server is the one offline, below
         cls.project = Path(tempfile.mkdtemp(prefix="run-with-")).resolve()
         cls.addClassCleanup(shutil.rmtree, cls.project, True)
-        _warm_uv_cache(cls.project)
+        uv_cache.warm(cls.project)
         cls.wheel = _wheel(cls.project)
         cls.env = engine_daemon.watched({**os.environ, "UV_OFFLINE": "1", "CAD_ENGINE_MESH": "inline"},
                                         cls.addClassCleanup)
