@@ -1499,7 +1499,11 @@ serves its document, so the daemon's server starts with the first `python model.
 pool waits. Every process starts on the first mesh a page asks for, or on `Server.warm`: sent by
 `cad viewer` at launch (`CAD_VIEWER_WARM=0` skips it), called when an app launches a view the kernel
 reads (a model, an xbf, a STEP, a robot: never a mesh the page parses itself, a DXF or a KiCad file, whose
-view must not wait for, or fail on, a pool it never uses) and when a build's `view:` link lands. An inspection's measurements, picked elements and poses start
+view must not wait for, or fail on, a pool it never uses) and when a build's `view:` link lands -- there on a
+thread of its own, one at a time (`EngineApp._warm`), so the page is answered at once even where the pool's start
+waits for the base to be made (a model built in an environment of its own leaves it unmade): the page shows its
+loading state while its document's requests wait on that making, and a base that cannot be made is its
+document's error. An inspection's measurements, picked elements and poses start
 only the processes their jobs need (`Mesher.processes`, `warm=False`; a
 document's measurements take two at most while no page has warmed the pool, **Mesh**). With no page
 and no inspection, the daemon's only children are the worker and the standby. Measured (before the

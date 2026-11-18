@@ -224,6 +224,7 @@ class EngineApp:
         self.cookie = 'cad-' + _mac(self.token, 'cookie')[:12]
         self.lock = threading.RLock()
         self.active_requests = 0
+        self._warming = False  # a page's warm of the engine's kernel processes under way (``_warm``)
         self._default = None
         self._mcp = None
         self.session_factory = session_factory
@@ -469,8 +470,31 @@ class EngineApp:
         if request.path == '/mcp' and self.session_factory is not None:
             return self.mcp().handle(request, response)
         if request.method == 'GET' and is_id(request.path[1:]) and self.server.holds(request.path[1:]):
-            self.server.warm()  # a build's view link opened: its meshing pool starts as the page loads
+            self._warm()  # a build's view link opened: its meshing pool starts as the page loads
         return self.default_app().handle(request, response)
+
+    def _warm(self):
+        """The processes a page's document waits on started (``server.warm``) on a thread of their own, never in
+        the request that loads the page: their start waits for the CAD kernel's environment where it is not made
+        yet (a model built in an environment of its own: another integration, a script's own requirements, a uv
+        project or setting), and the server makes it then -- seconds from uv's cache, minutes where it downloads --
+        while the page needs none of it. One at a time: a page loaded again meanwhile starts no second one, which
+        would only wait on the same making. What the start could not do, the document's own requests say."""
+        with self.lock:
+            if self._warming:
+                return
+            self._warming = True
+
+        def run():
+            try:
+                self.server.warm()
+            except Exception:  # noqa: BLE001 - said by the document requests that need the processes
+                pass
+            finally:
+                with self.lock:
+                    self._warming = False
+
+        threading.Thread(target=run, name='cad-warm', daemon=True).start()
 
     def _refused(self, request, response, expired=False):
         """A request without a credential this engine admits: refused, 403, whatever it asks for -- a
