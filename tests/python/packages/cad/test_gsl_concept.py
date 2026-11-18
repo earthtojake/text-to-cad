@@ -336,6 +336,18 @@ class Assembly(Folder):
         self.assertFalse(thick.ok)
         self.assertEqual(["interference"], [finding.code for finding in thick.findings])
 
+    def test_a_failed_fit_is_said_of_the_assembly_and_its_finding_of_the_concept_it_is_in(self) -> None:
+        from cad.gsl import fit
+
+        # Two placements of the slab: the block is clear of the first and inside the second, 8 thick.
+        bodies = {"block": box((5, 5, 0.5), (0, 0, -5.5))}
+        thin, thick = self.base(0), {**self.base(0, t=8), "part": "thick", "path": "device/thick"}
+        result = fit(self.plan(bodies, [thin, thick]))
+        self.assertFalse(result.ok)
+        self.assertEqual("device", str(result.path))
+        self.assertEqual(["interference"], [finding.code for finding in result.findings])
+        self.assertEqual("FAILED device: 1 blocking finding(s)", result.human_lines()[-1])
+
     def test_bake_holds_each_baked_part_to_its_own_concept_alone_in_the_part_s_frame(self) -> None:
         from cad.gsl import bake
 

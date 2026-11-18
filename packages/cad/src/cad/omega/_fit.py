@@ -323,7 +323,8 @@ def assembly(operation: str, document: Any, *, contact: tuple[str, ...] = (), de
     ok = all(result.ok for _concept, result in results)
     findings = tuple(finding for _concept, result in results for finding in result.findings)
     summary = "\n".join(result.summary for _concept, result in results if result.summary) if ok else ""
-    return CheckResult(ok=ok, path=results[0][1].path, findings=findings, summary=summary,
+    # The check is the assembly's: a failure is said of it, and each finding names its own concept.
+    return CheckResult(ok=ok, path=shown, findings=findings, summary=summary,
                        measurements={"concepts": [{"part": concept["part"], "gsl": concept["gsl"], "role": concept["role"],
                                                    **result.measurements} for concept, result in results]})
 
