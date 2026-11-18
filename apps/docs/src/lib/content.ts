@@ -80,6 +80,22 @@ export const contributing = {
   ],
 };
 
+// The projects around text-to-cad, the README's Community, item for item and word for word: the ones
+// built on top of it and the ones it uses. Each one's name, what it is, and its links, side by side.
+export const community = {
+  intro: "Projects built on top of text-to-cad, and projects that text-to-cad uses.",
+  items: [
+    {
+      title: "Studio",
+      body: "An open-source desktop CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand.",
+      links: [
+        { text: "Website", href: "https://texttocad.studio" },
+        { text: "GitHub", href: "https://github.com/amywork777/studio" },
+      ],
+    },
+  ],
+};
+
 // What text-to-cad does, the README's Features, item for item and word for word: each one's name,
 // the page that documents it (a path in the repository; every skill's folder is one of them), what it
 // does, and the file its picture on the homepage shows (`FeatureArt`, components/feature-art.tsx).
