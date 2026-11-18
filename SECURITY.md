@@ -152,8 +152,8 @@ major (`uv tool install --upgrade "cad>=<installed>,<<next major>"`), which down
 PyPI's newest release of `cad` in that range, and starts the server again. It never
 installs an older release; where a failed upgrade left no `cad`, it puts back the
 release that ran. A typed `cad update` asks PyPI which release of its major is newest
-and runs the same upgrade; `cad update --major` runs `uv tool install cad@latest`,
-PyPI's newest of all. Then, where `cad plugin update auto` is on, the
+and runs the same upgrade; `cad update --major` runs `uv tool install --upgrade
+"cad>=<installed>"`, PyPI's newest of all. Then, where `cad plugin update auto` is on, the
 server of the newer cad (however it got newer: by itself, by `cad update`, or by an
 upgrade by hand) downloads and runs the hosted install command once, unattended: it
 fetches `install.sh` or `install.ps1` and `install.py` from texttocad.dev, and the
@@ -165,10 +165,15 @@ project on PyPI or this repository's `latest` branch can run code as you.
 
 **What else installs by itself.** The CAD app's server line in Codex's plugin
 (`uvx ... cad@<release> mcp`) runs `uv tool install` for PyPI's newest `cad` of that
-release's major where the computer has no global cad. A computer that the updater of 0.10.0 to 0.11.11
-brought to this release installs cad the same way, and runs the hosted install
-command once, unattended, where our install command or an earlier release's update
-had put our plugin there.
+release's major where the computer has no global cad, and never over a `cad` of a higher
+major. A computer that the updater of 0.10.0 to 0.11.11 brought to this release runs the
+hosted install command, unattended, where our install command or an earlier release's
+update had put our plugin there, and otherwise installs cad itself the same bounded way.
+cad's own update never crosses a major, but the hosted install command, which cad runs by
+itself there and after an update, is not bounded by major: it installs the newest plugin
+of all, and, where cad is missing or does not start, PyPI's newest `cad` of all. No higher
+major exists today, and the command, fetched at every run, is to keep a computer inside
+its major before one ships.
 
 ### What we treat as a vulnerability
 

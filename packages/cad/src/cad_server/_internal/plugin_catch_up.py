@@ -216,32 +216,43 @@ def begin(told, *, now: float | None = None) -> subprocess.Popen | None:
     (``_wanted``) and the run kept as ``underway`` in the same step, then ``cad plugin update`` started. Its process, or
     None where the record no longer wants one (another server began one, or a run ended with exit status 0 since
     ``due`` was asked) or it could not start (kept as failed). Never raises."""
+    return _begin(told, now=now)[0]
+
+
+def _begin(told, *, now: float | None = None) -> tuple[subprocess.Popen | None, float | None]:
+    """``begin``, and the ``at`` the run was kept with (None where none began). The time is read once the state
+    folder's lock is held (``now``, a test's clock, in its place), as ``auto_update._claim`` reads it: read before, a
+    server that waited for the lock would find the run another began later than its own now, which ``_stale`` takes
+    for a clock set back, and begin a second."""
     from cad.engine.places import detached
     from cad_server._internal import auto_update
 
-    now = time.time() if now is None else now
     version = _version()
+    began: list[float] = []
     try:
         prefix = tool()
         if prefix is None:
-            return None
+            return None, None
 
         def start(kept: dict[str, Any]) -> dict[str, Any] | None:
-            if not _wanted(kept, version, now):
+            at = time.time() if now is None else now
+            if not _wanted(kept, version, at):
                 return None
             tries = kept.get("tries") if kept.get("release") == version else 0
             kept = {key: value for key, value in kept.items() if key not in ("code", "ended")}
-            return {**kept, "release": version, "at": now, "tries": (tries if type(tries) is int else 0) + 1,
+            began.append(at)
+            return {**kept, "release": version, "at": at, "tries": (tries if type(tries) is int else 0) + 1,
                     "outcome": UNDERWAY}
 
         if _change(start) is None:
-            return None
+            return None, None
     except Exception as error:  # noqa: BLE001 - never a failure of the server's tending
         told(f"the install command could not begin: {type(error).__name__}: {error}")
-        return None
+        return None, None
+    at = began[-1]
     folder = _folder()
     env = {**{name: value for name, value in os.environ.items() if name not in auto_update._UNSET},
-           ATTEMPT_ENV: str(now)}
+           ATTEMPT_ENV: str(at)}
     try:
         with open(folder / auto_update.INSTALL_LOG, "w", encoding="utf-8") as out:
             process = subprocess.Popen([str(auto_update.tool_command(prefix)), "plugin", "update"],
@@ -251,13 +262,13 @@ def begin(told, *, now: float | None = None) -> subprocess.Popen | None:
         told(f"the install command could not start: {error}")
         try:
             _change(lambda kept: {**kept, "outcome": FAILED, "code": None, "ended": time.time()}
-                    if kept.get("at") == now else kept)
+                    if kept.get("at") == at else kept)
         except OSError:
             pass
-        return None
+        return None, None
     told(f"cad {version} is newer than the one the install command is up to date for: it runs once now, in the "
          "background")
-    return process
+    return process, at
 
 
 class Catcher:
@@ -283,8 +294,7 @@ class Catcher:
                 pass
         if not due():
             return False
-        now = time.time()
-        self.process, self.at = begin(told, now=now), now
+        self.process, self.at = _begin(told)
         return self.process is not None
 
 

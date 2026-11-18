@@ -410,7 +410,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     detached helper (the server's `_internal/auto_update.py`), which stops it, runs the installer's own upgrade
     bounded to that major (`uv tool install --upgrade "cad>=<installed>,<<next major>"`) and starts it again (where no
     server runs, `cad update` hands it over itself, and the helper starts none); a higher major only by `cad update
-    --major` (`uv tool install cad@latest`). Where `cad plugin update auto` is on and cad is newer than the release
+    --major` (`uv tool install --upgrade "cad>=<installed>"`). Where `cad plugin update auto` is on and cad is newer than the release
     the install command last ended well for, however it got newer, its server runs `cad plugin update` once,
     detached, stopped with all it started after 15 minutes. Nothing waits on the install but a start that would
     otherwise start the release it replaces.

@@ -134,7 +134,8 @@ def run(*, seconds: float | None = None) -> int:
     could not start. With ``seconds`` (the run a server began, ``plugin_catch_up``), it is started as an attempt is, in
     a session or process group of its own (``Carrier.begin``), and stopped with every process it started once
     ``seconds`` have passed (``_stop``, as ``Carrier.tend`` stops an attempt): then, said in one line on stderr,
-    ``STOPPED``. A person's own run has no deadline."""
+    ``STOPPED``. In a Windows session where ``taskkill`` is refused, only the install command's own process is ended,
+    and what it started may run on; the line says so. A person's own run has no deadline."""
     command = installer()
     if not command:
         return 0
@@ -147,9 +148,9 @@ def run(*, seconds: float | None = None) -> int:
         try:
             code = process.wait(seconds)
         except subprocess.TimeoutExpired:
-            _stop(process)
-            print(f"the install command was stopped after {seconds:g} seconds, with everything it started",
-                  file=sys.stderr, flush=True)
+            said = "with everything it started" if _stop(process) else \
+                "but what it started could not be stopped and may run on"
+            print(f"the install command was stopped after {seconds:g} seconds, {said}", file=sys.stderr, flush=True)
             return STOPPED
     return code if code >= 0 else 128 - code
 
@@ -264,17 +265,37 @@ def judge(report: Path) -> tuple[str, bool]:
     return ("app" if any(status == "failed" for status in steps.values()) else DONE), True
 
 
-def _stop(process: subprocess.Popen) -> None:
-    """``process`` stopped with every process it started (its own session, or process group on Windows)."""
-    if os.name == "nt":
-        subprocess.run(["taskkill", "/T", "/F", "/PID", str(process.pid)], stdout=subprocess.DEVNULL,
-                       stderr=subprocess.DEVNULL, check=False)
-    else:
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except OSError:
-            pass
-    process.wait()
+# How long ``_stop`` lets taskkill run, and then waits for the process itself to be gone.
+STOP_SECONDS = 30.0
+
+
+def _stop(process: subprocess.Popen, *, windows: bool = os.name == "nt", seconds: float = STOP_SECONDS) -> bool:
+    """``process`` stopped with every process it started (its own session; on Windows its tree, ``taskkill /T``):
+    True; or, where that could not be done (on Windows taskkill refused -- "Access denied" in a session with no
+    interactive logon, SSH or a service --, failed or did not end within ``seconds``), the process itself alone
+    (``kill``): False, and what it started may run on. Never waits for ever (each step bounded by ``seconds``), never
+    raises."""
+    whole = False
+    try:
+        if windows:
+            done = subprocess.run(["taskkill", "/T", "/F", "/PID", str(process.pid)], stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=seconds, check=False)
+            whole = done.returncode == 0
+        else:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass  # nothing left of its session
+            whole = True
+    except (OSError, subprocess.SubprocessError):
+        whole = False
+    try:
+        if process.poll() is None and not whole:
+            process.kill()
+        process.wait(seconds)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return whole
 
 
 class Carrier:

@@ -1,5 +1,6 @@
 """How cad is installed and run: the uv tool ``cad`` (``uv tool install --managed-python --python 3.14 cad``), which the
-install command installs and cad's own update upgrades to PyPI's newest (``uv tool install cad@latest``), and ``uvx``
+install command installs and cad's own update upgrades to PyPI's newest of its major (``uv tool install --upgrade
+"cad>=X,<N"``, ``auto_update``), and ``uvx``
 for a line that runs a release from uv's cache (a plugin's server line, ``uvx ... cad@<version> mcp``).
 ``--managed-python --python 3.14`` (``PYTHON``) makes the environment the same on every machine, whatever interpreter
 a GUI app's PATH happens to find first, and ``--no-config`` keeps the user's own uv settings (an index, a cache

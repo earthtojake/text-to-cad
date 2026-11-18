@@ -15,17 +15,23 @@ no Python flags, so the environment keeps its interpreter. pipx: ``pipx upgrade 
 pipx 1.0, 1.4, 1.8 and 1.18: pip takes both requirements and the upgrade stays inside the bound, and pipx's own
 handling of a pinned version a release put back is kept; pipx 1.18 keeps the ``--pip-args`` for a person's own ``pipx
 upgrade cad``, which then stays inside the major too, where earlier pipx keeps none and takes the newest of all), the
-command that crosses to the newest release of all, for ``cad update --major`` (uv: ``uv tool install cad@latest``,
-which also drops the range uv kept; pipx: ``pipx upgrade cad --pip-args=cad>=X``, the floor alone, which replaces the
-range pipx 1.18 kept: a plain ``pipx upgrade cad`` there would stay inside it), the command that puts a given
-release back (``cad==<release>``; pipx: ``pipx install --force cad==<release>``), the command that prints the folder
+command that crosses to the newest release of all, for ``cad update --major``, never below the release that runs: the
+floor alone (uv: ``uv tool install --upgrade "cad>=X"``, measured on uv 0.11.25: it crosses to a higher major, keeps
+``>=X`` in place of the range, which the next bounded upgrade writes again, ends 0 with nothing changed where nothing
+newer is out, and where X is yanked and only older releases are not, keeps X; pipx: ``pipx upgrade cad
+--pip-args=cad>=X``, which replaces the range pipx 1.18 kept: a plain ``pipx upgrade cad`` there would stay inside
+it; a known gap: cad's ``--pip-args`` take the place of a person's own, an index of their ``pipx install cad
+--pip-args=...`` among them), the command that puts a given release back (``cad==<release>``; pipx: ``pipx install --force cad==<release>``), the command that prints the folder
 its launchers are in, the variables its commands need to act on this environment (pipx: ``PIPX_HOME``, the folder that
 holds ``venvs/cad``, where the server's environment may not name it), and the environment's own ``cad`` command.
 Another installer is one more entry of ``INSTALLERS``; nothing that asks changes. Where both made one on a computer,
 uv's is the one ``installed_tool`` finds.
 
 **The switches** are the person's, in cad's settings (``settings.json`` in the state folder): ``auto_update.on``,
-whether cad updates itself, ON where nothing is kept; and ``plugin.auto_update``, whether the server runs the install
+whether cad updates itself, ON where nothing is kept -- but OFF where 0.10.0 to 0.11.11 kept the person's own off
+(``updates.automatic: false``, the same file: every release reads the one state folder) and ``auto_update.on`` was
+never chosen, so a choice made before the update to this cad stands; ``cad update auto on`` then writes ``true``, which
+wins, and the earlier key is only read --; and ``plugin.auto_update``, whether the server runs the install
 command (``cad plugin update``) once where cad is newer than the release that command is up to date for
 (``plugin_catch_up``), OFF where nothing is kept. ``cad update auto`` and ``cad plugin update auto`` change them.
 
@@ -64,14 +70,17 @@ Left as they are, on purpose: a ``cad server start`` that arrives while the help
 there at that moment (the helper's own start at the end then meets it as any start meets a running server: a newer one
 is joined, an older one replaced); and uv run beside the helper by the install command or by an app's server line
 (``tool_install``), which uv's own lock on its tool folder puts one after the other, the last to run deciding what is
-installed.
+installed. A known gap: the helper's tries (``auto_update_helper.WAITS``, each up to ``INSTALL_SECONDS``) can last
+longer than ``RETRY_SECONDS``, after which the attempt is no longer ``underway`` and a second can begin beside it.
 
 **Counted** (``report``), once per attempt that ended, by the server that runs after it, at its start and as it tends
 itself, once nothing is in flight (and by a trigger, before a new attempt takes the record's place): one ``update``
 event (``analytics.update``) -- the release before, how it ended (``installed``, ``current``, ``failed``, or
 ``restored`` where the helper put the release before back), which step failed (``upgrade``: the installer's upgrade
-never ended well; ``older``: it ended well on a release it may not end on, older than the one that ran or, but for
-``--major``, of another major; ``put_back``: the release before could
+never ended well, or, for ``--major``, ended well without crossing to the higher major asked for; ``older``: it ended
+well on a release it may not end on, older than the one that ran or, but for ``--major``, of another major -- a
+``--major`` that crossed is ``installed``, whatever release of the higher major it got; ``put_back``: the release
+before could
 not be put back either), the tries, the installer, whether it was typed, and, for a newer cad installed, how the
 install command's run for it ended, a run begun since the attempt began (``plugin_catch_up.last``: ``none``, ``ok``,
 ``failed``; the event waits while that run is underway, but where a new attempt begins first, it is counted as it
@@ -220,9 +229,21 @@ def _section(name: str, path: Path | None) -> dict[str, Any]:
     return kept if isinstance(kept, dict) else {}
 
 
+# Where 0.10.0 to 0.11.11 kept the person's choice of automatic updates: ``{"updates": {"automatic": false}}`` once they
+# turned them off. Read, never written or removed.
+EARLIER_SECTION, EARLIER_KEY = "updates", "automatic"
+
+
 def switches(path: Path | None = None) -> dict[str, Any]:
-    """``{"on"}``, whether cad updates itself: on unless ``false`` is kept (absent, or unreadable: on)."""
-    return {"on": _section(SECTION, path).get("on") is not False}
+    """``{"on"}``, whether cad updates itself: what ``auto_update.on`` keeps, where it keeps true or false; where it
+    keeps neither, off where the choice of 0.10.0 to 0.11.11 (``updates.automatic``) is false -- then ``"earlier":
+    true`` too --, else on (absent, or unreadable: on)."""
+    kept = _section(SECTION, path).get("on")
+    if isinstance(kept, bool):
+        return {"on": kept}
+    if _section(EARLIER_SECTION, path).get(EARLIER_KEY) is False:
+        return {"on": False, "earlier": True}
+    return {"on": True}
 
 
 def change(on: bool) -> dict[str, Any]:
@@ -304,7 +325,8 @@ class Installer:
     find: Callable[[], list[str] | None]  # its program, never one inside cad's environment
     # cad upgraded to the newest release of the major of the release that runs, never below it (``bound``)
     upgrade: Callable[[list[str], str], list[str]]
-    # cad upgraded to the newest release of all, never below the release that runs: ``cad update --major``
+    # cad upgraded to the newest release of all, never below the release that runs (the floor alone, ``cad>=X``):
+    # ``cad update --major``
     cross: Callable[[list[str], str], list[str]]
     put_back: Callable[[list[str], str], list[str]]  # cad installed at a release, after a failed upgrade took it away
     launchers: Callable[[list[str]], list[str]]  # prints the folder its launchers (``cad``, ``cad.exe``) are in
@@ -318,18 +340,26 @@ def _outside(found: str | None, prefix: str | None) -> bool:
     return bool(found) and os.path.isfile(found) and not os.path.normcase(os.path.realpath(found)).startswith(inside)
 
 
+def _on_path(name: str, environ: dict[str, str], windows: bool) -> str | None:
+    """Program ``name`` on ``PATH``; on Windows only a real ``<name>.exe``. Windows runs a batch file (a ``.cmd`` or
+    ``.bat`` shim, pyenv-win's ``pipx.bat``) through cmd.exe, which reads the ``<`` and ``>`` of a requirement such
+    as ``cad>=X,<N`` as redirections, so cad never hands one a command: one found only as a batch file is not found."""
+    found = shutil.which(f"{name}.exe" if windows else name, path=environ.get("PATH"))
+    return None if found is None or (windows and not found.lower().endswith(".exe")) else found
+
+
 def find_uv(environ: dict[str, str] | None = None, prefix: str | None = None,
             windows: bool = os.name == "nt") -> str | None:
-    """uv: on ``PATH``, else where uv's own installer puts it (``UV_INSTALL_DIR`` and its ``bin``, ``XDG_BIN_HOME``,
-    ``~/.local/bin``, ``~/.cargo/bin``, as the install command looks). Never one inside this cad's environment
-    (``prefix``), which the update replaces."""
+    """uv: on ``PATH`` (on Windows its ``uv.exe`` alone, never a batch file: ``_on_path``), else where uv's own
+    installer puts it (``UV_INSTALL_DIR`` and its ``bin``, ``XDG_BIN_HOME``, ``~/.local/bin``, ``~/.cargo/bin``, as the
+    install command looks). Never one inside this cad's environment (``prefix``), which the update replaces."""
     environ = os.environ if environ is None else environ
     name = "uv.exe" if windows else "uv"
     home = Path(environ.get("USERPROFILE" if windows else "HOME") or Path.home())
     install = environ.get("UV_INSTALL_DIR")
     folders = [install, install and str(Path(install) / "bin"), environ.get("XDG_BIN_HOME"),
                str(home / ".local" / "bin"), str(home / ".cargo" / "bin")]
-    for found in (shutil.which("uv", path=environ.get("PATH")),
+    for found in (_on_path("uv", environ, windows),
                   *(str(Path(folder) / name) for folder in folders if folder)):
         if _outside(found, prefix):
             return found
@@ -342,7 +372,8 @@ PIPX_SYSTEM = ("/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbre
 
 def find_pipx(environ: dict[str, str] | None = None, prefix: str | None = None, windows: bool = os.name == "nt",
               python: str | None = None) -> list[str] | None:
-    """pipx, as the person's ``pipx install cad`` found it: on ``PATH``; else where pipx is usually installed --
+    """pipx, as the person's ``pipx install cad`` found it: on ``PATH`` (on Windows its ``pipx.exe`` alone, never a
+    batch file such as pyenv-win's ``pipx.bat``: ``_on_path``); else where pipx is usually installed --
     ``PIPX_BIN_DIR`` and ``~/.local/bin`` (pipx itself, ``uv tool install pipx``, ``pip install --user pipx`` on
     Linux), Homebrew's folders and ``/usr/bin`` (a system package), ``~/Library/Python/3.*/bin`` (``pip install --user``
     on macOS); on Windows ``%APPDATA%\\Python\\Python3*\\Scripts`` and ``%LOCALAPPDATA%\\Programs\\Python\\Python3*\\Scripts``
@@ -363,7 +394,7 @@ def find_pipx(environ: dict[str, str] | None = None, prefix: str | None = None, 
     for pattern in patterns:  # the newest Python's first
         folders += sorted(glob.glob(pattern), key=lambda folder: [int(part) for part in re.findall(r"\d+", folder)],
                           reverse=True)
-    for found in (shutil.which("pipx", path=environ.get("PATH")),
+    for found in (_on_path("pipx", environ, windows),
                   *(str(Path(folder) / name) for folder in folders if folder)):
         if _outside(found, prefix):
             return [found]
@@ -441,7 +472,7 @@ def outside_copy(program: list[str], prefix: str | None = None) -> list[str]:
 UV = Installer(
     name="uv", owns=lambda prefix: uv_tool(str(prefix)) is not None, find=update_uv,
     upgrade=lambda uv, version: [*uv, "tool", "install", "--upgrade", bound(version)],
-    cross=lambda uv, version: [*uv, "tool", "install", "cad@latest"],
+    cross=lambda uv, version: [*uv, "tool", "install", "--upgrade", f"cad>={version}"],
     put_back=lambda uv, version: [*uv, "tool", "install", "--managed-python", "--python", "3.14", f"cad=={version}"],
     launchers=lambda uv: [*uv, "tool", "dir", "--bin"])
 PIPX = Installer(
@@ -550,9 +581,14 @@ def _wanted(found: dict[str, Any]) -> Any:
 
 
 def _tries(wanted: str) -> int:
-    """How many times ``wanted`` has been tried (the last attempt's, where it was for ``wanted``)."""
+    """How many times ``wanted`` has been tried (the last attempt's, where it was for ``wanted``; a record with no
+    ``tries``, 1). A ``tries`` that is no integer (null, a string, a float, a bool) counts as 0,
+    never raising: the next attempt writes an integer, so the tries stay bounded."""
     found = last()
-    return int(found.get("tries", 1)) if found is not None and _wanted(found) == wanted else 0
+    if found is None or _wanted(found) != wanted:
+        return 0
+    tries = found.get("tries", 1)
+    return tries if type(tries) is int else 0
 
 
 def _tried(wanted: str, now: float) -> bool:
@@ -837,7 +873,10 @@ def event(found: dict[str, Any], *, wait: bool = True) -> dict[str, Any] | objec
     reason = None
     if outcome == "failed":
         detail = found.get("detail")
-        reason = "older" if isinstance(detail, str) and detail.startswith("it installed ") else "upgrade"
+        # ``older``: a release it may not end on (the helper's "which it may not end on"); a newer one that is not
+        # what was asked (``--major`` that did not cross: "it installed X, not Y") is the upgrade's failure.
+        reason = "older" if isinstance(detail, str) and detail.startswith("it installed ") \
+            and detail.endswith("which it may not end on") else "upgrade"
         if found.get("restored") is True:
             outcome = "restored"
         elif found.get("restored") is False:

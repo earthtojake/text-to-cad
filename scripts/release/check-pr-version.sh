@@ -64,16 +64,17 @@ if [ -n "$latest_tag" ] && ! version_greater "$version" "$(version_from_release_
   exit 1
 fi
 
-# A patch release is a fix or an addition: it breaks nothing, so it may not add a migration guide. A new guide is
-# a new migration, a change a person or an agent must make, and belongs to a release that bumps the breaking part
-# -- the minor below 1.0, the major from 1.0. A minor installs itself on every device of its major as a patch does
-# (version_installs_itself), a minor that breaks included, so it may carry a guide. An existing guide may be
-# corrected or extended in any release (modified or renamed), so only a file added or copied under docs/migrations
-# is refused. --find-renames holds whatever git's own diff.renames says, so a renamed guide is a rename.
-if [ "$(version_bump "$base_version" "$version")" = patch ]; then
+# A release that does not bump the breaking part -- a patch below 1.0, a patch or a minor from 1.0 -- breaks
+# nothing (version_breaks_nothing), so it may not add a migration guide. A new guide is a new migration, a change a
+# person or an agent must make, and belongs to a release that bumps the breaking part -- the minor below 1.0, the
+# major from 1.0. Which releases install themselves is another rule (version_installs_itself: every release of the
+# same major, so below 1.0 a minor that breaks too). An existing guide may be corrected or extended in any release
+# (modified or renamed), so only a file added or copied under docs/migrations is refused. --find-renames holds
+# whatever git's own diff.renames says, so a renamed guide is a rename.
+if version_breaks_nothing "$base_version" "$version"; then
   migrations="$(git diff --name-only --find-renames --diff-filter=AC "$base" HEAD -- docs/migrations)"
   if [ -n "$migrations" ]; then
-    echo "VERSION $version is a patch release, which breaks nothing and installs itself on every device, but this" >&2
+    echo "VERSION $version is a $(version_bump "$base_version" "$version") release, which breaks nothing and installs itself on every device, but this" >&2
     echo "pull request adds a migration guide (an existing one may be corrected in any release):" >&2
     echo "$migrations" | sed 's/^/  /' >&2
     if [ "$(breaking_part "$base_version")" = major ]; then

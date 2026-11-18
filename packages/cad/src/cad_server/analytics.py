@@ -521,7 +521,8 @@ ARRIVAL_FAILURES = {"setup": frozenset({"uv", "network", "denied", "other"}),
 MAX_ATTEMPTS = 1000  # a hand-over's attempts, and an update's tries, past this many are counted as this many
 # How cad's own update of itself ended (``update``, schema 11's), as its record says (``auto_update.event``): a newer
 # cad installed, nothing newer to install, failed, or failed and the release before put back; for a failure, which
-# step -- the installer's upgrade never ended well (``upgrade``), ended well with an older release than asked
+# step -- the installer's upgrade never ended well, or (``--major``) did not cross to the higher major asked for
+# (``upgrade``), ended well on a release it may not end on, older than the one that ran or of another major
 # (``older``), and for one not put back, putting back the release before failed too (``put_back``) --; the installer
 # that made the global install; and, for a newer cad installed, how the install command's run for it ended (``none``:
 # none ran for it).

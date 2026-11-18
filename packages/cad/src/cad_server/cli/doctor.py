@@ -145,7 +145,9 @@ def _update() -> tuple[str, str]:
     plugin = f"plugin update auto {word[auto.plugin_switch()]}"
     if found is None:
         return INFO, f"this cad is not a global install, so it never updates itself; {plugin}"
-    return INFO, (f"update auto {word[auto.switches()['on']]}, {plugin}; a global install by {found.installer.name} "
+    kept = auto.switches()
+    earlier = " (turned off in an earlier release)" if kept.get("earlier") else ""
+    return INFO, (f"update auto {word[kept['on']]}{earlier}, {plugin}; a global install by {found.installer.name} "
                   f"({found.prefix})")
 
 

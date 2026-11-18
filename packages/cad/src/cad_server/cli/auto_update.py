@@ -2,7 +2,8 @@
 itself (``cad_server._internal.auto_update``), on by default: ``status`` (the default) says it, and, where the version
 feed as last read names a release of a higher major than this cad's, the one line that says so
 (``auto_update.MAJOR_LINE``: a new major version never installs itself); ``on`` turns it on, refused unless this cad
-is a global install; ``off`` turns it off. A cad that is no global install never updates itself, and ``status`` says
+is a global install; ``off`` turns it off. Off by the choice an earlier release kept (0.10.0 to 0.11.11), ``status``
+says so in a few words. A cad that is no global install never updates itself, and ``status`` says
 so. Where a server runs, of any release that knows how, it keeps the switch (``_by_the_server``), so a shell whose
 sandbox may not write the state folder needs no permission; with none, this command writes it. ``CAD_UPDATE_CHECK=0``
 in a process's environment keeps it from updating, whatever the switch says.
@@ -20,6 +21,8 @@ DESCRIPTION = ("Show or change whether cad updates itself to the newest release 
                "install cad`).")
 NOT_GLOBAL = "this cad is not a global install, so it does not update itself (`uv tool install cad` makes one)"
 REFUSED = "refused: this cad is not a global install, and only a global install updates itself (`uv tool install cad`)"
+# After the switch's word, where it is off by the choice an earlier release kept (``auto_update.switches``).
+EARLIER = " (turned off in an earlier release)"
 
 
 def arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
@@ -56,7 +59,8 @@ def switch(action: str, *, prog: str = DEFAULT_PROG) -> int:
     elif auto_update.global_install() is None:
         print(NOT_GLOBAL)
         return 0
-    print(f"update auto: {'on' if (auto_update.switches()['on'] if found is None else found) else 'off'}")
+    kept = auto_update.switches() if found is None else {"on": found}
+    print(f"update auto: {'on' if kept['on'] else 'off'}{EARLIER if kept.get('earlier') else ''}")
     if action == "status":
         higher = _higher()
         if higher:

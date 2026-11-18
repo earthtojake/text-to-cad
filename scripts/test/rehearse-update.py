@@ -15,7 +15,7 @@ waits for a minute with nothing run still waits that minute. No real agent app i
 
 Every computer has a folder of releases of its own, holding only those that are out (``Box.out``): the install command
 installs PyPI's newest, and an upgrade the newest of a major (``uv tool install --upgrade "cad>=X,<N"``; ``cad update
---major``'s ``uv tool install cad@latest`` the newest of all), so a release not out yet must not be there. What is out,
+--major``'s ``uv tool install --upgrade "cad>=X"`` the newest of all), so a release not out yet must not be there. What is out,
 the feed names (``latest``, and each major's newest as ``lines``) and the stand-in PyPI lists (each release, its file not
 yanked). Releases of a higher major (``above``) have a minor and a patch of 9000 and more, past anything PyPI holds of
 that major.
@@ -59,8 +59,9 @@ shipped release the old.
   the server, idle, updates to the next release (``uv tool install --upgrade "cad>=<new>,<N>"``), never the higher
   major, and uv keeps that range; then, automatic updates off, a typed ``cad update`` says the next release is the
   newest of its major and names the higher one in one line, beginning nothing; ``cad update --major`` installs the
-  higher major (``uv tool install cad@latest``: uv keeps no range); then, automatic updates on, with a newer release of
-  that major and one two majors up out, the server updates inside the new major alone, and uv keeps the new range.
+  higher major (``uv tool install --upgrade "cad>=<next>"``: uv keeps the floor alone); then, automatic updates on,
+  with a newer release of that major and one two majors up out, the server updates inside the new major alone, and uv
+  keeps the new range.
 - ``self-pipx``: cad installed by ``pipx install cad`` (pipx itself a uv tool of the computer's, on pip's backend, its
   folders in the home, pip offered this tree's releases by ``PIP_FIND_LINKS``): the install command leaves it as it is,
   installs no uv tool, and turns the plugin's switch on; the next release and a release a major up out and an hour
@@ -98,6 +99,8 @@ updater), installed by its own ``cad setup`` through uvx, its server serving pag
   pages: cad a uv tool, the old launcher gone, both switches on; ``cad server start`` then replaces the old server.
 - ``typed``: the shipped release's own ``cad update`` typed (what today's skill text has an agent type where cad is
   older): it brings this build, whose plain ``cad setup`` runs the install command: the end of ``install-command``.
+  From 0.11.x, automatic updates were turned off first with the shipped release's own ``cad update auto off``: this
+  build's ``cad update auto`` then says off, and the next release, out and the feed read, does not install itself.
   On Windows the typed command is the shipped release's ``cad.exe``, running all along, which Windows lets no one
   replace or delete: the install command renames it aside and installs uv's cad all the same, and the command exits 0.
   What it set aside, which ran until the command exited, goes at the install command's next run, which leaves cad as
@@ -808,9 +811,10 @@ def self_major(box: Box) -> None:
     record = updated(box, HIGH)
     box.tool_serves(HIGH)
     box.is_tool(HIGH)
-    if (record.get("asked"), record.get("major"), recorded(box)) != (True, True, ""):
+    if (record.get("asked"), record.get("major"), recorded(box).replace(" ", "")) != (True, True, f">={NEXT}"):
         raise Failed(f"{box.label}: the update across majors: {record}, uv keeps {recorded(box)!r}\n{box.said()}")
-    say(f"        `cad update --major`: {NEXT} -> {HIGH} (`uv tool install cad@latest`); uv keeps no range")
+    say(f"        `cad update --major`: {NEXT} -> {HIGH} (`uv tool install --upgrade \"cad>={NEXT}\"`); uv keeps "
+        f"{recorded(box)!r}")
     # Afterwards the automatic update stays inside the new major.
     switched = box.run([box.cad(), "update", "auto", "on"]).stdout.strip()
     if switched != "update auto: on":
@@ -1362,6 +1366,13 @@ def typed_on_windows(box: Box, old: str) -> None:
 
 def typed(box: Box, old: str) -> None:
     box.install_old(old)
+    opted_out = old.startswith("0.11.")
+    if opted_out:
+        # The person turned automatic updates off on the shipped release, with its own command, before the update.
+        said = box.run([box.cad(), "update", "auto", "off"]).stdout.strip()
+        if (box.read_old("settings.json").get("updates") or {}).get("automatic") is not False:
+            raise Failed(f"{box.label}: {old}'s `cad update auto off` said {said!r}, and its settings hold "
+                         f"{box.read_old('settings.json')}")
     box.out(NEW)
     # On Windows the typed command is the shipped release's cad.exe, running all along: the install command renames it
     # aside, and uv's cad goes in all the same.
@@ -1383,8 +1394,31 @@ def typed(box: Box, old: str) -> None:
         if missing:
             raise Failed(f"{box.label}: not taken over from {box.old_state}: {missing}\n{box.said()}")
         pages(box, NEW)
+    if opted_out:
+        stays_off(box, old)
     if WINDOWS:
         typed_on_windows(box, old)
+
+
+def stays_off(box: Box, old: str) -> None:
+    """Automatic updates turned off on the shipped release stay off on this build: ``cad update auto`` says so, and the
+    next release, out and the feed read after an hour, does not install itself at the server's tending or start."""
+    began = time.monotonic()
+    said = box.run([box.cad(), "update", "auto"]).stdout.strip().splitlines()
+    if said[:1] != ["update auto: off (turned off in an earlier release)"]:
+        raise Failed(f"{box.label}: after the update from {old}, `cad update auto` said {said}\n{box.said()}")
+    box.out(NEXT)
+    box.hour_later()
+    box.until(lambda: (box.read("releases.json").get("feed") or {}).get("latest") == NEXT and
+              time.time() - box.read("releases.json").get("checked", 0) < 600, "the server reading the feed")
+    tendings(box, Path(box.tool()["env"]), 2)
+    box.run([box.cad(), "server", "stop"])
+    started = box.run([box.cad(), "server", "start"]).stdout
+    if f"cad {NEW}" not in started or box.version() != f"cad {NEW}" or box.read("auto-update.json"):
+        raise Failed(f"{box.label}: {old}'s off after the update: {started!r}, {box.version()}, "
+                     f"{box.read('auto-update.json')}\n{box.said()}")
+    say(f"        {old}'s `cad update auto off` stands: {said[0]!r}; {NEXT} out and the feed read, the server tended "
+        f"and started again as {NEW}, nothing attempted ({time.monotonic() - began:.0f} s)")
 
 
 def store_typed(box: Box, old: str) -> None:

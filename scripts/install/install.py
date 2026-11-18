@@ -237,7 +237,12 @@ def _stop(process: "subprocess.Popen[bytes]") -> None:
         else:
             os.killpg(process.pid, signal.SIGKILL)
     except (OSError, subprocess.SubprocessError):
-        process.kill()
+        pass
+    try:
+        if process.poll() is None:  # taskkill refused ("Access denied" with no interactive logon) or failed
+            process.kill()
+    except OSError:
+        pass
     try:
         process.communicate(timeout=10)
     except (OSError, ValueError, subprocess.SubprocessError):

@@ -258,7 +258,8 @@ older release's server, an older one joins a newer server that runs (`client.sta
 `cad mcp` that is not the global `cad` installed on the computer (Codex's plugin line runs it from uvx's cache) starts
 none of its own: it runs the installed cad's `cad server start` and joins the server that leaves, whatever the two
 releases are, so the server is always the one that updates itself. Where no global cad is installed, one run from uv's
-cache installs it first (`cad_server._internal.tool_install`: `uv tool install`, PyPI's newest, never `--force`).
+cache installs it first (`cad_server._internal.tool_install`: `uv tool install "cad<N>"`, PyPI's newest of its own
+major, never `--force`, and never over a `cad` tool of a higher major).
 Every other command, `cad run` and a model run directly among them, attaches to the one that runs, and says so in one
 line where none does (`not_running`). A model's own process -- the library, which never starts a server of its own
 environment -- starts none. No client starts another release's engine beside the device's: an engine runs on until

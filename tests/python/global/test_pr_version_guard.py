@@ -163,17 +163,17 @@ class PrVersionGuardTests(unittest.TestCase):
 
     def test_below_1_0_a_migration_guide_takes_a_minor_release(self) -> None:
         # A patch breaks nothing; a minor below 1.0 is the breaking slot, and installs itself all the same.
-        self.released("0.10.4")
+        self.released("0.11.11")
         self.migration_guide()
-        self.bump_feature("0.10.5")
+        self.bump_feature("0.11.12")
         result = self.check()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("VERSION 0.10.5 is a patch release, which breaks nothing and installs itself on every device",
+        self.assertIn("VERSION 0.11.12 is a patch release, which breaks nothing and installs itself on every device",
                       result.stderr)
         self.assertIn("pull request adds a migration guide", result.stderr)
         self.assertIn("docs/migrations/migrating-0.5-to-0.6.md", result.stderr)
         self.assertIn("a minor release below 1.0: scripts/release/bump-version.sh minor", result.stderr)
-        for version in ("0.11.0", "1.1.0"):
+        for version in ("0.12.0", "1.0.0"):
             self.bump_feature(version)
             result = self.check()
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -201,22 +201,23 @@ class PrVersionGuardTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("releases 0.10.5", result.stdout)
 
-    def test_from_1_0_a_migration_guide_is_refused_in_a_patch_alone(self) -> None:
-        # From 1.0 too a patch breaks nothing; a minor may carry a guide although it installs itself, and a major
-        # never installs itself. The refusal points at the breaking slot from 1.0, the major.
-        self.released("1.2.3")
+    def test_from_1_0_a_migration_guide_is_refused_in_a_patch_and_in_a_minor(self) -> None:
+        # From 1.0 a patch and a minor break nothing (Semantic Versioning): a guide takes a major, the breaking slot,
+        # which never installs itself. The refusal points at it.
+        self.released("1.4.0")
         self.migration_guide()
-        self.bump_feature("1.2.4")
+        for version, part in (("1.4.1", "patch"), ("1.5.0", "minor")):
+            with self.subTest(version=version):
+                self.bump_feature(version)
+                result = self.check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f"VERSION {version} is a {part} release, which breaks nothing and installs itself on "
+                              "every device", result.stderr)
+                self.assertIn("a major release from 1.0: scripts/release/bump-version.sh major", result.stderr)
+        self.bump_feature("2.0.0")
         result = self.check()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("VERSION 1.2.4 is a patch release, which breaks nothing and installs itself on every device",
-                      result.stderr)
-        self.assertIn("a major release from 1.0: scripts/release/bump-version.sh major", result.stderr)
-        for version in ("1.3.0", "2.0.0"):
-            self.bump_feature(version)
-            result = self.check()
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn(f"releases {version}", result.stdout)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("releases 2.0.0", result.stdout)
 
     def test_it_refuses_anything_but_a_merge_commit(self) -> None:
         result = subprocess.run(
@@ -228,8 +229,8 @@ class PrVersionGuardTests(unittest.TestCase):
 
 
 # Releases on both sides of 1.0, and across it.
-VERSIONS = ("0.0.1", "0.9.9", "0.10.4", "0.10.5", "0.11.0", "0.11.12", "1.0.0", "1.0.1", "1.2.3", "1.2.4",
-            "1.3.0", "1.9.3", "2.0.0", "2.1.0", "10.0.0")
+VERSIONS = ("0.0.1", "0.9.9", "0.10.4", "0.10.5", "0.11.0", "0.11.11", "0.11.12", "0.12.0", "1.0.0", "1.0.1",
+            "1.2.3", "1.2.4", "1.3.0", "1.4.0", "1.4.1", "1.5.0", "1.9.3", "2.0.0", "2.1.0", "10.0.0")
 
 
 def _bump(have: str, want: str) -> str | None:
@@ -240,6 +241,13 @@ def _bump(have: str, want: str) -> str | None:
     return "major" if new[0] != old[0] else "minor" if new[1] != old[1] else "patch"
 
 
+def _breaks_nothing(have: str, want: str) -> bool:
+    """Semantic Versioning: a later release that does not bump the breaking part -- a patch below 1.0, a patch or a
+    minor from 1.0 -- must break nothing, so it carries no new migration guide."""
+    bump = _bump(have, want)
+    return bump == "patch" or (bump == "minor" and int(have.split(".")[0]) >= 1)
+
+
 def _installs_itself(have: str, want: str) -> bool:
     """The rule cad's own update keeps: a later release of the same major -- a patch or a minor, below 1.0 and from
     1.0, a minor that breaks included -- is one every device takes by itself; a new major never is."""
@@ -248,25 +256,27 @@ def _installs_itself(have: str, want: str) -> bool:
 
 class TheGuardKeepsTheReleaseRuleTests(unittest.TestCase):
     """The release scripts' rule (release-tags.sh: the release scripts import nothing of the packages, and its job
-    installs no Python) answers as the rule above: which part a release bumps, and whether a computer on the earlier
-    release installs it by itself."""
+    installs no Python) answers as the rules above: which part a release bumps, whether a computer on the earlier
+    release installs it by itself, and whether it must break nothing (so may carry no new migration guide)."""
 
-    def test_every_pair_of_releases_bumps_and_installs_itself_as_the_rule_says(self) -> None:
+    def test_every_pair_of_releases_bumps_installs_itself_and_breaks_nothing_as_the_rules_say(self) -> None:
         pairs = [(have, want) for have in VERSIONS for want in VERSIONS]
         script = ('source "$1"; while read -r have want; do '
                   'bump="$(version_bump "$have" "$want")" || bump=none; '
                   'if version_installs_itself "$have" "$want"; then takes=yes; else takes=no; fi; '
-                  'echo "$have $want $bump $takes"; done')
+                  'if version_breaks_nothing "$have" "$want"; then safe=yes; else safe=no; fi; '
+                  'echo "$have $want $bump $takes $safe"; done')
         result = subprocess.run(
             ["bash", "-c", script, "bash", str(repo_path("scripts/release/release-tags.sh"))],
             input="".join(f"{have} {want}\n" for have, want in pairs),
             text=True, capture_output=True, check=True,
         )
-        answered = {(have, want): (bump, takes)
-                    for have, want, bump, takes in (line.split() for line in result.stdout.splitlines())}
+        answered = {(have, want): (bump, takes, safe)
+                    for have, want, bump, takes, safe in (line.split() for line in result.stdout.splitlines())}
         self.assertEqual(sorted(answered), sorted(pairs))
         for have, want in pairs:
-            expected = (_bump(have, want) or "none", "yes" if _installs_itself(have, want) else "no")
+            expected = (_bump(have, want) or "none", "yes" if _installs_itself(have, want) else "no",
+                        "yes" if _breaks_nothing(have, want) else "no")
             self.assertEqual(answered[have, want], expected, (have, want))
 
 

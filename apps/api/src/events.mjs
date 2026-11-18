@@ -244,7 +244,7 @@ const EARLIER = /^(?:none|[0-9][0-9A-Za-z.+_-]{0,31})$/;
 const MAX_ATTEMPTS = 1000;
 // How cad's own update of itself ended, schema 11's (`cad_server/analytics.py`: `UPDATE_OUTCOMES`, `UPDATE_FAILURES`,
 // `UPDATE_INSTALLERS`, `UPDATE_PLUGIN`): a newer cad installed, nothing newer, failed, or failed and the release
-// before put back; for a failure which step, a word cad chose (the installer's upgrade, an older release than asked,
+// before put back; for a failure which step, a word cad chose (the installer's upgrade, a release it may not end on,
 // and for one not put back the put-back too); the installer that made the global install; and the install command's
 // run for the cad an update installed (`ok`, `failed`, `underway` where a new attempt began before it ended; `none`
 // where none ran for it, and for any other outcome). Tries from 1, as many as attempts.

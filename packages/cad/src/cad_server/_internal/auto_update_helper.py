@@ -13,13 +13,15 @@ In order: the server stopped (``cad server stop``, which waits until it is gone)
 ``target`` or newer, or (but for ``major``) a release of a higher major than ``from``'s, which a bounded upgrade would
 take down (forward only), the upgrade, tried again on failure, until it ends 0 with a release installed that it may end
 on (``accepted``: never older than ``from`` and, but for ``major``, of ``from``'s major), ``target`` or newer where
-there is one; where the last try ended 0 on such a release below ``target``, that one, but for ``major``; where every
-try failed and ``cad`` no longer runs (uv removes the whole tool when an install fails after it has begun), the release
-that ran before put back (``from``: no way back from a good update, only what a failed one destroyed); the server
-started with whatever cad is there, where ``start`` says so; and the outcome written to ``record``: ``installed`` for
-a newer release, ``current`` for the one that ran (nothing newer it may take), ``failed`` for anything else, as every
-failure is -- and for ``major``, which asks for ``target``, PyPI's newest of all, a release below it too. The release
-the record names is the one installed after the upgrade, where it ended well; the one asked for where it did
+there is one -- for ``major``, any release of a higher major than ``from``'s: the major crossed is what was asked --;
+where the last try ended 0 on such a release below ``target``, that one, but for a ``major`` whose ``target`` is of a
+higher major (one that did not cross fails); where every try failed and ``cad`` no longer runs (uv removes the whole
+tool when an install fails after it has begun), the release that ran before put back (``from``: no way back from a
+good update, only what a failed one destroyed); the server started with whatever cad is there, where ``start`` says
+so; and the outcome written to ``record`` (``keep``: written beside it, then moved into place): ``installed`` for a
+newer release, ``current`` for the one that ran (nothing newer it may take), ``failed`` for anything else, as every
+failure is -- and for ``major``, a release of ``from``'s major where ``target``, PyPI's newest, is of a higher one. The
+release the record names is the one installed after the upgrade, where it ended well; the one asked for where it did
 not. It runs no install command and counts nothing: the server that starts after it does both
 (``auto_update.report``, ``plugin_catch_up``). The standard library alone, and nothing else of cad.
 
@@ -129,11 +131,13 @@ def accepted(held, before, major):
     return before is None or (held >= before and (major or held[0] == before[0]))
 
 
-def install(told, command, wanted, run, sleep, folder=None, accept=lambda held: held is not None, settle=False):
+def install(told, command, wanted, run, sleep, folder=None, accept=lambda held: held is not None, settle=False,
+            enough=lambda held: False):
     """``command`` run, tried at each of ``WAITS``, each ``cad.exe`` set aside first where ``folder`` (the launchers'
     folder, on Windows) is given, until it ends 0 with a release of cad installed that ``accept`` takes, ``wanted`` or
-    newer where it is given: ``(the release installed, or None, the installer's last line)``. With ``settle``, where the
-    last try ended 0 on a release ``accept`` takes, below ``wanted``, that release: nothing newer is to be had."""
+    newer where it is given, or one ``enough`` takes (``major``: a higher major than ``from``'s): ``(the release
+    installed, or None, the installer's last line)``. With ``settle``, where the last try ended 0 on a release
+    ``accept`` takes, below ``wanted``, that release: nothing newer is to be had."""
     detail, settled = "not tried", None
     for wait in WAITS:
         sleep(wait)
@@ -141,7 +145,7 @@ def install(told, command, wanted, run, sleep, folder=None, accept=lambda held: 
             set_aside(told, folder)
         code, detail = run(command, INSTALL_SECONDS)
         held = installed(told["prefix"])
-        if code == 0 and accept(held) and (wanted is None or held >= wanted):
+        if code == 0 and accept(held) and (wanted is None or held >= wanted or enough(held)):
             return held, detail
         settled = held if settle and code == 0 and accept(held) else None
         if code == 0:
@@ -163,8 +167,12 @@ def update(told, run=run, sleep=time.sleep, windows=WINDOWS):
     if held is not None and ((target is not None and held >= target) or above):
         outcome, detail, got = "current", f"cad {named(held)} is installed", held
     else:
+        # ``major``: crossing to a higher major is what was asked, whatever release of it the upgrade got; where no
+        # higher major was the target (none is out, or PyPI could not say), it ends as a bounded update does.
+        crossed = lambda found: major and found is not None and before is not None and found[0] > before[0]  # noqa: E731
         got, detail = install(told, told["upgrade"], target, run, sleep, folder,
-                              accept=lambda found: accepted(found, before, major), settle=not major)
+                              accept=lambda found: accepted(found, before, major), enough=crossed,
+                              settle=not (major and crossed(target)))
         outcome = "failed" if got is None else "installed" if before is None or got > before else "current"
         if got is None and run([told["cad"], "--version"], 60)[0] != 0:
             restored = install(told, told["put_back"], before, run, sleep, folder)[0] is not None
@@ -179,11 +187,36 @@ def update(told, run=run, sleep=time.sleep, windows=WINDOWS):
             **{name: told[name] for name in ("installer", "wanted", "asked", "major") if name in told}}
 
 
-def keep(path, record):
-    """``record`` written to ``path`` (a reader that finds it half written reads no attempt)."""
+# Seconds waited before each further try of moving the record into place, where Windows refuses it while another
+# process has the record open (a server reading it): then the plain write.
+REPLACE_WAITS = (0.05, 0.1, 0.2, 0.4, 0.8)
+
+
+def keep(path, record, replace=os.replace, sleep=time.sleep):
+    """``record`` written to a file of its own beside ``path``, then moved into its place (``os.replace``), so a reader
+    never finds it half written; where the move is refused, tried again after each of ``REPLACE_WAITS``, then
+    ``record`` written to ``path`` itself. Never raises: the helper never dies of its record."""
+    text = json.dumps(record, sort_keys=True)
+    staged = f"{path}.{os.getpid()}.tmp"
+    try:
+        with open(staged, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        for wait in (0, *REPLACE_WAITS):
+            sleep(wait)
+            try:
+                replace(staged, path)
+                return
+            except OSError:
+                continue
+    except OSError:
+        pass
+    try:
+        os.remove(staged)
+    except OSError:
+        pass
     try:
         with open(path, "w", encoding="utf-8") as handle:
-            json.dump(record, handle, sort_keys=True)
+            handle.write(text)
     except OSError:
         pass
 

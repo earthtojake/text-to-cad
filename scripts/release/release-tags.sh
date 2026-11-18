@@ -15,6 +15,8 @@
 #   version_bump 0.11.3 0.12.0        -> minor: the part the second moves on (fails when it is no later)
 #   breaking_part 0.11.3              -> minor: the part a breaking change bumps (major from 1.0)
 #   version_installs_itself 0.11.3 0.12.0 -> succeeds when a device at the first takes the second itself (same major)
+#   version_breaks_nothing 1.4.0 1.5.0  -> succeeds when the second must break nothing (a patch below 1.0, a patch
+#                                          or a minor from 1.0)
 #
 # shellcheck shell=bash
 
@@ -99,6 +101,15 @@ version_installs_itself() {
   local bump
   bump="$(version_bump "$1" "$2")" || return 1
   [ "$bump" != major ]
+}
+
+# Whether the second X.Y.Z, a later release than the first, must break nothing, as Semantic Versioning numbers
+# releases: one that does not bump the breaking part (breaking_part) -- a patch below 1.0; a patch or a minor from
+# 1.0. Such a release may carry no new migration guide (check-pr-version.sh).
+version_breaks_nothing() {
+  local bump
+  bump="$(version_bump "$1" "$2")" || return 1
+  [ "$bump" = patch ] || { [ "$bump" = minor ] && [ "$(breaking_part "$1")" = major ]; }
 }
 
 # A version PyPI will never take: the PyPI project `cad` published it before it was transferred to this

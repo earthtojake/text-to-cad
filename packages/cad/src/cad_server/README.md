@@ -184,7 +184,8 @@ running server of a newer release rather than replacing it. With no answer from 
 newer than the release the install command last ended well for, the server runs this cad's own `cad plugin
 update` once, detached, its output in `install-command.log` in the data folder; that run stops the install
 command, with all it started, after 15 minutes, and so fails (`install_script.run`, as the bridge stops its
-own). It asks at its start and at
+own); in a Windows session where `taskkill` is refused, only the install command's own process is ended, and what it
+started may run on. It asks at its start and at
 each tending once nothing is in flight, so it holds however cad got newer: its own update, a typed `cad
 update`, `uv tool upgrade cad` or `pipx upgrade cad` by hand. That release is kept in `install-command.json`
 in the data folder, beside the update's own record: written when `cad plugin update` ends with exit status 0
@@ -217,8 +218,8 @@ flight, with the switch off too and past the limits on automatic tries (it count
 joins the one underway, another process's too. Where a release of a higher major is out it adds one line
 naming it and `cad update --major`, with the migration guides' address; `cad doctor` says the same, and `cad
 update auto` with no argument. `cad update --major` (`{"op": "update", "major": true}`) begins the update to
-PyPI's newest of all, by `uv tool install cad@latest` (pipx: `pipx upgrade cad --pip-args=cad>=<installed>`),
-which also drops the range uv or pipx kept;
+PyPI's newest of all, never below the release that runs, by `uv tool install --upgrade "cad>=<installed>"` (pipx:
+`pipx upgrade cad --pip-args=cad>=<installed>`), the floor alone in place of the range uv or pipx kept;
 the next automatic update keeps the new major's. Where PyPI cannot be reached it runs the upgrade all the same
 and says what it got. It updates cad alone: it never runs the install command. Where no server runs, the
 command judges and begins the update itself, in its own process, and the helper starts no server after it:

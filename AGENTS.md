@@ -39,9 +39,10 @@ exact version, ask which one. A release pull request comes one of two ways:
 
 Releases follow Semantic Versioning: a breaking change, which always comes with a migration guide,
 bumps the minor below 1.0 and the major from 1.0, and `Test`'s version check refuses a new migration
-guide in a patch (an existing guide may be corrected in any release). cad installs every newer release
-of its own major by itself, a minor that breaks included (this is a beta); a new major never arrives by
-itself, only by `cad update --major` ([decisions](docs/contributing/decisions.md)). A command
+guide in a release that must break nothing: a patch below 1.0, a patch or a minor from 1.0 (an existing
+guide may be corrected in any release). Which releases install themselves is a second rule: cad installs
+every newer release of its own major by itself, so below 1.0 a minor that breaks too (this is a beta); a
+new major never arrives by itself, only by `cad update --major` ([decisions](docs/contributing/decisions.md)). A command
 the skills used keeps working for 30 days after they stop using it, which CI checks; otherwise a
 command, option or tool may change or go in any release. What breaks is law 15's tiers and the short
 list of what must stay the same

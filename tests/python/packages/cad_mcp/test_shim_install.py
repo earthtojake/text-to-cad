@@ -109,9 +109,12 @@ class Install(unittest.TestCase):
     def setUp(self) -> None:
         self.bin = Path(tempfile.mkdtemp(prefix="uvbin-")).resolve()
         self.addCleanup(shutil.rmtree, self.bin, True)
-        patch = mock.patch.object(tool_install, "_bin", return_value=self.bin)
-        patch.start()
-        self.addCleanup(patch.stop)
+        self.tools = self.bin / "tools"  # uv's tool folder, as ``uv tool dir`` names it: no cad tool in it yet
+        self.real_tools = tool_install._tools
+        for patch in (mock.patch.object(tool_install, "_bin", return_value=self.bin),
+                      mock.patch.object(tool_install, "_tools", return_value=self.tools)):
+            patch.start()
+            self.addCleanup(patch.stop)
         self.cad = self.bin / ("cad.exe" if os.name == "nt" else "cad")
 
     def test_the_command_is_uv_tool_install_of_the_newest_cad_of_this_major_with_cad_s_own_python_flags(self) -> None:
@@ -152,6 +155,48 @@ class Install(unittest.TestCase):
             with self.assertRaises(tool_install.Failed):
                 tool_install.install(timeout=1)
             self.assertFalse(tool_install.from_uv_cache(sys.prefix))
+
+    def holding(self, release: str | None) -> None:
+        """uv's tool ``cad`` with ``release`` in its environment's site-packages and no launcher (None: half made)."""
+        site = self.tools / "cad" / "lib" / "python3.14" / "site-packages"
+        site.mkdir(parents=True, exist_ok=True)
+        if release is not None:
+            (site / f"cad-{release}.dist-info").mkdir()
+
+    def test_a_tool_of_a_higher_major_is_never_moved_down_and_uv_is_never_run(self) -> None:
+        """``cad<1`` would move a cad 2.0.1 whose launcher is missing down to 0.x, with exit status 0: refused."""
+        import cad_server
+
+        self.holding("2.0.1")
+        with mock.patch.object(cad_server, "__version__", "0.11.12"), \
+                mock.patch.object(tool_install, "_run", side_effect=AssertionError("uv is never run")), \
+                self.assertRaises(tool_install.Failed) as refused:
+            tool_install.install("uv", timeout=1)
+        self.assertEqual(str(refused.exception), "uv's cad tool holds cad 2.0.1, of a newer major version than this "
+                                                 "cad installs, so cad was left as it is")
+
+    def test_a_tool_of_this_major_or_one_half_made_is_installed_over(self) -> None:
+        import cad_server
+
+        for release in ("0.11.13", "0.9.0", None):
+            with self.subTest(release=release), mock.patch.object(cad_server, "__version__", "0.11.12"):
+                shutil.rmtree(self.tools, ignore_errors=True)
+                self.holding(release)
+                self.assertEqual(self.run_as_uv("print('Installed 1 executable: cad')"),
+                                 ["Installed 1 executable: cad"])
+
+    def test_where_uv_cannot_say_where_its_tools_are_nothing_is_run(self) -> None:
+        def run(command, timeout):
+            if command[1:3] == ["tool", "dir"]:
+                return subprocess.CompletedProcess(command, 2, "", "error: no home folder")
+            raise AssertionError("uv's install is never run")
+
+        for answer in ({"side_effect": run}, {"side_effect": OSError("no uv")},
+                       {"side_effect": subprocess.TimeoutExpired("uv", 15)}):
+            with self.subTest(answer=answer), mock.patch.object(tool_install, "_tools", self.real_tools), \
+                    mock.patch.object(tool_install, "_run", **answer), self.assertRaises(tool_install.Failed) as refused:
+                tool_install.install("uv", timeout=1)
+            self.assertEqual(str(refused.exception), "uv could not say where its tools are, so cad was left as it is")
 
     # BRIDGE-ONLY: the cad command of 0.10.0 to 0.11.11 in uv's bin folder, which uv would refuse to replace.
     OLD = "#!/bin/sh\n# cad proxy: 3\nexec python -m cad_server._internal.proxy \"$@\"\n"
