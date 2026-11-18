@@ -156,7 +156,7 @@ Every build, export and snapshot runs in the engine server, a daemon: one per co
 `cad server start` (or `cad mcp`, which Codex's plugin line runs) and running until
 `cad server stop` (no timer stops it). A command that needs it and finds none says so in one line.
 A checkout's `.venv` reaches the same server as any client: to run a worktree's own engine, give it
-its own `CAD_ENGINE_DIR` and `CAD_STATE_DIR`. The engine folder, its door (a named pipe; on Windows,
+its own `CAD_ENGINE_DIR` and `CAD_STATE_DIR` ([Work In A Worktree](#work-in-a-worktree)). The engine folder, its door (a named pipe; on Windows,
 a port file) and lock live in `cad-engine` in `$XDG_RUNTIME_DIR`, else in the per-user temporary
 folder (on macOS the system's `/var/folders/...` one, whatever `$TMPDIR` a sandbox sets; else a
 per-user `$TMPDIR`), else in `/tmp/cad-<uid>` (Windows: the temporary folder); `CAD_ENGINE_DIR` moves
@@ -201,6 +201,48 @@ The robot validators used to be the exception, running on bare `python3` while
 their logic lived under `skills/`; that logic is the library's now (`cad.urdf`, `cad.sdf`, `cad.srdf`), run
 by `cad urdf|sdf|srdf validate`, so they need the server like everything else.
 
+## Work In A Worktree
+
+Iterate inside the worktree, on its own environment and its own server; install globally only to test
+end to end in an agent app ([Test In Agent Apps](#test-in-agent-apps)), one worktree at a time. Several
+worktrees can iterate at once: each has its own `.venv` (its own `packages/cad`, editable), `_runtime`,
+`node_modules` and server, and they share only uv's download cache, which uv locks.
+
+A worktree's `cad` (`uv run cad ...`, `.venv`'s) reaches the computer's one server unless it is given
+folders of its own, and a server is told apart by its release, never by its checkout: a worktree at
+0.11.12 and the published 0.11.12 are the same release, so its commands are served by the global
+server (the published code, or the code of whichever checkout last ran `dev_install.py`), and its
+`cad server start` joins that server rather than starting one. So give each worktree its own engine,
+state and cache folders (under `tmp/`, which is gitignored), and keep the server you start from
+updating itself:
+
+```bash
+uv sync --python 3.14
+npm ci && scripts/bundle/bundle.sh       # only for the CAD Viewer or the CAD app page
+export CAD_ENGINE_DIR=$PWD/tmp/engine CAD_STATE_DIR=$PWD/tmp/state CAD_CACHE_DIR=$PWD/tmp/cache CAD_UPDATE_CHECK=0
+uv run cad server start
+uv run python models/<model>/model.py    # builds on this worktree's server and prints its page
+uv run cad viewer                        # the home, served from this worktree's bundle
+```
+
+On Windows, in PowerShell:
+
+```powershell
+uv sync --python 3.14
+$env:CAD_ENGINE_DIR = "$PWD\tmp\engine"; $env:CAD_STATE_DIR = "$PWD\tmp\state"
+$env:CAD_CACHE_DIR = "$PWD\tmp\cache"; $env:CAD_UPDATE_CHECK = "0"
+uv run cad server start
+```
+
+The server keeps the Python it started with: after editing `packages/cad/src`, run
+`uv run cad server stop` (in the same shell, so it stops this worktree's), and the next command
+starts the new code. Leave it running between edits of a model script: a build of the same script
+reuses its warm worker. Stop it when the worktree is done. Never stop a server you did not start.
+
+The test runners need none of this: `uv run scripts/test/test-python.sh <files>` gives each test file
+a server and folders of its own. Run plain `cad` (not `uv run cad`) and you get the global command,
+whatever the shell's folder.
+
 ## Test In Agent Apps
 
 A person installs text-to-cad with the install command
@@ -216,7 +258,9 @@ there, turns on `cad plugin update auto`, telling cad whether its run is ending 
 `tests/python/global/test_install_script.py` runs it against stand-in app commands in a home of its
 own.
 
-Test the skills the way users get them: as the plugin, with CAD's server. One script installs
+Test the skills the way users get them: as the plugin, with CAD's server. This is the global
+install, so one worktree at a time owns it: the last to run the script is the computer's `cad`, and
+the agent apps' (iterating needs none of it: [Work In A Worktree](#work-in-a-worktree)). One script installs
 this checkout into the agent apps, with the same table and each app's own command, the checkout
 in place of PyPI and GitHub:
 
@@ -379,12 +423,8 @@ trees from another checkout. Rebuild shared packages after editing them;
 Vite and Next consume their `dist` exports. `npm ci` without a
 workspace filter installs the whole workspace.
 
-Create this worktree's `.venv` with `uv sync` when Python is needed: each worktree has
-its own, with its own `packages/cad` installed editable, and uv's cache makes the second one
-quick. The computer's `cad` command and its one server are not per worktree:
-`scripts/install/dev_install.py` points them at the worktree that ran it last, and a
-worktree's `.venv` reaches that server unless it has its own `CAD_ENGINE_DIR` and
-`CAD_STATE_DIR`. For web development, invoke Vite from a folder of models (the home shows it):
+Create this worktree's `.venv` with `uv sync` when Python is needed, and give it a server
+of its own ([Work In A Worktree](#work-in-a-worktree)). For web development, invoke Vite from a folder of models (the home shows it):
 
 ```bash
 cd <a folder of models>
