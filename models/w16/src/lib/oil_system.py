@@ -99,8 +99,20 @@ CRANK_HUB_D = 46.0
 BELT_T = 2.0
 
 # filter
-FILTER_X = -120.0                             # aft of the section plane and of the bank-1 engine mount (x +/-46); was 200, in front of the opened crankcase
+# Aft of the section plane and of the bank-1 engine mount, whose pad spans x -60..60
+# on this skirt (was 200, in front of the opened crankcase). At -120 the housing's
+# back plate and forward ears sat 16 cm^3 inside the mount's pad, its forward bolt in
+# the mount's own, and the block's tapping for that ear all but tangent to the
+# mount's M12 hole (the block's skirt cut dropped it as unsound). At -160 the plate
+# ends at x -78, the forward ears' bolts clear of the mount's, and the pressure
+# sender on the drum's crown clear of the bank-1 head bolt at x -138 (at -145 it
+# reached it).
+FILTER_X = -160.0
 FILTER_Z = -48.0
+# The housing's four mounting ears, (dx, ds) from the filter centre along X and up
+# the skirt; block.py taps the skirt at the same stations.
+FILTER_EAR_DX = (-66.0, 66.0)
+FILTER_EAR_DS = (-36.0, 40.0)
 FILTER_CAN_D = 95.0
 FILTER_CAN_Y = (228.0, 322.0)                # shorter spin-on: the turbos now sit 45 lower and their housings reach |y| 343
 
@@ -151,7 +163,18 @@ def block_trim(sectioned: bool = True):
     if key in _BLOCK_TRIM:
         return _BLOCK_TRIM[key]
     envelope = geo.prism_yz(_blk.section_outline(), S.BLOCK_REAR_X, S.BLOCK_FRONT_X)
-    pieces = [envelope]
+    trim = C.fuse_all([envelope] + block_proud())
+    _BLOCK_TRIM[key] = trim
+    return trim
+
+
+def block_proud():
+    """The block's proud lower-skirt features alone (`block_trim` without the
+    envelope): what a casting already trimmed to the skirt plane
+    (`_skirt_halfspace`) still beds into. Cutting the envelope as well grazes
+    that trimmed face (a sliver some microns thick over the whole face) and
+    comes back unsound."""
+    pieces = []
     pieces += _blk._bulkhead_ribs()
     pieces += _blk._rail_rib()
     pieces += _blk._cross_bosses()
@@ -163,9 +186,7 @@ def block_trim(sectioned: bool = True):
     q1 = (d1[0] + (t + 0.7) * up[0], d1[1] + (t + 0.7) * up[1])
     bead = _blk._band(q0, q1, _blk.SKIRT_SLOPE_N, 6.0, 0.6)
     pieces += [_blk._prism(bead, S.BLOCK_REAR_X, S.BLOCK_FRONT_X, sy) for sy in (1, -1)]
-    trim = C.fuse_all(pieces)
-    _BLOCK_TRIM[key] = trim
-    return trim
+    return pieces
 
 
 def _skirt_halfspace(bank: int, z_ref: float = -45.0):
@@ -830,8 +851,8 @@ def build_filter(sectioned: bool = True):
                              align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)),
                       centre, n1, (1, 0, 0))
     ears, ear_pts = [], []
-    for dx in (-66.0, 66.0):
-        for ds in (-36.0, 40.0):
+    for dx in FILTER_EAR_DX:
+        for ds in FILTER_EAR_DS:
             p = (centre[0] + dx, centre[1] + ds * s1[1], centre[2] + ds * s1[2])
             ear_pts.append((p[0] + 15.0 * n1[0], p[1] + 15.0 * n1[1], p[2] + 15.0 * n1[2]))
             ears.append(geo.locate(C.boss(30.0, 15.0, draft_deg=4.0, fillet_r=1.5), p, n1, (1, 0, 0)))
@@ -849,7 +870,9 @@ def build_filter(sectioned: bool = True):
                          (FILTER_X, 190.0, FILTER_Z - 60.0), 18.0),
            geo.cyl_along((FILTER_X, 188.0, FILTER_Z + 40.0),
                          (FILTER_X, 188.0, FILTER_Z + 52.0), 16.0)])
-    housing = C.cut_all(housing, [block_trim(sectioned)])
+    # the skirt half-space above already trimmed the back to the block's face;
+    # what is left to take off is where the ribs and bosses stand proud of it
+    housing = C.cut_all(housing, block_proud())
     parts.append(P.style(housing, "oil_filter_housing", P.CAST))
 
     m10 = F.hex_flange_bolt(10.0, 32.0)
