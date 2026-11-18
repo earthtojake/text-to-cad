@@ -385,10 +385,11 @@ class BaseTest(unittest.TestCase):
 class RunTest(unittest.TestCase):
     """``cad run``: a script whose imports use the build123d integration alone run by the base's Python, in
     the caller's folder, the program's own folder last on its path (the library's runner,
-    ``cad._internal.program``)."""
+    ``cad._internal.program``). Each runs in its own folder: the uv configuration a run's folder reads is part of
+    its environment, and a checkout's root pyproject.toml (a uv workspace) is one."""
 
     def test_the_script_runs_with_the_bases_python(self) -> None:
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, contextlib.chdir(folder):
             script = Path(folder) / "model.py"
             script.write_text("import build123d\n", encoding="utf-8")
             with mock.patch.object(run.os, "execv") as execv, mock.patch("subprocess.call", return_value=0) as call:
@@ -405,7 +406,7 @@ class RunTest(unittest.TestCase):
         with mock.patch.object(base, "ensure", side_effect=base.Refused("the CAD kernel environment needs the network "
                                                                         "once: dns error")), \
                 mock.patch.object(run.os, "execv") as execv, contextlib.redirect_stderr(err), \
-                tempfile.TemporaryDirectory() as folder:
+                tempfile.TemporaryDirectory() as folder, contextlib.chdir(folder):
             (Path(folder) / "model.py").write_text("import build123d\n", encoding="utf-8")
             self.assertEqual(run.main([str(Path(folder) / "model.py")]), 1)
         execv.assert_not_called()
