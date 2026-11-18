@@ -2,7 +2,6 @@
 name: render
 description: Renders photoreal images and videos of a text-to-cad model, a STEP or an xbf with Blender, for people to look at, such as a hero shot, a README picture, a product post, a turntable or a film of a model's motion or animation. Exports a GLB, loads it with cad.blender, lights and frames it in a bpy script that `cad run` runs, drafts in EEVEE and finishes in Cycles on the GPU, and can save a .blend. Not for checking geometry, which a snapshot does.
 license: MIT
-allowed-tools: Bash(cad *)
 metadata:
   repository: earthtojake/text-to-cad
 ---
@@ -32,28 +31,13 @@ dimension off one.
 
 ## Setup
 
-This skill was written for `cad==0.11.11`. The first time you use it in a chat, before you write or build
-anything, run `cad --version` as a command by itself and read what it prints. Then:
+Written for `cad==0.11.11`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
-- `cad` is not found or does not run, or is older than 0.11.12: run the install line below.
-- Older than the version above: run `cad update`.
-- The version above or newer: go on. If cad is a major or minor version ahead, or a command fails
-  unexpectedly, tell the person this skill may be out of date.
-
-Install line:
-
-```bash
-uv tool install cad
-```
-
-If `uv` is not found, install it as uv's install page says,
-https://docs.astral.sh/uv/getting-started/installation/, then run the line again. If uv says the `cad`
-executable already exists, add `--force` after `install`.
-
-Run each `cad` command by itself, not joined to others by `;`, `&&` or a pipe.
-
-A project written for an earlier major or minor version needs changes. The migration guides say what, one per
-version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
+If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
+https://github.com/earthtojake/text-to-cad
+A project written for an earlier version may need changes; the migration guides say what:
+https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
 `cad run render.py` sees `import bpy` and gives the script cad's blender integration: an
 environment on Python 3.13, the one Blender is built for, holding bpy 5.2.3 (Blender 5.2 LTS)

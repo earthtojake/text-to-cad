@@ -2,7 +2,6 @@
 name: engineering-drawing
 description: Make an engineering drawing of a part as a PDF - orthographic views with hidden lines and centre marks, real dimensions, hole callouts, notes and a title block on ISO sheets, all projected from the part's geometry so the drawing follows the model. Use when the user asks for a drawing, a dimensioned sheet, shop or manufacturing drawings, a print, or "2D views of this part". Not for DXF cut layouts or flat patterns.
 license: MIT
-allowed-tools: Bash(cad *)
 metadata:
   repository: earthtojake/text-to-cad
 ---
@@ -24,28 +23,13 @@ toolpaths, not documents, and a different job.
 
 ## Setup
 
-This skill was written for `cad==0.11.11`. The first time you use it in a chat, before you write or build
-anything, run `cad --version` as a command by itself and read what it prints. Then:
+Written for `cad==0.11.11`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
-- `cad` is not found or does not run, or is older than 0.11.12: run the install line below.
-- Older than the version above: run `cad update`.
-- The version above or newer: go on. If cad is a major or minor version ahead, or a command fails
-  unexpectedly, tell the person this skill may be out of date.
-
-Install line:
-
-```bash
-uv tool install cad
-```
-
-If `uv` is not found, install it as uv's install page says,
-https://docs.astral.sh/uv/getting-started/installation/, then run the line again. If uv says the `cad`
-executable already exists, add `--force` after `install`.
-
-Run each `cad` command by itself, not joined to others by `;`, `&&` or a pipe.
-
-A project written for an earlier major or minor version needs changes. The migration guides say what, one per
-version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
+If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
+https://github.com/earthtojake/text-to-cad
+A project written for an earlier version may need changes; the migration guides say what:
+https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
 ## Workflow
 

@@ -223,11 +223,11 @@ where those files ship, so these scripts are what produces them.
   README with outside links pinned to the release commit), checks it against
   claude.ai's file rules, and with `--commit` commits it on `REF` and prints the
   commit. The `latest` copy holds every app's manifest and config and the
-  marketplace catalogs; the `directory` copy is Claude's manifest and the skills alone, each
-  skill without its `allowed-tools` line, no MCP server and no hooks, every file one of the
-  types claude.ai's directory accepts from an unverified organization (any other fails
-  `--check`). Every copy's skills carry the same Setup block, main's, which installs cad by
-  uv's line; no copy names our install script or holds a download piped to a shell
+  marketplace catalogs; the `directory` copy is Claude's manifest and the skills alone, no MCP
+  server and no hooks, every file one of the types claude.ai's directory accepts from an
+  unverified organization (any other fails `--check`). Every copy carries main's skills byte
+  for byte, so the same Setup block, which installs cad by uv's line; no copy names our
+  install script or holds a download piped to a shell
   (`plugin_zip.text_errors`, `PIPE_TO_SHELL`). Its README, like `latest`'s, installs cad by
   uv's line rather than the install script, and it leaves out the manifest's four listing
   links; each substitution fails `--check` when what it replaces is not there exactly once

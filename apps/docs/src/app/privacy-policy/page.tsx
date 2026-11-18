@@ -117,8 +117,8 @@ export default function PrivacyPolicyPage() {
             made in CI. Automatic updates are on unless you turned them off. While they are on, and the answer
             names a newer release than the one you have, text-to-cad downloads the newest release from the
             Python Package Index (PyPI) and installs it. Where the plugin’s automatic updates are on (our
-            install command turns them on),
-            text-to-cad then downloads our install script from this website and runs it, which updates the
+            install command turns them on) and text-to-cad is newer than when our install script last ran,
+            however it got newer, text-to-cad then downloads that script from this website and runs it, which updates the
             text-to-cad plugin in your agent apps. When an earlier release that updated itself brings your
             computer to the current one, text-to-cad installs itself from PyPI the same way, and runs our
             install script once if our install command set up your computer before. Section 5 says how to turn
@@ -251,7 +251,7 @@ export default function PrivacyPolicyPage() {
           <li>
             To turn automatic updates off, run <code>cad auto-update off</code>;{" "}
             <code>cad auto-update on</code> turns them on again. <code>cad plugin auto-update off</code> stops
-            text-to-cad from running our install script after an update. Setting <code>CAD_UPDATE_CHECK=0</code> where
+            text-to-cad from running our install script on its own. Setting <code>CAD_UPDATE_CHECK=0</code> where
             text-to-cad runs turns the hourly version check, and with it automatic updates, off for that
             process.
           </li>

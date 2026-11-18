@@ -2,17 +2,18 @@
 same in each.
 
 The block names the cad the skills were written for once, as `cad==<VERSION>`, which the release stamps
-(scripts/release/sync-version.mjs); no command and no install line carries a version. 0.11.12 in its first bullet
-is fixed, not stamped: the first release installed globally by uv. It has the agent check `cad --version` on
-first use; install cad by uv's one line, `uv tool install cad`, where it is missing or older than 0.11.12 (0.10.0
-to 0.11.11 are a launcher, not a global install, and `--force` replaces its file); `cad update` where it is older than
-the skill, which updates cad and nothing else; and carry on where cad is newer, since cad updates itself ahead of
-the skills, telling the person the skill may be out of date when cad is a major or minor version ahead or a
-command fails unexpectedly. No skill runs our install script: that is how a person installs the plugins, and a
-skill installs only cad. A `cad` command that needs the server and finds none says to run `cad server start`.
-Nothing in the block asks the person whether to update: the app's own prompt for a command is the only asking.
-Every published copy of the skills (`latest`, claude.ai's directory's, Codex's) holds the same block
-(scripts/release/plugin_branch.py). A skill that runs the server any other way -- a
+(scripts/release/sync-version.mjs); no command and no install line carries a version. 0.11.12 in its first sentence
+is fixed, not stamped: the first release installed globally by uv. It has the agent run `cad --version` before
+first use, and install cad by uv's one line, `uv tool install cad`, where it is missing or older than 0.11.12
+(0.10.0 to 0.11.11 are a launcher, not a global install, and `--force` replaces its file). cad updates itself, so
+the block never has the agent update it: where cad is a major or minor version newer than the skill and something
+fails, the agent tells the person to update the plugin, whose skills are then the older half (docs/install.md,
+"Updating"). No skill runs our install script: that is how a
+person installs the plugins, and a skill installs only cad. A `cad` command that needs the server and finds none
+says to run `cad server start`. Nothing in the block asks the person whether to update. Every published copy of
+the skills (`latest`, claude.ai's directory's, Codex's) holds the skills byte for byte
+(scripts/release/plugin_branch.py), so no skill pre-approves a tool (`allowed-tools`): the directory refuses one
+from an organization it has not verified. A skill that runs the server any other way -- a
 `pip install -r requirements.txt` into the project's interpreter -- makes a second installation.
 
 Stated as a criterion rather than a list: "uses the server" is what the skill's docs TEACH (a `cad`
@@ -31,35 +32,17 @@ SKILLS = sorted(p for p in (REPO_ROOT / "skills").iterdir() if p.is_dir())
 VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 # The owner's text, word for word (X is the release, stamped).
-SETUP = """This skill was written for `cad=={X}`. The first time you use it in a chat, before you write or build
-anything, run `cad --version` as a command by itself and read what it prints. Then:
+SETUP = """Written for `cad=={X}`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
-- `cad` is not found or does not run, or is older than 0.11.12: run the install line below.
-- Older than the version above: run `cad update`.
-- The version above or newer: go on. If cad is a major or minor version ahead, or a command fails
-  unexpectedly, tell the person this skill may be out of date.
-
-Install line:
-
-```bash
-uv tool install cad
-```
-
-If `uv` is not found, install it as uv's install page says,
-https://docs.astral.sh/uv/getting-started/installation/, then run the line again. If uv says the `cad`
-executable already exists, add `--force` after `install`.
-
-Run each `cad` command by itself, not joined to others by `;`, `&&` or a pipe.
-
-A project written for an earlier major or minor version needs changes. The migration guides say what, one per
-version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
+If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
+https://github.com/earthtojake/text-to-cad
+A project written for an earlier version may need changes; the migration guides say what:
+https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 """
 
-# What every skill pre-approves in Claude Code: the `cad` commands it runs, the setup block's `cad --version` and
-# `cad update` among them, and nothing else. The install line is not: it installs software on the person's
-# computer, uv's own command, which the person approves in the app's prompt (and Codex ignores the line, and
-# claude.ai's directory's copy carries no `allowed-tools`: scripts/release/plugin_branch.py).
-ALLOWED_TOOLS = "allowed-tools: Bash(cad *)"
+# A key in a SKILL.md's front matter that pre-approves tools, in either spelling.
+_PRE_APPROVAL = re.compile(r"^(?:allowed-tools|allowedTools)[ \t]*:", re.M)
 
 _IMPORT = re.compile(r"^\s*(?:from|import)\s+(?:cad|cadgen|cad_server)\b", re.M)
 _INVOCATION = re.compile(r"(?:^|[`\s])cad(?:\.exe)?\s+[a-z]", re.M)
@@ -98,11 +81,13 @@ class SkillLaunchCommand(unittest.TestCase):
                     self.assertNotIn("install.sh", text, "a skill that never runs the server installs nothing")
         self.assertGreater(len(users), 1, "found no skill that runs the server: the criterion no longer matches")
 
-    def test_every_skill_pre_approves_its_cad_commands(self) -> None:
+    def test_no_skill_pre_approves_a_tool(self) -> None:
+        # Every copy carries the skills as they are here, and claude.ai's directory refuses `allowed-tools` from an
+        # organization it has not verified; each `cad` command is the app's to ask about, as any other.
         for skill in SKILLS:
             head = (skill / "SKILL.md").read_text(encoding="utf-8").split("\n---\n", 1)[0]
             with self.subTest(skill=skill.name):
-                self.assertEqual(head.splitlines().count(ALLOWED_TOOLS), 1)
+                self.assertIsNone(_PRE_APPROVAL.search(head))
 
     def test_no_command_names_a_version(self) -> None:
         # Commands are plain `cad <verb>`; the one version is the setup block's `cad==X`, the release's.
@@ -119,8 +104,9 @@ class SkillLaunchCommand(unittest.TestCase):
         # install script (a skill installs cad by uv's line alone), no switching cad's automatic update (on by
         # default), no exit codes a pin once added, no repair of apps, no newer-version notice and no asking the
         # person whether to update (cad updates itself, and `cad update` asks nobody), and nothing that claims a
-        # permission (agents refused the commands it named). `cad update` is the block's own.
-        gone = re.compile(r"cad(?:\.exe)? (?:plugin|setup|auto-update)\b|texttocad\.dev/install"
+        # permission (agents refused the commands it named).
+        # The commands, not the product's name: "the text-to-cad plugin" is the block's own words.
+        gone = re.compile(r"(?<![\w.-])cad(?:\.exe)? (?:plugin|setup|auto-update)\b|texttocad\.dev/install"
                           r"|doctor --prune|--add \d|exit code says why"
                           r"|\.local/bin/cad|unknown command '\+|newer version of cad is available"
                           r"|ask whether to update|without asking", re.I)

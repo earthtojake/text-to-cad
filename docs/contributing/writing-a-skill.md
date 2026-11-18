@@ -90,24 +90,31 @@ Each skill installs on its own, so the few things every skill must say are copie
 for word, and tests keep the copies from drifting:
 
 - **Setup** (`tests/python/global/test_skill_requirements.py`): how to get cad, in every skill that
-  runs it, and in no other. The block names once the cad release the skills were written for, which
-  the release script stamps (`scripts/release/sync-version.mjs`); no command carries a version. It has
-  the agent run `cad --version` on first use, then:
-  - `cad` is not found or does not run, or is older than the first release installed by uv (a fixed
-    number in the block, never stamped): install it with uv's line, `uv tool install cad`. uv's
-    install page where uv is missing; `--force` where uv says the `cad` executable already exists
-    (the launcher 0.10.0 to 0.11.11 wrote).
-  - cad is older than the skill: run `cad update`, which updates cad and nothing else.
-  - cad is the same or newer: carry on, and tell the person the skill may be out of date when cad
-    is a major or minor version ahead or a command fails unexpectedly.
+  runs it, and in no other. It reads, in each (`<VERSION>` is the release):
+
+  ```text
+  Written for `cad==<VERSION>`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+  0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
+
+  If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
+  https://github.com/earthtojake/text-to-cad
+  A project written for an earlier version may need changes; the migration guides say what:
+  https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
+  ```
+
+  The block names once the cad release the skills were written for, which the release script stamps
+  (`scripts/release/sync-version.mjs`); no command carries a version. 0.11.12 is fixed, never stamped:
+  the first release installed by uv, and `--force` replaces the launcher 0.10.0 to 0.11.11 wrote. cad
+  updates itself, so the block never has the agent update it or ask the person to. Where cad is a
+  major or minor version ahead, the skills are the older half: the agent tells the person to update
+  the plugin, and gives the repository's address.
 
   No skill runs our install script: it is how a person installs the plugins, and a skill installs
-  cad alone. The block never tells the agent to ask the person to update. Its front matter allows
-  `Bash(cad *)` alone, so the install line is the person's to approve. Every published copy of the
-  skills (`latest`, claude.ai's directory's, Codex's) holds the same block; the directory's copy only
-  drops the `allowed-tools` line (`scripts/release/plugin_branch.py`), and a copy that names our
-  install script or pipes a download to a shell fails the release. A new skill copies the block from
-  one beside it.
+  cad alone. No skill pre-approves a tool (no `allowed-tools` in its front matter), so each `cad`
+  command is the agent app's to ask about, as any other. Every published copy of the skills
+  (`latest`, claude.ai's directory's, Codex's) carries them byte for byte as they are here
+  (`scripts/release/plugin_branch.py`), and a copy that names our install script or pipes a download
+  to a shell fails the release. A new skill copies the block from one beside it.
 - **Commands that last** (`tests/python/global/test_released_commands_still_parse.py`): every `cad`
   command in the skills of every release from the last 30 days still parses with today's `cad`. So a
   command, an option or a spelling the skills stop using keeps working, hidden if need be, for at

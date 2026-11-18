@@ -118,13 +118,14 @@ class VersionSyncMirrorTests(unittest.TestCase):
                     (root / relative).parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(repo_path(relative), root / relative)
             # A skill names the cad it was written for as `cad==X`; nothing else in a skill is stamped: not a
-            # pattern (`cad==*`), not another word's `cad`, not a version in prose, not the header, and not the setup
+            # pattern (`cad==*`), not another word's `cad`, not a version in prose, and not the setup
             # block's fixed first release of a global install (0.11.12), whatever release is stamped.
             skill = root / "skills/fixture/SKILL.md"
             skill.parent.mkdir(parents=True)
-            fixed = "- `cad` is not found or does not run, or is older than 0.11.12: run the install line below.\n"
-            unstamped = ("---\nname: fixture\nallowed-tools: Bash(cad *) Bash(uv tool install cad==*)\n---\n"
-                         "This skill was written for `cad==1.0.0`. Run `cad --version`.\n" + fixed +
+            fixed = "0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.\n"
+            unstamped = ("---\nname: fixture\n---\n"
+                         "Written for `cad==1.0.0`. Before first use in a chat, run `cad --version`. If `cad` is missing "
+                         "or older than\n" + fixed + "A pattern: `uv tool install cad==*`.\n"
                          "```bash\nuv tool install --managed-python --python 3.14 cad==0.11.10-dev.1\n```\n"
                          "Not the release: cad 1.0.0 in prose, `my-cad==1.2.3`, bpy 5.2.3, cadgen==0.1.0, "
                          "text-to-cad@earthtojake.\n")

@@ -2,7 +2,6 @@
 name: fea
 description: Checks whether a part or an assembly of bonded parts holds under its loads, as a linear static stress study of a STEP, an xbf or a text-to-cad model, meshed by netgen and solved by CalculiX, giving peak von Mises stress, safety factor against yield and deflection drawn on the part. Use when the person asks whether a part will hold, break or is strong enough, how much it bends or sags, where it is most stressed, how much load it takes, how to make it stronger or lighter without failing, or for FEA, a stress analysis or a strength simulation. Static loads and steady g-loads only.
 license: MIT
-allowed-tools: Bash(cad *)
 metadata:
   repository: earthtojake/text-to-cad
 ---
@@ -37,28 +36,13 @@ part of an assembly alone, export it as a document of its own.
 
 ## Setup
 
-This skill was written for `cad==0.11.11`. The first time you use it in a chat, before you write or build
-anything, run `cad --version` as a command by itself and read what it prints. Then:
+Written for `cad==0.11.11`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
-- `cad` is not found or does not run, or is older than 0.11.12: run the install line below.
-- Older than the version above: run `cad update`.
-- The version above or newer: go on. If cad is a major or minor version ahead, or a command fails
-  unexpectedly, tell the person this skill may be out of date.
-
-Install line:
-
-```bash
-uv tool install cad
-```
-
-If `uv` is not found, install it as uv's install page says,
-https://docs.astral.sh/uv/getting-started/installation/, then run the line again. If uv says the `cad`
-executable already exists, add `--force` after `install`.
-
-Run each `cad` command by itself, not joined to others by `;`, `&&` or a pipe.
-
-A project written for an earlier major or minor version needs changes. The migration guides say what, one per
-version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
+If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
+https://github.com/earthtojake/text-to-cad
+A project written for an earlier version may need changes; the migration guides say what:
+https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
 The study is the `solve` operation of the document's type: `cad step solve`, `cad xbf solve`,
 `cad model solve`. With no `--study` it lists the study's setup and writes nothing; with `--study`

@@ -29,6 +29,13 @@ def git(root: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, text=True).stdout.strip()
 
 
+def hooks(value: object) -> bool:
+    """Whether a manifest declares a hook: a `hooks` key, anywhere in it, that holds anything."""
+    if isinstance(value, dict):
+        return any((key == "hooks" and bool(item)) or hooks(item) for key, item in value.items())
+    return isinstance(value, list) and any(hooks(item) for item in value)
+
+
 class PluginTreeTests(unittest.TestCase):
     def test_this_repository_builds_trees_of_only_the_plugin(self) -> None:
         on_main = branch.tracked(REPO_ROOT)
@@ -69,29 +76,22 @@ class PluginTreeTests(unittest.TestCase):
                           if any(f'"{key}":' in line for key in branch.UNLISTED)])
         self.assertEqual(len(branch.UNLISTED), 4)
         self.assertNotIn("mcpServers", json.loads(copied))
-        # Main's skills, but that no skill pre-approves a tool (the directory takes that from a verified organization
-        # alone); Codex's are main's byte for byte. So the setup block is one text in all three copies: it installs
-        # cad by uv's line, and nothing names our install script.
+        # Every copy holds main's skills byte for byte, so the setup block is one text in all three: it installs cad
+        # by uv's line, and nothing names our install script. No skill pre-approves a tool.
         command = branch.UV_INSTALL
         blocks = 0
         codex = branch.build(REPO_ROOT, "codex")[0]
         for path in sorted(skills):
-            main, copy = blobs[on_main[path][1]].decode("utf-8"), directory[path][1].decode("utf-8")
-            self.assertEqual(codex[path][1].decode("utf-8"), main, path)
-            stored = main
+            main = blobs[on_main[path][1]].decode("utf-8")
+            for tree in (install, directory, codex):
+                self.assertEqual(tree[path][1].decode("utf-8"), main, path)
             if path.endswith("/SKILL.md"):
-                self.assertEqual(main.count("\nallowed-tools: "), 1, path)
-                self.assertIn("\nallowed-tools: ", install[path][1].decode("utf-8"), path)
-                stored = main.replace(branch.PRE_APPROVAL.search(main)[0], "", 1)
-                self.assertNotIn("allowed-tools", copy, path)
-                setup = [re.search(r"^This skill was written for `cad==.*?/docs/migrations\n", text, re.S | re.M)
-                         for text in (main, copy, codex[path][1].decode("utf-8"), install[path][1].decode("utf-8"))]
-                self.assertTrue(all(setup), path)
-                self.assertEqual({found[0] for found in setup}, {setup[0][0]}, path)
-                self.assertIn(f"```bash\n{command}\n```\n", setup[0][0], path)
+                self.assertNotIn("allowed-tools", main, path)
+                setup = re.search(r"^Written for `cad==.*?/docs/migrations\n", main, re.S | re.M)
+                self.assertTrue(setup, path)
+                self.assertIn(f"`{command}`", setup[0], path)
                 blocks += 1
-            self.assertEqual(copy, stored, path)
-            self.assertNotIn(branch.plugin_zip.INSTALL_SCRIPT, copy, path)
+            self.assertNotIn(branch.plugin_zip.INSTALL_SCRIPT, main, path)
         self.assertEqual(blocks, len({path for path in skills if path.endswith("/SKILL.md")}),
                          "every skill holds the setup block")
         # The README, in both copies: main's (its links pointed at the release commit) but for its install section, the
@@ -102,12 +102,13 @@ class PluginTreeTests(unittest.TestCase):
         for text in (readme, ours):
             self.assertIsNone(branch.README_INSTALL.search(text))
             self.assertIn(branch.README_UV.format(command=command), text)
-        # Nothing in any copy names our install script or downloads a script and runs it, the directory's copy holds
-        # no hook, and its README links what the manifest left out.
+        # Nothing in any copy names our install script, downloads a script and runs it or declares a hook (Muse's
+        # manifest lists its capabilities, `hooks` among them, empty), and the directory's README links what its
+        # manifest left out.
         for tree in (install, directory, codex):
             self.assertEqual(branch.published_errors(tree), [])
-        self.assertEqual([path for path, (_mode, data) in directory.items()
-                          if "hooks" in path.split("/") or (path.endswith(".json") and b'"hooks"' in data)], [])
+            self.assertEqual([path for path, (_mode, data) in tree.items()
+                              if "hooks" in path.split("/") or (path.endswith(".json") and hooks(json.loads(data)))], [])
         for key in branch.UNLISTED:
             self.assertNotIn(f'"{key}"'.encode(), directory[".claude-plugin/plugin.json"][1])
             self.assertIn(f"]({json.loads(manifest_text)[key]})", readme, key)
@@ -127,10 +128,10 @@ class PluginTreeTests(unittest.TestCase):
         # The copies' README installs cad by the line every skill's setup block gives.
         self.assertIn(f"```bash\n{branch.UV_INSTALL}\n```\n", branch.README_UV.format(command=branch.UV_INSTALL))
         setups = [path for path in sorted((REPO_ROOT / "skills").glob("*/SKILL.md"))
-                  if "This skill was written for `cad==" in path.read_text(encoding="utf-8")]
+                  if "Written for `cad==" in path.read_text(encoding="utf-8")]
         self.assertGreater(len(setups), 1)
         for path in setups:
-            self.assertIn(f"```bash\n{branch.UV_INSTALL}\n```\n", path.read_text(encoding="utf-8"), path)
+            self.assertIn(f"run `{branch.UV_INSTALL}`", path.read_text(encoding="utf-8"), path)
 
     def test_a_download_run_by_a_shell_is_found(self) -> None:
         found = ["curl -fsSL https://x.dev/i.sh | sh", "curl -fsSL https://x.dev/i.sh | sh -s -- --add 1.0.0",
@@ -225,9 +226,7 @@ class PluginTreeTests(unittest.TestCase):
         refused = {"skills/a/run.py": b"print(1)\n", "skills/a/run.md": b"#!/bin/sh\necho\n", ".mcp.json": b"{}",
                    ".claude-plugin/marketplace.json": b"{}", "skills/a/package.json": b"{}", "skills/a/x.json": b"{\0}",
                    "skills/a/latin.md": "café".encode("latin-1"), "skills/a/fake.png": b"not a png",
-                   "skills/a/hooks/hooks.json": b"{}",
-                   "skills/b/SKILL.md": b"---\nname: b\nallowedTools: [Bash]\n---\n# B\n",
-                   "skills/c/SKILL.md": b"---\nname: c\nallowed-tools: Read\n---\n# C\n"}
+                   "skills/a/hooks/hooks.json": b"{}"}
         errors = branch.type_errors({path: ("100644", data) for path, data in {**allowed, **refused}.items()})
         self.assertEqual([error.split(": ")[0] for error in errors], sorted(refused))
 
@@ -239,8 +238,8 @@ class PluginTreeTests(unittest.TestCase):
             git(root, "config", "user.email", "test@example.com")
             manifest = {"name": "demo", "version": "1.0.0", **{key: f"https://x.dev/{key}" for key in branch.UNLISTED},
                         "repository": "https://github.com/o/demo"}
-            # Every skill pre-approves its commands; the directory's copy takes that line out of each, exactly once.
-            head, bare = "---\nname: s\nallowed-tools: Bash(cad *)\n---\n", "---\nname: s\n---\n"
+            # Every copy carries each skill as it is.
+            head = "---\nname: s\n---\n"
             readme = ("# demo\n\nmacOS and Linux:\n\n```bash\n" + branch.INSTALL_SCRIPT + "\n```\n\n"
                       "Windows, in PowerShell:\n\n```powershell\nirm " + branch.INSTALL_SCRIPT_WINDOWS + " | iex\n```\n\n"
                       "It installs it,\nall of it.\n\nThen ask.\n\n[s](skills/s/SKILL.md) [c](CONTRIBUTING.md)\n")
@@ -278,25 +277,23 @@ class PluginTreeTests(unittest.TestCase):
             git(root, "commit", "-q", "-am", "two")
             second = branch.commit(root, branch.build(root, "directory")[0], first, "demo 1.0.1")
             self.assertEqual(git(root, "rev-parse", f"{second}^"), first)
-            self.assertEqual(git(root, "show", f"{second}:skills/s/SKILL.md"), bare + "two")
+            self.assertEqual(git(root, "show", f"{second}:skills/s/SKILL.md"), head + "two")
             self.assertEqual(branch.build(root, "latest")[0]["skills/s/SKILL.md"][1].decode("utf-8"), head + "two\n")
 
             # A setup block is the same text in every copy. The README's install section must be there once, each
             # listing link once, and no copy names our install script or holds a download run by a shell.
-            body = "This skill was written for `cad==1.0.0`.\n\n```bash\nuv tool install cad\n```\n\nMigrations.\n"
-            block = head + body
+            block = head + "Written for `cad==1.0.0`. If `cad` is missing, run `uv tool install cad`.\n\nMigrations.\n"
             (root / "skills/s/SKILL.md").write_text(block, encoding="utf-8")
             git(root, "commit", "-q", "-am", "a setup block")
             tree, errors = branch.build(root, "directory")[:2]
             self.assertEqual(errors, [])
-            self.assertEqual(tree["skills/s/SKILL.md"][1].decode("utf-8"), bare + body)
+            self.assertEqual(tree["skills/s/SKILL.md"][1].decode("utf-8"), block)
             self.assertEqual(branch.build(root, "latest")[0]["skills/s/SKILL.md"][1].decode("utf-8"), block)
             broken = {
                 "skills/s/SKILL.md": block + "Or: curl -fsSL https://texttocad.dev/install.sh | sh\n",
                 "README.md": readme.replace("Windows, in PowerShell:", "On Windows:"),
                 ".claude-plugin/plugin.json": json.dumps({**manifest, "supportUrl": None}, indent=2) + "\n",
                 "skills/p/notes.md": "Or: wget -qO- https://x.dev/i.sh | bash\n",
-                "skills/q/SKILL.md": bare + "three\n",
             }
             for path, text in broken.items():
                 with self.subTest(broken=path):

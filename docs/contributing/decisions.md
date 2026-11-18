@@ -74,7 +74,7 @@ puts the release it ran back.
 
 **Decision.** `uv tool install cad`, with no flags, is the one way we tell anyone to install cad,
 and it never changes. Every skill's Setup block runs it where `cad` is missing, does not run, or is
-older than the first release installed this way, and runs `cad update` where cad is older than the skill. No skill runs the
+older than the first release installed this way; cad updates itself, so no skill updates it. No skill runs the
 install command. cad runs on Python 3.11 and newer, with no upper bound.
 
 **Why.** A skill deals with cad alone: the install command changes every agent app on the computer,
@@ -219,8 +219,7 @@ must stay the same").
 **Decision.** The CAD MCP server ships to, and offers tools to, one app: Codex, where the CAD tab is
 verified as solid. Only Codex's manifest names the server. Every other app gets the skills alone, and
 its agent shows a model in the app's own browser or by a link, as the skills say. A server someone adds
-to another app by hand is offered no tools either, whatever the app says it supports. Copies of the
-plugin we install in Claude Code and Cursor start cad's server when a session starts.
+to another app by hand is offered no tools either, whatever the app says it supports.
 
 **Why.** Inline cards are small and scroll away with the chat; only Codex's tab is a proper view. Of the
 other apps, Cursor shows cards inline only, Claude Code's cards are broken, and nothing else is verified.
@@ -228,11 +227,30 @@ Apps claim support they do not have, and their support changes between versions,
 what was checked in the real app rather than what an app declares.
 
 **What it costs.** Cursor loses its working card and shows a model in its browser instead. Where
-nothing has started the server, the skills have the agent run `cad server start`; in an app that
-sandboxes the agent's shell, that needs one approval.
+nothing has started the server, a command that needs it tells the agent to run `cad server start`; in
+an app that sandboxes the agent's shell, that needs one approval.
 
 **Adding an app back.** Verify its CAD view in the real app first. Then add its manifest's server entry
 and its name to the server's rule (`cad_server/mcp/host.py`), in one change.
+
+## No hooks, no pre-approved tools
+
+**Decision.** No manifest of ours declares a hook, and no skill declares `allowed-tools`. Nothing
+starts cad's server when a session opens: `cad server start` starts it, which a command that finds no
+server tells the agent to run (`the cad server is not running: run cad server start`), or `cad mcp`,
+Codex's server line. Every copy of the plugin, the one a person installs by hand and each listing's,
+carries the same skills, byte for byte. No released version ever had either: both were added on
+2026-11-16 and taken out before the next release shipped.
+
+**Why.** The copy people install by hand should be the same skills a listing carries, and Claude's
+plugin directory refuses hooks and `allowed-tools` from an organization it has not verified. The hooks
+had only tests of their declaration, and failed wherever cad was missing or old. `allowed-tools`
+pre-approves a command only during the turn that loads the skill, and made Claude Code ask before
+loading the skill at all. Current Claude Code terminal sessions start in auto mode, where routine
+commands are not asked.
+
+**What it costs.** In Claude Code's manual permission mode each new `cad` command asks once, and the
+first command of a session may be told to start the server.
 
 ## No Skills CLI route
 

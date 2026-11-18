@@ -54,7 +54,7 @@ class PluginZipTests(unittest.TestCase):
         self.assertIn(".codex-plugin/", members)
         self.assertEqual(changed, [])
         for name in (name for name in skills if name.endswith("/SKILL.md")):
-            self.assertIn("```bash\nuv tool install cad\n```\n", skills[name], name)
+            self.assertIn("run `uv tool install cad`", skills[name], name)
             self.assertNotIn(plugin_zip.INSTALL_SCRIPT, skills[name], name)
         # Everything tracked under the plugin's roots ships, `.codex-plugin/` icons included,
         # plus exactly the files the archived manifest points at; nothing else from the repo.
@@ -90,8 +90,8 @@ class PluginZipTests(unittest.TestCase):
             root = Path(directory)
             (root / ".codex-plugin").mkdir()
             (root / "skills/demo").mkdir(parents=True)
-            block = ("---\nname: demo\ndescription: Demo.\n---\nThis skill was written for `cad==1.0.0`.\n\n"
-                     "```bash\nuv tool install cad\n```\n\nWhen it says so.\n")
+            block = ("---\nname: demo\ndescription: Demo.\n---\nWritten for `cad==1.0.0`. If `cad` is missing, run "
+                     "`uv tool install cad`.\n\nWhen it says so.\n")
             (root / "skills/demo/SKILL.md").write_text(block, encoding="utf-8")
             server = {"command": "uvx", "args": ["cad@1.0.0", "mcp"]}
             (root / "codex.mcp.json").write_text(json.dumps({"mcpServers": {"cad": server}}), encoding="utf-8")

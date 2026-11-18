@@ -2,7 +2,6 @@
 name: cad
 description: Creates and edits parametric CAD parts, assemblies and 2D profiles as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB, DXF and xbf files on request; resolves prompt references, measures geometry, checks whether a part can be machined, cut and bent, molded or printed, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, DXF files, flat patterns, gaskets and laser or waterjet cut layouts, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF, GLB and DXF files in the CAD Viewer. Not for the robot and world descriptions the robot-simulation skill writes.
 license: MIT
-allowed-tools: Bash(cad *)
 metadata:
   repository: earthtojake/text-to-cad
 ---
@@ -33,28 +32,13 @@ the page the person has open updates. Files are exports, made when asked.
 
 ## Setup and paths
 
-This skill was written for `cad==0.11.11`. The first time you use it in a chat, before you write or build
-anything, run `cad --version` as a command by itself and read what it prints. Then:
+Written for `cad==0.11.11`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
-- `cad` is not found or does not run, or is older than 0.11.12: run the install line below.
-- Older than the version above: run `cad update`.
-- The version above or newer: go on. If cad is a major or minor version ahead, or a command fails
-  unexpectedly, tell the person this skill may be out of date.
-
-Install line:
-
-```bash
-uv tool install cad
-```
-
-If `uv` is not found, install it as uv's install page says,
-https://docs.astral.sh/uv/getting-started/installation/, then run the line again. If uv says the `cad`
-executable already exists, add `--force` after `install`.
-
-Run each `cad` command by itself, not joined to others by `;`, `&&` or a pipe.
-
-A project written for an earlier major or minor version needs changes. The migration guides say what, one per
-version: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
+If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
+https://github.com/earthtojake/text-to-cad
+A project written for an earlier version may need changes; the migration guides say what:
+https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
 One server runs: `cad server start` starts it, every run and every
 command goes through it, and it serves the viewer. `cad server status` lists its workers

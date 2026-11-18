@@ -267,20 +267,16 @@ class PluginManifestPolicyTest(unittest.TestCase):
             "startup_timeout_sec": 300,
         }}})
 
-    def test_claude_code_and_cursor_start_the_server_at_session_start(self) -> None:
-        # The copies we install start the server when a session starts, without holding the session: Claude Code's
-        # hook in the catalog's entry (so claude.ai's directory copy, which ships no catalog, carries none), Cursor's
-        # in its own manifest. No file at hooks/hooks.json: Claude Code, Cursor and Codex all read one there by
-        # default, each in its own format.
-        entry = next(entry for entry in load_json(MARKETPLACE_PATH)["plugins"] if entry["name"] == PLUGIN_NAME)
-        self.assertEqual(entry["hooks"], {"SessionStart": [{"hooks": [
-            {"type": "command", "command": "cad", "args": ["server", "start"], "async": True}]}]})
-        self.assertEqual(load_json(CURSOR_PLUGIN_PATH)["hooks"],
-                         {"version": 1, "hooks": {"sessionStart": [{"command": "cad server start"}]}})
-        for path in (*MANIFESTS, GEMINI_EXTENSION_PATH):
-            if path != CURSOR_PLUGIN_PATH:
-                with self.subTest(path=str(path.relative_to(REPO_ROOT))):
-                    self.assertNotIn("hooks", load_json(path))
+    def test_no_manifest_declares_a_hook(self) -> None:
+        # Nothing of ours runs when a session starts: no manifest, no catalog entry and no hooks/hooks.json (Claude
+        # Code, Cursor and Codex all read one there by default) declares a hook. A `cad` command that needs the
+        # server and finds none says to run `cad server start`; Codex's server line starts it as `cad mcp`.
+        catalogs = (MARKETPLACE_PATH, MUSE_MARKETPLACE_PATH)
+        for path in (*MANIFESTS, GEMINI_EXTENSION_PATH, *catalogs):
+            manifest = load_json(path)
+            for entry in [manifest, *(manifest.get("plugins", []) if path in catalogs else [])]:
+                with self.subTest(path=str(path.relative_to(REPO_ROOT)), entry=entry.get("name")):
+                    self.assertNotIn("hooks", entry)
         tracked = subprocess.run(["git", "-C", str(REPO_ROOT), "ls-files"], check=True, capture_output=True,
                                  text=True).stdout.splitlines()
         self.assertEqual([path for path in tracked if path == "hooks/hooks.json" or path.endswith("/hooks/hooks.json")], [])
@@ -327,7 +323,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertFalse((REPO_ROOT / "GEMINI.md").exists())
 
     def test_no_plugin_file_names_a_channel(self) -> None:
-        # Every copy behaves the same: no line or hook names a channel or who updates the copy (the variables 0.11.11
+        # Every copy behaves the same: no line names a channel or who updates the copy (the variables 0.11.11
         # and earlier read, which a copy of those releases still sets, are ignored).
         for path in (*MANIFESTS, MARKETPLACE_PATH, MUSE_MARKETPLACE_PATH, GEMINI_EXTENSION_PATH, CODEX_MCP_PATH):
             with self.subTest(path=str(path.relative_to(REPO_ROOT))):

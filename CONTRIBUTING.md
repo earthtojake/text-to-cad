@@ -898,8 +898,10 @@ no commit. There are three copies:
   that ZIP (`plugin_zip.build`), so the branch and the ZIP cannot differ.
 
 A store's copy (`claude-plugin`, `codex-plugin` and the ZIP) is delivered and updated by its store.
-Every copy holds the same skills and the same Setup block, `main`'s: it installs cad by uv's line,
-`uv tool install cad`, and no skill names our install command. No copy names our install script or
+Every copy holds `main`'s skills byte for byte, so the same Setup block: it installs cad by uv's line,
+`uv tool install cad`, and no skill names our install command. No skill pre-approves a tool
+(`allowed-tools`), which the directory refuses from an organization it has not verified, and no
+manifest of ours declares a hook. No copy names our install script or
 pipes a download to a shell anywhere (`plugin_zip.text_errors` and `plugin_branch.PIPE_TO_SHELL`,
 which fail the build). No copy names a store in its commands.
 
@@ -922,7 +924,7 @@ the build when what it replaces is not there exactly once:
 
 | | `latest` | `codex-plugin` and the OpenAI ZIP | `claude-plugin` |
 | --- | --- | --- | --- |
-| Skills | as `main` | as `main` | as `main`, each without the `allowed-tools` line of its front matter |
+| Skills | as `main` | as `main` | as `main` |
 | Codex's server line | as `main`: `uvx ... cad@<VERSION> mcp` in `codex.mcp.json` | the same, in `.mcp.json` | none: no MCP config |
 | README's install section | uv's line and one paragraph | no README | the same as `latest` |
 | `.claude-plugin/plugin.json` | as `main` | not shipped | without `documentationUrl`, `privacyPolicyUrl`, `supportUrl` and `termsOfServiceUrl`, which the directory's validation does not know; the README links the same pages |
