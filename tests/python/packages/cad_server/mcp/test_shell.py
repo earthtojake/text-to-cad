@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -33,7 +34,7 @@ class ShellTest(unittest.TestCase):
 
     def test_the_resource_is_the_shell_named_by_the_engine_s_release(self) -> None:
         page = ui.AppPage(self.page)
-        self.assertRegex(page.uri, rf"^ui://cad/{cad_server.__version__.replace('.', r'\.')}/[0-9a-f]{{16}}/app\.html$")
+        self.assertRegex(page.uri, r"^ui://cad/" + re.escape(cad_server.__version__) + r"/[0-9a-f]{16}/app\.html$")
         self.assertEqual(page.html(), "<!doctype html><title>CAD</title>")
         self.assertTrue(page.owns("ui://cad/0.0.1/0123456789abcdef/app.html"), "any build's shell reads as this one")
 

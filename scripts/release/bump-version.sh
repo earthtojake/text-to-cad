@@ -21,10 +21,12 @@ Usage:
 
 Makes this branch a release. Sets VERSION to the next major, minor or patch
 version after the one on BASE (or to X.Y.Z, which must be greater), then stamps
-the derived metadata and every pin of the release's own from it (sync-version.mjs:
-package, plugin and lockfile versions, the four pyproject.toml files and their
-cad== pins, the plugin server configs, the installers' fallback). The pull request that carries the change releases that version when
-it merges: Publish Release runs on the merge.
+the derived metadata and every mention of the release's own from it
+(sync-version.mjs: package, plugin and lockfile versions, the four
+pyproject.toml files, the aliases' cad==<version> requirement, Codex's server
+line, cad@<version>, and the cad==<version> each skill's Setup block names).
+The pull request that carries the change releases that version when it merges:
+Publish Release runs on the merge.
 
 The bump is relative to BASE, not to this branch, so running it again after
 BASE moves (another pull request released first) moves the bump with it, and

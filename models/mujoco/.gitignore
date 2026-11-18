@@ -1,0 +1,16 @@
+# Everything here is fetched or generated: the sources by src/fetch.py from the pins in
+# src/sources.py, the descriptions and reports by the scripts. Git holds the scripts alone.
+/upstream/
+/menagerie/
+/out/
+/reports/
+/tmp/
+# And what any model writes on request (cad <type> export), as in every project.
+/STEP/
+/STL/
+/GLB/
+/3MF/
+/DXF/
+/XBF/
+/PDF/
+__pycache__/

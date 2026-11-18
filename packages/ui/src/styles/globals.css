@@ -55,6 +55,13 @@
  * in on a focused field.) */
 [data-viewer-layout="mobile"] [data-flat-panel="page"] [data-tree-row] { gap: 6px; --tree-row-glyph: 16px; }
 [data-viewer-layout="mobile"] [data-flat-panel="page"] [data-tree-row] svg { width: 16px; height: 16px; }
+/* A phone cannot hover: a row's actions (Isolate, the Hide/Reveal eye) are always shown, and its name
+ * fades out under them. */
+[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-row-actions], [data-viewer-layout="mobile"] [data-flat-panel="page"] [data-row-actions] button { opacity: 1 !important; }
+[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-tree-row] [class*="group-hover/row:[mask-image"] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--row-actions) - 0.5rem), transparent calc(100% - var(--row-actions)));
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--row-actions) - 0.5rem), transparent calc(100% - var(--row-actions)));
+}
 [data-viewer-layout="mobile"] [data-flat-panel="page"] [data-slot="tree-filter"] { height: 36px; }
 [data-viewer-layout="mobile"] [data-flat-panel="page"] [data-slot="tree-filter"] input { height: 34px; padding-left: 28px; }
 [data-viewer-layout="mobile"] [data-flat-panel="page"] [data-slot="tree-filter"] svg { width: 16px; height: 16px; }

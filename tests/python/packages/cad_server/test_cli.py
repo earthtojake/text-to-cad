@@ -67,8 +67,7 @@ class Dispatch(unittest.TestCase):
 
         from cad_server._internal import installations
 
-        with mock.patch.dict("os.environ", {installations.NAME_ENV: ""}), \
-                mock.patch.object(installations, "editable", return_value=False):
+        with mock.patch.dict("os.environ", {installations.NAME_ENV: ""}):
             code, out, _ = self._run(["--version"])
         self.assertEqual(code, 0)
         self.assertEqual(out.strip(), f"cad {__version__}")
@@ -83,14 +82,13 @@ class Dispatch(unittest.TestCase):
             code, out, _ = self._run(["--version"])
         self.assertEqual((code, out.strip()), (0, "cad 0.8.0-dev.20261025032350"))
 
-    def test_doctor_adopts_the_earlier_state_folder_before_its_notice_writes_this_one(self):
-        # `doctor` registers, as `setup` does (which says no notice); any other command adopts nothing. Help
-        # does neither, and an answer in JSON says no notice.
+    def test_only_a_command_that_does_work_says_the_notice_and_none_adopts_an_earlier_state_folder(self):
+        # `doctor` is a report: it writes nothing, as help does not; an answer in JSON says no notice.
         from unittest import mock
 
         from cad.engine import places
 
-        for argv, expected in ((["doctor"], ["adopt", "tell"]), (["status"], ["tell"]), (["doctor", "--help"], []),
+        for argv, expected in ((["doctor"], []), (["status"], ["tell"]), (["doctor", "--help"], []),
                                (["status", "-h"], []), (["help", "doctor"], []), (["xbf", "export", "--help"], []),
                                (["xbf", "help"], []), (["status", "--json"], []), (["run", "a.py", "--help"], [])):
             with self.subTest(argv=argv):
@@ -117,11 +115,13 @@ class Dispatch(unittest.TestCase):
             env.update({"PYTHONPATH": str(add_sources()), "CAD_STATE_DIR": state,
                         "CAD_CACHE_DIR": os.path.join(folder, "cache"), "CAD_ENGINE_DIR": os.path.join(folder, "e"),
                         "CAD_LAUNCHER_DIR": os.path.join(folder, "bin"),
-                        "CAD_INSTALL_CHANNEL": "test"})  # a plugin's channel: a checkout's tells no one
+                        # A release's run: a checkout not told the version it runs as is a development build,
+                        # which tells no one.
+                        "CAD_INSTALLATION_VERSION": __import__("cad_server").__version__})
 
             def run(*argv):
                 return subprocess.run([sys.executable, "-m", "cad_server.cli", *argv], cwd=folder, env=env,
-                                      capture_output=True, text=True, timeout=120)
+                                      capture_output=True, text=True, encoding="utf-8", timeout=120)
 
             for argv in (["doctor", "--help"], ["help", "doctor"], ["status", "-h"], ["xbf", "export", "--help"],
                          ["help", "step"], ["status", "--json"]):
@@ -131,14 +131,14 @@ class Dispatch(unittest.TestCase):
                     self.assertFalse(os.path.exists(state), os.listdir(state) if os.path.exists(state) else None)
             done = run("status")
             self.assertEqual(done.returncode, 0, done.stderr)
-            self.assertIn("text-to-cad now sends usage stats", done.stderr)
+            self.assertIn("cad now sends usage stats", done.stderr)
             self.assertTrue(os.path.isfile(os.path.join(state, "settings.json")))
 
     def test_status_names_the_engine_s_installation(self):
         from cad_server.engine.cli import status_text
 
         text = status_text({"pid": 7, "up": 5, "workers": [], "installation": "0.8.0-dev.20261025032350"})
-        self.assertTrue(text.startswith("engine server 7 (cad-server 0.8.0-dev.20261025032350), up "), text)
+        self.assertTrue(text.startswith("engine server 7 (cad 0.8.0-dev.20261025032350), up "), text)
 
     def test_status_says_a_worker_s_retirement_by_its_script_and_a_render_process_s_by_its_document(self):
         import time
@@ -196,7 +196,7 @@ class LazyImports(unittest.TestCase):
             f"print('HEAVY:' + ','.join(m for m in {HEAVY!r} if m in sys.modules))"
         )
         proc = subprocess.run(
-            [sys.executable, "-c", code], capture_output=True, text=True
+            [sys.executable, "-c", code], capture_output=True, text=True, encoding="utf-8"
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         marked = [ln for ln in proc.stdout.splitlines() if ln.startswith("HEAVY:")]

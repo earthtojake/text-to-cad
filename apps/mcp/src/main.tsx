@@ -5,6 +5,7 @@ import { version } from '../package.json';
 import Connection from './Connection';
 import Notice, { noticeTranslator } from './Notice';
 import { createBridge, type HostContext, type ToolResult } from './host/bridge';
+import { appCapability } from './host/capability';
 import { createChannel, declaresServerTools } from './host/channel';
 import { readPresentation } from './host/presentation';
 import { createServer, PROTOCOL, readLaunch, toolText, type Launch } from './host/server';
@@ -37,8 +38,6 @@ const root = createRoot(element, {
   // Logged as React logs one, and counted: the page went on, with the view's "could not display".
   onCaughtError: (error, info) => { console.error(error, info.componentStack); reportCrash(error, { handled: true }); },
 });
-// The shell that loaded this page takes it down to load the engine's next release in its place (an update).
-globalThis.__cadApp = { unmount: () => root.unmount() };
 
 function applyTheme(context: HostContext) {
   const dark = context.theme === 'dark';
@@ -70,19 +69,21 @@ async function start() {
     else await bridge.initialize({ name: 'CAD', version }, presentation === 'inline' ? { displayModes: ['inline', 'fullscreen'] } : undefined);
     hostLocale = bridge.hostContext.locale || hostLocale;
     // The page starts on its launch alone: the launch carries what the server is (its protocol,
-    // version and platform). One from another build -- a tab the host restored after an update, a
-    // past chat's card -- says so: this page reads only its own protocol's.
+    // version and platform). One from another build -- a tab the host restored after another release
+    // was installed, a past chat's card -- says so: this page reads only its own protocol's.
     const { launch, result } = await launched;
     if (launch.protocol !== PROTOCOL) {
       root.render(<Notice title={say('cad.updated.title')} message={say('cad.updated.message')} t={say} details={`view ${PROTOCOL} · launch ${launch.protocol}${launch.version ? ` (${launch.version})` : ''}`} />);
       return;
     }
-    const token = result._meta?.['dev.texttocad/httpToken'];
-    if (typeof token !== 'string' || !token) throw new Error(say('cad.noCapability'));
     // Whether the host carries this page's calls to CAD's server: what it declared, until a call says
     // (`host/channel.ts`). A host that refuses them all gets the CAD Viewer's page instead.
     const channel = createChannel(declaresServerTools(bridge.hostCapabilities));
-    const server = createServer(bridge, token, channel);
+    // The page's capability, from the launch or the tool that launched it (`host/capability.ts`). With none,
+    // nothing it asks CAD's server can be answered: the card says it cannot connect, and links the page.
+    const token = appCapability(result, bridge.hostContext);
+    if (!token) channel.refusedCapability('capability');
+    const server = createServer(bridge, token ?? '', channel);
     const reporting = createTunnelClient(createTunnelFetch(server), { pollIntervalMs: 0 });
     sendCrash = crash => reporting.reportActivity({ crash });
     waiting.splice(0).forEach(sendCrash);

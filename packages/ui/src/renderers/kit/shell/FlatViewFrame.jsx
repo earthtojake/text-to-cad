@@ -3,6 +3,7 @@ import { MousePointer2 } from "lucide-react";
 import { AnnotationToolbar, DRAWING_TOOLS, annotationToolIcon, drawingToolVariant, drawingToolLabel } from "../../../annotation/toolbar.jsx";
 import { MeasureIcon } from "../tools/measure/SceneMeasure.jsx";
 import { MeasurementsBar } from "../tools/measure/measurementChips.jsx";
+import { ToolModeIcon } from "../tools/select/modeGlyphs.jsx";
 import QuickEdit from "../tools/quick-edit/QuickEdit.jsx";
 import { DRAWING_SHORTCUTS, TOOL_SHORTCUTS } from "../tools/toolShortcuts.js";
 import { FLAT_TOOL } from "./useFlatView.js";
@@ -32,16 +33,18 @@ const MEASURE_ICON = <MeasureIcon className="size-3.5" aria-hidden="true" />;
  * A flat view's strip, Select, Pencil, Shapes and Measure, each with its key, and the row of the
  * tool in hand under it: the drawing tools' (their tools, colours and widths) or Measure's (its
  * measurements, while there are any); Select has none. `selectMenu`: Select's filter, the chevron
- * after its button, where the view offers one.
+ * after its button, where the view offers one; `selectBadge`, the badge its button wears for what the
+ * filter ticks (`selectFilter.js`'s `filterBadge`: none for "all").
  *
  * @param {ReturnType<typeof import("./useFlatView.js").useFlatTools>} tools
- * @param {{ colorScheme: "light" | "dark", shown: boolean, t?: Function, selectMenu?: import("react").ReactNode }} options
+ * @param {{ colorScheme: "light" | "dark", shown: boolean, t?: Function, selectMenu?: import("react").ReactNode, selectBadge?: string }} options
  */
-export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, t = english }) {
+export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, selectBadge = "all", t = english }) {
   const { toolMode, selectTool, annotation, annotating, measuring, measure, toolKeys } = tools;
   const stripTool = (id, label, icon, extra = {}) => ({ id, label, icon, active: toolMode === id, disabled: !shown, onSelect: () => selectTool(id), ...extra });
   const strip = [
-    stripTool(FLAT_TOOL.SELECT, t("tool.select"), SELECT_ICON, { shortcut: TOOL_SHORTCUTS.select, ...(selectMenu ? { menu: selectMenu } : {}) }),
+    stripTool(FLAT_TOOL.SELECT, t("tool.select"), selectBadge === "all" ? SELECT_ICON
+      : <ToolModeIcon tool="select" mode={selectBadge} className="size-3" aria-hidden="true" />, { shortcut: TOOL_SHORTCUTS.select, ...(selectMenu ? { menu: selectMenu } : {}) }),
     // Pencil and Shapes: plain buttons, each the tool last chosen in it, its tooltip that tool and its key; the tools are the row's.
     ...DRAWING_TOOLS.map(({ id }) => {
       const label = drawingToolLabel(id, t);

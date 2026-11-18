@@ -60,6 +60,13 @@ class DoorTest(unittest.TestCase):
         for other in (b"", b"\n", b"ok\n", b"ok", b"ok 0\n", b"ok \n", b"ok one\n", b"no 1\n", b"okay\n",
                       b"ok\n\n"):
             self.assertIsNone(door.greeted(other), other)
+        # The server's release, an addition to protocol 1: every client since 0.10.0 reads this very rule
+        # (``greeted``), skipping it, and this release's reads it (``released``); the servers of 0.11.11 and earlier
+        # greet without.
+        said = door.greeting(1, "0.11.12")
+        self.assertEqual((said, door.greeted(said), door.released(said)), (b"ok 1 0.11.12\n", 1, "0.11.12"))
+        for line in (b"ok 1\n", b"ok 1 \n", b"ok 1 two words\n", b"ok\n", b"no 1 0.11.12\n"):
+            self.assertIsNone(door.released(line), line)
 
     def test_the_daemon_greets_each_hello_in_the_protocol_it_spoke(self) -> None:
         from cad.engine import door

@@ -32,7 +32,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 LIBRARY = REPO_ROOT / "packages/cad/src/cad"
-SERVER = REPO_ROOT / "packages/cad-server/src/cad_server"
+SERVER = REPO_ROOT / "packages/cad/src/cad_server"
 
 # Named explicitly rather than globbed: a glob over the packages would sweep in modules
 # that legitimately spawn other programs. These are the places a build starts -- the

@@ -17,7 +17,7 @@ KiCad exports the same saved source, with `cad kicad_pcb export BOARD --to KIND 
 | `drill` | Excellon drill files, mm |
 | `pos` | `<board>-pos.csv`: placement of both sides, mm, from KiCad's page origin, every placed part (DNP ones too): KiCad's columns `Ref`, `Val`, `Package`, `PosX`, `PosY`, `Rot`, `Side` |
 | `bom` | `<board>-bom.csv` from the schematic beside the board (`<board>.kicad_sch`), grouped by value and footprint, DNP parts left out: `Reference` (every designator, no ranges), `Value`, `Footprint`, `Quantity`, then `MPN` and `LCSC` where any part carries one (read from fields named `MPN`, `Manufacturer_Part_Number`, `LCSC`, `LCSC Part`, ...) |
-| `step`, `glb` | `<board>.step` / `<board>.glb`: the board and its parts, each part's STEP model read where the board view reads it (the board's folder, KiCad's installed 3D library, `CAD_KICAD_3DMODELS`; a `.wrl` name as the STEP beside it); parts without a model are named |
+| `step`, `glb` | `<board>.step` / `<board>.glb`: the board and its parts, each part's STEP model read where the board view reads it (the board's folder, KiCad's installed 3D library, `CAD_KICAD_3DMODELS`; a `.wrl` name as the STEP beside it); parts without a model are named. The GLB holds the board's copper, mask and silkscreen too, each KiCad's own mesh named by its layer (`<board>_copper`, `_pad`, `_via`, `_silkscreen`, `_soldermask`, `_PCB`), so it is the larger and slower of the two (tens of MB on a four-layer board) |
 | `odb` | `<board>-odb.zip`: ODB++, mm |
 | `ipc2581` | `<board>-ipc2581.xml`: IPC-2581 rev C, mm |
 | `pdf` | `<board>-front.pdf` and `<board>-back.pdf` (mirrored): copper, silkscreen and fab layers over the outline |
@@ -74,8 +74,9 @@ Choose and record the STEP origin explicitly: `--user-origin XxYmm`, `--grid-ori
 exported outline, holes and thickness and a known connector location before designing against
 it. Use `--board-only` only for a deliberately bare-board export and state that limitation.
 
-The STEP is an ordinary foreign CAD file; it is not the PCB's source. View it with `cad_show`
-or `cad viewer`, and use `cad step export mechanical/board.step mechanical/board.glb` (or STL,
+The STEP is an ordinary foreign CAD file; it is not the PCB's source. Show it as any file
+([Show the model](../SKILL.md#show-the-model): `cad_show` where your tools include it, else its page
+from `cad viewer`), and use `cad step export mechanical/board.step mechanical/board.glb` (or STL,
 3MF) for requested meshes. A text-to-cad model can use `step.read` to fit an enclosure around it.
 Check geometry and millimetre scale after conversion. Re-export after native board edits;
 do not copy STEP changes back into the PCB by guessing at their meaning.

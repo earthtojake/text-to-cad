@@ -1,5 +1,7 @@
 """On Windows every process the engine starts has a console of its own and no window (#597): the
-daemon (``client._start``) a process group of its own too, never no console at all, and each warm
+daemon (``client._spawn``, ``cad server start``'s) a process group of its own too, never no console at all,
+started by the environment's own Python with none of the command's streams, so ``cad.exe`` exits with the
+command and an update can replace it (``uv tool install`` fails while one runs); and each warm
 worker, STEP reader and render process windowless; what they start in turn (the meshing and
 reading pools) shares their windowless console. No CI machine shows a window, so the flags handed
 to ``subprocess.Popen`` are read under a patched ``os.name``: the engine's, where its processes
@@ -9,6 +11,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -60,12 +63,18 @@ class WindowsConsoleTest(unittest.TestCase):
                 self.assertEqual(self.popen(start)["creationflags"], NO_WINDOW)
                 self.assertNotIn("creationflags", self.popen(start, "posix"))  # POSIX takes no creation flags
         with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(folder)}):
-            started = self.popen(client._start)
+            started = self.popen(lambda: client._spawn(None))
             self.assertEqual(started["creationflags"], NO_WINDOW | NEW_GROUP)
             self.assertFalse(started["creationflags"] & DETACHED_PROCESS, "no console at all gives each child a window")
             self.assertNotIn("start_new_session", started)
-            self.assertEqual({key: value for key, value in self.popen(client._start, "posix").items()
+            self.assertEqual({key: value for key, value in self.popen(lambda: client._spawn(None), "posix").items()
                               if key in ("creationflags", "start_new_session")}, {"start_new_session": True})
+            self.assertEqual([started[name] for name in ("stdin", "stdout", "stderr")], [subprocess.DEVNULL] * 3,
+                             "none of the command's streams: nothing holds the command, or its cad.exe, open")
+            with mock.patch.object(subprocess, "Popen", side_effect=Started) as popen, self.assertRaises(Started):
+                client._spawn(4321)
+            self.assertEqual(popen.call_args.args[0], [sys.executable, "-P", "-m", "cad_server._internal.engine_daemon",
+                                                       "--port", "4321"], "the environment's Python, never cad.exe")
 
 
 def setUpModule() -> None:

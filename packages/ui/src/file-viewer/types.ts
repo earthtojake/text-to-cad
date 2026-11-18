@@ -216,11 +216,6 @@ export interface FileViewerProps {
    * the host's links (`host.links`).
    */
   appSettings?: readonly AppSetting[];
-  /**
-   * The host's update button (`@cad/ui/update`'s `UpdateButton`), first among the navbar's
-   * controls, while the host's install is behind; nothing otherwise.
-   */
-  update?: ReactNode;
   /** The view's own history, where the host keeps one: Back and Forward after the navbar's logo, over a file and on the home. */
   history?: ViewerHistory;
   /**
@@ -246,7 +241,7 @@ export interface FileViewerProps {
   chrome?: "page" | "bare";
   onError?: (error: Error) => void;
   presentation?: {
-    /** The host's home, shown with no file: a page of its own under the navbar, which has only its logo's menu, Back and Forward, the update and the host's actions there. */
+    /** The host's home, shown with no file: a page of its own under the navbar, which has only its logo's menu, Back and Forward and the host's actions there. */
     home?: ReactNode;
     loading?: ReactNode;
     /**

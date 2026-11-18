@@ -1,0 +1,131 @@
+name: Real install
+
+# The install command run for real against the real command-line programs of Claude Code (claude), Codex (codex)
+# and Gemini CLI (gemini), on Windows, macOS and Linux: scripts/test/real-install.py, on a private computer of
+# its own, the way a person runs it (install.sh piped to sh; install.ps1 handed to Invoke-Expression by
+# Windows PowerShell 5.1): cad a uv tool from the wheels this tree builds (written again as a release no index
+# holds, above PyPI's newest, and offered to uv), cad's automatic updates on and the plugin's turned on by the
+# install, no server started; `cad server start`, a model built by `cad run`, a file shown by `cad viewer`,
+# `cad doctor`; the plugin from this tree's `latest` copy through each program's own GitHub route (a local
+# repository the computer's git reads in GitHub's place). Then the command again (cad installed already and left
+# alone, each program's copy updated), and each program migrated from the state 0.11.10's installer left. The
+# desktop apps are not here: they need a person. test.yml calls it with the installer rehearsals, on a full run (so before a release ships),
+# nightly, and on a change to the installers or the runner: the selector's `installer` flag
+# (scripts/github-workflows/select_checks.py).
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "The ref to test (default: the branch dispatched)"
+        required: false
+        default: ""
+  workflow_call:
+    inputs:
+      ref:
+        description: "The ref to test (default: the caller's commit)"
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+# The programs, each at one version: the npm package's. To raise one, run the runner with the new version on a
+# computer of your own (scripts/README.md, "Real install"), then change it here.
+env:
+  CLAUDE_CODE: "2.1.316"
+  CODEX: "0.169.0"
+  GEMINI_CLI: "0.62.0"
+
+jobs:
+  wheel:
+    name: wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        timeout-minutes: 10
+        uses: ./.github/actions/setup-deps
+        with:
+          npm: packages/core packages/ui apps/web apps/mcp
+          playwright: "false"
+
+      - name: Bundle production outputs from clean
+        run: scripts/bundle/bundle.sh --clean
+
+      - name: Build and check the wheels
+        timeout-minutes: 10
+        env:
+          CAD_KEEP_WHEEL: "1"
+          CAD_WHEEL_OUT_DIR: ${{ runner.temp }}/wheels
+        run: scripts/release/check-wheel-contents.sh
+
+      - name: Keep the wheels for the programs' jobs
+        uses: actions/upload-artifact@v7
+        with:
+          name: real-install-wheels
+          path: ${{ runner.temp }}/wheels/*.whl
+          if-no-files-found: error
+          retention-days: 1
+
+  programs:
+    name: real programs (${{ matrix.os }})
+    needs: wheel
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      # 0.11.10's plugin folder is made from that release's tree.
+      - name: The tag v0.11.10
+        timeout-minutes: 5
+        run: git fetch --no-tags --depth 1 origin tag v0.11.10
+
+      - name: Set up Python
+        timeout-minutes: 5
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        timeout-minutes: 5
+        uses: astral-sh/setup-uv@v10.3.3
+
+      - name: Set up Node.js
+        timeout-minutes: 5
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      # Each vendor's npm package, the one route that is the same on the three systems and takes an exact version.
+      - name: The programs, at their pinned versions
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          npm install --global --no-fund --no-audit "@anthropic-ai/claude-code@$CLAUDE_CODE" \
+            "@openai/codex@$CODEX" "@google/gemini-cli@$GEMINI_CLI"
+
+      - name: Take the wheels
+        uses: actions/download-artifact@v8
+        with:
+          name: real-install-wheels
+          path: ${{ runner.temp }}/wheels
+
+      # The computer in the runner's own short temporary folder: Windows' paths stay well under its old limit.
+      - name: The install script against them
+        timeout-minutes: 35
+        run: >-
+          python scripts/test/real-install.py --wheels "${{ runner.temp }}/wheels" --require claude,codex,gemini
+          --work "${{ runner.temp }}/ri"

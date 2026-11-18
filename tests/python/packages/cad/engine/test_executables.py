@@ -53,7 +53,7 @@ class DaemonWorkingFolderTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, engine, True)
         with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(engine)}), \
                 mock.patch.object(client.subprocess, "Popen") as started:
-            client._start()
+            client._spawn(None)
         self.assertEqual(started.call_args.kwargs["cwd"], str(engine))
         self.assertIsNone(places.folder_refusal(engine))
 

@@ -625,9 +625,14 @@ def kicad_python(runtime: Path = RUNTIME) -> str:
                         ("CAD_LAUNCHER_DIR", "launcher")):
         os.environ[key] = str(runtime / folder)
     os.environ.update(pcb_fetch.TELEMETRY_OFF)
+    from cad.engine import api, client
     from cad_server._internal import integration_env
 
-    return integration_env.environment("kicad", lambda line: print(line, file=sys.stderr))
+    try:  # the server that makes it: the bench's own, started in those folders and stopped once it is made
+        client.start()
+        return integration_env.environment("kicad", lambda line: print(line, file=sys.stderr))
+    finally:
+        api.stop()
 
 
 def kicad_runner(runtime: Path = RUNTIME) -> Callable[[str, str, Path], dict[str, Any]]:

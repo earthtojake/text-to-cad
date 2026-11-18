@@ -28,16 +28,16 @@ export interface ViewReporter {
  * One view: the shared CAD viewer over this host — the model a launch names, by its absolute path,
  * or with none, the home (the library, and Open) — under the navbar (`chrome: "page"`): its logo and
  * app menu, Back and Forward, the file's name and menus (its ⋯: Copy path, and Open in › Browser and
- * the file manager), and at the right the host's update and Full size. A view browses from its model's folder, shows what is opened in place, and adds what it
+ * the file manager), and at the right the host's Full size. A view browses from its model's folder, shows what is opened in place, and adds what it
  * shows to the library. Everything differs by data — what a Quick Edit can do in the chat, whether
  * the view has a home — never by where the view is.
  *
  * Codex's file handler (`surface: file`, `alone`) shows its file alone (`chrome: "bare"`): the host's
  * own file tree is its navigation, so it has no navbar, no home and no file menu (no Open in › Browser); what the
- * navbar would carry that it still has (the update notice, Full size where the host offers it) is its
+ * navbar would carry that it still has (Full size, where the host offers it) is its
  * corner (`CardCorner`) at the viewport's top-right.
  */
-export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, update, fullSize, whatsNew, openInBrowser, engineOrigin }: {
+export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, fullSize, whatsNew, openInBrowser, engineOrigin }: {
   launch: Launch; sequence: number; bridge: Bridge; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
   /**
    * The view shows the one file its host opened, and nothing else (Codex's file handler): no home,
@@ -61,14 +61,9 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   chat: ChatReach;
   /** This app's on/off settings, in the app menu: analytics. */
   appSettings?: readonly AppSetting[];
-  /**
-   * While this install is behind: the navbar's update button, last among its controls (after Full size), over a file
-   * and on the home; in the file handler, the corner's notice under Full size.
-   */
-  update?: ReactNode;
   /** What's new, where the view has the page to say it over (a tab): `CadViewerProps.whatsNew`. */
   whatsNew?: { entry: string | null; onDismiss(): void };
-  /** Inline, the card's way to full size, where the host can show it so: in the navbar just before the update button; the corner's first in the file handler. */
+  /** Inline, the card's way to full size, where the host can show it so: in the navbar; the corner's in the file handler. */
   fullSize?: ReactNode;
   /**
    * Open a document's page (a file's path, a model's id) in the person's browser, where a launch carried
@@ -168,6 +163,6 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate} chrome={homed ? 'page' : 'bare'}
     onShown={path => { if (path) void client.changeRecents({ action: 'open', path }).catch(() => {}); }}
     library={library} appSettings={appSettings} colorScheme={theme} language={language} history={viewerHistory} whatsNew={whatsNew}
-    {...homed ? { update, fullSize } : { notice: <CardCorner fullSize={fullSize} update={update} /> }}
+    {...homed ? { fullSize } : { notice: <CardCorner fullSize={fullSize} /> }}
     onThumbnail={(png, pictured) => client.keepThumbnail(png, pictured)} />;
 }

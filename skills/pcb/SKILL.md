@@ -10,20 +10,17 @@ metadata:
 
 ## Setup
 
-Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.exe` on Windows). If
-it is missing, install text-to-cad, outside a sandbox or with its permission:
+Written for `cad==0.11.13`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
-```bash
-curl -fsSL https://texttocad.dev/install.sh | sh
-```
-
-On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
-only just added, its server may still be starting: try again for up to a minute first. `cad doctor
---check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
+If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
+https://github.com/earthtojake/text-to-cad
+A project written for an earlier version may need changes; the migration guides say what:
+https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
 text-to-cad reads a board or schematic itself, so inspecting either, and viewing a schematic or taking
-its snapshot, need no KiCad. DRC (`cad kicad_pcb drc`), ERC (`cad
-kicad_sch erc`), every export (`cad kicad_pcb export`, `cad kicad_sch export`) and an edit
+its snapshot, need no KiCad. DRC (`cad kicad_pcb drc`), ERC
+(`cad kicad_sch erc`), every export (`cad kicad_pcb export`, `cad kicad_sch export`) and an edit
 (`kicad_pcb.edit`, `kicad_sch.edit`) run KiCad's command line, `kicad-cli`,
 and its IPC API from kicode, the `kicad` extra (`cad[kicad]`): the `cad` command installs it the first
 time a board command needs it (about 100 MB to download and 340 MB on disk, once; nothing for you to install), and `cad run` gives a
@@ -213,20 +210,29 @@ the report then names every error they went ahead with.
 
 ## Show the model
 
-Show the person each model you create or change, and any model or file they ask to see. If your
-tools include `cad_show` (your host may prefix it), call it with the model's id or the file's
-absolute path; its description says the rest. Otherwise give the person the page's link once: a
-model's page is the `view:` line its run prints, and a file's is the `url` that
-`cad viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
-download: give its path. Never screenshot the viewer to check your own work; review with
-`cad <type> snapshot`. If it fails to launch, say so.
+Show the person each model you create or change as soon as its first run succeeds, and any model
+or file they ask to see. A model's page is the `view:` line its run prints, and a file's is the `url`
+that `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). Show it with
+the first of these you have:
+
+1. `cad_show` among your tools (your host may prefix it): call it with the model's id or the file's
+   absolute path; its description says the rest.
+2. A tool that opens a page in the app's own browser pane, not in the person's own browser (in the
+   Claude desktop app, the Browser pane's `preview_start` with the page's `url`, or its `navigate`):
+   open the page there yourself, and give the person the link as well.
+3. Neither: give the person the link, to open in their browser.
+
+The page follows every run of the model. A file you export is a download: give its path. Showing is
+for the person: to check your own work, review with `cad <type> snapshot`, never a screenshot
+of the page. If it fails to launch, say so.
 
 ## Board views
 
 The board view supports layers, selection, Measure, annotations and Quick Edit, in 2D and in 3D.
 Select works as KiCad's: a click picks a part, pad, track, via, zone, rule area, text, dimension or
 graphic, as its Selection Filter ticks them (locked items only when the person ticks them), and a
-drag names an area, a box on the layer the person works on. The panel at the left (⌘\ or Ctrl+\
+drag draws a box that takes anything it touches. A box that takes nothing names an area, a box on the layer the person works on
+(`#F.Cu@x10y5..x20y15`). The panel at the left (⌘\ or Ctrl+\
 hides and shows it, / searches it) has one search over three tabs. **Parts** lists the parts in the
 schematic blocks their footprints record (by kind on a board that records none): a block picks every
 part in it. **Nets** lists the nets: a net picks the whole net. Each arrives as a reference
@@ -251,7 +257,7 @@ board's folder (`${KIPRJMOD}`), KiCad's installed 3D library (every `${KICADn_3D
 folders `CAD_KICAD_3DMODELS` names (separated as `PATH` is); a `.wrl` name is read as the `.step` or
 `.stp` beside it. `CAD_KICAD_3DMODELS` is read from the server's environment: a server already
 running does not see a variable set in a shell afterwards, so set it before the server starts
-(`cad stop`, then run any `cad` command with it set). A part without a model stands as a block, and
+(`cad server stop`, then `cad server start` with it set). A part without a model stands as a block, and
 **Parts** lists it under **No 3D model**, with why: VRML only (no STEP beside the VRML), not found,
 outside the folders above, too large, not a STEP, embedded in the board, or too many models.
 `cad kicad_pcb inspect board.kicad_pcb --json` reports each model the same way (`models`: found,
@@ -295,7 +301,8 @@ selection, Measure, annotations and Quick Edit, and its panel: one search over *
 and, for more than one sheet, the **Hierarchy**. The Hierarchy is KiCad's
 Hierarchy Navigator: a press shows that sheet. A double-click on a sheet symbol enters it, and the
 Hierarchy goes back up; a sheet shown again is where it was left. Select works as KiCad's: a click picks a symbol, pin, wire, label, sheet,
-junction or no-connect, as its Selection Filter ticks them, and a drag picks what lies inside the box.
+junction or no-connect, as its Selection Filter ticks them, and a drag draws a box that picks anything
+it touches.
 **Parts** lists the parts by the sheet they are placed on, each with its pins, and **Nets** the nets
 with the pins on them. A net picked there lights across the sheet shown, and a part on another sheet shows
 that sheet. Each arrives as a schematic reference (`#R1`, `#R1.2`, `#net:/MID`, `#sheet:/Power/`,

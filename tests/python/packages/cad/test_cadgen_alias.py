@@ -134,7 +134,7 @@ class EarlierProgramTest(unittest.TestCase):
             script = Path(folder) / "model.py"
             script.write_text(source, encoding="utf-8")
             return subprocess.run([sys.executable, "-P", "-m", "cad._internal.program", str(script)],
-                                  capture_output=True, text=True, cwd=folder, timeout=120,
+                                  capture_output=True, text=True, encoding="utf-8", cwd=folder, timeout=120,
                                   env={**os.environ, "PYTHONPATH": SOURCE_PATH})
 
     def test_a_name_0_7_had_names_the_guide(self) -> None:

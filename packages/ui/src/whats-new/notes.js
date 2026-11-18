@@ -3,13 +3,14 @@
  * its minor version, and the rule for when a view shows them. Not every release has notes. An
  * entry is its items' ids, at most three; its words are the locale files' (`../i18n/locales`):
  * one title for every release (`whatsNew.title`, "What's New (v<release>.0)"), and per item `whatsNew.<release>.<item>.title` (bold, ending in a
- * period) and `.body` (one or two sentences; `code` in backticks). User-facing features only.
+ * period) and `.body`: a few plain words on what the feature is for, then one short example prompt a
+ * person would type to their agent, in quotation marks; never a command. User-facing features only.
  * The notes ship in the page, so a view reads them from the server that served it, never the network.
  */
 
 /** @type {Readonly<Record<string, readonly string[]>>} */
 export const WHATS_NEW = Object.freeze({
-  "0.11": Object.freeze(["boards", "updates"]),
+  "0.11": Object.freeze(["boards", "blender", "mujoco"]),
 });
 
 /** At most this many items an entry. */

@@ -4,7 +4,7 @@ import { useGlbAnimation } from '../../../dist/renderers/glb/useGlbAnimation.js'
 
 afterEach(cleanup);
 
-const clip = (name: string) => ({ name, duration: 2, tracks: [], userData: { cadgen: { duration: 2 } } });
+const clip = (name: string) => ({ name, duration: 2, tracks: [], userData: { cad: { duration: 2, kind: 'animation' } } });
 
 it('every clip opens looping, a motion once that the player repeats, and the viewer\'s own Loop wins until put at rest', () => {
   const document = { scene: null, clips: [clip('nod'), clip('steer')] };

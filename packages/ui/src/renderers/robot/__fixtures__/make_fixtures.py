@@ -71,8 +71,7 @@ def fixture_payloads() -> tuple[dict[str, dict], dict[str, str], dict[str, bytes
 
 
 def main() -> None:
-    for project in ("cad-mcp", "cad-server", "cad"):  # the library first on the path
-        sys.path.insert(0, str(HERE.parents[5] / "packages" / project / "src"))
+    sys.path.insert(0, str(HERE.parents[5] / "packages" / "cad" / "src"))
     payloads, refusals, meshes = fixture_payloads()
     primitives = HERE / "primitives"
     shutil.rmtree(primitives, ignore_errors=True)

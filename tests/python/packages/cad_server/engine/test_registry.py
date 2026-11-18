@@ -214,7 +214,7 @@ class RegistryDaemonTest(unittest.TestCase):
         cls.addClassCleanup(shutil.rmtree, cls.folder, True)
         cls.addClassCleanup(shutil.rmtree, cls.engine, True)
         # The registry alone, with a cache folder nothing can write: a restart knows an id by its
-        # record and its command. What the cache adds is ``test_cache``'s.
+        # record and its command. What the cache adds is ``test_cache_restart``'s.
         cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(cls.engine),
                                          "CAD_STATE_DIR": str(cls.state),
                                          "CAD_CACHE_DIR": engine_daemon.unwritable(cls.folder),
@@ -272,6 +272,7 @@ class RegistryDaemonTest(unittest.TestCase):
                          "an unchanged build rewrites nothing")
         # A restart: the id is known, not held, with the command that builds it again; nothing runs it.
         self.assertEqual(self.cli("stop").returncode, 0)
+        engine_daemon.start(self.env)
         inspected = self.cli("inspect", cube)
         self.assertEqual(inspected.returncode, 2, inspected.stderr)
         self.assertIn(f"run `cad run {project / 'parts.py'}`", inspected.stderr)

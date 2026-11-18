@@ -467,13 +467,23 @@ class NotHeld(ValueError):
 
 
 class KernelProcessesUnavailable(RuntimeError):
-    """The engine could not start the processes its kernel work runs in. Python refused what a
-    process pool needs: on Windows, most often the loader refusing ``_multiprocessing.pyd``
-    (``DLL load failed while importing ...``). It is a ``RuntimeError``, as ``api.EngineError`` is,
-    and not the ``ImportError`` it wraps: no model is missing a module. Its message carries the
-    original error's type and words, and ``__cause__`` the error itself. There is no in-process
-    fallback, because kernel work never runs in the engine's threads (law 20). Nothing remembers
-    the failure: the next request tries again."""
+    """The engine could not start the processes its kernel work runs in: the environment they run in
+    could not be made (``places.kernel``), or Python refused what a process pool needs -- on Windows,
+    most often the loader refusing ``_multiprocessing.pyd`` (``DLL load failed while importing ...``).
+    It is a ``RuntimeError``, as ``api.EngineError`` is, and not the ``ImportError`` it wraps: no model
+    is missing a module. Its message carries the original error's type and words, and ``__cause__`` the
+    error itself; ``cause`` is a word saying which failure it was, never read from the words (``pool``:
+    the pool refused; else the word the server gave the environment's failure). There is no in-process
+    fallback, because kernel work never runs in the engine's threads (law 20). A refused pool is tried
+    again by the next request; a failed making of the environment is remembered by the server that made
+    it, which says what clears it."""
+
+    def __init__(self, message: str = "", cause: str = "other") -> None:
+        super().__init__(message)
+        self.cause = cause
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        return type(self), (str(self), self.cause)
 
 
 def _process_pool(workers: int, **options: Any) -> concurrent.futures.ProcessPoolExecutor:
@@ -496,13 +506,31 @@ def _process_pool(workers: int, **options: Any) -> concurrent.futures.ProcessPoo
     except (ImportError, OSError, NotImplementedError, ValueError) as error:
         where = "" if found["own"] else f" in {found['python']}"
         raise KernelProcessesUnavailable(
-            f"The CAD engine could not start its kernel processes{where} ({type(error).__name__}: {error})") from error
+            f"The CAD engine could not start its kernel processes{where} ({type(error).__name__}: {error})",
+            "pool") from error
 
 
 # The import path the pool's processes start with when they run another environment's Python than this
 # one (``_spawn_in``): that environment's own, as its marker records it.
 _SPAWN_PATH: list[str] | None = None
 _PREPARATION: Callable[[str], dict[str, Any]] | None = None
+
+
+def _end(pool: concurrent.futures.ProcessPoolExecutor) -> None:
+    """A process pool shut down now: its queued jobs cancelled and each of its processes ended, a busy one
+    too. ``ProcessPoolExecutor.terminate_workers`` from Python 3.14; before it (the packages' floor is 3.11), the
+    same steps here: the processes noted, the pool shut down without waiting, each one still alive terminated."""
+    if hasattr(pool, "terminate_workers"):
+        pool.terminate_workers()
+        return
+    processes = list((getattr(pool, "_processes", None) or {}).values())
+    pool.shutdown(wait=False, cancel_futures=True)
+    for process in processes:
+        try:
+            if process.is_alive():
+                process.terminate()
+        except (ValueError, ProcessLookupError):
+            continue  # exited already
 
 
 def _spawn_in(context: Any, python: str, path: Any) -> Any:
@@ -727,7 +755,7 @@ class Mesher:
             job.future.cancel()
         self._inline.shutdown(wait=False, cancel_futures=True)
         if self._processes is not None:
-            self._processes.terminate_workers()  # shut down, its queued jobs cancelled, and each process ended
+            _end(self._processes)  # shut down, its queued jobs cancelled, and each process ended
 
 
 def _triangles(data: bytes) -> int:
@@ -1033,12 +1061,9 @@ class Server:
         self.on_close = lambda: None
         # A hold's client gone (``Daemon.hold``), by the name it held with: its MCP sessions end.
         self.on_hold_end: Callable[[str], None] = lambda _holder: None
-        # What an update's drain waits for beside the daemon's own work (``daemon.Daemon.working``): the
-        # application's exports and agents' MCP calls in flight, as the distribution's application says.
+        # What a drain waits for beside the daemon's own work (``daemon.Daemon.working``): the application's
+        # exports and agents' MCP calls in flight, as the distribution's application says.
         self.clients_working: Callable[[], bool] = lambda: False
-        # The daemon's drain for an update (``daemon.Daemon.drain``): ``retire(then)`` stops the engine once
-        # nothing is in flight, ``then`` first (the switch's helper started); the daemon sets it.
-        self.retire: Callable[..., None] = lambda then=None: None
         self.provenance = provenance
         self.load_lock = threading.RLock()
         self.changed = threading.Condition()
@@ -1137,7 +1162,7 @@ class Server:
                 self.helpers_idle.cancel()
         for pool in pools:
             if pool is not None:
-                pool.terminate_workers()  # as the mesher's (``Mesher.stop``): a reader loading the kernel too
+                _end(pool)  # as the mesher's (``Mesher.stop``): a reader loading the kernel too
 
     # --- documents -------------------------------------------------------------------
 

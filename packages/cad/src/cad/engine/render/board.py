@@ -124,8 +124,9 @@ def refusals(still: Any, name: str) -> None:
     from cad.engine.render.drawing import plan_view
 
     display_options(still.display)
-    if still.preview or still.pose is not None or still.transparent:
-        raise SnapshotRefused(f"{name} is a flat board: Preview, pose and transparent output are not supported")
+    if still.preview or still.pose is not None or still.transparent or still.background:
+        raise SnapshotRefused(f"{name} is a flat board: Preview, pose and a transparent or coloured backdrop are not "
+                              "supported")
     if still.camera is not None:
         plan_view(still.camera, name)
         if display_options(still.display).get("window") is not None:

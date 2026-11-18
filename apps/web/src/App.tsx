@@ -7,11 +7,9 @@ import type { TabStore, Appearance } from '@cad/ui/tab-store';
 import { createHttpPromptFiles, isEngineRefused, type CadClient, type CadServerInfo } from '@cad/core/client';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { useEngineReconnect } from './host/useEngineReconnect.js';
-import { useUpdateRestart } from './host/useUpdateRestart.js';
-import { followedUpdate, forgetFollowedUpdate, noteFollowedUpdate } from './host/followedUpdate.js';
+import { reloadWhenClean } from './host/reloadWhenClean.js';
 import { useAnalyticsConsent } from '@cad/ui/consent';
 import { english, translator, useLanguage } from '@cad/ui/i18n';
-import { UpdateButton, reloadWhenClean, useAutomaticUpdates, useUpdate, type UpdateNotice } from '@cad/ui/update';
 import { useWhatsNew } from '@cad/ui/whats-new';
 import { createBrowserDownloads } from './host/downloads';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
@@ -46,14 +44,12 @@ const DOCUMENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
  * before. A file opened by its path (from Files, or the home's Open) is asked for its id first, and shown by it. The browser's own history is the way back:
  * showing a document or the home is a new entry.
  */
-export default function App({ client, server, tabStore, notice = null, language: chosenLanguage = null }: { client: CadClient; server: CadServerInfo; tabStore: TabStore; notice?: UpdateNotice | null; language?: string | null }) {
+export default function App({ client, server, tabStore, language: chosenLanguage = null }: { client: CadClient; server: CadServerInfo; tabStore: TabStore; language?: string | null }) {
   // Another process answering on this page's port: never loaded into the tab (a dev server's restart
   // alone is followed), and said as the engine being gone.
   const [foreign, setForeign] = useState(false);
-  // An engine of another release that admits this page's credential is an update: reloaded into, once
-  // the page has nothing unsaved.
   useViewerAutoReload(server, { fetchServerInfo: () => client.serverInfo({ fresh: true }).then(info => ({ ok: true,
-    identityToken: String(info.identityToken || ''), release: String(info.release || '') }), () => ({ ok: false })),
+    identityToken: String(info.identityToken || '') }), () => ({ ok: false })),
     follow: Boolean(import.meta.env?.DEV), onForeign: () => setForeign(true), reload: () => { reloadWhenClean(() => window.location.reload()); } });
   const downloads = useMemo(() => createBrowserDownloads(), []);
   const source = useMemo(() => createCadFileSource(client), [client]);
@@ -135,31 +131,10 @@ export default function App({ client, server, tabStore, notice = null, language:
   // The usage stats text-to-cad sends (its telemetry), the same as the CAD app's: nothing asks here (a
   // cad command says it once), and the app menu's switch changes it. The answer is the person's,
   // shared with the CAD app.
-  const { appSettings: telemetry } = useAnalyticsConsent(client.consent, locale);
-  // Automatic updates, after Telemetry: the person's, shared with the CAD app and `cad update auto`.
-  const { appSettings: automaticUpdates } = useAutomaticUpdates(client.automaticUpdates, locale);
-  const appSettings = useMemo(() => telemetry || automaticUpdates ? [...(telemetry ?? []), ...(automaticUpdates ?? [])] : undefined,
-    [telemetry, automaticUpdates]);
-  // What's new: once after an update to a release with notes, over the home or a file's view, kept
+  const { appSettings } = useAnalyticsConsent(client.consent, locale);
+  // What's new: once after a release with notes is installed, over the home or a file's view, kept
   // seen in the person's settings for every CAD view (`@cad/ui/whats-new`).
   const whatsNew = useWhatsNew(client.whatsNew);
-  // A newer text-to-cad, as the CAD app says it (`cad_server/updates.py`): the update button, an icon first
-  // in the navbar while this install is behind, from the notice read with the server's description
-  // (`main.tsx`). A click updates; while the engine restarts for it, the page asks for its engine back
-  // often and says nothing of its going, and reloads into the new release once it answers -- or into the
-  // release before, should the switch fail and go back, which the page reloaded there says: the tab notes
-  // that its page followed the update through the restart (`followedUpdate`).
-  const [followed] = useState(() => followedUpdate());
-  useEffect(() => { forgetFollowedUpdate(); }, []);
-  const updater = useUpdate({ read: client.version, start: client.startUpdate }, notice, { followed });
-  const restarting = updater.phase.phase === 'restarting';
-  useEffect(() => { if (restarting) noteFollowedUpdate(); }, [restarting]);
-  // Through the restart the page asks on its own, whatever its other reads met: another start of the
-  // engine (or another release) is reloaded into, and its own engine saying the update failed ends
-  // the restart here.
-  useUpdateRestart(restarting, { instance: server.instance, release: String(server.release || ''),
-    ask: () => client.version(), settle: updater.settle,
-    reload: () => { reloadWhenClean(() => window.location.reload()); } });
   // A person touching the page is use (time spent looking at a model makes no other request): said
   // at most every couple of seconds.
   useEffect(() => {
@@ -186,18 +161,17 @@ export default function App({ client, server, tabStore, notice = null, language:
   const readRefused = useSyncExternalStore(client.subscribe, () => client.getSnapshot().engineRefused, () => false);
   // Asked again, at the same address with the same token, until an engine answers: a new one reloads the page.
   // An engine that refuses the token runs: the page's link was replaced, which the last ask says once it has asked.
-  const askedRefused = useEngineReconnect(engineGone, { instance: server.instance, release: String(server.release || ''), fast: restarting,
+  const askedRefused = useEngineReconnect(engineGone, { instance: server.instance,
     reload: () => { reloadWhenClean(() => window.location.reload()); },
     ask: () => client.serverInfo({ fresh: true }).then(info => info, error => (isEngineRefused(error) ? { refused: true } : null)) });
   const refused = askedRefused ?? readRefused;
-  return <div className="relative flex h-svh flex-col overflow-hidden">{engineGone && !restarting ? <EngineStopped locale={locale} refused={refused} /> : null}
+  return <div className="relative flex h-svh flex-col overflow-hidden">{engineGone ? <EngineStopped locale={locale} refused={refused} /> : null}
     {/* The engine gone, its notice is the page's one: what is under it (a view's own "can't reach"
-        card among it) is out of reach and unheard until it is back. An update's restart says nothing. */}
-    <div className="min-h-0 flex-1" inert={(engineGone && !restarting) || undefined} aria-hidden={(engineGone && !restarting) || undefined}>
+        card among it) is out of reach and unheard until it is back. */}
+    <div className="min-h-0 flex-1" inert={engineGone || undefined} aria-hidden={engineGone || undefined}>
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={next => { void show(next); }} onShown={shown}
       library={library} onThumbnail={client.keepThumbnail} appSettings={appSettings}
-      update={updater.notice || updater.phase.phase !== 'idle' ? <UpdateButton notice={updater.notice} phase={updater.phase} onUpdate={updater.update} /> : null}
       colorScheme={colorScheme} language={language}
-      whatsNew={engineGone || restarting ? undefined : { entry: whatsNew.entry, onDismiss: whatsNew.dismiss }} />
+      whatsNew={engineGone ? undefined : { entry: whatsNew.entry, onDismiss: whatsNew.dismiss }} />
   </div></div>;
 }

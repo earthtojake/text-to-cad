@@ -134,7 +134,7 @@ star count, Join Discord; `src/components/hero-section.tsx`, the links and the s
 Install and carries its stable address, `#install` (`src/components/install-box.tsx`: the ONE-LINE
 INSTALL label, a macOS / Linux | Windows toggle over `installCommands`, the command with Copy; a
 Windows browser has Windows preselected), with nothing under it: what the command does
-(`installSummary`) and the link to installing by hand, app by app, and updates, the repository's
+(`installSummary`) and the link to installing by hand, app by app, updating and removing, the repository's
 `docs/install.md` (`manualInstall`), are in the README's Quickstart and `/llms.txt`, not on the
 homepage. Behind them the planetary gear turns (`src/components/hero-gear.tsx`, drawn by
 `hero-gear-renderer.ts`): a faint line drawing seen from above at 45 degrees, its centre on the
@@ -149,13 +149,17 @@ for reduced motion, and draws at most 1.5 device pixels per CSS pixel. At the fo
 small uppercase label, WORKS WITH THESE AGENTS, over the agents' logos (no section title): the logos,
 each with its name beneath, drifting sideways (resting under a mouse, a finger or the focus, and
 off screen) and moved by a trackpad's sideways swipe, Shift with the wheel, a drag, a swipe or the
-arrow keys, while a vertical wheel over it scrolls the page (`AgentCarousel`), skills.sh's logo set in `public/agents/` with Grok's glyph from Lobe
-Icons (MIT) in the same tile, each tile a luminance mask over the text colour, so its black square
+arrow keys, while a vertical wheel over it scrolls the page (`AgentCarousel`). The agents are the
+apps `docs/install.md` lists, and no other (`agents`), skills.sh's logo set in `public/agents/` with Grok's glyph from Lobe
+Icons (MIT) in the same tile, an app with no logo there its initials in the text colour, each tile a luminance mask over the text colour, so its black square
 vanishes into the page (no blend mode: iOS Safari never blends a scroller's contents with the page). The logos are not
 links, and nothing follows them in the hero: under their names as much room as the label has over
 their glyphs, so the strip closes the first screen evenly. Then Features (below). The site has no
 Install section, no per-app install of its own and no telemetry note: the privacy policy, linked
-from the footer and from `/llms.txt`, says what is sent and how to turn it off. Contributing closes
+from the footer and from `/llms.txt`, says what is sent and how to turn it off. Community follows
+Features (`community`, the README's Community item for item and word for word): its intro, then
+a bullet for each project built on top of text-to-cad or that text-to-cad uses: its name, what it
+is and its links side by side (its website, its repository). Contributing closes
 the page (`contributing`, the README's Contributing in substance): its intro, then each way to take
 part, bugs and plugin requests, questions and ideas, and code, skills and models, with
 its links. The footer links the privacy policy and the terms of service, then Made by @earthtojake.
@@ -164,9 +168,9 @@ text fill the content width. Command text remains monospace.
 
 The homepage and the repository README share their structure and are changed
 together: the install commands, what they
-do, the link to installing by hand, the features and Contributing. Updates are on
-`docs/install.md`, with each app's own commands, which both link, and the telemetry in full is
-the privacy policy. The site has the hero and the agents carousel. The page's copy lives in
+do, the link to installing by hand, the apps it installs in, the features, Community and Contributing.
+Updating and removing are on `docs/install.md`, with each app's own commands, which both link, and
+the telemetry in full is the privacy policy. The site has the hero and the agents carousel. The page's copy lives in
 `src/lib/content.ts`, which `/llms.txt`
 (`src/app/llms.txt/route.ts`, the homepage as markdown for agents) renders too.
 `/install` redirects to the hero's install box (`/#install`, `next.config.ts`): the stable address

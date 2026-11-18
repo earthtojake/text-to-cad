@@ -19,6 +19,9 @@ import cad_server
 from cad_server.analytics import PRIVACY_URL, Recorder
 from cad_server.viewer import handler as handler_module
 from cad_server.viewer.http_app import create_cad_app
+# A release's process: a checkout is a development build, never told of a release and sending nothing by default,
+# unless it is told the version it runs as (``cad_server/_internal/editable.py``).
+RELEASE = __import__("cad_server").__version__
 
 STL = b"solid t\nendsolid t\n"
 
@@ -61,7 +64,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         # A plugin's install outside CI, where the default holds (a checkout is a development install, which sends
         # nothing by default).
         environment = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.tmp / "state"), "DO_NOT_TRACK": "", "CAD_TELEMETRY": "",
-                                                   "CAD_INSTALL_CHANNEL": "claude-github", "CI": ""})
+                                                   "CAD_INSTALLATION_VERSION": RELEASE, "CI": ""})
         environment.start()
         self.addCleanup(environment.stop)
         self.state = self.tmp / "state" / "settings.json"
@@ -197,59 +200,25 @@ class ViewerAnalyticsTest(unittest.TestCase):
         crashes = [(event["where"], event["type"]) for event in self.sent[-1]["events"] if event["name"] == "exception"]
         self.assertEqual(crashes, [("route", "KeyError")], "the route's own mistake, once; never the page leaving")
 
-    def test_the_update_button_reads_whether_a_newer_release_is_out(self) -> None:
-        # The CAD app's notice (`cad_server/updates.py`), from the same feed; this page copies its prompt,
-        # and nothing it does is kept: there is no answer to post. A Viewer no plugin's server started
-        # names no channel: a skills-only install, which nothing else updates.
-        (self.tmp / "state").mkdir(exist_ok=True)
-        (self.tmp / "state" / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": "99.0.0"}}),
-                                                          encoding="utf-8")
-        with mock.patch.dict(os.environ, {"CAD_INSTALL_CHANNEL": "", "CAD_AUTO_UPDATED": "", "CI": "",
-                                          "CAD_UPDATE_CHECK": ""}), \
-                mock.patch("cad_server._internal.channel._source_tree", return_value=False):
-            status, answer = self.request("GET", "/api/v1/server")
-            self.assertEqual((status, answer["notice"], answer["release"]),
-                             (200, {"latest": "99.0.0", "version": cad_server.__version__}, cad_server.__version__))
-            self.assertEqual(self.request("GET", "/api/v1/server")[1], answer)
-            self.assertEqual(self.request("POST", "/api/v1/server", {})[0], 405)
-            # Where an update is, read alone: the notice, the release, this start of the engine, the update.
-            status, update = self.request("GET", "/api/v1/local/update")
-            self.assertEqual((status, update), (200, {key: answer[key] for key in ("notice", "release", "instance", "update")}))
-            # Only the engine's application updates: one with no engine under it says so, and starts nothing.
-            status, refused = self.request("POST", "/api/v1/local/update", {})
-            from cad_server.updates import command
+    def test_the_server_says_its_release_and_no_update(self) -> None:
+        # A page reloads on another release (or start) of the engine; nothing here offers or runs an update.
+        status, answer = self.request("GET", "/api/v1/server")
+        self.assertEqual((status, answer["release"]), (200, cad_server.__version__))
+        self.assertFalse({"notice", "update"} & set(answer))
+        self.assertEqual(self.request("POST", "/api/v1/server", {})[0], 405)
+        for method in ("GET", "POST"):
+            self.assertEqual(self.request(method, "/api/v1/local/update", {} if method == "POST" else None)[0], 404)
+        self.assertNotIn("updates", self.request("GET", "/api/v1/settings")[1])
+        self.assertEqual(self.request("PUT", "/api/v1/settings", {"updates": {"automatic": False}})[0], 400)
 
-            self.assertEqual((status, refused), (409, {"error": "no engine serves this page: nothing to update",
-                                                       "hint": f"update with the install command: `{command()}`"}))
-            self.assertEqual(self.request("PUT", "/api/v1/local/update", {})[0], 405)
-
-    def test_an_install_with_no_cad_app_build_names_this_computer_s_install_command(self) -> None:
+    def test_an_install_with_no_cad_app_build_names_this_version_s_install_command(self) -> None:
+        from cad_server._internal.launch import reinstall_command
         from cad_server.mcp import tunnel
-        from cad_server.updates import command
 
         with mock.patch("cad_server.assets.cad_app_code", return_value=None):
             status, answer = self.request("GET", tunnel._APP_ROUTE)
         self.assertEqual((status, answer), (404, {"error": "this install has no CAD app build",
-                                                  "hint": f"run the install command again: `{command()}`"}))
-
-    def test_automatic_updates_are_the_person_s_setting_for_every_cad_app(self) -> None:
-        # The app menu's Automatic updates (`cad_server/auto_updates.py`): on by default, an answer kept in
-        # the settings every CAD app reads, a change guarded as every change is, and an environment's off fixed.
-        settings = "/api/v1/settings"
-        with mock.patch.dict(os.environ, {"CI": "", "CAD_UPDATE_CHECK": ""}):
-            self.assertEqual(self.request("GET", settings)[1]["updates"], {"automatic": True, "reason": "default"})
-            # What a read answered, put back as it was, keeps the default a default.
-            self.assertEqual(self.request("PUT", settings, self.request("GET", settings)[1])[1]["updates"]["reason"], "default")
-            status, answered = self.request("PUT", settings, {"updates": {"automatic": False}})
-            self.assertEqual((status, answered["updates"]), (200, {"automatic": False, "reason": "choice"}))
-            self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["updates"], {"automatic": False})
-            self.assertEqual(self.request("PUT", settings, {"updates": {"automatic": True}}, guard=False)[0], 403)
-            for change in ({"updates": {"automatic": "yes"}}, {"updates": True}, {"updates": {"automatic": True, "colour": 1}}):
-                with self.subTest(change=change):
-                    self.assertEqual(self.request("PUT", settings, change)[0], 400)
-            self.assertEqual(self.request("GET", settings)[1]["updates"], {"automatic": False, "reason": "choice"})
-        with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": "0"}):
-            self.assertEqual(self.request("GET", settings)[1]["updates"], {"automatic": False, "reason": "environment"})
+                                                  "hint": f"install this version again: `{reinstall_command()}`"}))
 
     def test_an_app_with_no_recorder_serves_no_analytics(self) -> None:
         # The viewer process and the CAD app's server each attach theirs; an app given none counts nothing.

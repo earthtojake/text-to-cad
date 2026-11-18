@@ -1,0 +1,4 @@
+interface:
+  display_name: "Render"
+  short_description: "Photoreal stills, turntables and films of a model with Blender."
+  default_prompt: "Use $render to export this model as a GLB and render a photoreal hero image of it with Blender, a draft first."

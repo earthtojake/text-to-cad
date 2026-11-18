@@ -109,7 +109,7 @@ what it was built from.
 | Subassembly | A model that calls its child models. |
 | Motion | build123d joints in the assembly's body, then `cad.build123d`. See [kinematics](kinematics.md). |
 | An explode or a showcase | `cad.build123d`'s `animation()`. See [animation](animation.md). |
-| Materials | `from bd_materials import metals`; `part.material = metals.aluminum()`. See [colour and materials](build123d-modeling.md#colour-and-materials). |
+| Materials | `from bd_materials import metals`; `part.material = metals.aluminum()`; board and finish looks from `cad.build123d.materials`. See [colour and materials](build123d-modeling.md#colour-and-materials). |
 | 2D drawing | A separate drawing script, beside the models it projects. |
 | Vendor CAD | The vendor STEP under `vendor/`, converted once with `cad step export vendor/motor.step vendor/motor.xbf` and read with `xbf.read` (an anchored path). |
 
@@ -123,7 +123,7 @@ imports work, and the folder above its topmost package is on the path too, so
 
 ```bash
 cad run src/chassis/frame.py
-cd src && cad run -m chassis.frame
+cad run -m chassis.frame           # in src/
 ```
 
 Without packages, `PYTHONPATH` names the import root (`PYTHONPATH=src cad run

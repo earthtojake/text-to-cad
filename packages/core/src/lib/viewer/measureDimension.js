@@ -1,6 +1,7 @@
 import { formatMeasurement, formatMeasurementAngle } from "./measurement.js";
 import { dimensionEndpoints } from "./measureLines.js";
 import { projectWorldPointToClient } from "./measureRuler.js";
+import { segmentTouchesBox, triangleTouchesBox } from "./boxSelect.js";
 
 // Draft state is amber so it can never be confused with a committed dimension.
 export const MEASURE_DIMENSION_DRAFT_COLOR = "#f59e0b";
@@ -249,6 +250,10 @@ const segmentDistance = (point, start, end) => {
   return Math.hypot(point.x - (start.x + dx * t), point.y - (start.y + dy * t));
 };
 
+// The label's reach, about its middle: what a press or a box finds of the chip drawn there.
+const LABEL_REACH_X = 36;
+const LABEL_REACH_Y = 12;
+
 /**
  * Whether a point (the layout's pixels) is on a drawn dimension: within `tolerance` of its
  * dimension line or a witness line, or over its label.
@@ -257,7 +262,21 @@ export function dimensionLayoutHit(layout, point, tolerance = 6) {
   if (!layout || !point) return false;
   const lines = [layout.dimensionLine, ...layout.witnesses];
   if (lines.some(([start, end]) => segmentDistance(point, start, end) <= tolerance)) return true;
-  return Math.abs(point.x - layout.label.x) <= 36 && Math.abs(point.y - layout.label.y) <= 12;
+  return Math.abs(point.x - layout.label.x) <= LABEL_REACH_X && Math.abs(point.y - layout.label.y) <= LABEL_REACH_Y;
+}
+
+/**
+ * Whether a box (`boxSelect.js`'s, in the layout's pixels) touches a drawn
+ * dimension, even in part: its dimension line, a witness line, a tick,
+ * an arrowhead, or its label, as far as a press reaches it (`dimensionLayoutHit`).
+ */
+export function dimensionLayoutTouchesBox(layout, box) {
+  if (!layout || !box) return false;
+  const lines = [layout.dimensionLine, ...layout.witnesses, ...(layout.ticks || [])];
+  if (lines.some(([a, b]) => segmentTouchesBox(box, a.x, a.y, b.x, b.y))) return true;
+  if ((layout.arrows || []).some(({ tip, left, right }) => triangleTouchesBox(box, tip.x, tip.y, left.x, left.y, right.x, right.y))) return true;
+  const { x, y } = layout.label;
+  return x + LABEL_REACH_X >= box.left && x - LABEL_REACH_X <= box.right && y + LABEL_REACH_Y >= box.top && y - LABEL_REACH_Y <= box.bottom;
 }
 
 function strokeSegment(context, start, end) {

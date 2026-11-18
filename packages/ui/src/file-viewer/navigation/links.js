@@ -1,8 +1,7 @@
 /**
  * What the app menu links to, in every app: the running version (its release notes), the
  * source, the community and a new issue. `@cad/ui/links` — pure, with no imports, so a
- * host's own build configuration and its unit tests read the same defaults the navbar draws. A
- * newer release is not a link: cadgen says so, with the update button (`@cad/ui/update`).
+ * host's own build configuration and its unit tests read the same defaults the navbar draws.
  *
  * A host supplies the version it runs, and the id of its build where that is not the release's
  * own (`@cad/ui/build-id`), and hands `viewerLinks(...)` to its `ViewerHost.links`. It

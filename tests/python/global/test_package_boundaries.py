@@ -3,11 +3,10 @@
 Boundary law (packages/README.md and each package's README): apps import
 packages; packages never import apps (here for the Python distributions'; the JavaScript's
 direction, and core being framework-free, are scripts/test/check-dependencies.mjs's). Ships-alone
-law: each Python distribution (the library, cad; the server, cad-server; the shim,
-cad-mcp: each its own PyPI wheel) and every skill (the Skills CLI installs
+law: the Python distribution (cad: the library, the server and the shim, one PyPI
+wheel; its aliases hold no files) and every skill (the Skills CLI installs
 skills/<name> ALONE; plugin installers copy the published tree, which has no
-models/ and whose packages/ is never installed; the server's wheel carries skills/ whole, and
-writes it into the plugin folder the agent apps read) each work in isolation outside
+models/ and whose packages/ is never installed) each work in isolation outside
 this repo, so their markdown must not refer to anything outside the package -- a
 distribution's not even to another distribution's files, which its wheel does not carry, and
 a skill's links not out of its skill.
@@ -46,9 +45,9 @@ class PackagesNeverImportApps(unittest.TestCase):
 
 
 # The ships-alone law. Two surfaces leave this repo whole:
-#   - packages/cad, packages/cad-server and packages/cad-mcp each
-#     build into a PyPI wheel (each README.md is its long description; the server's
-#     @cad/core and viewer client arrive already bundled under _runtime/).
+#   - packages/cad builds into a PyPI wheel (its README.md is the long description; the
+#     server's @cad/core and viewer client arrive already bundled under _runtime/), and each
+#     alias under packages/aliases into a wheel of metadata alone, its README the description.
 #   - skills/ installs standalone: the Skills CLI copies skills/<name> by
 #     itself, and Claude Code and Codex copy the PUBLISHED tree, which has no
 #     models/ and never installs its packages/ — so a skill that points at this
@@ -70,22 +69,22 @@ _DISTRIBUTION_FAMILIES = (
     r"models/",
     r"tests/",
     r"scripts/",
-    r"requirements-dev",
     r"AGENTS\.md",
     r"CONTRIBUTING\.md",
     r"\.github/",
 )
+# cad's aliases (cad-server, cad-mcp, cadgen): each README is its PyPI page.
+_ALIASES = tuple(sorted(path.parent for path in repo_path("packages/aliases").glob("*/pyproject.toml")))
 _MD_ISOLATION_ROOTS: dict[str, tuple[str, ...]] = {
-    **{project.relative_to(REPO_ROOT).as_posix(): _DISTRIBUTION_FAMILIES for project in PROJECTS},
+    **{project.relative_to(REPO_ROOT).as_posix(): _DISTRIBUTION_FAMILIES for project in (*PROJECTS, *_ALIASES)},
     # Skills own their scripts/<tool> entrypoints; the repo's scripts/
-    # families, its venv and its dev manifests are not theirs to name.
+    # families and its venv are not theirs to name.
     "skills": (
         r"apps/",
         r"packages/",
         r"tests/",
         r"scripts/(?:bundle|dev|test|release|install|github-workflows)/",
         r"\.venv",
-        r"requirements-dev",
         r"AGENTS\.md",
         r"CONTRIBUTING\.md",
         r"\.github/",
@@ -176,14 +175,13 @@ class DistributionLinksStayInside(unittest.TestCase):
 
     def test_every_relative_link_resolves_inside_its_distribution(self) -> None:
         offenders: list[str] = []
-        for project in PROJECTS:
+        for project in (*PROJECTS, *_ALIASES):
             offenders += _links_outside(project, _markdown_files(project))
         self.assertEqual(offenders, [], "a link out of its distribution, or to a file that is not there")
 
     def test_every_skill_link_resolves_inside_its_skill(self) -> None:
-        # The skills ship whole inside the server's wheel (cad_server/_runtime/plugin/skills, byte for byte
-        # these files: scripts/release/check-wheel-contents.sh) and each alone through the Skills CLI, so a
-        # skill's relative link names a file of its own skill, which both carry, or is a URL.
+        # A skill may be copied alone into an agent's skills folder, so a skill's relative link names a file of
+        # its own skill, which every copy carries, or is a URL.
         offenders: list[str] = []
         for skill in sorted(path.parent for path in repo_path("skills").glob("*/SKILL.md")):
             offenders += _links_outside(skill, _markdown_files(skill))

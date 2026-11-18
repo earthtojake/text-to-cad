@@ -22,7 +22,8 @@ import { FIELDS, OUR_FRAMES } from './events.mjs';
 export const EVENTS = {
   tool: 'tool_used', view: 'view_used', files: 'files_shown', build: 'models_built', snapshot: 'snapshots_rendered',
   feature: 'feature_used', health: 'daemon_health', exception: '$exception', tool_failure: 'tool_failed',
-  build_failure: 'build_failed', snapshot_failure: 'snapshot_failed', control: 'control_used',
+  build_failure: 'build_failed', snapshot_failure: 'snapshot_failed', control: 'control_used', arrival: 'version_arrival',
+  update: 'cad_updated',
 };
 // Frames that name no file of ours: never in the app, whatever the code around them.
 const NOT_OURS = new Set(['<user>', '<?>', '<frozen>']);
@@ -31,7 +32,11 @@ const NOT_OURS = new Set(['<user>', '<?>', '<frozen>']);
 // the file alone in a frame, or under `assets/`): a frame there is a library's, never the page's own.
 const VENDOR = /(?:^|\/)vendor-[^/]*$/;
 // What a row says beside its own fields, from the batch it came in.
-const CONTEXT = ['process', 'version', 'channel', 'source', 'platform', 'arch', 'client', 'client_version', 'presentation'];
+// `app` as schema 11 names it, `channel` and `app` as an older batch's were translated, and `legacy_channel` the
+// channel an older batch sent, as it sent it (events.mjs: `translated`). A schema 11 row has no channel, and a field
+// a row lacks is not sent.
+const CONTEXT = ['process', 'version', 'channel', 'app', 'legacy_channel', 'source', 'platform', 'arch', 'client', 'client_version',
+  'presentation'];
 export const SETTINGS = ['POSTHOG_REGION', 'POSTHOG_PROJECT_KEY', 'POSTHOG_PERSONAL_KEY', 'POSTHOG_PROJECT_ID'];
 const REGIONS = new Set(['us', 'eu']);
 const TIMEOUT_MS = 8000; // well inside a function's own limit: a PostHog that hangs is a failure, and the batch waits
@@ -85,7 +90,7 @@ export function propertiesOf(row, country) {
   // tracking counts an issue's sessions by. A process's id is a UUIDv4, not the v7 PostHog's sessions table
   // wants, so it sits out that table's aggregations; nothing else reads it.
   const properties = { distinct_id: row.install_id, session: row.session_id, $session_id: row.session_id, $geoip_disable: true };
-  const fields = row.event === 'exception' ? ['where', 'tool', 'count'] : FIELDS[row.event];
+  const fields = row.event === 'exception' ? ['where', 'tool', 'cause', 'count'] : FIELDS[row.event];
   for (const key of [...CONTEXT, ...fields]) if (row[key] !== null && row[key] !== undefined) properties[key] = row[key];
   if (row.event === 'exception') properties.$exception_list = exceptionOf(row);
   if (country) properties.country = country;

@@ -17,9 +17,19 @@ never starts a print.
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| **Slice it to G-code** | `python scripts/orca_presets.py --list machine --match "<printer>"` | [Slice with OrcaSlicer](#slice-with-orcaslicer) |
+| **Slice it to G-code** | `cad orcaslicer presets machine --match "<printer>"` | [Slice with OrcaSlicer](#slice-with-orcaslicer) |
 | **Print on a Bambu Lab printer** | The sliced `.gcode.3mf` | [Print on a Bambu Lab printer](#print-on-a-bambu-lab-printer) |
 | **Will this print?** | The cad skill's printing check ($cad) | Its manufacturing references |
+
+## Setup
+
+Written for `cad==0.11.13`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
+
+If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
+https://github.com/earthtojake/text-to-cad
+A project written for an earlier version may need changes; the migration guides say what:
+https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
 ## Slice with OrcaSlicer
 
@@ -43,27 +53,37 @@ Below, `<orca>` is that command.
 OrcaSlicer's command line (https://www.orcaslicer.com/wiki/cli/cli_mode) needs
 complete presets: it doesn't fill in a preset's parent settings, and it slices
 only with a process whose compatible printers name the printer.
-`scripts/orca_presets.py` (Python 3, no dependencies) writes them from
-OrcaSlicer's presets, searching the person's own first, then OrcaSlicer's
-built-in profiles.
+`cad orcaslicer` writes them from OrcaSlicer's presets, searching the person's
+own first, then OrcaSlicer's built-in profiles. It reads and writes preset
+files alone: it never runs OrcaSlicer, and works offline.
 
 1. Find the person's printer, process and filament presets. Prefer the presets
    they print with; never invent one, since a wrong bed size or
    temperature can damage the printer.
 
    ```bash
-   python scripts/orca_presets.py --list machine --match "MK4S"
-   python scripts/orca_presets.py --list process --match "@MK4S 0.4"
-   python scripts/orca_presets.py --list filament --match "PLA @MK4S"
+   cad orcaslicer presets machine --match "MK4S"
+   cad orcaslicer presets process --match "@MK4S 0.4"
+   cad orcaslicer presets filament --match "PLA @MK4S"
    ```
 
-2. Write the complete presets:
+2. Write the complete presets. It prints the files it wrote, as JSON:
 
    ```bash
-   python scripts/orca_presets.py --printer "Prusa MK4S 0.4 nozzle" \
+   cad orcaslicer complete --printer "Prusa MK4S 0.4 nozzle" \
      --process "0.20mm SPEED @MK4S 0.4" --filament "Prusa Generic PLA @MK4S" \
      --out presets
    ```
+
+   `--printer`, `--process` and `--filament` also take a preset's JSON file;
+   give `--filament` once per material, and `--profiles` another folder of
+   presets to search first.
+
+   OrcaSlicer 2.5 and later keeps its built-in presets in binary caches
+   (`.opc`) that `cad orcaslicer` can't read. When a command says so, there
+   is no preset to slice headless with: open the model in the app instead
+   ([Open in OrcaSlicer](#open-in-orcaslicer)), unless the person has a
+   folder of complete preset JSON files to give with `--profiles`.
 
 3. Slice. Give `--outputdir` an absolute path:
 

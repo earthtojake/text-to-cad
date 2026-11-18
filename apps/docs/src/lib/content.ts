@@ -11,43 +11,47 @@ export const pluginDescription =
   "The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services.";
 
 // The install: one command per system, which sets up text-to-cad in every agent app on the computer
-// and, run again, updates it (the README's Quickstart, which says the same, word for word).
+// (the README's Quickstart, which says the same, word for word).
 export const installCommands = [
   { system: "macOS and Linux", language: "bash", command: "curl -fsSL https://texttocad.dev/install.sh | sh" },
   { system: "Windows, in PowerShell", language: "powershell", command: "irm https://www.texttocad.dev/install.ps1 | iex" },
 ];
-// What the command does, and that running it again is the update, under the commands. The command
-// name is in backticks, which the page sets as code.
+// What the command does, under the commands. The command name is in backticks, which the page sets as
+// code.
 export const installSummary =
-  "It installs uv if it is missing, then sets up text-to-cad in every agent app on your computer with each app's own commands (the plugin, which brings the skills and CAD's MCP server, or for an agent without a plugin the skills alone), registers the `cad` command, and moves CAD's server to the new release. Run it again to update everything, or click CAD's update button when it shows one; it lists the apps to restart.";
-// Installing by hand, each app's own commands, and updates: a page in the repository (the README's
-// Quickstart links it too), which the site does not repeat.
-export const manualInstall = { label: "Installing by hand, app by app, and updates", path: "docs/install.md" };
+  "It installs uv if it is missing, then `cad`, the command text-to-cad runs on, then the plugin in each agent app it finds on your computer, with that app's own command (Kimi Code you install by hand), and turns on automatic updates.";
+// Installing by hand, each app's own commands, updating and removing: a page in the repository (the
+// README's Quickstart links it too), which the site does not repeat.
+export const manualInstall = { label: "Installing by hand, app by app, updating and removing", path: "docs/install.md" };
 
-// The agents text-to-cad works with, as skills.sh shows them (its logos, in public/agents/), and
-// Grok (Lobe Icons' glyph, MIT, in skills.sh's tile).
-export const agents = [
+// The agent apps text-to-cad installs in, as docs/install.md lists them and the README names them: Claude
+// Code, Codex and Cursor first. Each logo is a light glyph on a black square in public/agents/ (skills.sh's
+// set, and Grok's glyph from Lobe Icons, MIT); an app with none there shows its initials in the same square.
+export const agents: { name: string; logo?: string }[] = [
   { name: "Claude Code", logo: "claude-code" },
   { name: "Codex", logo: "codex" },
   { name: "Cursor", logo: "cursor" },
   { name: "Gemini", logo: "gemini" },
   { name: "Grok", logo: "grok" },
-  { name: "GitHub Copilot", logo: "copilot" },
-  { name: "Windsurf", logo: "windsurf" },
-  { name: "Cline", logo: "cline" },
-  { name: "AMP", logo: "amp" },
-  { name: "Antigravity", logo: "antigravity" },
-  { name: "OpenClaw", logo: "openclaw" },
+  { name: "Copilot CLI", logo: "copilot" },
+  { name: "Qwen Code" },
   { name: "Droid", logo: "droid" },
-  { name: "Goose", logo: "goose" },
-  { name: "Kilo", logo: "kilo" },
-  { name: "Kiro CLI", logo: "kiro-cli" },
+  { name: "Devin" },
+  { name: "Antigravity", logo: "antigravity" },
+  { name: "Pi" },
+  { name: "Muse" },
+  { name: "Kimi Code" },
   { name: "Hermes", logo: "nous-research" },
-  { name: "OpenCode", logo: "opencode" },
-  { name: "Roo", logo: "roo" },
+  { name: "Cline", logo: "cline" },
+  { name: "Amp", logo: "amp" },
+  { name: "OpenClaw", logo: "openclaw" },
+  { name: "Kilo Code", logo: "kilo" },
+  { name: "Kiro CLI", logo: "kiro-cli" },
+  { name: "Roo Code", logo: "roo" },
   { name: "Trae", logo: "trae" },
-  { name: "VS Code", logo: "vscode" },
-  { name: "Zed", logo: "zed" },
+  { name: "Windsurf", logo: "windsurf" },
+  { name: "Goose", logo: "goose" },
+  { name: "OpenCode", logo: "opencode" },
 ];
 
 // A plugin for an agent that has none: a new issue, titled for the person to name it.
@@ -60,7 +64,7 @@ export const contributing = {
   items: [
     {
       title: "Bugs and plugin requests",
-      body: "A bug report with the model script and the output of `cad doctor --check` is the fastest to fix, and an agent app without a plugin gets one on request. A security problem is reported privately, as SECURITY.md says.",
+      body: "A bug report with the model script and the output of `cad doctor` is the fastest to fix, and an agent app without a plugin gets one on request. A security problem is reported privately, as SECURITY.md says.",
       links: [
         { text: "Open an issue", href: `${siteConfig.repository}/issues/new` },
         { text: "Request a plugin", href: pluginRequestUrl },
@@ -76,6 +80,22 @@ export const contributing = {
       title: "Code, skills and models",
       body: "A new skill (a fabrication service, a printer, a CAD workflow) goes in `skills/`, an example model in `models/`, and fixes anywhere. The contributing guide has the local setup and how to test in the agent apps.",
       links: [{ text: "Contributing guide", href: `${siteConfig.repository}/blob/main/CONTRIBUTING.md` }],
+    },
+  ],
+};
+
+// The projects around text-to-cad, the README's Community, item for item and word for word: the ones
+// built on top of it and the ones it uses. Each one's name, what it is, and its links, side by side.
+export const community = {
+  intro: "Projects built on top of text-to-cad, and projects that text-to-cad uses.",
+  items: [
+    {
+      title: "Studio",
+      body: "An open-source desktop CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand.",
+      links: [
+        { text: "Website", href: "https://texttocad.studio" },
+        { text: "GitHub", href: "https://github.com/amywork777/studio" },
+      ],
     },
   ],
 };
@@ -121,6 +141,13 @@ export const features = [
     file: "bracket.pdf",
   },
   {
+    id: "renders",
+    name: "Renders",
+    path: "skills/render/SKILL.md",
+    summary: "Photoreal stills, turntables and films of a model with Blender, lit and framed in a Python script and run on the GPU, with a quick draft before each final.",
+    file: "hero.png, turntable.mp4",
+  },
+  {
     id: "fabrication",
     name: "Fabrication services",
     path: "skills/sendcutsend/SKILL.md",
@@ -131,7 +158,7 @@ export const features = [
     id: "robots",
     name: "Robotics and simulation",
     path: "skills/robot-simulation/SKILL.md",
-    summary: "Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and SDF for Gazebo.",
+    summary: "Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and MJCF for MuJoCo.",
     file: "arm.urdf",
   },
 ];

@@ -46,7 +46,7 @@ const fixtures = [
   // A cadgen engine document: served by the engine, read by the page from it, and picked,
   // measured and laid out as a STEP's is, with a STEP's pick menus on Select's and Measure's chevrons.
   { format: "xbf", file: "smoke.xbf", parts: true,
-    tools: ["Select", "Selection filter: everything", "Pencil", "Shapes", "Measure", "Measure filter: everything", "Clip"], sections: ["Model"], threeD: true },
+    tools: ["Select", "Filter: everything", "Pencil", "Shapes", "Measure", "Measure filter: everything", "Clip"], sections: ["Model"], threeD: true },
 ];
 // Small enough that software WebGL and the PNG encode stay cheap on CI, large enough for the
 // layout to be the desktop one.

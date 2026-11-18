@@ -358,11 +358,11 @@ def write_bus_schematic(folder: Path | str) -> Path:
 LIBRARY_ROOT_UUID = "11b50000-0000-4000-8000-000000000001"
 
 
-def write_library_project(folder: Path | str, *, schematic: bool = True) -> Path:
+def write_library_project(folder: Path | str) -> Path:
     """Write ``design``, a project with a symbol library of its own (``parts.kicad_sym``: ``parts:R``, the
     resistor drawn as ``Device:R`` is, its pin 1 at (0, -3.81) and pin 2 at (0, 3.81) from its origin, y down),
-    listed in the project's ``sym-lib-table``, into ``folder``; with ``schematic``, its root sheet, an empty
-    page, and the ``.kicad_pro``. Return the root sheet's path, ``design.kicad_sch`` (there or not)."""
+    listed in the project's ``sym-lib-table``, into ``folder``, with its root sheet, an empty page, and the
+    ``.kicad_pro``. Return the root sheet's path, ``design.kicad_sch``."""
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
     resistor = _LIB_SYMBOLS[_LIB_SYMBOLS.index('(symbol "Device:R"'):_LIB_SYMBOLS.index('(symbol "Device:C"')].rstrip()
@@ -373,10 +373,9 @@ def write_library_project(folder: Path | str, *, schematic: bool = True) -> Path
         '(sym_lib_table\n  (version 7)\n  (lib (name "parts")(type "KiCad")(uri "${KIPRJMOD}/parts.kicad_sym")'
         '(options "")(descr ""))\n)\n', encoding="utf-8")
     root = folder / "design.kicad_sch"
-    if schematic:
-        (folder / "design.kicad_pro").write_text(
-            json.dumps({"meta": {"filename": "design.kicad_pro", "version": 3}}), encoding="utf-8")
-        root.write_text(f'(kicad_sch (version 20250114) (generator "eeschema") (generator_version "9.0") '
-                        f'(uuid "{LIBRARY_ROOT_UUID}") (paper "A4") (lib_symbols) '
-                        f'(sheet_instances (path "/" (page "1"))) (embedded_fonts no))\n', encoding="utf-8")
+    (folder / "design.kicad_pro").write_text(
+        json.dumps({"meta": {"filename": "design.kicad_pro", "version": 3}}), encoding="utf-8")
+    root.write_text(f'(kicad_sch (version 20250114) (generator "eeschema") (generator_version "9.0") '
+                    f'(uuid "{LIBRARY_ROOT_UUID}") (paper "A4") (lib_symbols) '
+                    f'(sheet_instances (path "/" (page "1"))) (embedded_fonts no))\n', encoding="utf-8")
     return root
