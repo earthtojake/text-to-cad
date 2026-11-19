@@ -1,44 +1,7 @@
 # `cad.eng_drawing` reference
 
 Read this for the calls a drawing script makes and what each argument does: `@eng_drawing`, `Sheet`
-and `View`.
-
-## Template
-
-```python
-from cad.eng_drawing import Sheet, eng_drawing
-# The part, and the facts the dimensions reference, come from the model, not from this file.
-from enclosure import HOLES, L, H, W, enclosure
-
-
-@eng_drawing(out="../PDF/enclosure_drawing.pdf")
-def enclosure_drawing():
-    part = enclosure().shape
-    sheet = Sheet("A3", title="ENCLOSURE", part_number="ENC-001", material="ABS",
-                  revision="A", general_tolerance="ISO 2768-m",
-                  notes=["BREAK SHARP EDGES."])
-    # Third angle, placed from the part's size. iso=True returns four views.
-    top, front, right, iso = sheet.three_views(part, iso=True)
-    top.overall()
-    top.dim((HOLES[0][0], W / 2, 0), (HOLES[2][0], W / 2, 0))   # unplaced: next free row
-    top.hole((HOLES[3][0], HOLES[3][1], H / 2), 3, depth=8, count=len(HOLES))
-    front.dim((L / 2, -W / 2, 0), (L / 2, -W / 2, H))
-    return sheet          # or [sheet_one, sheet_two] for a multi-sheet drawing
-
-
-if __name__ == "__main__":
-    enclosure_drawing()
-```
-
-A part with no model is read from its file:
-
-```python
-from pathlib import Path
-
-from cad import step
-
-part = step.read(Path(__file__).parent / "../vendor/enclosure.step")   # xbf.read reads an xbf the same way
-```
+and `View`. A whole script is SKILL.md's [Workflow](../SKILL.md#workflow).
 
 ## `@eng_drawing(out="<path>.pdf")`
 

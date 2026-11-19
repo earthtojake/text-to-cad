@@ -402,8 +402,7 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         # is asked, cad.kicad._program.check_api_server, before it starts). A person's own KiCad is never run.
         probe=Probe("kicad-cli", "9.0", "kicad-cli comes with cad's kicad integration, cad[kicad] (kicode), which the "
                                         "cad command installs on first need (a script run with cad run: name "
-                                        "cad[kicad] in its header); or set CAD_KICAD_CLI to a kicad-cli of "
-                                        "KiCad 9 or newer (a nightly's, 10.99, for kicad_pcb.edit and kicad_sch.edit)",
+                                        "cad[kicad] in its header)",
                     "CAD_KICAD_CLI"),
         modules=("kicode",), distributions=("kicode",),
         identity=("kicode", "kicode-pcb", "kicode-sch"), commands=("kicad-cli",),
@@ -449,7 +448,7 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         # ccx is the cad-ccx package's (the extra's), or the one CAD_CCX names; a person's own CalculiX is never run.
         probe=Probe("ccx", "2.20", "ccx comes with cad's calculix integration, cad[calculix] (the cad-ccx package), which "
                                    "the cad command installs on first need (a script run with cad run: name "
-                                   "cad[calculix] in its header); or set CAD_CCX to a ccx of CalculiX 2.20 or newer",
+                                   "cad[calculix] in its header)",
                     "CAD_CCX"),
         modules=("cad_ccx",), distributions=("cad-ccx",), identity=("cad-ccx",), commands=("ccx",),
         # A study reads the B-rep with the kernel and meshes it with netgen before CalculiX solves it.

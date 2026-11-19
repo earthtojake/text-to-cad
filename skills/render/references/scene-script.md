@@ -50,7 +50,11 @@ scene.render.film_transparent = True  # a PNG with no background, for a page or 
 ```
 
 A floor to catch shadows is a plane under the box:
-`bpy.ops.mesh.primitive_plane_add(size=10 * model.size.length, location=(model.center.x, model.center.y, model.box[0].z))`.
+
+```python
+bpy.ops.mesh.primitive_plane_add(
+    size=10 * model.size.length, location=(model.center.x, model.center.y, model.box[0].z))
+```
 
 ## Colour
 

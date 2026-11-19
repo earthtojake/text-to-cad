@@ -20,7 +20,7 @@ flat pattern is a toolpath, not a document: that is the cad skill's.
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| Draw a part | `<name>_drawing.py` beside the model, from the template | [Template](references/sheet-api.md#template) |
+| Draw a part | `<name>_drawing.py` beside the model, from the script under [Workflow](#workflow) | [The calls](references/sheet-api.md) |
 | Place views, dimensions, hole callouts, notes | `Sheet` and `View` | [Sheet API](references/sheet-api.md) |
 | Check the drawing | What the run prints, then the PDF itself | [Check each change](#check-each-change) |
 

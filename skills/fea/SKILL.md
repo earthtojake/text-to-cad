@@ -25,6 +25,7 @@ safety factor is no answer to them (a drop or a braking load can be estimated as
 | Write or edit a study | One JSON object: fixtures and loads, then material, mesh, margin and checks | [Study file](references/study-file.md) |
 | Choose a material | The model's own, or the E, ν and yield the person gives | [Materials](references/materials.md) |
 | Judge the answer | `result.json` and its findings, against a hand estimate | [Findings](#findings), [judging the answer](references/linear-static.md#judging-the-answer) |
+| Find the load a part takes | Solve at any load: the model is linear, so the load at yield is the load applied times the safety factor | [`checks`](references/study-file.md#checks) |
 | Answer what the summary does not | `result.vtu`, read with meshio | [Your own questions](#your-own-questions) |
 | Compare design variants | The same study on each, faces mapped, mesh size held | [Compare variants](#compare-variants) |
 
