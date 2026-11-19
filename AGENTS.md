@@ -62,7 +62,8 @@ the docs site, tags `v<VERSION>` and publishes the GitHub Release. A run that
 stopped partway is finished by dispatching `Publish Release` on `main`;
 `build-test` is the rehearsal branch, used only when the user asks to test the
 pipeline; the standalone `Deploy Docs` workflow redeploys the docs site from a
-ref without a release. The full flow, the resume path, the rehearsal and the
+ref without a release (to production only while PyPI's newest cad has `cad plugin
+install`, which the install command the site serves hands over to). The full flow, the resume path, the rehearsal and the
 local fallbacks are [CONTRIBUTING.md's Releases](CONTRIBUTING.md#releases).
 
 People install text-to-cad with one command, `curl -fsSL https://texttocad.dev/install.sh | sh`
@@ -75,7 +76,7 @@ date with its own `cad update` where a person ran it, and hands over to that cad
 install` installs the plugin from `latest` in each agent app it finds with that app's own command (its
 `APPS` table, in `cad_server/plugin/`, is the one list of apps), removes our own older copies, and turns
 on `cad plugin update auto`, keeping its release as the one the plugin is up to date for only where it
-ends well. Neither starts the server. cad alone is installed by one promised line, `uv tool install cad`,
+ends well and is the computer's global install. Neither starts the server. cad alone is installed by one promised line, `uv tool install cad`,
 which is what every skill's Setup block runs; no skill runs the install command. A global install updates
 itself to every newer release of its own major version, on by default (`cad update auto`), never to a
 higher major; `cad update` updates it now inside its major, and `cad update --major` to the newest of all.

@@ -83,8 +83,13 @@ ID made for that one run and kept nowhere, the stage that failed (installing uv,
 `install.py`, running it, installing cad, running the plugin's step, or a crash of the script), an
 exit status, your operating system and processor type, uv's version, and whether a person or cad
 ran it. For a crash it adds the error's type and the function names and line numbers in the install
-script where it happened, never a message or a path. The command says so in one line near its
-start, on every run that could send one.
+script where it happened, never a message or a path. When you run the command, it says so in one
+line near its start, wherever it could send one.
+
+Where cad itself runs the install command (0.11.12 and 0.11.13 do, and the move from 0.10.0 to
+0.11.11), nobody reads its output, so it prints no such line. Such a run sends a report only where
+cad's settings show that cad had already told you what it sends, or that you said yes, and never
+for a failure before `install.py` runs.
 
 To turn both off, set `DO_NOT_TRACK=1` or `CAD_TELEMETRY=0` where the command runs, for example:
 
@@ -405,8 +410,8 @@ time cad is newer than the release the plugin is up to date for, cad runs `cad p
 in the background, which puts the newest plugin in every agent app it finds. That holds however cad
 got newer: by itself, by `cad update`, or by `uv tool upgrade cad` or `pipx upgrade cad`. It happens
 the next time cad's server starts or looks after itself with nothing running. A run that fails, or
-that is still running after 15 minutes and is stopped, is tried again an hour or more later: at most
-three runs for one release. To update the plugin now:
+that is still running after 15 minutes and is stopped (a minute later for certain, whatever it is
+doing), is tried again an hour or more later: at most three runs for one release. To update the plugin now:
 
 ```bash
 cad plugin update

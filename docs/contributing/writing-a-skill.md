@@ -142,6 +142,8 @@ tool's description, which only agents that have the tool read, never in a skill.
 - [ ] Its name is in `SKILLS` in `packages/cad/src/cad_server/plugin/source.py`, in the same release
       (a skill taken out moves to `RETIRED_SKILLS`): the names `cad plugin install` takes as ours.
       A copy under a name it does not know is left as someone else's, so never replaced or removed.
+      `tests/python/global/test_plugin_knows_the_skills_shipped.py` holds the list to the folders of
+      `skills/`.
 - [ ] A feature in README.md's Features and the docs site's (`features` in
       `apps/docs/src/lib/content.ts`, the same list) links it, and `.muse-plugin/plugin.json`, which
       lists every skill by id and path, names it.

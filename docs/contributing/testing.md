@@ -64,7 +64,10 @@ enough. Every other job runs on the changes that reach it. The two there now:
   and typed with and without a server running, inside its major with a higher major out and across it by
   `cad update --major` (`self-major`), and cad installed by pipx (`self-pipx`); and after an update, the
   new server's one `cad plugin update`, which runs cad's own code and no install command, read from
-  cad's record of it. It is the one test
+  cad's record of it. One more route starts on the real 0.11.13 (`plugin-update`, on shard 1/2 of each
+  system): that release's own `cad plugin update` runs this tree's install command, which finds no `cad
+  plugin install` in it and has the newest release's do the work (`uv tool run ... cad@latest plugin
+  install`: this tree's), 0.11.13 left as it is. It is the one test
   of the move every computer makes, unattended or by the install command. It runs with the installer
   rehearsals, and on a change to the rehearsal itself. A route runs alone too, as
   `scripts/test/rehearse-update.py store-only`.
@@ -408,7 +411,7 @@ keeps them out of `models/`.
 ([Rehearsing on `build-test`](../../CONTRIBUTING.md#rehearsing-on-build-test)), and the installers on
 a fresh machine by `install-linux.yml` and `install-windows.yml`, which `test.yml` calls in the release
 tier and which a dispatch with `published` runs against the release people install today. The arrival
-of a computer on 0.11.11, 0.11.0, 0.10.4 or 0.10.0 at this tree's build is rehearsed by `scripts/test/rehearse-update.py`,
+of a computer on 0.11.11, 0.11.0, 0.10.4 or 0.10.0 at this tree's build, and 0.11.13's own `cad plugin update` running this tree's install command, are rehearsed by `scripts/test/rehearse-update.py`,
 which `test.yml`'s
 `update-rehearsal` job runs in the same tier and which runs locally too (it needs uv and the network).
 The install script, and the `cad plugin install` it hands over to, against the real programs of Claude Code, Codex and Gemini CLI is `scripts/test/real-install.py`

@@ -171,22 +171,31 @@ The plugin is `cad plugin install`'s: for every agent app it finds, the plugin i
 with that app's own command, then our older copies there removed. `cad plugin update` is the same
 run, and neither downloads or runs the hosted install command. As its last step a run turns on `cad
 plugin update auto`, which is off until then, and keeps cad's release as the one the plugin is up to
-date for only where it ended well. A run in which every app it found failed turns the switch on and
-keeps none, so a computer whose runs keep failing still has the plugin kept: where cad is newer
-than the release the plugin is up to date for, cad's server runs `cad plugin update` once. cad keeps
-that release in a small record of its state folder, written when `cad plugin update` ends with exit
+date for only where it ended well and the cad that ran it is the computer's global install. A run
+in which every app it found failed turns the switch on and keeps none, so a computer whose runs
+keep failing still has the plugin kept: where cad is newer than the release the plugin is up to
+date for, cad's server runs `cad plugin update` once. A run of a cad from anywhere else, such as
+the newest release from uv's cache (`uv tool run cad@latest`, below), does the work, turns the
+switch on and keeps none too: its release is not the installed cad's, and may be of a major that
+cad never reaches, so kept, the installed cad's server would never catch up again. cad keeps that
+release in a small record of its state folder, written when `cad plugin update` ends with exit
 status 0 and when the switch is turned on by a run that ended well. The rule asks what cad is, not
 how it got there, so a typed `cad update` or `uv tool upgrade cad` by hand brings the plugin along
 as cad's own update does, with one mechanism. A run cad's server began has 15 minutes: each command
 it runs is stopped when they are up, with all it started, and no further app is begun (in a Windows
 session where `taskkill` is refused, only the command's own process is ended; what it started may
-run on). A failed run is tried again an hour or more later: at most three runs for one release. A
-plugin store (Codex's directory, Claude's) updates the copy it installed.
+run on). That much is asked between the run's steps, so the run also carries a hard stop: where a
+step never comes back and the run has not ended a minute past its 15, a thread of its own closes
+its record as a stopped run's, counts it as stopped and ends the process there and then, which
+frees its lock. A failed run is tried again an hour or more later: at most three runs for one
+release. A plugin store (Codex's directory, Claude's) updates the copy it installed.
 
 One run at a time. A run holds a lock in cad's state folder from its start to its end. A second run
-waits for it; one a server began ends at once instead, as a failed run, and is tried again as one
-is. cad's own update holds while a run is going: the automatic update begins none, and a typed `cad
-update` is refused in one line.
+waits for it; one a server began does not wait, runs nothing, and is tried again as a failed run
+is. Either tries for the lock for two seconds before it takes it as another run's: whether a run is
+going can only be asked by trying for the lock, so a server that asks holds it for an instant. cad's
+own update holds while a run is going: the automatic update begins none, and a typed `cad update`
+is refused in one line.
 
 The install command, which a person runs, gets cad and hands over to it (below). It no longer
 carries the plugin's install: it runs the installed cad's `cad plugin install`.
@@ -199,7 +208,9 @@ install`) first changes their apps. The plugin's update is the code of the cad t
 so it is the release that was tested, and nothing is fetched from our website to run it. The lock
 is there because two runs can meet: after a person's install command updated cad, the server that
 starts may begin its own run at the moment that command goes on to the plugin. cad's update holds
-because it replaces the files of the environment a run is reading.
+because it replaces the files of the environment a run is reading. The hard stop is there because
+the lock holds back cad's own update and every run that waits: a run that hung for good would hold
+them for as long as its process lived.
 
 **What it costs.** The plugin's install is only as new as the cad that runs it: a correction to an
 app's row waits for a release, and for that computer's update (the first decision). Released 0.11.12
@@ -207,7 +218,8 @@ and 0.11.13 still download the hosted install command and run it unattended, as 
 update` and after their own update, and so does the bridge for 0.10.0 to 0.11.11:
 [SECURITY.md](../../SECURITY.md) says so. Nothing shipped later can change those two releases: they
 stop only when their computers have updated. A typed `cad update` during a run fails and has to be
-typed again. A store's copy of the skills lags cad by
+typed again. The hard stop cannot end a process no thread of which runs at all (one a signal
+stopped). A store's copy of the skills lags cad by
 however long its store takes.
 
 ## Forward only
@@ -249,9 +261,13 @@ update-shell`. Where a person ran it and a cad that starts was there already, it
 `cad update`, which stays inside its major; run by cad, it updates no cad. Then it hands over: that
 cad's `cad plugin install` does everything in the agent apps. Where the cad there has no such
 command (0.11.12 and 0.11.13), or cad could not be installed, the newest release's runs instead,
-once, from uv's cache (`uv tool run ... cad@latest plugin install`). It never stops to ask the
+once, from uv's cache (`uv tool run ... cad@latest plugin install`), which keeps no release as the
+one the plugin is up to date for: that is the installed cad's to say. It never stops to ask the
 person anything and starts no server. A run that fails where no working cad can count it sends one
-anonymous report of the stage that failed ([docs/install.md](../install.md#what-it-sends)). cad's
+anonymous report of the stage that failed ([docs/install.md](../install.md#what-it-sends)); a run
+cad started says nothing of it, and sends one only where cad's settings show the person was told
+what cad sends. The docs site serves the script, so a production deploy of the site is refused
+until PyPI's newest cad has `cad plugin install` (`scripts/release/newest_cad.py`). cad's
 table of apps (`cad_server/plugin/apps.py`) is the only list of apps and of past layouts in the
 repository.
 
@@ -262,16 +278,24 @@ before, it never updated a cad that worked, and a person who ran it to fix somet
 cad until its next automatic update. Run by cad it has no reason to: cad updates itself. One
 behaviour for the apps means one thing to test, and running it again is how a broken install is
 repaired. A failure before any cad runs was one nobody saw; a report of the stage is the least that
-shows it.
+shows it, and it is never sent before a person was told: a run cad started has no reader for the
+line that says so. The script goes live with the site and hands over to PyPI's newest cad, so
+served before the release that carries the command, every install would fail: the deploy asks
+first.
 
-**What it costs.** The script still has no version, and one copy serves every cad: it must work
-with each release that has `cad plugin install` and, through `cad@latest`, with the two that do not.
+**What it costs.** The script still has no version, and one copy serves every cad: it must work with
+each release that has `cad plugin install` and, through `cad@latest`, with the two that do not.
 Those two and the bridge still run it unattended, so what they read of it can never change: no
 options, exit status 0 only where the run ended well, and the report it writes where
-`CAD_INSTALL_REPORT` names a file. A person's run updates a working cad at once from PyPI, under
-neither the feed's hour nor a hold, as a fresh install does (the feed's decision). And cad's table
-is long, with many rows that follow vendor documentation we cannot run here. A row that is wrong
-fails for that app alone, until a release of cad corrects it.
+`CAD_INSTALL_REPORT` names a file. The bridge reads that report and never the exit status, and with
+cad installed takes a run for a failed one only where a value of its `apps` says `failed`; so where
+the plugin's step ended non-zero and named no app as failed, the script writes `"plugin": "failed"`
+there itself, and the bridge runs it again later. And while PyPI's newest cad has no `cad plugin
+install`, nothing of `main` can be deployed to the production site, a fix to a page included: only a
+preview. A person's run updates a working cad at once from PyPI, under neither the feed's hour nor a
+hold, as a fresh install does (the feed's decision). And cad's table is long, with many rows that
+follow vendor documentation we cannot run here. A row that is wrong fails for that app alone, until
+a release of cad corrects it.
 
 ## The bridge for 0.10.0 to 0.11.11
 

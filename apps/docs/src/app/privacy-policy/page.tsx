@@ -140,9 +140,13 @@ export default function PrivacyPolicyPage() {
             keeps neither the address nor anything finer than the country (to refuse a flood of reports,
             it counts those from one address for ten minutes, under a scrambled form of the address held
             only in memory). Like any request, it reaches our host with your IP address, the time and the
-            user agent of the program that sent it (curl, wget, PowerShell or Python). The install command
-            says in a line near its start that it may send this report, on every run that could. Section 5
-            says when none is sent.
+            user agent of the program that sent it (curl, wget, PowerShell or Python). When you run the
+            install command, it says in a line near its start that it may send this report, wherever it
+            could. When text-to-cad itself runs it (releases 0.11.12 and 0.11.13 do, and an earlier
+            release as it moves your computer to the current one), nobody reads what it prints, so it
+            says no such line: it then sends a report only if text-to-cad had already told you on that
+            computer what it sends, or you had said yes, and never for a failure before the script’s
+            Python part runs. Section 5 says when none is sent.
           </li>
           <li>
             <strong>The version check and automatic updates:</strong> at most once an hour, text-to-cad’s
@@ -311,7 +315,8 @@ export default function PrivacyPolicyPage() {
             <code>curl -fsSL https://texttocad.dev/install.sh | DO_NOT_TRACK=1 sh</code>), where you turned
             telemetry off on that computer before (<code>cad telemetry off</code>, which the install command
             reads from text-to-cad’s settings file), or in CI. Set that way, the same variables also keep
-            the plugin’s install it runs from being counted.
+            the plugin’s install it runs from being counted. Where text-to-cad itself runs the install
+            command, no report is sent unless text-to-cad had told you first (section 1).
           </li>
           <li>
             To turn automatic updates off, run <code>cad update auto off</code>;{" "}

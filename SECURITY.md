@@ -144,7 +144,8 @@ and nothing asked:
 - One report, only where the run fails with no working cad: the stage that failed,
   an exit status, the operating system and processor type and uv's version, sent to
   `api.texttocad.dev` under a random id made for that run and kept nowhere.
-  `DO_NOT_TRACK=1` turns it off ([docs/install.md](docs/install.md#what-it-sends)).
+  `DO_NOT_TRACK=1` turns it off, and a run cad started sends one only where cad had
+  told the person what it sends ([docs/install.md](docs/install.md#what-it-sends)).
 
 It starts no server. To read the scripts first, take the copies attached to a
 release on GitHub and check them against the release's `SHA256SUMS`; they install
@@ -171,7 +172,8 @@ just installed, which fetches the plugin from GitHub and runs each agent app's o
 command-line program, as `cad plugin install` does (above). It downloads no script
 and runs nothing from texttocad.dev. A run that fails is tried again an hour or more
 later, at most three runs for one release, and one still running after 15 minutes is
-stopped. One such run goes at a time, and cad's own update begins none while one is
+stopped, by its own thread a minute later where a step of it never came back. One such
+run goes at a time, and cad's own update begins none while one is
 going. So with automatic updates on, whoever controls `api.texttocad.dev` (which
 decides only when), the `cad` project on PyPI or this repository's `latest` branch
 can run code as you.
