@@ -120,12 +120,12 @@ _CORNER_DETAIL = "{edge}, {height_mm:g} mm tall, {depth_mm:g} mm below the top{u
 _ROUND_DETAIL = "{height_mm:g} mm tall, a corner of the cavity at {pocket}"
 _EDGE_DETAIL = "{edge} between {between}, a {void_angle_deg:.0f}-degree void, at {xyz}{unreached}"
 _ACROSS_DETAIL = {"walls": "to {opposite} at {xyz}", "gaps": "to {opposite} at {xyz}"}
-#: What the guide says of a hole a wall cuts (``cnc.partial_hole``): two of its headings, a sentence each. It
-#: states no figure, so the hole's whole reach past the wall is the verdict's.
+#: What the guide says of a hole a wall cuts (``cnc.partial_hole``), under its headings "Avoid Partial Holes"
+#: and "Avoid Drilling Through Cavities". It states no figure, so the limit is none of the hole past the wall.
 _PARTIAL_NOTE = ('"Partial holes should be avoided because there is a high chance of tip wander. If you do need a '
                  'partial hole, keep the drill axis on the material so the majority of the hole is contained in the '
                  'part."; "Design the locations of your drilled holes so they are not intersecting with an existing '
-                 'cavity in the part."')
+                 'cavity in the part." The guide states no figure: any reach past the wall is said')
 
 
 #: Why no tool of the machine makes a sharp concave edge (``sharp_edges`` items' ``reason``): the words of the
@@ -383,20 +383,18 @@ _RULES: tuple[Rule, ...] = (
     Rule("cnc.partial_hole", "holes", "past_wall_mm", "max", 0.0, "mm",
          "partial hole (a wall cuts its mouth): reach past the wall", "fictiv-cnc", severity="warning",
          item_when={"drilled": True, "mouth": ("whole", "slotted", "stepped")},
-         fix="a drill starts it on a step, part of its tip over the cavity, and wanders: move the hole back from "
-             "that wall by its reach past it or more, or take it whole into the cavity's floor (bring the wall "
-             "back by what stays behind it, or move the hole that far forward where the cavity has the room); "
-             "left as drawn, drill it before the cavity is milled or mill it with an end mill, and the wall keeps "
-             "the hole's scallop",
+         fix="move the hole back from that wall by its reach past it or more, or move the wall: back until the "
+             "cavity takes the hole whole (the rest of its diameter), or clear of the hole where it is a rib "
+             "thinner than the hole; left as drawn, drill it before the wall is cut, or mill it with an end mill: "
+             "a drill that starts on the step wanders, and the wall keeps the hole's scallop",
          note=_PARTIAL_NOTE,
-         detail="{cut_by} opens {open_deg:.0f} degrees of the hole's wall for {open_mm:g} mm from its mouth; "
-                "{behind_wall_mm:g} mm of the hole stays behind that wall"),
+         detail="{cut_by} opens {open_deg:.0f} degrees of the hole's wall for {open_mm:g} mm from its mouth"),
     Rule("cnc.partial_hole", "holes", "past_wall_mm", "max", 0.0, "mm",
          "partial hole (a wall cuts it along its whole length): reach past the wall", "fictiv-cnc",
          severity="warning", item_when={"drilled": True, "mouth": "open"},
-         fix="the hole is open along its side, a notch in that wall, and a drill wanders out of it: move it back "
-             "into the material by its reach past the wall or more, or cut it with the wall, as a notch of its "
-             "profile, with an end mill; left as drawn, drill it before that wall is cut",
+         fix="move the hole back into the material by its reach past the wall or more, or cut it with the wall as "
+             "a notch of that profile, an end mill's; left as drawn, drill it before the wall is cut: a drill "
+             "wanders out of an open side",
          note=_PARTIAL_NOTE, detail="{cut_by} opens {open_deg:.0f} degrees of the hole's wall"),
     Rule("cnc.thread_size", "threads", "major_diameter_mm", "min", 6.0, "mm", "thread major diameter", "hubs-cnc",
          severity="warning", fix="M6 or larger where it can be: smaller threads are tapped, not thread-milled",

@@ -518,21 +518,22 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   A hole's **mouth** (`_dfm_cnc_holes.mouths`): `mouth` is `whole` where no wall cuts it. A wall cuts it where
   faces that are none of the hole's and rise along its axis, either way (`Model.rises`: a cavity's wall, a
   step's, the part's side, another hole's), meet its narrowest cylinder by two convex edges with an opening
-  between them, and from the axis, 0.05 mm inside an end the hole opens by (`MOUTH_INSET_MM`), a ray through
-  the middle of that opening meets no wall of the hole -- a drill starts there with part of its tip over the
-  void: `stepped` where the opening ends at a floor (an edge of the cylinder crosses its middle and the wall is
-  met just beyond: the mouth lies on two levels), `open` where it runs the hole's whole length (a hole that
-  breaks out of the part's side). `past_wall_mm` (how far the hole's circle reaches past that wall, the move
-  back that clears it: a plane's by its normal where the cylinder meets it, a cylinder's along the axis by the
-  distance between the two axes; 0 where no wall cuts it), `behind_wall_mm` (what of its diameter stays behind
-  the wall: how far the wall is brought back to take the hole whole), `open_deg` (the angle of the cylinder the
-  wall opens), `open_mm` (how far along the axis), `cut_by` (the wall it reaches furthest past) and `cut_faces`
-  (the faces the opening lies between); of several openings, the one that reaches furthest. An opening whose
-  two sides face each other (their normals' cosine under -0.7, `SLOT_SIDES`, as a gap's two faces) is a slot's
-  that runs into the hole -- a slit across a clamp's bore, a keyway, a channel that leaves a hole --, cut after
-  it: `slotted`, no wall the hole crosses. No cut either: an opening in the hole's side below its mouth (a
-  cross hole's, a cavity's), an end on a face that does not rise (an inclined one, a curved one), a modelled
-  thread's groove where it runs out, and a counterbore's own wall (the mouth judged is the drilled cylinder's).
+  between them, and from the axis, 0.05 mm inside an end the hole opens by (`MOUTH_INSET_MM`; a tenth of the
+  hole's run where that is less), a ray through the middle of that opening meets no wall of the hole -- a
+  drill starts there with part of its tip over the void: `stepped` where the opening ends at a floor (an edge
+  of the cylinder crosses its middle and the wall is met just beyond: the mouth lies on two levels), `open`
+  where it runs the hole's whole length (a hole that breaks out of the part's side). `past_wall_mm` (how far
+  the hole's circle reaches past that wall, the move back that clears it: a plane's by its normal where the
+  cylinder meets it, a cylinder's along the axis by the distance between the two axes; 0 where no wall cuts
+  it), `open_deg` (the angle of the cylinder the wall opens), `open_mm` (how far along the axis), `cut_by` (the
+  wall it reaches furthest past) and `cut_faces` (the faces the opening lies between: one wall's, two walls' at
+  a corner, or the two faces of a wall thinner than the hole that stands across its mouth, a rib); of several
+  openings, the one that reaches furthest. Two sides that face each other across the opening (their normals'
+  cosine under -0.7, `SLOT_SIDES`, as a gap's two faces, each in front of the other) are a slot's that runs
+  into the hole -- a slit across a clamp's bore, a keyway, a channel that leaves a hole --, cut after it:
+  `slotted`, no wall the hole crosses. No cut either: an opening in the hole's side below its mouth (a cross
+  hole's, a cavity's), an end on a face that does not rise (an inclined one, a curved one), a modelled thread's
+  groove where it runs out, and a counterbore's own wall (the mouth judged is the drilled cylinder's).
 - **threads** — modelled threads: non-analytic faces (no surface of revolution) whose edge points sweep >= 350
   degrees about a cylinder's axis in a radial band under a third of the radius, with a flank edge winding half
   a turn or more (a pitch), with their end caps. `internal`, `major_diameter_mm`,
@@ -846,7 +847,7 @@ is at the corner's own face); `sharp_internal_edge` its edge, the two faces (in 
 item carries is one ref), the void angle and xyz
 (its fix names the angle); every `walls` and `gaps` rule the face across (`opposite`) and the thinnest point;
 `partial_hole` the wall (`cut_by`), the angle of the hole's wall it opens and, of a stepped mouth, how far
-from the mouth and what of the hole stays behind the wall.
+from the mouth.
 
 Fact findings (not rules): `cnc.stock_too_small` (e: the part does not fit `--stock`), `cnc.no_turning_axis`
 (e, `--turning` on a part with no surface of revolution), `cnc.mostly_not_turned` (w, under half the area

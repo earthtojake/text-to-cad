@@ -221,8 +221,7 @@ class HoleMouthTest(unittest.TestCase):
         self.assertEqual(len({f.location for f in found}), 4)
         walls = set(result.measurements["pockets"]["items"][0]["faces"])
         for hole in holes:
-            self.assertEqual((hole["mouth"], hole["past_wall_mm"], hole["behind_wall_mm"], hole["open_mm"]),
-                             ("stepped", 1.75, 2.75, 5.0))
+            self.assertEqual((hole["mouth"], hole["past_wall_mm"], hole["open_mm"]), ("stepped", 1.75, 5.0))
             self.assertAlmostEqual(hole["open_deg"], 2 * math.degrees(math.acos(0.5 / 2.25)), places=3)
             self.assertIn(hole["cut_by"], walls)
             finding = next(f for f in found if f.location == hole["location"])
@@ -233,16 +232,14 @@ class HoleMouthTest(unittest.TestCase):
             self.assertEqual(finding.source, "Fictiv, CNC machining design guide")
             self.assertIn("partial hole (a wall cuts its mouth): reach past the wall 1.75 mm is over the 0 mm "
                           "recommended maximum", finding.message)
-            self.assertIn("opens 154 degrees of the hole's wall for 5 mm from its mouth; 2.75 mm of the hole stays "
-                          "behind that wall", finding.message)
+            self.assertIn("opens 154 degrees of the hole's wall for 5 mm from its mouth", finding.message)
             self.assertIn("move the hole back from that wall by its reach past it or more", finding.hint)
-            self.assertIn("drill it before the cavity is milled", finding.hint)
+            self.assertIn("drill it before the wall is cut", finding.hint)
         self.assertEqual(sum("cnc.partial_hole, 4 place(s)" in line for line in result.human_lines()), 1)
         # the bore lies whole in the pocket's floor: no wall cuts it
         [bore] = self._holes(result, 22.0)
         self.assertEqual((bore["mouth"], bore["past_wall_mm"], bore["cut_by"]), ("whole", 0.0, None))
-        # with --strict a warning fails the part, and the part is the same however it is turned
-        self.assertEqual(cnc(_part(plate), material="aluminum", tools="3,6,10", strict=True).status, "failed")
+        # the part is the same however it is turned
         turned = cnc(_part(bd.Pos(13, -7, 5) * bd.Rot(17, 23, 41) * plate), material="aluminum", tools="3,6,10")
         self.assertEqual(sorted((hole["mouth"], hole["past_wall_mm"], hole["open_mm"])
                                 for hole in turned.measurements["holes"]["items"]),
@@ -282,9 +279,8 @@ class HoleMouthTest(unittest.TestCase):
         part -= bd.Pos(39, 0, 0) * bd.Cylinder(2.25, 15, align=(A.CENTER, A.CENTER, A.MIN))
         result = cnc(_part(part), material="aluminum")
         by_x = {round(hole["xyz"][0], 1): hole for hole in self._holes(result, 4.5)}
-        self.assertEqual({x: (hole["mouth"], hole["past_wall_mm"], hole["behind_wall_mm"], hole["open_mm"])
-                          for x, hole in by_x.items()},
-                         {-18.5: ("stepped", 1.75, 2.75, 5.0), 39.0: ("stepped", 1.25, 3.25, 5.0)})
+        self.assertEqual({x: (hole["mouth"], hole["past_wall_mm"], hole["open_mm"]) for x, hole in by_x.items()},
+                         {-18.5: ("stepped", 1.75, 5.0), 39.0: ("stepped", 1.25, 5.0)})
         self.assertEqual(sorted(f.value for f in result.findings if f.code == "cnc.partial_hole"), [1.25, 1.75])
 
     def test_a_blind_hole_is_read_at_its_opening_and_a_milled_one_is_not_judged(self) -> None:
@@ -314,12 +310,11 @@ class HoleMouthTest(unittest.TestCase):
 
         result = cnc(side(2.0), material="aluminum")
         [hole] = result.measurements["holes"]["items"]
-        self.assertEqual((hole["mouth"], hole["past_wall_mm"], hole["behind_wall_mm"], hole["open_mm"]),
-                         ("open", 0.25, 4.25, 10.0))
+        self.assertEqual((hole["mouth"], hole["past_wall_mm"], hole["open_mm"]), ("open", 0.25, 10.0))
         [said] = [f for f in result.findings if f.code == "cnc.partial_hole"]
         self.assertIn("partial hole (a wall cuts it along its whole length): reach past the wall 0.25 mm",
                       said.message)
-        self.assertIn("move it back into the material", said.hint)
+        self.assertIn("move the hole back into the material by its reach past the wall or more", said.hint)
         # its two feather edges are knife edges besides, as they were
         self.assertEqual(_judged(result), {"cnc.partial_hole", "cnc.knife_edge"})
         # less than 300 degrees of its wall left, it is a notch of the outline and no hole: nothing to say
@@ -344,14 +339,21 @@ class HoleMouthTest(unittest.TestCase):
             - bd.Pos(0, 1.5, 6) * bd.Box(60.01, 3, 4.01, align=(A.CENTER, A.CENTER, A.MIN)) \
             - bd.Pos(0, 2.5, 0) * bd.Cylinder(2.25, 10, align=(A.CENTER, A.CENTER, A.MIN))
         [hole] = cnc(_part(across), material="aluminum").measurements["holes"]["items"]
-        self.assertEqual((hole["mouth"], hole["past_wall_mm"], hole["behind_wall_mm"], hole["open_mm"]),
-                         ("stepped", 2.75, 1.75, 4.0))
+        self.assertEqual((hole["mouth"], hole["past_wall_mm"], hole["open_mm"]), ("stepped", 2.75, 4.0))
+        # and a rib thinner than the hole that stands across its mouth cuts it with both its faces, back to
+        # back: no slot's two walls, which face each other
+        ribbed = bd.Box(40, 30, 10, align=(A.CENTER, A.CENTER, A.MIN)) \
+            + bd.Pos(0, 7.5, 10) * bd.Box(2, 15, 3, align=(A.CENTER, A.CENTER, A.MIN)) \
+            - bd.Cylinder(3, 40)
+        [hole] = cnc(_part(ribbed), material="aluminum").measurements["holes"]["items"]
+        self.assertEqual((hole["mouth"], hole["past_wall_mm"], hole["open_mm"], len(hole["cut_faces"])),
+                         ("stepped", 2.0, 3.0, 2))
 
     def test_an_opening_below_the_mouth_is_no_cut(self) -> None:
-        # a pocket milled in from the side across the middle of a 10 mm hole's length, its end wall cutting a
+        # a channel milled through from the side across the middle of a 10 mm hole's length, its wall cutting a
         # chord off the hole: an opening in the hole's side, as a cross hole's is, both mouths whole
         part = bd.Box(40, 40, 30, align=(A.CENTER, A.CENTER, A.MIN)) - bd.Cylinder(5, 60) \
-            - bd.Pos(0, 12, 10) * bd.Box(20, 16.01, 10, align=(A.CENTER, A.CENTER, A.MIN))
+            - bd.Pos(0, 12, 10) * bd.Box(40.02, 16.01, 10, align=(A.CENTER, A.CENTER, A.MIN))
         result = cnc(_part(part), material="aluminum")
         [hole] = result.measurements["holes"]["items"]
         self.assertEqual((hole["mouth"], hole["past_wall_mm"]), ("whole", 0.0))

@@ -645,9 +645,9 @@ document): an option refused by name, a file of another type or not there, a doc
 
 - **CNC machining** (`--axes 3|4|5`, `--turning`, `--tools`, `--stock`): holes (drill sizes, depth, drill
   points, counterbores, threads, a wall that cuts a hole's mouth), pockets and slots, internal corners against
-  tool radius and depth, sharp
-  internal edges no tool makes, walls and gaps, tool access per setup direction and the setups it needs,
-  undercuts, voids, stock; turned parts' axis, diameters, bores, grooves and live-tooling features.
+  tool radius and depth, sharp internal edges no tool makes, walls and gaps, tool access per setup direction
+  and the setups it needs, undercuts, voids, stock; turned parts' axis, diameters, bores, grooves and
+  live-tooling features.
 - **Sheet metal** (`--thickness`, `--k-factor`, `--bend-radius`, `--kerf`, `--sheet-size`): constant
   thickness, bends, flanges, reliefs, hems, holes and their distances to edges, holes and bends (in each
   convention), notches, tabs and webs, measured on the part unfolded with its K-factor
