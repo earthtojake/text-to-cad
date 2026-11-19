@@ -106,14 +106,15 @@ in g (1 g = 9.81 m/s²).
 
 - Every study is solved by CalculiX (`ccx`), the one the `calculix` integration carries
   (`cad[calculix]`, the cad-ccx package: CalculiX 2.23), which the `cad` command installs on first
-  need. text-to-cad runs `CAD_CCX` instead when it is set (2.20 or newer), never a `ccx` on PATH.
-  It writes CalculiX's input (each part its own element set and material, a roller on a sloped or
-  curved face in its own frame), runs it, and reads the displacements, the reactions and the stress
-  at each element's integration points back. There is no fallback solver: a missing `ccx`, or one
-  older than 2.20, stops the solve before meshing with an error naming how to install it.
+  need; a `ccx` on PATH is never run. It writes CalculiX's input (each part its own element set and
+  material, a roller on a sloped or curved face in its own frame), runs it, and reads the
+  displacements, the reactions and the stress at each element's integration points back. There is no
+  fallback solver: a missing `ccx` stops the solve before meshing with an error naming how to install
+  it.
 - `--deck` keeps the input of the solve written as `ccx.inp` in the results folder, which
-  `cad run ccx -i ccx` runs again. The result's `mesh.solver` names the version that ran
-  (`calculix 2.23 (C3D10)`). A solve that runs past an hour is stopped and says so.
+  `cad run ccx -i ccx` runs again, and which any CalculiX of your own solves too. The result's
+  `mesh.solver` names the version that ran (`calculix 2.23 (C3D10)`). A solve that runs past an hour
+  is stopped and says so.
 
 ## Judging the answer
 

@@ -13,6 +13,7 @@ or any movement that is not the mechanism's is a GLB's `animation()`: read
 - [Mechanism states](#mechanism-states)
 - [Couplings](#couplings)
 - [Loops](#loops)
+- [Joint stops](#joint-stops)
 - [Declaring for a simulator](#declaring-for-a-simulator)
 - [Configuration sequences](#configuration-sequences)
 - [Reviewing motion](#reviewing-motion)
@@ -310,6 +311,78 @@ and says so in the export's log. A slide never closes a loop in an MJCF (MuJoCo 
 slide equality): where the last pair is a slide, the description closes the loop at the
 loop's hinge or ball nearest it instead. The closing joint's range is not enforced.
 
+## Joint stops
+
+Where a joint's travel is limited by its parts meeting, `cad <type> ranges` (`model`, `xbf`, `step`)
+finds the stops from the geometry: it moves each joint alone from the as-built pose, the others as
+built, a degree or a millimetre at a time each way, until the parts meet. It writes nothing: write
+the stops into the joint's `angular_range` or `linear_range` in the body, rounded towards zero, and
+run the model again.
+
+```bash
+cad model ranges "$ID"
+cad model ranges "$ID" --joint gripper
+cad step ranges arm.step --step 0.5 --json
+```
+
+Reading a finding:
+
+- **The stop** each way is where the joint's child link meets its parent link (each with the links
+  fixed to it), whatever the other joints do, and it names the two parts that met. Stops are in
+  degrees or millimetres around the as-built pose, in the joint's own values where its as-built value
+  is not zero.
+- **A clash**, said beside a stop, is something the joint moves meeting another link first in this
+  pose of the other joints: a self-collision of the pose, not the joint's range (an arm drawn folded
+  clashes its wrist on its shoulder a few degrees out). Write the stop; a simulator's contacts hold
+  the clash.
+- **Check the pair before adopting the stop**, with a posed snapshot there. A stop made by a pair
+  that does not limit the hardware (a vendor's servo cover the jaw clears) is not the joint's range,
+  and neither is a stop wider than the actuator's own travel: write the datasheet's travel instead.
+- **No stop.** A turn is swept a full turn each way and a slide the document's extent; a joint clear
+  that far has none (`why`: `clear all the way round`). A cylindrical or spherical joint and a joint
+  of a closed loop are not swept, and a warning says so. A document with no joint fails with
+  `no_joints`.
+
+How it decides that two parts meet:
+
+- **Clearance.** Surfaces within `--clearance` (0.3 mm, the least it takes) count as touching, so a
+  stop is where the parts all but touch. A larger clearance only narrows a range. Every gap is
+  measured to within 0.6 mm over the true one, never under it. Each part is tested on its own
+  surface, not on the collision shape a simulator would use.
+- **Touching or near as built.** Parts that touch as built (a horn on its servo), or stand under
+  0.3 mm apart, meet only where their contact grows by about 15 mm^2 on a surface that stops the
+  motion, or where one is pushed into the other; sliding along each other (a pin in its bore, a
+  carriage on its rail) stops nothing. Parts a little farther apart meet only where their gap closes
+  to under half of what it was beyond 0.3 mm (0.1 mm for a 0.5 mm gap), not where it narrows a hair.
+  At a larger clearance the finding lists the pairs within it as built (`near as built:`), and a stop
+  one of them makes says `closed to 0.2 from 0.5 mm as built`.
+- **Turning on an output.** A vendor often draws a motor as one solid, case and output flange
+  together, with the next link bolted to the output. A pair touching as built on a surface about the
+  joint's axis is read as an output and what turns on it: that face, and what lies within the reach
+  of their contact about the axis (a locating boss, a bolt's seat), stops nothing, and the finding
+  lists the pair (`turns on: plate (link2) on motor (link1)`). Where a stop a few degrees out still
+  names that pair `touching as built`, the output carries something that reaches past its face (an
+  arm, a cam): split the solid in the model.
+- **Overlapping as drawn.** Simplified vendor parts are often drawn sunk into each other. Such a pair
+  meets only where one is pushed 0.6 mm deeper into the other than drawn. The finding lists it
+  (`overlapping as drawn ... by 180 mm^3, 1.0 mm deep`), and a stop it makes says `deeper than
+  drawn`: that stop lies past the true one by up to about that depth, so read it against the geometry
+  or the datasheet.
+
+`--joint NAME` sweeps that joint alone (repeat it for several; an unknown name is refused, naming the
+model's joints), `--step` sets the increment, and `--verbose` says each stage as it starts. The sweep
+runs on one core and its time follows the parts' surface area and detail, not their number: an arm of
+a few hundred small parts and six joints takes tens of seconds, one of a few large freeform shells
+minutes. A finer `--step` costs in proportion. For a narrower question (do the jaws close?) use
+`--joint` or a posed snapshot.
+
+`--json` carries every number in `measurements.joints`, each joint under `joint`: `lower`, `upper`
+and `range` in the joint's own values; the `*_contact` and `*_clash` parts, each with its `gap` in mm
+(and `near`, the gap as built, or `overlap` in mm^3 and `depth` in mm for a pair drawn overlapping);
+the pairs touching as built (`resting`), near as built (`near`: `rest`, and the gap at each stop),
+drawn overlapping (`overlapping`: `volume`, `depth`) and turning on an output (`riding`); and `why`
+for a joint with no stop.
+
 ## Declaring for a simulator
 
 A mechanism exported as a robot description (an MJCF or a URDF:
@@ -466,7 +539,7 @@ each sequence at the times that matter
 check script, pose the model there, taking its parts placed with
 `leaves(tree)` (`cad.build123d`) through `find_part`, copied from
 [Opening geometry](inspection-and-validation.md#opening-geometry). Where a joint's stops are
-the parts meeting, `cad model ranges` finds them ([Joint stops](../SKILL.md#joint-stops)):
+the parts meeting, `cad model ranges` finds them ([Joint stops](#joint-stops)):
 
 ```python
 from cad.build123d import leaves, overlap_volume, posed

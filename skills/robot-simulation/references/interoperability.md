@@ -8,7 +8,7 @@ Use this reference when work touches more than one description of the same robot
 - **SRDF** owns MoveIt semantics: virtual joints, passive joints, planning groups, group states, end effectors, and disabled collision pairs.
 - **MJCF** owns a MuJoCo model: bodies, joints, geoms, default classes, actuators, equalities and keyframes, and a scene's floor and lights.
 
-Do not place geometry, inertials, joint origins, link poses, mesh references, physical joint limits, transmissions, or `ros2_control` interfaces in SRDF. Neither the URDF nor the MJCF defines planning groups, end-effectors, group states, or disabled-collision matrices: if the task becomes IK or path-planning work, that is the SRDF's job ([SKILL.md](../SKILL.md#srdf)).
+Do not place geometry, inertials, joint origins, link poses, mesh references, physical joint limits, transmissions, or `ros2_control` interfaces in SRDF. Neither the URDF nor the MJCF defines planning groups, end-effectors, group states, or disabled-collision matrices: if the task becomes IK or path-planning work, that is the SRDF's job ([srdf-authoring.md](srdf-authoring.md)).
 
 ## Ownership
 

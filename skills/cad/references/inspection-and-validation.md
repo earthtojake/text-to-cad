@@ -164,6 +164,19 @@ plate/face 3                            in a document of one part, its elements 
 - **The canonical ref**, what `cad <type> inspect` answers, spells an element by its name under its part's label where that label
   names one occurrence, else under the occurrence's path from the root.
 
+### References into other files
+
+A reference into a file that is not a document names what the viewer picked in it, in that file's
+own terms. None is a ref `cad <type> inspect` resolves:
+
+| File | Reference | Means |
+| --- | --- | --- |
+| URDF, SRDF | `/work/arm/arm.urdf#upper_arm` | the link `upper_arm` |
+| GLB | `/work/out/model.glb#n12` | the glTF node `nodes[12]` (0-based, the file's own index) |
+| 3MF | `/work/out/plate.3mf#o2.1` | the 2nd `<build><item>`'s 1st `<component>` (1-based); `#o3` is the 3rd build item |
+| STL | the file alone, on `File:` | one mesh: nothing in it is picked |
+| DXF | `/work/DXF/panel.dxf#h2F` | the modelspace entity whose handle is `2F`; what a block reference draws is named by its INSERT |
+
 ### Element names
 
 Every face, edge and vertex of a part is named by the feature history that made it,

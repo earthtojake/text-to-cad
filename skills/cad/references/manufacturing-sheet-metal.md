@@ -97,7 +97,7 @@ The last line is the check's state and its exit status -- `OK` 0, `FAILED` 1 (a 
 `--strict` a warning fails too), `NOT CHECKED` 3 (something was not judged: never a pass), and 2 for a
 command refused -- and a finding is data to edit from (a rule's `value`, `limit`, `unit`, `op`, `source`
 and `refs`; the faces of a sharp corner, a chamfered edge or a part that is not sheet in `refs` too):
-[Read the result](../SKILL.md#read-the-result).
+[Read the result](manufacturing-review.md#read-the-result).
 
 The families: `parts`, `not_sheet`, `sharp_bends`, `bends`, `flanges`, `channels`, `reliefs`, `hems`,
 `curls`, `holes`, `hole_spacing`, `hole_to_bend`, `notches`, `tabs`, `webs`, `gaps`.

@@ -86,7 +86,7 @@ another orientation, turn the part in its model and check again.
 The last line is the check's state and its exit status -- `OK` 0, `FAILED` 1 (a finding is an error; with
 `--strict` a warning fails too), `NOT CHECKED` 3 (something was not judged: never a pass), and 2 for a
 command refused -- and a rule's finding is data to edit from (`value`, `limit`, `unit`, `op`, `source`,
-`refs`): [Read the result](../SKILL.md#read-the-result).
+`refs`): [Read the result](manufacturing-review.md#read-the-result).
 
 The families: `solid` (a mesh's `mesh`), `overhangs`, `bridges`, `wall_thickness`, `knife_edges`, `gaps`, `holes`,
 `pins`, `details`, `clearances`, `trapped_volumes`, `build_volume`, `bed`, `stair_stepping`,

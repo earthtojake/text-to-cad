@@ -68,8 +68,13 @@ ask to see it ([Show the model](../SKILL.md#show-the-model)).
 
 ## Model page or file page
 
-The model's page is the default; a file's page is for a project that revolves around its
-files ([projects built around exported files](../SKILL.md#projects-built-around-exported-files)):
+The model's page is the default. A project can instead revolve around its exported files: the
+script writes the file on each run, by a file decorator in place of `@model`
+(`@step("../STEP/bracket.step")`, relative to the script), or `exports.py` or `cad <type> export`
+follows the run; the person looks at the file's page, which follows the file on disk; and
+verification reads the file (`cad <type> snapshot` or `inspect` with its path, or `step.read` in a
+check). Do this only where the person asks to iterate on the file or the project already works
+that way:
 
 | | Model page | File page |
 | --- | --- | --- |
