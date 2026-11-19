@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
+from . import computer
 from .computer import (EXCEPTION, Failed, Here, Ran, copy_tree, discard, read_json, read_toml, same_path, swap, table,
                        version_key, within)
 from .source import (BRANCH, COPY_MARK, DEV_CATALOG, DEV_MARK, OUR_CATALOGS, OUR_PLUGINS, PLUGIN, REPOSITORY,
@@ -838,7 +839,7 @@ def claude_desktop(app: App, here: Here, context: Context) -> Outcome:
     with os.fdopen(handle, "w", encoding="utf-8", newline="") as out:
         out.write(edited)
     os.chmod(temporary, real.stat().st_mode & 0o777)
-    os.replace(temporary, real)
+    computer.rename(temporary, real)
     words = f"the old cad server in its settings ({kept.name} keeps the file as it was)"
     return Outcome("removed", "; ".join(filter(None, [words, hint])), has_ours=ours)
 

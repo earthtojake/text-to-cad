@@ -3,7 +3,8 @@ is found and how one runs; and the files it reads and replaces -- a person's con
 (``read_json``, ``read_toml``, ``table``), and nothing removed or replaced by half (``discard``, ``copy_tree``,
 ``swap``).
 
-A command an app's row runs is given nothing to read but its answer, its output captured, and is stopped with every
+Every rename goes through ``rename``, which ``cad plugin`` sets to cad's own. A command an app's row runs is given
+nothing to read but its answer, its output captured, and is stopped with every
 process it started after ``COMMAND_SECONDS`` (``Here.run``). A run that has a deadline of its own (``Here.until``:
 the one a server began) gives each command what is left of it and starts none past it. How a step failed is a word
 chosen where it failed (``Failed.reason``, ``REASONS``), never its message.
@@ -46,6 +47,10 @@ TIMEOUT, COMMAND, NETWORK, EXCEPTION, OTHER = "timeout", "command", "network", "
 REASONS = (TIMEOUT, COMMAND, NETWORK, EXCEPTION, OTHER)
 # The exit status of a command stopped because it did not answer in time, as ``timeout(1)`` says one.
 STOPPED = 124
+# How a file or a folder is renamed into place (``discard``, ``swap``, an app's config written): the standard
+# library's, unless what runs these modules gives a more patient one -- ``cad plugin`` gives cad's own (``run``), which
+# waits out a file another program holds for a moment on Windows.
+rename: Callable[[Any, Any], None] = os.replace
 
 
 # --- the computer ---------------------------------------------------------------------------------
@@ -277,7 +282,7 @@ def discard(path: Path) -> None:
     if not path.exists():
         return
     trash = Path(tempfile.mkdtemp(prefix=".text-to-cad-trash-", dir=str(path.parent)))
-    os.replace(str(path), str(trash / path.name))
+    rename(str(path), str(trash / path.name))
     try:
         _rmtree(trash)
     except OSError:
@@ -305,15 +310,15 @@ def swap(staged: Path, target: Path) -> bool:
     folder beside it), the new one in, the old one put back where that fails. Then the old one, which the caller has
     found to be ours, is deleted (a link unlinked, never followed). Whether there was an old one."""
     if not (target.exists() or target.is_symlink()):
-        os.replace(str(staged), str(target))
+        rename(str(staged), str(target))
         return False
     held = Path(tempfile.mkdtemp(prefix=".text-to-cad-old-", dir=str(target.parent)))
     try:
-        os.replace(str(target), str(held / target.name))
+        rename(str(target), str(held / target.name))
         try:
-            os.replace(str(staged), str(target))
+            rename(str(staged), str(target))
         except OSError:
-            os.replace(str(held / target.name), str(target))
+            rename(str(held / target.name), str(target))
             raise
         discard(held / target.name)
     finally:

@@ -147,6 +147,13 @@ class InstallTests(PluginRuns):
         self.assertIn("The plugin's automatic updates were not turned on (read-only). Run this command again to update "
                       "the plugin.", done.stdout)
 
+    def test_run_by_cad_every_rename_is_cad_s_one_rename(self) -> None:
+        """The table's modules are the standard library alone, and rename with it where a checkout's development
+        install loads them without cad; the command gives them cad's rename, which every file cad writes goes by."""
+        from cad._internal.atomic_replace import replace_atomic
+
+        self.assertIs(computer.rename, replace_atomic)
+
     def test_install_under_an_earlier_cad_s_server_run_leaves_that_run_s_record_alone(self) -> None:
         """A server of an earlier cad runs ``cad plugin update``, whose install command hands over to this cad's ``cad
         plugin install`` with that run's name in its environment: the run is the earlier command's to end. It has no

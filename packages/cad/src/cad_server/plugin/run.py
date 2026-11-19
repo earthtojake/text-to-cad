@@ -30,12 +30,16 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
 
+from cad._internal.atomic_replace import replace_atomic
 from cad_server._internal import plugin_catch_up
 
-from . import terminal
+from . import computer, terminal
 from .apps import NOT_FOUND, QUIET, Report, install_apps
 from .computer import STOPPED, Here
 from .source import Source
+
+# Run by cad, every rename the apps' rows make is cad's one rename, as every file cad writes goes through it.
+computer.rename = replace_atomic
 
 # Where the run says what it did, for the program that started it (the hosted install command).
 REPORT_ENV = "CAD_PLUGIN_REPORT"
@@ -198,7 +202,7 @@ def write_report(here: Here, report: Report) -> None:
         handle, temporary = tempfile.mkstemp(prefix=".plugin-report-", dir=os.path.dirname(os.path.abspath(target)))
         with os.fdopen(handle, "w", encoding="utf-8") as out:
             out.write(text)
-        os.replace(temporary, target)
+        replace_atomic(temporary, target)
         temporary = None
     except Exception:  # noqa: BLE001 - the report is for the program that asked; the run is the person's
         pass
