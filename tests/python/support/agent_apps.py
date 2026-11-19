@@ -256,13 +256,25 @@ class AgentApps(unittest.TestCase):
         self.write(".claude/plugins/known_marketplaces.json", {name: {"source": source} for name, source in catalogs.items()})
 
 
+# ``cad <argv>`` in a process of its own, as the cad of the environment named first: a global install's.
+AS_THE_TOOL = "import sys\nsys.prefix = sys.argv.pop(1)\nfrom cad_server.cli import main\nsys.exit(main(sys.argv[1:]))\n"
+
+
 class PluginRuns(AgentApps):
     """``cad plugin`` run on that computer (``cad_plugin``, in this process, its environment the computer's alone;
     ``child``, a process of its own): cad's state folder is the home's, and its engine folder one where no server
-    runs, so the command keeps its switch and its record itself, there."""
+    runs, so the command keeps its switch and its record itself, there. The cad that runs is that computer's global
+    install (``tool``, a uv tool's environment as uv's receipt says one), the one whose release a run keeps;
+    ``from_elsewhere`` is a cad that is not."""
 
     def setUp(self) -> None:
         super().setUp()
+        self.tool = self.root / "tools" / "cad"
+        self.tool.mkdir(parents=True)
+        (self.tool / "uv-receipt.toml").write_text('[tool]\nrequirements = [{ name = "cad" }]\n', encoding="utf-8")
+        installed = mock.patch.object(sys, "prefix", str(self.tool))
+        installed.start()
+        self.addCleanup(installed.stop)
         # A short path of its own: a server's door is a socket, whose path has a limit.
         self.engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None))
         self.addCleanup(shutil.rmtree, self.engine, ignore_errors=True)
@@ -301,8 +313,13 @@ class PluginRuns(AgentApps):
     def child(self, *argv: str, **extra: str) -> tuple:
         """The command line of ``cad plugin <argv>`` as a process of its own, and its environment: this computer's,
         with the path this process imports cad by."""
-        return ([sys.executable, "-m", "cad_server.cli", "plugin", *argv],
+        return ([sys.executable, "-c", AS_THE_TOOL, str(self.tool), "plugin", *argv],
                 self.environ(**{"PYTHONPATH": os.pathsep.join(entry for entry in sys.path if entry), **extra}))
+
+    def from_elsewhere(self):
+        """For the ``with``, the cad that runs in this process is no global install: one run from uv's cache, a
+        project's, a checkout's."""
+        return mock.patch.object(sys, "prefix", str(self.root))
 
     def kept(self) -> dict:
         """What cad keeps of the plugin: ``switch``, whether ``cad plugin update auto`` is on, and ``record``, its

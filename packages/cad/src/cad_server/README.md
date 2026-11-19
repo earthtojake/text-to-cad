@@ -118,7 +118,9 @@ cad_server/
 - **`cad plugin install`**: for every agent app found on this computer, the plugin installed or updated with
   that app's own command, from the GitHub repository's `latest` branch, then our older copies there removed;
   one line per app (`plugin/`: `apps.py` is the one table of apps). Then it turns `cad plugin update auto` on,
-  and keeps this cad as the release the plugin is up to date for only where the run ended well. In a person's
+  and keeps this cad as the release the plugin is up to date for only where the run ended well and this cad is
+  the computer's global install (a cad run from anywhere else, as the newest release from uv's cache, keeps
+  none: below). In a person's
   terminal it builds the CAD logo first and keeps a live line under the apps' lines; anywhere else the plain
   lines. No options. Exit status 0 where it ended well, 1 where every app it found failed, 2 for a command line
   it does not take, 75 where another run was going and a server began this one. Where `CAD_PLUGIN_REPORT` names
@@ -214,7 +216,11 @@ in the data folder, beside the update's own record: written when `cad plugin upd
 and when the switch is turned on (the last step of `cad plugin install` and `cad plugin update`, right after
 the plugin is in place, but written only where the run ended well: one in which every app it found failed
 turns the switch on and writes none; turned on by hand, `cad plugin update auto on`, it means "from this
-release on"); a run that fails writes none. With no record and the switch on, the record is written for this release and nothing
+release on"); a run that fails writes none. Only the computer's global install of cad writes it: a cad run from
+anywhere else (the newest release from uv's cache, which the hosted install command runs for an installed cad
+that has no `cad plugin install`) does the work and turns the switch on, and keeps no release, since its own may
+be of a major the installed cad never reaches, and this cad's server would then never catch up again. With no
+record and the switch on, the record is written for this release and nothing
 runs, so a fresh install runs nothing again. A run underway, of any release, begun less than an hour ago, is
 waited for, and the server that begins a run asks the record again under the state folder's lock as it keeps
 it, so two servers never both begin one. A run that failed, or never said how it ended, is tried again an

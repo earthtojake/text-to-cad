@@ -92,6 +92,30 @@ class InstallTests(PluginRuns):
                                       "so this one ran nothing\n")
         self.assertFalse((self.root / "report.json").exists(), "a run that ran nothing writes none")
 
+    def test_a_cad_that_is_not_the_global_install_turns_the_switch_on_and_keeps_no_release(self) -> None:
+        """For an installed cad with no ``cad plugin install`` (0.11.12, 0.11.13) the hosted install command runs the
+        newest release's, from uv's cache. That release is not the installed cad's, and may be of a major it never
+        reaches: kept as the one the plugin is up to date for, the installed cad's server, which runs ``cad plugin
+        update`` only where it is newer than the release kept, would never run it again. So only the computer's global
+        install keeps its release; any other cad does the work, turns the switch on, and leaves the record alone."""
+        self.programs("claude")
+        with self.from_elsewhere():
+            done = self.run_install()
+        self.assertEqual((0, ""), (done.returncode, done.stderr), done.stdout)
+        self.assertEqual(self.calls("claude"), ADD)
+        self.assertEqual(done.stdout.splitlines()[-2:], ["plugin update auto: on",
+                                                         "Start a new session in each app to use it."])
+        self.assertEqual(self.kept(), {"switch": True, "record": {}}, "the next server keeps its own release")
+        # What the installed cad kept stays as it was, whichever command the other cad runs.
+        self.keep(**{"for": "0.0.1"})
+        with self.from_elsewhere():
+            for argv in (["install"], ["update"], ["update", "auto", "on"]):
+                self.assertEqual(0, self.cad_plugin(*argv).returncode, argv)
+                self.assertEqual(self.kept(), {"switch": True, "record": {"for": "0.0.1"}}, argv)
+        # The installed cad's own run keeps its release.
+        self.assertEqual(0, self.run_install().returncode)
+        self.assertEqual(self.kept(), {"switch": True, "record": {"for": cad_server.__version__}})
+
     def test_the_report_names_each_app_s_status_and_changes_nothing_the_run_says(self) -> None:
         # CAD_PLUGIN_REPORT (set by the hosted install command, which hands over to this one): what the run did, each
         # app by its key, written whole; the run's output and exit status as without it, and a report that cannot be

@@ -2075,6 +2075,17 @@ class PluginCatchUpTest(Case):
                             self.assertTrue(plugin_command._keep(True, note=True))
                     self.assertNotIn("note", asked.call_args.args[0])
                     self.assertEqual(self.catch_up.read()["for"], "0.1.0", "from this release on")
+                # A cad that is no global install (the newest release, run from uv's cache) asks as a run ending
+                # badly does: the switch, and nothing of its own release, which the installed cad may never reach.
+                self.catch_up._change(lambda found: {**found, "for": "0.0.9"})
+                with mock.patch.object(client, "request", side_effect=lambda request, **_o: answer(request)) as asked, \
+                        mock.patch.object(sys, "prefix", str(self.tmp)), \
+                        mock.patch.object(cad_server, "__version__", "9.0.0"):
+                    self.assertTrue(plugin_command._keep(True, note=True))
+                    self.catch_up.ended(0)
+                self.assertEqual(asked.call_args.args[0], {"op": "plugin_auto_update", "on": True, "release": "9.0.0",
+                                                           "note": False})
+                self.assertEqual(self.catch_up.read()["for"], "0.0.9")
         # No record at all (a computer where no run ever ended well), the run ending badly: nothing written; the rule
         # for no record then takes this release as up to date, and the command runs once cad is newer.
         (self.state / self.catch_up.RECORD).unlink()

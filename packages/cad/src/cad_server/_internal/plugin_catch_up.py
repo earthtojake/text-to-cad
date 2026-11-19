@@ -10,13 +10,17 @@ gets newer -- its own automatic update, a typed ``cad update``, ``uv tool upgrad
 
 **The record** (``RECORD``, in the state folder beside ``auto-update.json``): ``for``, the release of cad the plugin is
 up to date for -- written by ``cad plugin update`` as it ends with exit status 0 (``ended``), and as the switch is
-turned on (``noted``, from ``auto_update.change_plugin``): a run of ``cad plugin install`` or ``cad plugin update``
-turns it on as its last step, right after it put the plugin in place: ending well, the switch is turned on and ``for``
-written; ending badly (every app it found failed), the switch is turned on and nothing written, so a computer whose
-runs keep failing still has the plugin kept: where an earlier run ended well (``for`` older than this cad), the server
-runs the command again for this release; where none ever did (no ``for``), the rule below takes this release as up to
-date, and the command runs once cad is newer. A person who turns it on by hand (``cad plugin update auto on``) means
-"from this release on". A run that fails writes nothing of ``for``. Then the last run the server began (``begin``):
+turned on (``noted``, from ``auto_update.change_plugin``), and only ever by this computer's global install of cad
+(``tool``): a cad run from anywhere else (the newest release from uv's cache, which the hosted install command runs
+for an installed cad with no ``cad plugin install``) is not the cad whose server asks the rule below, and its release,
+which may be of a higher major than that cad ever reaches, is never kept. A run of ``cad plugin install`` or ``cad
+plugin update`` turns the switch on as its last step, right after it put the plugin in place: ending well, the switch
+is turned on and ``for`` written; ending badly (every app it found failed), the switch is turned on and nothing
+written, so a computer whose runs keep failing still has the plugin kept: where an earlier run ended well (``for``
+older than this cad), the server runs the command again for this release; where none ever did (no ``for``), the rule
+below takes this release as up to date, and the command runs once cad is newer. A person who turns it on by hand
+(``cad plugin update auto on``) means "from this release on". A run that fails writes nothing of ``for``. Then the
+last run the server began (``begin``):
 ``release``, ``at``, ``tries`` (of that release), ``outcome`` (``underway``, then ``ok`` or ``failed``), ``code`` (its
 exit status, null where it could not start) and ``ended``. It is a state record, not a choice, so it lives in the
 state folder, as the update's own record does, and not in the person's settings. ``cad doctor`` shows it.
@@ -185,14 +189,16 @@ def noted(release: str | None = None) -> None:
 
 
 def ended(code: int | None) -> None:
-    """``cad plugin update`` ended with exit status ``code``: ``for`` this cad where it is 0 (a run that failed writes
-    none: it turns the switch on as it ends badly too, and takes nothing as up to date), and, where the server began
-    this run (``ATTEMPT_ENV``), the run's outcome. Never raises."""
+    """``cad plugin update`` ended with exit status ``code``: ``for`` this cad where it is 0 and this cad is the
+    computer's global install (``tool``; a run that failed writes none: it turns the switch on as it ends badly too,
+    and takes nothing as up to date; nor does a cad run from anywhere else, see the module), and, where the server
+    began this run (``ATTEMPT_ENV``), the run's outcome. Never raises."""
     try:
         attempt = os.environ.get(ATTEMPT_ENV)
+        mine = code == 0 and tool() is not None
 
         def change(found: dict[str, Any]) -> dict[str, Any]:
-            if code == 0:
+            if mine:
                 found["for"] = _version()
             if attempt and str(found.get("at")) == attempt and found.get("outcome") == UNDERWAY:
                 found.update(outcome=OK if code == 0 else FAILED, code=code, ended=time.time())

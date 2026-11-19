@@ -3,15 +3,16 @@ them (``cad_server.plugin``).
 
 - ``cad plugin install``: for every agent app found here, the plugin installed or updated with that app's own
   command, then our older copies there removed (``cad_server.plugin.run``); then ``cad plugin update auto`` turned on,
-  and this cad kept as the release the plugin is up to date for only where the run ended well -- what ``cad plugin
-  update auto on`` does, done in this process by the same code (``_keep``). It takes no options. In a person's
+  and this cad kept as the release the plugin is up to date for only where the run ended well and this cad is the
+  computer's global install -- what ``cad plugin update auto on`` does, done in this process by the same code
+  (``_keep``, which says why a cad run from anywhere else keeps none). It takes no options. In a person's
   terminal it builds the CAD logo first and keeps a live line under the apps' lines; anywhere else, the plain lines.
   Its exit status: 0 where it ended well; 1 where every app it found failed; 2 for a command line it does not take;
   ``plugin_catch_up.BUSY`` (75) where another run was going and a server began this one. Where ``CAD_PLUGIN_REPORT``
   names a file, what it did is written there as it ends. The hosted install command hands over to it.
 - ``cad plugin update``: the same run, and what the server runs once where this cad is newer than the release the
   plugin is up to date for (``plugin_catch_up``). Where it ends with exit status 0, this cad is kept as that release
-  (``plugin_catch_up.ended``); a run that fails writes none. Where a server began this run
+  (``plugin_catch_up.ended``, a global install's alone); a run that fails writes none. Where a server began this run
   (``plugin_catch_up.ATTEMPT_ENV``), it has ``INSTALL_SECONDS`` (``plugin_catch_up.deadline``): each command it runs is
   stopped, with every process it started, when they are up, no further app is begun, and it exits non-zero; a
   person's own run has no deadline. ``cad plugin install`` keeps nothing of a server's run and has no deadline: one
@@ -193,11 +194,20 @@ def _update(prog: str) -> int:
 
 def _keep(on: bool, *, note: bool, release: str | None = None) -> bool:
     """The switch kept as ``on`` -- by the server where one runs (``_by_the_server``), else here -- and, turned on with
-    ``note``, ``release`` (this cad's by default) kept as the one the plugin is up to date for: the switch as it is
-    now. ``OSError`` where it could not be kept."""
-    from cad_server._internal import auto_update
+    ``note`` by this computer's global install of cad (``plugin_catch_up.tool``), ``release`` (this cad's by default)
+    kept as the one the plugin is up to date for: the switch as it is now. ``OSError`` where it could not be kept.
+
+    A cad that is no global install keeps no release, as a run that ended badly keeps none: the newest release run
+    from uv's cache (what the hosted install command runs for an installed cad that has no ``cad plugin install``), a
+    project's, a checkout's. Its release is not the installed cad's, and may be one that cad never reaches by itself
+    (a higher major): kept, the server of the installed cad, which runs ``cad plugin update`` only where it is newer
+    than the release kept, would never run it again. What is kept instead is the installed cad's to say: the ``cad
+    plugin update`` of 0.11.12 and 0.11.13 that ran the install command keeps its own release as it ends well, and
+    where nothing is kept the next server keeps its own (``plugin_catch_up.due``)."""
+    from cad_server._internal import auto_update, plugin_catch_up
     from cad_server.cli.auto_update import _by_the_server
 
+    note = note and on and plugin_catch_up.tool() is not None
     release = release or auto_update._version()
     found = _by_the_server("plugin_auto_update", on, release=release, **({} if note else {"note": False}))
     return auto_update.change_plugin(on, release, note=note) if found is None else found
