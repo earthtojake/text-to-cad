@@ -474,7 +474,7 @@ class KernelProcessesUnavailable(RuntimeError):
     is missing a module. Its message carries the original error's type and words, and ``__cause__`` the
     error itself; ``cause`` is a word saying which failure it was, never read from the words (``pool``:
     the pool refused; else the word the server gave the environment's failure). There is no in-process
-    fallback, because kernel work never runs in the engine's threads (law 20). A refused pool is tried
+    fallback, because kernel work never runs in the engine's threads (law 19). A refused pool is tried
     again by the next request; a failed making of the environment is remembered by the server that made
     it, which says what clears it."""
 

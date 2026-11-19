@@ -138,8 +138,7 @@ answers the tree `.shape` would, at that pose. Given such a `.shape`, it says to
 ## Laws
 
 The laws are the package README's (**The design laws**), and this document restates none of them: it
-describes the mechanism they constrain and cites them by that README's numbers -- 1, 2, 3, 6, 7, 9,
-10, 11, 13, 19, 20, 22 and 23.
+describes the mechanism they constrain and cites them by that README's numbers.
 
 ## Architecture
 
@@ -150,7 +149,7 @@ they say so in one line.
 The background process is implemented in `daemon.py`; warm workers remain separate.
 Every successful build registers its document by id and gives it a URL, `/<id>`; registration does not mesh it.
 A model's worker is a separate process, holding its memo and live kernel objects; the daemon holds
-structures and buffers, never live kernel objects (law 20).
+structures and buffers, never live kernel objects (law 19).
 The daemon takes its HTTP application -- the CAD Viewer's and the CAD app's -- from the server's
 composition root (`daemon.HTTP_FACTORY`, `cad_server._internal.engine_host`); the library's engine imports
 no application module. Beside the library's own dependencies (numpy) it imports the `build123d`
@@ -187,7 +186,7 @@ or another file of the folder whose last run declared it, as the name's record s
 document; so does a name moved to another file of its folder, once the file it left is gone or has
 run again without it: each run records the explicit names its script declares (`declares`) and gives
 up those it declares no more (`identity.released`), and no script but the run's own is read (law
-23). The same explicit name in two folders is two documents, and there are no global names. Two unnamed functions in different files may share a name:
+22). The same explicit name in two folders is two documents, and there are no global names. Two unnamed functions in different files may share a name:
 their ids still include their script paths. A name holding `::`, the formula's separator, is refused
 at declaration. The canonical path (`ids.canonical`) is `realpath` and, on
 macOS, the name as the file system spells it, so a symlink and a case variant of one file are one
@@ -206,7 +205,7 @@ environment and cad release of the Python a build of it named where that is not 
 model**), a process's key, not a document's.
 
 The daemon maps each built document to its worker. HTTP watcher accounting has its
-own lock, independent of document reads and the supervisor's leases. A page watches a document (law 19)
+own lock, independent of document reads and the supervisor's leases. A page watches a document (law 18)
 while it has a version wait outstanding or completed a sync within `serve.LIVE` seconds; its heartbeats
 name the document by its id (`ids`): a file's `file_id`, a model's `model_id`, never turning
 a model into a file path. To admit a new script at the worker-count cap, the
@@ -389,7 +388,7 @@ seconds) only from the peer's word that it opened. The first word on a page that
 was asked to open settles the ask, so a failed open records nothing and the next `cad_show` opens
 the page again, and a word on any other page, from any client, is ignored. A client that declared
 no such peer is given the URL in words, and nothing opens.
-Host differences stay at the boundary (law 20): the stdio process translates host capabilities, the app
+Host differences stay at the boundary: the stdio process translates host capabilities, the app
 page keeps its version reads short enough for the host's tool-call slots, and the engine's request
 handlers act on declared capabilities, never on a host's identity.
 Active HTTP calls keep the daemon alive; quiet MCP sessions expire after an hour. The host's
@@ -1009,7 +1008,7 @@ in. Its structure says how long the parse took and which process made it
 
 ## Document types and integrations
 
-The words are the library README's (**Definitions**, laws 23 to 28); this is how they work.
+The words are the library README's (**Definitions**, laws 22 to 27); this is how they work.
 
 **The registry.** `cad.registry` is one table, the standard library alone: `DOCUMENT_TYPES` (each a
 `DocumentTypeEntry`: `id`, `title`, `extensions`, `mime`, `view`, `content`, `operations` -- each an
@@ -1723,7 +1722,7 @@ environment it runs in (`prefix`): the current installation's, which `cad doctor
 
 A document outlives the worker that built it, the engine's memory and the engine itself, and lives
 until a person deletes it (**Delete**; [models.py](models.py), the library's `cad.engine.serve`). What the
-engine knows of a model comes from a run alone (law 22): a run of its script pushes the model's
+engine knows of a model comes from a run alone (law 21): a run of its script pushes the model's
 code, its key and its document, and outside a run the engine reads and watches no script and runs
 nothing -- a file document's bytes, which are the disk, and the registry's records, which runs
 wrote, are no model's code. A document's state (`models.STATES`, what `cad server status` lists):
@@ -1972,7 +1971,7 @@ its shape), then the parts' facts (measured again when asked); then documents, l
 from where it is kept, under the same id, on its next access, and reading runs no code -- a file
 from its file, a model's document from the cache, which is handed its bytes as it leaves when it
 does not hold them yet (`Server.leaving`, `Models.leaving`). A document a page watches is never
-evicted, nor its tessellations or its parts' facts (law 19, connected means warm), nor the document being served as it is put.
+evicted, nor its tessellations or its parts' facts (law 18, connected means warm), nor the document being served as it is put.
 The STEP reads held by their bytes go with the first document evicted.
 
 **Pressure.** The daemon's server asks the operating system's memory-pressure signal every two
@@ -2697,7 +2696,7 @@ a mechanism in ISO 10303-105's terms (STEP AP242's kinematics):
   segments' times (`t_parameter`), interpolation and states (a mechanism state it names, or pair
   values).
 
-**What AP242 cannot hold is refused or left out, never patched** (law 13). A pair the built
+**What AP242 cannot hold is refused or left out, never patched** (law 12). A pair the built
 tree contradicts fails the build by name: one whose part stands where it cannot put it (moved
 after `connect_to`, connected after its compound was made, a rigid joint off the joint's axis)
 or that joins two parts rigid joints make one body has no value the standard can hold. A moving
@@ -2824,7 +2823,7 @@ label, `TDataStd_NamedData` for an entity's AP242 name (`entity`) and attributes
 the standard names them), `TDataStd_ReferenceList` for references, `TDataStd_RealArray` and
 `TDataStd_IntegerArray` for a configuration's values, `XCAFDoc_AssemblyItemRef` for an
 occurrence (`mechanism.py` draws the tree); `test_kinematics`' conformance test walks the subtree and holds
-it to law 13. A motion's segments say its ease as AP242's
+it to law 12. A motion's segments say its ease as AP242's
 `interpolation` (`linear_interpolation_type`, `synchronous_interpolation_type`; the last
 segment's `discontinuous_interpolation_type`), and a coupling is its couplers under
 `:6 "couplings"`, a label per coupling holding them. The structure serves couplings as
@@ -2911,7 +2910,7 @@ tracks too: a **build record** on its main label after the closure, as the closu
 animation's name, duration and tracks (path, interpolation, keys, the occurrence paths of its
 parts, what it says beyond its keys, its label and its order), the build's JSON
 (`animations.to_json`), no code. A document with no animation holds no record. It is no part of the
-mechanism subtree, which stays AP242's alone (law 13), and only a GLB reads it:
+mechanism subtree, which stays AP242's alone (law 12), and only a GLB reads it:
 `document.Loaded.animations`, and so `Source.read`, give the tracks back as the harvest made them,
 so a GLB exported from the xbf (`cad xbf export model.xbf model.glb`), from a held document by its
 id (**Document lifetime**) and by the build's own worker are byte for byte one GLB, and a model
@@ -3029,7 +3028,7 @@ carry); `point_mass(part, grams, at, name=, inertia=)`, a lump at a point in the
 above it counts; `free(shape)`, a base not bolted to the world (each link hung from the world that holds a part at
 or below it floats); and `link(shape, name)`, the name of the link its parts make. ISO 10303-105 bounds no drive and
 has no ground that floats, so `limits` and `free` are facts of the machine that are not kinematics, kept here and
-not in the mechanism (law 13). How a simulator collides a part, which pairs never collide, contact friction and a
+not in the mechanism (law 12). How a simulator collides a part, which pairs never collide, contact friction and a
 joint's dynamics are a simulation's choices, made in a MuJoCo function (`cad.mujoco`), never declared on the
 model. All travel with the prototype, in the structure (`frames`, and `body`, `drives`, `mass` -- each declaration
 at or above the part, as levels above it and grams --, `pointMasses`, `free` -- the levels above the part declared

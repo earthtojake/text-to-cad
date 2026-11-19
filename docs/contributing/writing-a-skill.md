@@ -6,8 +6,7 @@ circuit board, describe a robot for simulation, prepare a laser-cut order. It is
 
 The skills are the product. Every line of a `SKILL.md` is read by every agent on every task that
 loads it, and paid for in the context the agent has left for the work. This guide says what earns a
-line, how to keep a skill from growing, and how to test a change. Tests under `tests/python/global/`
-hold the parts that can be held mechanically.
+line, how to keep a skill from growing, and how to test a change.
 
 ## What a skill is for
 
@@ -27,18 +26,18 @@ gets more capable every release. It needs three things from a skill, in this ord
 It does not need engineering it already knows, a step-by-step script for a task it can plan, the
 tool's internals, the tool's history, or the same fact twice.
 
-## The budget
+## Short, by judgement
 
-| | Limit | Held by |
-|---|---|---|
-| `SKILL.md` | 260 lines and 17,500 bytes | `test_skill_shape.py` |
-| The description | 1,024 characters, the format's own limit; aim for 300 to 600 | `test_skill_shape.py` |
-| References | one level deep, each linked from `SKILL.md` | `test_skill_shape.py` |
-| Links | every relative link lands on a file and a heading | `test_skill_shape.py` |
+There is no size limit, and none would help: a skill is as long as what most of its tasks need, and a
+number invites writing to it. What keeps a skill short is asking, of every line in every change,
+whether it earns its place ([Before you add a line](#before-you-add-a-line)), and a reviewer who asks
+the same of the diff. The same holds for a reference: it is read less often, not less carefully, so
+it carries no history, no internals and nothing said elsewhere.
 
-The limits are ceilings, not targets: the smaller skills are a third of them. A change that would
-pass a limit moves something to a reference or deletes something first. Raising a limit is a change
-to this guide and the test together, with the reason in the pull request.
+A skill grows the way the `cad` skill did, to 570 lines with a section on joint stops (which only a
+model with a mechanism needs) at its top level: one reasonable paragraph after each feature and each
+bug, none of them wrong and none of them weighed against the rest. A pull request that makes a
+`SKILL.md` longer says what it weighed.
 
 ## Before you add a line
 
@@ -108,7 +107,7 @@ skills/<name>/
 
 - **The description** (front matter) decides whether the skill loads at all. Third person, the words
   a person would use for the outcome, what it covers, and what it is not where a neighbouring skill
-  could be confused for it.
+  could be confused for it. At most 1,024 characters, the format's limit.
 - **`SKILL.md`** opens with a few sentences on what the outcome is, then **Start with the task**: a
   table of each task, the command or file to start with, and the reference that goes deeper. A skill
   that makes something has **Check each change**: a table of the kind of change and how to check it,
@@ -194,7 +193,8 @@ for word, and tests keep the copies from drifting:
 - [ ] The skill is an outcome a person asks for, and no existing description covers it.
 - [ ] Each added line passed [Before you add a line](#before-you-add-a-line), and the pull request
       says what an agent got wrong without it.
-- [ ] `SKILL.md` is inside its budget, opens with "Start with the task", and links every reference.
+- [ ] `SKILL.md` opens with "Start with the task" and links every reference; a change that made it
+      longer says what was weighed.
 - [ ] A skill that makes something has "Check each change".
 - [ ] Every example was run, and every command in a code block parses.
 - [ ] The Setup and Show the model blocks are the shared text where they apply.

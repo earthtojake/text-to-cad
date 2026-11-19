@@ -1,12 +1,8 @@
-"""Every skill keeps the shape the guide gives it: a SKILL.md inside its budget, a task table, a check loop
-where it makes something, references one level deep and all linked, and links that land.
+"""Every skill keeps the shape the guide gives it (docs/contributing/writing-a-skill.md): a task table, a check
+loop where it makes something, references one level deep and all linked from SKILL.md, and links that land.
 
-A SKILL.md is read whole by every agent that loads the skill, on every task, so its size is a cost every task
-pays. The cad skill's had grown to 570 lines one reasonable paragraph at a time, with a section on joint stops,
-which only a model with a mechanism needs, at its top level. Nothing held the guide's own limit, so this does:
-the budget below is a ceiling a change may not pass without moving something to a reference first
-(docs/contributing/writing-a-skill.md, "The budget"). Raising a number here is a decision, said in the pull
-request that does it.
+It holds the structure, not the size. Whether a line earns its place is a judgement the guide's questions ask
+of each change ("Before you add a line"), and no number here stands in for it.
 
 Standard library alone.
 """
@@ -19,10 +15,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 SKILLS = sorted(path for path in (REPO / "skills").iterdir() if path.is_dir())
-#: The ceiling of a SKILL.md: lines, and bytes (a few very long lines must not hide in the line count).
-MAX_LINES = 260
-MAX_BYTES = 17_500
-#: The format's own limit on a description.
+#: The skill format's own limit on a description: a longer one is cut off or refused where it is listed.
 MAX_DESCRIPTION = 1024
 #: The skills that make something a person keeps, which say how to check each change. The other two review a
 #: file someone else made: their whole text is the check.
@@ -51,14 +44,10 @@ class SkillShape(unittest.TestCase):
         self.assertGreaterEqual(len(SKILLS), 8)
         self.assertLessEqual(MAKES, {skill.name for skill in SKILLS})
 
-    def test_every_skill_md_is_inside_its_budget(self) -> None:
+    def test_every_description_fits_the_format(self) -> None:
         for skill in SKILLS:
             text = (skill / "SKILL.md").read_text(encoding="utf-8")
             with self.subTest(skill=skill.name):
-                self.assertLessEqual(len(text.splitlines()), MAX_LINES,
-                                     "move what only some tasks need to a reference before adding to SKILL.md")
-                self.assertLessEqual(len(text.encode("utf-8")), MAX_BYTES,
-                                     "move what only some tasks need to a reference before adding to SKILL.md")
                 description = re.search(r"^description: (.*)$", text, re.M)
                 self.assertIsNotNone(description)
                 self.assertLessEqual(len(description[1]), MAX_DESCRIPTION)

@@ -74,8 +74,6 @@ VARIABLES: dict[str, Variable] = _table(
                                                  "half an hour; 0: no limit)"),
     Variable("CAD_ENGINE_CHECK_RSS_MB", PUBLIC, "the most memory one check may take, in MiB (default: the kernel "
                                                 "processes' cap; 0: no limit)"),
-    Variable("CAD_ENGINE_MEMO", PUBLIC, "0: no memo hit, so every kernel call of a run runs (a diagnosis)"),
-    Variable("CAD_ENGINE_BODIES", PUBLIC, "0: no body is replayed, so every model body of a run runs (a diagnosis)"),
     # --- what cad sends and fetches --------------------------------------------------------------------------
     Variable("CAD_TELEMETRY", PUBLIC, "0: no usage counts from this process; 1: on, over the person's saved "
                                       "choice. DO_NOT_TRACK=1 turns it off too"),
@@ -89,6 +87,8 @@ VARIABLES: dict[str, Variable] = _table(
     Variable("CAD_ENGINE_TEND_SECONDS", DEVELOPMENT, "how often the daemon tends itself"),
     Variable("CAD_ENGINE_STANDBY", DEVELOPMENT, "0: the daemon keeps no standby process"),
     Variable("CAD_ENGINE_MESH", DEVELOPMENT, "how parts are meshed: processes (the default) or inline"),
+    Variable("CAD_ENGINE_MEMO", DEVELOPMENT, "0: no memo hit, so every kernel call of a run runs"),
+    Variable("CAD_ENGINE_BODIES", DEVELOPMENT, "0: no body is replayed, so every model body of a run runs"),
     Variable("CAD_ENGINE_PRESSURE", DEVELOPMENT, "the memory-pressure signal as given (0 or 1), in place of the "
                                                  "system's"),
     Variable("CAD_ENGINE_UPDATE_INSTALLER", DEVELOPMENT, "a command run in place of the hosted install command "

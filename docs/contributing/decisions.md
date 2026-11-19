@@ -198,7 +198,7 @@ lag by weeks. The rule keeps those skills working; the test keeps the rule.
 
 **What it costs.** An old spelling lives on for a month after the skills drop it. A person's own
 scripts that run `cad` commands are not covered and may need changes after an update. A model's
-Python imports and a person's data are not covered by this rule either: they keep law 15's tiers 2
+Python imports and a person's data are not covered by this rule either: they keep law 14's tiers 2
 and 3 (`packages/cad/README.md`).
 
 ## The install script is the one place that knows every app

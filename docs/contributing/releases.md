@@ -75,7 +75,7 @@ every computer, and a store's copy of the skills can be weeks older. So a `cad` 
 `--json` key, an exit status, an MCP tool or its arguments that the skills of any release in the last
 30 days use keeps working, hidden if need be; CI checks every release against that skill text
 (`tests/python/global/test_released_commands_still_parse.py`). Past that window it may change or go
-in any release, and that is not a breaking change: it is a hard cutover (law 15, tier 1). A person's
+in any release, and that is not a breaking change: it is a hard cutover (law 14, tier 1). A person's
 own script that runs `cad` commands may need an edit after an update; the release notes say what
 changed.
 
@@ -98,11 +98,11 @@ for the person. The two rules are not one: from 1.0 a minor installs itself and 
 may carry no new guide; below 1.0 a minor installs itself and may break, with its guide
 (`version_installs_itself` and `version_breaks_nothing`).
 
-**What breaks, by tier.** [Law 15](../../packages/cad/README.md#the-design-laws) ("Compatibility, by who
+**What breaks, by tier.** [Law 14](../../packages/cad/README.md#the-design-laws) ("Compatibility, by who
 pays for a break") sorts what a release can change into four tiers and says what compatibility each
 keeps; it is the one statement of them. This table says which slot a change in each tier takes.
 
-| Law 15's tier | Breaks nothing: the patch below 1.0, the minor or patch from 1.0 | Breaking: the breaking slot, with a migration guide |
+| Law 14's tier | Breaks nothing: the patch below 1.0, the minor or patch from 1.0 | Breaking: the breaking slot, with a migration guide |
 | --- | --- | --- |
 | 1. What an agent reads each session: the skills, the `cad` command's verbs and options, the CAD tools | any change, in any release, once no skill text of the last 30 days uses what it removes | nothing: the 30-day rule keeps what released skills use |
 | 2. The library's public imports | an addition; a rename or a move whose earlier spelling stays an alias of the same object, its interface unchanged (a deprecation, which bumps the minor from 1.0) | the alias's removal; a change to a name's contract (what it takes or returns), including a spelling kept by something that is not the same object with the same interface |
@@ -111,7 +111,7 @@ keeps; it is the one statement of them. This table says which slot a change in e
 
 Tier 2 changes in two steps, and only the second breaks. The rename keeps the earlier spelling an
 alias of the same object, its interface unchanged, for a release at least, so no script stops working:
-it takes the non-breaking slot. Law 15 keeps an alias out of every document but the migration guide,
+it takes the non-breaking slot. Law 14 keeps an alias out of every document but the migration guide,
 and asks for no guide when one is made: the rename is announced by its warning, which names the new
 spelling at the line that spelled the old, and held by the pinned table (`cad._internal.aliases`), and
 it is listed in a migration guide when a breaking release next writes one, at the latest the release

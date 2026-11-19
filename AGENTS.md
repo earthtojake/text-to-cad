@@ -31,7 +31,7 @@ Read the one document for what you are changing, then the link it gives you. Not
 | A skill | [Writing a skill](docs/contributing/writing-a-skill.md) |
 | The library, the server or the `cad` command | [The design laws](packages/cad/README.md#the-design-laws), then the mechanism: the [engine](packages/cad/src/cad_server/engine/README.md), the [server](packages/cad/src/cad_server/README.md) or the [transport](packages/cad/src/cad_mcp/README.md) |
 | A document type or an integration | [Adding a document type](docs/contributing/adding-a-document-type.md), [adding an integration](docs/contributing/adding-an-integration.md) |
-| An environment variable | Law 31: declare it in `cad._internal.environment` first, and prefer not to add one |
+| An environment variable | Law 30: declare it in `cad._internal.environment` first, and prefer not to add one |
 | The CAD Viewer or shared JS | [apps/web](apps/web/README.md), [packages/ui](packages/ui/README.md) (its `docs/settings-ui.md` binds every settings control), [packages/core](packages/core/README.md) |
 | The CAD app | [apps/mcp](apps/mcp/README.md) |
 | The docs site or the API | [apps/docs](apps/docs/README.md), [apps/api](apps/api/README.md) |
@@ -57,9 +57,9 @@ Read the one document for what you are changing, then the link it gives you. Not
 
 **Skills**
 
-- A skill teaches a tool and how to check work done with it. Its `SKILL.md` has a size budget, and a
-  line is added only for something an agent got wrong without it, with the evidence in the pull
-  request. A change to what a skill tells agents to do is tested A/B before it ships.
+- A skill teaches a tool and how to check work done with it, and stays short: a line is added only
+  for something an agent got wrong without it, with the evidence in the pull request. A change to
+  what a skill tells agents to do is tested A/B before it ships.
 - A skill runs plain `cad` commands with no version, installs nothing, ships no scripts and imports no
   other skill.
 - Claude Code, Codex and Cursor are first-class: a change to the skills, the plugin, the server or the
@@ -67,11 +67,11 @@ Read the one document for what you are changing, then the link it gives you. Not
 
 **Code**
 
-- No superficial wrappers (law 29): add a helper or a command only where something is missing without
+- No superficial wrappers (law 28): add a helper or a command only where something is missing without
   it. What a tool already does is used as the tool's own.
 - cad knows no app and no skill: knowledge of agent apps lives in the plugin and
   `scripts/install/install.py`.
-- Markdown inside `packages/cad` refers to nothing outside that package (law 14).
+- Markdown inside `packages/cad` refers to nothing outside that package (law 13).
 - `packages/core` has no React; apps never import each other, and shared packages never import apps.
 - The Python floor is `requires-python` in `packages/cad/pyproject.toml` and nowhere else.
 - Where a law or a guide does not fit what you are adding, do not force it: say which and why in the

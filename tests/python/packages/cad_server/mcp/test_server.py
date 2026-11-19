@@ -776,7 +776,7 @@ class InlineServerTest(_Session):
                          ["data:", "blob:"])
 
     def test_a_mounted_view_warms_the_engine_s_meshing_pool_where_the_kernel_reads_it(self) -> None:
-        # The engine starts its pool with the first view, never with a build (law 19): a view the kernel reads.
+        # The engine starts its pool with the first view, never with a build (law 18): a view the kernel reads.
         # A mesh the page parses itself starts none -- it neither waits for the kernel environment to be made
         # nor fails where the machine cannot start the pool.
         warmed = []

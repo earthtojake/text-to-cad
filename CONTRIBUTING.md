@@ -173,7 +173,7 @@ Every environment variable cad reads is declared once, in `cad._internal.environ
 set (the server's README lists them), the development ones for tests and experiments
 (`CAD_ENGINE_MESH=processes|inline`, `CAD_ENGINE_STANDBY=0`, `CAD_VIEWER_WARM=0` and the like), the
 internal ones cad's processes hand each other, and the deprecated ones. A variable is the last resort
-(law 31): add one by declaring it there first, with its tier, and
+(law 30): add one by declaring it there first, with its tier, and
 `tests/python/global/test_environment_variables.py` fails on a name the source reads and the table
 lacks. What the
 engine builds is written beside a project only as the files models declare or a command
@@ -565,8 +565,7 @@ install script, cad's update, the manifests or the skills' setup text.
 
 ## Writing A Skill
 
-What earns a line in a skill, the size budget, where each kind of content goes and how a change is
-tested A/B are [Writing a skill](docs/contributing/writing-a-skill.md). Read it before editing
+What earns a line in a skill, where each kind of content goes and how a change is tested A/B are [Writing a skill](docs/contributing/writing-a-skill.md). Read it before editing
 anything under `skills/`. Then test the skill in an agent app
 ([Test In Agent Apps](#test-in-agent-apps)).
 

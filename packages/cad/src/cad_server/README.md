@@ -260,8 +260,6 @@ and the others there are for a contributor's tests or pass between cad's own pro
 | `CAD_ENGINE_CHECKS` | How many checks are measured at once (default: half the cores, one to four) |
 | `CAD_ENGINE_CHECK_SECONDS` | The longest one check may run before it is stopped (default: half an hour; 0: no limit) |
 | `CAD_ENGINE_CHECK_RSS_MB` | The most memory one check may take, in MiB (default: the kernel processes' cap; 0: no limit) |
-| `CAD_ENGINE_MEMO` | 0: no memo hit, so every kernel call of a run runs (a diagnosis) |
-| `CAD_ENGINE_BODIES` | 0: no body is replayed, so every model body of a run runs (a diagnosis) |
 | `CAD_TELEMETRY` | 0: no usage counts from this process; 1: on, over the person's saved choice. DO_NOT_TRACK=1 turns it off too |
 | `CAD_UPDATE_CHECK` | 0: this server neither looks for a newer release nor installs one |
 | `CAD_KICAD_3DMODELS` | More folders a board's 3D models are read from, separated as PATH is |

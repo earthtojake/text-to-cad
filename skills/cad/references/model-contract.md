@@ -263,8 +263,7 @@ the key can tell whether the document has been built from other sources since. T
 `bracket.build(verify=True)` runs every body the server would replay and compares each
 fresh result with the logged one (`.models[0]["verify"]`); a body whose result differs
 runs on every call for the worker's life. `bracket.build(profile=True)` adds function
-timings of the run as it happened. `CAD_ENGINE_BODIES=0` turns replay off, and
-`CAD_ENGINE_MEMO=0` every memo hit.
+timings of the run as it happened.
 
 ## Inputs
 

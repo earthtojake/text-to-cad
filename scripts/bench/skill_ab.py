@@ -8,8 +8,8 @@ working tree's, each by a fresh agent that reads only its own copy.
 
 A change to a skill is a change to what agents do, and reading the diff does not say what. This lays out, under
 ``tmp/skill-ab`` (ignored), one folder per task and variant: a copy of one set of skills, a working folder with
-the task's fixtures, an ``env.sh`` that gives the run a cad server of its own, and a ``BRIEF.md`` to hand to an
-agent. It runs no agent and grades nothing: start one agent per folder on the model you are testing for
+the task's fixtures, an ``env.sh`` that gives the run a cad server of its own (and starts it), and a ``BRIEF.md``
+to hand to an agent. It runs no agent and grades nothing: start one agent per folder on the model you are testing for
 (weaker than the one that wrote the change), then read each task's ``Expect`` against what the agent made, with
 your own ``cad`` commands and never the agent's word. ``runs.tsv`` says which folder had which skills; keep it
 from the agents.
@@ -125,7 +125,10 @@ def prepare(run: Path, task: dict, ref: str | None, scratch: Path) -> None:
         (work / destination).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(exported(source, scratch) if built else source, work / destination)
     variables = environment(run)
-    (run / "env.sh").write_text("".join(f"export {name}={value}\n" for name, value in variables.items()),
+    # The run's server is its own, so nothing has started it: the first command that sources this does, as a
+    # person's computer has one running already. Later commands find it and start nothing.
+    (run / "env.sh").write_text("".join(f"export {name}={value}\n" for name, value in variables.items())
+                                + "cad server status >/dev/null 2>&1 || cad server start >/dev/null 2>&1\n",
                                 encoding="utf-8")
     request = task["request"]
     if task["id"]:
