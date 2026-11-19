@@ -6,7 +6,6 @@ import { fetchXbfPartGroups } from "@cad/core/lib/xbf/xbfDocument.js";
 import { XBF_PICK_PIXELS, parseXbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
 import { useExportView } from "../../export/context.js";
 import { useViewerHost } from "../../host/context.js";
-import ParametersSection from "../kit/inspector/ParametersSection.jsx";
 import { readFileView } from "../kit/shell/fileView.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { usePreviewState, useRendererShell } from "../kit/shell/useRendererShell.js";
@@ -770,22 +769,11 @@ function XbfSurface({ view, data }) {
     onShowAs: (node, value) => showAs({ representationId: node.leafPartIds[0] }, value)
   }), [concepts, showAs, assembly, hiddenIds, isolatedIds, selectableIds, expandedIds, toggleExpanded, revealExpanded, selectTreeNode, ensureSelect, isolate, exitSingleIsolate,
     exitIsolate, toggleVisibility, showAll, tree, menuForNode, partMenuActions]);
-  // The ranged names of a concept, as sliders: the selected part's, else the first concept that has any.
-  const tuned = useMemo(() => {
-    const withNames = concepts.filter(concept => concept.parameters.length);
-    const chosenLeaves = new Set(leavesOf(selectedNodeIds));
-    const concept = withNames.find(found => chosenLeaves.has(found.id)) || withNames[0];
-    return concept ? { id: concept.id, parameters: concept.parameters,
-      parameterValue: name => scene.conceptParameterValue(concept.id, name),
-      setParameter: (name, value) => scene.setConceptParameter(concept.id, name, value) } : null;
-  }, [scene, concepts, leavesOf, selectedNodeIds]);
-  const redrawConcept = useCallback(() => shellRef.current?.requestFrame?.(), []);
-  const sidebar = scene && (assembly || kinematics || tuned) ? <>
+  const sidebar = scene && (assembly || kinematics) ? <>
     {assembly ? <XbfModelTree key={document.modelKey} tree={tree} active={!previewing} disabled={shell.idle} mode={shape}
       selectedIds={selected} onClearSelection={clearSelection} partControls={partControls} /> : null}
     {kinematics ? <XbfPositionSection kinematics={kinematics} motion={motionOwns ? motion : null} values={poseValues || {}} couplings={poseCouplings} preset={posePreset}
       onValues={setPoseValues} onPreset={choosePreset} onReset={resetPose} /> : null}
-    {tuned && !previewing ? <ParametersSection key={tuned.id} scene={tuned} revision={`${loaded.revision}:${tuned.id}`} onChange={redrawConcept} /> : null}
   </> : null;
 
   // What is picked, as the frame reads it: the Selected pane under the Model tree, the hover tip, the rows of

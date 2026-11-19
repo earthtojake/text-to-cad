@@ -648,8 +648,6 @@ export default {
   "field.value": "{name}的值",
   "position.title": "位置",
   "position.controls": "位置控制項",
-  "field.parameters.title": "參數",
-  "field.parameters.controls": "參數控制項",
   "field.parameter.value": "{name} 的值",
   "field.parameter.range": "{min} 至 {max}",
   "position.sliderValue": "{name}滑桿的值",

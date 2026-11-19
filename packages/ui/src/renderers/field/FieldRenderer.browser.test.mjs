@@ -126,24 +126,12 @@ test('a GSL model is drawn as its field, marched in the view, at the middle of t
   assert.equal(requests.filter(request => request.endsWith('/field')).length, 1, 'the field is read once');
 });
 
-test('a slider moves the field at once, by a number in its block, and asks the server for nothing', async (t) => {
+test('a ranged name is no control: the viewer shows a field at its values and changes none', async (t) => {
   served = { status: 200, body: field() };
-  const { page, errors, pane } = await open(t);
+  const { errors, pane } = await open(t);
   await ready(pane);
-  const before = covered(await capture(page));
-  // The model's sliders are the view's panel's Parameters tab.
-  await pane.getByRole('button', { name: 'Show panel' }).click();
-  const slider = pane.getByRole('slider', { name: 'r' });
-  await slider.waitFor();
-  assert.deepEqual([await slider.getAttribute('aria-valuemin'), await slider.getAttribute('aria-valuemax'), await slider.getAttribute('aria-valuenow')], ['2', '18', '6']);
-  requests.length = 0;
-  await slider.focus();
-  await page.keyboard.press('End');
-  await page.waitForFunction(() => document.querySelector('[data-field-parameter="r"] [data-slider-field-value]')?.value === '18');
-  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  const after = covered(await capture(page));
-  assert.ok(after > before * 4, `a radius three times as large covers far more of the view: ${before} -> ${after}`);
-  assert.deepEqual(requests.filter(request => /field|documents/.test(request) && !request.startsWith('GET /api/v1/documents')), [], 'no request for the move');
+  assert.equal(await pane.getByRole('slider').count(), 0);
+  assert.equal(await pane.getByRole('button', { name: 'Show panel' }).count(), 0);
   assert.deepEqual(errors, []);
 });
 

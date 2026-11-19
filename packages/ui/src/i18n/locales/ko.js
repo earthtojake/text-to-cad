@@ -647,8 +647,6 @@ export default {
   "field.value": "{name} 값",
   "position.title": "위치",
   "position.controls": "위치 컨트롤",
-  "field.parameters.title": "매개변수",
-  "field.parameters.controls": "매개변수 컨트롤",
   "field.parameter.value": "{name} 값",
   "field.parameter.range": "{min}~{max}",
   "position.sliderValue": "{name} 슬라이더 값",

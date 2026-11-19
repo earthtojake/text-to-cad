@@ -647,8 +647,6 @@ export default {
   "field.value": "{name}の値",
   "position.title": "位置",
   "position.controls": "位置のコントロール",
-  "field.parameters.title": "パラメーター",
-  "field.parameters.controls": "パラメーターのコントロール",
   "field.parameter.value": "{name} の値",
   "field.parameter.range": "{min}〜{max}",
   "position.sliderValue": "{name}のスライダーの値",

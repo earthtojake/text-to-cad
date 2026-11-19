@@ -673,8 +673,6 @@ export default {
   "field.value": "{name} value",
   "position.title": "Position",
   "position.controls": "Position controls",
-  "field.parameters.title": "Parameters",
-  "field.parameters.controls": "Parameter controls",
   "field.parameter.value": "{name} value",
   "field.parameter.range": "{min} to {max}",
   "position.sliderValue": "{name} slider value",

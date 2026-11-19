@@ -408,8 +408,8 @@ def device():
   **ranged** names (`@range`), this placement's: a name without a range is refused where the concept is drawn.
 - `gsl.baked(part, path, **values)` says an exact part was made from a concept. The Viewer shows it as its exact
   body, the concept, or both (the part's menu), which is where a bake's departure from its concept is seen.
-- The Viewer draws each concept as its field among the exact parts; its ranged names are sliders in the panel's
-  Parameters tab, which change the picture and never the file.
+- The Viewer draws each concept as its field among the exact parts, at the values its part gives. It has no
+  sliders: a ranged name is changed in the `.gsl`, or by the value the script gives.
 - In the Viewer a part that is a concept has its own glyph in the Model tree. Clip cuts the concepts with the
   exact parts and caps them. A concept that reads `time` is played by the playbar: with the document's motion
   where it has one, else by a clip of its own, Time, ten seconds long and looping. A baked part's row has a

@@ -884,9 +884,6 @@ export function createXbfScene(THREE, document) {
     },
     /** The GSL concepts drawn (`xbfConcepts.js`): each `{ id, name, role, representation, parameters }`, by its part's id. */
     concepts: () => concepts.list().map(({ index, ...rest }) => ({ id: xbfElementId(index), ...rest })),
-    conceptParameterValue: (id, name) => concepts.parameterValue(parseXbfElementId(id)?.instance, name),
-    /** Set a ranged name of a part's concept as it is drawn; the file is not changed. True when it took. */
-    setConceptParameter: (id, name, value) => !disposed && concepts.setParameter(parseXbfElementId(id)?.instance, name, value),
     /** Whether a concept reads its clock (GSL's `time`), and the clock itself, in seconds: true when it moved. */
     conceptsTimed: concepts.timed,
     setConceptTime: seconds => !disposed && concepts.setTime(seconds),
@@ -1487,9 +1484,8 @@ export function createXbfScene(THREE, document) {
     createSibling() {
       const sibling = createXbfScene(THREE, document);
       sibling.setHiddenParts(scene.hiddenParts());
-      for (const { id, role, representation, parameters } of scene.concepts()) {
+      for (const { id, role, representation } of scene.concepts()) {
         if (role === "baked") sibling.setRepresentation(id, representation);
-        for (const { name } of parameters) sibling.setConceptParameter(id, name, scene.conceptParameterValue(id, name));
       }
       return sibling;
     },

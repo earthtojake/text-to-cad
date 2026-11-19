@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import { MousePointer2 } from "lucide-react";
 import { viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
 import { useI18n } from "@cad/ui/i18n";
@@ -8,7 +8,6 @@ import { failureAlert } from "../kit/status/loadAlerts.js";
 import { useSceneToolState } from "../kit/tools/sceneTools.jsx";
 import { TOOL_SHORTCUTS } from "../kit/tools/toolShortcuts.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
-import ParametersSection from "../kit/inspector/ParametersSection.jsx";
 import { FIELD_DECLINED_LIVE_COMMANDS, FIELD_TOOL, FIELD_TOOL_MODES } from "./tools.js";
 import { useFieldScene } from "./useFieldScene.js";
 
@@ -40,13 +39,9 @@ function FieldSurface({ view, data }) {
   });
   shellRef.current = shell;
   useDeclinedSelectReference(document);
-  // A parameter moved: the field as it is now, on the next frame. No shadow or bound of the stage's changes.
-  const redraw = useCallback(() => shellRef.current?.requestFrame?.(), []);
 
   const strip = [shell.tools.own({ id: FIELD_TOOL.SELECT, label: t("tool.select"), shortcut: TOOL_SHORTCUTS.select, icon: SELECT_ICON })];
-  const sidebar = scene?.parameters.length
-    ? <ParametersSection key={document.modelKey} scene={scene} revision={loaded.revision} onChange={redraw} /> : null;
-  return <RendererShell shell={shell} tools={strip} sidebar={sidebar} references={NO_REFERENCES} referenceChips={NO_REFERENCES} />;
+  return <RendererShell shell={shell} tools={strip} sidebar={null} references={NO_REFERENCES} referenceChips={NO_REFERENCES} />;
 }
 
 export default function FieldRenderer(props) {
