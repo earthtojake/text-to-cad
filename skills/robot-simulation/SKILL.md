@@ -29,8 +29,8 @@ There are two routes to one:
 | A robot from a vendor's STEP | Read it, group parts into links, find each axis, declare, export | [From a vendor STEP](references/from-a-vendor-step.md) |
 | A MuJoCo scene: several robots, objects, a world | `spec()` for each piece, composed with MuJoCo's own `MjSpec` | [MuJoCo environment](references/mujoco-environment.md#the-scene-in-code) |
 | Tune a MuJoCo model's physics | `cad mujoco check`'s model-health findings, one parameter at a time | [Tuning](references/mujoco-environment.md#tuning), [MJCF checks](references/mjcf-checks.md) |
-| A URDF by hand | The `.urdf` and its ledger, then `cad urdf validate` | [Authoring](references/urdf-authoring.md), [frames](references/urdf-frames.md), [ledger](references/urdf-ledger.md), [checks](references/urdf-checks.md) |
-| MoveIt groups, end effectors, states, collision pairs | A `.srdf` beside the URDF, then `cad srdf validate` | [Authoring](references/srdf-authoring.md), [end effectors](references/srdf-end-effectors.md), [collisions](references/srdf-disabled-collisions.md), [ledger](references/srdf-ledger.md), [checks](references/srdf-checks.md) |
+| A URDF by hand | The `.urdf` and its ledger, then `cad urdf validate` | [Authoring](references/urdf-authoring.md) (frames and signs, the ledger), [checks](references/urdf-checks.md) |
+| MoveIt groups, end effectors, states, collision pairs | A `.srdf` beside the URDF, then `cad srdf validate` | [Authoring](references/srdf-authoring.md) (end effectors, disabled collisions, the ledger), [checks](references/srdf-checks.md) |
 | An MJCF by hand | `robot.xml` and a `scene.xml` that includes it, then `cad mujoco check` | [Authoring](references/mjcf-authoring.md), [checks](references/mjcf-checks.md) |
 | Link meshes for a hand-written file | One mesh per link, in the link's frame | [Meshes](references/meshes.md) |
 | Mass, centre of mass, inertia | Materials on the CAD parts; else a formula or a script, never intuition | [Inertials](references/inertials.md) |
@@ -178,7 +178,7 @@ The trap in each format, and where its contract is:
 - **URDF**: most errors are frame errors. A joint's `<origin>` is the parent-link-frame transform to
   the joint frame at zero, the child link frame coincides with the joint frame, `<axis>` is in the
   joint frame, and `visual`, `collision` and `inertial` origins are each in the link frame
-  ([frames](references/urdf-frames.md), [authoring](references/urdf-authoring.md)).
+  ([frames and signs](references/urdf-authoring.md#frames-and-signs)).
 - **SRDF**: the failure is a plausible file with the wrong group, tool link, default state or
   collision matrix. Extract the URDF's link and joint table and copy every name from it; derive groups
   from its topology and disabled collisions from evidence

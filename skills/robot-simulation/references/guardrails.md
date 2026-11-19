@@ -13,7 +13,7 @@ Say the source where the number is, with its frame and its unit:
 <origin xyz="0.18 0 0.12" rpy="0 -0.2 0"/>
 ```
 
-Where a value has no source, [urdf-ledger.md](urdf-ledger.md#when-information-is-missing) has the outcomes to choose from. The inferences that go wrong without a sign:
+Where a value has no source, [urdf-authoring.md](urdf-authoring.md#when-information-is-missing) has the outcomes to choose from. The inferences that go wrong without a sign:
 
 - A mirrored left or right chain changes axis signs and the off-diagonal inertia terms: derive the mirror transform in a script and record it.
 - A visual mesh's origin is not the link frame, the collision frame or the centre of mass unless its export made it so, and an STL carries no unit ([meshes.md](meshes.md)).

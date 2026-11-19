@@ -26,7 +26,7 @@ The unit of export is the link, not the assembly and not the CAD feature tree:
 4. A mesh that cannot be re-framed (a vendor's, a scan) takes a nonzero visual origin, recorded in the ledger with its source: a per-link constant, not a tuning knob.
 5. With a text-to-cad model, each link is a model of its own returning the link's part in the link's frame, and `cad model export <id> link.stl` writes its mesh.
 
-Before writing the XML, confirm each file holds only its link's geometry (open it, or check its bounding box), and give each mesh its ledger line: source, units, scale, and how its collision was simplified ([urdf-ledger.md](urdf-ledger.md)). When the CAD changes shape, export the affected links again first, then re-check what was derived from the old shape: link frames, visual origins, collision approximations and inertials.
+Before writing the XML, confirm each file holds only its link's geometry (open it, or check its bounding box), and give each mesh its ledger line: source, units, scale, and how its collision was simplified ([urdf-authoring.md](urdf-authoring.md#the-ledger)). When the CAD changes shape, export the affected links again first, then re-check what was derived from the old shape: link frames, visual origins, collision approximations and inertials.
 
 ## Units and Scale
 

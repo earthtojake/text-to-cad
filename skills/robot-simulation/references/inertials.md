@@ -4,7 +4,7 @@ Read this before writing or accepting a mass, a centre of mass or an inertia ten
 MJCF. Never type one from intuition: every `mass`, inertial `origin` and `inertia` value is generated
 from the CAD model, copied from a source (a datasheet, a measurement) or computed by a formula or a
 script in the same task. A hand-written file's ledger says which, per link
-([urdf-ledger.md](urdf-ledger.md)).
+([urdf-authoring.md](urdf-authoring.md#the-ledger)).
 
 ## Generated From the CAD Model
 

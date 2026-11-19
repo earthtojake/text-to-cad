@@ -11,7 +11,7 @@ Split the robot from its world, as an export does:
 - `arm.xml`, named for the robot: the compiler line, default classes, assets, the body tree, equalities, actuators and keys. It compiles alone.
 - `scene.xml`: solver options and contact defaults, then `<include file="arm.xml"/>`, then the floor, the lights and whatever else stands in the world ([the scene file](mujoco-environment.md#the-scene-file)). An include resolves against the main file's folder, and MuJoCo refuses a file included twice.
 
-The robot's file opens with its ledger as a comment ([urdf-ledger.md](urdf-ledger.md) has the block), then:
+The robot's file opens with its ledger as a comment ([urdf-authoring.md](urdf-authoring.md#the-ledger) has the block), then:
 
 ```xml
 <mujoco model="arm">

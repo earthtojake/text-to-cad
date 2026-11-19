@@ -25,11 +25,11 @@ OK robot.srdf: robot 'example_arm', urdf example_arm.urdf, 2 groups, 1 end effec
   before trusting that result.
 - **Errors against the URDF**: a name it does not hold, a chain that is not a parent-to-child path,
   a cycle of subgroups, no group or an empty one, an end effector that breaks its rules
-  ([srdf-end-effectors.md](srdf-end-effectors.md)), and a state that sets a fixed, mimic or passive
+  ([srdf-authoring.md](srdf-authoring.md#end-effectors)), and a state that sets a fixed, mimic or passive
   joint, a joint outside its group, or a value past the URDF's limits.
 - **Warnings**, which pass unless `--strict`: a state that leaves out joints of its group, which
   MoveIt fills from wherever the robot is; a pair whose reason is not borne out
-  ([srdf-disabled-collisions.md](srdf-disabled-collisions.md)); a virtual joint that takes a URDF
+  ([srdf-authoring.md](srdf-authoring.md#disabled-collisions)); a virtual joint that takes a URDF
   joint's name; and an unknown element under `<robot>` or `<group>`, a misspelled tag that MoveIt
   ignores silently.
 - **A group or a state that names a virtual joint** is reported as a missing name, since group
