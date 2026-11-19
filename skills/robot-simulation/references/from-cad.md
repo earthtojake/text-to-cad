@@ -60,8 +60,8 @@ how to tell).
   stands at its link's centre of mass with the model's axes, so a key's first three values and the
   simulator's base position read where the base is (a humanoid's at its torso, not on the floor
   between its feet). Mount an IMU or a camera on a `frame()` of the torso's part, not on the base
-  frame. On a part or a sub-assembly of a model with no joints, that node's body alone floats.
-  Bolted is the default.
+  frame. In a model with no joints, each top-level part or assembly is a body, and `free()` on one,
+  or on a part inside it, floats that body alone. Bolted is the default.
 
 ## States, couplings and loops
 
@@ -81,7 +81,7 @@ how to tell).
 ## Mass
 
 Every number here is the kernel's, exact, from the solids ([inertials.md](inertials.md) has the
-cases in full).
+parts a density weighs wrongly, and the checks).
 
 - **Materials** (`part.material = metals.aluminum()`, from `bd_materials`) give each part a density,
   so each link's mass, centre of mass and inertia tensor follow. A part with no material weighs
@@ -94,8 +94,8 @@ cases in full).
   only the solids no inner one holds.
 - **`point_mass(part, grams, at, name=, inertia=)`** is a lump the CAD leaves out (a motor inside a
   filled housing), at `at` in the part's own frame, with no inertia of its own unless `inertia=(ixx,
-  iyy, izz)` (kg*m^2) gives it. A `mass()` above it counts it: the lumps are fixed and the solids
-  make up the rest, and a total the lumps reach or pass is refused.
+  iyy, izz)` (kg*m^2, in `at`'s axes) gives it. A `mass()` above it counts it: the lumps are fixed
+  and the solids make up the rest, and a total the lumps reach or pass is refused.
 
 ## Frames, bodies and drive limits
 
@@ -103,8 +103,8 @@ cases in full).
   sensor), in the part's own frame, the one its geometry is in before it is placed: for a 100 mm bar
   built up from its own origin and then placed 140 mm up (`bd.Pos(0, 0, 140) * bar`), the tip is
   `bd.Pos(0, 0, 100)`, not world z 240.
-  A site in MJCF, an empty link on a fixed joint in URDF. The export's summary lists each frame where
-  it landed: read it.
+  A site in MJCF, an empty link on a fixed joint in URDF. The export's summary names each frame it
+  wrote, and the MJCF's `<site pos>` says where it stands, in metres in its link's frame.
 - **`body(part, name=None)`** keeps a part a body of its own, fixed to the link it would merge into
   (a camera mount, a fingertip the simulator addresses), with its own mass and geoms.
 - **`limits(assembly, joint, effort=, velocity=)`** is a joint's drive limits from its datasheet, in
@@ -122,17 +122,17 @@ cad model export "$ID" description/gripper.urdf --zero home
 cad step export vendor/part.step sim/part.xml
 ```
 
-`$ID` is the `id:` line the run printed. The suffix picks the format, and the meshes are written as
-binary STL in metres beside the file.
-
 - **Read what it wrote.** After the file's line, an export says its links and how its base stands,
   its joints by kind, its total mass, then its couplings, loops, frames, collisions, contact excludes
   (the jointed pairs touching at rest), keys and zero; every warning (a link with no mass, a joint
   left out) is a line of the log before it. `--json` gives the same as the file row's `robot`. A mass
   of 0, a link you did not expect or a missing joint is a model to fix.
+- **Its meshes** are written beside the file ([meshes](meshes.md)), with a list of them
+  (`.gripper.xml.meshes`). By that list, the next export of the file removes the meshes it no longer
+  names (parts renamed or gone), never a file it did not write nor one another robot's list names.
 - **The scene.** An MJCF export to `sim/gripper.xml` writes `sim/scene.xml` beside it when there is
   none: it includes the robot's file and adds a floor, a light and a skybox. The scene is yours to
-  edit (solver settings, cameras, other bodies); an export never writes over it, and says it kept it.
+  edit (solver settings, cameras, other bodies), and an export never writes over it.
 - **The layout** is that of published MuJoCo robots: radians, `meshdir="assets"`, `autolimits`,
   `implicitfast`, a `visual` class in group 2 that collides with nothing and a `collision` class in
   group 3, explicit `<inertial>`s, a site per frame, a key per state.

@@ -1,8 +1,7 @@
 # `cad.eng_drawing` reference
 
-```python
-from cad.eng_drawing import eng_drawing, Sheet
-```
+Read this for the calls a drawing script makes and what each argument does: `@eng_drawing`, `Sheet`
+and `View`.
 
 ## Template
 
@@ -14,11 +13,11 @@ from enclosure import HOLES, L, H, W, enclosure
 
 @eng_drawing(out="../PDF/enclosure_drawing.pdf")
 def enclosure_drawing():
-    part = enclosure().shape    # the model, built by the server (a replay when it holds it)
+    part = enclosure().shape
     sheet = Sheet("A3", title="ENCLOSURE", part_number="ENC-001", material="ABS",
                   revision="A", general_tolerance="ISO 2768-m",
                   notes=["BREAK SHARP EDGES."])
-    # Third angle, placed from the part's size. iso=True returns FOUR views.
+    # Third angle, placed from the part's size. iso=True returns four views.
     top, front, right, iso = sheet.three_views(part, iso=True)
     top.overall()
     top.dim((HOLES[0][0], W / 2, 0), (HOLES[2][0], W / 2, 0))   # unplaced: next free row
@@ -31,112 +30,72 @@ if __name__ == "__main__":
     enclosure_drawing()
 ```
 
-## `@eng_drawing(out="<path>.pdf")`
-
-Declares the drawing. The function returns a `Sheet` or a list of them. Calling
-it renders one PDF at `out`, a page per sheet, and returns `[path]`.
-
-`out` is required and must name a `.pdf`; a relative path resolves against the
-script. text-to-cad has no default location — where a document belongs is the
-caller's decision. Both are checked when the module is imported, not when the
-drawing runs.
-
-There is no `eng_drawing` CLI verb. A `Sheet` is composed in Python — views,
-their placement, and dimensions between points on the part's geometry — and no
-argument list carries that, so the decorator is the whole surface.
-
-## The part
-
-Call the model: `enclosure()` is built by text-to-cad's server, a replay when the server
-already holds it, and its `.shape` is the part as a build123d tree. A part with no model is
-read from its file instead:
+A part with no model is read from its file:
 
 ```python
 from pathlib import Path
 
 from cad import step
 
-part = step.read(Path(__file__).parent / "../vendor/enclosure.step")
+part = step.read(Path(__file__).parent / "../vendor/enclosure.step")   # xbf.read reads an xbf the same way
 ```
 
-`xbf.read` reads an xbf the same way. Anchor the path on the
-script, since it resolves against the process's working directory otherwise. Any
-build123d shape works: a drawing takes geometry, not a file.
+## `@eng_drawing(out="<path>.pdf")`
 
-## `Sheet(size="A3", scale=1.0, title=..., part_number="", material="", revision="A", author="", units="mm", projection="THIRD ANGLE", notes=(), ink="mono", text_height=3.5, general_tolerance="", revisions=())`
+The function returns a `Sheet` or a list of them. Calling it writes one PDF at `out`, a page per
+sheet, and returns `[path]`. `out` is required and must name a `.pdf`, both checked when the script
+is imported; a relative path resolves against the script.
+
+## `Sheet(size="A3", scale=1.0, title="UNTITLED", part_number="", material="", revision="A", author="", units="mm", projection="THIRD ANGLE", notes=(), ink="mono", text_height=3.5, general_tolerance="", revisions=())`
 
 - `size`: `A4`, `A3`, `A2`, `A1`, `A0`, landscape. `width`/`height` in mm.
-- `scale`: drawing scale, 1 = 1:1, 0.5 = 1:2. Dimension values stay true size at
-  any scale — each view divides its measurement by its own scale.
-- `projection`: `"THIRD ANGLE"` (default) or `"FIRST ANGLE"`. The label and the
-  arrangement `three_views` produces are the same decision, so anything else is
-  refused rather than printed over the wrong layout.
+- `scale`: drawing scale, 1 = 1:1, 0.5 = 1:2. Dimension values stay true size at any scale.
+- `projection`: `"THIRD ANGLE"` (default) or `"FIRST ANGLE"`: the title block's label and the
+  arrangement `three_views` lays out. Anything else is refused.
 - `ink`: `"mono"` (default) is black ink with grey hidden lines, the printed look;
-  `"color"` keeps per-layer colours (red dimensions, green notes) for review.
+  `"color"` colours each kind of line (red dimensions, green notes) for review.
 - `general_tolerance="ISO 2768-m"`: written as note 1, "TOLERANCES PER ISO 2768-m
-  UNLESS OTHERWISE SPECIFIED." Give one on any drawing a shop will quote from.
+  UNLESS OTHERWISE SPECIFIED."
 - `revisions=[("A", "2026-09-01", "INITIAL RELEASE"), ...]`: a revision table
   (REV, DATE, DESCRIPTION) top-right inside the frame.
-- `sheet.three_views(shape, gap=None, iso=False)` → `(top, front, right)` placed
-  from the part's extents in the arrangement `projection` names, with the gap
-  sized for two rows of dimensions unless you pass one. `iso=True` adds an
-  isometric view in the free corner and returns it FOURTH — unpack four names.
-  Use `view()` with `at=` only for a custom layout.
-- `sheet.view(shape, name, at=(x, y), label=None, hidden=True, centre_marks=True, scale=None)`
-  → `View`. `scale` overrides the sheet's for this view (a pictorial drawn
-  smaller); say so in its label. `name` is one of `top`, `bottom`, `front`,
-  `back`, `left`, `right`, `iso`. The projected geometry is centred on `at`.
-
-A view whose geometry runs off the frame raises, naming the scale that fits.
-
-Running the drawing also prints what it noticed: a dimension whose points miss
-the view's geometry (it draws, but it measures blank paper — usually a part
-built from a corner and dimensioned as if centred), and annotation printed over
-other annotation (usually one view's outermost row against the label of the
-view above it, which `three_views(gap=...)` fixes).
+- `sheet.three_views(shape, *, gap=None, hidden=True, centre_marks=True, iso=False)` →
+  `(top, front, right)` placed from the part's extents in the arrangement `projection` names, with
+  the gap sized for two rows of dimensions unless you pass one. `iso=True` adds an isometric view
+  in the free corner and returns it fourth: unpack four names.
+- `sheet.view(shape, name, *, at, label=None, hidden=True, centre_marks=True, scale=None)`
+  → `View`. `name` is one of `top`, `bottom`, `front`, `back`, `left`, `right`, `iso`, and the
+  projected geometry is centred on `at`. `scale` overrides the sheet's for this view (a pictorial
+  drawn smaller); say so in its label.
 
 ## `View`
 
-All points are MODEL coordinates (3-tuples; a 2-tuple means z = 0). Offsets
-are sheet millimetres.
+Points are model coordinates (3-tuples; a 2-tuple means z = 0) and offsets are sheet millimetres.
+Arguments after the points are keyword-only.
 
-- `view.overall()`: overall width above and height left of the view, on the
-  OUTERMOST row of each side — the feature dimensions sit inside it.
-- `view.dim(p1, p2, offset=None, text=None, orientation=None, tol=None, fit=None)`:
+- `view.overall()`: overall width above and height left of the view, on the outermost row of each
+  side, so the feature dimensions sit inside it.
+- `view.dim(p1, p2, *, offset=None, text=None, orientation=None, tol=None, fit=None)`:
   linear dimension. `orientation` is `"h"`, `"v"` or None (whichever the pair
-  spans more); anything else is refused. `offset` left unset takes the next free
-  row outside the view, so unplaced dimensions never stack on each other or on
-  `overall()`. A number places the line that far from the farther of the two
-  points (not from the view's edge), and its sign picks the side; a dimension
-  between interior points then needs an offset that clears the geometry.
-  `tol=0.1` states ±0.1 as a proper tolerance (stacked, smaller text);
-  `tol=(0.05, 0.02)` states +0.05/-0.02 deviations; `fit="H7"` appends an ISO
-  fit class. `text` overrides the value; `"<>"` inside it inserts the
-  measurement.
-- `view.hole(center, diameter, depth=None, thru=False, cbore=(dia, depth), csk=(dia, angle), thread=None, count=None, angle=45, tol=None, fit=None, label=None)`:
+  spans more). `offset` left unset takes the next free row outside the view, so unplaced
+  dimensions never stack on each other or on `overall()`. A number places the line that far from
+  the farther of the two points (not from the view's edge), and its sign picks the side; a
+  dimension between interior points then needs an offset that clears the geometry.
+  `tol=0.1` states ±0.1 (stacked, smaller text); `tol=(0.05, 0.02)` states +0.05/-0.02
+  deviations; `fit="H7"` appends an ISO fit class. `text` overrides the value; `"<>"` inside it
+  inserts the measurement.
+- `view.hole(center, diameter, *, depth=None, thru=False, cbore=(dia, depth), csk=(dia, angle), thread=None, count=None, angle=45, tol=None, fit=None, label=None)`:
   a hole callout in the standard symbols, e.g. `4× ⌀6.6 ↧12`, `⌀6 THRU`,
   `⌴ ⌀11 ↧6.5` (counterbore), `⌵ ⌀12 × 90°` (countersink), or `M6x1 - 6H THRU`
   when `thread` is given; `label="WHEEL"` is appended; `angle` is where the
   leader leaves the circle, in degrees from horizontal. Prefer it to
   `diameter()` for any hole a shop drills. Every size must be a positive
   number, and a hole is either `thru` or has a `depth`.
-- `view.diameter(center, radius, angle=45, text=None)` and
-  `view.radius(...)`: on a circular feature at `center`, plain value only.
-- `view.angle(vertex, p1, p2, offset=14)`: the angle at `vertex` between the legs
+- `view.diameter(center, radius, *, angle=45, text=None)` and `view.radius(...)`: on a circular
+  feature at `center`, plain value only. Both take the radius.
+- `view.angle(vertex, p1, p2, *, offset=14)`: the angle at `vertex` between the legs
   toward `p1` and `p2`; `offset` is the arc's distance from the vertex.
-- `view.note(text, at, offset=(10, 10))`: a leader from a model point to text.
+- `view.note(text, at, *, offset=(10, 10))`: a leader from a model point to text.
 
-## Layers
-
-| Layer | Linetype | Weight | Holds |
-| --- | --- | --- | --- |
-| SHEET | continuous | 0.35 | frame |
-| TITLE | continuous | 0.25 | title block lines and text |
-| VISIBLE | continuous | 0.50 | visible edges |
-| HIDDEN | DASHED | 0.25 | hidden edges |
-| CENTER | CENTER | 0.18 | centre marks |
-| DIM | continuous | 0.18 | dimensions |
-| NOTES | continuous | 0.25 | notes, view labels, leaders |
-
-They exist inside the ezdxf document the page is rendered from; the PDF carries
-their weights and dash patterns, not the layer names.
+`hole`, `diameter` and `radius` print the sizes they are given, not the part's:
+`diameter(center, 10)` on a bore of radius 6 prints ⌀20, with nothing said. Pass the model's own
+numbers.

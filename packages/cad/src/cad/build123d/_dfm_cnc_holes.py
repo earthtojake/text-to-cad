@@ -16,6 +16,21 @@ floor is a ``drill_point`` (a concave cone closing to a point: its included angl
 drill) or ``flat`` (a plane). A flat floor is an end mill's or a flat-bottom drill's (``floor_tool``): a drill
 leaves its point, so such a hole is not ``drilled``, whatever its diameter.
 
+**Its mouth** is ``whole`` where the narrowest cylinder goes all round at each end the hole opens by. A wall
+**cuts** it (``_mouth``) where a face that is none of the hole's and rises along its axis, either way
+(``Model.rises``: a cavity's wall, a step's, the part's side, another hole's), meets that cylinder by a convex
+edge, and from the axis, just inside that end, a ray through the middle of the opening the edge bounds meets
+no wall of the hole: a drill starts there with part of its tip over the void (a partial hole).
+``past_wall_mm`` is how far the hole's circle reaches past that wall, the move back that clears it;
+``open_deg`` the angle of the cylinder the wall opens, ``open_mm`` how far along the axis. The mouth is
+``stepped`` where the cylinder goes all round again beyond the wall's foot (the mouth lies on two levels;
+``to_floor_mm`` is the move the other way that takes the hole whole into the lower one) and ``open`` where it
+does not (a hole that breaks out of the part's side along its whole length). An opening whose two sides face
+each other (``SLOT_SIDES``) is a slot's that runs into the hole -- a slit across a clamp's bore, a keyway, a
+channel that leaves a hole --, cut after it: ``slotted``, no wall the hole crosses. An opening in the hole's
+side below its mouth (a cross hole's, a cavity's) and an end on a face that does not rise (an inclined one, a
+curved one) are no cut.
+
 **Standard drills** (Wikipedia, "Drill bit sizes", after ASME B94.11M): metric 0.2-0.98 mm (N x 0.1 + 0,
 0.02, 0.05, 0.08), 1.0-2.95 mm by 0.05, 3.0-13.9 mm by 0.1, 14-25 mm by 0.25; fractional inch by 1/64 to
 1 3/4 in; number gauges #80-#1; letters A-Z. A hole over the series' largest is milled, not drilled. A
@@ -32,7 +47,7 @@ import numpy as np
 
 from cad._internal.dfm import cnc as rules_side
 from cad.build123d import _dfm_brep as brep
-from cad.build123d._dfm_cnc_model import WORLD, Model, unit
+from cad.build123d._dfm_cnc_model import SAME, WORLD, Model, edge_normals, unit
 
 __all__ = ["DRILLS", "TAPS", "holes", "standard_drill"]
 
@@ -194,6 +209,7 @@ def holes(model: Model) -> tuple[list[dict[str, Any]], set[int]]:
                 hole["grooves"] = grooves
         holed |= group
         if hole is not None:
+            hole.update(_mouth(model, group, hole))
             found.append(hole)
     return found, holed
 
@@ -398,6 +414,138 @@ def _axis_length(model: Model, ordinal: int, a: np.ndarray) -> float | None:
     if not ends[True] or not ends[False]:
         return None
     return (max(ends[True]) + min(ends[True])) / 2.0 - (max(ends[False]) + min(ends[False])) / 2.0
+
+
+#: How far inside an end of a hole, and beyond a wall's foot, the hole's own wall is looked for (``_mouth``):
+#: mm, a tenth of the hole's run where that is less (a station's inset: ``_dfm_cnc_model.stations_at``).
+MOUTH_INSET_MM = 0.05
+#: The two sides of an opening in a hole's wall face each other within this (the cosine of their normals, as a
+#: gap's two faces do: ``_dfm_cnc.OPPOSED``): a slot that runs into the hole, no wall the hole crosses.
+SLOT_SIDES = -0.7
+
+
+def _mouth(model: Model, group: set[int], hole: dict[str, Any]) -> dict[str, Any]:
+    """What a wall that cuts the hole's mouth makes of it (the module), as its item's fields: ``mouth``
+    (``whole``, ``slotted``, ``stepped`` or ``open``), ``past_wall_mm``, ``to_floor_mm``, ``open_deg``,
+    ``open_mm``, ``cut_by`` (the wall the hole reaches furthest past) and ``cut_faces`` (the faces the opening
+    lies between). Of several openings, the one that reaches furthest past its wall.
+
+    Each convex edge the narrowest cylinder shares with a face that rises along the axis is a **side** of an
+    opening, which lies the way the wall looks from it; a side and the next one round the axis that runs
+    beside it and looks back are one opening's two (a side with none is read alone, its opening's angle a
+    straight wall's). An opening counts where the hole's wall is not met through its middle just inside an
+    end the hole opens by: one that stops short of the mouth is in the hole's side, not across its mouth."""
+    found: dict[str, Any] = {"mouth": "whole", "past_wall_mm": 0.0, "to_floor_mm": None, "open_deg": 0.0,
+                             "open_mm": 0.0, "cut_by": None, "cut_faces": []}
+    a = unit(hole["_axis"])
+    o = np.asarray(hole["_origin"], dtype=float)
+    radius = hole["diameter_mm"] / 2.0
+    narrow = {i for i in group if model.surface(i).kind == "cylinder"
+              and abs(float(model.surface(i).radius) - radius) < 1e-6}
+    sides = []
+    for i in sorted(narrow):
+        for edge, other in model.neighbours(i):
+            if other in group or edge.concave or edge.smooth:
+                continue
+            if not (model.rises(other, a) or model.rises(other, -a)):
+                continue
+            normal = edge_normals(model, edge)[edge.faces.index(other)]
+            sides.append((other, _edge_points(model, edge), unit(normal - a * float(normal @ a))))
+    opening = hole.get("opening")
+    if hole["through"]:
+        ends: tuple[int, ...] = (1, -1)
+    elif opening is None or hole["bottom"] == "closed":
+        ends = ()
+    else:
+        ends = (1,) if float(np.asarray(opening, dtype=float) @ a) > 0 else (-1,)
+    if not sides or not ends:
+        return found
+    seed = np.array([1.0, 0.0, 0.0]) if abs(a[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+    u = unit(np.cross(a, seed))
+    v = np.cross(a, u)
+    lows, highs = zip(*(model.extent(i, a) for i in narrow))
+    inset = min(MOUTH_INSET_MM, 0.1 * (max(highs) - min(lows)))
+    for sign in ends:
+        # along the axis toward this end: the hole runs from ``far`` up to its mouth at ``top``
+        top, far = (max(highs), min(lows)) if sign > 0 else (-min(lows), -max(highs))
+
+        def walled(level: float, way: np.ndarray) -> bool:
+            hit = model.first(o + a * (level * sign - float(o @ a)), way, skip=1e-6)
+            return hit is not None and hit.face in narrow and hit.distance < radius * (1.0 + 1e-6) + 1e-6
+
+        rows = []
+        for wall, points, across in sides:
+            along = (points @ a) * sign
+            rel = points[int(np.argmax(along))] - o  # the side's end toward the mouth
+            radial = rel - a * float(rel @ a)
+            rows.append({"wall": wall, "across": across, "foot": float(along.min()), "head": float(along.max()),
+                         "angle": math.atan2(float(radial @ v), float(radial @ u)),
+                         "turns": 1 if float(np.cross(a, radial) @ across) > 0 else -1,
+                         "past": _past(model, wall, a, o, radius, radial, across)})
+        rows.sort(key=lambda row: row["angle"])
+        paired: set[int] = set()
+        openings: list[tuple[dict[str, Any], dict[str, Any] | None]] = []
+        for k, row in enumerate(rows):
+            if row["turns"] != 1:
+                continue
+            for step in range(1, len(rows)):
+                other = rows[(k + step) % len(rows)]
+                if min(row["head"], other["head"]) - max(row["foot"], other["foot"]) > 1e-6:
+                    if other["turns"] == -1 and id(other) not in paired:
+                        paired |= {id(row), id(other)}
+                        openings.append((row, other))
+                    break
+        openings += [(row, None) for row in rows if id(row) not in paired]
+        for first, second in openings:
+            if second is not None:
+                turn = (second["angle"] - first["angle"]) % (2 * math.pi)
+                middle = first["angle"] + turn / 2.0
+            else:
+                turn = 2.0 * math.acos(max(-1.0, min(1.0, 1.0 - first["past"] / radius)))
+                middle = first["angle"] + first["turns"] * turn / 2.0
+            way = math.cos(middle) * u + math.sin(middle) * v
+            if walled(top - inset, way):
+                continue
+            if second is not None and float(first["across"] @ second["across"]) < SLOT_SIDES:
+                if found["mouth"] == "whole":
+                    found["mouth"] = "slotted"
+                continue
+            members = sorted((row for row in (first, second) if row is not None), key=lambda row: -row["past"])
+            past = members[0]["past"]
+            if past <= max(1e-9, found["past_wall_mm"]):
+                continue
+            foot = min(row["foot"] for row in members)
+            stepped = foot - inset > far and walled(foot - inset, way)
+            found = {"mouth": "stepped" if stepped else "open", "past_wall_mm": round(past, 9),
+                     "to_floor_mm": round(2.0 * radius - past, 4) if stepped else None,
+                     "open_deg": round(math.degrees(turn), 4), "open_mm": round(top - foot, 4),
+                     "cut_by": model.ref(members[0]["wall"]),
+                     "cut_faces": [model.ref(wall) for wall in dict.fromkeys(row["wall"] for row in members)]}
+    return found
+
+
+def _edge_points(model: Model, edge: brep.Edge) -> np.ndarray:
+    """Seventeen points along an edge, end to end."""
+    from OCP.BRepAdaptor import BRepAdaptor_Curve
+
+    curve = BRepAdaptor_Curve(model.part.edges()[edge.ordinal - 1].wrapped)
+    first, last = curve.FirstParameter(), curve.LastParameter()
+    return np.array([curve.Value(first + (last - first) * k / 16).Coord() for k in range(17)])
+
+
+def _past(model: Model, wall: int, a: np.ndarray, o: np.ndarray, radius: float, radial: np.ndarray,
+          across: np.ndarray) -> float:
+    """How far a hole's circle reaches past a wall that crosses it, into the void the wall looks at: the
+    hole's radius and how far its axis stands in front of the wall. A cylinder's along the hole's axis (a round
+    cavity's wall, a boss's, another hole's) by the distance between the two axes, exactly; any other by the
+    wall's normal where the hole's cylinder meets it (``radial``: from the axis to there; ``across``: the
+    wall's outward normal, square to the axis), a plane's exactly."""
+    s = model.surface(wall)
+    if s.kind == "cylinder" and s.concave is not None and abs(float(unit(s.axis) @ a)) > SAME:
+        gap = np.asarray(s.origin, dtype=float) - o
+        apart = float(np.linalg.norm(gap - a * float(gap @ a)))
+        return radius + (float(s.radius) - apart if s.concave else apart - float(s.radius))
+    return radius - float(radial @ across)
 
 
 _ANALYTIC = ("plane", "cylinder", "cone", "sphere", "torus")

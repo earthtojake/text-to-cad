@@ -1,28 +1,48 @@
 # Decisions
 
-How text-to-cad is installed, run and updated, and why. Each entry says the decision, why it was
-made, and what it costs. Read it before changing the install script, cad's update, the plugin's
-manifests or the skills' setup text.
+How text-to-cad is installed, run and updated, and why. Each entry says the decision, why it was made
+and what it costs. Read it before changing the install script, cad's update, the plugin's manifests or
+the skills' setup text. How each is carried out is
+[How a release reaches a computer](releases.md#how-a-release-reaches-a-computer) and, by module, the
+server README's [cad's own update](../../packages/cad/src/cad_server/README.md#cads-own-update).
+
+- **The two layers**: [Two layers, one direction of knowledge](#two-layers-one-direction-of-knowledge),
+  [cad says `cad`](#cad-says-cad-the-views-may-say-text-to-cad)
+- **Installing**: [One cad per computer](#one-cad-per-computer), [uv's own commands](#uvs-own-commands),
+  [One line installs cad](#one-line-installs-cad),
+  [The install script](#the-install-script-is-the-one-place-that-knows-every-app),
+  [No Skills CLI route](#no-skills-cli-route),
+  [Inside a Windows app's package](#inside-a-windows-apps-package-say-so)
+- **Updating**: [The feed says when](#the-feed-says-when),
+  [A major version never installs itself](#a-major-version-never-installs-itself),
+  [Who updates which copy](#who-updates-which-copy), [Forward only](#forward-only),
+  [The 30-day rule](#the-30-day-rule)
+- **Past releases**: [The bridge](#the-bridge-for-0100-to-01111),
+  [Old releases are carried through the newest 0.11](#old-releases-are-carried-through-the-newest-011),
+  [No version left behind](#no-version-left-behind)
+- **The plugin**: [Browser first](#browser-first-the-mcp-server-only-where-its-view-is-verified),
+  [No hooks, no pre-approved tools](#no-hooks-no-pre-approved-tools)
 
 ## Two layers, one direction of knowledge
 
 **Decision.** text-to-cad is two layers. cad is the software: the `cad` package on PyPI and the
-`cad` command. The plugin is the skills, one manifest per agent app, and the lines that start the
+`cad` command. The plugin is the skills, one manifest per agent app and the line that starts the
 server, on this repository's branches. The plugin knows cad: its skills run `cad` commands and say
-how to install cad. cad knows nothing of skills or agent apps: it never names them, installs,
-removes, updates or carries them, and does not depend on them. Of plugins it knows one command,
-`cad plugin`, which runs the hosted install command.
+how to install cad. cad knows nothing of skills or agent apps: it never names, installs, removes,
+updates or carries them, and does not depend on them. Of plugins it knows one command, `cad plugin`,
+which runs the hosted install command.
 
-**Why.** Every agent app installs plugins its own way, and changes that way often. When cad wrote
-plugin folders, edited app configs and ran app commands, every app change was a cad release, and a
-cad bug could break an app's setup. With one direction, an app change touches the plugin and the
-install script, never the software.
+**Why.** Every agent app installs plugins its own way, and changes that way often. A cad that writes
+plugin folders, edits app configs and runs app commands needs a release for every such change, and
+its bugs break an app's setup. With one direction, an app change touches the plugin and the install
+script, never the software.
 
 **What it costs.** cad cannot repair a broken plugin install or tell which app a person uses it
-from. Three exceptions are allowed: the MCP server reads which app connected, to choose how to show
-a model; the viewer's "Open in" menu names apps; and `cad plugin` runs the hosted install command,
-when asked (`cad plugin update`) and once where cad is newer than the release it last ended well for
-and `cad plugin update auto` is on (below). Nothing else in cad may name an app, a plugin or a skill.
+from. Three exceptions are allowed: the server reads which app it serves, to choose how to show a
+model and to say in telemetry where a count came from; the viewer's "Open in" menu names apps; and
+`cad plugin` runs the hosted install command, when asked and by itself
+([Who updates which copy](#who-updates-which-copy)). Nothing else in cad names an app, a plugin or a
+skill (`tests/python/global/test_cad_names_no_skill_or_plugin.py`, `test_host_neutral_packages.py`).
 
 ## cad says `cad`; the views may say text-to-cad
 
@@ -43,40 +63,41 @@ the MCP ids `dev.texttocad/*` and the URDF namespace keep their spelling: they c
 has one cad, installed globally with `uv tool install cad`, and one server, which it starts only
 when asked (`cad server start`, or the CAD app an agent app starts). The CAD app's line runs cad from
 uv's cache (`uvx ... cad@<VERSION> mcp`); where the computer has no global cad, that cad installs one
-and uses its server, so no server runs from the cache. Its data lives in one folder per user.
-No command names a version. `cad-server`, `cad-mcp` and `cadgen` stay on PyPI as empty aliases of
-`cad`, so older installs that name them keep working.
+and uses its server, so no server runs from the cache. Its data lives in one folder per user. No
+command a skill runs names a version. `cad-server`, `cad-mcp` and `cadgen` stay on PyPI as empty
+aliases of `cad`, so older installs that name them keep working.
 
-**Why.** Earlier designs kept each release in its own folder, side by side, with every command
-pinned to its release. That needed our own launcher, our own version machinery, data copied between
-versions and a cleanup of old ones, and it confused people who saw two servers. One cad is what
-every other command-line tool does.
+**Why.** A release per folder, side by side, with every command pinned to its release, needs a
+launcher and version machinery of our own, data copied between versions and a cleanup of old ones,
+and shows people two servers. One cad is what every other command-line tool does.
 
 **What it costs.** A chat that is open while cad updates meets the new release. Skills may be older
-than cad, which the 30-day rule covers (below). A server started from uv's cache would never update
-itself, which is why the CAD app's line installs cad first.
+than cad, which [the 30-day rule](#the-30-day-rule) covers. A server started from uv's cache would
+never update itself, which is why the CAD app's line installs cad first.
 
 ## uv's own commands
 
 **Decision.** cad is installed, updated and removed with its installer's own commands: `uv tool
 install cad`, `uv tool install --upgrade "cad>=<installed>,<<next major>"` (what cad's update runs),
-`uv tool install --upgrade "cad>=<installed>"` (what `cad update --major` runs) and `uv tool uninstall cad`. cad has no
-installer, uninstaller or launcher of its own.
+`uv tool install --upgrade "cad>=<installed>"` (what `cad update --major` runs) and `uv tool
+uninstall cad`. cad has no installer, uninstaller or launcher of its own.
 
-**Why.** uv already installs a tool in place, replaces it on update, and removes it cleanly. Code of
-our own that did the same was how earlier releases got into trouble.
+**Why.** uv already installs a tool in place, replaces it on update and removes it cleanly. Code of
+our own that did the same is where earlier releases failed.
 
 **What it costs.** We take uv's behaviour as it is, its bugs included: on Windows, uv cannot remove a
 running `cad.exe`, so cad's update renames each one aside first and puts a copy back, and tries again
-if uv still fails; and when an install fails after it has started, uv removes the tool, so cad's update
-puts the release it ran back.
+if uv still fails; and when an install fails after it has started, uv removes the tool, so cad's
+update puts the release it ran back.
 
 ## One line installs cad
 
 **Decision.** `uv tool install cad`, with no flags, is the one way we tell anyone to install cad,
-and it never changes. Every skill's Setup block runs it where `cad` is missing, does not run, or is
-older than the first release installed this way; cad updates itself, so no skill updates it. No skill runs the
-install command. cad runs on Python 3.11 and newer, with no upper bound.
+and it never changes. Every skill's Setup block runs it where `cad` is missing or older than 0.11.12,
+the first release installed this way
+([The shared blocks](writing-a-skill.md#the-shared-blocks), held by
+`tests/python/global/test_skill_requirements.py`); cad updates itself, so no skill updates it. No
+skill runs the install command. cad's `requires-python` has a floor and no upper bound.
 
 **Why.** A skill deals with cad alone: the install command changes every agent app on the computer,
 which is the person's call, not an agent's. A line with no flags works on whatever Python uv picks,
@@ -91,11 +112,10 @@ An upper bound on Python would make a resolver on a newer Python fall back to an
 
 **Decision.** The version feed, `api.texttocad.dev/v1/releases`, names the newest release, `latest`,
 once it has been on PyPI for an hour, and the newest such release of each major version, `lines`; we
-can hold a release back from it. cad's automatic update
-begins when the feed names a release of its own major newer than its own, or, where the feed names
-none of its major while its `latest` is of a higher major, all the same (bounded by its tries), and
-then runs the installer's own upgrade inside that major, which installs PyPI's newest of the major. Everything else
-asks PyPI: `cad update`, the install command, the skills' line and the CAD app's line.
+can hold a release back from it ([The version feed](releases.md#the-version-feed)). cad's automatic
+update begins when the feed names a newer release of its own major, and then runs the installer's own
+upgrade inside that major, which installs PyPI's newest of the major. Everything else asks PyPI:
+`cad update`, the install command, the skills' line and the CAD app's line.
 
 **Why.** The hour keeps automatic updates from spreading a release the moment it is out, and a hold
 stops them without a new release. The upgrade names a range, never an exact version, because an
@@ -110,28 +130,27 @@ starts.
 ## A major version never installs itself
 
 **Decision.** cad installs by itself any newer release with the same major version number as its
-own, a patch and a minor alike; a release of a higher major never arrives by itself. A person asks for
-it: `cad update --major`, which `cad update` and `cad doctor` name, with the migration guides, when
-one is out. The automatic update and a typed `cad update` run the installer's upgrade bounded to the
-installed major, `uv tool install --upgrade "cad>=<installed>,<<next major>"` (pipx: `pipx upgrade cad
---pip-args=...` with the same range), worked out from the installed release each time; the helper
-accepts only a release of that major, never an older one. The CAD app's line installs the newest of its
-own major where a computer has no cad, and never over a `cad` of a higher major. This is cad's own
-update; the hosted install command is not bounded by major, and cad runs it by itself too (the
-plugin's catch-up after cad got newer, and the bridge from 0.10.0 to 0.11.11): it installs the newest
-plugin of all, and, where cad is missing or does not start, PyPI's newest `cad` of all. No higher
-major exists yet; CONTRIBUTING's "Before the first release of a higher major" lists what changes
-first.
+own, a patch and a minor alike; a release of a higher major never arrives by itself. A person asks
+for it: `cad update --major`, which `cad update` and `cad doctor` name, with the migration guides,
+when one is out. The automatic update and a typed `cad update` run the installer's upgrade bounded to
+the installed major ([uv's own commands](#uvs-own-commands)). The CAD app's line installs the newest
+of its own major where a computer has no cad, and never over a `cad` of a higher major. The bound is
+cad's own update's. The hosted install command has none, and cad runs it by itself too (the plugin's
+catch-up after cad got newer, and [the bridge](#the-bridge-for-0100-to-01111)): it installs the newest
+plugin of all and, where cad is missing or does not start, PyPI's newest `cad` of all. No higher
+major exists yet;
+[Before the first release of a higher major](releases.md#before-the-first-release-of-a-higher-major)
+lists what changes first.
 
 **Why.** The bound lives in the updater a computer already has: a computer that sleeps for months
 wakes with the updater of the release it has, so the rule has to be in the first release of this
 updater, and in the commands it runs, not in a feed that can change. uv's own version range does it:
 the upgrade moves up, never past the bound and, with the floor, never down; it is safe to repeat; and
-uv keeps the range, so a person's own `uv tool upgrade cad` stays inside the major too.
-`uv tool install --upgrade "cad>=<installed>"` crosses it, the floor alone in its place, and never
-moves down (measured on uv 0.11.25, a yanked installed release included). A minor that breaks installs itself because
-text-to-cad is in beta: below 1.0 a break bumps the minor, comes with a migration guide, and the skills
-tell the person when cad is a version ahead of them.
+uv keeps the range, so a person's own `uv tool upgrade cad` stays inside the major too. The floor
+alone, in the range's place, crosses a major and never moves down (measured on uv 0.11.25, a yanked
+installed release included). A minor that breaks installs itself because text-to-cad is in beta:
+below 1.0 a break bumps the minor, comes with a migration guide, and the skills tell the person when
+cad is a version ahead of them.
 
 **What it costs.** A person on an old major stays there until they run `cad update --major`, and gets
 no fixes made only in a later major. A minor that breaks reaches everyone by itself. Before pipx 1.18,
@@ -141,24 +160,18 @@ keeps the last upgrade's, so `cad update --major` passes a floor alone to replac
 ## Who updates which copy
 
 **Decision.** cad and the plugin update separately. A global install of cad updates itself, inside
-its major version, on by default (`cad update auto off` stops it): when the feed names a newer release
-of its major, as the server starts, after a failed start, or once nothing has run for a minute, a
-helper outside cad's environment stops the server, runs the installer's upgrade and starts the server
-again. `cad update` updates cad now, inside its major (`--major`: the newest of all), with or without a
-server running and with automatic updates off too, and touches nothing else. A cad that is not a global
-install, such as one installed with pip into a project's own Python, never updates itself.
+its major version, on by default (`cad update auto off` stops it). `cad update` updates cad now,
+inside its major (`--major`: the newest of all), with or without a server running and with automatic
+updates off too, and touches nothing else. A cad that is not a global install, such as one installed
+with pip into a project's own Python, never updates itself.
 
 The plugin is the install command's. Run by a person, or by cad (`cad plugin update`), it puts the
-newest plugin in every app it finds. Wherever cad is there, it turns on `cad plugin update auto`, which
-is off until then, so a computer whose runs keep failing still has the plugin kept: where cad is newer
-than the release the install command last ended well for, cad's server runs it once. cad keeps that
-release in a small record of its state folder, written when the command ends with exit status 0 and
-when the switch is turned on by a run that is ending well (a run ending badly tells cad so, and writes
-none); a run that fails writes none. The rule asks what cad is, not how it got there, so a typed `cad update` or `uv
-tool upgrade cad` by hand brings the plugin along as cad's own update does, with one mechanism. A run
-cad's server began is stopped, with all it started, after 15 minutes (in a Windows session where `taskkill`
-is refused, only the install command's own process is ended; what it started may run on). A failed run is tried again an
-hour or more later: at most three runs for one release. A plugin
+newest plugin in every app it finds. Wherever cad is there, it turns on `cad plugin update auto`,
+which is off until then: where cad is newer than the release the install command last ended well
+for, cad's server runs it once, so a computer whose runs keep failing still has the plugin kept. The
+rule asks what cad is, not how it got there, so a typed `cad update` or `uv tool upgrade cad` by hand
+brings the plugin along as cad's own update does. Such a run is bounded: stopped, with all it
+started, after 15 minutes, and three runs at most for one release, an hour or more apart. A plugin
 store (Codex's directory, Claude's) updates the copy it installed.
 
 **Why.** People install and forget, and they should get our fixes without being asked. Nothing of
@@ -185,39 +198,39 @@ back.
 
 **What it costs.** A bad release stays on the computers that took it until the next one. A person
 who wants an older release installs it by hand, with automatic updates off
-([docs/install.md](../install.md)).
+([Staying on an older release](../install.md#staying-on-an-older-release)).
 
 ## The 30-day rule
 
 **Decision.** A command the skills used keeps working for at least 30 days after the skills stop
 using it, hidden if need be. CI checks each release against the skill text of every release in the
-last 30 days. Apart from that, a command, option or tool may change or go in any release.
+last 30 days (`tests/python/global/test_released_commands_still_parse.py`). Apart from that, a
+command, option or tool may change or go in any release.
 
-**Why.** cad moves to the newest release of its major on every computer, while a store's copy of the skills can
-lag by weeks. The rule keeps those skills working; the test keeps the rule.
+**Why.** cad moves to the newest release of its major on every computer, while a store's copy of the
+skills can lag by weeks. The rule keeps those skills working; the test keeps the rule.
 
 **What it costs.** An old spelling lives on for a month after the skills drop it. A person's own
 scripts that run `cad` commands are not covered and may need changes after an update. A model's
-Python imports and a person's data are not covered by this rule either: they keep law 14's tiers 2
-and 3 (`packages/cad/README.md`).
+Python imports and a person's data are not covered by this rule either: they keep tiers 2 and 3 of
+[law 14](../../packages/cad/README.md#the-design-laws).
 
 ## The install script is the one place that knows every app
 
 **Decision.** `scripts/install/install.py`, behind `install.sh` and `install.ps1`, takes no options,
-carries no cad version and has one behaviour, whether a person or cad runs it. It makes sure uv is
-there (an old uv that cannot update itself gets a newer one beside it), installs cad only where none
-is installed or the one there does not start, installs or updates the plugin in each app it finds
-with that app's own command, removes our own older copies, puts cad's folder on the PATH with uv's
-own `uv tool update-shell`, and turns on `cad plugin update auto`, telling cad whether its run ended
-well. It never
-updates a cad that works,
-never stops to ask the person anything, and starts no server. Its table of apps is the only list of
-apps and of past layouts in the repository.
+carries no cad version and has one behaviour, whether a person or cad runs it
+([scripts/README.md](../../scripts/README.md), `install/`, lists what it does). It installs cad only
+where none is installed or the one there does not start, and never updates a cad that works. It
+installs or updates the plugin in each app it finds with that app's own command, removes our own
+older copies, and puts cad's folder on the PATH with uv's own `uv tool update-shell`. It never stops
+to ask the person anything, and starts no server. Its table of apps is the only list of apps and of
+past layouts in the repository.
 
 **Why.** Knowledge of the apps, and of every layout a past release left on a computer, has to live
 somewhere. In one hosted script, a correction reaches every computer the next time it runs, with no
-release of cad. One behaviour means one thing to test, and running it again is how a broken install
-is repaired. cad updates itself, so the script has no reason to.
+release of cad. One behaviour means one thing to test
+(`tests/python/global/test_install_script.py`), and running it again is how a broken install is
+repaired. cad updates itself, so the script has no reason to.
 
 **What it costs.** The script is long, and many of its rows follow vendor documentation we cannot
 run here. A row that is wrong fails for that app alone.
@@ -227,12 +240,13 @@ run here. A row that is wrong fails for that app alone.
 **Decision.** Releases 0.10.0 to 0.11.11 shipped an updater of their own, which installs a newer
 release the old way and runs its hidden `cad setup --engine-update`. The new cad then runs the
 hosted install command once, which installs cad as a uv tool, installs the plugin and turns
-`cad plugin update auto` on. A computer whose apps got text-to-cad only from a plugin store gets the new cad
-alone: running the install command there would put our plugin in apps the person never asked us
-into. There, and where the install command failed before it installed cad, the new cad installs
+`cad plugin update auto` on. A computer whose apps got text-to-cad only from a plugin store gets the
+new cad alone: running the install command there would put our plugin in apps the person never asked
+us into. There, and where the install command failed before it installed cad, the new cad installs
 itself with uv, and that cad updates itself from then on. Where the new cad arrived by the uv line
 on a computer the install command set up before, cad runs the install command once. The code that
-does this is kept apart and marked, so that a later release deletes it in one change.
+does this is kept apart and marked (`cad_server/cli/setup.py`), so that a later release deletes it in
+one change.
 
 **Why.** That updater cannot be changed, and it is the only way those computers reach the new
 design without a person doing anything.
@@ -246,9 +260,9 @@ design without a person doing anything.
 **Decision.** The old address of the version feed, `api.texttocad.dev/v1/versions`, which every
 release from 0.7.12 to 0.11.11 reads, is frozen: it names the newest release below 0.12.0, in the shape
 it always had (`latest` alone), under the feed's hour and holds. The releases from 0.11.12 on read
-their own address, `api.texttocad.dev/v1/releases`, which names the newest release and the newest of
-each major version. A computer on an old release reaches the newest 0.11.x, whose bridge brings it onto
-the design that updates itself, and that cad goes on from there.
+their own address, `/v1/releases` ([The feed says when](#the-feed-says-when)). A computer on an old
+release reaches the newest 0.11.x, whose bridge brings it onto the design that updates itself, and
+that cad goes on from there.
 
 **Why.** Releases 0.11.0 to 0.11.11 install by themselves exactly the release the feed names, but only a
 patch of their own minor: the day the feed named 0.12.0, every computer on 0.11.x would stop updating by
@@ -270,8 +284,9 @@ and the version feed stay where they are, because old releases point people and 
 fixed and a support load we cannot see.
 
 **What it costs.** The install script carries the cleanup of every past layout, a few addresses can
-never change, and whatever else changes must bring the earlier releases along (CONTRIBUTING, "What
-must stay the same").
+never change, and whatever else changes must bring the earlier releases along
+([What must stay the same](releases.md#what-must-stay-the-same); the two paths to check a change
+against are [No version left behind](releases.md#no-version-left-behind)).
 
 ## Browser first: the MCP server only where its view is verified
 
@@ -294,16 +309,16 @@ and its name to the server's rule (`cad_server/mcp/host.py`), in one change.
 
 ## No hooks, no pre-approved tools
 
-**Decision.** No manifest of ours declares a hook, and no skill declares `allowed-tools`. Nothing
-starts cad's server when a session opens: `cad server start` starts it, which a command that finds no
-server tells the agent to run (`the cad server is not running: run cad server start`), or `cad mcp`,
-Codex's server line. Every copy of the plugin, the one a person installs by hand and each listing's,
-carries the same skills, byte for byte. No released version ever had either: both were added on
-2026-11-16 and taken out before the next release shipped.
+**Decision.** No manifest of ours declares a hook, and no skill declares `allowed-tools`
+(`tests/python/global/test_plugin_manifests.py`, `test_skill_requirements.py`). Nothing starts cad's
+server when a session opens: `cad server start` starts it, which a command that finds no server tells
+the agent to run (`the cad server is not running: run cad server start`), or `cad mcp`, Codex's
+server line. Every copy of the plugin, the one a person installs by hand and each listing's, carries
+the same skills, byte for byte (`test_plugin_branch.py`).
 
 **Why.** The copy people install by hand should be the same skills a listing carries, and Claude's
-plugin directory refuses hooks and `allowed-tools` from an organization it has not verified. The hooks
-had only tests of their declaration, and failed wherever cad was missing or old. `allowed-tools`
+plugin directory refuses hooks and `allowed-tools` from an organization it has not verified. A hook
+fails wherever cad is missing or old, and only its declaration can be tested. `allowed-tools`
 pre-approves a command only during the turn that loads the skill, and made Claude Code ask before
 loading the skill at all. Current Claude Code terminal sessions start in auto mode, where routine
 commands are not asked.
@@ -333,9 +348,8 @@ app's private copy, say why it matters, and say to delete it in File Explorer; c
 **Why.** No tool we found works around it from inside someone else's package: a way out of the
 package is reported to fail inside these apps, and uv, pip and CPython document the problem and stop.
 Detecting and saying what to do is what they do. The lines say File Explorer because a delete from
-inside the app does not reach the folder: `Remove-Item` on that path, run inside the package,
-reported the folder gone and left every file, and the same delete from outside the app removed it
-(both measured).
+inside the app does not reach the folder: `Remove-Item` there reported the folder gone and left every
+file, and the same delete from outside the app removed it (both measured).
 
 **What it costs.** On such a computer a person may have to run one command or delete one folder by
 hand.
