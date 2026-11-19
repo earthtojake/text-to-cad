@@ -97,11 +97,21 @@ REQUIRED=(
   "cad_server/_internal/auto_update.py"
   "cad_server/_internal/auto_update_helper.py"
   "cad_server/cli/auto_update.py"
-  # The install command as cad runs it: `cad plugin update` (its command below), run by the server of a newer cad
-  # where `cad plugin update auto` is on (`plugin_catch_up`, the rule it runs by), and once by the bridge's install mode.
+  # The install command as the bridge's install mode runs it, once (`install_script`); and `cad plugin`, its command:
+  # `cad plugin update`, which the server of a newer cad runs where `cad plugin update auto` is on (`plugin_catch_up`,
+  # the rule it runs by), and `cad plugin install`, which the install command hands the agent apps to.
   "cad_server/_internal/install_script.py"
   "cad_server/_internal/plugin_catch_up.py"
   "cad_server/cli/plugin.py"
+  # What those two run: the plugin in the agent apps, every module of it, each imported before a run begins. A
+  # wheel without one is a cad whose `cad plugin install` dies at import, and with it every run of the install
+  # command, which gets PyPI's newest cad and hands over to it.
+  "cad_server/plugin/__init__.py"
+  "cad_server/plugin/computer.py"
+  "cad_server/plugin/source.py"
+  "cad_server/plugin/apps.py"
+  "cad_server/plugin/terminal.py"
+  "cad_server/plugin/run.py"
   # What the updaters and launchers of 0.10.0 to 0.11.11 run in a release they bring: `cad setup
   # --engine-update`, the records their switch starts a server by, and the module their `cad` command runs.
   "cad_server/cli/setup.py"
