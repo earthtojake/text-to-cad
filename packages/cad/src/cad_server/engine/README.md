@@ -474,7 +474,7 @@ verbosity) key nothing. What it adds is two things:
   (`cad.kicad._program.private_run`, a typed command's, KiCad's library variables naming KiCad's own
   libraries: the first 3D library a board's 3D view reads, the others an installation of KiCad's; none of
   the person's), its arguments, stdio and exit code kicad-cli's, and never the one
-  `CAD_KICAD_CLI` names. The environment of the build123d integration
+  `CAD_KICAD_CLI` (a deprecated variable) names. The environment of the build123d integration
   alone, with nothing else, is the base.
 
 **What an environment holds** (`extras.Spec`): the pin, and beside it the packages the program names.
@@ -740,6 +740,8 @@ cad mujoco check FILE [--strict] [--json]    a MuJoCo model's file (an MJCF: no 
                                              as what and the contact excludes; in cad[mujoco]'s
                                              environment (made first) where this one holds no mujoco
 cad orcaslicer presets KIND [--match TEXT] [--profiles DIR] [--json]
+                                             DEPRECATED, with `complete` below: unlisted, and said so
+                                             on stderr when run.
                                              the OrcaSlicer presets of one kind (machine, process,
                                              filament) a person can select, by name: an integration's
                                              operation on its tool's own files, found by name
@@ -1277,7 +1279,7 @@ The options of the other use (`--out` or `--deck` with no study, `--occurrence` 
 file) are refused there, the standard library alone, before anything is read. The study reads a file's B-rep with
 the kernel in its own process (`cad._internal.fea.document`; a model's, from an `.xbf` the engine writes of it in a
 temporary folder), meshes it with netgen in a process of netgen's own (`cad.netgen._mesher`) and solves it with
-CalculiX (`cad.calculix`: the `calculix` integration's probe, `CAD_CCX`, else the cad-ccx package's `ccx`, run headless
+CalculiX (`cad.calculix`: the `calculix` integration's probe, the deprecated `CAD_CCX` where it is still set, else the cad-ccx package's `ccx`, run headless
 in a private folder by `cad._internal.programs`; `--deck` keeps the input of the solve written). Its answer is a
 `cad.results.FeaResult`, a check's: findings, `measurements` and the files `written` into the folder `--out` names
 (`cad._internal.fea.run`): `result.json` (that answer), `result.glb` (the deformed surface coloured by a ramp
@@ -1290,8 +1292,8 @@ of one operation, and the result is printed as it would be here (`FeaResult.from
 
 **The KiCad board's DRC, the schematic's ERC and their exports.** `cad kicad_pcb drc` and `cad kicad_pcb export` are the library's
 `cad.kicad_pcb.drc` and `export`, the `kicad` integration's (`cad.kicad._check`, `_export`), run the same
-way: in the command's own process where it runs KiCad itself (`cad.kicad._program.carried`: `CAD_KICAD_CLI`
-names a `kicad-cli`, or kicode is installed there), else in the environment of `cad[kicad]` at the
+way: in the command's own process where it runs KiCad itself (`cad.kicad._program.carried`: the deprecated
+`CAD_KICAD_CLI` names a `kicad-cli`, or kicode is installed there), else in the environment of `cad[kicad]` at the
 installation's release, made once by the engine (about 100 MB to download from PyPI, mostly kicode, and 340 MB on disk, the first time). kicad-cli
 is found by the library's helper (`cad._internal.programs`: the override, then `kicode.executable()`; never
 `PATH` or KiCad's installation folders) and run headless in a private folder, with `kicode.environment(root)`
@@ -1317,7 +1319,11 @@ in the environment of `cad[mujoco]` at the installation's release, made once by 
 and `mujoco-studio`, about 20 MB: the compiler and the bindings, and Studio's web viewer, no GL). A
 MuJoCo function's `save` says the same of the file it wrote.
 
-**OrcaSlicer's presets.** OrcaSlicer keeps a preset as its differences from a parent (`inherits`), and its
+**OrcaSlicer's presets (deprecated).** The `orcaslicer` integration is on its way out: OrcaSlicer's app
+exports complete presets and projects that carry their settings, which its command line takes as they are, so
+nothing here is needed. Its commands stay, unlisted, while skill text of the last 30 days uses them, and say on
+stderr that they are deprecated (the registry entry's `deprecated`). What they do until then:
+OrcaSlicer keeps a preset as its differences from a parent (`inherits`), and its
 command line neither fills the parent in nor reads compatibility conditions. The `orcaslicer` integration's two
 operations take preset names, not a file (`cli/integrations.py`): `cad orcaslicer presets KIND` lists the
 selectable presets of one kind, and `cad orcaslicer complete` writes a printer, a process and each filament

@@ -72,8 +72,8 @@ cad_server/
   findings carry a severity, a code and a location (`--json`). `cad <type> --help` lists a type's
   operations, `cad <type> <operation> --help` its options, and a file of another type is refused by name
   (`cli/document_types.py`, each type's module `cli/<type>.py`).
-- **Integrations**, for a tool's own files that are no document type: `cad mujoco check MODEL.xml`,
-  `cad orcaslicer presets KIND`, `cad orcaslicer complete` (`cli/integrations.py`).
+- **Integrations**, for a tool's own files that are no document type: `cad mujoco check MODEL.xml`
+  (`cli/integrations.py`). `cad orcaslicer presets|complete` are deprecated: unlisted, still run, and say so.
 - **The server**: `cad server start` starts it, detached, and says so; `cad server stop` stops it;
   `cad server status` says whether it runs, its release, its workers and what they build.
   `cad server start --foreground` runs it in this process; `cad server --rotate-token` replaces the page
@@ -240,6 +240,35 @@ desktop app) starts. A release reads what the release before wrote and migrates 
 Coming from 0.7 or 0.8 (named cadgen): their caches (`~/.cache/cadgen`, `%LOCALAPPDATA%\cadgen`) and the
 state files only they wrote are not read or removed by anything here; `cad doctor` says where they are,
 with their size, and the person deletes them once no such release is left.
+
+## Environment variables
+
+cad reads the variables below from the environment a command or the server starts in; the server reads its own
+once, as it starts, so a change takes a `cad server stop` and `cad server start`. They are the whole list a
+person sets: every variable cad reads is declared in one table, `cad._internal.environment`, with who sets it,
+and the others there are for a contributor's tests or pass between cad's own processes.
+
+| Variable | What it sets |
+| --- | --- |
+| `CAD_STATE_DIR` | The folder of the person's settings and the records of their documents |
+| `CAD_CACHE_DIR` | The folder of what cad can make again: built documents and the environments it installs |
+| `CAD_ENGINE_DIR` | The folder of the server's door and lock: one server runs per folder |
+| `CAD_ENGINE_PORT` | The server's HTTP port (0: any free one); `cad server start --port` says the same for one start |
+| `CAD_ENGINE_WORKERS` | The most model workers alive at once (default: the machine's cores) |
+| `CAD_ENGINE_WORKER_RSS_MB` | The memory the server's kernel processes may hold together, in MiB (default: a quarter of the machine's; 0: no cap) |
+| `CAD_ENGINE_MEMORY_MB` | The memory the server may hold documents in, in MiB (default: a quarter of the machine's) |
+| `CAD_ENGINE_CHECKS` | How many checks are measured at once (default: half the cores, one to four) |
+| `CAD_ENGINE_CHECK_SECONDS` | The longest one check may run before it is stopped (default: half an hour; 0: no limit) |
+| `CAD_ENGINE_CHECK_RSS_MB` | The most memory one check may take, in MiB (default: the kernel processes' cap; 0: no limit) |
+| `CAD_ENGINE_MEMO` | 0: no memo hit, so every kernel call of a run runs (a diagnosis) |
+| `CAD_ENGINE_BODIES` | 0: no body is replayed, so every model body of a run runs (a diagnosis) |
+| `CAD_TELEMETRY` | 0: no usage counts from this process; 1: on, over the person's saved choice. DO_NOT_TRACK=1 turns it off too |
+| `CAD_UPDATE_CHECK` | 0: this server neither looks for a newer release nor installs one |
+| `CAD_KICAD_3DMODELS` | More folders a board's 3D models are read from, separated as PATH is |
+
+A variable exists only where nothing else can carry the value: a folder, a port or a limit a process must know
+before it starts. A choice kept between runs is a setting (`cad telemetry`, `cad update auto`), and no variable
+says which third-party program an integration runs: cad runs the one its extra pins.
 
 ## Telemetry
 

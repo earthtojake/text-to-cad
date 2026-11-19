@@ -73,10 +73,21 @@ class Program:
         return path.name in self.names
 
 
+def _named_outright(variable: str) -> str:
+    """The program a variable names outright, "" when it names none. The variables that do (``CAD_KICAD_CLI``,
+    ``CAD_CCX``) are deprecated: a set one is said once a process and still decides which program runs."""
+    from cad._internal import environment
+
+    row = environment.VARIABLES.get(variable)
+    if row is not None and row.tier == environment.DEPRECATED:
+        return environment.deprecated(variable)
+    return os.environ.get(variable, "").strip()
+
+
 def find(program: Program) -> Path:
     """The copy of ``program`` to run: its override when that is set (a file of the program's name, else
     refused), else the program on ``PATH`` (``search_path``), else the one in its usual place."""
-    explicit = os.environ.get(program.override, "").strip()
+    explicit = _named_outright(program.override)
     if explicit:
         path = Path(explicit).expanduser()
         if not program.is_named(path):

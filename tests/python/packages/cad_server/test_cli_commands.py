@@ -291,7 +291,10 @@ class MujocoCheck(unittest.TestCase):
         code, said, _ = _run(["--help"])
         self.assertEqual(0, code)
         self.assertIn("integrations, for a tool's own files cad checks or writes and does not show (cad <integration> "
-                      "<operation> [FILE]):\n  mujoco      check              compile a MuJoCo model", said)
+                      "<operation> [FILE]):\n  mujoco  check  compile a MuJoCo model", said)
+        # A deprecated integration's commands still run (the 30 days a command the skills used is kept) and are
+        # no longer listed: `cad orcaslicer`, whose presets OrcaSlicer's own app exports.
+        self.assertNotIn("orcaslicer", said.split("integrations, for a tool's own files", 1)[1])
         code, said, _ = _run(["mujoco", "--help"])
         self.assertEqual(0, code)
         self.assertIn("usage: cad mujoco <operation> FILE [options]", said)

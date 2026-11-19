@@ -113,6 +113,10 @@ class Integration:
     #: on a file take (``FILE_OPERATIONS``), and an integration with none of those names none.
     operations: tuple[Operation, ...] = ()
     files: tuple[str, ...] = ()
+    #: Set where its operations are deprecated: what to do instead, in a line. They keep working while skill
+    #: text of the last 30 days uses them (the compatibility law's first tier), ``cad --help`` no longer lists
+    #: them, and a run says this line once on stderr.
+    deprecated: str = ""
     modules: tuple[str, ...] = ()
     distributions: tuple[str, ...] = ()
     #: The distributions that ARE it (its own and the other builds of its modules), of which one a resolution
@@ -473,6 +477,8 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         # The person's own OrcaSlicer: our code never runs it (so no probe), and reads and writes its presets, JSON
         # files, with the standard library alone (so no extra), in the process that calls it.
         extra=None, process="in-process",
+        deprecated="OrcaSlicer's own command line slices with a project saved from the app or the presets the "
+                   "app exports (File > Export > Export Preset Bundle): give it those",
         operations=(Operation("presets", "list the presets of one kind a person can select (machine, process or "
                                          "filament), from their own OrcaSlicer folders and the app's profiles",
                               "orcaslicer"),

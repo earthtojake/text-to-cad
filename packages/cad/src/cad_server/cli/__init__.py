@@ -108,8 +108,9 @@ def _type_lines() -> str:
 def _integration_lines() -> str:
     """The integrations with operations of their own, each with them and the files they take, or, for one whose
     tool's files are found by name in its own folders, that tool (``cad.registry``)."""
-    width = max(len(name) for name in INTEGRATION_COMMANDS)
-    ops = {name: ", ".join(INTEGRATIONS[name].operation_names) for name in INTEGRATION_COMMANDS}
+    listed = [name for name in INTEGRATION_COMMANDS if not INTEGRATIONS[name].deprecated]
+    width = max(len(name) for name in listed)
+    ops = {name: ", ".join(INTEGRATIONS[name].operation_names) for name in listed}
     ops_width = max(len(text) for text in ops.values())
 
     def takes(entry) -> str:
@@ -118,7 +119,7 @@ def _integration_lines() -> str:
         return f"found by name in {entry.summary.split(',')[0]}'s own folders"
 
     return "\n".join(f"  {name.ljust(width)}  {ops[name].ljust(ops_width)}  {takes(INTEGRATIONS[name])}"
-                     for name in INTEGRATION_COMMANDS) + "\n"
+                     for name in listed) + "\n"
 
 
 def _usage() -> str:
