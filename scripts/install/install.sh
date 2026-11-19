@@ -11,7 +11,8 @@
 #
 # Where it fails before install.py runs, it sends one anonymous report of where (`report`): uv could not be installed
 # or is too old (uv), install.py could not be downloaded (fetch), or uv could not run it (python). install.py reports
-# what fails after that, and says what a report holds and when none is sent.
+# what fails after that, and says what a report holds and when none is sent. A run cad started says and sends nothing
+# from here (`may_report`).
 
 set -eu
 
@@ -22,7 +23,7 @@ UV_INSTALLER="https://astral.sh/uv/install.sh"
 UV_MINIMUM="0.9.0"
 # Where a failure's one report goes: cad's own service (CAD_API_URL, cad's own hook, names a stand-in's base).
 REPORT_URL="https://api.texttocad.dev/v1/install"
-# Said once, near the start, by a run that could send a report: install.py's NOTICE, word for word.
+# Said once, near the start, by a person's run that could send a report: install.py's NOTICE, word for word.
 NOTICE="If the install fails before cad can run, one anonymous report of where it failed is sent to texttocad.dev (DO_NOT_TRACK=1 turns it off)."
 
 say() {
@@ -51,12 +52,16 @@ kept_no() {
 
 # Whether a failure of this run may be reported: not where the environment says no (DO_NOT_TRACK on, CAD_TELEMETRY
 # off: cad's own spellings), in CI, on a checkout's run (CAD_INSTALL_PY), with nothing here to send by, or where
-# cad's kept settings say no (its state folder: CAD_STATE_DIR, macOS's, XDG's).
+# cad's kept settings say no (its state folder: CAD_STATE_DIR, macOS's, XDG's). And never on a run cad started
+# (CAD_INSTALL_BY_CAD, CAD_INSTALL_ATTEMPT or CAD_INSTALL_REPORT set: its output is a log's, or nobody's): the line
+# said first would be read by no one, and nothing is sent before a person was told. Whether cad told them already
+# is in its settings, which install.py reads: it reports such a run's later failures where they were.
 may_report() {
   case "$(word "${DO_NOT_TRACK:-}")" in 1|on|true|yes) return 1 ;; esac
   case "$(word "${CAD_TELEMETRY:-}")" in 0|off|false|no) return 1 ;; esac
   case "$(word "${CI:-}")" in ''|0|off|false|no) ;; *) return 1 ;; esac
   [ -z "${CAD_INSTALL_PY:-}" ] || return 1
+  [ -z "${CAD_INSTALL_BY_CAD:-}${CAD_INSTALL_ATTEMPT:-}${CAD_INSTALL_REPORT:-}" ] || return 1
   command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1 || return 1
   for dir in "${CAD_STATE_DIR:-}" "$HOME/Library/Application Support/cad" "${XDG_STATE_HOME:-$HOME/.local/state}/cad"; do
     if [ -n "$dir" ] && kept_no "$dir"; then
@@ -67,8 +72,9 @@ may_report() {
 }
 
 # One anonymous report that this run failed at stage $1 (uv, fetch, python) with exit status $2, where one may be
-# sent ($reports) and none was: the body install.py documents, its run id random and kept nowhere. curl gives it 2
-# seconds in all, wget 2 for each step of one try. It says nothing, and never changes how the run ends.
+# sent ($reports) and none was: the body install.py documents, its run id random and kept nowhere, a person's run
+# always (`may_report`). curl gives it 2 seconds in all, wget 2 for each step of one try. It says nothing, and never
+# changes how the run ends.
 report() {
   [ -n "$reports" ] || return 0
   reports=""
@@ -80,16 +86,12 @@ report() {
   case "$(uname -s 2>/dev/null)" in Darwin) platform=darwin ;; Linux) platform=linux ;; *) platform=other ;; esac
   arch=$(uname -m 2>/dev/null | tr -d '\n' | tr '[:upper:]' '[:lower:]' |
     tr -cs 'abcdefghijklmnopqrstuvwxyz0123456789_.+:-' '-' | cut -c1-16) || arch=""
-  by=person
-  if [ -n "${CAD_INSTALL_BY_CAD:-}${CAD_INSTALL_ATTEMPT:-}${CAD_INSTALL_REPORT:-}" ]; then
-    by=cad
-  fi
   with=none
   if printf '%s\n' "${version:-$had}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
     with=${version:-$had}
   fi
-  body=$(printf '{"schema":1,"run":"%s","at":%s,"stage":"%s","outcome":"failed","code":%s,"platform":"%s","arch":"%s","by":"%s","uv":"%s"}' \
-    "$id" "$at" "$1" "$2" "$platform" "$arch" "$by" "$with")
+  body=$(printf '{"schema":1,"run":"%s","at":%s,"stage":"%s","outcome":"failed","code":%s,"platform":"%s","arch":"%s","by":"person","uv":"%s"}' \
+    "$id" "$at" "$1" "$2" "$platform" "$arch" "$with")
   url=$REPORT_URL
   case "${CAD_API_URL:-}" in http://*|https://*) url="${CAD_API_URL%/}/install" ;; esac
   if command -v curl >/dev/null 2>&1; then

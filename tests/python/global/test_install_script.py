@@ -600,8 +600,8 @@ class InstallScriptTests(AgentApps):
         # CAD_INSTALL_REPORT (0.11.12's and 0.11.13's hand-over sets it, and judges the file the moment it is there):
         # `apps` always a dict, as cad's step said them, `setup` an integer, the file written whole, after
         # everything else. The run ends 0 only where that step did: 1 where every app it found failed, 75 where
-        # another run was going (cad's own status for it), 1 for anything else. A step that ended non-zero and said
-        # nothing of any app is one failure in `apps`, the one thing its readers take for a run to try again.
+        # another run was going (cad's own status for it), 1 for anything else. A step that ended non-zero and named
+        # no app as failed is one failure more in `apps`, the one thing its readers take for a run to try again.
         self.tools(cad="0.13.0")
         report = self.root / "report.json"
         failed = {"claude": "failed", "codex": "not found"}
@@ -719,14 +719,10 @@ class InstallScriptTests(AgentApps):
         self.assertEqual(done.stdout.count(install.NOTICE), 1)
         self.report("cad", 3)
         # No cad could run the plugin's step: the one this computer has has none, and the newest could not be run.
-        # Who ran the command is cad where any of the three variables its releases set is there.
         self.tools(cad="0.11.13")
-        for by in ({}, {"CAD_INSTALL_BY_CAD": "1"}, {"CAD_INSTALL_ATTEMPT": "1763500000.5"},
-                   {"CAD_INSTALL_REPORT": str(self.root / "report.json")}):
-            with self.subTest(by=by):
-                done = self.run_hosted(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_EXIT_UV="1", FAKE_UPDATE_EXIT="1", **by)
-                self.assertEqual(1, done.returncode)
-                self.report("plugin", 1, by="cad" if by else "person")
+        done = self.run_hosted(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_EXIT_UV="1", FAKE_UPDATE_EXIT="1")
+        self.assertEqual(1, done.returncode)
+        self.report("plugin", 1)
         # uv itself gone since the cad step (`uv` then names nothing a report can ask): the step cannot run at all.
         cad = install.Cad("0.11.13", 0, str(self.uv_bin / "cad"), there=True)
         gone = self.reporting(FAKE_PLUGIN_EXIT_CAD="2", PATH=str(self.root / "nowhere"))
@@ -748,6 +744,76 @@ class InstallScriptTests(AgentApps):
                 self.assertEqual(code, done.returncode, done.stdout + done.stderr)
                 self.assertEqual(self.receiver.posts, [])
                 self.assertEqual(done.stdout.count(install.NOTICE), 1)
+
+    def test_a_run_cad_started_says_no_line_and_reports_only_where_cad_has_told_the_person(self) -> None:
+        # cad runs this command with its output in a log, or thrown away (0.11.12's and 0.11.13's `cad plugin
+        # update`, the server's run of it, the bridge's install mode): a line said there is read by nobody, and
+        # nothing is sent before a person was told. What cad told them, it keeps in its settings.
+        from cad_server import analytics
+
+        self.assertEqual((install.TOLD, install.AGREED), (analytics.NOTICE, analytics.DISCLOSURE))
+        self.tools(cad="0.11.13")
+        failing = {"FAKE_PLUGIN_EXIT_CAD": "2", "FAKE_PLUGIN_EXIT_UV": "1"}
+        started = ({"CAD_INSTALL_BY_CAD": "1"}, {"CAD_INSTALL_ATTEMPT": "1763500000.5"},
+                   {"CAD_INSTALL_REPORT": str(self.root / "report.json")})
+        settings = self.home / ".local" / "state" / "cad" / "settings.json"
+
+        def keep(telemetry: dict) -> None:
+            """cad's settings, as cad writes them, with ``telemetry`` what it keeps of the person's answer."""
+            self.write(".local/state/cad/settings.json", json.dumps(
+                {"plugin": {"auto_update": True}, "telemetry": telemetry}, indent=2, sort_keys=True))
+
+        told = {"notifiedAt": 1763500000.5, "notice": analytics.NOTICE}
+        # A computer nobody was told on (no settings; settings that say nothing of it): nothing said, nothing sent,
+        # by each of the three variables cad's releases set. The same run, a person's, says its line and reports.
+        for kept in (None, {}):
+            for by in started:
+                with self.subTest(kept=kept, by=by):
+                    settings.unlink(missing_ok=True)
+                    if kept is not None:
+                        keep(kept)
+                    done = self.run_hosted(**failing, **by)
+                    self.assertEqual((1, [], False), (done.returncode, self.receiver.posts, install.NOTICE in done.stdout))
+        done = self.run_hosted(**failing, FAKE_UPDATE_EXIT="1")
+        self.assertEqual(done.stdout.count(install.NOTICE), 1)
+        self.report("plugin", 1)
+        # Told by cad, or having said yes to what is sent now: the report goes, as cad's own counts do, and still no
+        # line is said where nobody reads it.
+        for kept in (told, {"choice": "on", "disclosure": analytics.DISCLOSURE, "by": "cli", "decidedAt": 1.5, "id": "x"}):
+            for by in started:
+                with self.subTest(kept=kept, by=by):
+                    keep(kept)
+                    done = self.run_hosted(**failing, **by)
+                    self.assertEqual((1, False), (done.returncode, install.NOTICE in done.stdout))
+                    self.report("plugin", 1, by="cad")
+        # A no cad keeps is a no, told or not; so is a telling of less than is sent now, a yes to less, and
+        # settings that cannot be read.
+        for kept in ({**told, "choice": "off", "by": "cli", "decidedAt": 1.5}, {"choice": "off"},
+                     {"notifiedAt": 1763500000.5, "notice": analytics.NOTICE - 1}, {"notifiedAt": 1763500000.5},
+                     {"choice": "on", "disclosure": analytics.DISCLOSURE - 1}, {"choice": "on"}):
+            with self.subTest(kept=kept):
+                keep(kept)
+                done = self.run_hosted(**failing, CAD_INSTALL_BY_CAD="1")
+                self.assertEqual((1, [], False), (done.returncode, self.receiver.posts, install.NOTICE in done.stdout))
+        settings.unlink()
+        settings.mkdir()
+        done = self.run_hosted(**failing, CAD_INSTALL_BY_CAD="1")
+        self.assertEqual((1, [], False), (done.returncode, self.receiver.posts, install.NOTICE in done.stdout))
+        settings.rmdir()
+        # Told in one of cad's state folders and refused in another: the no holds.
+        keep(told)
+        elsewhere = self.root / "state"
+        elsewhere.mkdir()
+        (elsewhere / "settings.json").write_text(json.dumps({"telemetry": {"choice": "off"}}), encoding="utf-8")
+        done = self.run_hosted(**failing, CAD_INSTALL_BY_CAD="1", CAD_STATE_DIR=str(elsewhere))
+        self.assertEqual((1, []), (done.returncode, self.receiver.posts))
+        # A crash of the script on a run cad started goes by the same rule.
+        (elsewhere / "settings.json").unlink()
+        with mock.patch.object(install, "development", lambda here: False):
+            for kept, sends in ((told, True), ({}, False)):
+                keep(kept)
+                here = install.Here(self.reporting(CAD_INSTALL_BY_CAD="1"))
+                self.assertEqual(install.Reports(here).on, sends, kept)
 
     def test_no_report_is_sent_or_spoken_of_where_the_person_the_environment_or_the_place_says_no(self) -> None:
         failing = {"FAKE_FAIL": "uv:cad", "FAKE_PLUGIN_EXIT_UV": "1"}
@@ -935,11 +1001,11 @@ class InstallScriptTests(AgentApps):
         self.assertEqual(1, script.returncode)
         self.assertEqual((script.stderr.splitlines()[0], script.stderr.count(install.NOTICE)), (install.NOTICE, 1))
         self.report("uv", 1, uv="0.8.24")
-        # fetch: install.py could not be downloaded. By cad where a release of it ran the command.
-        script = self.run_sh_hosted(FAKE_FAIL="curl:https://texttocad.dev/install.py", CAD_INSTALL_ATTEMPT="1763500000.5")
+        # fetch: install.py could not be downloaded.
+        script = self.run_sh_hosted(FAKE_FAIL="curl:https://texttocad.dev/install.py")
         self.assertEqual(1, script.returncode)
         self.assertIn("error: could not download https://texttocad.dev/install.py", script.stderr)
-        self.report("fetch", 1, by="cad")
+        self.report("fetch", 1)
         # python: uv could not run install.py, which left no sign that it started. The run ends as uv did.
         script = self.run_sh_hosted(FAKE_FAIL="uv:run", FAKE_EXIT="2")
         self.assertEqual(2, script.returncode)
@@ -987,6 +1053,29 @@ class InstallScriptTests(AgentApps):
             with self.subTest(on=on):
                 self.run_sh_hosted(**failing, **on)
                 self.report("fetch", 1)
+
+    def test_install_sh_says_and_sends_nothing_on_a_run_cad_started_and_leaves_its_report_to_install_py(self) -> None:
+        # Its output is a log's or nobody's, and the script cannot tell whether cad told the person: so no line, and
+        # no report of its own stages, whatever cad's settings keep. install.py, which reads them, reports from there.
+        self.programs("uv", "curl")
+        told = {"telemetry": {"notifiedAt": 1763500000.5, "notice": 1}}
+        for kept in (None, told):
+            if kept is not None:
+                self.write(".local/state/cad/settings.json", json.dumps(kept, indent=2, sort_keys=True))
+            for by in ({"CAD_INSTALL_BY_CAD": "1"}, {"CAD_INSTALL_ATTEMPT": "1763500000.5"},
+                       {"CAD_INSTALL_REPORT": str(self.root / "report.json")}):
+                for failing, code in (({"FAKE_UV_VERSION": "0.8.24", "FAKE_FAIL": "curl:https://astral.sh/uv/install.sh"}, 1),
+                                      ({"FAKE_FAIL": "curl:https://texttocad.dev/install.py"}, 1),
+                                      ({"FAKE_FAIL": "uv:run", "FAKE_EXIT": "2"}, 2)):
+                    with self.subTest(kept=kept, by=by, failing=failing):
+                        script = self.run_sh_hosted(**failing, **by)
+                        self.assertEqual((code, [], False), (script.returncode, self.receiver.posts,
+                                                             install.NOTICE in script.stdout + script.stderr))
+        # install.py, run by it on a computer cad told: cad could not be installed, reported once, by cad, unsaid.
+        script = self.run_sh_hosted(FAKE_UV_RUNS="1", FAKE_FAIL="uv:cad", FAKE_EXIT="3", FAKE_PLUGIN_EXIT_UV="1",
+                                    CAD_INSTALL_BY_CAD="1")
+        self.assertEqual((1, False), (script.returncode, install.NOTICE in script.stdout + script.stderr))
+        self.report("cad", 3, by="cad")
 
     def test_install_sh_s_report_goes_by_the_real_curl_and_the_real_wget(self) -> None:
         # The command lines themselves, each by the program a person has: install.py cannot be downloaded (every
@@ -1090,6 +1179,14 @@ class InstallScriptTests(AgentApps):
         for name in install.BY_CAD + (install.MARK_ENV, install.API_ENV, "DO_NOT_TRACK", "CAD_TELEMETRY", "CAD_INSTALL_PY"):
             self.assertIn(name, sh, name)
             self.assertIn(name, ps1, name)
+        # A run cad started (any of its three variables) says and sends nothing from either shell: the rule that
+        # decides both stops there, and what they send is a person's run always.
+        self.assertIn('  [ -z "${CAD_INSTALL_BY_CAD:-}${CAD_INSTALL_ATTEMPT:-}${CAD_INSTALL_REPORT:-}" ] || return 1\n',
+                      sh.split("may_report() {\n", 1)[1].split("\n}\n", 1)[0])
+        self.assertIn("        if ($env:CAD_INSTALL_BY_CAD -or $env:CAD_INSTALL_ATTEMPT -or $env:CAD_INSTALL_REPORT) "
+                      "{ return $false }\n", ps1.split("    function Test-Report {\n", 1)[1].split("\n    }\n", 1)[0])
+        self.assertEqual((sh.count('"by":"person"'), sh.count('"by":"'), ps1.count("$by = 'person'\n"), ps1.count("$by = ")),
+                         (1, 1, 1, 1))
 
     def test_the_installer_names_no_release_and_no_agent_app(self) -> None:
         # Nothing in the install command changes with a release: no fallback, no pin, nothing a release stamps.
