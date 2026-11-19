@@ -232,13 +232,9 @@ class DrawingSheetTests(unittest.TestCase):
         _render_sheet(fits, index=1, count=1, label="big")
 
     def test_a_title_longer_than_its_cell_is_cut_not_overrun(self) -> None:
-        """Measured the way it is drawn, whatever font this machine resolves.
-
-        A character is not a fixed fraction of the cap height, and which
-        fraction it is depends on the font the renderer finds: proportional
-        here, near-monospace on a runner with no system fonts. Whether a given
-        title has to be cut or merely shrunk is that font's business. That it
-        ends up inside its cell is not.
+        """A character is not a fixed fraction of the cap height, so the title is
+        measured by its own characters: whether one has to be cut or merely
+        shrunk depends on them. That it ends up inside its cell does not.
         """
         from cad._internal.drawing_base import _MIN_TEXT_MM, _text_width
         from cad._internal.drawing_render import _render_sheet
@@ -639,13 +635,9 @@ class UndimensionedSheetTests(unittest.TestCase):
 
 
 class TextMeasurementTests(unittest.TestCase):
-    """The markup is not the text.
-
-    Everything here is asserted against the font this machine resolves, never
-    against a millimetre figure. The frontend turns text into glyph paths
-    through the same font machinery the measurement asks, so the two agree by
-    construction -- on a workstation full of typefaces and on a runner with
-    none. Baking in one font's numbers tests the runner, not the code.
+    """The markup is not the text, and the text is measured by the drawing's own
+    metrics: a layout is a function of what the script says, never of the fonts
+    the machine it runs on happens to have.
     """
 
     def test_mtext_is_measured_by_the_glyphs_it_draws(self) -> None:
@@ -669,20 +661,50 @@ class TextMeasurementTests(unittest.TestCase):
         # wide as the wider half and not as wide as both.
         self.assertLess(stacked, plain + 2 * _text_width("+0.05", 3.5))
 
-    def test_the_measurement_is_the_font_the_renderer_will_use(self) -> None:
-        """No fixed fraction of the cap height serves every string: the ratio
-        that fits "ELECTRONICS ENCLOSURE BASE" runs "+0.10" 25% over in a
-        proportional font, and a machine with no system fonts resolves a
-        different one again. Ask the font, do not assume it."""
-        from cad._internal.drawing_base import _font, _text_width
+    def test_a_sheet_is_laid_out_the_same_beside_any_fonts(self) -> None:
+        """A callout wraps, a title shrinks and a note breaks by how wide the text
+        is, and the width used to be the machine's fallback font's: the same
+        script drew a callout on one line beside one font and on two beside
+        another. Here every font ezdxf could be asked for is taken away, and the
+        sheet comes out the same, entity for entity."""
+        import io
+        from unittest import mock
 
-        font = _font(5.0)
-        if font is None:
-            self.skipTest("no font machinery here; the conservative ratio applies")
-        for value in ("ELECTRONICS ENCLOSURE BASE", "+0.10", "\u00d86 THRU", "R18"):
-            with self.subTest(value=value):
-                self.assertAlmostEqual(_text_width(value, 5.0), float(font.text_width(value)),
-                                       delta=1e-6)
+        from ezdxf.fonts import fonts
+
+        from cad._internal.drawing_render import _render_sheet
+        from cad.eng_drawing import Sheet
+
+        def drawn() -> str:
+            sheet = Sheet("A4", title="ELECTRONICS ENCLOSURE BASE, LOWER HALF, REVISION C",
+                          notes=["BREAK ALL EDGES 0.2 MAX UNLESS OTHERWISE STATED ON THE FACE OF THE DRAWING."])
+            top = sheet.view(_counterbored(), "top", at=(140, 120))
+            top.hole((15, 0, 12))
+            top.dim((-15, 0, 12), (15, 0, 12), tol=(0.05, 0.02), text="<> CENTRES")
+            stream = io.StringIO()
+            _render_sheet(sheet, index=1, count=1, label="fonts").write(stream)
+            text = stream.getvalue()
+            return text[text.index("BLOCKS"):text.index("OBJECTS")]  # every block and entity, no file stamp
+
+        here = drawn()
+        asked = AssertionError("a layout measured text with a font of the machine's")
+        with mock.patch.object(fonts, "make_font", side_effect=asked), \
+                mock.patch.object(fonts.TrueTypeFont, "text_width", side_effect=asked), \
+                mock.patch.object(fonts.TrueTypeFont, "text_width_ex", side_effect=asked):
+            self.assertEqual(drawn(), here)
+
+    def test_the_metrics_carried_are_the_font_they_name(self) -> None:
+        """The widths are DejaVu Sans's, which matplotlib carries: a table nobody
+        can check by eye is checked against the font."""
+        import matplotlib.font_manager
+        from fontTools.ttLib import TTFont
+
+        from cad._internal.drawing_base import _ADVANCE, _CAP_HEIGHT
+
+        font = TTFont(matplotlib.font_manager.findfont("DejaVu Sans"))
+        glyphs, cmap = font.getGlyphSet(), font.getBestCmap()
+        self.assertEqual({char: glyphs[cmap[ord(char)]].width for char in _ADVANCE}, _ADVANCE)
+        self.assertEqual(font["glyf"][cmap[ord("A")]].yMax, _CAP_HEIGHT, "a capital's height")
 
     def test_width_grows_with_the_string_and_the_height(self) -> None:
         from cad._internal.drawing_base import _text_width
@@ -1222,8 +1244,9 @@ class FromThePartTests(unittest.TestCase):
 
         sheet = Sheet("A4")
         sheet.view(_counterbored(), "top", at=(140, 120)).hole((15, 0, 12))
+        # Wider than a callout's one line, so its counterbore takes the line under the bore.
         self.assertEqual(_callouts(_render_sheet(sheet, index=1, count=1, label="cb")),
-                         ["2× %%c6.6 THRU   ⌴ %%c11 ↧6.5"])
+                         ["2× %%c6.6 THRU", "⌴ %%c11 ↧6.5"])
 
     def test_a_typed_size_the_part_contradicts_is_refused(self) -> None:
         """A callout that says ⌀6 over a ⌀6.6 bore is machined faithfully, and wrong."""
@@ -1244,7 +1267,7 @@ class FromThePartTests(unittest.TestCase):
         sheet.view(_counterbored(), "top", at=(140, 120)).hole((15, 0, 12), 6.6, thru=True, count=2,
                                                                cbore=(11, 6.5))
         self.assertEqual(_callouts(_render_sheet(sheet, index=1, count=1, label="cb")),
-                         ["2× %%c6.6 THRU   ⌴ %%c11 ↧6.5"])
+                         ["2× %%c6.6 THRU", "⌴ %%c11 ↧6.5"])
 
     def test_a_callout_where_there_is_no_hole_names_the_holes_there_are(self) -> None:
         from cad._internal.drawing_render import _render_sheet
