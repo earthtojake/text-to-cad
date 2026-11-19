@@ -42,7 +42,8 @@ import math
 from dataclasses import dataclass, replace
 
 __all__ = ["Hole", "Axis", "Slot", "BoltCircle", "Blend", "Chamfer", "holes", "axes", "slots", "bolt_circles",
-           "turned_diameters", "blends", "chamfers", "sharp_edges", "Hex", "hexes"]
+           "turned_diameters", "blends", "chamfers", "sharp_edges", "Hex", "hexes", "OpenBore", "open_bores",
+           "taper_bores", "ring_walls"]
 
 #: Model millimetres two positions on an axis may differ by and still touch. A
 #: counterbore's floor and the bore below it meet at one plane, so their ranges
@@ -1087,16 +1088,115 @@ def tapers(shape) -> list[Taper]:
     return found
 
 
+def taper_bores(shape) -> list[Taper]:
+    """The part's tapered bores: concave full cones with air inside that belong to
+    no drilled hole (a countersink, a chamfered mouth and a drill point are their
+    hole's). A hole callout states a straight bore, so a taper is stated as an
+    outside one is: a diameter at each end, each end placed. A cone that closes to
+    a point has ``small`` 0."""
+    from build123d import Vector
+
+    found = []
+    for d, foot, segments in _surface_segments(shape).values():
+        bores = [s for s in _merge_split_faces(segments) if s.concave and _full(s)]
+        for chain in _chains(bores):
+            if any(seg.kind == "cyl" for seg in chain):
+                continue
+            for seg in chain:
+                mid = (seg.lo + seg.hi) / 2
+                if shape.is_inside(Vector(*(f + mid * c for f, c in zip(foot, d)))):
+                    continue  # material on its axis: a conical seat round a pin, not a bore
+                ends = [tuple(f + t * c for f, c in zip(foot, d)) for t in (seg.lo, seg.hi)]
+                small, large = sorted((2 * seg.r_lo, 2 * seg.r_hi))
+                if seg.r_lo > seg.r_hi:
+                    ends.reverse()
+                found.append(Taper(0.0 if small <= 2 * _POINT else round(small, 6), round(large, 6),
+                                   (_tidy(ends[0]), _tidy(ends[1])), d))
+    found.sort(key=lambda t: (t.large, t.small, t.ends))
+    return found
+
+
+@dataclass(frozen=True)
+class OpenBore:
+    """A bore that is not a whole circle: a hole breaking out of an edge, a
+    half-round notch, a bore with a keyway cut along it. ``radius`` is its arc's,
+    ``middle`` a point on its axis midway along it, ``span`` how much of the
+    circle it has, in degrees."""
+
+    radius: float
+    axis: tuple[float, float, float]
+    middle: tuple[float, float, float]
+    span: float
+
+
+def open_bores(shape) -> list[OpenBore]:
+    """The part's bores that are not whole circles and are nobody else's: a
+    concave part cylinder that is not a slot's end, and is sharp where it meets
+    its neighbours (a fillet, or the full-round end of a notch, runs tangent
+    into the faces it joins, and is a blend or an end). No hole callout reads
+    one: a hole is a full circle."""
+    ancestors = _edge_faces(shape)
+    slot_ends = set()
+    for slot in slots(shape):
+        for end in slot.ends:
+            slot_ends.add(_line_key(*_canonical(slot.axis, end)) + (round(slot.width / 2, 4),))
+    found = []
+    for d, foot, segments in _surface_segments(shape).values():
+        for seg in _merge_split_faces(segments):
+            if seg.kind != "cyl" or not seg.concave or _full(seg):
+                continue
+            if _line_key(d, foot) + (round(seg.r_lo, 4),) in slot_ends:
+                continue
+            if any(_tangent_neighbours(ancestors, face, _surface_key(face.wrapped)) for face in seg.faces):
+                continue
+            mid = (seg.lo + seg.hi) / 2
+            found.append(OpenBore(round(seg.r_lo, 6), d, _tidy(tuple(f + mid * c for f, c in zip(foot, d))),
+                                  round(math.degrees(seg.span), 3)))
+    found.sort(key=lambda b: (b.radius, b.axis, b.middle))
+    return found
+
+
+def ring_walls(shape) -> list[Turned]:
+    """The part's bores with material standing in them: the outer wall of a ring
+    groove cut in a face, of a pocket round a standoff or a boss. No hole callout
+    reads one (a hole's inside is air), and its diameter is a size the part has."""
+    from build123d import Vector
+
+    found = []
+    for d, foot, segments in _surface_segments(shape).values():
+        u, v = _perpendicular(d)
+        bores = [s for s in _merge_split_faces(segments) if s.concave and _full(s)]
+        for chain in _chains(bores):
+            for seg in chain:
+                if seg.kind != "cyl":
+                    continue
+                mid = (seg.lo + seg.hi) / 2
+                samples = [(0.0, 0.0)] + [(seg.r_lo * f * math.cos(t), seg.r_lo * f * math.sin(t))
+                                          for f in (0.45, 0.85) for t in (0.3, 2.4, 4.5)]
+                if any(shape.is_inside(Vector(*(f + mid * c + x * cu + y * cv
+                                                for f, c, cu, cv in zip(foot, d, u, v)))) for x, y in samples):
+                    found.append(Turned(round(2 * seg.r_lo, 6), d,
+                                        _tidy(tuple(f + mid * c for f, c in zip(foot, d)))))
+    found.sort(key=lambda t: (t.diameter, t.axis, t.middle))
+    return found
+
+
 @dataclass(frozen=True)
 class Groove:
     """A turned groove: a torus cut round a turned surface, not a fillet. Its
     section radius, the point on its axis at its middle, and ``ring``, the radius
-    of the circle its section's centre runs round."""
+    of the circle its section's centre runs round. ``diameter`` is the one that
+    says how deep it is cut: its bottom's, for a groove round a shaft or in a
+    bore, or its ring's, for one cut in a face. ``seated`` is whether its section
+    is centred on a turned surface of the part (a half-round groove in a ⌀57
+    body, its centre on the ⌀57): its radius and that surface then fix its depth."""
 
     radius: float
     middle: tuple[float, float, float]
     axis: tuple[float, float, float]
     ring: float
+    diameter: float = 0.0
+    seated: bool = False
 
 
 def grooves(shape) -> list[Groove]:
@@ -1107,6 +1207,8 @@ def grooves(shape) -> list[Groove]:
     from OCP.GeomAbs import GeomAbs_Torus
 
     rounded = [Vector(*b.point) for b in blends(shape)]
+    turned = {key: [seg.r_lo for seg in _merge_split_faces(segments) if seg.kind == "cyl" and _full(seg)]
+              for key, (_d, _foot, segments) in _surface_segments(shape).items()}
     found = []
     for face in shape.faces():
         surface = BRepAdaptor_Surface(face.wrapped)
@@ -1129,7 +1231,14 @@ def grooves(shape) -> list[Groove]:
         centre = [m + torus.MajorRadius() * c / reach for m, c in zip(middle, radial)]
         if sum(n * (c - p) for n, c, p in zip(normal, centre, point)) <= 0:
             continue
-        groove = Groove(round(torus.MinorRadius(), 6), _tidy(middle), d, round(torus.MajorRadius(), 6))
+        # Which way it is cut: toward the axis (round a shaft), away from it (in a
+        # bore), or along it (in a face), read off where its middle lies.
+        major, minor = torus.MajorRadius(), torus.MinorRadius()
+        lean = (reach - major) / minor
+        bottom = 2 * (major - minor) if lean < -0.5 else 2 * (major + minor) if lean > 0.5 else 2 * major
+        line = _line_key(*_canonical(d, middle))
+        seated = any(abs(r - major) < 1e-6 for r in turned.get(line, ()))
+        groove = Groove(round(minor, 6), _tidy(middle), d, round(major, 6), round(bottom, 6), seated)
         if groove not in found:
             found.append(groove)
     return found

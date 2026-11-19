@@ -562,3 +562,42 @@ class TwoCircleTests(unittest.TestCase):
         self.assertEqual(len(found), 25)
         self.assertEqual(bolt_circles(plate, found), [])
         self.assertEqual(len({h.signature() for h in found}), 1, "one kind, one count")
+
+
+class UncalledBoreTests(unittest.TestCase):
+    """The round cuts no hole callout reads are still read off the part."""
+
+    def test_a_tapered_bore_an_open_bore_and_a_ring_wall(self) -> None:
+        from build123d import Align, Box, Cone, Cylinder, Pos
+        from cad._internal.drawing_features import holes, open_bores, ring_walls, taper_bores
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        plate = Box(100, 60, 12, align=align)
+        plate -= Pos(-30, 0, 0) * Cone(3, 5, 12, align=align)
+        plate -= Pos(48, 0, 0) * Cylinder(4, 12, align=align)
+        plate -= Pos(10, 0, 9) * (Cylinder(15, 3, align=align) - Cylinder(10, 3, align=align))
+        plate -= Pos(-10, 20, 0) * Cylinder(2, 12, align=align)      # and one plain hole, countersunk
+        plate -= Pos(-10, 20, 10) * Cone(2, 4, 2, align=align)
+        (hole,) = holes(plate)
+        self.assertAlmostEqual(hole.diameter, 4.0, places=6)
+        self.assertIsNotNone(hole.csk, "a countersink is its hole's, not a tapered bore")
+        (taper,) = taper_bores(plate)
+        self.assertEqual((taper.small, taper.large), (6.0, 10.0))
+        self.assertEqual([round(end[2], 6) for end in taper.ends], [0.0, 12.0], "small end first")
+        (broken,) = open_bores(plate)
+        self.assertEqual(broken.radius, 4.0)
+        self.assertGreater(broken.span, 180.0)
+        self.assertLess(broken.span, 360.0)
+        (wall,) = ring_walls(plate)
+        self.assertEqual(wall.diameter, 30.0)
+
+    def test_a_fillet_a_slot_end_and_a_full_round_notch_are_no_open_bore(self) -> None:
+        from build123d import Align, Axis, Box, Pos, SlotCenterToCenter, extrude, fillet
+        from cad._internal.drawing_features import open_bores
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        plate = Box(80, 60, 10, align=align) - Pos(0, 0, 4) * Box(40, 30, 6, align=align)
+        plate = fillet(plate.edges().filter_by(Axis.Z).filter_by(lambda e: abs(e.center().X) < 25), 3)
+        plate -= Pos(-30, 0, 0) * extrude(SlotCenterToCenter(10, 6), 10)
+        plate -= Pos(40, 0, 0) * extrude(SlotCenterToCenter(12, 8), 10)   # a notch in the edge, its end full round
+        self.assertEqual(open_bores(plate), [])

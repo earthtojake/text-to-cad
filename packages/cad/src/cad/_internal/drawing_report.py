@@ -149,6 +149,7 @@ def _unstated(facts: _Facts) -> list[str]:
         lines.extend(_unlocated(record, whose))
         lines.extend(_unplaced_faces(record, whose))
         lines.extend(_unstated_turns(record, whose))
+        lines.extend(_unstated_bores(record, whose))
     for entry in facts.lists.values():
         parts, listed, keyed = entry["parts"], entry["listed"], entry["ballooned"]
         if not listed:
@@ -738,6 +739,10 @@ def _unstated_turns(record: dict, whose: str) -> list[str]:
         along = next((k for k in range(3) if abs(abs(groove.axis[k]) - 1) < 1e-9), None)
         named = any(abs(r - groove.radius) <= 0.01 for r in record.get("radii", ()))
         missing = [] if named else [f"its radius R{_fmt(groove.radius)}"]
+        # How deep it is cut: its radius says so when its section is centred on a
+        # turned surface of the part, else a diameter has to.
+        if not groove.seated and groove.diameter > 0 and not any(abs(v - groove.diameter) <= 0.01 for v in stated):
+            missing.append(f"its diameter ⌀{_fmt(groove.diameter)}")
         if along is not None:
             if reached is None:
                 reached = _reached(record)
@@ -746,8 +751,67 @@ def _unstated_turns(record: dict, whose: str) -> list[str]:
         if missing:
             at = f"{'XYZ'[along]} = {_fmt(groove.middle[along])}" if along is not None else _where(groove.middle)
             lines.append(f"incomplete: {whose}the groove R{_fmt(groove.radius)} at {at} leaves "
-                         f"{' and '.join(missing)} unstated: "
-                         f"{side or 'a view'}.radius(...) on its arc and a dimension to its middle state it.")
+                         f"{_and(missing)} unstated: "
+                         f"{side or 'a view'}.radius(...) on its arc and a dimension to its middle state it"
+                         + (", and a diameter across it (text=\"%%c<>\") how deep it is cut."
+                            if any("diameter" in m for m in missing) else "."))
+    return lines
+
+
+def _unstated_bores(record: dict, whose: str) -> list[str]:
+    """The round cuts no hole callout reads, each stated its own way: a tapered
+    bore by a diameter at each end, each end placed (as an outside taper is); a
+    bore that is not a whole circle (a hole breaking out of an edge, a notch, a
+    bore with a keyway along it) by ``radius()`` on its arc or its diameter; a
+    bore with material standing in it (a ring groove's outer wall, a pocket round
+    a boss) by its diameter."""
+    from cad._internal.drawing_features import open_bores, ring_walls, taper_bores
+
+    shape, views = record["shape"], record["views"]
+    stated = record["values"]
+    reached = None
+    lines = []
+    for taper in taper_bores(shape):
+        along = next((k for k in range(3) if abs(abs(taper.axis[k]) - 1) < 1e-9), None)
+        missing = [f"⌀{_fmt(d)}" for d in (taper.small, taper.large)
+                   if d > 0 and not any(abs(v - d) <= 0.01 for v in stated)]
+        if along is not None:
+            if reached is None:
+                reached = _reached(record)
+            missing += [f"its end at {'XYZ'[along]} = {_fmt(end[along])}" for end in taper.ends
+                        if round(end[along], _PLACE) not in reached[along]]
+        if missing:
+            what = (f"the tapered bore from ⌀{_fmt(taper.large)} to ⌀{_fmt(taper.small)}" if taper.small > 0
+                    else f"the conical recess ⌀{_fmt(taper.large)}")
+            lines.append(f"incomplete: {whose}{what} {_axis_words(taper.axis)} through {_where(taper.ends[1])} "
+                         f"leaves {', '.join(missing)} unstated: a hole callout states a straight bore, and reads "
+                         "none here. A section through it, with a diameter across each end (text=\"%%c<>\") "
+                         "and each end placed along its axis, states it.")
+    kinds: dict[tuple, list] = {}
+    for bore in open_bores(shape):
+        if round(bore.radius, 3) in record.get("radii", ()) or any(abs(v - 2 * bore.radius) <= 0.01 for v in stated):
+            continue
+        kinds.setdefault((round(bore.radius, 3), round(bore.span, 1), bore.axis), []).append(bore)
+    for (radius, span, axis), members in kinds.items():
+        where = next((name for name, look in views if abs(abs(sum(a * b for a, b in zip(axis, look))) - 1) < 1e-6),
+                     None)
+        count = f"{len(members)}× " if len(members) > 1 else ""
+        fix = (f"{where}.radius({_where(members[0].middle)}) on its arc states it, its centre located like a hole's."
+               if where else "No view on the drawing looks down it; add one, and radius() on its arc states it.")
+        lines.append(f"incomplete: {whose}{count}R{_fmt(radius)} part-round bore {_axis_words(axis)} through "
+                     f"{_where(members[0].middle)} ({_fmt(span)}° of a ⌀{_fmt(2 * radius)} circle: a hole breaking "
+                     "out of an edge, a notch, a bore cut open along its side) is not stated: a hole callout "
+                     f"reads whole circles. {fix}")
+    for wall in ring_walls(shape):
+        if any(abs(v - wall.diameter) <= 0.01 for v in stated):
+            continue
+        where = next((name for name, look in views
+                      if abs(abs(sum(a * b for a, b in zip(wall.axis, look))) - 1) < 1e-6), None)
+        fix = (f"{where}.diameter({_where(wall.middle)}, size={_fmt(wall.diameter)}) states it." if where else
+               "No view on the drawing looks down it; add one, and diameter() states it.")
+        lines.append(f"incomplete: {whose}the bore ⌀{_fmt(wall.diameter)} {_axis_words(wall.axis)} through "
+                     f"{_where(wall.middle)} has material standing in it (a ring groove's outer wall, a pocket "
+                     f"round a boss), so no hole callout reads it, and its diameter is not dimensioned. {fix}")
     return lines
 
 
