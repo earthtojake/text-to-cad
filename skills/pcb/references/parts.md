@@ -25,10 +25,10 @@ checks read them through the project's `fp-lib-table`, beside the `.kicad_pro`: 
 stock library (`${KICAD9_FOOTPRINT_DIR}/...`) is read in the KiCad the person installed
 ([SKILL.md](../SKILL.md#setup)). Hand a board over with its project libraries.
 
-Manufacturer, part number and DNP live in the schematic's fields (`MPN`, `LCSC`), and the BOM, with its
-quantities, is exported from them ([manufacturing](manufacturing.md#exports)), never inferred from the
-board's pads. Never edit an exported BOM: change the schematic's field and export it again, since a hand
-edit to the CSV disagrees with the board and is lost at the next export.
+Manufacturer and part number live in the schematic's fields (`MPN`, `LCSC`) and DNP on its symbols, and the
+BOM, with its quantities, is exported from them ([manufacturing](manufacturing.md#exports)), never
+inferred from the board's pads. Never edit an exported BOM: change the schematic's field and export it
+again, since a hand edit to the CSV disagrees with the board and is lost at the next export.
 
 ## 3D models
 

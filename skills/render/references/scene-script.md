@@ -23,8 +23,9 @@ shot. A clip that swings a part out of the box needs `model.bounds()` at its wid
 
 A sun is one parallel light; its `energy` is in W/m² (3 to 5 for a bright day). For a product look,
 three area lights around the model in place of the sun, their power in watts scaled by the square
-of their distance so the light on the model is the same at any size (these numbers, with the world
-below and the Standard view, light a white part without clipping it; draft and adjust):
+of their distance so the light on the model is the same at any size. These numbers are a start:
+with the world below and the Standard view they take a pale part's lit faces to full white in
+Cycles, and 0.4 of each keeps a white part under it, so draft and adjust:
 
 ```python
 def area(name, direction, power, size):
