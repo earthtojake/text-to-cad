@@ -237,7 +237,10 @@ sheet millimetres.
   for one kind, B1 for the next), an X and Y origin marked (the lower-left
   corner of the view's extent unless `origin`, a model point, is given), and a
   table of TAG, X, Y and SIZE in free paper beside the view (or with its
-  top-left corner at `at`). Sizes are read off the part as a callout reads
+  top-left corner at `at`). A table too tall for the paper is set in blocks
+  side by side, each under its own header, read down one and then the next;
+  a sheet choosing its size takes a larger one where no scale leaves the
+  table room. Sizes are read off the part as a callout reads
   them. A view tabulates its holes or calls them out, not both, but for a
   `hole(point, thread=...)`, which gives tapped holes' rows their thread under
   a letter of their own (nothing in the part says a bore is tapped).

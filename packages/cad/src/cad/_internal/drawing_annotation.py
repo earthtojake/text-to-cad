@@ -399,6 +399,22 @@ class _Features:
         return None
 
 
+def _read_features(sheet: Sheet, shape) -> _Features:
+    """A part's holes, slots and bolt circles, read off it once for the sheet.
+    Reading them is most of what a plate of holes costs to draw (seconds, for
+    two hundred), and a first pass, every view that shows the part, every size
+    and scale a sheet tries before it fits and the report that follows all ask
+    for the same reading."""
+    from cad._internal.drawing_features import bolt_circles, holes as find_holes, slots as find_slots
+
+    key = ("features", id(shape))
+    if key not in sheet._read:
+        holes = find_holes(shape)
+        # Kept with its part, so the part outlives the reading and its id names no other.
+        sheet._read[key] = (shape, _Features(holes, find_slots(shape), bolt_circles(shape, holes)))
+    return sheet._read[key][1]
+
+
 def _hole_spec(hole, count: int, thread: str | None = None, label: str | None = None,
                pcd: float | None = None, *, tap_drill: bool = False, thread_depth: float | None = None) -> dict:
     if hole.problem is not None:
@@ -994,13 +1010,30 @@ class _TableRow(NamedTuple):
 
 @dataclass
 class _HoleTable:
-    """A view's hole table: its rows, the model point its X and Y run from, its
-    size on the sheet, and its top-left corner once placed."""
+    """A view's hole table: its rows, the model point its X and Y run from, the
+    width of its four columns, and, once placed, its top-left corner and how many
+    blocks it is set in. A table too tall for the paper is set as a long list
+    is, in blocks side by side, each under its own header, read down the first
+    and then down the next."""
 
     rows: list[_TableRow]
     origin: tuple[float, float, float]
-    size: tuple[float, float]
+    width: float
     corner: tuple[float, float] | None = None
+    blocks: int = 1
+
+    def size(self, blocks: int | None = None) -> tuple[float, float]:
+        """Its size on the sheet set in ``blocks`` blocks (those it was placed in, by default)."""
+        blocks = blocks or self.blocks
+        return blocks * self.width, (math.ceil(len(self.rows) / blocks) + 1) * _TABLE_ROW
+
+    def ways(self, height: float) -> list[int]:
+        """The numbers of blocks it may be set in on paper ``height`` tall, fewest
+        first: one, then as many as bring it under that height, then more for as
+        long as another block still shortens it."""
+        fewest = max(1, math.ceil(len(self.rows) / max(1.0, height // _TABLE_ROW - 1)))
+        return [blocks for blocks in dict.fromkeys((1, *range(fewest, len(self.rows) + 1)))
+                if blocks == 1 or self.size(blocks)[1] < self.size(blocks - 1)[1]]
 
 
 def _hole_table(view: View, proj, features, cut, items) -> _HoleTable:
@@ -1065,7 +1098,7 @@ def _hole_table(view: View, proj, features, cut, items) -> _HoleTable:
                                                 start=1):
             rows.append(_TableRow(f"{letter}{number}", x, y, size, feature, beside(feature), radius))
     width = sum(w for _n, w in _TABLE_COLUMNS) + max(28.0, max(_ink_width(r.size, 2.5) for r in rows) + 6.0)
-    return _HoleTable(rows, origin, (width, (len(rows) + 1) * _TABLE_ROW))
+    return _HoleTable(rows, origin, width)
 
 
 def _lower_left(shape, proj) -> tuple[float, float, float]:
@@ -1108,26 +1141,35 @@ def _draw_hole_tags(msp, table: _HoleTable, proj, to_sheet, sv: float, th: float
 
 
 def _draw_hole_table(msp, table: _HoleTable, text) -> None:
-    """The table itself, header on top: TAG, X, Y, SIZE."""
+    """The table itself, header on top: TAG, X, Y, SIZE; in its blocks side by
+    side, each under its own header, where it was placed in more than one."""
     from ezdxf.enums import TextEntityAlignment as A
 
-    x0, y1 = table.corner
-    w, h = table.size
+    left, y1 = table.corner
+    w = table.width
     columns = list(_TABLE_COLUMNS) + [("SIZE", w - sum(cw for _n, cw in _TABLE_COLUMNS))]
-    msp.add_lwpolyline([(x0, y1), (x0 + w, y1), (x0 + w, y1 - h), (x0, y1 - h)], close=True,
-                       dxfattribs={"layer": "TITLE"})
-    for r in range(1, len(table.rows) + 1):
-        msp.add_line((x0, y1 - r * _TABLE_ROW), (x0 + w, y1 - r * _TABLE_ROW), dxfattribs={"layer": "TITLE"})
-    x = x0
-    for c, (name, width) in enumerate(columns):
-        if c:
-            msp.add_line((x, y1), (x, y1 - h), dxfattribs={"layer": "TITLE"})
-        text(name, x + width / 2, y1 - _TABLE_ROW / 2, _CAPTION_HEIGHT, A.MIDDLE_CENTER, fit=width - 2)
-        for r, row in enumerate(table.rows, start=1):
-            value = (row.tag, _fmt(row.x), _fmt(row.y), row.size)[c]
-            mid = y1 - (r + 0.5) * _TABLE_ROW
-            if c == 3:
-                text(value, x + 2.0, mid, 2.5, A.MIDDLE_LEFT, "NOTES")
-            else:
-                text(value, x + width / 2, mid, 2.5, A.MIDDLE_CENTER, fit=width - 2)
-        x += width
+    most = math.ceil(len(table.rows) / table.blocks)
+    for block in range(table.blocks):
+        rows = table.rows[block * most:(block + 1) * most]
+        x0, h = left + block * w, (len(rows) + 1) * _TABLE_ROW
+        # Its top and left edges, with the right one of the last block: a block
+        # shares each side with the next, and a line is drawn once.
+        outline = [(x0 + w, y1), (x0, y1), (x0, y1 - h), (x0 + w, y1 - h)]
+        if block == table.blocks - 1:
+            outline.append((x0 + w, y1))
+        msp.add_lwpolyline(outline, dxfattribs={"layer": "TITLE"})
+        for r in range(1, len(rows) + 1):
+            msp.add_line((x0, y1 - r * _TABLE_ROW), (x0 + w, y1 - r * _TABLE_ROW), dxfattribs={"layer": "TITLE"})
+        x = x0
+        for c, (name, width) in enumerate(columns):
+            if c:
+                msp.add_line((x, y1), (x, y1 - h), dxfattribs={"layer": "TITLE"})
+            text(name, x + width / 2, y1 - _TABLE_ROW / 2, _CAPTION_HEIGHT, A.MIDDLE_CENTER, fit=width - 2)
+            for r, row in enumerate(rows, start=1):
+                value = (row.tag, _fmt(row.x), _fmt(row.y), row.size)[c]
+                mid = y1 - (r + 0.5) * _TABLE_ROW
+                if c == 3:
+                    text(value, x + 2.0, mid, 2.5, A.MIDDLE_LEFT, "NOTES")
+                else:
+                    text(value, x + width / 2, mid, 2.5, A.MIDDLE_CENTER, fit=width - 2)
+            x += width

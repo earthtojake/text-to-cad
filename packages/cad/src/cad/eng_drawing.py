@@ -64,7 +64,7 @@ from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, NamedTuple, Sequence
 
-from cad._internal.drawing_annotation import _Dim, _fit, _looks_into, _thread
+from cad._internal.drawing_annotation import _Dim, _fit, _looks_into, _read_features, _thread
 from cad._internal.drawing_annotation import hole_callout_text  # noqa: F401 - a name released scripts import
 from cad._internal.drawing_assembly import (
     _GA_LIST_SHARE, JOINTS, Item, _PartOf, PartsList, _arrange_assembly, _continuations, _item_shown, _joint_note,
@@ -942,6 +942,10 @@ class Sheet:
     #: The flag notes its views flag, in the order first flagged: they follow the
     #: notes, each numbered in its flag.
     _flags: list[str] = field(default_factory=list, init=False, repr=False)
+    #: What has been read off each part the sheet draws, kept with the part: its
+    #: holes, slots and bolt circles (``_read_features``) and each view's picture
+    #: of it whole. Read once, whoever asks and at however many sizes it is drawn.
+    _read: dict = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.size is not None and self.size not in SHEET_SIZES:
@@ -1378,9 +1382,7 @@ def _first_pass(sheet: Sheet, shape) -> None:
     sheet's views take the author's points in ``shape``'s own frame."""
     from build123d import GeomType
 
-    from cad._internal.drawing_features import (
-        grooves, hexes, holes as find_holes, revolved, slots as find_slots, tapers, turned_surfaces,
-    )
+    from cad._internal.drawing_features import grooves, hexes, revolved, tapers, turned_surfaces
     from cad._internal.drawing_report import _owned
 
     turn = None
@@ -1395,7 +1397,12 @@ def _first_pass(sheet: Sheet, shape) -> None:
             turn = Rot(0, 90, 0) if turned.axis == 2 else Rot(0, 0, -90)
             shape = turn * shape
             turned = revolved(shape, bores=True)
-    features = [*find_holes(shape), *find_slots(shape)]
+
+    def holes_and_slots(of) -> list:
+        read = _read_features(sheet, of)
+        return [*read.holes, *read.slots]
+
+    features = holes_and_slots(shape)
     if turned is None:
         # The view showing most is drawn as the front, as drafters choose it: a
         # part whose holes are seen from above or the side is turned to face it.
@@ -1412,7 +1419,7 @@ def _first_pass(sheet: Sheet, shape) -> None:
         if main != "front" or best:
             turn = candidates[best]
             shape = turn * shape
-            features = [*find_holes(shape), *find_slots(shape)]
+            features = holes_and_slots(shape)
     names = list(_VIEW_NAMES) if turned is not None else _earned_views(shape, features)
     if turned is not None:
         # Turned whole: the two views square to its axis draw the same picture,

@@ -3362,6 +3362,71 @@ class WhiteSpaceTests(unittest.TestCase):
         self.assertEqual((sheet._size(), sheet._scale()), ("A4", 1.0))
 
 
+    def test_a_part_is_read_and_projected_once_however_many_sizes_its_sheet_tries(self) -> None:
+        """Reading a plate's holes off its faces and projecting its views are most
+        of what a sheet costs. A sheet choosing its size drew at a dozen before
+        one fitted and read the part afresh at each, and the report read it
+        again: 38 seconds for a plate of a hundred holes."""
+        from unittest import mock
+
+        from build123d import Align, Box, Cylinder, Pos
+
+        import cad._internal.drawing_render as render
+        from cad._internal import drawing_features
+        from cad._internal.drawing_report import _unstated
+        from cad._internal.drawing_sheet import _OffFrame
+        from cad.eng_drawing import Sheet
+
+        up = (Align.CENTER, Align.CENTER, Align.MIN)
+        block = Box(24, 16, 6, align=up) - Pos(-7, 0, 0) * Cylinder(2, 6, align=up) - Pos(7, 0, 0) * Cylinder(2, 6, align=up)
+        sheet = Sheet(size=None, scale=None)
+        top, _front, _right = sheet.three_views(block)
+        top.hole_table()
+        real = render._place_hole_tables
+        drawn = []
+
+        def tables(sheet, *args):
+            drawn.append(sheet._scale())
+            if sheet._scale() > 1:
+                raise _OffFrame("no room for the table", None)
+            return real(sheet, *args)
+
+        facts = _facts()
+        with mock.patch.object(render, "_place_hole_tables", tables), \
+                mock.patch.object(drawing_features, "holes", wraps=drawing_features.holes) as read, \
+                mock.patch.object(render, "_Projection", wraps=render._Projection) as projected:
+            render._render_sheet(sheet, index=1, count=1, label="once", facts=facts)
+            _unstated(facts)
+        self.assertGreater(len(drawn), 1, "the sheet was drawn at more than one size or scale")
+        self.assertEqual(read.call_count, 1, "its holes are read once, for every attempt and the report")
+        self.assertEqual(projected.call_count, 3, "and each of its three views projected once")
+
+    def test_a_sheet_out_of_scales_takes_a_size_it_would_not_choose_for_the_part(self) -> None:
+        """A table of two hundred holes needs more paper than A2 has at any scale."""
+        from unittest import mock
+
+        from cad._internal import drawing_render
+        from cad._internal.drawing_sheet import _OffFrame
+        from cad.eng_drawing import Sheet
+
+        tried = []
+
+        def draw(sheet, *, floor, ceiling, **_kwargs):
+            sheet._chosen_size, sheet._chosen_scale = ("A4", "A3", "A2", "A1", "A0")[floor], 1.0
+            tried.append(sheet._chosen_size)
+            if floor < 3:
+                raise _OffFrame("no free paper for the table", None)   # None: no scale of this sheet has it
+            return "drawn"
+
+        with mock.patch.object(drawing_render, "_draw_sheet", side_effect=draw):
+            self.assertEqual(drawing_render._render_sheet(Sheet(None, None), index=1, count=1, label="t"), "drawn")
+            self.assertEqual(tried, ["A4", "A3", "A2", "A1"])
+            tried.clear()
+            with self.assertRaises(_OffFrame):   # a size its author gave is refused at once
+                drawing_render._render_sheet(Sheet("A3", None), index=1, count=1, label="t")
+            self.assertEqual(tried, ["A4"])
+
+
 class CrossingTests(unittest.TestCase):
     """A reviewing engineer: dimension lines crossing other dimension lines are not acceptable."""
 
@@ -5327,6 +5392,28 @@ class HoleTableTests(unittest.TestCase):
         top.hole_table()
         with self.assertRaisesRegex(ValueError, "hides some of the part"):
             _render_sheet(sheet, index=1, count=1, label="hidden")
+
+    def test_a_table_too_tall_for_the_paper_is_set_in_blocks_side_by_side(self) -> None:
+        """Thirty holes make a table 186 mm tall, and A4 has 190 inside its frame
+        with a title block in it: the table was refused for want of paper."""
+        from build123d import Align, Box, Cylinder, Pos
+
+        from cad._internal.drawing_render import _render_sheet
+        from cad.eng_drawing import Sheet
+
+        up = (Align.CENTER, Align.CENTER, Align.MIN)
+        plate = Box(130, 110, 4, align=up) - [Pos(-50 + 20 * i, -40 + 20 * j, 0) * Cylinder(2, 4, align=up)
+                                              for i in range(6) for j in range(5)]
+        sheet = Sheet("A4", 0.5)
+        sheet.view(plate, "top", at=(60, 150)).hole_table()
+        texts = [e.dxf.text for e in _render_sheet(sheet, index=1, count=1, label="long").modelspace().query("TEXT")]
+        self.assertEqual(texts.count("TAG"), 2, "two blocks, each under its own header")
+        self.assertEqual([texts.count(f"A{n}") for n in (1, 15, 16, 30)], [2, 2, 2, 2], "and every hole in one")
+        # One block where it fits, as before.
+        sheet = Sheet("A3", 0.5)
+        sheet.view(plate, "top", at=(80, 200)).hole_table()
+        texts = [e.dxf.text for e in _render_sheet(sheet, index=1, count=1, label="one").modelspace().query("TEXT")]
+        self.assertEqual(texts.count("TAG"), 1)
 
     def test_a_hole_table_placed_by_hand_must_be_on_the_paper(self) -> None:
         from cad._internal.drawing_render import _render_sheet
