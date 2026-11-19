@@ -39,10 +39,11 @@ Nothing here imports the kernel at module scope.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 __all__ = ["Hole", "Axis", "Slot", "BoltCircle", "Blend", "Chamfer", "holes", "axes", "slots", "bolt_circles",
-           "turned_diameters", "blends", "chamfers", "sharp_edges", "Hex", "hexes"]
+           "turned_diameters", "blends", "chamfers", "sharp_edges", "Hex", "hexes", "OpenBore", "open_bores",
+           "taper_bores", "ring_walls"]
 
 #: Model millimetres two positions on an axis may differ by and still touch. A
 #: counterbore's floor and the bore below it meet at one plane, so their ranges
@@ -53,6 +54,8 @@ _TOUCH = 1e-4
 _SLIVER = 1e-3
 #: How far past an end of a hole the solid is sampled to decide whether it is open.
 _PROBE = 0.05
+#: A cone that closes to within this radius, mm, comes to a point: a drill's.
+_POINT = 0.01
 
 
 @dataclass(frozen=True)
@@ -62,9 +65,11 @@ class Hole:
     ``mouth`` is the point on the axis where the hole opens (for a through hole,
     the end with the counterbore or countersink, else the end at the larger
     coordinate along ``axis``); ``axis`` is the unit direction from the mouth into
-    the material. Sizes are model millimetres; ``depth`` is measured from the
-    mouth to the end of the full-diameter bore, so a drill point below it is not
-    counted, and is None for a through hole.
+    the material. Sizes are model millimetres; ``depth`` is a blind hole's, as a
+    callout's ↧ states it, and None for a through hole: from the mouth to the
+    flat floor, a fillet round that floor included, or, where the bore ends in a
+    point or a ball, to where its full diameter ends (a drill point below it is
+    not counted). ``end`` says what such a depth leaves out.
     """
 
     mouth: tuple[float, float, float]
@@ -84,13 +89,30 @@ class Hole:
     #: steps (a chamfered counterbore, a counterbore in a counterbore). Such a hole
     #: is refused wherever a callout or a table would state it.
     problem: str | None = None
+    #: What a blind hole's depth does not say about its end, when its end is
+    #: neither a flat floor nor a drill point: ``("ball", radius, beyond)`` for a
+    #: ball end of that radius, or ``("other", 0.0, beyond)`` for any other form,
+    #: ``beyond`` being how far the end runs past ``depth`` on the centre line. A
+    #: callout has no symbol for it, so the report asks for a note.
+    end: tuple[str, float, float] | None = None
+    #: The bolt circle the hole is on, as (its diameter, its centre), or None: six
+    #: holes on ⌀60 and eight of the same size on ⌀100 are two patterns, each a
+    #: callout with its own count.
+    circle: tuple[float, tuple[float, float, float]] | None = None
 
     def signature(self) -> tuple:
         """What makes two holes "the same hole" for a ``4×`` count."""
         r = lambda v: None if v is None else round(v, 3)
         pair = lambda p: None if p is None else (round(p[0], 3), round(p[1], 3))
+        # What no callout states, as one text that sorts: a hole with a ball end is
+        # not the flat-bottomed hole of the same size, and the two can share a part.
+        unsaid = self.problem or ""
+        if self.end is not None:
+            unsaid += f"|{self.end[0]} {round(self.end[1], 3)} {round(self.end[2], 3)}"
+        if self.circle is not None:
+            unsaid += f"|on {round(self.circle[0], 3)} at {tuple(round(c, 3) for c in self.circle[1])}"
         return (r(self.diameter), self.thru, r(self.depth), pair(self.cbore), pair(self.csk),
-                pair(self.far_cbore), pair(self.far_csk), self.problem)
+                pair(self.far_cbore), pair(self.far_csk), unsaid)
 
 
 @dataclass(frozen=True)
@@ -156,6 +178,8 @@ class _Segment:
     #: Unit radial direction from the axis to the middle of the face: which way a
     #: part cylinder (a slot's end, a fillet) faces.
     bulge: tuple = (0.0, 0.0, 0.0)
+    #: The faces the segment is read off: one, or the pieces of a split surface.
+    faces: tuple = ()
 
 
 def _canonical(direction, point) -> tuple[tuple, tuple]:
@@ -228,7 +252,7 @@ def _surface_segments(shape) -> dict[tuple, tuple[tuple, tuple, list[_Segment]]]
         concave = sum(a * b for a, b in zip(radial, (normal.X, normal.Y, normal.Z))) < 0
         reach = math.sqrt(sum(c * c for c in radial)) or 1.0
         segment = _Segment("cyl" if kind == GeomAbs_Cylinder else "cone", lo, hi, r_lo, r_hi, concave, u1 - u0,
-                           tuple(c / reach for c in radial))
+                           tuple(c / reach for c in radial), (face,))
         lines.setdefault(_line_key(d, foot), (d, foot, []))[2].append(segment)
     return lines
 
@@ -248,9 +272,11 @@ def _merge_split_faces(segments: list[_Segment]) -> list[_Segment]:
                 reach = math.sqrt(sum(c * c for c in summed)) or 1.0
                 other.bulge = tuple(c / reach for c in summed)
                 other.span += seg.span
+                other.faces += seg.faces
                 break
         else:
-            merged.append(_Segment(seg.kind, seg.lo, seg.hi, seg.r_lo, seg.r_hi, seg.concave, seg.span, seg.bulge))
+            merged.append(_Segment(seg.kind, seg.lo, seg.hi, seg.r_lo, seg.r_hi, seg.concave, seg.span, seg.bulge,
+                                   seg.faces))
     return merged
 
 
@@ -269,16 +295,76 @@ def _chains(segments: list[_Segment]) -> list[list[_Segment]]:
     return chains
 
 
-class _Ray:
-    """Whether a feature is open past one of its ends, asked of one solid.
+class _Ends:
+    """Whether a hole's or a slot's end is closed, read off the faces its wall
+    runs into there.
 
-    Open means air just past the end AND no face of the part ahead within the
-    feature's own width. Air alone was the old test, and a blind hole or slot
-    with a filleted or ball floor has air just past where its straight wall
-    stops: it read THRU. A face far ahead is a different matter -- a through
-    hole in the floor of a closed box looks out at the lid -- so only a face
-    close enough to be the feature's own floor closes it.
+    A wall ends at an edge, and the face on the other side of that edge says
+    what the end is. A floor lies inside the feature's own section: a flat
+    bottom, the fillet round it, a ball, a cone are all within the bore's
+    radius of its axis (within a slot's outline). Anything else reaches out
+    past the wall -- the face the hole breaks out through, a cavity's wall, a
+    cross hole -- and the feature leaves the material there: it is open, and a
+    hole open at both ends is THRU.
+
+    How far away the next wall stands does not come into it. It used to: an end
+    was open when the air past it met no face within one bore diameter, a bound
+    put there so that a blind hole with a filleted or ball floor, which has air
+    just past where its straight wall stops, did not read THRU. That bound made
+    a hole through a wall into a gap narrower than itself read blind, as deep
+    as the wall is thick. The floor is told from the far wall by what it is
+    joined to, not by its distance.
     """
+
+    def __init__(self, shape) -> None:
+        self.shape = shape
+        self._ancestors = None
+        self._points: dict = {}
+
+    def _reach(self, face) -> list:
+        """Points round a face that show how far it reaches: its corners, and three
+        along each of its edges. Read once a face: a plate's top is every hole's."""
+        from build123d import Face
+
+        beyond = Face(face)
+        if beyond not in self._points:
+            points = [tuple(v) for v in beyond.vertices()]
+            points += [tuple(e.position_at(t)) for e in beyond.edges() for t in (0.25, 0.5, 0.75)]
+            self._points[beyond] = points
+        return self._points[beyond]
+
+    def closed(self, segments, own, d, foot, end: float, far: float, within) -> bool | None:
+        """Whether the end at ``end`` along the line (``d``, ``foot``) of the wall
+        ``segments`` (whose other end is toward ``far``) is closed: every face
+        joined to the wall there lies ``within`` the feature's section. ``own`` are
+        the feature's own faces, which are not what it runs into. None when the
+        wall has no edge of its own at that end (a cone that closes to a point)."""
+        if self._ancestors is None:
+            self._ancestors = _edge_faces(self.shape)
+        seen = False
+        for segment in segments:
+            for face in segment.faces:
+                for edge in face.edges():
+                    along = [sum((c - f) * k for c, f, k in zip(tuple(edge.position_at(t)), foot, d))
+                             for t in (0.0, 0.25, 0.5, 0.75, 1.0)]
+                    # The edge round this end: one that reaches it. Not the one round
+                    # the other end, nor a seam or a side that runs the wall's length,
+                    # nor the edge of a hole cut through the wall partway along it.
+                    if min(abs(a - end) for a in along) > _TOUCH or min(abs(a - far) for a in along) <= _TOUCH:
+                        continue
+                    for other in _others(self._ancestors, edge, face):
+                        if any(other.IsSame(mine.wrapped) for mine in own):
+                            continue
+                        seen = True
+                        if not all(within(point) for point in self._reach(other)):
+                            return False
+        return True if seen else None
+
+
+class _Ray:
+    """Lines cast through one solid: how deep a blind feature's floor is, and,
+    where its wall has no edge to read at an end (:class:`_Ends`), whether the
+    air past that end meets the part within the feature's own width."""
 
     def __init__(self, shape) -> None:
         from OCP.IntCurvesFace import IntCurvesFace_ShapeIntersector
@@ -382,7 +468,9 @@ def holes(shape) -> list[Hole]:
     found: list[Hole] = []
     ray = None
     tori = None
-    for key, (d, foot, segments) in _surface_segments(shape).items():
+    ends = _Ends(shape)
+    surfaces = _surface_segments(shape)
+    for key, (d, foot, segments) in surfaces.items():
         u, v = _perpendicular(d)
 
         def at(a: float, x: float = 0.0, y: float = 0.0):
@@ -398,7 +486,8 @@ def holes(shape) -> list[Hole]:
         bores = [s for s in _merge_split_faces(segments) if s.concave and _full(s)]
         if tori is None:
             tori = _tori(shape)
-        _bridge_fillets(bores, tori.get(key, []))
+        fillets = tori.get(key, [])
+        _bridge_fillets(bores, fillets)
         groups: list[list[list[_Segment]]] = []
         for chain in _chains(bores):
             # Two pieces of one bore with air between them -- a clevis's two arms,
@@ -412,22 +501,27 @@ def holes(shape) -> list[Hole]:
                 groups.append([chain])
         for group in groups:
             ray = ray or _Ray(shape)
-            hole = _read_chain([seg for chain in group for seg in chain], d, foot, at, air, ray)
+            hole = _read_chain([seg for chain in group for seg in chain], d, foot, at, air, ray, fillets, ends)
             if hole == "sealed" and len(group) > 1:
                 # Closed at both ends, the pieces are not one bore drilled through
                 # air: two blind holes facing each other across a gap (into the
                 # two walls of a channel) are each their own.
                 for chain in group:
-                    piece = _read_chain(chain, d, foot, at, air, ray)
+                    piece = _read_chain(chain, d, foot, at, air, ray, fillets, ends)
                     if isinstance(piece, Hole):
                         found.append(piece)
             elif isinstance(hole, Hole):
                 found.append(hole)
+    # Which bolt circle each hole is on is part of what it is: holes of one size
+    # on two pitch circles are two kinds, counted apart.
+    on = {mouth: (circle.diameter, circle.centre)
+          for circle in _bolt_circles(found, list(surfaces.values())) for mouth in circle.mouths}
+    found = [replace(hole, circle=on[hole.mouth]) if hole.mouth in on else hole for hole in found]
     found.sort(key=lambda h: (h.signature(), h.axis, h.mouth))
     return found
 
 
-def _read_chain(chain: list[_Segment], d, foot, at, air, ray: _Ray) -> "Hole | str | None":
+def _read_chain(chain: list[_Segment], d, foot, at, air, ray: _Ray, fillets, ends: _Ends) -> "Hole | str | None":
     """One run of bore segments on a line as a hole: None when it is not one (no
     bore, material inside, a conical recess), ``"sealed"`` when it is closed at
     both ends."""
@@ -439,8 +533,22 @@ def _read_chain(chain: list[_Segment], d, foot, at, air, ray: _Ray) -> "Hole | s
         return None
     lo, hi = chain[0].lo, chain[-1].hi
     narrowest = min(s.r_lo for s in cylinders)
-    open_lo = ray.open(tuple(at(lo - _PROBE)), tuple(-c for c in d), 2 * narrowest)
-    open_hi = ray.open(tuple(at(hi + _PROBE)), d, 2 * narrowest)
+    own = [face for seg in chain for face in seg.faces]
+
+    def is_open(seg: _Segment, end: float, far: float, radius: float, direction) -> bool:
+        def within(point) -> bool:
+            rel = tuple(p - f for p, f in zip(point, foot))
+            along = sum(a * b for a, b in zip(rel, d))
+            return math.sqrt(max(0.0, sum(c * c for c in rel) - along * along)) <= radius + _TOUCH
+
+        closed = ends.closed([seg], own, d, foot, end, far, within)
+        if closed is None:
+            start = at(end + _PROBE * (1 if end > far else -1))
+            return ray.open(tuple(start), direction, 2 * narrowest)
+        return not closed
+
+    open_lo = is_open(chain[0], lo, chain[0].hi, chain[0].r_lo, tuple(-c for c in d))
+    open_hi = is_open(chain[-1], hi, chain[-1].lo, chain[-1].r_hi, d)
     if not (open_lo or open_hi):
         return "sealed"  # a sealed void, not something a drill makes
     thru = open_lo and open_hi
@@ -484,22 +592,64 @@ def _read_chain(chain: list[_Segment], d, foot, at, air, ray: _Ray) -> "Hole | s
             problems.append(f"its {name} opens out in {len(steps)} steps ({described(steps)})")
     mouth_end = widening(mouth_steps[0], at_mouth=True) if len(mouth_steps) == 1 else None
     far_end = widening(far_steps[0], at_mouth=False) if len(far_steps) == 1 and len(ordered) > 1 else None
-    depth = None
+    depth, end = None, None
+    mouth = tuple(f + mouth_at * c for f, c in zip(foot, d))
     if not thru:
         # From the mouth to the bottom of the deepest full-diameter stretch: a
         # groove partway down does not end the hole, a drill point does not
         # count.
         deepest = [s for s in ordered if s.kind == "cyl" and abs(s.r_lo - narrowest) < _TOUCH][-1]
-        depth = max(from_mouth(deepest.lo), from_mouth(deepest.hi))
-    mouth = tuple(f + mouth_at * c for f, c in zip(foot, d))
+        wall = max(from_mouth(deepest.lo), from_mouth(deepest.hi))
+        bottom = deepest.lo if from_hi else deepest.hi
+        below = ordered[ordered.index(deepest) + 1:]
+        depth, end = _blind_end(wall, narrowest, bottom, below, fillets, mouth, axis, ray)
     return Hole(
         mouth=_tidy(mouth), axis=_tidy(axis), diameter=2 * narrowest, thru=thru, depth=depth,
         cbore=mouth_end[1] if mouth_end and mouth_end[0] == "cbore" else None,
         csk=mouth_end[1] if mouth_end and mouth_end[0] == "csk" else None,
         far_cbore=far_end[1] if far_end and far_end[0] == "cbore" else None,
         far_csk=far_end[1] if far_end and far_end[0] == "csk" else None,
-        length=hi - lo, problem="; ".join(problems) or None,
+        length=hi - lo, problem="; ".join(problems) or None, end=end,
     )
+
+
+def _blind_end(wall: float, radius: float, bottom: float, below: list[_Segment], fillets, mouth, axis,
+               ray: _Ray) -> tuple[float, tuple | None]:
+    """A blind hole's depth as its callout states it, and what that depth leaves
+    unsaid about its end (:attr:`Hole.end`), for a bore of ``radius`` whose straight
+    wall stops ``wall`` from its ``mouth``, at ``bottom`` along its line, with the
+    segments ``below`` it and the line's fillets.
+
+    A drawing gives a blind hole's depth where its full diameter ends (ISO 129-1,
+    ASME Y14.5: the depth of the full diameter, a drill point not counted). So:
+
+    - a flat floor is the depth, and a fillet round it is part of that floor: the
+      depth is to the floor, as a depth gauge reads it, and the fillet is a radius
+      of its own (the report asks for it as it asks for any fillet). The straight
+      wall alone would state the hole short by that radius;
+    - a point (a drill's) is left out of the depth, as it always was;
+    - a ball end, or any other form, has no symbol in a callout: the depth stays
+      the full diameter's, and ``end`` says what runs on below it.
+    """
+    tip = ray.depth(mouth, axis)  # the first face on the centre line: the floor, or the end's tip
+    if tip is None or tip - wall <= _TOUCH:
+        return wall, None
+    beyond = tip - wall
+    if (len(below) == 1 and below[0].kind == "cone" and min(below[0].r_lo, below[0].r_hi) <= _POINT
+            and abs((below[0].hi - below[0].lo) - beyond) < _TOUCH):
+        return wall, None  # a drill point
+    for lo, hi, r_min, r_max in fillets:
+        if (min(abs(lo - bottom), abs(hi - bottom)) < 1e-6 and abs(r_max - radius) < 1e-6 and r_min > 1e-6
+                and abs((hi - lo) - beyond) < 1e-6 and not below):
+            return tip, None  # a flat floor, filleted into the wall
+    if not below and abs(beyond - radius) < 1e-6:
+        # A hemisphere of the bore's own radius: 0.6 of the way out from the centre
+        # line it is 0.8 of its radius deep.
+        u, _v = _perpendicular(axis)
+        off = ray.depth(tuple(m + 0.6 * radius * c for m, c in zip(mouth, u)), axis)
+        if off is not None and abs(off - wall - 0.8 * radius) < 1e-4:
+            return wall, ("ball", radius, beyond)
+    return wall, ("other", 0.0, beyond)
 
 
 def axes(shape) -> list[Axis]:
@@ -532,7 +682,7 @@ def slots(shape) -> list[Slot]:
     all along the gap between them. Ends are paired nearest first, so three slots
     in a row stay three. Pairs stacked on one centre line make one slot with a
     counterbore, and a chamfer at an end belongs to the slot's depth. Through
-    when it is open past both ends (see :class:`_Ray`)."""
+    when it is open at both ends (see :class:`_Ends`)."""
     from build123d import Vector
 
     halves, cones = [], []
@@ -577,7 +727,7 @@ def slots(shape) -> list[Slot]:
         middle = tuple(f + c / 2 for f, c in zip(foot_a, between))
         toward = _canonical(tuple(c / gap for c in between), (0.0, 0.0, 0.0))[0]
         pairs.append({"d": d, "middle": _canonical(d, middle)[1], "toward": toward, "lo": a.lo, "hi": a.hi,
-                      "r": a.r_lo, "gap": gap, "feet": (foot_a, halves[j][1])})
+                      "r": a.r_lo, "gap": gap, "feet": (foot_a, halves[j][1]), "walls": (a, halves[j][2])})
 
     # Pairs stacked on one centre line, touching end to end, are one slot.
     lines: dict[tuple, list] = {}
@@ -585,6 +735,7 @@ def slots(shape) -> list[Slot]:
         key = _line_key(pair["d"], pair["middle"]) + tuple(round(c, 4) for c in pair["toward"])
         lines.setdefault(key, []).append(pair)
     ray = _Ray(shape) if pairs else None
+    joined = _Ends(shape)
     found: list[Slot] = []
     for stack in lines.values():
         stack.sort(key=lambda p: p["lo"])
@@ -612,8 +763,29 @@ def slots(shape) -> list[Slot]:
             # a hole through its floor is open where the hole is.
             feet = [_canonical(d, f)[1] for f in narrow["feet"]]
             along = [tuple(a + t * (b - a) for a, b in zip(*feet)) for t in (0.0, 0.25, 0.5, 0.75, 1.0)]
-            open_lo = all(ray.open(point(c, d, lo - _PROBE), tuple(-k for k in d), 2 * narrow["r"]) for c in along)
-            open_hi = all(ray.open(point(c, d, hi + _PROBE), d, 2 * narrow["r"]) for c in along)
+            own = [face for pair in chain for wall in pair["walls"] for face in wall.faces]
+
+            def is_open(pair, end: float, far: float, direction) -> bool:
+                a, b = (_canonical(d, f)[1] for f in pair["feet"])
+                ab = tuple(q - r for q, r in zip(b, a))
+                run = sum(c * c for c in ab)
+
+                def within(p) -> bool:
+                    # Inside the slot's outline: within its radius of the line between its ends' axes.
+                    ap = tuple(q - r for q, r in zip(p, a))
+                    lift = sum(x * y for x, y in zip(ap, d))
+                    ap = tuple(c - lift * k for c, k in zip(ap, d))
+                    t = max(0.0, min(1.0, sum(x * y for x, y in zip(ap, ab)) / run))
+                    return math.dist(ap, tuple(t * c for c in ab)) <= pair["r"] + _TOUCH
+
+                closed = joined.closed(pair["walls"], own, d, pair["feet"][0], end, far, within)
+                if closed is None:
+                    past = end + _PROBE * (1 if end > far else -1)
+                    return all(ray.open(point(c, d, past), direction, 2 * narrow["r"]) for c in along)
+                return not closed
+
+            open_lo = is_open(chain[0], chain[0]["lo"], chain[0]["hi"], tuple(-k for k in d))
+            open_hi = is_open(chain[-1], chain[-1]["hi"], chain[-1]["lo"], d)
             if not (open_lo or open_hi):
                 continue
             thru = open_lo and open_hi
@@ -654,53 +826,83 @@ def bolt_circles(shape, found: list[Hole] | None = None) -> list[BoltCircle]:
     circle whose centre lies on a turned axis of the part (a bore, a boss, the
     part's own outside). The turned axis is what makes it a bolt circle rather than
     a pattern a rectangular plate happens to make: four corner holes on a square
-    are equally spaced too, and are dimensioned as pitches."""
+    are equally spaced too, and are dimensioned as pitches.
+
+    Holes of one size can make more than one circle: six on ⌀60 and eight on ⌀100
+    round one bore are two patterns, each with its own count and pitch circle, and
+    a hole of that size standing elsewhere belongs to neither."""
     found = holes(shape) if found is None else found
-    surfaces = list(_surface_segments(shape).values())
-    lines = [(d, foot) for d, foot, segments in surfaces
-             if any(s.kind == "cyl" and _full(s) for s in _merge_split_faces(segments))]
+    return _bolt_circles(found, list(_surface_segments(shape).values()))
+
+
+def _bolt_circles(found: list[Hole], surfaces: list) -> list[BoltCircle]:
+    merged = [(d, foot, _merge_split_faces(segments)) for d, foot, segments in surfaces]
+    lines = [(d, foot) for d, foot, segments in merged if any(s.kind == "cyl" and _full(s) for s in segments)]
     # The outside radius of every turned surface round each line.
     outside: dict[tuple, float] = {}
-    for d, foot, segments in surfaces:
-        for seg in _merge_split_faces(segments):
+    for d, foot, segments in merged:
+        for seg in segments:
             if seg.kind == "cyl" and _full(seg) and not seg.concave:
                 key = _line_key(d, foot)
                 outside[key] = max(outside.get(key, 0.0), seg.r_lo)
     groups: dict[tuple, list[Hole]] = {}
     for hole in found:
-        groups.setdefault((hole.signature(), hole.axis), []).append(hole)
+        groups.setdefault((replace(hole, circle=None).signature(), hole.axis), []).append(hole)
     circles: list[BoltCircle] = []
     for (_sig, axis), members in groups.items():
         if len(members) < 3:
             continue
         u, v = _perpendicular(axis)
-        centre = tuple(sum(h.mouth[k] for h in members) / len(members) for k in range(3))
-        polar = []
-        for hole in members:
-            rel = tuple(m - c for m, c in zip(hole.mouth, centre))
-            x, y = sum(a * b for a, b in zip(rel, u)), sum(a * b for a, b in zip(rel, v))
-            along = sum(a * b for a, b in zip(rel, axis))
-            polar.append((math.atan2(y, x) % (2 * math.pi), math.hypot(x, y), along))
-        radius = sum(r for _a, r, _z in polar) / len(polar)
-        if radius < _TOUCH or any(abs(r - radius) > 1e-3 or abs(z) > 1e-3 for _a, r, z in polar):
-            continue
-        angles = sorted(a for a, _r, _z in polar)
-        step = 2 * math.pi / len(angles)
-        gaps = [(b - a) for a, b in zip(angles, angles[1:] + [angles[0] + 2 * math.pi])]
-        if any(abs(g - step) > 1e-3 for g in gaps):
-            continue
-        d, foot = _canonical(axis, centre)
-        if not any(all(abs(x - y) < 1e-6 for x, y in zip(d, line_d))
-                   and math.dist(foot, line_foot) < 1e-3 for line_d, line_foot in lines):
-            continue
-        # Four holes equally spaced are also the corners of a square, and on a
-        # square plate (a motor mount round its bore) they are dimensioned as
-        # pitches. Only a round part -- a turned outside enclosing them -- makes
-        # four a bolt circle.
-        if len(members) == 4 and outside.get(_line_key(d, foot), 0.0) < radius:
-            continue
-        circles.append(BoltCircle(centre=_tidy(centre), axis=axis, diameter=2 * radius,
-                                  mouths=tuple(h.mouth for h in members)))
+        along_axis = _canonical(axis, (0.0, 0.0, 0.0))[0]
+        own = {_line_key(*_canonical(axis, hole.mouth)) for hole in members}
+        rings = []
+        for line_d, line_foot in lines:
+            # A circle's centre line is a turned axis along the holes' own, and none
+            # of the holes themselves: in a field of holes (a perforated plate) every
+            # hole has equally spaced neighbours, and none of them is a bolt circle.
+            if any(abs(x - y) > 1e-6 for x, y in zip(along_axis, line_d)) or _line_key(line_d, line_foot) in own:
+                continue
+            polar = []
+            for hole in members:
+                rel = tuple(m - f for m, f in zip(hole.mouth, line_foot))
+                along = sum(a * b for a, b in zip(rel, line_d))
+                radial = tuple(r - along * k for r, k in zip(rel, line_d))
+                x, y = sum(a * b for a, b in zip(radial, u)), sum(a * b for a, b in zip(radial, v))
+                polar.append((math.hypot(x, y), along, math.atan2(y, x) % (2 * math.pi), hole))
+            polar.sort(key=lambda entry: entry[:3])
+            # Each run of one radius is a ring round this line.
+            runs: list[list] = []
+            for entry in polar:
+                if runs and entry[0] - runs[-1][-1][0] <= 1e-3:
+                    runs[-1].append(entry)
+                else:
+                    runs.append([entry])
+            for ring in runs:
+                radius = sum(r for r, _a, _t, _h in ring) / len(ring)
+                level = ring[0][1]
+                if len(ring) < 3 or radius < _TOUCH or any(abs(a - level) > 1e-3 for _r, a, _t, _h in ring):
+                    continue
+                angles = sorted(t for _r, _a, t, _h in ring)
+                step = 2 * math.pi / len(angles)
+                gaps = [(b - a) for a, b in zip(angles, angles[1:] + [angles[0] + 2 * math.pi])]
+                if any(abs(g - step) > 1e-3 for g in gaps):
+                    continue
+                # Four holes equally spaced are also the corners of a square, and on a
+                # square plate (a motor mount round its bore) they are dimensioned as
+                # pitches. Only a round part -- a turned outside enclosing them -- makes
+                # four a bolt circle.
+                if len(ring) == 4 and outside.get(_line_key(line_d, line_foot), 0.0) < radius:
+                    continue
+                centre = _tidy(tuple(f + level * k for f, k in zip(line_foot, line_d)))
+                rings.append((-len(ring), round(radius, 6), centre, [h for _r, _a, _t, h in ring]))
+        # A hole is on one circle: the fullest rings first.
+        used: set[int] = set()
+        for _count, radius, centre, ring in sorted(rings, key=lambda entry: entry[:3]):
+            if any(id(hole) in used for hole in ring):
+                continue
+            used.update(id(hole) for hole in ring)
+            circles.append(BoltCircle(centre=centre, axis=axis, diameter=2 * radius,
+                                      mouths=tuple(h.mouth for h in ring)))
     circles.sort(key=lambda c: (round(c.diameter, 3), c.axis, c.centre))
     return circles
 
@@ -887,16 +1089,137 @@ def tapers(shape) -> list[Taper]:
     return found
 
 
+def _of_a_hole(found: list[Hole], d, foot, lo: float, hi: float) -> bool:
+    """Whether the stretch ``lo`` to ``hi`` of a line lies within a hole read on
+    that line: a piece of that hole, however a cross hole has cut it off from the
+    rest (a countersink left standing above a hole drilled across its bore)."""
+    key = _line_key(d, foot)
+    for hole in found:
+        line_d, line_foot = _canonical(hole.axis, hole.mouth)
+        if _line_key(line_d, line_foot) != key:
+            continue
+        ends = sorted(sum(c * k for c, k in zip(point, line_d))
+                      for point in (hole.mouth, tuple(m + hole.length * a for m, a in zip(hole.mouth, hole.axis))))
+        if ends[0] - _TOUCH <= lo and hi <= ends[1] + _TOUCH:
+            return True
+    return False
+
+
+def taper_bores(shape, found: list[Hole] | None = None) -> list[Taper]:
+    """The part's tapered bores: concave full cones with air inside that belong to
+    no drilled hole (a countersink, a chamfered mouth and a drill point are their
+    hole's; ``found`` is the part's holes, read here when not given). A hole
+    callout states a straight bore, so a taper is stated as an outside one is: a
+    diameter at each end, each end placed. A cone that closes to a point has
+    ``small`` 0."""
+    from build123d import Vector
+
+    drilled = holes(shape) if found is None else found
+    found = []
+    for d, foot, segments in _surface_segments(shape).values():
+        bores = [s for s in _merge_split_faces(segments) if s.concave and _full(s)]
+        for chain in _chains(bores):
+            if any(seg.kind == "cyl" for seg in chain):
+                continue
+            for seg in chain:
+                if _of_a_hole(drilled, d, foot, seg.lo, seg.hi):
+                    continue
+                mid = (seg.lo + seg.hi) / 2
+                if shape.is_inside(Vector(*(f + mid * c for f, c in zip(foot, d)))):
+                    continue  # material on its axis: a conical seat round a pin, not a bore
+                ends = [tuple(f + t * c for f, c in zip(foot, d)) for t in (seg.lo, seg.hi)]
+                small, large = sorted((2 * seg.r_lo, 2 * seg.r_hi))
+                if seg.r_lo > seg.r_hi:
+                    ends.reverse()
+                found.append(Taper(0.0 if small <= 2 * _POINT else round(small, 6), round(large, 6),
+                                   (_tidy(ends[0]), _tidy(ends[1])), d))
+    found.sort(key=lambda t: (t.large, t.small, t.ends))
+    return found
+
+
+@dataclass(frozen=True)
+class OpenBore:
+    """A bore that is not a whole circle: a hole breaking out of an edge, a
+    half-round notch, a bore with a keyway cut along it. ``radius`` is its arc's,
+    ``middle`` a point on its axis midway along it, ``span`` how much of the
+    circle it has, in degrees."""
+
+    radius: float
+    axis: tuple[float, float, float]
+    middle: tuple[float, float, float]
+    span: float
+
+
+def open_bores(shape, found: list[Hole] | None = None) -> list[OpenBore]:
+    """The part's bores that are not whole circles and are nobody else's: a
+    concave part cylinder that is not a slot's end, nor a piece of a hole a cross
+    hole has cut into (``found`` is the part's holes, read here when not given),
+    and is sharp where it meets its neighbours (a fillet, or the full-round end of
+    a notch, runs tangent into the faces it joins, and is a blend or an end). No
+    hole callout reads one: a hole is a full circle."""
+    drilled = holes(shape) if found is None else found
+    ancestors = _edge_faces(shape)
+    slot_ends = set()
+    for slot in slots(shape):
+        for end in slot.ends:
+            slot_ends.add(_line_key(*_canonical(slot.axis, end)) + (round(slot.width / 2, 4),))
+    found = []
+    for d, foot, segments in _surface_segments(shape).values():
+        for seg in _merge_split_faces(segments):
+            if seg.kind != "cyl" or not seg.concave or _full(seg):
+                continue
+            if _line_key(d, foot) + (round(seg.r_lo, 4),) in slot_ends or _of_a_hole(drilled, d, foot, seg.lo, seg.hi):
+                continue
+            if any(_tangent_neighbours(ancestors, face, _surface_key(face.wrapped)) for face in seg.faces):
+                continue
+            mid = (seg.lo + seg.hi) / 2
+            found.append(OpenBore(round(seg.r_lo, 6), d, _tidy(tuple(f + mid * c for f, c in zip(foot, d))),
+                                  round(math.degrees(seg.span), 3)))
+    found.sort(key=lambda b: (b.radius, b.axis, b.middle))
+    return found
+
+
+def ring_walls(shape) -> list[Turned]:
+    """The part's bores with material standing in them: the outer wall of a ring
+    groove cut in a face, of a pocket round a standoff or a boss. No hole callout
+    reads one (a hole's inside is air), and its diameter is a size the part has."""
+    from build123d import Vector
+
+    found = []
+    for d, foot, segments in _surface_segments(shape).values():
+        u, v = _perpendicular(d)
+        bores = [s for s in _merge_split_faces(segments) if s.concave and _full(s)]
+        for chain in _chains(bores):
+            for seg in chain:
+                if seg.kind != "cyl":
+                    continue
+                mid = (seg.lo + seg.hi) / 2
+                samples = [(0.0, 0.0)] + [(seg.r_lo * f * math.cos(t), seg.r_lo * f * math.sin(t))
+                                          for f in (0.45, 0.85) for t in (0.3, 2.4, 4.5)]
+                if any(shape.is_inside(Vector(*(f + mid * c + x * cu + y * cv
+                                                for f, c, cu, cv in zip(foot, d, u, v)))) for x, y in samples):
+                    found.append(Turned(round(2 * seg.r_lo, 6), d,
+                                        _tidy(tuple(f + mid * c for f, c in zip(foot, d)))))
+    found.sort(key=lambda t: (t.diameter, t.axis, t.middle))
+    return found
+
+
 @dataclass(frozen=True)
 class Groove:
     """A turned groove: a torus cut round a turned surface, not a fillet. Its
     section radius, the point on its axis at its middle, and ``ring``, the radius
-    of the circle its section's centre runs round."""
+    of the circle its section's centre runs round. ``diameter`` is the one that
+    says how deep it is cut: its bottom's, for a groove round a shaft or in a
+    bore, or its ring's, for one cut in a face. ``seated`` is whether its section
+    is centred on a turned surface of the part (a half-round groove in a ⌀57
+    body, its centre on the ⌀57): its radius and that surface then fix its depth."""
 
     radius: float
     middle: tuple[float, float, float]
     axis: tuple[float, float, float]
     ring: float
+    diameter: float = 0.0
+    seated: bool = False
 
 
 def grooves(shape) -> list[Groove]:
@@ -907,6 +1230,8 @@ def grooves(shape) -> list[Groove]:
     from OCP.GeomAbs import GeomAbs_Torus
 
     rounded = [Vector(*b.point) for b in blends(shape)]
+    turned = {key: [seg.r_lo for seg in _merge_split_faces(segments) if seg.kind == "cyl" and _full(seg)]
+              for key, (_d, _foot, segments) in _surface_segments(shape).items()}
     found = []
     for face in shape.faces():
         surface = BRepAdaptor_Surface(face.wrapped)
@@ -929,7 +1254,14 @@ def grooves(shape) -> list[Groove]:
         centre = [m + torus.MajorRadius() * c / reach for m, c in zip(middle, radial)]
         if sum(n * (c - p) for n, c, p in zip(normal, centre, point)) <= 0:
             continue
-        groove = Groove(round(torus.MinorRadius(), 6), _tidy(middle), d, round(torus.MajorRadius(), 6))
+        # Which way it is cut: toward the axis (round a shaft), away from it (in a
+        # bore), or along it (in a face), read off where its middle lies.
+        major, minor = torus.MajorRadius(), torus.MinorRadius()
+        lean = (reach - major) / minor
+        bottom = 2 * (major - minor) if lean < -0.5 else 2 * (major + minor) if lean > 0.5 else 2 * major
+        line = _line_key(*_canonical(d, middle))
+        seated = any(abs(r - major) < 1e-6 for r in turned.get(line, ()))
+        groove = Groove(round(minor, 6), _tidy(middle), d, round(major, 6), round(bottom, 6), seated)
         if groove not in found:
             found.append(groove)
     return found

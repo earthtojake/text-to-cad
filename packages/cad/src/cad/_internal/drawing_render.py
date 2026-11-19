@@ -964,7 +964,7 @@ def _draw_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings: l
         if facts is not None:
             record = facts.parts.setdefault(id(view.shape), {"shape": view.shape, "called": set(), "values": [],
                                                        "axes": set(), "referenced": set(), "views": [],
-                                                       "sheet": (index, sheet.title),
+                                                       "sheet": (index, sheet.title), "turn": view._turn,
                                                        "assembly": id(view.shape) in assemblies,
                                                        "notes": set(), "radii": set(), "spans": [],
                                                        "anchors": [], "datums": [], "symmetric": set(),
