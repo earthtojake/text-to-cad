@@ -19,8 +19,8 @@ def rig_drawing():
     ga_front = next(v for v in sheets[0].views if v.name == "front")
     ga_front.flag("TORQUE TO 9 NM WITH LOCTITE 243", item="cap_screw")   # the finished state
     ga_front.flag("FLUSH WITHIN 0.1", item="bushing", joint="press_fit")
-    top, front, right, iso = sheets.part("base_plate").views
-    front.section("A")
+    plate = {view.name: view for view in sheets.part("base_plate").views}   # the views its first pass drew
+    plate["front"].section("A")
     return sheets
 ```
 
@@ -31,8 +31,8 @@ assembly model's `.shape`, `cad.xbf.read(path)` and `cad.step.read(path)`
 hand one back. Returns a `PartsList`: one `Item` per
 distinct part, numbered in the order the assembly first holds them.
 Occurrences are one part when they have the same name, the same colour, the
-same material (`shape.material`) and the same geometry (one prototype placed several times, or an exact translated
-copy). Anything less stays apart: two parts of identical geometry can be
+same material (`shape.material`) and the same geometry (one prototype placed several times, or the same
+solid built again where it stands, shifted or turned). Anything less stays apart: two parts of identical geometry can be
 different parts (a steel spacer and a brass one), a
 label's detail often names a finish (`piston_rod:chrome`), and mirror images
 have identical volumes. `parts.twins` lists the item pairs that share a shape
@@ -170,8 +170,9 @@ through it:
 parts = parts_list(case_back().shape)
 parts.set("shell", material="PC/ABS", family="plastic")
 parts.set("tape", material="3M VHB 4910")
-sheet = Sheet("A3", 5.0, title="CASE BACK")
-front = sheet.view(parts.assembly, "front", at=(180, 170), hidden=False).section("A", parts=parts, materials=True)
+sheet = Sheet("A2", 5.0, title="CASE BACK")
+sheet.view(parts.assembly, "top", at=(180, 290), hidden=False)    # the view the cutting plane is drawn on
+front = sheet.view(parts.assembly, "front", at=(180, 120), hidden=False).section("A", parts=parts, materials=True)
 front.flag("15 PSI, 72 H DWELL", at=(10, 0, 1.6), joint="tape")   # a point on the tape
 ```
 

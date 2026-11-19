@@ -60,20 +60,21 @@ from __future__ import annotations
 import functools
 import math
 import sys
-from dataclasses import dataclass, field
+from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, NamedTuple, Sequence
 
-from cad._internal.drawing_annotation import _Dim, _fit, _looks_into, _thread
+from cad._internal.drawing_annotation import _Dim, _fit, _looks_into, _read_features, _thread
+from cad._internal.drawing_annotation import hole_callout_text  # noqa: F401 - a name released scripts import
 from cad._internal.drawing_assembly import (
     _GA_LIST_SHARE, JOINTS, Item, _PartOf, PartsList, _arrange_assembly, _continuations, _item_shown, _joint_note,
     parts_list,
     _refuse_balloons_on,
 )
 from cad._internal.drawing_base import (
-    _BAND_H, _DETAIL_SIZE, _MARGIN, _NOTE_HEIGHT, _NOTE_INSET, PROJECTIONS, _SAME_PLACE, _SECTION_LETTERS,
-    SHEET_SIZES, _STANDARD_SCALES, _TITLE_H, _TITLE_W, UNITS, VIEW_DIRECTIONS, _cross, _dirs, _dot, _fmt, _look, _p3,
-    _places, _scale_label, _text_width, _view_axes, _where,
+    _BAND_H, _DETAIL_SIZE, _MARGIN, _MOST_PLACES, _NOTE_HEIGHT, _NOTE_INSET, PROJECTIONS, _SAME_PLACE,
+    _SECTION_LETTERS, SHEET_SIZES, _STANDARD_SCALES, _TITLE_H, _TITLE_W, VIEW_DIRECTIONS, _cross, _dirs, _dot,
+    _exact, _fmt, _look, _p3, _places, _scale_label, _text_width, _view_axes, _where,
 )
 from cad._internal.drawing_gdt import Frame, frame_size
 from cad._internal.drawing_profile import (
@@ -204,6 +205,10 @@ class View:
     _turn: Any = None
     #: The view's centre lines the part is stated symmetric about: "h", "v".
     _symmetric: set = field(default_factory=set)
+    #: What its calls have to say when the sheet renders: a value an earlier
+    #: release printed as typed, which still prints, and is no value this one
+    #: can check.
+    _notices: list = field(default_factory=list)
 
     def _at(self, p) -> tuple[float, float, float]:
         """A model point given to the view, in the frame the view draws."""
@@ -214,6 +219,28 @@ class View:
 
         moved = (self._turn * Pos(*point)).position
         return moved.X, moved.Y, moved.Z
+
+    def _typed_fit(self, call: str, fit, *, hole: bool = False) -> str | None:
+        """A ``fit=`` on a call earlier releases took, which printed whatever it was
+        given after the size: it still does, and one that is no ISO 286 class or
+        fit is reported."""
+        try:
+            return _fit(fit, hole=hole)
+        except (TypeError, ValueError) as refusal:
+            self._notices.append(f"{call}: {refusal}. It prints as typed.")
+            return str(fit)
+
+    def _typed_tol(self, call: str, tol) -> tuple[float, float] | None:
+        """A ``tol=``, which prints as given to four decimal places: one given finer
+        is rounded to them, and reported."""
+        given = _tol(tol)
+        if given is None:
+            return None
+        stated = tuple(round(value, _MOST_PLACES) for value in given)
+        if any(abs(a - b) > 1e-9 for a, b in zip(stated, given)):
+            self._notices.append(f"{call}: tol={tol!r} is finer than the {_MOST_PLACES} decimal places a "
+                                 f"tolerance prints to; it prints {' and '.join(_exact(v) for v in stated)}.")
+        return stated
 
     def dim(self, p1, p2, *, offset: float | None = None, text: str | None = None, orientation: str | None = None,
             tol: float | tuple[float, float] | None = None, fit: str | None = None,
@@ -228,10 +255,13 @@ class View:
         unset, it stands off the view's middle). Left unset, the dimension takes the next free row on
         its side, so defaults never stack on each other or on :meth:`overall`.
         ``tol=0.1`` states ±0.1; ``tol=(0.05, 0.02)`` states +0.05/-0.02
-        deviations; ``fit="H7"`` appends an ISO 286 tolerance class (``"g6"`` a
-        shaft's, ``"H7/g6"`` a fit) and is the size's whole tolerance, so it takes
-        no ``tol`` or ``limits``; ``limits=(39.98, 40.02)`` prints the two limits
-        the part must lie between, and is checked against the part.
+        deviations (to four decimal places); ``fit="H7"`` appends an ISO 286
+        tolerance class (``"g6"`` a shaft's, ``"H7/g6"`` a fit) and is the size's
+        whole tolerance, so give it or ``tol``, and it takes no ``limits``. A fit
+        that is no such class, or one beside a ``tol``, prints as typed, as
+        every release has printed it, and the drawing's report says so.
+        ``limits=(39.98, 40.02)`` prints the two limits the part must lie
+        between, and is checked against the part.
 
         ``basic=True`` makes it a basic dimension: the exact value, in a box, that
         a GD&T frame bounds. ``reference=True`` makes it a reference dimension:
@@ -246,10 +276,17 @@ class View:
         if orientation == "aligned" and (frame is not None or datum is not None or key):
             raise ValueError("an aligned dimension takes no frame, datum or key mark; state those on a "
                              "dimension along the view's axes")
-        fit = _fit(fit)
-        limits = _dimension_kind(tol=tol, fit=fit, limits=limits, basic=basic, reference=reference)
-        self._dims.append(_Dim("linear", self._at(p1), self._at(p2), _offset(offset), text, orientation,
-                               tol=_tol(tol), fit=fit, basic=basic, reference=reference, limits=limits,
+        a, b = self._at(p1), self._at(p2)
+        call = f"{self.name}.dim({_where(a)}, {_where(b)})"
+        both = fit is not None and tol is not None and limits is None and not basic and not reference
+        limits = _dimension_kind(tol=tol, fit=None if both else fit, limits=limits, basic=basic, reference=reference)
+        if both:
+            # Earlier releases printed the two side by side, and a script that gives both still gets both.
+            self._notices.append(f"{call}: fit={fit!r} and tol= are two tolerances for one size, and both print, as "
+                                 "typed; an ISO 286 class is the size's whole tolerance, so give one of them.")
+        fit = None if fit is None else self._typed_fit(call, fit)
+        self._dims.append(_Dim("linear", a, b, _offset(offset), text, orientation,
+                               tol=self._typed_tol(call, tol), fit=fit, basic=basic, reference=reference, limits=limits,
                                frame=_frame(frame), datum=_new_datum(self.sheet, datum),
                                key=_key(key, reference)))
         return self
@@ -265,12 +302,12 @@ class View:
         mouth is the natural one), in a view that looks down that axis.
 
         The diameter, THRU or depth, counterbore, countersink and the ``4×``
-        count all come from the geometry. Anything given here is checked against
-        it and a disagreement is refused: a callout that says ⌀6 over a ⌀6.6
-        bore is the one error a shop machines faithfully. ``tol`` or ``fit``
-        (a hole's class, ``"H7"``, or a fit, ``"H7/g6"``) qualifies the diameter
-        the way :meth:`dim` does, one or the other; ``label`` is appended
-        (``"WHEEL"``).
+        count all come from the geometry, so leave them unset. One given without
+        the diameter is checked against the part and a disagreement is refused:
+        a callout that says ⌀6 over a ⌀6.6 bore is the one error a shop machines
+        faithfully. ``tol`` or ``fit`` (a hole's class, ``"H7"``, or a fit,
+        ``"H7/g6"``) qualifies the diameter the way :meth:`dim` does, one or the
+        other; ``label`` is appended (``"WHEEL"``).
 
         ``thread`` states a tapped hole, which the B-rep cannot carry: a metric
         thread of ISO 261's sizes and pitches, with an optional ISO 965-1 class
@@ -279,16 +316,23 @@ class View:
         ``"#10-32 UNF"``); a pitch the size does not have is refused. The bore
         must be its tap drill (from the basic minor diameter to about d - P: ⌀5
         for M6x1) or the thread's own size (⌀6), and a tap drill is stated with
-        the thread after it (``⌀5 ↧12   M6x1 - 6H ↧10``). It takes no ``diameter``, ``tol`` or
-        ``fit``. What the part cannot say is asked, never assumed: ``count``
+        the thread after it (``⌀5 ↧12   M6x1 - 6H ↧10``). What the part cannot
+        say is asked, never assumed: ``count``
         is how many of the identical bores are tapped (all of them, or this one
         alone), and ``depth`` how deep the thread runs, which a blind tap drill
         needs and a through one may have. ``angle`` is where the leader
         leaves the circle, degrees from horizontal. ``frame`` is the
         :class:`Frame` drawn under the callout (its position, say), and ``datum``
         makes the hole a datum feature, its symbol on the callout. ``key=True``
-        marks a key characteristic, as :meth:`dim` does."""
-        _refuse_iso(self, "hole()")
+        marks a key characteristic, as :meth:`dim` does.
+
+        ``diameter`` given makes it the callout earlier releases took, typed
+        whole: it prints what is typed and nothing else (``hole(p, 6.6,
+        thru=True, cbore=(11, 6.5), count=4)``; a ``thread`` in the diameter's
+        place), on a circle of that diameter at ``center``, whatever the part
+        has there. The drawing's report says where the part reads otherwise --
+        a different size, a hole that is not there -- so a script written for
+        an earlier release draws what it drew."""
         given = {"diameter": _positive("diameter", diameter, allow_none=True),
                  "depth": _positive("depth", depth, allow_none=True),
                  "thru": None if thru is None else bool(thru), "cbore": _pair("cbore", cbore),
@@ -296,19 +340,36 @@ class View:
                  "count": None if count is None else _positive("count", count, integer=True)}
         if thru and depth is not None:
             raise ValueError("a hole is either THRU or has a depth, not both")
-        parsed = None
-        if thread is not None:
-            parsed = _thread(thread)
-            stated = [name for name, value in (("diameter", diameter), ("tol", tol), ("fit", fit)) if value is not None]
-            if stated:
+        at = self._at(center)
+        call = f"{self.name}.hole({_where(at)})"
+        typed = None
+        if diameter is not None:
+            typed = dict(given, thru=bool(thru), thread=None if thread is None else str(thread),
+                         label=None if label is None else str(label))
+            try:
+                parsed = None if thread is None else _thread(typed["thread"])
+            except ValueError as refusal:
+                # Any text printed as a thread; one this drawing cannot read prints still, unchecked.
+                parsed = None
+                self._notices.append(f"{call}: {refusal}. It prints as typed, and the bore under it is not checked.")
+            if fit is not None and tol is not None:
+                self._notices.append(f"{call}: fit={fit!r} and tol= are two tolerances for one diameter, and both "
+                                     "print, as typed; give one of them.")
+            fit = None if fit is None else self._typed_fit(call, fit, hole=True)
+        else:
+            _refuse_iso(self, "hole()")
+            parsed = None if thread is None else _thread(thread)
+            stated = [name for name, value in (("tol", tol), ("fit", fit)) if value is not None]
+            if parsed is not None and stated:
                 raise ValueError(f"hole(thread={thread!r}) takes no {', '.join(stated)}: the thread and its class "
                                  "are the tapped hole's size, and the bore under it is read off the part")
-        if fit is not None and tol is not None:
-            raise ValueError(f"hole() takes fit={fit!r} or tol=, not both: a tolerance class is the diameter's "
-                             "tolerance, so the two would print two")
+            if fit is not None and tol is not None:
+                raise ValueError(f"hole() takes fit={fit!r} or tol=, not both: a tolerance class is the diameter's "
+                                 "tolerance, so the two would print two")
+            fit = _fit(fit, hole=True)
         spec = {"given": given, "thread": parsed, "label": None if label is None else str(label)}
-        self._dims.append(_Dim("hole", self._at(center), None, 0.0, None, None, radius=0.0,
-                               angle=float(angle), tol=_tol(tol), fit=_fit(fit, hole=True), hole=spec,
+        self._dims.append(_Dim("hole", at, None, 0.0, None, None, radius=0.0,
+                               angle=float(angle), tol=self._typed_tol(call, tol), fit=fit, hole=spec, typed=typed,
                                frame=_frame(frame), datum=_new_datum(self.sheet, datum), key=_key(key)))
         return self
 
@@ -339,7 +400,10 @@ class View:
         (``4× ⌀5.5 THRU``, ``⌀28 THRU``, ``8 × 30 SLOT THRU``), each read off the
         part and placed on the one nearest the edge of the view so its leader is
         short. Holes on a bolt circle say so (``EQ SP ON ⌀60``). A blind hole that
-        opens on the far side belongs to the opposite view."""
+        opens on the far side belongs to the opposite view. A hole is stated once
+        on a sheet: one an earlier view of the same part states (a through hole
+        reads the same from both ends) is left to that view, and one this view
+        draws hidden, behind another part of the part, to the view that sees it."""
         _refuse_iso(self, "holes()")
         self._dims.append(_Dim("holes", (0.0, 0.0, 0.0), None, 0.0, None, None, angle=float(angle)))
         return self
@@ -364,29 +428,36 @@ class View:
         self._table = _TableSpec(None if origin is None else self._at(origin), corner)
         return self
 
-    def diameter(self, center, *, size: float | None = None, angle: float = 45.0,
-                 text: str | None = None, basic: bool = False, reference: bool = False,
+    def diameter(self, center, radius: float | None = None, *, angle: float = 45.0,
+                 text: str | None = None, size: float | None = None, basic: bool = False, reference: bool = False,
                  frame: Frame | None = None, datum: str | None = None, key: bool = False) -> "View":
         """A diameter callout on the circle centred at ``center``, measured off the
         view. ``size`` picks one of several concentric circles (a chamfered
         shaft end shows two) and is checked against the geometry. ``basic``,
-        ``reference``, ``frame``, ``datum`` and ``key`` as :meth:`dim` takes them."""
+        ``reference``, ``frame``, ``datum`` and ``key`` as :meth:`dim` takes them.
+
+        ``radius`` is the circle's radius as earlier releases took it, typed:
+        the callout is drawn on a circle of that radius whatever the view shows
+        there, and the report says when it shows none."""
         _dimension_kind(basic=basic, reference=reference)
         self._dims.append(_Dim("diameter", self._at(center), None, 0.0, text, None,
-                               radius=0.0 if size is None else _positive("size", size) / 2, angle=float(angle),
+                               radius=_round_size("diameter", radius, size, 2.0), angle=float(angle),
+                               typed=True if radius is not None else None,
                                basic=basic, reference=reference, frame=_frame(frame),
                                datum=_new_datum(self.sheet, datum), key=_key(key, reference)))
         return self
 
-    def radius(self, center, *, size: float | None = None, angle: float = 45.0,
-               text: str | None = None, basic: bool = False, reference: bool = False) -> "View":
+    def radius(self, center, radius: float | None = None, *, angle: float = 45.0,
+               text: str | None = None, size: float | None = None, basic: bool = False,
+               reference: bool = False) -> "View":
         """A radius callout on the arc centred at ``center``, measured off the view;
         ``size`` (the radius) picks one of several and is checked like ``diameter``'s,
-        and ``basic`` and ``reference`` are as :meth:`dim` takes them."""
+        and ``basic`` and ``reference`` are as :meth:`dim` takes them. ``radius``
+        is the radius as earlier releases took it, typed and drawn as typed."""
         _dimension_kind(basic=basic, reference=reference)
         self._dims.append(_Dim("radius", self._at(center), None, 0.0, text, None,
-                               radius=0.0 if size is None else _positive("size", size), angle=float(angle),
-                               basic=basic, reference=reference))
+                               radius=_round_size("radius", radius, size, 1.0), angle=float(angle),
+                               typed=True if radius is not None else None, basic=basic, reference=reference))
         return self
 
     def angle(self, vertex, p1, p2, *, offset: float = 14.0, basic: bool = False,
@@ -653,8 +724,19 @@ def _tol(value):
             plus, minus = (abs(float(v)) for v in value)
         except (TypeError, ValueError) as exc:
             raise TypeError(f"tol must be a number or a (plus, minus) pair, got {value!r}") from exc
-    _places(plus, minus)
     return plus, minus
+
+
+def _round_size(call: str, radius, size, per_radius: float) -> float:
+    """The radius a ``diameter()`` or ``radius()`` callout names, or 0 for the one
+    the view shows: from ``radius``, typed as earlier releases took it, or from
+    ``size`` (``per_radius`` of it to a radius: a diameter is two)."""
+    if radius is not None and size is not None:
+        raise ValueError(f"{call}() takes size=, checked against the view, or the radius earlier releases took, "
+                         "drawn as typed; not both")
+    if radius is not None:
+        return _positive("radius", radius)
+    return 0.0 if size is None else _positive("size", size) / per_radius
 
 
 def _assert_legs_measure_an_angle(vertex, a, b, *, tol_deg: float = 0.05) -> None:
@@ -805,16 +887,11 @@ class Sheet:
     title: str = "UNTITLED"
     part_number: str = ""
     material: str = ""
-    #: The material's specification ("AMS 4027"): MATERIAL reads "AL 6061-T6 PER
-    #: AMS 4027".
-    spec: str = ""
     revision: str = "A"
     author: str = ""
-    #: Surface finish or treatment, as the requirement states it ("ANODISE CLEAR").
-    finish: str = ""
-    #: The drawing's date, as the author writes it. Never stamped from the clock:
-    #: the PDF's bytes are a function of its content.
-    date: str = ""
+    #: The unit the title block names. Every value on the sheet is measured off
+    #: the model, in millimetres, whatever this says: the report says so of any
+    #: other unit.
     units: str = "mm"
     projection: str = "THIRD ANGLE"
     notes: Sequence[str] = ()
@@ -823,11 +900,23 @@ class Sheet:
     #: A general tolerance standard, e.g. "ISO 2768-m": written as a note, after
     #: any general profile.
     general_tolerance: str = ""
+    #: Revision history rows (rev, date, description), drawn as a table top-right.
+    revisions: Sequence[tuple[str, str, str]] = ()
+    views: list[View] = field(default_factory=list)
+    #: The fields above are the released ones, in the order a positional call
+    #: gives them; every later one is given by name.
+    _: KW_ONLY
+    #: The material's specification ("AMS 4027"): MATERIAL reads "AL 6061-T6 PER
+    #: AMS 4027".
+    spec: str = ""
+    #: Surface finish or treatment, as the requirement states it ("ANODISE CLEAR").
+    finish: str = ""
+    #: The drawing's date, as the author writes it. Never stamped from the clock:
+    #: the PDF's bytes are a function of its content.
+    date: str = ""
     #: A surface profile every surface meets unless otherwise specified, to its
     #: datums: note 1, "UNLESS OTHERWISE SPECIFIED, ALL SURFACES" and the frame.
     general_profile: Frame | None = None
-    #: Revision history rows (rev, date, description), drawn as a table top-right.
-    revisions: Sequence[tuple[str, str, str]] = ()
     #: A second line under the title: on a part's sheet of an assembly drawing,
     #: which item it details and of what ("ITEM 4 OF SHOCK ABSORBER").
     subtitle: str = ""
@@ -844,7 +933,6 @@ class Sheet:
     company: str = ""
     #: Values for the profile's extra title cells, by name.
     fields: Mapping[str, str] = field(default_factory=dict)
-    views: list[View] = field(default_factory=list)
     #: Set when :meth:`parts_list` draws a parts list on the sheet.
     _parts: _ListRun | None = field(default=None, init=False, repr=False)
     #: The size and scale the sheet chose, where the author left ``size`` or
@@ -857,21 +945,23 @@ class Sheet:
     #: The flag notes its views flag, in the order first flagged: they follow the
     #: notes, each numbered in its flag.
     _flags: list[str] = field(default_factory=list, init=False, repr=False)
+    #: What has been read off each part the sheet draws, kept with the part: its
+    #: holes, slots and bolt circles (``_read_features``) and each view's picture
+    #: of it whole. Read once, whoever asks and at however many sizes it is drawn.
+    _read: dict = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.size is not None and self.size not in SHEET_SIZES:
             raise ValueError(f"unknown sheet size {self.size!r}; one of {sorted(SHEET_SIZES)}, or None to let "
                              "three_views() choose")
-        if self.scale is not None and (isinstance(self.scale, bool) or not isinstance(self.scale, (int, float))
-                                       or not (self.scale > 0)):
-            raise ValueError(f"scale must be a positive number, or None to let three_views() choose; got "
-                             f"{self.scale!r}")
-        if self.units not in UNITS:
-            raise ValueError(
-                f"units={self.units!r}: a sheet prints millimetres, the unit every value on it is measured "
-                "in. An inch drawing would need every measured value converted, and nothing here does that "
-                "yet; labelling millimetre values IN would make each one wrong by 25.4."
-            )
+        if self.scale is not None:
+            try:
+                positive = bool(self.scale > 0)
+            except TypeError:
+                positive = False
+            if not positive:
+                raise ValueError(f"scale must be a positive number, or None to let three_views() choose; got "
+                                 f"{self.scale!r}")
         # The title block prints this label and `three_views` lays the views out to
         # match it. Accepting any string would print "FIRST ANGLE" over a third-angle
         # arrangement, which is the one mislabel a shop cannot recover from.
@@ -1295,9 +1385,7 @@ def _first_pass(sheet: Sheet, shape) -> None:
     sheet's views take the author's points in ``shape``'s own frame."""
     from build123d import GeomType
 
-    from cad._internal.drawing_features import (
-        grooves, hexes, holes as find_holes, revolved, slots as find_slots, tapers, turned_surfaces,
-    )
+    from cad._internal.drawing_features import grooves, hexes, revolved, tapers, turned_surfaces
     from cad._internal.drawing_report import _owned
 
     turn = None
@@ -1312,7 +1400,12 @@ def _first_pass(sheet: Sheet, shape) -> None:
             turn = Rot(0, 90, 0) if turned.axis == 2 else Rot(0, 0, -90)
             shape = turn * shape
             turned = revolved(shape, bores=True)
-    features = [*find_holes(shape), *find_slots(shape)]
+
+    def holes_and_slots(of) -> list:
+        read = _read_features(sheet, of)
+        return [*read.holes, *read.slots]
+
+    features = holes_and_slots(shape)
     if turned is None:
         # The view showing most is drawn as the front, as drafters choose it: a
         # part whose holes are seen from above or the side is turned to face it.
@@ -1329,7 +1422,7 @@ def _first_pass(sheet: Sheet, shape) -> None:
         if main != "front" or best:
             turn = candidates[best]
             shape = turn * shape
-            features = [*find_holes(shape), *find_slots(shape)]
+            features = holes_and_slots(shape)
     names = list(_VIEW_NAMES) if turned is not None else _earned_views(shape, features)
     if turned is not None:
         # Turned whole: the two views square to its axis draw the same picture,

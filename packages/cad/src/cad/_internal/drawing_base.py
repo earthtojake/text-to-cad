@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from functools import lru_cache
 
 
@@ -109,10 +110,6 @@ _MIN_TEXT_MM = 1.6
 #: refused with the first of these that fits rather than an arbitrary ratio.
 _STANDARD_SCALES = (50.0, 20.0, 10.0, 5.0, 2.0, 1.0, 1 / 2, 1 / 2.5, 1 / 5, 1 / 10, 1 / 20, 1 / 50, 1 / 100,
                     1 / 200, 1 / 500, 1 / 1000)
-#: The only unit a sheet prints. Every value on it is measured off the model, whose
-#: unit is the millimetre; a title block reading IN over millimetre values is a
-#: drawing that is wrong by 25.4 everywhere and looks right.
-UNITS = ("mm",)
 
 
 def _fmt(value: float) -> str:
@@ -204,44 +201,51 @@ def _scale_label(scale: float, digits: str = "g") -> str:
     return f"1:{1 / scale:{digits}}" if scale < 1 else f"{scale:{digits}}:1"
 
 
-#: Fallback width per character, as a multiple of cap height, for when the font
-#: the renderer uses cannot be measured. Set at the wide end of what was
-#: measured (0.70 for "+0.10", 0.89 for "ELECTRONICS ENCLOSURE BASE") so the
-#: fallback overruns nothing.
-_CHAR_WIDTH = 0.9
 #: MTEXT's own control codes: a backslash, a letter, and everything to the ";".
 _MTEXT_CODE = re.compile(r"\\([A-Za-z])([^;]*);")
+#: Text is measured by metrics the drawing carries, never by a font looked up on
+#: the machine. A sheet wraps a callout, shrinks a title and finds an overlap by
+#: these widths, and a layout that asked the machine's fonts came out different
+#: on each: one callout measured 64 mm beside DejaVu Sans and 58 mm beside
+#: FreeSans, a line more on one than on the other. The widths are DejaVu Sans's:
+#: each character's advance in the font's own units, against its cap height. It
+#: is the widest of the fonts a renderer falls back to, so text a machine draws
+#: in another of them prints inside the room planned for it.
+_CAP_HEIGHT = 1493
+_ADVANCES = {
+    465: "′", 563: "'", 569: "ijl", 582: "ł", 604: "IJ", 651: " ,.\u00a0·‘’", 690: "/:;\\|¦", 721: "f",
+    739: "-\u00ad", 765: "″", 799: "()[]", 803: "t", 821: "!¡²³¹", 842: "r", 942: "\"", 965: "ªº",
+    1024: "*_`§¨¯°´¸–", 1061: "“”", 1067: "s", 1075: "z", 1087: "?¿", 1126: "c", 1141: "L", 1151: "Ł", 1178: "F",
+    1186: "k", 1208: "•", 1212: "vxy", 1233: "⌀", 1235: "P", 1239: "Þ", 1251: "TY", 1253: "o«»ðø", 1255: "a",
+    1260: "e", 1290: "ß", 1294: "E", 1298: "hnu", 1300: "Sbdgpqþ", 1303: "$0123456789{}¢£¤¥µ¶€", 1305: "√",
+    1343: "K", 1370: "∆", 1401: "AV", 1403: "XZ", 1405: "B", 1423: "R", 1430: "C", 1499: "U", 1532: "N", 1540: "H",
+    1565: "Ω", 1577: "D", 1587: "GÐ", 1597: "&", 1612: "OQØ", 1675: "w", 1706: "∞", 1716: "#+<=>^~¬±×÷↧≤≥≈←→↑↓",
+    1767: "M", 1946: "%", 1985: "¼½¾", 1995: "mÆ", 2011: "æ", 2025: "W", 2048: "@©®—…™", 2095: "œ", 2191: "Œ",
+}
+_ADVANCE = {char: advance for advance, chars in _ADVANCES.items() for char in chars}
+#: A character the table lacks is measured as its base letter where it has one
+#: (an accented letter is as wide as its letter), else as an ideograph is drawn:
+#: a full em and a little over, so a width that is a guess errs wide.
+_UNKNOWN_ADVANCE = 1.4 * _CAP_HEIGHT
 
 
-@lru_cache(maxsize=8)
-def _font(height: float):
-    """The renderer's own font at a cap height, or None if it cannot be had.
-
-    A constant width per character is wrong for every proportional font: the
-    same ratio that fits "ELECTRONICS ENCLOSURE BASE" runs "+0.10" 25% over.
-    ezdxf measures the glyphs it is about to draw, so ask it.
-    """
-    try:
-        from ezdxf.fonts import fonts
-
-        return fonts.make_font("txt.shx", height)
-    except Exception:  # noqa: BLE001 - no font manager, no cache; fall back to a ratio
-        return None
+@lru_cache(maxsize=4096)
+def _advance(char: str) -> float:
+    """One character's advance, in ``_CAP_HEIGHT`` units."""
+    if char in _ADVANCE:
+        return _ADVANCE[char]
+    base = unicodedata.normalize("NFD", char)[0]
+    return _ADVANCE.get(base, _UNKNOWN_ADVANCE)
 
 
 def _text_width(value: str, height: float) -> float:
-    """How wide `value` prints at this cap height, in millimetres."""
+    """How wide `value` prints at this cap height, in millimetres: a function of
+    the text alone, the same on every machine."""
     if not value:
         return 0.0
     # %%c, %%d and %%p each draw one glyph; measured as written they read three wide.
     value = value.replace("%%c", "Ø").replace("%%d", "°").replace("%%p", "±")
-    font = _font(round(float(height), 4))
-    if font is None:
-        return len(value) * height * _CHAR_WIDTH
-    try:
-        return float(font.text_width(value))
-    except Exception:  # noqa: BLE001 - an unmappable glyph is not worth a failed drawing
-        return len(value) * height * _CHAR_WIDTH
+    return sum(_advance(char) for char in value) * height / _CAP_HEIGHT
 
 
 def _mtext_extent(raw: str, height: float) -> tuple[float, float]:

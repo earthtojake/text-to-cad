@@ -1,6 +1,6 @@
 ---
 name: engineering-drawing
-description: Make an engineering drawing of a part or an assembly as a PDF - views, sections and details, measured dimensions with the tolerances, GD&T and datums the person confirms, hole callouts, notes and a title block, and for an assembly balloons, a parts list, flag notes and a sheet per part, all projected from the geometry. Use when the user asks for a drawing, a dimensioned sheet, shop or assembly drawings, a parts list, a print, or "2D views of this part". Not for DXF cut layouts or flat patterns.
+description: Make an engineering drawing of a part or an assembly as a PDF - views, sections and details, measured dimensions with the tolerances, GD&T and datums the person confirms, hole callouts and a title block; for an assembly, balloons, a parts list and a sheet per part. Use when the user asks for a drawing, a dimensioned sheet, shop or assembly drawings, a parts list, a print, or "2D views of this part". Not for DXF cut layouts or flat patterns.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -139,10 +139,14 @@ https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
      `view.hole(point)` and `view.slot(point)` call out one. Diameter, THRU or
      depth, counterbore, countersink, a slot's width and length, the `4×` count
      and a bolt circle's `EQ SP ON ⌀60` are **read off the part**: do not type
-     them. Anything you do
-     type is checked, and a value the part contradicts stops the script, as
-     does a `hole()` where the part has no hole to read (a boss's circle is
-     none). Only `thread=` (which the geometry cannot carry) and `label=` are yours;
+     them. A `hole(point)` where the part has no hole to read (a boss's circle
+     is none) stops the script, and so does a depth, counterbore or count
+     given to it that the part contradicts. A callout typed whole, its
+     diameter first (`view.hole(point, 6.6, thru=True, count=4)`, as a script
+     written for an earlier release has it), still prints exactly what is
+     typed, wherever it points, and the run reports where the part reads
+     otherwise; leave the sizes unset in anything you write.
+     Only `thread=` (which the geometry cannot carry) and `label=` are yours;
      with `thread=`, say how many of the identical bores are tapped (`count=`)
      and, for a blind one, the thread's depth (`depth=`).
      A chamfered bore end is part of its hole: it is called out as `⌵`, with
@@ -154,7 +158,10 @@ https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
      corner filleted, or every outside edge rounded or chamfered). Other sizes
      need a `radius()` callout or a note giving the size.
    - `view.diameter(center)` / `view.radius(center)` measure the circle or arc
-     there; pass `size=` only to pick one of several concentric ones.
+     there; pass `size=` only to pick one of several concentric ones. (The
+     radius given second, `view.diameter(center, 8)`, is the earlier
+     spelling: drawn as typed, and reported when the view shows no such
+     circle.)
    - Each dimension is one of three kinds: toleranced (`tol=`, `fit=`,
      `limits=`; inspect to this), basic (`basic=True`, boxed; a GD&T frame
      bounds the feature) or reference (`reference=True`, in parentheses;
@@ -187,17 +194,23 @@ https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
    - *"redundant: …"*: dimensions that state one size twice, every one in the
      loop named. Make one of them reference, or leave it out; which one is a
      design decision (the one that matters is toleranced).
-   - *"would measure blank paper"* (it stops the script): a dimension's points
-     miss the view. Usually the part was built from a corner and the script
-     assumed it was centred.
-   - *"annotation overlaps"* (it stops the script), *"views crowded"*,
+   - *"it measures blank paper"*: a dimension's, a callout's or a note's
+     point misses the view. It is drawn all the same, and wrong. Usually the
+     part was built from a corner and the script assumed it was centred.
+   - *"prints …, as typed"*, *"is drawn as typed"*: a hole callout typed whole,
+     or a circle given its radius, that the part does not bear out: another
+     size, a depth left unsaid, no hole there. The line says what the part
+     reads. Leave the sizes unset (`view.hole(point)`), or fix the model.
+   - *"annotation overlaps"*, *"views crowded"*,
      *"leader crosses the view"*, *"its leader crosses a dimension line"*:
      not enough paper where the annotation is. The message names the view and
      side asking most, and a larger sheet or smaller scale; moving that
-     annotation to a view with room to spare often does instead.
-   - *"separate solids"* (it stops the script): the part is in pieces, usually
-     a cut that runs right through the model. Fix the model before drawing it,
-     or, if it is an assembly, draw it as one (below).
+     annotation to a view with room to spare often does instead. Two values
+     printed in one place are drawn so on a sheet whose size you gave; a sheet
+     choosing its size takes a larger one.
+   - *"separate solids"*: the part is in pieces, usually a cut that runs right
+     through the model. It is drawn as given; fix the model, or, if it is an
+     assembly, draw it as one (below).
    - *"requirements: …"*: one line per part sheet, apart from the `incomplete:`
      lines: its stage; how many sizes are toleranced, basic, reference or
      nominal (and under which general tolerance); its datums and frames; and
@@ -209,8 +222,9 @@ https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
      such a joint's axis (no end play). These are the joints to settle with
      the person (step 0); the line stays as the record of each joint, and the
      sheets' `requirements:` lines say which sizes still have no fit.
-   - A refusal (an exception, no PDF): a typed size the part contradicts, a
-     hole called out where no hole is, views that run off the frame on a sheet
+   - A refusal (an exception, no PDF): a depth, counterbore or count given to
+     `hole(point)` that the part contradicts, a `hole(point)` where no hole
+     is, views that run off the frame on a sheet
      whose scale you fixed. The message says what the part has, or which scale
      fits. A sheet that chose its own scale takes a larger sheet or the next
      scale down instead. A failed render leaves no file it wrote; an earlier
