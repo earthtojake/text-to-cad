@@ -20,7 +20,9 @@ It does six things, and nothing else:
    is installed already, it leaves it as it is: cad updates itself. Where that cad does not start,
    it installs it again.
 3. Installs or updates the plugin in each agent app it finds, with that app's own command (below),
-   all but Kimi Code, which you install by hand. It prints one line per app.
+   all but Kimi Code, which you install by hand. It prints one line per app; in a terminal it first
+   builds the CAD logo, and a live line under the others names the app it is setting up and the
+   command it is running (`NO_COLOR` turns that off).
 4. Removes what earlier releases of text-to-cad left in those apps.
 5. Where cad's folder is not on your PATH, runs uv's own `uv tool update-shell`, which adds it for
    new terminals (on macOS and Linux in your shell's profile, on Windows in your user PATH). Setting
