@@ -154,8 +154,9 @@ working tree's), each with its own copy of the skills, its fixtures, a server of
    tokens, and any difference in what was made. One run a cell is noisy: a difference worth acting
    on is a wrong result or a repeated pattern, not two tool calls.
 
-The tasks are `scripts/bench/skill_ab/tasks/*.md`, one common request per skill with its objective
-answer. Add a task when a skill gains an outcome, or when a regression got past the ones there.
+The tasks are `scripts/bench/skill_ab/tasks/*.md`: common requests of each skill, each with its
+objective answer. Add a task when a skill gains an outcome, when a change rewrites a reference no task
+reaches, or when a regression got past the ones there.
 
 ## The shared blocks
 
