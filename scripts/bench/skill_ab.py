@@ -59,10 +59,11 @@ you would for a real person who is waiting on the result.
 
 ## When you are done
 
-Reply with three sections: **Reply** (what you would tell the person: what you made or found, the files, the
-checks you ran and what they showed, your assumptions); **Commands** (every `cad` command you ran, in order,
-marking any that failed and why); **Skill notes** (anything in the skill that was unclear, missing or wrong, or
-that you had to find by trial, and the skill files you opened).
+Stop this run's server (`. {run}/env.sh; cad server stop`). Then reply, in under 350 words, with three sections:
+**Reply** (what you would tell the person: what you made or found, the files, the checks you ran and what they
+showed, your assumptions); **Commands** (the `cad` commands you ran, in order, marking any that failed and why);
+**Skill notes** (anything in the skill that was unclear, missing or wrong, or that you had to find by trial, and
+the skill files you opened).
 """
 
 
@@ -79,9 +80,11 @@ def parse(path: Path) -> dict:
 
 
 def environment(run: Path) -> dict[str, str]:
-    """A run's own server: its engine, state and cache folders, no update and no telemetry."""
+    """A run's own server: its engine, state and cache folders, no update and no telemetry, and one worker with
+    no standby, since a bench has a server a run and they share one machine's memory."""
     return {"CAD_ENGINE_DIR": str(run / ".cad/engine"), "CAD_STATE_DIR": str(run / ".cad/state"),
-            "CAD_CACHE_DIR": str(run / ".cad/cache"), "CAD_UPDATE_CHECK": "0", "CAD_TELEMETRY": "0"}
+            "CAD_CACHE_DIR": str(run / ".cad/cache"), "CAD_UPDATE_CHECK": "0", "CAD_TELEMETRY": "0",
+            "CAD_ENGINE_WORKERS": "1", "CAD_ENGINE_STANDBY": "0"}
 
 
 def exported(model: Path, scratch: Path) -> Path:
