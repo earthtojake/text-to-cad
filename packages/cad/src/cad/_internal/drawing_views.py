@@ -379,31 +379,13 @@ def _plane_cut(shape, point, look) -> tuple:
     from build123d import Compound, GeomType, Keep, Plane
 
     plane = Plane(origin=point, z_dir=look)
-    # OCCT's splitter can come back done and short: on a part of two solids read
-    # from STEP its first run in a process returned three pieces of four, one half
-    # of one solid missing, and the next run all four. Kept as it came, that part
-    # vanished from the section without a word. The pieces of a cut add up to the
-    # part, so a split that lost volume is run again. A plane that runs along a thin
-    # part (a wire lying in it) can lose slivers every time: the section is refused,
-    # never drawn short (law 17).
-    whole = sum(abs(s.volume) for s in shape.solids())
-    best, best_found = None, -1.0
-    for _attempt in range(3):
-        pieces = list(shape.split(plane, keep=Keep.ALL) or [])
-        found = sum(abs(s.volume) for piece in pieces for s in piece.solids())
-        if found > best_found:
-            best, best_found = pieces, found
-        # A lost piece is a whole region; cutting curved faces moves the sum by a few
-        # parts in 1e5 either way, which is not a loss.
-        if whole - found <= 1e-3 * whole:
-            break
-    else:
-        label = getattr(shape, "label", "") or "a part"
-        raise ValueError(
-            f"section through {_where(point)}: the cut of {label!r} kept {best_found:.1f} of its {whole:.1f} mm3 "
-            "after three tries (OCCT's splitter drops slivers where the plane runs along a thin part), so its "
-            "section would be missing pieces. A plane a little off the part's axis cuts it cleanly.")
-    pieces = best or []
+    # Each solid is cut on its own, and has to come back whole (``_split_whole``):
+    # measured against the part's whole volume, a small solid of a part of several
+    # could go missing inside the allowance a large one's curved faces need.
+    solids = list(shape.solids())
+    label = getattr(shape, "label", "") or "a part"
+    pieces = [piece for solid in (solids if len(solids) > 1 else [shape])
+              for piece in _split_whole(solid, plane, Keep, point, label)]
     # Below the plane, as build123d's Keep.BOTTOM sorts them: by each piece's centre.
     below = [piece for piece in pieces if plane.to_local_coords(piece).center().Z < 0]
     kept = None if not below else below[0] if len(below) == 1 else Compound(below)
@@ -413,9 +395,60 @@ def _plane_cut(shape, point, look) -> tuple:
             continue
         normal, centre = face.normal_at(), face.center()
         if (abs(abs(_dot((normal.X, normal.Y, normal.Z), look)) - 1) < 1e-6
-                and abs(_dot((centre.X - point[0], centre.Y - point[1], centre.Z - point[2]), look)) < 1e-6):
+                and abs(_dot((centre.X - point[0], centre.Y - point[1], centre.Z - point[2]), look)) < 1e-6
+                and _was_cut(shape, face, look)):
             faces.append(face)
     return kept, faces
+
+
+#: How far past a face in the cutting plane the part is asked for material, mm.
+_CUT_PROBE = 1e-3
+
+
+def _was_cut(shape, face, look) -> bool:
+    """Whether a face of the kept half that lies in the cutting plane is one the
+    cut made: the part had material on the other side of it, which the cut took
+    away. A face of the part's own that the plane only touches (a step whose
+    face lies in the plane) has air there: it is seen beyond the plane, not cut,
+    and is not hatched."""
+    from build123d import Vector
+
+    step = Vector(*look) * _CUT_PROBE
+    # A point on the face: the middle of its surface, or, where that falls in a
+    # hole of it, the first of a few others that does not.
+    for u, v in ((0.5, 0.5), (0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75), (0.1, 0.5), (0.9, 0.5),
+                 (0.5, 0.1), (0.5, 0.9)):
+        on = face.position_at(u, v)
+        if face.distance_to(on) < 1e-7:
+            return bool(shape.is_inside(on + step))
+    return True  # no point found on it to ask from: drawn as a cut, as it always was
+
+
+def _split_whole(shape, plane, keep, point, label: str) -> list:
+    """``shape`` split by ``plane`` into pieces that add up to it.
+
+    OCCT's splitter can come back done and short: on a part of two solids read
+    from STEP its first run in a process returned three pieces of four, one half
+    of one solid missing, and the next run all four. Kept as it came, that part
+    vanished from the section without a word. The pieces of a cut add up to what
+    was cut, so a split that lost volume is run again. A plane that runs along a
+    thin part (a wire lying in it) can lose slivers every time: the section is
+    refused, never drawn short (law 17)."""
+    whole = sum(abs(s.volume) for s in shape.solids())
+    best, best_found = None, -1.0
+    for _attempt in range(3):
+        pieces = list(shape.split(plane, keep=keep.ALL) or [])
+        found = sum(abs(s.volume) for piece in pieces for s in piece.solids())
+        if found > best_found:
+            best, best_found = pieces, found
+        # A lost piece is a whole region; cutting curved faces moves the sum by a few
+        # parts in 1e5 either way, which is not a loss.
+        if whole - found <= 1e-3 * whole:
+            return pieces
+    raise ValueError(
+        f"section through {_where(point)}: the cut of {label!r} kept {best_found:.1f} of its {whole:.1f} mm3 "
+        "after three tries (OCCT's splitter drops slivers where the plane runs along a thin part), so its "
+        "section would be missing pieces. A plane a little off the part's axis cuts it cleanly.")
 
 
 def _cut(view: View) -> tuple:

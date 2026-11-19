@@ -81,5 +81,76 @@ class PlaneCutTests(unittest.TestCase):
         self.assertEqual(len(faces), 1)
 
 
+def _dropping_smallest(times: int):
+    """A Shape.split that loses its smallest piece on the first ``times`` calls
+    that return more than one."""
+    from build123d import Shape
+
+    real = Shape.split
+    calls: list[int] = []
+
+    def split(self, tool, keep=None):
+        pieces = real(self, tool, keep) if keep is not None else real(self, tool)
+        if isinstance(pieces, (list, tuple)) and len(pieces) > 1:
+            calls.append(1)
+            if len(calls) <= times:
+                kept = sorted(pieces, key=lambda piece: abs(piece.volume))[1:]
+                return type(pieces)(kept) if not isinstance(pieces, tuple) else tuple(kept)
+        return pieces
+
+    return split, calls
+
+
+class SmallSolidTests(unittest.TestCase):
+    """A part of a large solid and a small one: the small one's half is a millionth
+    of the part, far inside what a curved face's cut may move the sum by."""
+
+    def _part(self):
+        from build123d import Box, Compound, Pos
+
+        # The small solid sits a little off the plane y = 0, so the piece of it the
+        # section keeps (below the plane) is the smallest piece of the cut.
+        return Compound([Box(100, 100, 100), Pos(80, 0.1, 0) * Box(1, 1, 1)])
+
+    def test_a_small_solid_s_lost_piece_is_noticed_and_cut_again(self):
+        from build123d import Shape
+
+        from cad._internal.drawing_views import _plane_cut
+
+        split, calls = _dropping_smallest(times=1)
+        with mock.patch.object(Shape, "split", split):
+            kept, faces = _plane_cut(self._part(), (0.0, 0.0, 0.0), (0.0, 1.0, 0.0))
+        self.assertEqual(len(kept.solids()), 2, "the small solid's half is in the section")
+        self.assertEqual(sorted(round(face.area, 6) for face in faces), [1.0, 10000.0])
+
+    def test_a_small_solid_that_keeps_losing_its_piece_is_refused(self):
+        from build123d import Shape
+
+        from cad._internal.drawing_views import _plane_cut
+
+        split, _calls = _dropping_smallest(times=99)
+        with mock.patch.object(Shape, "split", split), self.assertRaisesRegex(ValueError, "after three tries"):
+            _plane_cut(self._part(), (0.0, 0.0, 0.0), (0.0, 1.0, 0.0))
+
+
+class TouchedFaceTests(unittest.TestCase):
+    """A section hatches what the plane cut, not a face it only touches."""
+
+    def test_a_face_lying_in_the_cutting_plane_is_not_a_cut_face(self):
+        from build123d import Align, Box, Pos
+
+        from cad._internal.drawing_views import _plane_cut
+
+        corner = (Align.MIN, Align.MIN, Align.MIN)
+        # One block behind the plane y = 0, its front face in it; one block the plane cuts.
+        part = Box(40, 20, 20, align=corner) + Pos(40, -20, 0) * Box(40, 40, 20, align=corner)
+        self.assertEqual(len(part.solids()), 1)
+        kept, faces = _plane_cut(part, (0.0, 0.0, 10.0), (0.0, -1.0, 0.0))   # seen from -Y, as a front view is
+        self.assertAlmostEqual(kept.volume, 40 * 20 * 20 * 2, places=6, msg="the half beyond the plane, whole")
+        self.assertEqual(len(faces), 1, "the block the plane only touches is seen, not cut")
+        self.assertAlmostEqual(faces[0].area, 800.0, places=6)
+        self.assertAlmostEqual(faces[0].center().X, 60.0, places=6)
+
+
 if __name__ == "__main__":
     unittest.main()

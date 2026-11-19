@@ -418,3 +418,208 @@ class EdgeTests(unittest.TestCase):
         self.assertGreater(sharp_edges(channel)[1], 0, "its two edges are inside corners left sharp")
         self.assertFalse([n for n in geometry_notes(channel) if "FILLETS" in n],
                          "so no fillet note claims the bevelled corner is R3")
+
+
+def _blind_ends():
+    """A block with four blind holes, each ended its own way: ⌀10 to a floor
+    filleted R2, ⌀8 to a ball, ⌀6 to a drill point, ⌀4 to a plain flat floor."""
+    from build123d import Align, Axis, Box, Cone, Cylinder, Pos, Sphere, fillet
+
+    down = (Align.CENTER, Align.CENTER, Align.MAX)
+    block = Box(100, 40, 20, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    filleted = Cylinder(5, 10, align=down)
+    block -= Pos(-30, 0, 20) * fillet(filleted.edges().group_by(Axis.Z)[0], 2)
+    block -= Pos(-10, 0, 20) * (Cylinder(4, 6, align=down) + Pos(0, 0, -6) * Sphere(4))
+    block -= Pos(10, 0, 20) * (Cylinder(3, 10, align=down) + Pos(0, 0, -10) * Cone(3, 0, 1.8, align=down))
+    block -= Pos(30, 0, 20) * Cylinder(2, 5, align=down)
+    return block
+
+
+class BlindEndTests(unittest.TestCase):
+    """A blind hole's depth is the one its callout states: to the floor, or to
+    where the full diameter ends, and what runs on below that is said."""
+
+    def test_depth_is_to_the_floor_and_an_end_no_callout_states_is_said(self) -> None:
+        from cad._internal.drawing_features import holes
+
+        found = {round(h.diameter): h for h in holes(_blind_ends())}
+        self.assertEqual(sorted(found), [4, 6, 8, 10])
+        self.assertTrue(all(not h.thru for h in found.values()))
+        self.assertAlmostEqual(found[10].depth, 10.0, places=6, msg="to the floor, not to where its fillet starts")
+        self.assertIsNone(found[10].end, "a filleted floor is a floor: the fillet is a radius of its own")
+        self.assertAlmostEqual(found[8].depth, 6.0, places=6, msg="the full diameter's depth")
+        self.assertEqual(found[8].end[0], "ball")
+        self.assertAlmostEqual(found[8].end[1], 4.0, places=6)
+        self.assertAlmostEqual(found[8].end[2], 4.0, places=6, msg="the ball runs its radius past the depth")
+        self.assertAlmostEqual(found[6].depth, 10.0, places=6, msg="a drill point is not counted")
+        self.assertIsNone(found[6].end)
+        self.assertAlmostEqual(found[4].depth, 5.0, places=6)
+        self.assertIsNone(found[4].end)
+        self.assertNotEqual(found[8].signature(), holes(_plain_blind(4, 6))[0].signature(),
+                            "a ball-ended hole and a flat one of the same size are two kinds")
+
+
+def _plain_blind(radius: float, depth: float):
+    from build123d import Align, Box, Cylinder, Pos
+
+    return Box(40, 40, 20, align=(Align.CENTER, Align.CENTER, Align.MIN)) - Pos(0, 0, 20) * Cylinder(
+        radius, depth, align=(Align.CENTER, Align.CENTER, Align.MAX))
+
+
+class OpenEndTests(unittest.TestCase):
+    """A hole or slot that leaves the wall it is in is through that wall, however
+    near the next wall stands; a floor closes it, however it is rounded."""
+
+    def test_a_hole_and_a_slot_into_a_gap_narrower_than_themselves_are_thru(self) -> None:
+        from build123d import Align, Box, Cylinder, Pos, Rot, SlotCenterToCenter, extrude
+        from cad._internal.drawing_features import holes, slots
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        # Two arms 10 thick, 5 apart: a ⌀8 hole through one, an 8 wide slot through the other.
+        channel = Box(60, 25, 30, align=align) - Pos(0, 0, 10) * Box(60, 5, 20, align=align)
+        channel -= Pos(-15, 12.5, 20) * Rot(90, 0, 0) * Cylinder(4, 10, align=align)
+        channel -= Pos(15, -12.5, 20) * Rot(-90, 0, 0) * extrude(SlotCenterToCenter(10, 8), 10)
+        (hole,) = holes(channel)
+        self.assertTrue(hole.thru, "through the arm it is in: the other arm, 5 away, is not its floor")
+        self.assertIsNone(hole.depth)
+        self.assertAlmostEqual(hole.length, 10.0, places=6)
+        (slot,) = slots(channel)
+        self.assertTrue(slot.thru)
+        self.assertIsNone(slot.depth)
+
+    def test_a_floor_closes_a_hole_and_a_lid_close_above_it_does_not(self) -> None:
+        from build123d import Align, Box, Cylinder, Pos
+        from cad._internal.drawing_features import holes
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        # A box with a cavity 3 high under a 3 thick lid: one ⌀8 hole through the lid,
+        # one ⌀6 hole 4 deep into the 10 thick floor from below.
+        box = Box(60, 40, 16, align=align) - Pos(0, 0, 10) * Box(54, 34, 3, align=align)
+        box -= Pos(-15, 0, 13) * Cylinder(4, 3, align=align)
+        box -= Pos(15, 0, 0) * Cylinder(3, 4, align=align)
+        found = {round(h.diameter): h for h in holes(box)}
+        self.assertTrue(found[8].thru, "the lid's hole opens into the cavity")
+        self.assertFalse(found[6].thru)
+        self.assertAlmostEqual(found[6].depth, 4.0, places=6)
+
+    def test_a_hole_drilled_across_another_leaves_each_its_end_and_its_pieces(self) -> None:
+        """A ⌀8 hole 15 deep from the side crosses a countersunk ⌀4.5 hole 5 short
+        of its own floor, and cuts that hole's bore off from its countersink."""
+        from build123d import Align, Box, BuildPart, CounterSinkHole, Cylinder, Locations, Pos, Rot
+        from cad._internal.drawing_features import holes, open_bores, taper_bores
+
+        with BuildPart() as plate:
+            Box(120, 80, 12, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            with Locations(Pos(50, 0, 12)):
+                CounterSinkHole(radius=2.25, counter_sink_radius=4.5, counter_sink_angle=90)
+        across = Rot(0, 90, 0) * Cylinder(4, 15, align=(Align.CENTER, Align.CENTER, Align.MAX))
+        part = plate.part - Pos(60, 0, 6) * across
+        found = {round(h.diameter, 1): h for h in holes(part)}
+        self.assertEqual(sorted(found), [4.5, 8.0])
+        self.assertFalse(found[8.0].thru, "its floor closes it: the hole crossing it is no way out of its end")
+        self.assertAlmostEqual(found[8.0].depth, 15.0, places=6)
+        self.assertTrue(found[4.5].thru)
+        self.assertIsNotNone(found[4.5].csk, "the countersink above the crossing is still this hole's")
+        self.assertEqual(taper_bores(part), [], "and is no tapered bore of its own")
+        self.assertEqual(open_bores(part), [], "nor are the slivers of bore the crossing leaves")
+
+
+def _two_circles():
+    """A ⌀120 flange with a ⌀20 bore: six ⌀5 holes on ⌀60, eight more on ⌀100, and
+    one more of the same size standing alone at (0, 18)."""
+    from build123d import Align, Cylinder, Pos
+
+    align = (Align.CENTER, Align.CENTER, Align.MIN)
+    flange = Cylinder(60, 10, align=align) - Cylinder(10, 10, align=align)
+    spots = [(30 * math.cos(math.radians(a)), 30 * math.sin(math.radians(a))) for a in range(0, 360, 60)]
+    spots += [(50 * math.cos(math.radians(a)), 50 * math.sin(math.radians(a))) for a in range(0, 360, 45)]
+    spots.append((0.0, 18.0))
+    return flange - [Pos(x, y, 0) * Cylinder(2.5, 10, align=align) for x, y in spots]
+
+
+class TwoCircleTests(unittest.TestCase):
+    """Holes of one size on two pitch circles are two patterns."""
+
+    def test_each_pattern_has_its_own_count_and_circle(self) -> None:
+        from cad._internal.drawing_features import bolt_circles, holes
+
+        part = _two_circles()
+        found = holes(part)
+        circles = bolt_circles(part, found)
+        self.assertEqual([(round(c.diameter, 6), len(c.mouths)) for c in circles], [(60.0, 6), (100.0, 8)])
+        small = [h for h in found if abs(h.diameter - 5) < 1e-6]
+        kinds: dict[tuple, int] = {}
+        for hole in small:
+            kinds[hole.signature()] = kinds.get(hole.signature(), 0) + 1
+        self.assertEqual(sorted(kinds.values()), [1, 6, 8], "the six, the eight, and the one on no circle")
+        self.assertEqual(sorted(round(h.circle[0]) for h in small if h.circle), [60] * 6 + [100] * 8)
+        self.assertEqual(bolt_circles(part), circles, "read alone, the same circles")
+
+    def test_the_sheet_calls_out_and_draws_both(self) -> None:
+        from cad._internal.drawing_render import _render_sheet
+        from cad.eng_drawing import Sheet
+
+        sheet = Sheet("A3", 1.0)
+        top, _front = sheet.three_views(_two_circles(), views=("top", "front"))
+        top.holes()
+        msp = _render_sheet(sheet, index=1, count=1, label="circles").modelspace()
+        pitch = sorted(round(c.dxf.radius, 6) for c in msp.query("CIRCLE[layer=='CENTER']"))
+        self.assertEqual(pitch, [30.0, 50.0], "a pitch circle each")
+        said = " ".join(t.dxf.text for t in msp.query("TEXT[layer=='DIM']"))
+        for words in ("6× ", "8× ", "EQ SP ON"):
+            self.assertIn(words, said)
+        self.assertNotIn("15× ", said)
+        self.assertNotIn("14× ", said)
+
+    def test_a_field_of_holes_is_no_bolt_circle(self) -> None:
+        """Every hole of a hexagonal field has six equally spaced neighbours."""
+        from build123d import Align, Box, Cylinder, Pos
+        from cad._internal.drawing_features import bolt_circles, holes
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        rise = 12 * math.sin(math.radians(60))
+        spots = [(12 * (i + 0.5 * (j % 2)), rise * j) for i in range(-2, 3) for j in range(-2, 3)]
+        plate = Box(90, 80, 4, align=align) - [Pos(x, y, 0) * Cylinder(2, 4, align=align) for x, y in spots]
+        found = holes(plate)
+        self.assertEqual(len(found), 25)
+        self.assertEqual(bolt_circles(plate, found), [])
+        self.assertEqual(len({h.signature() for h in found}), 1, "one kind, one count")
+
+
+class UncalledBoreTests(unittest.TestCase):
+    """The round cuts no hole callout reads are still read off the part."""
+
+    def test_a_tapered_bore_an_open_bore_and_a_ring_wall(self) -> None:
+        from build123d import Align, Box, Cone, Cylinder, Pos
+        from cad._internal.drawing_features import holes, open_bores, ring_walls, taper_bores
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        plate = Box(100, 60, 12, align=align)
+        plate -= Pos(-30, 0, 0) * Cone(3, 5, 12, align=align)
+        plate -= Pos(48, 0, 0) * Cylinder(4, 12, align=align)
+        plate -= Pos(10, 0, 9) * (Cylinder(15, 3, align=align) - Cylinder(10, 3, align=align))
+        plate -= Pos(-10, 20, 0) * Cylinder(2, 12, align=align)      # and one plain hole, countersunk
+        plate -= Pos(-10, 20, 10) * Cone(2, 4, 2, align=align)
+        (hole,) = holes(plate)
+        self.assertAlmostEqual(hole.diameter, 4.0, places=6)
+        self.assertIsNotNone(hole.csk, "a countersink is its hole's, not a tapered bore")
+        (taper,) = taper_bores(plate)
+        self.assertEqual((taper.small, taper.large), (6.0, 10.0))
+        self.assertEqual([round(end[2], 6) for end in taper.ends], [0.0, 12.0], "small end first")
+        (broken,) = open_bores(plate)
+        self.assertEqual(broken.radius, 4.0)
+        self.assertGreater(broken.span, 180.0)
+        self.assertLess(broken.span, 360.0)
+        (wall,) = ring_walls(plate)
+        self.assertEqual(wall.diameter, 30.0)
+
+    def test_a_fillet_a_slot_end_and_a_full_round_notch_are_no_open_bore(self) -> None:
+        from build123d import Align, Axis, Box, Pos, SlotCenterToCenter, extrude, fillet
+        from cad._internal.drawing_features import open_bores
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        plate = Box(80, 60, 10, align=align) - Pos(0, 0, 4) * Box(40, 30, 6, align=align)
+        plate = fillet(plate.edges().filter_by(Axis.Z).filter_by(lambda e: abs(e.center().X) < 25), 3)
+        plate -= Pos(-30, 0, 0) * extrude(SlotCenterToCenter(10, 6), 10)
+        plate -= Pos(40, 0, 0) * extrude(SlotCenterToCenter(12, 8), 10)   # a notch in the edge, its end full round
+        self.assertEqual(open_bores(plate), [])
