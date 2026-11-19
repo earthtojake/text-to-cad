@@ -158,6 +158,24 @@ The tasks are `scripts/bench/skill_ab/tasks/*.md`: common requests of each skill
 objective answer. Add a task when a skill gains an outcome, when a change rewrites a reference no task
 reaches, or when a regression got past the ones there.
 
+## Check a rewrite against what it replaced
+
+A bench task shows that common work still gets done. It does not show what was lost, and a rewrite
+loses things in a particular way: two files each drop a "duplicate" on the assumption that the other
+keeps it. So before a pull request that shortens a skill:
+
+1. **Run what you keep.** Every command, every example and every claim about what the tool does, on
+   the tool as it is. The pass that shortened these skills found about sixty statements that were
+   wrong, most of them long-standing: a command that did not exist, an example that could not
+   solve, a sign that was backwards.
+2. **Audit against the old text.** Have a reader who did not make the change go through the previous
+   version passage by passage and look for each fact in the new skill, anywhere in its folder.
+   What is no longer there falls into two lists: rightly cut (general knowledge, internals, history,
+   what `--help` or a refusal says), and lost (a fact about this tool an agent cannot get any other
+   way). Restore the second list, a clause each.
+3. **Fix the tool where the text was a workaround.** A reference that carries a line to step round a
+   defect is a report of the defect.
+
 ## The shared blocks
 
 Each skill installs on its own, so the few things every skill must say are copied into each, word
@@ -199,7 +217,8 @@ for word, and tests keep the copies from drifting:
 - [ ] A skill that makes something has "Check each change".
 - [ ] Every example was run, and every command in a code block parses.
 - [ ] The Setup and Show the model blocks are the shared text where they apply.
-- [ ] A change to what agents are told was run A/B, with the table in the pull request.
+- [ ] A change to what agents are told was run A/B, with the table in the pull request, and a
+      rewrite was audited against the text it replaced.
 - [ ] A command the skill stops using still works for 30 days.
 - [ ] A new skill is linked from the README's Features and the docs site's (`features` in
       `apps/docs/src/lib/content.ts`), and named in `.muse-plugin/plugin.json`.
