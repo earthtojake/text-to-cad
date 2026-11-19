@@ -128,10 +128,12 @@ def prepare(run: Path, task: dict, ref: str | None, scratch: Path) -> None:
         (work / destination).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(exported(source, scratch) if built else source, work / destination)
     variables = environment(run)
-    # The run's server is its own, so nothing has started it: the first command that sources this does, as a
-    # person's computer has one running already. Later commands find it and start nothing.
-    (run / "env.sh").write_text("".join(f"export {name}={value}\n" for name, value in variables.items())
-                                + "cad server status >/dev/null 2>&1 || cad server start >/dev/null 2>&1\n",
+    # The checkout's own cad comes first on PATH: an agent's shell has no cad of its own, or another release's.
+    # The run's server is its own, so nothing has started it: sourcing this does, as a person's computer has one
+    # running already (`cad server start` starts one where none runs, and joins the one that does).
+    (run / "env.sh").write_text(f'export PATH="{REPO / ".venv" / "bin"}:$PATH"\n'
+                                + "".join(f"export {name}={value}\n" for name, value in variables.items())
+                                + "cad server start >/dev/null 2>&1 || true\n",
                                 encoding="utf-8")
     request = task["request"]
     if task["id"]:
