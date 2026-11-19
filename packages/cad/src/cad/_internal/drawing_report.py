@@ -226,8 +226,9 @@ def _unstated(facts: _Facts) -> list[str]:
 def _unstated_ends(record: dict, whose: str, kinds: dict) -> list[str]:
     """The blind holes whose end a callout cannot state: its depth is where the
     full diameter ends, and a ball end, or any form that is neither a flat floor
-    nor a drill point, runs on below it. A ball is stated by a note naming its
-    radius (SPHERICAL R5) or a ``radius()`` callout of it; any other end by a note
+    nor a drill point, runs on below it; a hole that ends inside a bore drilled
+    across it has no floor at all. A ball is stated by a note naming its radius
+    (SPHERICAL R5) or a ``radius()`` callout of it; any other end by a note
     naming the hole (⌀10 ...), which the author writes from a section of it."""
     notes = [note.upper().replace("%%C", "⌀").replace("Ø", "⌀") for note in record.get("notes", ())]
     lines = []
@@ -251,6 +252,13 @@ def _unstated_ends(record: dict, whose: str, kinds: dict) -> list[str]:
             continue
         mark = re.compile(rf"⌀ ?{re.escape(_fmt(feature.diameter))}(?!\.?\d)")
         if any(mark.search(note) for note in notes):
+            continue
+        if kind == "cavity":
+            lines.append(
+                f"incomplete: {whose}{text} ends inside a bore drilled across it: it has no floor to measure to and "
+                "does not leave the part along its own axis, so the depth its callout gives is where its full "
+                "diameter ends. A note naming it states what it runs into "
+                f"(view.note(\"⌀{_fmt(feature.diameter)} THRU TO BORE\", point)).")
             continue
         lines.append(
             f"incomplete: {whose}{text} ends {_fmt(beyond)} past the depth its callout gives, in a form that is "

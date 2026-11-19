@@ -523,6 +523,42 @@ class OpenEndTests(unittest.TestCase):
         self.assertEqual(taper_bores(part), [], "and is no tapered bore of its own")
         self.assertEqual(open_bores(part), [], "nor are the slivers of bore the crossing leaves")
 
+    def test_a_floor_closes_a_hole_that_opens_sideways_at_it(self) -> None:
+        """A cross hole on the level of a bore's floor, and a pocket that takes half
+        the floor away, open the end sideways: the floor is still there, and the
+        bore is as deep as it."""
+        from build123d import Align, Box, Cylinder, Pos, Rot
+        from cad._internal.drawing_features import holes
+
+        up, down = (Align.CENTER, Align.CENTER, Align.MIN), (Align.CENTER, Align.CENTER, Align.MAX)
+        block = Box(120, 40, 50, align=up)
+        block -= Pos(-30, 0, 50) * Cylinder(5, 20, align=down)                 # ⌀10, 20 deep
+        block -= Pos(-30, 0, 30) * Rot(90, 0, 0) * Cylinder(2, 60)             # ⌀4 across, on the level of its floor
+        block -= Pos(30, 0, 50) * Cylinder(4, 15, align=down)                  # ⌀8, 15 deep
+        pocket = Box(40, 20, 6, align=(Align.CENTER, Align.MIN, Align.MIN))
+        block -= Pos(30, -20, 30) * pocket                                     # a pocket under half of it
+        found = {round(h.diameter): h for h in holes(block)}
+        for diameter, depth in ((10, 20.0), (8, 15.0)):
+            self.assertFalse(found[diameter].thru, f"⌀{diameter}: its floor is joined to its wall")
+            self.assertAlmostEqual(found[diameter].depth, depth, places=6)
+            self.assertIsNone(found[diameter].end, "a flat floor, whatever is cut through it")
+        self.assertTrue(found[4].thru, "the cross hole leaves the block at both ends")
+
+    def test_a_hole_ending_inside_a_bore_across_it_is_no_depth_to_a_floor_and_not_thru(self) -> None:
+        from build123d import Align, Box, Cylinder, Pos, Rot
+        from cad._internal.drawing_features import holes
+
+        corner = (Align.MIN, Align.MIN, Align.MIN)
+        # A ⌀10 bore along X at y = 20; a ⌀6 hole from the front, drilled 20 deep to its axis.
+        block = Box(60, 40, 30, align=corner) - Pos(30, 20, 15) * Rot(0, 90, 0) * Cylinder(5, 60)
+        block -= Pos(30, 0, 15) * Rot(-90, 0, 0) * Cylinder(3, 20, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        found = {round(h.diameter): h for h in holes(block)}
+        self.assertTrue(found[10].thru)
+        self.assertFalse(found[6].thru, "it does not leave the block along its own axis")
+        self.assertAlmostEqual(found[6].depth, 15.0, places=4, msg="where its whole section ends: the bore's near side")
+        self.assertEqual(found[6].end[0], "cavity")
+        self.assertAlmostEqual(found[6].end[2], 10.0, places=4, msg="the bore's far wall is that far past it")
+
 
 def _two_circles():
     """A ⌀120 flange with a ⌀20 bore: six ⌀5 holes on ⌀60, eight more on ⌀100, and

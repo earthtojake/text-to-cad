@@ -91,9 +91,10 @@ class Hole:
     problem: str | None = None
     #: What a blind hole's depth does not say about its end, when its end is
     #: neither a flat floor nor a drill point: ``("ball", radius, beyond)`` for a
-    #: ball end of that radius, or ``("other", 0.0, beyond)`` for any other form,
-    #: ``beyond`` being how far the end runs past ``depth`` on the centre line. A
-    #: callout has no symbol for it, so the report asks for a note.
+    #: ball end of that radius, ``("cavity", 0.0, beyond)`` for a hole that ends
+    #: inside a bore drilled across it, or ``("other", 0.0, beyond)`` for any
+    #: other form, ``beyond`` being how far the end runs past ``depth`` on the
+    #: centre line. A callout has no symbol for it, so the report asks for a note.
     end: tuple[str, float, float] | None = None
     #: The bolt circle the hole is on, as (its diameter, its centre), or None: six
     #: holes on ⌀60 and eight of the same size on ⌀100 are two patterns, each a
@@ -296,24 +297,34 @@ def _chains(segments: list[_Segment]) -> list[list[_Segment]]:
 
 
 class _Ends:
-    """Whether a hole's or a slot's end is closed, read off the faces its wall
-    runs into there.
+    """What a hole's or a slot's end is, read off the faces its wall runs into
+    there.
 
-    A wall ends at an edge, and the face on the other side of that edge says
-    what the end is. A floor lies inside the feature's own section: a flat
-    bottom, the fillet round it, a ball, a cone are all within the bore's
-    radius of its axis (within a slot's outline). Anything else reaches out
-    past the wall -- the face the hole breaks out through, a cavity's wall, a
-    cross hole -- and the feature leaves the material there: it is open, and a
-    hole open at both ends is THRU.
+    A wall ends at an edge, and the faces on the other side of that edge say
+    what the end is:
 
-    How far away the next wall stands does not come into it. It used to: an end
+    - a **floor**, where any of them lies inside the feature's own section: a
+      flat bottom, the fillet round it, a ball, a cone are all within the bore's
+      radius of its axis (within a slot's outline). A floor closes the end
+      whatever else is joined there too: a cross hole on the level of the floor,
+      or a pocket that takes half the floor away, opens the end sideways, and a
+      hole that opens sideways still has its depth;
+    - a way **out**, where none of them does and nothing they belong to stands
+      ahead: the face the hole breaks out through, the wall of a gap or a
+      cavity. The feature leaves the material it is in along its own axis, and
+      a hole open so at both ends is THRU, however near the next wall stands;
+    - a **cavity**, where none of them is a floor but the surface the wall runs
+      into curves round ahead of it: a hole that ends inside a larger bore
+      drilled across it. It has no floor and it does not leave the part along
+      its axis, so it is neither a depth to a floor nor THRU: its depth is where
+      its full diameter ends, and what it runs into is said beside it.
+
+    How far away the next wall stands does not come into it. It once did: an end
     was open when the air past it met no face within one bore diameter, a bound
     put there so that a blind hole with a filleted or ball floor, which has air
     just past where its straight wall stops, did not read THRU. That bound made
     a hole through a wall into a gap narrower than itself read blind, as deep
-    as the wall is thick. The floor is told from the far wall by what it is
-    joined to, not by its distance.
+    as the wall is thick.
     """
 
     def __init__(self, shape) -> None:
@@ -333,15 +344,24 @@ class _Ends:
             self._points[beyond] = points
         return self._points[beyond]
 
-    def closed(self, segments, own, d, foot, end: float, far: float, within) -> bool | None:
-        """Whether the end at ``end`` along the line (``d``, ``foot``) of the wall
-        ``segments`` (whose other end is toward ``far``) is closed: every face
-        joined to the wall there lies ``within`` the feature's section. ``own`` are
-        the feature's own faces, which are not what it runs into. None when the
-        wall has no edge of its own at that end (a cone that closes to a point)."""
+    def joined(self, segments, own, d, foot, end: float, far: float, within) -> tuple[str | None, list, float, bool]:
+        """What the end at ``end`` along the line (``d``, ``foot``) of the wall
+        ``segments`` (whose other end is toward ``far``) runs into: ``"floor"``
+        when a face joined to the wall there lies ``within`` the feature's
+        section, ``"open"`` when faces are joined there and none does, None when
+        the wall has no edge of its own at that end (a cone that closes to a
+        point). With it, the faces joined there that reach out past the section;
+        where along the line the wall's whole section ends (at ``end`` for a
+        wall cut square, short of it where what it runs into cuts it on a slant:
+        a bore across it); and whether a floor joined there is flat, square to
+        the line. ``own`` are the feature's own faces, which are not what it
+        runs into."""
+        from OCP.BRepAdaptor import BRepAdaptor_Surface
+        from OCP.GeomAbs import GeomAbs_Plane
+
         if self._ancestors is None:
             self._ancestors = _edge_faces(self.shape)
-        seen = False
+        floor, flat, outside, whole = False, False, [], end
         for segment in segments:
             for face in segment.faces:
                 for edge in face.edges():
@@ -355,10 +375,56 @@ class _Ends:
                     for other in _others(self._ancestors, edge, face):
                         if any(other.IsSame(mine.wrapped) for mine in own):
                             continue
-                        seen = True
-                        if not all(within(point) for point in self._reach(other)):
-                            return False
-        return True if seen else None
+                        if all(within(point) for point in self._reach(other)):
+                            floor = True
+                            surface = BRepAdaptor_Surface(other)
+                            if surface.GetType() == GeomAbs_Plane:
+                                normal = surface.Plane().Axis().Direction()
+                                square = abs(normal.X() * d[0] + normal.Y() * d[1] + normal.Z() * d[2])
+                                flat = flat or abs(square - 1) < 1e-9
+                        elif not any(other.IsSame(seen) for seen in outside):
+                            outside.append(other)
+        if outside and not floor:
+            # Where the whole section ends: the point of the edges shared with what
+            # the wall runs into that lies nearest the wall's other end.
+            for segment in segments:
+                for face in segment.faces:
+                    for edge in face.edges():
+                        if not any(other.IsSame(seen) for other in _others(self._ancestors, edge, face)
+                                   for seen in outside):
+                            continue
+                        near = _nearest_along(edge, d, foot, far)
+                        if abs(near - far) < abs(whole - far):
+                            whole = near
+        return ("floor" if floor else "open" if outside else None), outside, whole, flat
+
+    def closed(self, segments, own, d, foot, end: float, far: float, within) -> bool | None:
+        """Whether the end is closed by a floor (see :meth:`joined`): None when the
+        wall has no edge of its own there."""
+        kind, _outside, _whole, _flat = self.joined(segments, own, d, foot, end, far, within)
+        return None if kind is None else kind == "floor"
+
+
+def _nearest_along(edge, d, foot, far: float) -> float:
+    """The position along the line (``d``, ``foot``) of the point of ``edge``
+    nearest ``far``: its samples, then the stretch round the nearest of them
+    searched down."""
+    def along(t: float) -> float:
+        return sum((c - f) * k for c, f, k in zip(tuple(edge.position_at(t)), foot, d))
+
+    def gap(t: float) -> float:
+        return abs(along(t) - far)
+
+    steps = 32
+    best = min(range(steps + 1), key=lambda i: gap(i / steps))
+    lo, hi = max(0.0, (best - 1) / steps), min(1.0, (best + 1) / steps)
+    for _round in range(40):
+        a, b = lo + (hi - lo) / 3, hi - (hi - lo) / 3
+        if gap(a) < gap(b):
+            hi = b
+        else:
+            lo = a
+    return along((lo + hi) / 2)
 
 
 class _Ray:
@@ -389,6 +455,14 @@ class _Ray:
         self.cast.Perform(gp_Lin(gp_Pnt(*start), gp_Dir(*direction)), _PROBE, 1e9)
         hits = [self.cast.WParameter(i) for i in range(1, self.cast.NbPnt() + 1)]
         return min(hits) if hits else None
+
+    def first(self, start, direction):
+        """The first face of the part along ``direction`` from ``start``, or None."""
+        from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
+
+        self.cast.Perform(gp_Lin(gp_Pnt(*start), gp_Dir(*direction)), _PROBE, 1e9)
+        hits = [(self.cast.WParameter(i), i) for i in range(1, self.cast.NbPnt() + 1)]
+        return self.cast.Face(min(hits)[1]) if hits else None
 
 
 def _perpendicular(d) -> tuple[tuple, tuple]:
@@ -553,20 +627,33 @@ def _read_chain(chain: list[_Segment], d, foot, at, air, ray: _Ray, fillets, end
     narrowest = min(s.r_lo for s in cylinders)
     own = [face for seg in chain for face in seg.faces]
 
-    def is_open(seg: _Segment, end: float, far: float, radius: float, direction) -> bool:
+    def end_of(seg: _Segment, end: float, far: float, radius: float, direction) -> tuple[str, float, bool]:
+        """What the chain's end is (:class:`_Ends`): ``"floor"``, ``"out"`` or
+        ``"cavity"``; where along the line its whole section ends; and whether
+        its floor is flat."""
         def within(point) -> bool:
             rel = tuple(p - f for p, f in zip(point, foot))
             along = sum(a * b for a, b in zip(rel, d))
             return math.sqrt(max(0.0, sum(c * c for c in rel) - along * along)) <= radius + _TOUCH
 
-        closed = ends.closed([seg], own, d, foot, end, far, within)
-        if closed is None:
-            start = at(end + _PROBE * (1 if end > far else -1))
-            return ray.open(tuple(start), direction, 2 * narrowest)
-        return not closed
+        kind, outside, whole, flat = ends.joined([seg], own, d, foot, end, far, within)
+        past = end + _PROBE * (1 if end > far else -1)
+        if kind is None:
+            return ("out" if ray.open(tuple(at(past)), direction, 2 * narrowest) else "floor"), end, False
+        if kind == "floor":
+            return "floor", end, flat
+        # No floor: a way out, unless what the wall runs into stands ahead of it too.
+        # Asked along five lines down the bore, so one that runs on into a hole
+        # drilled further in does not decide it.
+        starts = [(0.0, 0.0)] + [(0.6 * radius * math.cos(t), 0.6 * radius * math.sin(t))
+                                 for t in (0.4, 2.0, 3.5, 5.1)]
+        ahead = [ray.first(tuple(at(past, x, y)), direction) for x, y in starts]
+        closing = sum(1 for face in ahead if face is not None and any(_same_surface(face, seen) for seen in outside))
+        return ("cavity" if 2 * closing > len(starts) else "out"), whole, False
 
-    open_lo = is_open(chain[0], lo, chain[0].hi, chain[0].r_lo, tuple(-c for c in d))
-    open_hi = is_open(chain[-1], hi, chain[-1].lo, chain[-1].r_hi, d)
+    end_lo, whole_lo, flat_lo = end_of(chain[0], lo, chain[0].hi, chain[0].r_lo, tuple(-c for c in d))
+    end_hi, whole_hi, flat_hi = end_of(chain[-1], hi, chain[-1].lo, chain[-1].r_hi, d)
+    open_lo, open_hi = end_lo == "out", end_hi == "out"
     if not (open_lo or open_hi):
         return "sealed"  # a sealed void, not something a drill makes
     thru = open_lo and open_hi
@@ -620,7 +707,19 @@ def _read_chain(chain: list[_Segment], d, foot, at, air, ray: _Ray, fillets, end
         wall = max(from_mouth(deepest.lo), from_mouth(deepest.hi))
         bottom = deepest.lo if from_hi else deepest.hi
         below = ordered[ordered.index(deepest) + 1:]
-        depth, end = _blind_end(wall, narrowest, bottom, below, fillets, mouth, axis, ray)
+        if (end_lo if from_hi else end_hi) == "cavity":
+            # It ends inside a bore drilled across it: no floor to measure to, and
+            # no way out along its axis. Its depth is where its whole section ends,
+            # and the report says what it runs into.
+            depth = from_mouth(whole_lo if from_hi else whole_hi)
+            tip = ray.depth(mouth, axis)
+            end = ("cavity", 0.0, max(0.0, (tip if tip is not None else wall) - depth))
+        elif (flat_lo if from_hi else flat_hi) and not below:
+            # A flat floor joined to the wall is the depth, whatever is cut through
+            # it: a cross hole on its level, a pocket that takes half of it away.
+            depth = wall
+        else:
+            depth, end = _blind_end(wall, narrowest, bottom, below, fillets, mouth, axis, ray)
     return Hole(
         mouth=_tidy(mouth), axis=_tidy(axis), diameter=2 * narrowest, thru=thru, depth=depth,
         cbore=mouth_end[1] if mouth_end and mouth_end[0] == "cbore" else None,
@@ -660,10 +759,10 @@ def _blind_end(wall: float, radius: float, bottom: float, below: list[_Segment],
         if (min(abs(lo - bottom), abs(hi - bottom)) < 1e-6 and abs(r_max - radius) < 1e-6 and r_min > 1e-6
                 and abs((hi - lo) - beyond) < 1e-6 and not below):
             return tip, None  # a flat floor, filleted into the wall
+    u, _v = _perpendicular(axis)
     if not below and abs(beyond - radius) < 1e-6:
         # A hemisphere of the bore's own radius: 0.6 of the way out from the centre
         # line it is 0.8 of its radius deep.
-        u, _v = _perpendicular(axis)
         off = ray.depth(tuple(m + 0.6 * radius * c for m, c in zip(mouth, u)), axis)
         if off is not None and abs(off - wall - 0.8 * radius) < 1e-4:
             return wall, ("ball", radius, beyond)
@@ -1451,6 +1550,15 @@ def _surface_key(face) -> tuple | None:
     d, foot = _canonical((ax.Direction().X(), ax.Direction().Y(), ax.Direction().Z()),
                          (ax.Location().X(), ax.Location().Y(), ax.Location().Z()))
     return ("cyl" if kind == GeomAbs_Cylinder else "torus",) + _line_key(d, foot) + radii
+
+
+def _same_surface(a, b) -> bool:
+    """Whether two faces are one face, or two pieces of one cylinder or torus (a
+    bore's wall, which a kernel may hold as two half faces)."""
+    if a.IsSame(b):
+        return True
+    key = _surface_key(a)
+    return key is not None and key == _surface_key(b)
 
 
 def _blend_faces(shape) -> list[tuple]:

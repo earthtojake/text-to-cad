@@ -59,6 +59,29 @@ class BlindEndReportTests(unittest.TestCase):
         lines = _report(self._sheet("SPHERICAL R4"))
         self.assertFalse([line for line in lines if "ends in a ball" in line], lines)
 
+    def test_a_hole_ending_inside_a_bore_across_it_is_reported(self) -> None:
+        from build123d import Align, Box, Cylinder, Pos, Rot
+        from cad.eng_drawing import Sheet
+
+        corner = (Align.MIN, Align.MIN, Align.MIN)
+        block = Box(60, 40, 30, align=corner) - Pos(30, 20, 15) * Rot(0, 90, 0) * Cylinder(5, 60)
+        block -= Pos(30, 0, 15) * Rot(-90, 0, 0) * Cylinder(3, 20, align=(Align.CENTER, Align.CENTER, Align.MIN))
+
+        def lines(note: str | None) -> list[str]:
+            sheet = Sheet("A3", 1.0)
+            _top, front, right = sheet.three_views(block)
+            front.holes()
+            right.holes()
+            if note:
+                front.note(note, (30, 0, 15))
+            return [line for line in _report(sheet) if "drilled across it" in line]
+
+        said = lines(None)
+        self.assertEqual(len(said), 1, said)
+        self.assertIn("⌀6 ↧15 ends inside a bore drilled across it", said[0])
+        self.assertNotIn("THRU ends", said[0])
+        self.assertEqual(lines("⌀6 THRU TO ⌀10 BORE"), [], "a note naming the hole states it")
+
 
 def _round_cuts():
     """A 100 x 60 x 12 plate with three round cuts no hole callout reads: a bore
