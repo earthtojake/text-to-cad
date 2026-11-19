@@ -3609,14 +3609,101 @@
    "description": 134
   },
   {
-   "command": "cad delete",
-   "summary": "delete documents: record, cached document, the engine's copy",
-   "usage": "cad delete [--dry-run] [--yes] [--json] DOC [DOC ...]",
+   "command": "cad config",
+   "summary": "show or change the settings an environment variable overrides: list, get, set, unset",
+   "usage": "cad config [--json] {list,get,set,unset} ...",
    "description": 135,
    "arguments": [
     {
+     "name": "{list,get,set,unset} ...",
+     "choices": [
+      "list",
+      "get",
+      "set",
+      "unset"
+     ]
+    }
+   ],
+   "options": [
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 136
+    }
+   ]
+  },
+  {
+   "command": "cad config list",
+   "summary": "every setting: its value in effect, where that came from, and its variable",
+   "usage": "cad config list [--json]",
+   "description": 137,
+   "options": [
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 138
+    }
+   ]
+  },
+  {
+   "command": "cad config get",
+   "summary": "one setting's value in effect, and where it came from",
+   "usage": "cad config get [--json] KEY",
+   "description": 139,
+   "arguments": [
+    {
+     "name": "KEY",
+     "help": 140
+    }
+   ],
+   "options": [
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 141
+    }
+   ]
+  },
+  {
+   "command": "cad config set",
+   "summary": "save a setting's value",
+   "usage": "cad config set KEY VALUE",
+   "description": 142,
+   "arguments": [
+    {
+     "name": "KEY",
+     "help": 140
+    },
+    {
+     "name": "VALUE",
+     "help": 143
+    }
+   ]
+  },
+  {
+   "command": "cad config unset",
+   "summary": "remove a setting's saved value, so its default holds",
+   "usage": "cad config unset KEY",
+   "description": 144,
+   "arguments": [
+    {
+     "name": "KEY",
+     "help": 140
+    }
+   ]
+  },
+  {
+   "command": "cad delete",
+   "summary": "delete documents: record, cached document, the engine's copy",
+   "usage": "cad delete [--dry-run] [--yes] [--json] DOC [DOC ...]",
+   "description": 145,
+   "arguments": [
+    {
      "name": "DOC",
-     "help": 136,
+     "help": 146,
      "repeatable": true
     }
    ],
@@ -3625,20 +3712,20 @@
      "flags": [
       "--dry-run"
      ],
-     "help": 137
+     "help": 147
     },
     {
      "flags": [
       "-y",
       "--yes"
      ],
-     "help": 138
+     "help": 148
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 139
+     "help": 149
     }
    ]
   },
@@ -3646,19 +3733,19 @@
    "command": "cad doctor",
    "summary": "report this cad, its folders, its kernel and the server; it changes nothing",
    "usage": "cad doctor [--check] [--json]",
-   "description": 140,
+   "description": 150,
    "options": [
     {
      "flags": [
       "--check"
      ],
-     "help": 141
+     "help": 151
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 142
+     "help": 152
     }
    ]
   },
@@ -3666,13 +3753,13 @@
    "command": "cad mcp",
    "summary": "serve the CAD app to the agent app that starts it, over MCP on stdin and stdout",
    "usage": "cad mcp",
-   "description": 143
+   "description": 153
   },
   {
    "command": "cad plugin",
    "summary": "the plugin: `update` it now; `update auto`: whether cad's updates do",
    "usage": "cad plugin {update} ...",
-   "description": 144,
+   "description": 154,
    "arguments": [
     {
      "name": "{update} ...",
@@ -3686,7 +3773,7 @@
    "command": "cad plugin update",
    "summary": "run the install command, which installs or updates the plugin in every agent app it finds; `update auto` shows or changes whether cad's updates run it",
    "usage": "cad plugin update [auto [{status,on,off}]]",
-   "description": 145,
+   "description": 155,
    "arguments": [
     {
      "name": "{auto} ...",
@@ -3700,7 +3787,7 @@
    "command": "cad plugin update auto",
    "summary": "show or change whether cad's updates run the install command",
    "usage": "cad plugin update auto [{status,on,off}]",
-   "description": 146,
+   "description": 156,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3717,13 +3804,13 @@
    "command": "cad run",
    "summary": "run a script (or -m, -c) as uv run does, cad pinned at this device's release with the integrations its imports use",
    "usage": "cad run [uv run's options] SCRIPT.py [ARGS...] | -m MODULE [ARGS...] | -c CODE [ARGS...] | COMMAND [ARGS...]",
-   "description": 147
+   "description": 157
   },
   {
    "command": "cad server",
    "summary": "the cad server: start, stop, status",
    "usage": "cad server [--rotate-token] [--yes] {start,stop,status} ...",
-   "description": 148,
+   "description": 158,
    "arguments": [
     {
      "name": "{start,stop,status} ...",
@@ -3739,14 +3826,14 @@
      "flags": [
       "--rotate-token"
      ],
-     "help": 149
+     "help": 159
     },
     {
      "flags": [
       "-y",
       "--yes"
      ],
-     "help": 150
+     "help": 160
     }
    ]
   },
@@ -3754,20 +3841,20 @@
    "command": "cad server start",
    "summary": "start the cad server where it is not running",
    "usage": "cad server start [--port PORT] [--foreground]",
-   "description": 151,
+   "description": 161,
    "options": [
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 152
+     "help": 162
     },
     {
      "flags": [
       "--foreground"
      ],
-     "help": 153
+     "help": 163
     }
    ]
   },
@@ -3780,7 +3867,7 @@
      "flags": [
       "--json"
      ],
-     "help": 154
+     "help": 164
     }
    ]
   },
@@ -3793,7 +3880,7 @@
      "flags": [
       "--json"
      ],
-     "help": 155
+     "help": 165
     }
    ]
   },
@@ -3801,7 +3888,7 @@
    "command": "cad telemetry",
    "summary": "show or change the usage stats and crash reports CAD sends: status, on, off",
    "usage": "cad telemetry [{status,on,off}]",
-   "description": 156,
+   "description": 166,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3818,7 +3905,7 @@
    "command": "cad update",
    "summary": "update cad now to the newest release of its major version (`--major`: of all); `update auto`: whether it does so itself",
    "usage": "cad update [--major]\ncad update auto [{status,on,off}]",
-   "description": 157,
+   "description": 167,
    "arguments": [
     {
      "name": "{auto} ...",
@@ -3832,7 +3919,7 @@
      "flags": [
       "--major"
      ],
-     "help": 158
+     "help": 168
     }
    ]
   },
@@ -3840,7 +3927,7 @@
    "command": "cad update auto",
    "summary": "show or change whether cad updates itself: status, on, off",
    "usage": "cad update auto [{status,on,off}]",
-   "description": 159,
+   "description": 169,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3857,11 +3944,11 @@
    "command": "cad viewer",
    "summary": "open a viewer page on the running cad server",
    "usage": "cad viewer [--host HOST] [--port PORT] [--json] [--no-open] [--dist DIST] [--api-only] [FILE ...]",
-   "description": 160,
+   "description": 170,
    "arguments": [
     {
      "name": "FILE",
-     "help": 161,
+     "help": 171,
      "optional": true,
      "repeatable": true
     }
@@ -3872,39 +3959,39 @@
       "--host"
      ],
      "metavar": "HOST",
-     "help": 162
+     "help": 172
     },
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 163
+     "help": 173
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 164
+     "help": 174
     },
     {
      "flags": [
       "--no-open"
      ],
-     "help": 165
+     "help": 175
     },
     {
      "flags": [
       "--dist"
      ],
      "metavar": "DIST",
-     "help": 166
+     "help": 176
     },
     {
      "flags": [
       "--api-only"
      ],
-     "help": 167
+     "help": 177
     }
    ]
   }
@@ -4045,6 +4132,16 @@
   "Print where cad's cache is.",
   "Remove what this release of cad cannot use: environments made for other releases, and the release folders of 0.11.11 and earlier.",
   "Remove all of cad's cache, and what prune removes; cad makes it again as it needs it. Refused while the cad server runs.",
+  "Show or change the settings cad keeps for this computer: the server's limits and port, and the programs and folders its integrations use. Each one's environment variable, where it is set, overrides it.",
+  "the answer as one JSON document (list, get)",
+  "Every setting: its key, its value in effect, where that came from (environment, saved, default), and the variable that overrides it.",
+  "the settings as one JSON document",
+  "One setting's value in effect, where it came from, and its variable.",
+  "the setting's key, or its variable's name",
+  "the setting as one JSON document",
+  "Save a setting's value, checked first: its variable, where it is set, overrides it.",
+  "the value to save",
+  "Remove a setting's saved value, so its default holds where its variable is unset.",
   "delete documents: each one's record and its document in the engine's cache, and what the engine holds of it; never a file of yours",
   "a document's id, a model's script (every document recorded of it), or a CAD file a page opened; your own files -- a script, its declared files, an opened file -- are never touched",
   "say which documents would be deleted, and how many, and delete nothing",

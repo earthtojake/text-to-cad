@@ -27,6 +27,7 @@ from tests.python.support.paths import add_sources, repo_path
 add_sources()
 
 from cad._internal import environment, programs  # noqa: E402
+from cad.engine import places  # noqa: E402
 
 SOURCE = Path(repo_path("packages/cad/src"))
 TABLE = SOURCE / "cad" / "_internal" / "environment.py"
@@ -90,6 +91,29 @@ class EnvironmentVariables(unittest.TestCase):
         self.assertIn(environment.table(), section, "run `python -m cad._internal.environment` and paste its table")
         public = {row.name for row in environment.named(environment.PUBLIC)}
         self.assertEqual(set(ANY.findall(section)) - {"CAD_ENGINE"}, public)
+
+    def test_every_setting_is_public_of_a_kind_and_keyed_by_the_one_rule(self) -> None:
+        settings = environment.settings()
+        # Ten today (the server's limits and port, and three of integrations); a new integration adds its own by
+        # declaring it, with no change here.
+        self.assertGreaterEqual(len(settings), 10, "the sweep found almost no setting")
+        for row in settings:
+            with self.subTest(variable=row.name):
+                self.assertEqual(row.tier, environment.PUBLIC)
+                self.assertIn(row.kind, environment.KINDS)
+                self.assertEqual(row.key, row.name.removeprefix("CAD_").lower())
+                self.assertEqual(row.key, places.setting_key(row.name), "the engine reads it under the same key")
+                self.assertIs(environment.setting(row.key), row)
+                self.assertIs(environment.setting(row.name), row)
+                self.assertIn(f"| `{row.name}` | `{row.key}` |", environment.table())
+        for row in environment.VARIABLES.values():
+            if not row.setting:
+                self.assertEqual((row.key, row.kind, row.at_start), ("", "", False))
+        # One set of words for where a value came from and where it is kept, the engine's and the table's.
+        self.assertEqual((environment.ENVIRONMENT, environment.SAVED, environment.DEFAULT, environment.SECTION),
+                         (places.ENVIRONMENT, places.SAVED, places.DEFAULT, places.CONFIG))
+        for name in ("CAD_STATE_DIR", "CAD_CACHE_DIR", "CAD_ENGINE_DIR", "CAD_TELEMETRY", "CAD_UPDATE_CHECK"):
+            self.assertFalse(environment.VARIABLES[name].setting, f"{name} stays the environment's alone")
 
     def test_a_skill_names_only_public_variables(self) -> None:
         public = {row.name for row in environment.named(environment.PUBLIC)}

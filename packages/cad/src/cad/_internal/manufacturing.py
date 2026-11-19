@@ -580,11 +580,12 @@ WATCH_SECONDS = 1.0
 _STOPPED = {
     "over_time": "the manufacturing check was stopped after {seconds:.0f} s, over a check's time limit of "
                  "{limit:g} s: nothing was measured. Check a smaller part or fewer samples, or raise the limit "
-                 "(CAD_ENGINE_CHECK_SECONDS, in this environment; 0 for none)",
+                 "(with `cad config set engine_check_seconds N`, 0 for none; CAD_ENGINE_CHECK_SECONDS in this "
+                 "environment overrides it)",
     "over_memory": "the manufacturing check was stopped with its process at {resident:.0f} MB, over a check's "
                    "memory limit of {limit:.0f} MB: nothing was measured. The part may be too large to check on "
-                   "this machine; check a smaller part, or raise the limit (CAD_ENGINE_CHECK_RSS_MB, in this "
-                   "environment; 0 for none)",
+                   "this machine; check a smaller part, or raise the limit (with `cad config set engine_check_rss_mb "
+                   "N`, 0 for none; CAD_ENGINE_CHECK_RSS_MB in this environment overrides it)",
     "process_lost": "the process measuring the manufacturing check exited ({code}) before it answered{why}: "
                     "nothing was measured",
 }

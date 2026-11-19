@@ -37,8 +37,8 @@ TYPES = {
     "kicad_pcb": ("export", "snapshot", "inspect", "drc"),
     "kicad_sch": ("export", "snapshot", "inspect", "erc"),
 }
-COMMANDS = ("serve", "status", "stop", "delete", "server", "mcp", "run", "requirement", "doctor", "cache", "setup",
-            "viewer", "telemetry", "update", "plugin")
+COMMANDS = ("serve", "status", "stop", "delete", "server", "mcp", "run", "requirement", "doctor", "cache", "config",
+            "setup", "viewer", "telemetry", "update", "plugin")
 # Run, never listed by `cad --help`: the bridge's (0.10.0 to 0.11.11's skill text and updaters), and the commands for
 # programs rather than people.
 UNLISTED = ("status", "stop", "setup", "serve", "requirement")

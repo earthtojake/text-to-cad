@@ -38,7 +38,6 @@ The standard library alone: the server and the library both read it.
 
 from __future__ import annotations
 
-import json
 import math
 import os
 import re
@@ -51,10 +50,10 @@ __all__ = ["DEFAULT", "DEPRECATED", "DEVELOPMENT", "ENVIRONMENT", "INTERNAL", "K
 
 PUBLIC, DEVELOPMENT, INTERNAL, DEPRECATED = "public", "development", "internal", "deprecated"
 TIERS = (PUBLIC, DEVELOPMENT, INTERNAL, DEPRECATED)
-#: Where a value in effect came from (``resolved``).
+#: Where a value in effect came from (``resolved``), and the section of ``settings.json`` the saved values are kept
+#: in: the engine's own words (``cad.engine.places``), which its modules read a setting by.
 ENVIRONMENT, SAVED, DEFAULT = "environment", "saved", "default"
 SOURCES = (ENVIRONMENT, SAVED, DEFAULT)
-#: The section of ``settings.json`` the saved values are kept in.
 SECTION = "config"
 #: The values a setting takes, by its kind, as ``check`` says them when it refuses one.
 KINDS = {
@@ -90,7 +89,7 @@ class Variable:
     def key(self) -> str:
         """The setting's key, from the variable's name by the one rule: without ``CAD_``, in lower case; "" for a
         variable that is no setting."""
-        return self.name.removeprefix("CAD_").lower() if self.setting else ""
+        return self.name.removeprefix("CAD_").lower() if self.setting else ""  # places.setting_key's rule
 
 
 def _table(*rows: Variable) -> dict[str, Variable]:
@@ -234,36 +233,24 @@ def check(row: Variable, text: str) -> str:
 
 
 def saved() -> dict[str, str]:
-    """The saved settings, by key: the ``config`` section of ``settings.json`` in the state folder
-    (``cad.engine.places.state_dir``), its text values (a number written by hand is read as its text). Never
-    raises: a file that is missing, unreadable or malformed, or a section that is not an object, saves nothing,
-    as it would be read with no settings kept at all."""
-    try:
-        from cad.engine.places import state_dir
+    """The saved settings, by key (``cad.engine.places.saved_settings``, which never raises: a file it cannot read
+    saves nothing)."""
+    from cad.engine.places import saved_settings
 
-        with open(state_dir() / "settings.json", encoding="utf-8") as handle:
-            section = json.load(handle).get(SECTION)
-    except (OSError, ValueError, AttributeError):
-        return {}
-    if not isinstance(section, dict):
-        return {}
-    return {key: str(found) for key, found in section.items()
-            if isinstance(key, str) and isinstance(found, (str, int, float)) and not isinstance(found, bool)}
+    return saved_settings()
 
 
 def resolved(name: str) -> tuple[str, str]:
     """The value of the variable ``name`` in effect and where it came from (``SOURCES``): the environment's where it
     is set and not blank, as it is set; else, for a setting, the saved value where one is; else ``""``, which its
-    reader takes for its own default. Only a setting consults the saved file."""
-    row = VARIABLES[name]
+    reader takes for its own default. Only a setting consults the saved file (``cad.engine.places.setting``, which
+    the engine's own modules read by)."""
+    if VARIABLES[name].setting:
+        from cad.engine.places import setting as in_effect
+
+        return in_effect(name)
     given = os.environ.get(name, "")
-    if given.strip():
-        return given, ENVIRONMENT
-    if row.setting:
-        kept = saved().get(row.key, "")
-        if kept.strip():
-            return kept, SAVED
-    return "", DEFAULT
+    return (given, ENVIRONMENT) if given.strip() else ("", DEFAULT)
 
 
 def value(name: str) -> str:

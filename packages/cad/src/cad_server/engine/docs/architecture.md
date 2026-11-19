@@ -94,8 +94,9 @@ folder (`places.engine_dir`; **Starting and updating**): its door, lock and port
 
 **A link outlives its engine.** The port is the device's and the page token the user's, not one
 engine's (`daemon.bind`). A port named -- `--port` (`cad server --port`, or a `serve`/`viewer`
-request's), else `CAD_ENGINE_PORT` (0: any free port), read from the engine's own environment --
-is taken or refused. Else the engine's own port: 3245 (`daemon.DEFAULT_PORT`, 0xCAD) when it can, as
+request's), else `CAD_ENGINE_PORT` (0: any free port), read from the engine's own environment, else its
+saved setting (`cad config set engine_port N`) -- is taken or refused. Else the engine's own port: 3245
+(`daemon.DEFAULT_PORT`, 0xCAD) when it can, as
 Vite, Jupyter and Next.js take theirs; when another program holds it, the next free port
 (`daemon.PORTS_TRIED` above it, then any), which the engine remembers in its record and takes at
 every later start, whatever release it runs, so its links stay what they were. The start that rolls says so once, on the
@@ -196,7 +197,8 @@ on, unbound, for its other clients' builds and the next request that serves. Its
 (`CAD_ENGINE_PORT` in the environment it started in) fails that request with the line, and the
 engine, which can never serve, leaves its note (`places.failure_path`) and exits 1: `port 3245 is
 held by <name> (pid N): stop it, or start the server with another CAD_ENGINE_PORT` (`…or pass another
---port` for a port `--port` named).
+--port` for a port `--port` named, `…or name another with cad config set engine_port N and start the server
+again` for a port the saved setting named).
 
 The token is made at the first engine's start and every start serves with it: the engine's record,
 `engines/engine.json` in the state folder (`places.state_dir`), keeps the port it rolled to (`registry.Registry.engine`,

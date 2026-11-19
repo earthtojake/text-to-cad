@@ -361,9 +361,12 @@ renumbers the list and every citation in the same change.
     must know before it starts, a fact one of cad's processes hands the next, or another copy of a
     program an extra pins, for the computer the pinned one does not run on (`CAD_CCX`,
     `CAD_KICAD_CLI`). A choice a person keeps is a setting, and an input of one call is that call's
-    option. Every variable is declared
-    once with who sets it (`cad._internal.environment`: public, development, internal, deprecated),
-    only the public ones are named to a person or in a skill, and a test holds the table to the source.
+    option. A public variable that is configuration a person keeps (a limit or the port of the server, a
+    program or folders of an integration's) is also a saved setting, which the variable overrides: the
+    variable holds for one process, the setting for the computer (`cad config`). Every variable is declared
+    once with who sets it (`cad._internal.environment`: public, development, internal, deprecated), and a
+    setting by the same declaration (`setting=True`), which gives it its key, its check, its command and its
+    row; only the public ones are named to a person or in a skill, and a test holds the table to the source.
 
 
 ## Inspection

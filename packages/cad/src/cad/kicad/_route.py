@@ -387,7 +387,8 @@ def _rules(board: Any, names: Sequence[str]) -> tuple[Any, list[str]]:
         dru = _project_file(board, ".kicad_dru")
         if dru is not None and dru.is_file() and "(rule" in dru.read_text(encoding="utf-8", errors="replace"):
             raise ValueError(f"route keeps the board's custom rules ({dru.name}), and this KiCad cannot give them over "
-                             "its API: run the edit with kicode's kicad-cli (unset CAD_KICAD_CLI), or take the rules "
+                             "its API: run the edit with kicode's kicad-cli (`cad config unset kicad_cli`, with "
+                             "CAD_KICAD_CLI unset), or take the rules "
                              "out while routing") from None
         response = None
     custom = []

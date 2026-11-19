@@ -105,6 +105,9 @@ cad kicad_sch inspect SCHEMATIC [REF] [--json]
 cad kicad_sch snapshot SCHEMATIC OUT.png [--sheet PATH] [--border] [--display JSON] [...]
                                              one sheet drawn flat (the root unless --sheet names another)
 cad server start [--port N] [--foreground] | stop [--json] | status [--json]; cad server --rotate-token [--yes]
+cad config [list] [--json] | get KEY [--json] | set KEY VALUE | unset KEY
+                                             the settings an environment variable overrides (the server's
+                                             README, **Environment variables**); no server needed or started
 cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]
                                              each document deleted: its record, its document in the engine's
                                              cache and what the engine holds of it (**Delete**); never a
@@ -277,7 +280,8 @@ start one, a folder refused, its port held -- raises its `ConnectionError` or `E
 same way: left uncaught, its one line on stderr (`cad: <why>`, as a `cad` verb says it) and
 status 1, no traceback; caught, nothing said. Builds run in the daemon's warm workers, at most one per core alive
 (**The engine server and its workers**). `CAD_ENGINE_DIR` moves its door and lock; the client and the server resolve it alike (`places.engine_dir`: a `..`, a symlink or a trailing slash names the same folder). On POSIX the folder must be the user's own and closed to writing by anyone else (`places.folder_refusal`): whoever owns or can write the folder could take the door's place, so a client refuses to connect or start there and the daemon refuses to lock there, saying why.
-`CAD_ENGINE_MEMORY_MB` sets the server's memory budget (**Document lifetime**); the document
+`CAD_ENGINE_MEMORY_MB` (or `cad config set engine_memory_mb`) sets the server's memory budget
+(**Document lifetime**); the document
 cache has no size to set, keeping every document until a person deletes it
 (`CAD_ENGINE_CACHE_IDLE`, its idle seconds, is the tests' seam).
 `CAD_ENGINE_DEFAULT_PORT` stands in for 3245 as the default port (`daemon.default_port`): the

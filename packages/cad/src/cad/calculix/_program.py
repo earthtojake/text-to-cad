@@ -79,12 +79,11 @@ def _installed() -> list[Path]:
 
 
 def carried() -> bool:
-    """Whether this process can run CalculiX itself: ``CAD_CCX`` names one, or the ``cad-ccx`` package is installed here.
-    Else a study runs in the environment of ``cad[calculix]``."""
+    """Whether this process can run CalculiX itself: ``CAD_CCX`` (or its saved setting) names one, or the ``cad-ccx``
+    package is installed here. Else a study runs in the environment of ``cad[calculix]``."""
     import importlib.util
-    import os
 
-    return bool(os.environ.get(CCX_ENV, "").strip()) or importlib.util.find_spec("cad_ccx") is not None
+    return bool(programs._named_outright(CCX_ENV)) or importlib.util.find_spec("cad_ccx") is not None
 
 
 class _Ccx(programs.Program):

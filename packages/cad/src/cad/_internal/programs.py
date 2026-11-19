@@ -74,14 +74,28 @@ class Program:
 
 
 def _named_outright(variable: str) -> str:
-    """The program a variable names outright (``CAD_KICAD_CLI``, ``CAD_CCX``), "" when it names none. One the
-    registry of variables marks deprecated is said once a process, and still decides which program runs."""
+    """The program a variable names outright (``CAD_KICAD_CLI``, ``CAD_CCX``), else its saved setting (``cad
+    config``), "" when neither names one. One the registry of variables marks deprecated is said once a process,
+    and still decides which program runs."""
     from cad._internal import environment
 
     row = environment.VARIABLES.get(variable)
     if row is not None and row.tier == environment.DEPRECATED:
         return environment.deprecated(variable)
-    return os.environ.get(variable, "").strip()
+    if row is None:
+        return os.environ.get(variable, "").strip()
+    return environment.value(variable).strip()
+
+
+def _namer(variable: str) -> str:
+    """What named the program outright, as a refusal says it: the variable, or where it is unset, its saved
+    setting, which ``cad config unset`` forgets."""
+    from cad._internal import environment
+
+    row = environment.VARIABLES.get(variable)
+    if row is not None and row.setting and environment.resolved(variable)[1] == environment.SAVED:
+        return f"the saved setting {row.key} (`cad config unset {row.key}` forgets it)"
+    return variable
 
 
 def find(program: Program) -> Path:
@@ -89,13 +103,13 @@ def find(program: Program) -> Path:
     refused), else the program on ``PATH`` (``search_path``), else the one in its usual place."""
     explicit = _named_outright(program.override)
     if explicit:
-        path = Path(explicit).expanduser()
+        path, who = Path(explicit).expanduser(), _namer(program.override)
         if not program.is_named(path):
-            raise ProgramMissing(f"{program.override} names {path}, which is not {program.name}: name the "
+            raise ProgramMissing(f"{who} names {path}, which is not {program.name}: name the "
                                  f"program itself, never an app or a launcher; {program.install_hint}")
         if path.is_file():
             return path
-        raise ProgramMissing(f"{program.override} names {path}, which is not a file: {program.install_hint}")
+        raise ProgramMissing(f"{who} names {path}, which is not a file: {program.install_hint}")
     found = shutil.which(program.name) if program.search_path else None
     if found and program.is_named(Path(found)):
         return Path(found)

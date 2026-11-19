@@ -116,6 +116,10 @@ cad_server/
   [status|on|off]`**: whether the server runs it once where cad is newer than the release it last ended well for
   (below), off by default, kept by the server as `cad update auto` is. That is all cad knows of plugins.
 - **`cad telemetry [status|on|off]`**: the person's answer about usage stats and crash reports.
+- **`cad config [list|get KEY|set KEY VALUE|unset KEY]`**: the settings an environment variable overrides
+  (**Environment variables**): each with its value in effect and where that came from (`--json` for a
+  program); `set` checks a value before it saves it, and an unknown key is refused naming the keys. It writes
+  `settings.json`'s `config` section itself and never needs or starts a server.
 
 No command removes cad, and installing it is uv's (`uv tool install cad`, `uv tool uninstall cad`).
 Two commands can install it with uv where a computer has none: `cad mcp` run from uv's cache, which
@@ -249,26 +253,32 @@ once, as it starts, so a change takes a `cad server stop` and `cad server start`
 person sets: every variable cad reads is declared in one table, `cad._internal.environment`, with who sets it,
 and the others there are for a contributor's tests or pass between cad's own processes.
 
-| Variable | What it sets |
-| --- | --- |
-| `CAD_STATE_DIR` | The folder of the person's settings and the records of their documents |
-| `CAD_CACHE_DIR` | The folder of what cad can make again: built documents and the environments it installs |
-| `CAD_ENGINE_DIR` | The folder of the server's door and lock: one server runs per folder |
-| `CAD_ENGINE_PORT` | The server's HTTP port (0: any free one); `cad server start --port` says the same for one start |
-| `CAD_ENGINE_WORKERS` | The most model workers alive at once (default: the machine's cores) |
-| `CAD_ENGINE_WORKER_RSS_MB` | The memory the server's kernel processes may hold together, in MiB (default: a quarter of the machine's; 0: no cap) |
-| `CAD_ENGINE_MEMORY_MB` | The memory the server may hold documents in, in MiB (default: a quarter of the machine's) |
-| `CAD_ENGINE_CHECKS` | How many checks are measured at once (default: half the cores, one to four) |
-| `CAD_ENGINE_CHECK_SECONDS` | The longest one check may run before it is stopped (default: half an hour; 0: no limit) |
-| `CAD_ENGINE_CHECK_RSS_MB` | The most memory one check may take, in MiB (default: the kernel processes' cap; 0: no limit) |
-| `CAD_TELEMETRY` | 0: no usage counts from this process; 1: on, over the person's saved choice. DO_NOT_TRACK=1 turns it off too |
-| `CAD_UPDATE_CHECK` | 0: this server neither looks for a newer release nor installs one |
-| `CAD_KICAD_3DMODELS` | More folders a board's 3D models are read from, separated as PATH is |
-| `CAD_KICAD_CLI` | Another `kicad-cli` to check, export and edit boards with, in place of the one `cad[kicad]` brings (KiCad 9 or newer; a nightly's to edit) |
-| `CAD_CCX` | Another CalculiX `ccx` to solve studies with, in place of the one `cad[calculix]` brings (2.20 or newer) |
+A variable with a setting's key is also a setting kept for the computer, which `cad config` shows and changes
+(`cad config set engine_workers 4`), so it holds whichever shell, app or login item starts the server. What
+holds is, first, a command's own option where it has one (`cad server start --port`), then the variable, where
+it is set and not blank, then the saved setting, then the default.
+
+| Variable | Setting | What it sets |
+| --- | --- | --- |
+| `CAD_STATE_DIR` |  | The folder of the person's settings and the records of their documents |
+| `CAD_CACHE_DIR` |  | The folder of what cad can make again: built documents and the environments it installs |
+| `CAD_ENGINE_DIR` |  | The folder of the server's door and lock: one server runs per folder |
+| `CAD_ENGINE_PORT` | `engine_port` | The server's HTTP port (0: any free one); `cad server start --port` says the same for one start |
+| `CAD_ENGINE_WORKERS` | `engine_workers` | The most model workers alive at once (default: the machine's cores) |
+| `CAD_ENGINE_WORKER_RSS_MB` | `engine_worker_rss_mb` | The memory the server's kernel processes may hold together, in MiB (default: a quarter of the machine's; 0: no cap) |
+| `CAD_ENGINE_MEMORY_MB` | `engine_memory_mb` | The memory the server may hold documents in, in MiB (default: a quarter of the machine's) |
+| `CAD_ENGINE_CHECKS` | `engine_checks` | How many checks are measured at once (default: half the cores, one to four) |
+| `CAD_ENGINE_CHECK_SECONDS` | `engine_check_seconds` | The longest one check may run before it is stopped (default: half an hour; 0: no limit) |
+| `CAD_ENGINE_CHECK_RSS_MB` | `engine_check_rss_mb` | The most memory one check may take, in MiB (default: the kernel processes' cap; 0: no limit) |
+| `CAD_TELEMETRY` |  | 0: no usage counts from this process; 1: on, over the person's saved choice. DO_NOT_TRACK=1 turns it off too |
+| `CAD_UPDATE_CHECK` |  | 0: this server neither looks for a newer release nor installs one |
+| `CAD_KICAD_3DMODELS` | `kicad_3dmodels` | More folders a board's 3D models are read from, separated as PATH is |
+| `CAD_KICAD_CLI` | `kicad_cli` | Another `kicad-cli` to check, export and edit boards with, in place of the one `cad[kicad]` brings (KiCad 9 or newer; a nightly's to edit) |
+| `CAD_CCX` | `ccx` | Another CalculiX `ccx` to solve studies with, in place of the one `cad[calculix]` brings (2.20 or newer) |
 
 A variable exists only where nothing else can carry the value: a folder, a port or a limit a process must know
-before it starts. A choice kept between runs is a setting (`cad telemetry`, `cad update auto`). An integration
+before it starts. A choice kept between runs is a setting (`cad telemetry`, `cad update auto`, `cad config`). An
+integration
 runs the program its extra pins: `CAD_KICAD_CLI` and `CAD_CCX` name another only as a last resort, where the pinned
 one does not run on a computer.
 
