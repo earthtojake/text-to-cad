@@ -1,55 +1,34 @@
 # SRDF disabled collisions
 
-Disabled collisions are planning-safety data. Treat them as derived evidence, not as decorative XML.
-
-## Valid sources
-
-Use one of these sources:
-
-- adjacent-link policy from the URDF kinematic graph;
-- MoveIt Setup Assistant self-collision matrix generation;
-- sampled collision analysis from a known MoveIt configuration;
-- explicit user-provided collision matrix;
-- a manually reviewed pair with a specific rationale.
-
-Do not infer disabled collision pairs from visual theme or vague prose.
-
-## XML shape
+Read this when writing or changing `<disable_collisions>`. A planner never checks a disabled pair,
+so a wrong one hides a real collision: each pair comes from evidence, never from how the robot
+looks.
 
 ```xml
-<disable_collisions link1="base_link" link2="shoulder_link" reason="Adjacent"/>
+<disable_collisions link1="base_link" link2="shoulder_link" reason="Adjacent" />
 ```
 
-The current runtime requires:
+## Where a pair comes from
 
-- `link1` and `link2`;
-- both links to exist in the URDF;
-- distinct link names;
-- a non-empty `reason`;
-- no duplicate or reversed duplicate pairs.
+- **Adjacency**: two links one URDF joint joins, listed from the URDF's joints (a few lines of
+  script on a large robot).
+- **Sampling**: MoveIt Setup Assistant's self-collision matrix, or collision sampling in a known
+  MoveIt configuration, dense enough to cover the poses the task reaches.
+- **A matrix the person gives.**
+- **A pair reviewed by hand**, with what was reviewed written in its reason.
 
-## Reason and provenance
+A matrix goes stale when geometry, limits or group membership change: derive it again.
 
-Use truthful reasons. Examples:
+## What the validator reads in a reason
 
-| Reason | Typical source |
-|---|---|
-| `Adjacent` | URDF graph adjacency |
-| `Never` | Setup Assistant sampled matrix |
-| `Always` | Setup Assistant sampled matrix |
-| `Default` | Setup Assistant sampled matrix |
-| `Manual: tool fixture is outside workspace envelope` | Explicit human review |
+`cad srdf validate` requires a `reason` on every pair, and refuses a pair of one link with itself
+and a pair given twice, in either order. Then it reads the reason's words:
 
-The current parser classifies reasons into broad provenance buckets such as adjacent, sampled, setup assistant, manual, or assumed. Avoid `assumed` unless the user explicitly requested a provisional SRDF and the risk is reported.
+- One that contains `adjacent` is held to the URDF: a warning where no joint joins the two links.
+- One that contains none of `adjacent`, `never`, `always`, `default`, `sample`, `setup`, `assistant`
+  or `assum` counts as reasoned by hand (`User`, `Manual: fixture is outside the workspace`). 25 or
+  more of those warn: regenerate the matrix by sampling instead.
 
-## Review checklist
-
-Before committing a disabled collision pair:
-
-- Is the pair adjacent or sampled-safe?
-- Does disabling the pair hide a possible real collision during the planned task?
-- Was the pair generated with sufficient sampling density?
-- Is the pair still valid after geometry, limits, or group membership changed?
-- Was manual rationale written down?
-
-If many manual pairs are present, prefer regenerating the self-collision matrix with MoveIt Setup Assistant.
+So write the reason that is true: Setup Assistant's own word where it made the pair (`Adjacent`,
+`Never`, `Always`, `Default`), and `assumed` only where the person asked for a provisional SRDF and
+the report says so.
