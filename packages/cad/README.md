@@ -239,8 +239,8 @@ renumbers the list and every citation in the same change.
     arrives by itself with its migration guide. Four tiers, which hold within a major as across one:
 
     - **Tier 1, what an agent reads each session**: the skills, the commands' verbs and flags, the CAD
-      tools' arguments. Whatever the skills of the last 30 days used keeps working, hidden if need be,
-      and CI checks each release against that text. Past the window it is a hard cutover in any
+      tools' arguments. Whatever the skills of the last 30 days used keeps working, hidden if need be.
+      Past the window it is a hard cutover in any
       release: no alias, no shim, and no error that recognizes the old spelling.
       *Pressure-test*: a removed spelling fails exactly as a name that never existed.
     - **Tier 2, the library's public imports**: what a model script imports. Changed only when a

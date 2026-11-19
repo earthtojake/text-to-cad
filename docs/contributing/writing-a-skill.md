@@ -199,10 +199,9 @@ for word, and tests keep the copies from drifting:
   0.11.11 wrote. cad updates itself, so the block never has the agent update it. No skill runs the
   install script, and no skill pre-approves a tool (`allowed-tools`). A new skill copies the block
   from one beside it.
-- **Commands that last** (`tests/python/global/test_released_commands_still_parse.py`): every `cad`
-  command in the skills of every release from the last 30 days still parses with today's `cad`. A
-  command, an option or a spelling the skills stop using keeps working, hidden if need be, for 30
-  days after the release that stopped using it. Say so in the pull request that removes it.
+- **Commands that last** (no test holds this one): a command, an option or a spelling the skills
+  stop using keeps working, hidden if need be, for 30 days after the release that stopped using it.
+  Say so in the pull request that removes it.
 - **Show the model** (`tests/python/global/test_skill_show_the_model.py`): how to show the person what
   was made, in every skill that makes something they look at. It covers an agent with the CAD app's
   tools (`cad_show`) and one without (the page's link).

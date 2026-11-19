@@ -88,9 +88,8 @@ compatibility each keeps. This table says which slot a change in each tier takes
 
 - **Tier 1, the 30-day rule.** What the skills of any release in the last 30 days use keeps working,
   hidden if need be: a `cad` command, an option, a `--json` key, an exit status, an MCP tool or its
-  arguments. `tests/python/global/test_released_commands_still_parse.py` puts every `cad` command
-  those skills type through today's command line (commands and options, not keys, statuses or
-  tools). Past the window it may change or go in any release, a hard cutover and not a breaking
+  arguments. No test holds it: the change that removes one says which releases' skills used it.
+  Past the window it may change or go in any release, a hard cutover and not a breaking
   change. A person's own script that runs `cad` commands may then need an edit: the release notes say
   what changed.
 - **Tier 2 changes in two steps, and only the second breaks.** The rename keeps its alias for a

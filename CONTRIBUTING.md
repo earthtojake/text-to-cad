@@ -16,10 +16,7 @@ request.
 ## Local Checkout
 
 Branch from `main` and open the pull request against `earthtojake/text-to-cad:main`: from a branch of
-the repository with write access, otherwise from a fork. Clone with history and tags: the policy
-tests read the skills at every release tag of the last 30 days
-(`tests/python/global/test_released_commands_still_parse.py`) and fail in a clone with no release
-tags, saying how to fetch them.
+the repository with write access, otherwise from a fork.
 
 ### Python
 
