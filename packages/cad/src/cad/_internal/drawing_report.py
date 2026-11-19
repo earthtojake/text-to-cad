@@ -108,6 +108,7 @@ def _unstated(facts: _Facts) -> list[str]:
                    f"and slot the {where} view looks down." if where else
                    f"No view on the drawing looks into it; add the view that looks down the {verb}.")
             lines.append(f"incomplete: {whose}{text} is not called out. {fix}")
+        lines.extend(_unstated_ends(record, whose, kinds))
         size = shape.bounding_box().size
         turned = [] if record.get("assembly") else turned_diameters(shape)
         whole = None if record.get("assembly") else revolved(shape, bores=True)
@@ -172,6 +173,43 @@ def _unstated(facts: _Facts) -> list[str]:
                 )
     for record in facts.sheets:
         lines.extend(_unstated_for_stage(record, _whose(record, facts.sheets)))
+    return lines
+
+
+def _unstated_ends(record: dict, whose: str, kinds: dict) -> list[str]:
+    """The blind holes whose end a callout cannot state: its depth is where the
+    full diameter ends, and a ball end, or any form that is neither a flat floor
+    nor a drill point, runs on below it. A ball is stated by a note naming its
+    radius (SPHERICAL R5) or a ``radius()`` callout of it; any other end by a note
+    naming the hole (⌀10 ...), which the author writes from a section of it."""
+    notes = [note.upper().replace("%%C", "⌀").replace("Ø", "⌀") for note in record.get("notes", ())]
+    lines = []
+    for members in kinds.values():
+        feature = members[0]
+        end = getattr(feature, "end", None)
+        if end is None:
+            continue
+        kind, radius, beyond = end
+        text = _feature_text(feature, len(members))
+        if kind == "ball":
+            mark = re.compile(rf"\bR{re.escape(_fmt(radius))}(?!\.?\d)")
+            if round(radius, 3) in record.get("radii", ()) or any(
+                    mark.search(note) and any(word in note for word in ("SPHER", "BALL", "FULL R")) for note in notes):
+                continue
+            lines.append(
+                f"incomplete: {whose}{text} ends in a ball R{_fmt(radius)}, {_fmt(beyond)} past the depth its callout "
+                "gives: a callout's depth is its full diameter's, and has no symbol for the end. A note on the hole "
+                f"states it (view.note(\"SPHERICAL R{_fmt(radius)}\", point)), or radius() on its arc where a "
+                "section shows it.")
+            continue
+        mark = re.compile(rf"⌀ ?{re.escape(_fmt(feature.diameter))}(?!\.?\d)")
+        if any(mark.search(note) for note in notes):
+            continue
+        lines.append(
+            f"incomplete: {whose}{text} ends {_fmt(beyond)} past the depth its callout gives, in a form that is "
+            "neither a flat floor nor a drill point: a callout's depth is its full diameter's, and has no symbol "
+            f"for the end. Cut a section through it and dimension its end, and name it in a note "
+            f"(view.note(\"⌀{_fmt(feature.diameter)} ...\", point)).")
     return lines
 
 

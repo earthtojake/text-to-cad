@@ -53,6 +53,8 @@ _TOUCH = 1e-4
 _SLIVER = 1e-3
 #: How far past an end of a hole the solid is sampled to decide whether it is open.
 _PROBE = 0.05
+#: A cone that closes to within this radius, mm, comes to a point: a drill's.
+_POINT = 0.01
 
 
 @dataclass(frozen=True)
@@ -62,9 +64,11 @@ class Hole:
     ``mouth`` is the point on the axis where the hole opens (for a through hole,
     the end with the counterbore or countersink, else the end at the larger
     coordinate along ``axis``); ``axis`` is the unit direction from the mouth into
-    the material. Sizes are model millimetres; ``depth`` is measured from the
-    mouth to the end of the full-diameter bore, so a drill point below it is not
-    counted, and is None for a through hole.
+    the material. Sizes are model millimetres; ``depth`` is a blind hole's, as a
+    callout's ↧ states it, and None for a through hole: from the mouth to the
+    flat floor, a fillet round that floor included, or, where the bore ends in a
+    point or a ball, to where its full diameter ends (a drill point below it is
+    not counted). ``end`` says what such a depth leaves out.
     """
 
     mouth: tuple[float, float, float]
@@ -84,13 +88,24 @@ class Hole:
     #: steps (a chamfered counterbore, a counterbore in a counterbore). Such a hole
     #: is refused wherever a callout or a table would state it.
     problem: str | None = None
+    #: What a blind hole's depth does not say about its end, when its end is
+    #: neither a flat floor nor a drill point: ``("ball", radius, beyond)`` for a
+    #: ball end of that radius, or ``("other", 0.0, beyond)`` for any other form,
+    #: ``beyond`` being how far the end runs past ``depth`` on the centre line. A
+    #: callout has no symbol for it, so the report asks for a note.
+    end: tuple[str, float, float] | None = None
 
     def signature(self) -> tuple:
         """What makes two holes "the same hole" for a ``4×`` count."""
         r = lambda v: None if v is None else round(v, 3)
         pair = lambda p: None if p is None else (round(p[0], 3), round(p[1], 3))
+        # What no callout states, as one text that sorts: a hole with a ball end is
+        # not the flat-bottomed hole of the same size, and the two can share a part.
+        unsaid = self.problem or ""
+        if self.end is not None:
+            unsaid += f"|{self.end[0]} {round(self.end[1], 3)} {round(self.end[2], 3)}"
         return (r(self.diameter), self.thru, r(self.depth), pair(self.cbore), pair(self.csk),
-                pair(self.far_cbore), pair(self.far_csk), self.problem)
+                pair(self.far_cbore), pair(self.far_csk), unsaid)
 
 
 @dataclass(frozen=True)
@@ -398,7 +413,8 @@ def holes(shape) -> list[Hole]:
         bores = [s for s in _merge_split_faces(segments) if s.concave and _full(s)]
         if tori is None:
             tori = _tori(shape)
-        _bridge_fillets(bores, tori.get(key, []))
+        fillets = tori.get(key, [])
+        _bridge_fillets(bores, fillets)
         groups: list[list[list[_Segment]]] = []
         for chain in _chains(bores):
             # Two pieces of one bore with air between them -- a clevis's two arms,
@@ -412,13 +428,13 @@ def holes(shape) -> list[Hole]:
                 groups.append([chain])
         for group in groups:
             ray = ray or _Ray(shape)
-            hole = _read_chain([seg for chain in group for seg in chain], d, foot, at, air, ray)
+            hole = _read_chain([seg for chain in group for seg in chain], d, foot, at, air, ray, fillets)
             if hole == "sealed" and len(group) > 1:
                 # Closed at both ends, the pieces are not one bore drilled through
                 # air: two blind holes facing each other across a gap (into the
                 # two walls of a channel) are each their own.
                 for chain in group:
-                    piece = _read_chain(chain, d, foot, at, air, ray)
+                    piece = _read_chain(chain, d, foot, at, air, ray, fillets)
                     if isinstance(piece, Hole):
                         found.append(piece)
             elif isinstance(hole, Hole):
@@ -427,7 +443,7 @@ def holes(shape) -> list[Hole]:
     return found
 
 
-def _read_chain(chain: list[_Segment], d, foot, at, air, ray: _Ray) -> "Hole | str | None":
+def _read_chain(chain: list[_Segment], d, foot, at, air, ray: _Ray, fillets=()) -> "Hole | str | None":
     """One run of bore segments on a line as a hole: None when it is not one (no
     bore, material inside, a conical recess), ``"sealed"`` when it is closed at
     both ends."""
@@ -484,22 +500,63 @@ def _read_chain(chain: list[_Segment], d, foot, at, air, ray: _Ray) -> "Hole | s
             problems.append(f"its {name} opens out in {len(steps)} steps ({described(steps)})")
     mouth_end = widening(mouth_steps[0], at_mouth=True) if len(mouth_steps) == 1 else None
     far_end = widening(far_steps[0], at_mouth=False) if len(far_steps) == 1 and len(ordered) > 1 else None
-    depth = None
+    depth, end = None, None
+    mouth = tuple(f + mouth_at * c for f, c in zip(foot, d))
     if not thru:
         # From the mouth to the bottom of the deepest full-diameter stretch: a
         # groove partway down does not end the hole, a drill point does not
         # count.
         deepest = [s for s in ordered if s.kind == "cyl" and abs(s.r_lo - narrowest) < _TOUCH][-1]
-        depth = max(from_mouth(deepest.lo), from_mouth(deepest.hi))
-    mouth = tuple(f + mouth_at * c for f, c in zip(foot, d))
+        wall = max(from_mouth(deepest.lo), from_mouth(deepest.hi))
+        bottom = deepest.lo if from_hi else deepest.hi
+        depth, end = _blind_end(wall, narrowest, bottom, ordered[ordered.index(deepest) + 1:], fillets, mouth, axis, ray)
     return Hole(
         mouth=_tidy(mouth), axis=_tidy(axis), diameter=2 * narrowest, thru=thru, depth=depth,
         cbore=mouth_end[1] if mouth_end and mouth_end[0] == "cbore" else None,
         csk=mouth_end[1] if mouth_end and mouth_end[0] == "csk" else None,
         far_cbore=far_end[1] if far_end and far_end[0] == "cbore" else None,
         far_csk=far_end[1] if far_end and far_end[0] == "csk" else None,
-        length=hi - lo, problem="; ".join(problems) or None,
+        length=hi - lo, problem="; ".join(problems) or None, end=end,
     )
+
+
+def _blind_end(wall: float, radius: float, bottom: float, below: list[_Segment], fillets, mouth, axis,
+               ray: _Ray) -> tuple[float, tuple | None]:
+    """A blind hole's depth as its callout states it, and what that depth leaves
+    unsaid about its end (:attr:`Hole.end`), for a bore of ``radius`` whose straight
+    wall stops ``wall`` from its ``mouth``, at ``bottom`` along its line, with the
+    segments ``below`` it and the line's fillets.
+
+    A drawing gives a blind hole's depth where its full diameter ends (ISO 129-1,
+    ASME Y14.5: the depth of the full diameter, a drill point not counted). So:
+
+    - a flat floor is the depth, and a fillet round it is part of that floor: the
+      depth is to the floor, as a depth gauge reads it, and the fillet is a radius
+      of its own (the report asks for it as it asks for any fillet). The straight
+      wall alone would state the hole short by that radius;
+    - a point (a drill's) is left out of the depth, as it always was;
+    - a ball end, or any other form, has no symbol in a callout: the depth stays
+      the full diameter's, and ``end`` says what runs on below it.
+    """
+    tip = ray.depth(mouth, axis)  # the first face on the centre line: the floor, or the end's tip
+    if tip is None or tip - wall <= _TOUCH:
+        return wall, None
+    beyond = tip - wall
+    if (len(below) == 1 and below[0].kind == "cone" and min(below[0].r_lo, below[0].r_hi) <= _POINT
+            and abs((below[0].hi - below[0].lo) - beyond) < _TOUCH):
+        return wall, None  # a drill point
+    for lo, hi, r_min, r_max in fillets:
+        if (min(abs(lo - bottom), abs(hi - bottom)) < 1e-6 and abs(r_max - radius) < 1e-6 and r_min > 1e-6
+                and abs((hi - lo) - beyond) < 1e-6 and not below):
+            return tip, None  # a flat floor, filleted into the wall
+    if not below and abs(beyond - radius) < 1e-6:
+        # A hemisphere of the bore's own radius: 0.6 of the way out from the centre
+        # line it is 0.8 of its radius deep.
+        u, _v = _perpendicular(axis)
+        off = ray.depth(tuple(m + 0.6 * radius * c for m, c in zip(mouth, u)), axis)
+        if off is not None and abs(off - wall - 0.8 * radius) < 1e-4:
+            return wall, ("ball", radius, beyond)
+    return wall, ("other", 0.0, beyond)
 
 
 def axes(shape) -> list[Axis]:

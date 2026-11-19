@@ -418,3 +418,49 @@ class EdgeTests(unittest.TestCase):
         self.assertGreater(sharp_edges(channel)[1], 0, "its two edges are inside corners left sharp")
         self.assertFalse([n for n in geometry_notes(channel) if "FILLETS" in n],
                          "so no fillet note claims the bevelled corner is R3")
+
+
+def _blind_ends():
+    """A block with four blind holes, each ended its own way: ⌀10 to a floor
+    filleted R2, ⌀8 to a ball, ⌀6 to a drill point, ⌀4 to a plain flat floor."""
+    from build123d import Align, Axis, Box, Cone, Cylinder, Pos, Sphere, fillet
+
+    down = (Align.CENTER, Align.CENTER, Align.MAX)
+    block = Box(100, 40, 20, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    filleted = Cylinder(5, 10, align=down)
+    block -= Pos(-30, 0, 20) * fillet(filleted.edges().group_by(Axis.Z)[0], 2)
+    block -= Pos(-10, 0, 20) * (Cylinder(4, 6, align=down) + Pos(0, 0, -6) * Sphere(4))
+    block -= Pos(10, 0, 20) * (Cylinder(3, 10, align=down) + Pos(0, 0, -10) * Cone(3, 0, 1.8, align=down))
+    block -= Pos(30, 0, 20) * Cylinder(2, 5, align=down)
+    return block
+
+
+class BlindEndTests(unittest.TestCase):
+    """A blind hole's depth is the one its callout states: to the floor, or to
+    where the full diameter ends, and what runs on below that is said."""
+
+    def test_depth_is_to_the_floor_and_an_end_no_callout_states_is_said(self) -> None:
+        from cad._internal.drawing_features import holes
+
+        found = {round(h.diameter): h for h in holes(_blind_ends())}
+        self.assertEqual(sorted(found), [4, 6, 8, 10])
+        self.assertTrue(all(not h.thru for h in found.values()))
+        self.assertAlmostEqual(found[10].depth, 10.0, places=6, msg="to the floor, not to where its fillet starts")
+        self.assertIsNone(found[10].end, "a filleted floor is a floor: the fillet is a radius of its own")
+        self.assertAlmostEqual(found[8].depth, 6.0, places=6, msg="the full diameter's depth")
+        self.assertEqual(found[8].end[0], "ball")
+        self.assertAlmostEqual(found[8].end[1], 4.0, places=6)
+        self.assertAlmostEqual(found[8].end[2], 4.0, places=6, msg="the ball runs its radius past the depth")
+        self.assertAlmostEqual(found[6].depth, 10.0, places=6, msg="a drill point is not counted")
+        self.assertIsNone(found[6].end)
+        self.assertAlmostEqual(found[4].depth, 5.0, places=6)
+        self.assertIsNone(found[4].end)
+        self.assertNotEqual(found[8].signature(), holes(_plain_blind(4, 6))[0].signature(),
+                            "a ball-ended hole and a flat one of the same size are two kinds")
+
+
+def _plain_blind(radius: float, depth: float):
+    from build123d import Align, Box, Cylinder, Pos
+
+    return Box(40, 40, 20, align=(Align.CENTER, Align.CENTER, Align.MIN)) - Pos(0, 0, 20) * Cylinder(
+        radius, depth, align=(Align.CENTER, Align.CENTER, Align.MAX))
