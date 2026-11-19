@@ -37,13 +37,13 @@ independent coordinate, and put this namespaced element on the input joint, whic
 - **What moves it.** The Viewer and `cad urdf snapshot` place the input joint from the driver's
   value. It has no slider or handle, a snapshot's `--pose` refuses it by name, and an SRDF group
   state cannot set it, as with a mimic joint.
-- **What checks it.** `cad urdf validate` checks the element alone: one a joint, every length
-  positive, both zero angles numbers, the joint and its driver revolute or continuous on one parent,
-  no cycle of drivers and mimics. The linkage's geometry (the two points above) is checked when the
-  CAD Viewer opens the file: its page refuses the robot, naming the joint, what it found and what to
-  change. `cad urdf snapshot` checks none of it: it draws what the numbers give, and refuses only a
-  pose the coupler cannot reach. So a clean validation and a picture do not show that the linkage
-  closes.
+- **What checks it.** `cad urdf validate` checks the element alone: at most one on a joint, every
+  length positive, both zero angles numbers, the joint and its driver revolute or continuous on one
+  parent, no cycle of drivers and mimics. The linkage's geometry (the two points above) is checked
+  when the CAD Viewer opens the file: its page refuses the robot, naming the joint, what it found
+  and what to change. `cad urdf snapshot` checks none of it: it draws what the numbers give, and
+  refuses only a pose the coupler cannot reach. So a clean validation and a picture do not show that
+  the linkage closes.
 - **Not in a generated URDF.** The extension derives one joint's angle and places no coupler link,
   and a loop generated from a CAD model has its coupler as a link. The generated URDF leaves the
   loop's closing joint out and says so, and the MJCF closes it ([from-cad.md](from-cad.md)).

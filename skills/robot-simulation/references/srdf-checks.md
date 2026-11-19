@@ -18,7 +18,7 @@ OK robot.srdf: robot 'example_arm', urdf example_arm.urdf, 2 groups, 1 end effec
   on every pair), then every name, chain, state and pair against the URDF. An error in the first
   stops the second, so a short first report is not a short list of problems: fix and run again.
 - **The URDF** is the one beside it with the same robot name, or the one `--urdf` names
-  ([pairing](srdf-authoring.md#urdf-pairing-non-negotiable)). A URDF with an error of its own is
+  ([pairing](srdf-authoring.md#urdf-pairing)). A URDF with an error of its own is
   `invalid_paired_urdf`, with the first of its errors: run `cad urdf validate` for the rest.
 - **A URDF that is not one rooted tree** is only a warning, `paired_urdf_not_a_tree`, and every
   check against it is skipped: the SRDF passes on its own structure. Fix the URDF and run again
@@ -44,11 +44,12 @@ OK robot.srdf: robot 'example_arm', urdf example_arm.urdf, 2 groups, 1 end effec
   that.
 - **Whether a state is collision-free or useful.** A value typed in degrees is caught only where it
   passes a limit.
-- **That a picture means a valid file.** `cad srdf snapshot` draws an SRDF the validator fails. The
-  CAD Viewer does not: its page refuses one, with the validator's errors.
+- **That a picture means a valid file.** `cad srdf snapshot` runs no validation and draws SRDFs the
+  validator fails (a chain that is no path, a state past a limit). The CAD Viewer does not: its page
+  refuses one, with the validator's errors.
 - **That MoveIt plans with it.** Where MoveIt is at hand, load the pair (Setup Assistant, or the
-  project's launch), solve IK for the primary group and plan to a named state. Where it is not,
-  report that as skipped.
+  project's launch), solve IK for the primary group, plan to a pose and to a named state, and run a
+  collision check. Where it is not, report that as skipped.
 
 When a name is missing, decide which file is wrong before editing: a typo in the SRDF, or a rename
 in the URDF that the SRDF never followed.

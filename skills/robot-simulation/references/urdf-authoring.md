@@ -1,9 +1,9 @@
 # URDF authoring
 
 Read this before writing or editing a `.urdf` by hand. A robot with a CAD model here has its URDF
-generated instead ([from-cad.md](from-cad.md)). The frame contract and the checks are in
-[SKILL.md](../SKILL.md#author-by-hand); this is what `cad` reads of a URDF, and the conventions that
-keep a hand-written one auditable.
+generated instead ([from-cad.md](from-cad.md)). The frame contract is in
+[SKILL.md](../SKILL.md#author-by-hand) and the checks in [urdf-checks.md](urdf-checks.md); this is
+what `cad` reads of a URDF, and the conventions that keep a hand-written one auditable.
 
 ## What cad reads
 
@@ -23,8 +23,8 @@ keep a hand-written one auditable.
 - **Links, then joints**, each in tree order from the root, so the file reads as the tree does.
 - **A frame-only link** (`base_footprint`, `tool0`, an optical frame) is an empty element, and the
   ledger says it is one, so its missing geometry and inertial read as intent.
-- **A link and a joint never share a name.** It is legal, but a tool that keeps both in one
-  namespace refuses the file, and the validator warns: `elbow_link` on the joint `elbow`.
+- **A link and a joint never share a name.** A shared name is legal, but a tool that keeps both in
+  one namespace refuses the file, and the validator warns: the link `elbow_link`, the joint `elbow`.
 - **Every revolute and prismatic `<limit>` gives `effort` and `velocity`**, from the drive's
   datasheet. A ROS controller reads a 0 literally, and the validator warns of one omitted or 0.
 - **Meshes come first**: one per link, in the link's frame, before the XML that places it

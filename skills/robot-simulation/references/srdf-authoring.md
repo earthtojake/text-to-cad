@@ -5,7 +5,7 @@ already validates (`cad urdf validate`): it refers to that URDF's links, joints 
 repair none of them. Its ledger is in [srdf-ledger.md](srdf-ledger.md), its checks in
 [srdf-checks.md](srdf-checks.md).
 
-## URDF pairing (non-negotiable)
+## URDF pairing
 
 An SRDF plans for the one `.urdf` in its own folder whose `<robot name>` is its own.
 
