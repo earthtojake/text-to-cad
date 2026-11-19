@@ -86,12 +86,11 @@ scene coordinates: a document's and a GLB's millimetres, a robot's metres, a 3MF
 `assembly` 1800x1200, `assembly-large` 1920x1440, `presentation` and `contact-sheet` 2400x1600,
 `presentation-large` 2800x1800.
 
-`--pose` draws a document's mechanism posed: a mechanism state's name, a configuration
-sequence at a time of its clip (`walk@0.6`, the sequence's name and the seconds), or joint
-and coupling values as JSON, a turn in degrees, a slide in millimetres
-([reviewing motion](kinematics.md#reviewing-motion)). It is how
-the picture is drawn; a file of the pose is a posed model
-([exports](exports.md#posed-files-and-parts-on-their-own)).
+`--pose` draws a document's mechanism posed: a mechanism state's name, a configuration sequence
+at a time of its clip (`walk@0.6`, the sequence's name and the seconds), or joint and coupling
+values as JSON, a turn in degrees, a slide in millimetres
+([reviewing motion](kinematics.md#reviewing-motion)). It is how the picture is drawn; a file of
+the pose is a posed model ([exports](exports.md#posed-files-and-parts-on-their-own)).
 
 A snapshot draws the mesh the viewer draws, which is right for a review and coarse for a close-up
 of a large curved part (a faceted outline, uneven shading). For a still that needs a finer one,
@@ -168,11 +167,11 @@ cad model snapshot --job tmp/bracket.snapshot.json "$ID"   # the same views, of 
 
 `--job` also takes a job (`{input, camera, display, preview, jointValues, output, outputs}`) or a
 list of jobs, as a file or JSON, so one command draws many pictures. A job's `jointValues` takes
-what `--pose` does, so a list of jobs is a sequence's frames. Its `outputs` are its pictures (`path`, and `width`,
-`height`, `camera` of their own; a folder `path` takes a generated name). A SRC given is drawn in
-place of every job's input, and any other flag overrides every job. Every job is checked before
-anything renders, and a failure writes none of its pictures. A job's `output` settings finish its
-pictures:
+what `--pose` does, so a list of jobs is a sequence's frames. Its `outputs` are its pictures
+(`path`, and `width`, `height`, `camera` of their own; a folder `path` takes a generated name). A
+SRC given is drawn in place of every job's input, and any other flag overrides every job. Every
+job is checked before anything renders, and a failure writes none of its pictures. A job's
+`output` settings finish its pictures:
 
 - `padding` (0 to 0.15 of the picture each side) and `tightFrame` frame a fitted camera; a view's
   own camera with `tightFrame` false, as the viewer writes every view, is drawn exactly;

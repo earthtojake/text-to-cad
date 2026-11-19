@@ -188,15 +188,12 @@ $ cad model inspect "$ID" "bracket/face 7"
 {
   "ref": "bracket/f:bracket_body.hole.1;M:bracket_body.body_dedanl",
   "path": "bracket/bracket",
-  "part": "bracket",
   "kind": "face",
   "ordinal": 7,
-  "name": "f:bracket_body.hole.1;M:bracket_body.body_dedanl",
-  "area": 150.79644737231007,
   "surface": "cylinder",
   "radius": 4.0,
-  "made_by": {"name": "f:bracket_body.hole.1;M:bracket_body.body_dedanl", "feature": "bracket_body.body_dedanl",
-              "operation": "cut", "function": "bracket_body", "file": "/work/src/bracket.py", "line": 8},
+  "made_by": {"feature": "bracket_body.body_dedanl", "operation": "cut", "function": "bracket_body",
+              "file": "/work/src/bracket.py", "line": 8},
   ...
 }
 ```

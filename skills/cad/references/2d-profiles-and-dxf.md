@@ -60,7 +60,7 @@ cad model export "$ID" DXF/gasket.dxf     # runs the drawing checks, then writes
 - **Planar means 2D, on z=0, at 1:1, in millimetres** (`$INSUNITS` is set for you). The export
   refuses a document holding a solid (`bracket is 3D: a DXF is drawn from 2D geometry a model
   returns`) and an edge with any point off z=0, by its element name. A face taken from a solid
-  sits at that solid's height: relocate it (`flatten_face(face)`, or `bd.Pos(0, 0, -z) * face`).
+  sits at that solid's height: move it down (`bd.Pos(0, 0, -z) * face`).
 - **Text** is `bd.Text(...)`, written as outlines on a marking layer, never a DXF `TEXT` entity:
   cut and marking toolchains consume geometry.
 - **A refused drawing writes nothing** (exit 2, naming what it refused), and neither does any
@@ -75,24 +75,16 @@ it straight to a snapshot or the viewer.
 
 ## Flat patterns, kerf and curves
 
-Derive contours from the part's real topology with the helpers in `cad.build123d` rather than
-redrawing them; draw an outline by hand only when there is no reliable 3D topology.
-
-| Helper | Does |
-| --- | --- |
-| `flat_pattern(shape, coordinate=, kerf=)` | A flat plate's profile: its planar faces facing +Z at one height, laid into XY, fused and offset (`normal_axis=`, `normal_sign=` and `coordinate_axis=` pick another side) |
-| `unfold(shape, k_factor=, bend_lines=False)` | A bent sheet part's flat pattern, each bend unrolled by its bend allowance |
-| `planar_faces(shape, normal_axis=, normal_sign=, coordinate_axis=, coordinate=)` | The planar faces facing one way at one height; raises on an empty selection |
-| `flatten_face(face)`, `flatten_faces(faces)` | Lays each face into XY by its own plane |
-| `union_faces(faces)` | Fuses coplanar faces into one profile |
-| `offset_profile(shape, amount)` | Kerf or tool-radius compensation: positive grows the profile (cut outside the line), negative shrinks it |
+Derive contours from the part's real topology rather than redrawing them; draw an outline by hand
+only when there is no reliable 3D topology. The calls are build123d's own, with
+`cad.build123d`'s `unfold` for a bent part:
 
 ```python
 """Flat patterns of plate.py and bracket.py: their geometry reused, not redrawn."""
 
 import build123d as bd
 from cad import model
-from cad.build123d import flat_pattern, unfold
+from cad.build123d import unfold
 
 from bracket import bracket        # the models: importing builds nothing
 from plate import plate
@@ -101,15 +93,14 @@ KERF = 0.1                         # how far each edge moves: half the cut's wid
 
 
 @model
-def plate_drawing():               # a flat plate: its top faces
-    part = plate().shape
-    return flat_pattern(part, coordinate=part.bounding_box().max.Z, kerf=KERF)
+def plate_drawing():               # a flat plate: its top face, laid on z=0
+    top = plate().shape.faces().filter_by(bd.Axis.Z).sort_by(bd.Axis.Z)[-1]
+    return bd.offset(bd.Pos(0, 0, -top.center().Z) * top, amount=KERF)
 
 
 @model
 def bracket_drawing():             # a bent part, unrolled, its bend lines on a layer of their own
-    cut, bends = unfold(bracket().shape, k_factor=0.4, bend_lines=True).children
-    return bd.Compound(children=[cut, bd.Compound(bends.edges(), label="BEND")], label="bracket_drawing")
+    return unfold(bracket().shape, k_factor=0.4, bend_lines=True)
 
 
 if __name__ == "__main__":
@@ -117,21 +108,21 @@ if __name__ == "__main__":
     bracket_drawing()
 ```
 
-- **A flat plate** is `flat_pattern`, which selects the faces at one coordinate. A vendor STEP
-  with no source is flattened the same way from `step.read(path)`
-  ([inputs](model-contract.md#inputs)).
-- **A bent part** is `unfold`: faces flattened plane by plane land on top of each other and are no
-  blank. Without `bend_lines` it returns the outline alone, one shape. With it, it returns the
-  outline labelled `CUT` and a group of the bends' centre lines labelled `BEND`: make the lines one
-  part of their layer, as above, since a layer is named by a part's label. Take `k_factor` from the
-  shop ([sheet metal](manufacturing-sheet-metal.md#review-the-part)).
-- **Kerf** is `offset_profile` or `flat_pattern(..., kerf=...)`, never hand-offset coordinates, and
-  the amount is how far each edge moves. A negative offset at or beyond half the narrowest
-  feature consumes the profile, and the offset raises saying so.
-- **Curves stay curves.** The union and the offset are exact, and each edge is written as one
-  entity, so a filleted corner exports as an `ARC` and a hole as a `CIRCLE`, kerf included. A
-  profile that comes out as hundreds of short `LINE`s fell back to a sampled union: check the
-  union's inputs rather than accept it.
+- **A flat plate's profile is one of its faces**, selected by what it is and laid on z=0:
+  `bd.Pos(0, 0, -z) * face` for a face parallel to XY, `bd.Plane(face).to_local_coords(face)` for
+  any planar face, by its own plane. A vendor STEP with no source is read with `step.read(path)`
+  and flattened the same way ([inputs](model-contract.md#inputs)).
+- **A bent part is `unfold(shape, k_factor=)`**, each bend unrolled by its bend allowance: faces
+  laid flat one by one land on top of each other and are no blank. Without `bend_lines` it returns
+  the outline alone, one shape. With it, it returns the outline labelled `CUT` and the bends' centre
+  lines labelled `BEND`, each written as its own layer. Take `k_factor` from the shop
+  ([sheet metal](manufacturing-sheet-metal.md#review-the-part)).
+- **Kerf is `bd.offset(profile, amount=...)`**, never hand-offset coordinates. Positive grows the
+  profile (cut outside the line) and shrinks its holes, and the amount is how far each edge moves.
+  It rounds the outer corners unless `kind=bd.Kind.INTERSECTION`, and a negative amount at or
+  beyond half the narrowest feature consumes the profile and raises.
+- **Curves stay curves.** Each edge is written as one entity, so a filleted corner exports as an
+  `ARC` and a hole as a `CIRCLE`, offset included.
 
 ## Check a drawing
 

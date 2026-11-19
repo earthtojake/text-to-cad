@@ -56,7 +56,7 @@ reader and its operations -- and our helpers that take build123d's objects are `
 | `from cad.ap242 import mechanism_state, configuration_sequence, gear_pair, rack_and_pinion_pair, screw_pair, posed` | `from cad.build123d import ...` (the same names) |
 | `from cad.gltf import animation` | `from cad.build123d import animation` |
 | `from cad.geometry import overlap_volume, ...` | `from cad.build123d import overlap_volume, ...` |
-| `from cad import flatten` / `flatten.flat_pattern(...)` | `from cad.build123d import flat_pattern` / `flat_pattern(...)` (also `planar_faces`, `flatten_face`, `flatten_faces`, `union_faces`, `offset_profile`) |
+| `from cad import flatten` / `flatten.flat_pattern(...)` | build123d's own calls: `bd.Plane(face).to_local_coords(face)` lays a face into XY and `bd.offset(profile, amount=kerf)` compensates for kerf; a bent part is `cad.build123d.unfold`. The six names (`flat_pattern`, `planar_faces`, `flatten_face`, `flatten_faces`, `union_faces`, `offset_profile`) still answer under `cad.flatten` and `cad.build123d`, each with a warning |
 | `cad.urdf.validate`, `cad.sdf.validate`, `cad.srdf.validate` | unchanged |
 | `cad.results.ValidationResult`, `ValidationIssue` | `cad.results.CheckResult`, `CheckFinding` (`.findings`, each with `.location`); the old names keep their 0.10 call shapes, `ValidationIssue(severity, message, element=, code=, hint=)` and `ValidationResult(ok, path, issues=, summary=)`, and `.issues` and `.element` still read |
 | `cad.findings`, `cad.xml_common`, `cad.check_fonts`, `cad.urdf_source`, `cad.sdf_source`, `cad.sdf_validation`, `cad.sdf_external`, `cad.srdf_source`, `cad.srdf_validation` | private now (`cad._internal.*`, `cad.<type>._*`): the aliases keep working, and nothing of a model's needs them |
