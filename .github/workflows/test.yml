@@ -497,6 +497,11 @@ jobs:
         timeout-minutes: 35
         run: python scripts/test/rehearse-update.py bridge --uv-cache "${{ runner.temp }}/uv"
 
+      - name: From 0.11.13, whose own `cad plugin update` runs the install command
+        if: matrix.shard == '1/2'
+        timeout-minutes: 15
+        run: python scripts/test/rehearse-update.py plugin-update --uv-cache "${{ runner.temp }}/uv"
+
       - name: From 0.11.0, the first with an automatic update, by itself
         if: matrix.shard == '1/2'
         timeout-minutes: 15
