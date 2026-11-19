@@ -143,7 +143,7 @@ fresh clone therefore has no Viewer client or CAD app page until
 `scripts/bundle/bundle.sh` runs, and the server says so by name the
 first time it reaches for one. Building a model needs none of it.
 
-For CAD Viewer development:
+For viewer development:
 
 ```bash
 npm ci
@@ -218,7 +218,7 @@ updating itself:
 
 ```bash
 uv sync --python 3.14
-npm ci && scripts/bundle/bundle.sh       # only for the CAD Viewer or the CAD app page
+npm ci && scripts/bundle/bundle.sh       # only for the viewer or the CAD app page
 export CAD_ENGINE_DIR=$PWD/tmp/engine CAD_STATE_DIR=$PWD/tmp/state CAD_CACHE_DIR=$PWD/tmp/cache CAD_UPDATE_CHECK=0
 uv run cad server start
 uv run python models/<model>/model.py    # builds on this worktree's server and prints its page
@@ -353,7 +353,7 @@ is gone. The server now carries the JavaScript it executes as well as the Python
 Canonical source directories are:
 
 - `skills/*` for skill instructions and references.
-- `apps/web/` for the CAD Viewer's React client. Its backend is
+- `apps/web/` for the viewer's React client. Its backend is
   `cad_server.viewer` (in `packages/cad`), and its built `dist/` ships inside the
   wheel as `cad_server/_runtime/viewer` — built at release time, never
   committed.
@@ -566,7 +566,7 @@ wrong.
 
 ### Build artifacts live in the wheel, never in git
 
-`main` is source. Everything the server serves that is not Python — the CAD Viewer
+`main` is source. Everything the server serves that is not Python — the viewer
 client under `cad_server/_runtime/viewer` and the CAD app page under `_runtime/mcp`
 — is gitignored and produced by `scripts/bundle/bundle.sh`. Nothing built is ever
 committed: a rebundle used to add a megabyte of history per commit, and a
@@ -812,7 +812,7 @@ release request does not specify one, confirm it rather than assuming.
 A release with significant user-facing features adds its What's new entry before it ships: its
 minor version's line in `packages/ui/src/whats-new/notes.js` and its words in all five locale
 files, user-facing features only, at most three items, each a bold title and one or two sentences
-(the dialog the CAD Viewer and the CAD app's tabs show once after an update; `notes.test.mjs`
+(the dialog the viewer and the CAD app's tabs show once after an update; `notes.test.mjs`
 holds the shape). A release with nothing a person would notice adds none.
 
 **Its own pull request**, to release what `main` already has: dispatch
@@ -898,7 +898,7 @@ green: that is the release. `Publish Release`, on the merge commit:
    that the `cad` wheel about to ship really holds `_runtime/viewer` and
    `_runtime/mcp`. The pages' source maps, which the bundle
    builds and the wheel leaves out, are gathered too
-   (`scripts/release/sourcemaps.py`): every chunk a crash on the CAD Viewer or
+   (`scripts/release/sourcemaps.py`): every chunk a crash on the viewer or
    the CAD app can name, by the debug id its build stamped on it, with its map
    -- a page whose maps PostHog could not use stops the release here.
 4. **Install test.** The `cad`, `cad-server` and `cad-mcp` wheels together
@@ -1171,6 +1171,14 @@ gh workflow run deploy-docs.yml -f ref=main
 gh workflow run deploy-docs.yml -f ref=v0.5.0  # a past release: its tag
 ```
 
+To look at a branch's site before it merges, deploy it as a preview: a URL of its own
+behind Vercel Authentication, with production untouched. Dispatch from the branch, so
+the run uses its workflow and scripts; the run's summary gives the URL:
+
+```bash
+gh workflow run deploy-docs.yml --ref my-branch -f ref=my-branch -f preview=true
+```
+
 `Deploy API` (`.github/workflows/deploy-api.yml`) deploys `api.texttocad.dev`
 on every change to `apps/api` on `main`, and redeploys `main` on dispatch
 (`gh workflow run deploy-api.yml`). It follows no release.
@@ -1301,10 +1309,10 @@ scripts/test/test-python.sh tests/python/packages/cad/test_urdf_source.py
 ```
 
 Repo-owned Python tests live under `tests/python/`, grouped by tested surface:
-`skills/<skill>`, `packages/<package>`, and `global`. The CAD Viewer backend's
+`skills/<skill>`, `packages/<package>`, and `global`. The viewer backend's
 suite is `tests/python/packages/cad_server/viewer/`, part of the server's package suite.
 
-For fast CAD Viewer source iteration, build the shared packages, then invoke
+For fast viewer source iteration, build the shared packages, then invoke
 the web app in dev mode from a folder of models (outside `apps/web`). The app
 consumes source with HMR while shared packages resolve to their compiled exports:
 

@@ -37,7 +37,7 @@ export default function Notice({ title, message, details, t = english }: { title
  * What a card that cannot reach CAD's server says (`Connection.tsx`), and nothing else: no home, no
  * library, nothing the host or the server said. Its chat carries none of its calls (`host/channel.ts`),
  * or the server refused them for their capability (`refused`: none, or one from before CAD restarted,
- * which asks for the model to be shown again). `page` is the CAD Viewer's page of what the card was
+ * which asks for the model to be shown again). `page` is the viewer's page of what the card was
  * asked to show, from its launch, where the engine gave one; `open` follows it through the host, where
  * the host opens links, and returns false where it does not (the link then opens as an ordinary one,
  * in a new window). Said in `t`'s language, in the look the shell's notice has too (`notice.css`).

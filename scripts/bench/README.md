@@ -1,6 +1,6 @@
 # Benchmarks
 
-Manual commands that measure the CAD Viewer's pictures against OCCT's and the manufacturing
+Manual commands that measure the viewer's pictures against OCCT's and the manufacturing
 checks. None of them runs in CI:
 what they write goes under an ignored `tmp/` folder, never into the tree
 (`AGENTS.md`), and only their pure helpers are tested

@@ -1,4 +1,4 @@
-// Shared, renderer-agnostic viewport/camera helpers used by the CAD viewer
+// Shared, renderer-agnostic viewport/camera helpers used by the viewer
 // (the kit viewport). They operate on a generic `runtime` shape that exposes at least
 // `{ THREE, camera, controls, keyboardOrbitState }`; they make no assumption
 // about how the scene itself is rendered.

@@ -27,7 +27,7 @@ KNOWN_VISUAL_CHILDREN = {"origin", "geometry", "material"}
 KNOWN_COLLISION_CHILDREN = {"origin", "geometry"}
 KNOWN_INERTIAL_CHILDREN = {"origin", "mass", "inertia"}
 
-# The CAD Viewer's nonlinear coupling of a four-bar linkage (`<tcad:four_bar>` on the derived
+# The viewer's nonlinear coupling of a four-bar linkage (`<tcad:four_bar>` on the derived
 # joint), as the robot-simulation skill's URDF authoring reference specifies it.
 TCAD_URDF_NAMESPACE = "https://text-to-cad.dev/urdf"
 FOUR_BAR_TAG = f"{{{TCAD_URDF_NAMESPACE}}}four_bar"
@@ -1124,7 +1124,7 @@ def _validate_four_bar(
     joint_name: str,
     joint_type: str,
 ) -> str | None:
-    """The joint's `<tcad:four_bar>`, read as the CAD Viewer reads it: its driver, or None.
+    """The joint's `<tcad:four_bar>`, read as the viewer reads it: its driver, or None.
 
     What closing the linkage needs of the joint frames (one ground link, parallel axes, pivots
     `ground_length` apart, a reachable driver range) is the Viewer's to check when it solves it.

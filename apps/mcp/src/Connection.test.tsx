@@ -6,7 +6,7 @@ import { HostError } from './host/bridge';
 import { createChannel, declaresServerTools } from './host/channel';
 import { createServer, type Launch } from './host/server';
 
-// The shared CAD viewer, reduced to whether this page mounted it, and with what client.
+// The shared viewer, reduced to whether this page mounted it, and with what client.
 const viewer = vi.hoisted(() => ({ props: null as CadViewerProps | null }));
 vi.mock('@cad/ui/cad-viewer', async original => ({
   ...await original<object>(),

@@ -2,7 +2,7 @@
 the engine's own refs.
 
 The document is the engine's (``cad.engine.document.load``: read once and held while its file is
-unchanged), and a study's refs are resolved in its structure as ``cad inspect`` and the CAD Viewer resolve
+unchanged), and a study's refs are resolved in its structure as ``cad inspect`` and the viewer resolve
 them (``cad.engine.refs``): ``bracket/face 17``, ``hand/finger.2/face 7``, an element's name
 (``bracket/f:plate.relief.3``), or any of those after the document's path and ``#``. So a face a person
 picks in the viewer and copies is the face a study names, and a face is numbered as the engine numbers it

@@ -1,4 +1,4 @@
-"""The CAD Viewer reads and writes the refs of a document the engine draws (an .xbf, a STEP) as this
+"""The viewer reads and writes the refs of a document the engine draws (an .xbf, a STEP) as this
 engine does, case for case.
 
 ``@cad/core``'s ``cadRefs.js`` holds a second parser of the ref grammar (the viewer's, for

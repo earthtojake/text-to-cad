@@ -1,5 +1,5 @@
 /**
- * Plots: a KiCad board drawn from its file, shared by the CAD Viewer's board view and the headless
+ * Plots: a KiCad board drawn from its file, shared by the viewer's board view and the headless
  * snapshot bundle. Payload in (`GET /api/v1/documents/kicad_pcb/<id>/plot`, schema 4: geometry per layer), Canvas 2D out in
  * the viewer's two themes (`theme.js`: KiCad's default colours on the dark canvas, the same hues
  * darkened on the light one), the view maths drawing2d's; and the board's Display contract

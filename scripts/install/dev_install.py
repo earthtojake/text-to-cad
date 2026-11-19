@@ -21,7 +21,7 @@ checkout as the source instead of PyPI and GitHub:
 newest release of cad, every app moved back to the GitHub copy (the development copies, ``text-to-cad@earthtojake-dev``
 and the rest, are among the old copies it removes); then turns cad's automatic updates on again (``cad update
 auto on``), which install.py leaves as they are. Run it again after a change; restart an app's session to load it. Run
-``scripts/bundle/bundle.sh`` once first: the CAD Viewer's page comes from the bundle.
+``scripts/bundle/bundle.sh`` once first: the viewer's page comes from the bundle.
 """
 
 from __future__ import annotations

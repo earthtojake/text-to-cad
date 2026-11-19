@@ -72,7 +72,7 @@ async function startDevBackend() {
   const external = String(process.env.VIEWER_BACKEND_URL || "").trim();
   if (external) {
     const target = external.replace(/\/+$/u, "");
-    console.info(`CAD Viewer backend: ${target} (VIEWER_BACKEND_URL)`);
+    console.info(`Viewer backend: ${target} (VIEWER_BACKEND_URL)`);
     return { target, token: process.env[TOKEN_VARIABLE] };
   }
 
@@ -95,7 +95,7 @@ async function startDevBackend() {
   );
   const announced = await readFirstJsonLine(child.stdout);
   const target = String(announced.apiUrl || "").replace(/\/+$/u, "");
-  console.info(`CAD Viewer backend: ${target} (${python}, started in ${directoryRoot})`);
+  console.info(`Viewer backend: ${target} (${python}, started in ${directoryRoot})`);
   return { target, token: announced.token };
 }
 
@@ -121,7 +121,7 @@ function readFirstJsonLine(stream) {
     stream.on("data", onData);
     stream.once("error", reject);
     stream.once("end", () =>
-      reject(new Error(`CAD Viewer backend exited before announcing a port: ${buffered}`)),
+      reject(new Error(`Viewer backend exited before announcing a port: ${buffered}`)),
     );
   });
 }
@@ -137,7 +137,7 @@ function serverLifetimePlugin() {
       const scheduleShutdown = () => {
         shutdownTimer = scheduleProcessShutdown({
           lifetimeMs: viewerServerLifetimeMs,
-          label: "CAD Viewer dev server",
+          label: "Viewer dev server",
           close: () => server.close(),
         });
       };
@@ -172,17 +172,17 @@ function chunkIdsPlugin() {
       for (const chunk of Object.values(bundle)) {
         if (chunk.type !== "chunk" || !chunk.sourcemapFileName) continue;
         const map = bundle[chunk.sourcemapFileName];
-        if (map?.type !== "asset") throw new Error(`The CAD Viewer chunk ${chunk.fileName} has no source map.`);
+        if (map?.type !== "asset") throw new Error(`The viewer chunk ${chunk.fileName} has no source map.`);
         const stamped = stampDebugId(chunk.code, String(map.source), chunk.fileName);
         chunk.code = stamped.code;
         map.source = stamped.map;
         ids[chunk.fileName.split("/").pop()] = stamped.debugId;
       }
       const html = bundle["index.html"];
-      if (!html || html.type !== "asset") throw new Error("The CAD Viewer build needs index.html.");
+      if (!html || html.type !== "asset") throw new Error("The viewer build needs index.html.");
       const script = `<script>globalThis.__cadChunkIds=${JSON.stringify(ids)}</script>`;
       const document = String(html.source);
-      if (!document.includes("<head>")) throw new Error("The CAD Viewer's index.html has no <head>.");
+      if (!document.includes("<head>")) throw new Error("The viewer's index.html has no <head>.");
       html.source = document.replace("<head>", () => `<head>${script}`);
     } },
   };
