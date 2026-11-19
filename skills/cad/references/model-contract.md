@@ -341,13 +341,13 @@ imports, runs or builds a script: editing the script changes nothing until Pytho
 it again.
 
 - **Documents outlive their workers.** A document stays held after its script's worker
-  retires (`cad status`: `live` with its worker, `held` without one, where `made_by`
+  retires (`cad server status`: `live` with its worker, `held` without one, where `made_by`
   is null), under one memory budget (`CAD_ENGINE_MEMORY_MB`, default a quarter of the
   machine's) that never drops a document a page watches.
 - **The server never reruns code.** A document it no longer holds (its file in the server's
   cache deleted, or never saved) is refused with the command that
   brings it back, `cad run <the script that defines it>`, by the page, `cad <type> inspect`
-  and `cad_show` alike (`cad status`: `unsaved`, or `detached` once its script is gone).
+  and `cad_show` alike (`cad server status`: `unsaved`, or `detached` once its script is gone).
   Running it updates the same document and its open pages.
 - **Each document has a record** in text-to-cad's state folder (`documents/<uuid>/document.json`:
   the script and function that build it (the rebuild command is `cad run` of that script, with the
@@ -357,7 +357,7 @@ it again.
   written beside your files: no record of a run.
 - **A restart reopens what was built.** The server keeps each model document's bytes in
   the platform's cache folder (`~/.cache/cad/documents/`), once it is idle, so after a
-  restart its id answers every verb as last built (`cad status`: `held`, on `disk`).
+  restart its id answers every verb as last built (`cad server status`: `held`, on `disk`).
   A document is what its last run made: the server never checks the code on disk against
   it, no surface says the script changed, and nothing reruns. After an edit, run the script
   (`cad run /work/arm.py`) to update the document and its open pages.
@@ -376,8 +376,8 @@ it again.
   shape go with it; a GLB's animations are passed as `animations=[...]`. Nothing builds
   it again: its record says a program the server did not run showed it, so run that
   program again. A decorated function in no saved file is refused, with these words.
-- `cad status` lists the workers and the documents the server holds (`--json` as
-  data); `cad stop` stops the server and any older one still running. At most
+- `cad server status` lists the workers and the documents the server holds (`--json` as
+  data); `cad server stop` stops the server and any older one still running. At most
   `CAD_ENGINE_WORKERS` workers live (default: the machine's cores); a worker is retired only
   when the workers' memory is over `CAD_ENGINE_WORKER_RSS_MB`, never for idleness,
   and its script's next run starts cold. `CAD_ENGINE_DIR` moves the
@@ -404,7 +404,7 @@ built src/assembly.py::assembly warm in 0.03s: bodies 2 run, 1 replayed; 3 misse
   src/plate.py::plate, a child
   src/standoff.py::standoff_m3, a child
   id: 7a9724e8-f676-5676-acaa-160d7c6cc5fa
-  view: http://127.0.0.1:54360/7a9724e8-f676-5676-acaa-160d7c6cc5fa?token=...
+  view: http://127.0.0.1:<port>/<id>?token=<token>
 ```
 
 That run followed an edit of the plate's depth: the plate's body and the assembly's ran,

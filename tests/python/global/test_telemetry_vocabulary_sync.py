@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 PAGE = ROOT / "packages/ui/src/usage/controls.js"
-CADGEN = ROOT / "packages/cad-server/src/cad_server/analytics.py"
+CADGEN = ROOT / "packages/cad/src/cad_server/analytics.py"
 RECEIVER = ROOT / "apps/api/src/events.mjs"
 
 
@@ -61,12 +61,12 @@ class TheKindsAreOneVocabulary(unittest.TestCase):
         receiver = set(names(RECEIVER, "const KINDS = new Set([", "]);")
                        + names(RECEIVER, "const KINDS_6 = new Set([", "]);")
                        + names(RECEIVER, "const KINDS_8 = new Set([", "]);")
-                       + names(RECEIVER, "const KINDS_11 = new Set([", "]);"))
+                       + names(RECEIVER, "const KINDS_12 = new Set([", "]);"))
         self.assertEqual(formats | set(extra), receiver)
         self.assertIn("model", extra)
         self.assertIn("xbf", formats)
         schema = ast.literal_eval(assignments["SCHEMA"])
-        self.assertRegex(RECEIVER.read_text(encoding="utf-8"), rf"\[{schema}, \{{[^\n]*kinds: KINDS_11")
+        self.assertRegex(RECEIVER.read_text(encoding="utf-8"), rf"\[{schema}, \{{[^\n]*kinds: KINDS_12")
 
 
 class TheKernelCausesAreOneVocabulary(unittest.TestCase):

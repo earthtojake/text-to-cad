@@ -12,8 +12,7 @@ This app is the browser host of `@cad/ui/file-viewer`, not the owner of
 the shared CAD interface.
 
 **Owns:** URL selection (`/<id>`: `src/client/workbench/fileParam.js`), browser history, document title/appearance, browser
-persistence, the file menu's reveal route, and the app menu's links (the update notice is
-the server's, read from `/api/v1/server`).
+persistence, the file menu's reveal route, and the app menu's links.
 `src/App.tsx` composes an explicit `ViewerHost` and hands it to the shared
 `CadViewer` (`@cad/ui/cad-viewer`), which registers one renderer per file
 family and draws the navbar and the explorer. The catalog exposes CAD
@@ -33,7 +32,7 @@ this app. The Python wheel consumes only the production build.
 src/
   App.tsx               the CadViewer's browser host: URL, history, title, appearance, the file menu and the library
   main.tsx              host/client bootstrap and cleanup
-  host/                 browser clipboard, prompt delivery, the app menu's links, the update notice, reload under a new server
+  host/                 browser clipboard, prompt delivery, the app menu's links, reload under a new server
   persistence/          the tab record in sessionStorage
   client/               appearance control and styling
   shared/               app build/runtime configuration helpers
@@ -50,7 +49,7 @@ and assets, so the app does not scan another package's source.
 - **One boundary**: the app imports shared packages through public exports.
   The root dependency checker prevents app-to-app and package-to-app imports.
   The backend is not here: its code, its tests and its laws live with the server
-  (`cad-server`).
+  (`cad_server`, in the `cad` distribution).
 - **Document boundary**: everything renders from the file. A STEP and an `.xbf`
   render from what the engine serves of them — the structure (names,
   colours, materials, the mechanism) and one buffer per part, read through the
@@ -112,21 +111,22 @@ export CAD_VIEWER_DIST="$PWD/apps/web/dist"
 cad viewer --host 127.0.0.1 --json [FILE ...]
 ```
 
-The launcher ensures this installation's engine and its one page, registers each FILE (an
+The launcher reaches the running engine and its one page (where none runs it says so in one line,
+naming `cad server start`), registers each FILE (an
 on-disk CAD file, or a document id the engine holds) by its id, prints its page's URL
 (`/<id>`, a line each; the home's, `/`, with none), opens the first in the browser, and exits. `--json` prints the launch
 record without opening a browser; `--no-open` prints only the URL. A FILE that is not there (`not_found`), or that is
 no CAD file -- a model's script among them, which `cad run` builds and prints the page of (`wrong_type`) -- is refused
 before the engine is asked, exit 2, as an id the engine does not hold is (`not_found`); under `--json` a failure is
 the `cad` command's one `{"ok": false, "error", "reason"}` document on stdout. There is no
-foreground viewer server and no `--detach` or `viewer stop`. `cad stop` stops
-the installation's engine and all its clients; never stop an engine you did not start.
+foreground viewer server and no `--detach` or `viewer stop`. `cad server stop` stops
+the engine and all its clients; never stop an engine you did not start.
 
-`cad serve DOC` also starts or reuses this engine, prints the document URL and
+`cad serve DOC` also reuses this engine, prints the document URL and
 exits. It has no `--foreground` or standalone server mode.
 
 The engine binds loopback on 3245, or, when another program holds it, the next free
-port, which the installation keeps (`cad status` says which and why). `--port N`
+port, which it keeps (`cad server status` says which and why). `--port N`
 pins its HTTP port and `--host ADDRESS` pins its bind address. If the running engine has a different
 port or address, the launch fails with that conflict; it never replaces a server
 or starts a second engine. A taken port that `--port` names fails, naming its holder. There are no page sessions: every launch
@@ -135,8 +135,8 @@ reuses the one page, and its folder replaces the last launch's as the one its re
 
 The JSON record includes `url`, `apiUrl`, `token`, `port`, `pid`, `start` (the folder the home
 shows), `documents` (`{id, file, url}` for each FILE) and `action` (`started` or `reused`,
-referring to the page). Each URL, and `token`, carries a fresh link, good until the token is
-rotated (`cad server --rotate-token`) (`--api-only`'s `token` is the user's token itself, for the dev proxy). The URL is usable
+referring to the page). Each URL, and `token`, carries the link, good until the token is
+rotated (`cad server --rotate-token`) and the same text at every launch until then (`--api-only`'s `token` is the user's token itself, for the dev proxy). The URL is usable
 as soon as it is printed. Opening it gives the browser an HttpOnly, SameSite=Strict session
 cookie, one for every port of the host, that lasts 30 days from its last use, and the page is
 served with its link left in the address bar (no redirect; `Referrer-Policy: no-referrer`). The
@@ -158,8 +158,8 @@ language, over the page until a read answers again. One whose engine runs and re
 viewer` and open the link it prints; it keeps asking, never reloads for the refusal, and heals
 once that link, opened beside it, has left the new cookie.
 
-A page closing never stops the engine, and no timer does: it runs until `cad stop`, or
-until a newer installation's engine retires it while nothing uses it.
+A page closing never stops the engine, and no timer does: it runs until `cad server stop`, or
+until cad's own update restarts it on a newer release while nothing uses it.
 Code changes in a checkout require
 restarting an engine you own, then rerunning the launcher. Vite handles client HMR.
 
@@ -194,15 +194,15 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
 ## Export and job status
 
 **Export** is the last item of the file menu (the ⋯ beside the file's name, after Copy path, Copy
-link — this page's origin, the document's id and a fresh link from `GET /api/v1/local/link`, on every
+link — this page's origin, the document's id and the link from `GET /api/v1/local/link`, on every
 document — and Open in › Finder / File Explorer / File manager) of a STEP, XBF, held model (a model's document
 the engine holds), GLB, STL or 3MF page: a submenu of the formats that page's file writes, there at once, as nothing is
 inspected first. A held model's menu also has Copy path and Open in › Finder (File Explorer,
 File manager) on the script that builds it; where that script was moved or deleted, Open in is
 disabled, its hint "The source was moved or deleted." Open in also lists the apps the server finds
 on this computer for the document's files (`GET /api/v1/local/open-in`, as the menu opens): the
-source's, each export's as "App (file name)", then Default app; a choice is `POST /api/v1/local/open`. The navbar's right end holds only the update button
-(and a dismissed alert's icon). For a model it captures the displayed revision and writes the document as its code built it: every
+source's, each export's as "App (file name)", then Default app; a choice is `POST /api/v1/local/open`. The navbar's right end holds only a dismissed alert's
+icon, when there is one. For a model it captures the displayed revision and writes the document as its code built it: every
 part, as authored. The menu chooses a format alone; a posed or partial file is a function
 in the model's code. A STEP, XBF or held model offers STEP, STL, 3MF, GLB and XBF (an XBF's
 XBF is its own bytes), and DXF where the view draws it flat on z=0; on a GLB, STL or 3MF page Export converts the file shown, at the
@@ -411,8 +411,7 @@ script and exported files kept, and no other model with it; a file's "Delete bra
 engine's record of the file alone. From a file, Back to home in
 the menu the navbar's C logo opens leads back to it. The home has the same navbar, the same C
 logo (one 16px mark on every page) and the same menu (without Back to home, and with GitHub, Discord and X as
-over a file) at the left and
-the update button at the right while a newer cad-server release is out. The home is a step of
+over a file) at the left. The home is a step of
 the browser's history, as a file is: the browser's Back and Forward walk between them (the
 navbar draws no arrows of its own here). A `/<id>` the server knows no file for, and no model the engine
 holds, shows "This model is no longer held" with the engine's words -- the command that builds it
@@ -442,10 +441,10 @@ user's state directory, shared with the CAD app.
 
 ### What's new
 
-After an update to a release whose notes say what it brought, the page shows them once, over the
+Once a release whose notes say what it brought is installed, the page shows them once, over the
 home or a file's view once it is up (`@cad/ui/whats-new`): read through the CAD client (`whatsNew`,
 `/api/v1/settings`' `whats_new`) and kept seen in the person's settings for every CAD view. A new
-person is shown nothing new, and nothing shows while the engine is gone or an update restarts.
+person is shown nothing new, and nothing shows while the engine is gone.
 
 ### Usage stats (telemetry)
 
@@ -496,8 +495,7 @@ and the web stay consistent without host-specific copies of those controls.
 The Viewer has the one navbar every app shares (see
 [the host contract](../../packages/ui/docs/viewer-host.md#host-chrome-slots)): at the
 left the logo (the C mark, on the home and over a file alike), which opens the app menu, then the open file's name (no glyph),
-which opens the name menu (Models and Files), with its ⋯; at the right the blue update button, while a newer cad-server release
-is out, and Export over a file that writes formats. The app menu holds Back to home (the home), the
+which opens the name menu (Models and Files), with its ⋯ (Export, over a file that writes formats). The app menu holds Back to home (the home), the
 person's settings (Language — Automatic or a named language —, Telemetry, Theme), Send feedback (a new issue titled "Feedback: "),
 GitHub, Discord and, in gray, the version (a link to its release notes) and "Made by @…"
 (X), as in the CAD app, over a file and on the home alike.
@@ -507,19 +505,8 @@ in Preview the navbar gives way to Preview's own bar. This host
 supplies the links (`src/host/viewerLinks.js`): its version (with its build's id,
 `v0.10.0-dev.b80844940`, for any build but the release's own), the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
-links open in a new tab. A newer cad-server release is the blue update button's, at the navbar's right as in the CAD app: the server's
-hourly version check, read from `/api/v1/server` with the server's description as the page
-starts (`main.tsx`) and again whenever the person comes back to it. A press updates
-(`POST /api/v1/local/update`): the engine installs the release, updates each agent app and restarts on it,
-on the same port with the same token; the button fills while it works and spins while the engine
-restarts, the page reconnects every quarter second meanwhile (`useEngineReconnect`), and it reloads
-once the engine answers with the new release and nothing on the page is unsaved. Should the switch fail,
-the release before's engine comes back and the page reloads into it all the same: the tab notes that its
-page followed the update (`src/host/followedUpdate.js`), and the page loaded says the update failed, in
-its one line, with the button offered again.
-A Viewer the CAD app's server opens is told of a release only where its install channel allows
-it (a store's copy, which its store updates, hears nothing); one a skill opens names no channel
-— a skills-only install — and is told. The browser title is the open file's or model's name alone ("bracket.step", "juno"), and "text-to-cad" on the home.
+links open in a new tab. The page never tells of a newer release: cad updates itself, and the agent the rest.
+The browser title is the open file's or model's name alone ("bracket.step", "juno"), and "text-to-cad" on the home.
 Appearance (System, Light, Dark) is the app menu's Theme row, the tab's choice (`colorScheme`,
 over a file and on the home); the page has no light/dark button of its own. The original animated mark remains the shared LoadingIcon
 for loading states. The C and CAD marks are the UI package's; the favicons are this

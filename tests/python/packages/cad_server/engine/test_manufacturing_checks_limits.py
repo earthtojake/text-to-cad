@@ -366,8 +366,10 @@ class EngineLimitsTest(unittest.TestCase):
 
         (step,) = box(self, 15)
         api.stop()
+        self.addCleanup(engine_daemon.start)  # the file's own engine again
         self.addCleanup(api.stop)
         with mock.patch.dict(os.environ, {"CAD_ENGINE_WORKER_RSS_MB": "1", "CAD_ENGINE_CHECK_RSS_MB": "0"}):
+            engine_daemon.start()
             first = cad.step.dfm(step, process="printing")
             second = cad.step.dfm(step, process="sheet")
         self.assertEqual((first.measurements["process"], second.measurements["process"]), ("printing", "sheet"))

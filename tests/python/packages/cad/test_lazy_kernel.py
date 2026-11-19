@@ -126,12 +126,12 @@ class PthTest(unittest.TestCase):
         return found.stdout.strip()
 
     def test_the_installed_library_runs_the_pth_editable_or_not(self) -> None:
-        """setup.py ships it in an editable wheel too, so a checkout's ``requirements-dev.txt``
-        venv (CI's included) defers the kernel as a user's install does."""
+        """setup.py ships it in an editable wheel too, so a checkout's development
+        environment (``uv sync``, CI's included) defers the kernel as a user's install does."""
         found = subprocess.run([sys.executable, "-c", "import build123d, sys; print('OCP' in sys.modules)"],
                                capture_output=True, text=True, cwd=tempfile.gettempdir())
         self.assertEqual((found.returncode, found.stdout.strip()), (0, "False"),
-                         found.stderr or f"no {PTH}: reinstall requirements-dev.txt")
+                         found.stderr or f"no {PTH}: uv sync --reinstall-package cad")
 
     def test_the_pth_is_one_import_line(self) -> None:
         self.assertEqual((PACKAGE / PTH).read_text(encoding="utf-8"),

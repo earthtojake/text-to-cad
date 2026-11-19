@@ -64,6 +64,9 @@ class ViewerExportHttpTest(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         self.addCleanup(self.stop_engine)
+        from tests.python.support import engine_daemon
+
+        engine_daemon.start()
 
     def stop_engine(self):
         from cad.engine.client import request, wait_gone

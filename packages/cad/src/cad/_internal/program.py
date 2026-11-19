@@ -80,6 +80,9 @@ def fix(error: BaseException) -> str | None:
 
 
 if __name__ == "__main__":
+    from cad._internal.streams import utf8
+
+    utf8()  # the program's words are the command's: on Windows, UTF-8 to a pipe or a file, as the command's own
     try:
         main(sys.argv[1:])
     except ImportError as error:

@@ -2,7 +2,7 @@
 and ``cad run gsl`` is ``gsl`` as it is.
 
 The measurements are numpy alone and tested everywhere. What runs ``gsl`` needs the omega-core wheel, which
-requirements-dev.txt installs on macOS and Linux (it has no Windows build): those tests skip, by name, where it is
+the development environment installs on macOS and Linux (it has no Windows build): those tests skip, by name, where it is
 absent. Every model is written by the test into a temporary folder.
 """
 

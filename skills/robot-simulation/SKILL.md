@@ -46,20 +46,15 @@ There are two routes to one:
 
 ## Setup
 
-Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.exe` on Windows). If
-it is missing, install text-to-cad, outside a sandbox or with its permission:
+Written for `cad==0.11.13`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
-```bash
-curl -fsSL https://texttocad.dev/install.sh | sh
-```
+If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
+https://github.com/earthtojake/text-to-cad
+A project written for an earlier version may need changes; the migration guides say what:
+https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
-On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
-only just added, its server may still be starting: try again for up to a minute first. `cad doctor
---check` explains any other failure, changing nothing; `cad doctor` repairs what it reports. Tell the
-person any next step `cad setup` prints.
-
-`cad doctor --check` also reports the installation in use and the server's release. A URDF's and an
-SRDF's validation need nothing beyond the Python standard library; a snapshot and a generated description draw on the CAD
+A URDF's and an SRDF's validation need nothing beyond the Python standard library; a snapshot and a generated description draw on the CAD
 kernel. `cad mujoco check` and `cad run mujoco-studio` use MuJoCo's headless core
 and Studio's web viewer, `cad[mujoco]` (about 20 MB), which the `cad` command fetches into an
 environment of its own the first time and reuses after; a script run by `cad run` that imports
@@ -443,13 +438,21 @@ so it is for this computer or a trusted network.
 
 ## Show the model
 
-Show the person each model you create or change, and any model or file they ask to see. If your
-tools include `cad_show` (your host may prefix it), call it with the model's id or the file's
-absolute path; its description says the rest. Otherwise give the person the page's link once, to
-open in the app's browser pane where it has one, or their browser: a model's page is the `view:` line its run prints, and a file's is the `url` that
-`cad viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
-download: give its path. Never screenshot the viewer to check your own work; review with
-`cad <type> snapshot`. If it fails to launch, say so.
+Show the person each model you create or change as soon as its first run succeeds, and any model
+or file they ask to see. A model's page is the `view:` line its run prints, and a file's is the `url`
+that `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). Show it with
+the first of these you have:
+
+1. `cad_show` among your tools (your host may prefix it): call it with the model's id or the file's
+   absolute path; its description says the rest.
+2. A tool that opens a page in the app's own browser pane, not in the person's own browser (in the
+   Claude desktop app, the Browser pane's `preview_start` with the page's `url`, or its `navigate`):
+   open the page there yourself, and give the person the link as well.
+3. Neither: give the person the link, to open in their browser.
+
+The page follows every run of the model. A file you export is a download: give its path. Showing is
+for the person: to check your own work, review with `cad <type> snapshot`, never a screenshot
+of the page. If it fails to launch, say so.
 
 An MJCF is the exception: the CAD Viewer and `cad_show` do not open one. Show the person the CAD
 model it was generated from, and for the MJCF itself run `cad run mujoco-studio --model FILE` and

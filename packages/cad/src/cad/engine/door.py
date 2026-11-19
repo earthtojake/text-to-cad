@@ -12,7 +12,8 @@ reading and for writing (its own writer, so the door never reads as closed). A c
 2. writes one hello into the door, its id, a space, the door protocol it speaks and a newline
    (``<id> <protocol>\n``, ``hello``): far below ``PIPE_BUF`` (512 bytes on macOS), so hellos
    written at once never interleave. A door nobody reads refuses the open (``ENXIO``): no engine;
-3. waits for the daemon's greeting on ``down`` (``ok <protocol>\n``, ``greeting``), then opens each
+3. waits for the daemon's greeting on ``down`` (``ok <protocol> <release>\n``, ``greeting``: the release
+   the server runs, which a ``cad`` command holds its own to, ``client.RELEASE``), then opens each
    FIFO again for its one direction alone and lets the read-write ends go, so either side's leaving
    is the other's end of file, as a socket's would be; and unlinks the pair's names, which no one
    opens again.
@@ -36,12 +37,15 @@ reader of that number skips. A removal or a rename takes a new number. Each side
 number first: the daemon greets with the number the connection speaks, the lower of its own and the
 hello's (one it no longer serves: no greeting, the connection closed), and the client speaks that one
 or hangs up. Numbers start at 1: 0.8's door had none (a bare ``<id>\n`` and ``ok\n``), which neither
-side reads, and 0.8's engines keep a folder of their own (``places.default_engine_dir``).
+side reads, and 0.8's engines keep a folder of their own (``places.default_engine_dir``). The greeting's
+release is such an addition to protocol 1: the servers of 0.11.11 and earlier greet without it, and
+their clients skip it.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import secrets
 import selectors
 import stat
@@ -51,7 +55,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Callable
 
 __all__ = ["CLIENTS", "DOOR_PROTOCOL", "Connection", "Door", "answer", "answering", "dial", "greeted", "greeting",
-           "hello", "hello_id", "hello_protocol", "sweep"]
+           "hello", "hello_id", "hello_protocol", "released", "sweep"]
 
 CLIENTS = "clients"
 # The door protocol this side speaks: the hello's and the greeting's number (the module's docstring).
@@ -63,6 +67,8 @@ STALE_SECONDS = 120.0
 # How long a client waits for the daemon's greeting: the door's reader starts a thread and opens
 # two FIFOs, so only a wedged daemon takes anywhere near it (a stopping one takes its door away).
 GREETING_SECONDS = 15.0
+# A release as a greeting names it: a version's characters, never a space.
+RELEASE = re.compile(rb"[0-9][0-9A-Za-z.+_-]{0,63}")
 
 _NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 _CLOEXEC = getattr(os, "O_CLOEXEC", 0)
@@ -106,18 +112,27 @@ def hello_protocol(line: bytes) -> int | None:
     return None if found is None else found[1]
 
 
-def greeting(protocol: int = DOOR_PROTOCOL) -> bytes:
-    """The daemon's greeting for a connection that speaks ``protocol``: ``ok <protocol>`` and a
-    newline."""
-    return f"ok {protocol}\n".encode("ascii")
+def greeting(protocol: int = DOOR_PROTOCOL, release: str | None = None) -> bytes:
+    """The daemon's greeting for a connection that speaks ``protocol``: ``ok <protocol>``, the release
+    the server runs where it says one (``release``), and a newline."""
+    return f"ok {protocol}{f' {release}' if release else ''}\n".encode("ascii")
 
 
 def greeted(line: bytes) -> int | None:
     """The door protocol a greeting says the connection speaks (with or without its newline), or None
-    for a line that is no greeting (0.8's bare ``ok`` among them). Fields after the protocol are a
-    later release's additions, skipped."""
+    for a line that is no greeting (0.8's bare ``ok`` among them). Fields after the protocol are
+    skipped here: the release (``released``), and a later release's additions."""
     word, spaced, rest = line.removesuffix(b"\n").partition(b" ")
     return _number(rest.split(b" ", 1)[0]) if word == b"ok" and spaced else None
+
+
+def released(line: bytes) -> str | None:
+    """The release a greeting says its server runs (the field after its protocol), or None for a
+    greeting that says none -- a server of 0.11.11 or earlier -- and for a line that is no greeting."""
+    fields = line.removesuffix(b"\n").split(b" ")
+    if greeted(line) is None or len(fields) < 3 or not RELEASE.fullmatch(fields[2]):
+        return None
+    return fields[2].decode("ascii")
 
 
 def pair(folder: Path, ident: str) -> tuple[Path, Path]:
@@ -162,14 +177,19 @@ def answering(door: Path) -> bool:
 
 
 class Connection:
-    """One connection to the daemon: the lines it reads (``reader``) and writes (``writer``), and the
-    door protocol it speaks (``protocol``, the greeting's)."""
+    """One connection to the daemon: the lines it reads (``reader``) and writes (``writer``), the
+    door protocol it speaks (``protocol``, the greeting's), the release its server runs (``release``,
+    the greeting's: None for a server of 0.11.11 or earlier) and, on Windows, the token its hello said
+    (``token``, the port file's as it was read then), which its request carries too."""
 
-    def __init__(self, reader: BinaryIO, writer: BinaryIO, *closing: Any, protocol: int = DOOR_PROTOCOL) -> None:
+    def __init__(self, reader: BinaryIO, writer: BinaryIO, *closing: Any, protocol: int = DOOR_PROTOCOL,
+                 release: str | None = None, token: str | None = None) -> None:
         self.reader = reader
         self.writer = writer
         self.closing = closing or (reader, writer)
         self.protocol = protocol
+        self.release = release
+        self.token = token
 
     def close(self) -> None:
         for each in self.closing:
@@ -209,7 +229,8 @@ def dial(door: Path, timeout: float = GREETING_SECONDS, protocol: int = DOOR_PRO
         early = take(up, os.O_RDWR)  # a writer before the daemon reads: its reads wait, never end
         if not _knock(door, hello(ident, protocol), timeout):
             return None
-        spoken = _greeted(hold, door, timeout)
+        line = _greeting(hold, door, timeout)
+        spoken = greeted(line)
         if spoken is None or spoken > DOOR_PROTOCOL:
             return None
         reader = take(down, os.O_RDONLY | os.O_NONBLOCK)
@@ -222,7 +243,7 @@ def dial(door: Path, timeout: float = GREETING_SECONDS, protocol: int = DOOR_PRO
             opened.remove(fd)
             os.close(fd)
         opened.clear()
-        return Connection(open(reader, "rb"), open(writer, "wb"), protocol=spoken)
+        return Connection(open(reader, "rb"), open(writer, "wb"), protocol=spoken, release=released(line))
     except PermissionError:
         raise
     except OSError:
@@ -260,44 +281,44 @@ def _knock(door: Path, line: bytes, timeout: float) -> bool:
         os.close(fd)
 
 
-def _greeted(fd: int, door: Path, timeout: float) -> int | None:
-    """The door protocol of the daemon's greeting read from ``fd`` (``greeted``), or None. Read a
-    byte at a time, to its newline and never past it: what follows on ``down`` is the connection's.
-    While it waits, a door that went (its daemon is stopping, and reads no more hellos) ends the
-    wait at once."""
+def _greeting(fd: int, door: Path, timeout: float) -> bytes:
+    """The daemon's greeting read from ``fd``, or ``b""`` for none. Read a byte at a time, to its
+    newline and never past it: what follows on ``down`` is the connection's. While it waits, a door
+    that went (its daemon is stopping, and reads no more hellos) ends the wait at once."""
     try:
         identity = os.stat(door).st_ino
     except OSError:
-        return None
+        return b""
     deadline = time.monotonic() + timeout
     got = b""
     with selectors.DefaultSelector() as selector:
         selector.register(fd, selectors.EVENT_READ)
         while not got.endswith(b"\n"):
             if len(got) >= HELLO_LIMIT:
-                return None  # no greeting is this long
+                return b""  # no greeting is this long
             left = deadline - time.monotonic()
             if left <= 0:
-                return None
+                return b""
             if selector.select(min(left, 0.2)):
                 got += os.read(fd, 1)
                 continue
             try:
                 if os.stat(door).st_ino != identity:
-                    return None
+                    return b""
             except OSError:
-                return None
+                return b""
             if not answering(door):
-                return None  # its daemon died after reading the hello: nobody reads the door now
-    return greeted(got)
+                return b""  # its daemon died after reading the hello: nobody reads the door now
+    return got
 
 
-def answer(folder: Path, ident: str, serve: Callable[[BinaryIO, BinaryIO], None], protocol: int = DOOR_PROTOCOL) -> None:
+def answer(folder: Path, ident: str, serve: Callable[[BinaryIO, BinaryIO], None], protocol: int = DOOR_PROTOCOL,
+           release: str | None = None) -> None:
     """The daemon's half of a connection whose hello named ``ident`` and spoke ``protocol``: its pair
     in ``folder`` opened without blocking or following a link, each refused unless it is a FIFO of
     this user's, the greeting sent in the protocol the connection speaks (the lower of the hello's and
-    ``DOOR_PROTOCOL``), and ``serve(reader, writer)`` run over it. A client gone before its pair was
-    opened is no connection. The pair's names go with it."""
+    ``DOOR_PROTOCOL``) with the server's ``release``, and ``serve(reader, writer)`` run over it. A client
+    gone before its pair was opened is no connection. The pair's names go with it."""
     up, down = pair(folder, ident)
     opened: list[int] = []
     try:
@@ -311,7 +332,7 @@ def answer(folder: Path, ident: str, serve: Callable[[BinaryIO, BinaryIO], None]
                 return
             os.set_blocking(writer, True)
             os.set_blocking(reader, True)
-            os.write(writer, greeting(min(protocol, DOOR_PROTOCOL)))
+            os.write(writer, greeting(min(protocol, DOOR_PROTOCOL), release))
         except OSError:
             return  # ENXIO, ENOENT: the client is gone; ELOOP: a link where a pair should be
         opened.clear()

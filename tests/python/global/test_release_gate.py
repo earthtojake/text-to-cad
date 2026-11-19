@@ -4,14 +4,13 @@ The gate looks up the record a Test run made of the release commit's tree
 (scripts/github-workflows/tested_tree.py). Found, the tests are not run again; not found,
 the workflow runs every Test job on the commit first, and the publish job runs only after
 one of the two. The branches installers follow get the release only after PyPI's index lists
-it, and the docs, the version feed's purge and the tag only after them.
+it, and the docs and the tag only after them; nothing purges the version feed.
 """
 from __future__ import annotations
 
 import contextlib
 import importlib.util
 import io
-import math
 import os
 import re
 import unittest
@@ -64,11 +63,14 @@ def condition(job: str) -> str:
 
 def evaluate(expression: str, results: dict[str, str], outputs: dict[str, str], ref: str = "refs/heads/main") -> bool:
     """A job condition, given the needed jobs' results, the gate's outputs and the run's ref."""
-    expression = re.sub(r"needs\.(\w+)\.result (==|!=) '(\w*)'",
+    expression = re.sub(r"needs\.([\w-]+)\.result (==|!=) '(\w*)'",
                         lambda m: str((results[m[1]] == m[3]) == (m[2] == "==")), expression)
     expression = re.sub(r"github\.ref (==|!=) '([^']*)'", lambda m: str((ref == m[2]) == (m[1] == "==")), expression)
     expression = re.sub(r"needs\.gate\.outputs\.(\w+) (==|!=) '(\w*)'",
                         lambda m: str((outputs.get(m[1], "") == m[3]) == (m[2] == "==")), expression)
+    # Another job's output, given as "job.name".
+    expression = re.sub(r"needs\.([\w-]+)\.outputs\.(\w+) (==|!=) '(\w*)'",
+                        lambda m: str((outputs.get(f"{m[1]}.{m[2]}", "") == m[4]) == (m[3] == "==")), expression)
     expression = expression.replace("!cancelled()", "True").replace("&&", " and ").replace("||", " or ")
     if not re.fullmatch(r"(?:True|False|and|or|not|\s|[()])+", expression):
         raise AssertionError(f"unhandled condition: {expression}")
@@ -149,15 +151,15 @@ class PublishGate(unittest.TestCase):
 
     def test_the_wheel_s_smoke_check_starts_no_engine(self):
         # CI runs doctor on the built wheel to prove it answers; an engine it started would linger in
-        # the job, so the check says whether one runs and never starts it (``doctor --no-server``).
+        # the job. Doctor asks whether one runs and never starts it, and takes no option to say so.
         doctors = [line.strip() for line in WORKFLOW.splitlines() if re.search(r"\bcad\"? doctor\b", line)]
         self.assertTrue(doctors, "the release smoke-tests doctor")
         for line in doctors:
-            self.assertIn("doctor --no-server", line)
+            self.assertRegex(line, r"\bdoctor$")
 
     def test_the_release_builds_the_four_projects_and_installs_its_three_wheels_together(self):
         publish = JOBS["publish"]
-        self.assertIn("for project in cad cad-server cad-mcp aliases/cadgen; do\n"
+        self.assertIn("for project in cad aliases/cad-server aliases/cad-mcp aliases/cadgen; do\n"
                       "            python3 -m build --outdir dist \"packages/$project\"", publish)
         # Exactly the four projects' wheels and sdists at the release, nothing else.
         check = publish.split("- name: Check the distributions are the release's\n", 1)[1].split("\n      - name: ", 1)[0]
@@ -169,31 +171,47 @@ class PublishGate(unittest.TestCase):
         self.assertIn("dist/cad_server-*.whl dist/cad_mcp-*.whl", install)
         self.assertIn("scripts/test/test-installed.sh --wheels dist", install)
         self.assertIn('"$RUNNER_TEMP/install-test/bin/cad-mcp" --help', install)
-        self.assertIn("find dist -name 'cad_server-*.whl'", publish)
+        self.assertIn("find dist -name 'cad-[0-9]*.whl'", publish)
 
     def test_installers_get_the_version_only_once_pypi_serves_it(self):
-        # Each project uploaded, then PyPI's index -- what uv resolves a pin through -- listing it before the
-        # next goes up: the library first, which the others pin at the release. All in the pypi job, which
-        # the branches job needs. The docs deploy and the tag follow the branches.
+        # The library uploaded and listed by PyPI's index -- what uv resolves a pin through -- before the others,
+        # which pin it at the release; cad-server and cad-mcp together, in one upload, both listed before cadgen,
+        # the alias the version feed reads, goes last (apps/api: a release cadgen lists installs by every name).
+        # All in the pypi job, which the install branches, the tag and the docs follow.
         pypi = JOBS["pypi"]
-        self.assertEqual(pypi_release.PROJECTS[0], "cad")
+        self.assertEqual(pypi_release.PROJECTS, ("cad", "cad-server", "cad-mcp", "cadgen"))
+        steps = [
+            'pypi_release.py --project cad --version "$VERSION" --built',
+            "packages-dir: upload-to-pypi/cad\n",
+            'pypi_release.py --project cad --version "$VERSION" --wait',
+            'pypi_release.py --project cad-server --version "$VERSION" --built',
+            'pypi_release.py --project cad-mcp --version "$VERSION" --built',
+            "packages-dir: upload-to-pypi/servers\n",
+            'pypi_release.py --project cad-server --version "$VERSION" --wait',
+            'pypi_release.py --project cad-mcp --version "$VERSION" --wait',
+            'pypi_release.py --project cadgen --version "$VERSION" --built',
+            "packages-dir: upload-to-pypi/cadgen\n",
+            'pypi_release.py --project cadgen --version "$VERSION" --wait',
+        ]
         at = 0
-        for project in pypi_release.PROJECTS:
-            with self.subTest(project=project):
-                compare = pypi.index(f'pypi_release.py --project {project} --version "$VERSION" --built', at)
-                publish = pypi.index(f"packages-dir: upload-to-pypi/{project}\n", compare)
-                at = pypi.index(f'pypi_release.py --project {project} --version "$VERSION" --wait', publish)
-        self.assertEqual(pypi.count("uses: pypa/gh-action-pypi-publish@"), len(pypi_release.PROJECTS))
-        branches = condition("branches")
-        self.assertTrue(evaluate(branches, {"pypi": "success"}, {"is_main": "true"}))
-        self.assertFalse(evaluate(branches, {"pypi": "success"}, {"is_main": "false"}))
+        for step in steps:
+            with self.subTest(step=step):
+                at = pypi.index(step, at)
+        self.assertEqual(pypi.count("uses: pypa/gh-action-pypi-publish@"), 3)
+        self.assertEqual(pypi.count("--upload upload-to-pypi/servers"), 2, "cad-server and cad-mcp share one upload")
+        # The branches and the tag follow PyPI, on main, in one job.
+        tag = condition("tag-release")
+        self.assertTrue(evaluate(tag, {"pypi": "success"}, {"is_main": "true"}))
+        self.assertFalse(evaluate(tag, {"pypi": "success"}, {"is_main": "false"}))
         for result in ("failure", "skipped", "cancelled"):
-            self.assertFalse(evaluate(branches, {"pypi": result}, {"is_main": "true"}))
-        for job in ("deploy-docs", "tag-release"):
-            with self.subTest(job=job):
-                self.assertTrue(evaluate(condition(job), {"branches": "success"}, {}))
-                for result in ("skipped", "failure", "cancelled"):
-                    self.assertFalse(evaluate(condition(job), {"branches": result}, {}))
+            self.assertFalse(evaluate(tag, {"pypi": result}, {"is_main": "true"}))
+        # The docs deploy follows the branches' push, and only it: a tag that fails after the push holds
+        # nothing back, and a job that never pushed deploys nothing.
+        docs = condition("deploy-docs")
+        self.assertTrue(evaluate(docs, {}, {"tag-release.branches": "pushed"}))
+        self.assertFalse(evaluate(docs, {}, {"tag-release.branches": ""}))
+        self.assertIn("branches: ${{ steps.branches.outputs.pushed == 'true' && 'pushed' || '' }}", JOBS["tag-release"])
+        self.assertNotIn("branches", JOBS, "the branches move in the tag's job: one runner, not two")
 
     def test_only_the_pypi_job_on_main_in_its_environment_may_mint_a_pypi_token(self):
         # PyPI's trusted publisher names this workflow and the `release` environment, which deploys from
@@ -215,16 +233,22 @@ class PublishGate(unittest.TestCase):
         self.assertIn("name: dist-${{ needs.gate.outputs.version }}-released", JOBS["tag-release"])
 
     def test_the_branches_get_their_copies_of_the_plugin(self):
-        # latest gets one copy and claude.ai's claude-plugin the other, in one push: both or neither.
-        body = JOBS["branches"]
+        # latest gets one copy and claude.ai's claude-plugin the other, in one push: both or neither. It is the
+        # tag job's first step after the checkout, so the tag follows it.
+        job = JOBS["tag-release"]
+        body = job.split("- name: Commit the plugin onto latest, claude-plugin and codex-plugin and push them\n", 1)[1]
+        body = body.split("\n      - name: ", 1)[0]
+        self.assertLess(job.index("- name: Commit the plugin onto latest"), job.index("- name: Configure tag push credentials"))
+        self.assertLess(job.index("- name: Commit the plugin onto latest"), job.index("- name: Create release tag and GitHub Release"))
         self.assertIn("plugin_branch.py --commit --copy latest", body)
         self.assertIn("plugin_branch.py --commit --copy directory", body)
         self.assertIn('git push --atomic "$remote" "$latest:refs/heads/latest" "$directory:refs/heads/claude-plugin"',
                       body)
+        self.assertIn('echo "pushed=true" >> "$GITHUB_OUTPUT"', body)
         self.assertNotIn("refs/heads/plugin", body)
         # Only a deploy key may update those branches, so the push goes over SSH with the release's own key,
-        # checked against GitHub's host keys, and nothing else; the gate checks for the key on main, before
-        # the PyPI upload.
+        # checked against GitHub's host keys, and nothing else -- not the token the tag's later step uses; the
+        # gate checks for the key on main, before the PyPI upload.
         self.assertIn("INSTALL_BRANCHES_KEY: ${{ secrets.INSTALL_BRANCHES_KEY }}", body)
         self.assertIn('remote="git@github.com:${GITHUB_REPOSITORY}.git"', body)
         self.assertIn("StrictHostKeyChecking=yes", body)
@@ -234,52 +258,44 @@ class PublishGate(unittest.TestCase):
         self.assertIn("INSTALL_BRANCHES_KEY: ${{ secrets.INSTALL_BRANCHES_KEY }}", check)
         self.assertNotIn("PUBLISH_PUSH_TOKEN", WORKFLOW)
 
-    def test_the_version_feed_names_the_release_once_the_branches_carry_it(self):
-        # The feed (apps/api) reads PyPI, but Vercel's edge keeps its answer an hour. Once the branches every
-        # install takes carry the release -- after the pypi job's wait for PyPI's index, which they need --
-        # a job of its own purges that cache, on main alone, and nothing waits on it.
-        feed = condition("feed")
-        self.assertTrue(evaluate(feed, {"branches": "success"}, {"is_main": "true"}))
-        self.assertFalse(evaluate(feed, {"branches": "success"}, {"is_main": "false"}))
-        for result in ("failure", "skipped", "cancelled"):
-            self.assertFalse(evaluate(feed, {"branches": result}, {"is_main": "true"}))
-        body = JOBS["feed"]
-        self.assertRegex(body, re.compile(r"^    needs:\n      - gate\n      - branches\n", re.M))
-        self.assertEqual([job for job, text in JOBS.items() if re.search(r"^      - feed$", text, re.M)], [])
-        # The job that may mint a PyPI token runs nothing from npm; this one holds no token at all.
-        self.assertNotRegex(JOBS["pypi"], r"\b(npm|npx|vercel)\b")
-        self.assertRegex(body, re.compile(r"^    permissions: \{\}$", re.M))
-        # Never a failure of the release: each step's own failure is tolerated, a failed install or purge
-        # is a warning, and missing secrets are said and stop it.
-        steps = body.split("\n      - name: ")[1:]
-        self.assertEqual([each.split("\n", 1)[0] for each in steps], ["Set up Node.js", "Purge the version feed's CDN cache"])
-        self.assertTrue(all(re.search(r"^        continue-on-error: true$", each, re.M) for each in steps), steps)
-        step = body.split("- name: Purge the version feed's CDN cache\n", 1)[1]
-        self.assertIn('if VERCEL_PROJECT_ID="$VERCEL_API_PROJECT_ID" vercel cache purge --type cdn --yes --token '
-                      '"$VERCEL_TOKEN"; then\n', step)
-        self.assertEqual(step.count("::warning::"), 2)
-        # It purges only once every instance of the feed's function has let go of what it read before
-        # PyPI listed the release (FRESH_MS), or the edge could fill with the release before again.
-        versions = (REPO_ROOT / "apps/api/src/versions.mjs").read_text(encoding="utf-8")
-        fresh = math.prod(int(factor) for factor in re.search(r"^const FRESH_MS = ([\d *]+);", versions, re.M)[1].split("*"))
-        waits = re.findall(r"^\s+sleep (\d+)$", step, re.M)
-        self.assertEqual(len(waits), 1)
-        self.assertGreaterEqual(int(waits[0]) * 1000, fresh)
-        self.assertLess(step.index("sleep"), step.index("vercel cache purge"))
-        self.assertIn("Would have purged the version feed's CDN cache",
-                      JOBS["publish"].split("- name: Rehearsal summary (build-test)", 1)[1])
+    def test_nothing_purges_the_version_feed(self):
+        # The feed (apps/api) names a release only once every file of it has been on PyPI an hour, and its edge keeps
+        # an answer five minutes: a purge when the release ships finds the feed not naming it yet, and one later saves
+        # minutes at most. No job purges it, and no job holds the Vercel API project's id for that.
+        self.assertNotIn("feed", JOBS)
+        self.assertNotIn("vercel cache purge", WORKFLOW)
+        self.assertNotIn("VERCEL_API_PROJECT_ID", WORKFLOW)
 
     def test_the_release_carries_the_installer_and_its_checksums(self):
-        # releases/download/v<VERSION>/install.sh is the installer pinned to a release (texttocad.dev
-        # serves the newest), checked against the SHA256SUMS beside it; a rehearsal lists the same.
+        # releases/download/v<VERSION>/ keeps the release's installer files for the record, checked against the
+        # SHA256SUMS beside them (install.sh, run from anywhere, downloads the newest install.py from
+        # texttocad.dev); a rehearsal lists the same.
         body = JOBS["tag-release"]
         gather = body.split("- name: Gather the installer scripts and their checksums\n", 1)[1].split("\n      - name: ", 1)[0]
-        self.assertIn("cp scripts/install/install.sh scripts/install/install.ps1", gather)
-        self.assertIn("sha256sum install.sh install.ps1 > SHA256SUMS", gather)
+        self.assertIn("cp scripts/install/install.sh scripts/install/install.ps1 scripts/install/install.py", gather)
+        self.assertIn("sha256sum install.sh install.ps1 install.py > SHA256SUMS", gather)
         attach = body.split("- name: Create release tag and GitHub Release\n", 1)[1]
-        for name in ("install.sh", "install.ps1", "SHA256SUMS"):
+        for name in ("install.sh", "install.ps1", "install.py", "SHA256SUMS"):
             self.assertIn(f'"$RUNNER_TEMP"/installer/{name}', attach)
         self.assertIn('"$RUNNER_TEMP"/installer/*', JOBS["publish"].split("- name: Rehearsal summary (build-test)", 1)[1])
+
+    def test_the_release_carries_cad_s_distributions_not_the_empty_aliases(self):
+        # The aliases (cad-server, cad-mcp, cadgen) are empty and PyPI keeps them: the release page carries cad's
+        # wheel and sdist alone, in a release and a rehearsal alike. `cad-*` names cad's files and none of the
+        # aliases' (cad_server-, cad_mcp-, cadgen-).
+        import fnmatch
+
+        attach = JOBS["tag-release"].split("- name: Create release tag and GitHub Release\n", 1)[1]
+        rehearsal = JOBS["publish"].split("- name: Rehearsal summary (build-test)", 1)[1]
+        for body, folder in ((attach, '"$RUNNER_TEMP"/dist/'), (rehearsal, "dist/")):
+            self.assertIn(f"{folder}cad-*.whl", body)
+            self.assertIn(f"{folder}cad-*.tar.gz", body)
+            self.assertNotIn(f"{folder}*", body.replace(f"{folder}cad-*", ""))
+        built = ["cad-0.11.13-py3-none-any.whl", "cad-0.11.13.tar.gz", "cad_server-0.11.13-py3-none-any.whl",
+                 "cad_server-0.11.13.tar.gz", "cad_mcp-0.11.13-py3-none-any.whl", "cad_mcp-0.11.13.tar.gz",
+                 "cadgen-0.11.13-py3-none-any.whl", "cadgen-0.11.13.tar.gz"]
+        attached = [name for name in built if fnmatch.fnmatch(name, "cad-*.whl") or fnmatch.fnmatch(name, "cad-*.tar.gz")]
+        self.assertEqual(attached, ["cad-0.11.13-py3-none-any.whl", "cad-0.11.13.tar.gz"])
 
 
 pypi_release = load("pypi_release", "scripts/release/pypi_release.py")

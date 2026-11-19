@@ -1,5 +1,4 @@
 import type { LibraryModel } from '@cad/ui/library';
-import type { UpdateNotice } from '@cad/ui/update';
 import type { Bridge, CallOptions, ToolResult } from './bridge';
 import { isHostRefusal, type Channel } from './channel';
 import { refusalOf } from './unreachable.js';
@@ -28,8 +27,6 @@ export interface Launch {
   recents?: Recent[];
   /** Whether this computer has a file chooser for the home's Open. */
   pick?: boolean;
-  /** Whether a newer text-to-cad is out, as the server last read it: the update button draws with the page. */
-  notice?: UpdateNotice | null;
   /**
    * The ways to the engine that need no call, where it gives a page (`cad_server/mcp/server.py`'s
    * `_reach`): `browser`, the CAD Viewer's page of what the launch shows, with its link

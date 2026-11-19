@@ -67,7 +67,7 @@ class ChoosingTest(unittest.TestCase):
                          (("blender",), "3.13", ("--managed-python",)))
         here = dataclasses.replace(base.Installation.here(), python=SERVER)
         # But for uv's settings in the caller's environment, cad doctor's spec is the run's.
-        self.assertEqual(dataclasses.replace(spec, environment=()), extras.integration_spec(here, ["blender"]))
+        self.assertEqual(dataclasses.replace(spec, environment=()), extras.integration_spec(["blender"]))
         # Beside any other integration, its namespace in the library counting as an import of bpy does.
         both = self.prepared("both.py")
         self.assertEqual((both.spec.integrations, both.spec.python, both.line),
@@ -133,7 +133,7 @@ class ChoosingTest(unittest.TestCase):
 
     def test_a_platform_bpy_has_no_build_for_is_refused_by_name_before_anything_is_made(self) -> None:
         here = base.Installation.here()
-        spec = extras.integration_spec(dataclasses.replace(here, python=SERVER), ["blender", "build123d"])
+        spec = extras.integration_spec(["blender", "build123d"])
         for system, arch, said in (("darwin", "x86_64", "macOS x86-64"), ("linux", "aarch64", "Linux arm64")):
             with self.subTest(platform=said), mock.patch.object(extras, "_system", return_value=system):
                 with self.assertRaises(extras.Refused) as caught:
@@ -154,8 +154,8 @@ class ChoosingTest(unittest.TestCase):
 
     def test_its_environment_is_its_release_s_as_any_other_is(self) -> None:
         here = dataclasses.replace(base.Installation.here(), python=SERVER)
-        spec = extras.integration_spec(here, ["blender"])
-        later = dataclasses.replace(here, release="0.99.0", name="0.99.0")
+        spec = extras.integration_spec(["blender"])
+        later = dataclasses.replace(here, release="0.99.0")
         self.assertNotEqual(extras.key(here, spec), extras.key(later, spec), "cad is pinned in it: an update makes its own")
         self.assertEqual(extras._called(spec, "cad[blender] 0.11.3")[0], "the blender integration's environment")
         import cad.registry

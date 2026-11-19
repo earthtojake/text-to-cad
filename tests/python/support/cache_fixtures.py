@@ -124,6 +124,7 @@ class CacheCase(unittest.TestCase):
         self.project.mkdir()
         (self.state, self.cache), self.env = self.shared, self.engine_env
         self.engine = Path(self.env["CAD_ENGINE_DIR"])
+        self.start()  # the class's engine, which a test before may have left stopped
         self.reset()
 
     def reset(self) -> None:
@@ -144,6 +145,10 @@ class CacheCase(unittest.TestCase):
 
     def cli(self, *args: str, env: dict | None = None):
         return engine_daemon.run([sys.executable, "-m", "cad_server.engine", *args], cwd=self.project, env=env or self.env)
+
+    def start(self) -> None:
+        """The test's engine started again after a stop: a restart, as ``cad server start`` starts one."""
+        engine_daemon.start(self.env)
 
     def run_script(self, name: str):
         done = engine_daemon.run([sys.executable, f"{name}.py"], cwd=self.project, env=self.env)

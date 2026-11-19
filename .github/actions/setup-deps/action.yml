@@ -7,8 +7,11 @@ description: Install the selected root npm workspaces and optional Python, brows
 
 inputs:
   python:
-    description: Install requirements-dev.txt.
+    description: Install the development environment from uv.lock (`uv sync --locked`) into the interpreter setup-python provides.
     default: "true"
+  python-version:
+    description: The Python the environment is made on.
+    default: "3.14"
   playwright:
     description: Install Python Playwright's headless Chromium, which the viewer's launch smoke test drives (requires python).
     default: "true"
@@ -27,18 +30,19 @@ runs:
   steps:
     - name: Set up Python
       if: inputs.python == 'true'
+      id: python
       uses: actions/setup-python@v7
       with:
-        python-version: "3.14"
+        python-version: ${{ inputs.python-version }}
 
-    # uv installs requirements-dev.txt into that interpreter: pip took 99 s of every
-    # Windows job even from its cache. uv's own cache is keyed on the same file.
+    # uv makes the environment on that interpreter from the lock contributors use (pip took 99 s
+    # of every Windows job even from its cache). uv's own cache is keyed on the lock.
     - name: Set up uv
       if: inputs.python == 'true'
       uses: astral-sh/setup-uv@v10.3.3
       with:
         enable-cache: true
-        cache-dependency-glob: requirements-dev.txt
+        cache-dependency-glob: uv.lock
 
     - name: Set up Node.js
       uses: actions/setup-node@v7
@@ -104,10 +108,18 @@ runs:
         "${apt[@]}" update
         "${apt[@]}" install -y "${missing[@]}"
 
+    # The lock contributors sync into `.venv`, installed here into the interpreter setup-python put on
+    # the PATH (UV_PROJECT_ENVIRONMENT, its prefix), as CI always ran: a Windows venv's python.exe is a
+    # launcher that starts the interpreter as its child, and the suites that follow a process by its
+    # id would follow the launcher. `--locked` refuses a lock that no longer matches the pyproject
+    # files rather than resolving again; `--inexact` leaves the interpreter's own pip and setuptools.
+    # Later steps' uv commands (`uv sync --group fea`) take the same environment.
     - name: Install Python dependencies
       if: inputs.python == 'true'
       shell: bash
-      run: uv pip install --system --python python -r requirements-dev.txt
+      run: |
+        echo "UV_PROJECT_ENVIRONMENT=$pythonLocation" >>"$GITHUB_ENV"
+        UV_PROJECT_ENVIRONMENT="$pythonLocation" uv sync --locked --inexact
 
     - name: Install the launch smoke test's browser
       if: inputs.python == 'true' && inputs.playwright == 'true'

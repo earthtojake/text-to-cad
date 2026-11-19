@@ -283,7 +283,7 @@ class FirstNeedTest(_Folder):
                 hulls._engine(told.append)
 
 
-@unittest.skipUnless(importlib.util.find_spec("coacd"), "coacd is the coacd extra's: requirements-dev.txt installs it")
+@unittest.skipUnless(importlib.util.find_spec("coacd"), "coacd is the coacd extra's: uv sync installs it")
 class CoacdTest(_Folder):
     def test_coacd_cuts_an_l_shaped_part_into_hulls_that_mujoco_compiles(self) -> None:
         from cad.mujoco import decompose, spec

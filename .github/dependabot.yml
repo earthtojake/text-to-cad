@@ -2,9 +2,9 @@
 # noise is one review, not twenty. Majors stay individual. Every PR carries the
 # `dependencies` label, which .github/release.yml files under Maintenance.
 #
-# The Python packages' pins (the library's, packages/cad, the server's,
-# packages/cad-server; the shim, packages/cad-mcp, has none) are the floor a
-# released wheel is built against, so they are reviewed like any other change;
+# The Python package's pins (packages/cad: the library, the server and the shim)
+# are the floor a released wheel is built against, so they are reviewed like any other change, and
+# the development lock (uv.lock) moves with them;
 # @cad/core/viewer/docs are the three npm trees CI installs (.github/actions/setup-deps).
 version: 2
 updates:
@@ -64,10 +64,11 @@ updates:
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
 
-  - package-ecosystem: pip
-    directories:
-      - /packages/cad
-      - /packages/cad-server
+  # uv's ecosystem at the workspace root: it reads the root pyproject.toml, its member packages/cad and the one
+  # lock, uv.lock, and moves a requirement and the lock together (it raises a floor to what it locks, as the pip
+  # ecosystem did here). Every Python job installs with `uv sync --locked`, so a lock out of step fails CI.
+  - package-ecosystem: uv
+    directory: /
     schedule:
       interval: weekly
     labels:

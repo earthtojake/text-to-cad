@@ -36,20 +36,41 @@ Each is held by a test where one can hold it.
 | unit | `packages (Linux)`, `js-core`, `js-ui`, `js-web`, `js-mcp`, `docs`, `skills` | when its component changes | Behaviour of one package or app |
 | platform | `packages (Windows)`, `routing (macOS)` | with every change to the packages | What differs by operating system: paths, locks, subprocesses, line endings, the C library |
 | integration | `fea`, `kicad`, `blender`, `packaging`, `viewer-e2e` | with every change to the packages; the last two with the UI and the apps too | A third-party tool installed as a person has it; the wheels as they ship; the bundled viewer through the real backend |
-| release | `packages (Python 3.13 floor)`, `install (Linux)`, `install (Windows)` | a full run: a `VERSION` change, nightly, a dispatch | Rare breaks that must not reach a release, at a cost not worth paying on every push |
+| release | `packages (Python 3.11 floor)`, `install (Linux)`, `install (Windows)` | a full run: a `VERSION` change, nightly, a dispatch | Rare breaks that must not reach a release, at a cost not worth paying on every push |
 | gate | `CI` | always | The one required check |
 
 **The release tier's criterion.** A job runs on a full run only, not on every push, when both hold:
 it rarely catches what a per-push job does not, and catching it before a release ships is soon
 enough. Every other job runs on the changes that reach it. The two there now:
 
-- `packages (Python 3.13 floor)` is a third run of suites the packages jobs already run on the Python
+- `packages (Python 3.11 floor)` is a third run of suites the packages jobs already run on the Python
   the server's installations use. It guards one kind of break, a call the floor's standard library
-  lacks, of which the repository has had one (argparse's `suggest_on_error`), at 11 minutes a run.
+  lacks, of which the repository has had one (argparse's `suggest_on_error`), at 11 to 17 minutes a run
+  whole, so it runs as two shards.
 - The installer rehearsals install this tree's wheel on a fresh machine. What they exercise changes in
   few pull requests, and before this layout they ran only after a merge (in November 2026 the Linux
   one had passed 7 runs of 7, the Windows one 23 pushes of 25); a release pull request runs every job,
   so no release ships unrehearsed. They also run on a change to the installers themselves.
+- The update rehearsal (`update-rehearsal`, `scripts/test/rehearse-update.py`) installs real releases
+  from PyPI on private computers and brings each to this tree's build by the route it takes, on Linux,
+  macOS and Windows: the updater of 0.11.11, 0.11.0 and 0.10.4 (`cad setup --engine-update`, then the
+  install command the new server runs once; where that run fails, `updater-fallback`, or the computer had
+  only a store's copy, `store-only`, the new server installs cad with uv itself), the shipped release's
+  typed `cad update` (`typed`, `store-typed`), the uv line typed on a computer of 0.11.11 (`uv-line`,
+  `store-uv-line`), and the install command on a computer of 0.11.11; then cad's own update, automatic
+  and typed with and without a server running, inside its major with a higher major out and across it by
+  `cad update --major` (`self-major`), and cad installed by pipx (`self-pipx`). It is the one test
+  of the move every computer makes, unattended or by the install command. It runs with the installer
+  rehearsals, and on a change to the rehearsal itself. A route runs alone too, as
+  `scripts/test/rehearse-update.py store-only`.
+- The real install (`real install`, `real-install.yml`, `scripts/test/real-install.py`) runs the install script
+  against the real `claude`, `codex` and `gemini` on Windows, macOS and Linux, each on a private computer: the
+  one test of the half of the script that touches agent apps on Windows, where its unit tests (stand-in
+  programs) are skipped. It installs, runs the script again, and migrates each program from the state 0.11.10's
+  installer left; cad comes from this tree's wheel, the plugin from this tree's `latest` copy in a local
+  repository each program's git reads in GitHub's place. It cannot test the desktop apps (they need a person) or
+  GitHub's `latest` branch itself, which before a release is the last release's. About 10 minutes a system.
+  It runs with the installer rehearsals, and on a change to the runner.
 
 A job moves into the tier, or out of it, with that argument in its pull request.
 
@@ -146,7 +167,7 @@ no other job has:
 
 - another operating system (`packages (Windows)`, `routing (macOS)`);
 - another toolchain or environment, installed as a person has it (`fea`, `kicad`, `blender`);
-- another interpreter (`packages (Python 3.13 floor)`);
+- another interpreter (`packages (Python 3.11 floor)`);
 - the built artifact in place of the source (`packaging`, `viewer-e2e`, the installer rehearsals).
 
 Splitting a job that has outgrown its time is the other reason: shards of one suite, not a new kind of
@@ -173,8 +194,7 @@ every rule it matches. Selection is by path, never by what a file says: a commen
 in a module selects what the module's code would, and no rule reads a file to
 decide which tests reach it. The components:
 
-- **The packages** (`packages/cad`, `packages/cad-server`, `packages/cad-mcp`,
-  `packages/aliases`, `scripts/bundle`): their suites whole on Linux and Windows,
+- **The packages** (`packages/cad`, `packages/aliases`, `scripts/bundle`): their suites whole on Linux and Windows,
   `skills`, `packaging`, `viewer-e2e`, and the jobs that run them with a tool
   installed or on the third C library (`fea`, `kicad`, `blender`,
   `routing (macOS)`: minutes together, never the longest job).
@@ -187,7 +207,7 @@ decide which tests reach it. The components:
 
 | Job | Runs on | What it runs |
 | --- | --- | --- |
-| `static` | every change | With Python and Node alone: the version check (canonical version, derived metadata, the release's pins; on a pull request, what merging it releases, see [Shipping a release](../../CONTRIBUTING.md#shipping-a-release)), the shipping contract's tree rules, the light contracts (every policy test that reads only the repository's text, and the print3d, render and sendcutsend suites) and the API's tests |
+| `static` | every change | With Python and Node alone: the version check (canonical version, derived metadata, the release's pins; on a pull request, what merging it releases, see [Shipping a release](../../CONTRIBUTING.md#shipping-a-release)), the shipping contract's tree rules, the light contracts (every policy test that reads only the repository's text, and the render and sendcutsend suites) and the API's tests |
 | `packages (Linux I/2)` | the packages, a package test | The library's, the server's (the engine's and the CAD Viewer backend's included) and the shim's suites under Xvfb, or the files of them the change selected; the type check |
 | `packages (Windows I/3)` | the same | The same suites and the type check on Windows: paths, locks, subprocesses, file URLs and the daemon are platform-sensitive |
 | `routing (macOS)` | the packages, the router's unit files | The router's unit files on the third C library (its copper is held to a digest on all three) |
@@ -197,17 +217,18 @@ decide which tests reach it. The components:
 | `js-web` | `packages/ui`, `apps/web` and what its Markdown links to | The CAD Viewer client's type check and units |
 | `js-mcp` | `packages/ui`, `apps/mcp` | The CAD app's type check, units and one-file build |
 | `docs` | `apps/docs`, `scripts/brand`, the one-line installers | Lint, the Next build, icon verification, the brand marks |
-| `fea` | the packages, its suite | `test-fea.sh`, with netgen and CalculiX installed |
+| `fea` | the packages, its suite | `test-fea.sh`, with netgen and CalculiX installed (the lock's `fea` group) |
 | `kicad` | the packages, its suite | `test-kicad.sh`, in the environment of `cad[kicad]` |
 | `blender` | the packages, its suite | `test-blender.sh`, in the environment `cad run` makes for bpy; a test that skips there fails the run |
 | `packaging` | the packages, the UI, `apps/web`, `apps/mcp`: whatever ships in a wheel | Clean bundle, layout, the wheels' contents, the installed commands |
 | `viewer-e2e` | the packages, the UI, `apps/web`, `tests/browser` | The bundle's viewer through the real backend: the launch smoke test and the format and camera gates in Chromium |
-| `packages (Python 3.13 floor)` | a full run | The three suites on the packages' oldest Python (`test-floor.sh`) |
+| `packages (Python 3.11 floor)` | a full run | The three suites on the packages' oldest Python (`test-floor.sh`), in two shards |
 | `install (Linux)`, `install (Windows)` | a full run; `scripts/install`, the two workflows | `install-linux.yml` and `install-windows.yml`: the one-line installers on a fresh machine, against this tree's wheel |
+| `real install` | a full run; `scripts/install`, its workflow, its runner | `real-install.yml`: the install script against the real `claude`, `codex` and `gemini` on Windows, macOS and Linux |
 | `CI` | always | The one required check: every job that ran passed (`scripts/github-workflows/ci_gate.py`) |
 
 **A full run** is every job on every suite. `VERSION` (a release is tested
-whole), `package.json`, `package-lock.json`, `requirements-dev.txt`,
+whole), `package.json`, `package-lock.json`, the root `pyproject.toml` and `uv.lock`,
 `packages/core`, `scripts/build`, `tests/python/support`, the workflow,
 `setup-deps`, the selector, the gate, the runners' shared parts and any path the
 table does not name start one; so do a manual dispatch, `Publish Release`'s call
@@ -219,15 +240,16 @@ tests resolve. Root prose, the plugin manifests and configs, the release scripts
 
 **The release tier** runs on a full run only, so before a release ships and not
 on every push ([its criterion](#what-runs-where)): the packages' suites on Python
-3.13, and the installer rehearsals, which also run on a change to the installers
-themselves (`scripts/install`, the two workflows). The nightly run, on `main`, is
+3.11, the installer and update rehearsals and the real install, which also run on a change to the
+installers themselves (`scripts/install`, their workflows) or to the update rehearsal or the real install. The nightly run, on `main`, is
 that tier for whatever merged without a release; it runs nothing when a run
 already tested `main`'s tree in full.
 
 **Shards.** Run whole, the packages' suites are split over two jobs on Linux and
 three on Windows, each taking its share of every suite (`CAD_TEST_SHARD=I/N`,
 which any `run_python_unittest` honours); a narrowed selection runs in one. The
-first shard also runs the type check, once a platform because the checker reads
+floor's suites, which only a full run selects, are always split over two. The
+first shard of Linux and of Windows also runs the type check, once a platform because the checker reads
 the `win32` branches on Windows alone, and the package test files the change
 itself touches before the suite, so a break in a pull request's own test (most
 Windows failures are one: a POSIX path, a line ending) reports in a minute or
@@ -243,8 +265,10 @@ rule matches a tracked file and names tests that exist, every job runs on one fl
 and no step on any, a full run runs everything, and `CI` needs every job. A job
 is added, renamed, split or retimed without an edit there; a new job goes in
 `CI`'s `needs` (the same test fails one that is not there). Each job installs only
-what its tests need: npm workspaces by job, Python and the two Playwright browsers
-on request, system packages through `setup-deps`'s `apt` input, and nothing beyond
+what its tests need: npm workspaces by job, Python (the development environment,
+`uv sync --locked` from the one `uv.lock` contributors use, installed into the interpreter
+`setup-python` provides) and the
+two Playwright browsers on request, system packages through `setup-deps`'s `apt` input, and nothing beyond
 Python and Node for `static`.
 
 Every run records the tree it tested as an artifact, `tested-<tree>-<scope>`
@@ -272,7 +296,7 @@ stopping the merge.
 **Nothing waits long.** Every job has a timeout of about twice its slowest
 observed run (a job that runs Python test files, at least its slowest run and
 11 minutes, so the hang guard below fires before it), and every install step has
-one of its own (`setup-deps` as a whole, the pip and uv installs): a stalled
+one of its own (`setup-deps` as a whole, the uv installs): a stalled
 mirror fails in minutes rather than running out its job. The blender and KiCad
 suites fetch their environments as they run and the rehearsals are installs;
 their jobs' timeouts bound those. `setup-deps` installs system packages only when the image
@@ -316,15 +340,13 @@ Read the failing job, not the run: `CI` names the jobs that failed, and each job
 
 ## Other ways to test
 
-**The type check.** With the development environment active, check the three distributions' Python sources with:
+**The type check.** With the development environment active, check the distribution's Python sources with:
 
 ```sh
-for project in cad cad-server cad-mcp; do
-  python -m pyrefly check --config "packages/$project/pyproject.toml"
-done
+uv run pyrefly check --config packages/cad/pyproject.toml
 ```
 
-Pyrefly is pinned in `requirements-dev.txt`. Each package's `[tool.pyrefly]`
+Pyrefly is pinned in the root `pyproject.toml`'s `dev` group. The package's `[tool.pyrefly]`
 configuration uses the [basic preset](https://pyrefly.org/en/docs/configuration/#preset-basic)
 over its own `src`. It checks a limited set of diagnostics, including
 undefined names in annotations, and skips unannotated function bodies and broader
@@ -372,7 +394,14 @@ keeps them out of `models/`.
 **Rehearsals.** The release pipeline is rehearsed on `build-test`
 ([Rehearsing on `build-test`](../../CONTRIBUTING.md#rehearsing-on-build-test)), and the installers on
 a fresh machine by `install-linux.yml` and `install-windows.yml`, which `test.yml` calls in the release
-tier and which a dispatch with `published` runs against the release people install today.
+tier and which a dispatch with `published` runs against the release people install today. The arrival
+of a computer on 0.11.11, 0.11.0, 0.10.4 or 0.10.0 at this tree's build is rehearsed by `scripts/test/rehearse-update.py`,
+which `test.yml`'s
+`update-rehearsal` job runs in the same tier and which runs locally too (it needs uv and the network).
+The install script against the real programs of Claude Code, Codex and Gemini CLI is `scripts/test/real-install.py`
+(`real install`, the same tier), which runs locally too against the programs on your PATH, never your own
+configuration of them: `--wheels` names this tree's wheels (`CAD_KEEP_WHEEL=1 CAD_WHEEL_OUT_DIR=<dir>
+scripts/release/check-wheel-contents.sh` after `scripts/bundle/bundle.sh`).
 
 ### Performance changes
 
@@ -385,7 +414,7 @@ that removes a cache or a performance mechanism first lists what it made faster.
 #478 removed a kernel-op memo for correctness and slowed re-runs (f1's
 `power_unit` forced rebuild went from 24 s to 102 s); that cost sat deep in a long
 PR body instead of being approved as a trade-off. The engine's memo
-(`packages/cad-server/src/cad_server/engine/README.md`, **Body retention**) is keyed by
+(`packages/cad/src/cad_server/engine/README.md`, **Body retention**) is keyed by
 each operation's parameters and the keys of the shapes it was given, and answers
 a hit with the live object the first run made; its pressure tests are
 `tests/python/packages/cad/engine/test_memo.py` and `test_bodies.py`, and a

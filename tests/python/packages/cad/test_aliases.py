@@ -72,7 +72,7 @@ class TheAliases(unittest.TestCase):
                               "from cad.ap242 import mechanism_state\n", encoding="utf-8")
             proc = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=120)
             program = subprocess.run([sys.executable, "-P", "-m", "cad._internal.program", str(script)],
-                                     capture_output=True, text=True, timeout=120)
+                                     capture_output=True, text=True, encoding="utf-8", timeout=120)
         self.assertEqual(0, proc.returncode, proc.stderr)
         for said in (proc.stderr, program.stderr):
             lines = [line for line in said.splitlines() if "CadDeprecationWarning" in line]

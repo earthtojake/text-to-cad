@@ -4,9 +4,7 @@ packages/core and packages/ui serve every app -- the web CAD Viewer and the Code
 plugin -- through injected host capabilities (packages/ui/docs/viewer-host.md).
 The Python packages are shared the same way: the server's host adapter lives in cad_server/mcp/,
 which may depend on the rest of the server; nothing else in the library or the server may name a
-host or import the adapter, but the installer's providers (`_internal/providers.py`), whose whole
-job is each agent app's own commands and files, and the plugin folder they point the apps at
-(`_internal/plugin.py`), each app's own manifest and server config. The shim (cad-mcp) is the stdio transport an
+host or import the adapter. The shim (cad-mcp) is the stdio transport an
 agent app starts, an adapter whole: it reads which host launched it.
 
 A host name, a host-protocol call, a host-identity flag or host sniffing in shared
@@ -34,14 +32,11 @@ SHARED_PACKAGE_MANIFESTS = (
     repo_path("packages/ui/package.json"),
 )
 
-# The library's and the server's packages, by their source trees.
-CAD_SOURCES = (repo_path("packages/cad/src"), repo_path("packages/cad-server/src"))
+# The library's and the server's packages, by their source tree.
+CAD_SOURCES = (repo_path("packages/cad/src"),)
 CAD_PACKAGES = ("cad", "cad_server")
-# The adapter: the only code of theirs allowed to know the host. And the agent apps `cad setup` sets
-# text-to-cad up in, each by its own commands and files: the installer's providers, and the plugin folder
-# it points them at, which holds each app's own manifest and server config.
-CAD_ADAPTER = ("cad_server/mcp/", "cad_server/_internal/engine_host.py", "cad_server/_internal/providers.py",
-               "cad_server/_internal/plugin.py")
+# The adapter: the only code of theirs allowed to know the host.
+CAD_ADAPTER = ("cad_server/mcp/", "cad_server/_internal/engine_host.py")
 
 # Each entry: (compiled pattern, what the match means).
 HOST_NAMES = (re.compile(r"\b(?:codex|chatgpt|openai|skybridge)\b", re.IGNORECASE), "names a host")

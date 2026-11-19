@@ -91,7 +91,7 @@ class CacheKeepingTest(cache_fixtures.CacheCase):
         self.assertEqual((done.returncode, done.stderr), (0, ""))
         self.assertEqual(json.loads(done.stdout), {"ok": True, "deleted": [{"id": other, "name": "other", "kind": "model"}]})
         self.assertEqual((self.record(other), self.file(other).parent.exists()), ({}, False))
-        self.assertIn("no engine server is running", self.cli("status").stdout)
+        self.assertIn("the cad server is not running", self.cli("status").stdout)
 
     def legacy_cache(self, data: bytes) -> tuple[str, dict]:
         """Install historical bytes in a real registered model's cache, with its source gone."""
@@ -105,6 +105,7 @@ class CacheKeepingTest(cache_fixtures.CacheCase):
         })
         (self.project / "cube.py").unlink()
         (self.project / "cube.ran").unlink()
+        self.start()  # the next engine
         return ident, self.record(ident)
 
     def test_legacy_cached_snapshot_opens_after_restart_without_source_or_rewriting_cache(self) -> None:
@@ -140,6 +141,7 @@ class CacheKeepingTest(cache_fixtures.CacheCase):
         self.assertEqual(status, 200, shown)
         self.assertEqual(self.cli("stop").returncode, 0)
         # The next daemon still opens the original snapshot; no migration cache/revision churn.
+        self.start()
         out = self.folder / "again.step"
         exported = self.cli("export", ident, str(out))
         self.assertEqual(exported.returncode, 0, exported.stderr)
@@ -161,6 +163,7 @@ class CacheKeepingTest(cache_fixtures.CacheCase):
         ident, record = self.legacy_cache(original)
         out = self.folder / "unsupported.step"
         for _ in range(2):
+            self.start()  # the engine each time afresh
             exported = self.cli("export", ident, str(out))
             self.assertEqual(exported.returncode, 2, exported.stderr)
             self.assertIn("unsupported document format xbf/99", exported.stderr)
@@ -228,6 +231,7 @@ class CacheKeepingTest(cache_fixtures.CacheCase):
             failures = listed["cache"]["failures"]
             self.assertEqual(self.cli("stop").returncode, 0)
             (self.project / "cube.ran").unlink()
+            self.start()
             again = self.cli("inspect", ident)
             seen["restart"] = (again.returncode, again.stderr)
             seen["restart state"] = self.ask({"op": "state", "id": ident})

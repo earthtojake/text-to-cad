@@ -1,6 +1,6 @@
 /**
  * The CAD app as a host keeps it: a small page that loads the CAD app the engine serves, so a page a
- * host cached, or kept open across an update, runs the engine's release, not its own.
+ * host cached runs the engine's release, not its own.
  *
  * Hosts may keep a UI resource by its URI (OpenAI's guidance makes the URI the cache key; Claude
  * Desktop keeps a thread's page until it restarts), so the resource is this shell, and the app is
@@ -9,8 +9,7 @@
  * through the call the host carries back to CAD's server (`cad_http`, in parts as the tunnel sends
  * long bodies), or, where the host carries no call, from the engine directly with the launch's link
  * (`host/direct.ts`'s way); imports it, and hands it what it greeted: `globalThis.__cadShell` (its
- * bridge, the launch and its result), which the app starts on (`main.tsx`). After an update the app
- * asks the shell to load the engine's app again (`reload`), in place.
+ * bridge, the launch and its result), which the app starts on (`main.tsx`).
  *
  * Where the host carries none of the card's calls and the engine cannot be read from the card either
  * (the Claude app's Code tab, which refuses a card's calls and keeps it off this machine's loopback),
@@ -40,15 +39,11 @@ export interface CadShell {
   presentation: Presentation;
   launch: Launch;
   result: ToolResult;
-  /** The engine's CAD app loaded again, in place of the one running (`globalThis.__cadApp`): after an update, the new release's. */
-  reload(): Promise<void>;
 }
 
 declare global {
   // eslint-disable-next-line no-var
   var __cadShell: CadShell | undefined;
-  // eslint-disable-next-line no-var
-  var __cadApp: { unmount(): void } | undefined;
 }
 
 interface Reply { status: number; headers: Record<string, string>; body: string; encoding?: string }
@@ -261,15 +256,7 @@ export async function start() {
     return;
   }
   const { launch, result } = opened;
-  const shell: CadShell = {
-    bridge, presentation, launch, result,
-    async reload() {
-      globalThis.__cadApp?.unmount();
-      globalThis.__cadApp = undefined;
-      document.getElementById('root')?.replaceChildren();
-      await loadApp(shell);
-    },
-  };
+  const shell: CadShell = { bridge, presentation, launch, result };
   globalThis.__cadShell = shell;
   try {
     await loadApp(shell);

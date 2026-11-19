@@ -1,14 +1,18 @@
 name: Linux installer rehearsal
 
-# install.sh on a fresh Linux, the way a person runs it, piped to sh, against the wheel this tree builds: on
+# install.sh on a fresh Linux, the way a person runs it, piped to sh, against the wheels this tree builds: on
 # the runner's own Ubuntu, and in the slim Python image, which has no curl until one is installed, no procps,
-# and no uv. uv comes from its own installer. The checks are the `cad` command's: `cad --version` and `cad
-# doctor`. The Windows rehearsal goes further, through models and the uninstall (install-windows.yml); the
-# release smoke runs the wheels. test.yml calls it, as it does the Windows one, on a full run (so before
-# a release ships) and on a change to the installers: the selector's `installer` flag
-# (scripts/github-workflows/select_checks.py). Dispatched by hand with `published`, the
-# same steps run against what people install today: the site's install.sh and the newest release on PyPI,
-# no wheel built.
+# and no uv. uv comes from its own installer. The wheels are written again as a release no index holds, this
+# tree's major and minor with a patch far above PyPI's newest (scripts/test/real_computer.py stamp and publish),
+# and offered to uv (UV_FIND_LINKS), so the install command's `uv tool install cad`, which installs the newest
+# release uv is offered, takes them and never an index's. The checks: cad a uv tool at that release in
+# ~/.local/bin, cad's automatic updates on and the plugin's turned on by the install, no server started by the
+# install; then `cad server start`, a model built by `cad run` (which makes the CAD kernel's environment), and
+# `cad doctor`. The Windows rehearsal goes further (install-windows.yml); the release smoke
+# runs the wheels. test.yml calls it, as it does the Windows one, on a full run (so before a release ships) and
+# on a change to the installers: the selector's `installer` flag (scripts/github-workflows/select_checks.py).
+# Dispatched by hand with `published`, the same steps run against what people install today: the site's
+# install.sh and PyPI's newest release of cad, no wheel built.
 on:
   workflow_dispatch:
     inputs:
@@ -64,9 +68,7 @@ jobs:
         env:
           CAD_KEEP_WHEEL: "1"
           CAD_WHEEL_OUT_DIR: ${{ runner.temp }}/wheels
-        run: |
-          python -m pip install build
-          scripts/release/check-wheel-contents.sh
+        run: scripts/release/check-wheel-contents.sh
 
       - name: Keep the wheels for the rehearsals
         uses: actions/upload-artifact@v7
@@ -82,7 +84,7 @@ jobs:
     if: ${{ !cancelled() && needs.wheel.result != 'failure' }}
     runs-on: ubuntu-latest
     container: ${{ matrix.image }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -114,29 +116,66 @@ jobs:
           name: install-linux-wheels
           path: wheels
 
-      # The server's wheel, the one the installer runs; uv finds the library's beside it (UV_FIND_LINKS), at
-      # the release the server pins, which no index has before it is released. Published: the site's installer,
-      # and the release the version feed names, from PyPI.
+      # This tree's wheels as a release newer than PyPI's newest, offered to uv; this tree's install.py.
+      # Published: the site's installer, and PyPI's newest release, which is what it installs.
       - name: Install, piped as the docs say (curl | sh)
         shell: sh
         run: |
           if [ "$CAD_PUBLISHED" = true ]; then
-            release=$(curl -fsS https://api.texttocad.dev/v1/versions | sed -n 's/.*"latest"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+            release=$(curl -fsS https://pypi.org/pypi/cad/json | python3 -c 'import json, sys; print(json.load(sys.stdin)["info"]["version"])')
             [ -n "$release" ]
             curl -fsSL https://texttocad.dev/install.sh | sh
           else
-            release=$(cat VERSION)
-            CAD_INSTALL_FROM=$(ls "$PWD"/wheels/cad_server-*.whl)
-            UV_FIND_LINKS=$PWD/wheels
-            export CAD_INSTALL_FROM UV_FIND_LINKS
+            release="$(python3 scripts/test/real_computer.py stamp)"
+            python3 scripts/test/real_computer.py publish wheels "$release" stamped
+            CAD_INSTALL_PY=$PWD/scripts/install/install.py
+            UV_FIND_LINKS=$PWD/stamped
+            export CAD_INSTALL_PY UV_FIND_LINKS
             sh < scripts/install/install.sh
+            # The kernel's environment is made on first need, by a later step: it takes the same wheels.
+            echo "UV_FIND_LINKS=$UV_FIND_LINKS" >> "$GITHUB_ENV"
           fi
           echo "CAD_RELEASE=$release" >> "$GITHUB_ENV"
 
-      - name: The cad command and the doctor
+      - name: cad, a uv tool with both switches on, and no server started
         shell: sh
         run: |
           said=$("$HOME/.local/bin/cad" --version)
           echo "$said"
           [ "$said" = "cad $CAD_RELEASE" ]
-          "$HOME/.local/bin/cad" doctor
+          [ -L "$HOME/.local/bin/cad" ] || { echo "~/.local/bin/cad is not uv's link to its tool"; exit 1; }
+          switches=$("$HOME/.local/bin/cad" update auto status; "$HOME/.local/bin/cad" plugin update auto status)
+          echo "$switches"
+          [ "$switches" = "$(printf 'update auto: on\nplugin update auto: on')" ]
+          status=$("$HOME/.local/bin/cad" server status --json)
+          [ "$status" = "null" ] || { echo "the install started a server: $status"; exit 1; }
+
+      # The first build makes the CAD kernel's environment. The slim image has no OpenGL library, which the kernel
+      # links against, so there the build fails and the doctor is right to fail the kernel (exit 1), naming the
+      # missing library and its package; on the runner's Ubuntu the box builds and the doctor passes (exit 0).
+      - name: A model, and the doctor
+        shell: sh
+        timeout-minutes: 15
+        env:
+          SLIM: ${{ matrix.image != '' }}
+        run: |
+          cad="$HOME/.local/bin/cad"
+          "$cad" server start
+          mkdir -p "$RUNNER_TEMP/box" && cd "$RUNNER_TEMP/box"
+          printf 'from cad import model\n\n\n@model\ndef box():\n    import build123d as bd\n\n    return bd.Box(40, 20, 6)\n\n\nif __name__ == "__main__":\n    box()\n' > box.py
+          built=0
+          out=$("$cad" run box.py 2>&1) || built=$?
+          echo "$out"
+          status=0
+          report=$("$cad" doctor) || status=$?
+          echo "$report"
+          "$cad" server stop
+          if [ "$SLIM" = true ]; then
+            [ "$status" -eq 1 ] || { echo "expected the doctor to fail the kernel here (exit 1), got $status"; exit 1; }
+            echo "$report" | grep -q "libGL.so.1" || { echo "expected the doctor to name libGL.so.1"; exit 1; }
+            echo "$report" | grep -q "apt-get install libgl1" || { echo "expected the doctor to name its package"; exit 1; }
+          else
+            [ "$built" -eq 0 ] || { echo "cad run box.py exited $built"; exit 1; }
+            echo "$out" | grep -Eq 'bounds 40[^0-9]+20[^0-9]+6 mm' || { echo "cad run built no box"; exit 1; }
+            [ "$status" -eq 0 ] || { echo "the doctor failed (exit $status)"; exit 1; }
+          fi

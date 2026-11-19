@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 
 from cad.engine.render import context
-from tests.python.support import opengl
+from tests.python.support import engine_daemon, opengl
 from tests.python.support.paths import add_sources
 from tests.python.support.render_stills import PLATFORM, X_VARIABLES, drawn, gl, mismatch
 
@@ -73,7 +73,10 @@ class DaemonRenderTest(unittest.TestCase):
 
     def build(self, size: int, *, daemon: bool = True) -> None:
         (self.folder / "pair.py").write_text(textwrap.dedent(PAIR.format(size=size)), encoding="utf-8")
-        # ``python pair.py`` asks the daemon; ``Model.build(daemon=False)`` builds in its own process.
+        # ``python pair.py`` asks the daemon, started for it as ``cad server start`` starts one;
+        # ``Model.build(daemon=False)`` builds in its own process.
+        if daemon:
+            engine_daemon.start(self.env)
         argv = ["pair.py"] if daemon else ["-B", "-c", "import pair; pair.pair.build(daemon=False)"]
         done = subprocess.run([sys.executable, *argv], cwd=self.folder, env=self.env, capture_output=True, text=True,
                               timeout=300)
@@ -180,7 +183,8 @@ class EngineDisplayTest(unittest.TestCase):
     def test_an_engine_with_no_display_draws_on_an_xvfb_of_its_own(self) -> None:
         if shutil.which("Xvfb") is None:
             opengl.require("Xvfb is not on PATH (apt-get install xvfb libgl1-mesa-dri)", "no Xvfb for the engine")
-        done = self.run_in(self.bare, "pair.py")  # the daemon starts here, with no display
+        engine_daemon.start(self.bare)  # the daemon starts here, with no display
+        done = self.run_in(self.bare, "pair.py")
         self.assertEqual(done.returncode, 0, done.stderr)
         found = self.pictures(self.bare)
         here = self.drawn_here()
@@ -201,9 +205,10 @@ class EngineDisplayTest(unittest.TestCase):
         if not os.environ.get("DISPLAY"):
             opengl.require("no DISPLAY to start the engine on", "no display")
         gl()
-        done = self.run_in({**self.bare, "DISPLAY": os.environ["DISPLAY"],
-                            **({"XAUTHORITY": os.environ["XAUTHORITY"]} if "XAUTHORITY" in os.environ else {})},
-                           "pair.py")
+        shown = {**self.bare, "DISPLAY": os.environ["DISPLAY"],
+                 **({"XAUTHORITY": os.environ["XAUTHORITY"]} if "XAUTHORITY" in os.environ else {})}
+        engine_daemon.start(shown)
+        done = self.run_in(shown, "pair.py")
         self.assertEqual(done.returncode, 0, done.stderr)
         found = self.pictures(self.bare)
         here = self.drawn_here()

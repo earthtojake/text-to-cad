@@ -1,6 +1,6 @@
 {
   "name": "@cad/core",
-  "version": "0.11.11",
+  "version": "0.11.13",
   "private": true,
   "type": "module",
   "description": "Reusable CAD render/viewer runtime for docs, CAD Viewer, and generated snapshot browser assets.",
@@ -38,7 +38,7 @@
     "@types/three": "^0.187.0",
     "esbuild": "0.28.2",
     "gltf-validator": "2.0.0-dev.3.10",
-    "playwright": "^1.65.0",
+    "playwright": "^1.65.1",
     "typescript": "5.9.3",
     "jsdom": "30.1.3"
   },

@@ -3,106 +3,177 @@
 The page an agent host renders for CAD: the same `@cad/ui` FileViewer and
 renderers `apps/web` composes (`cadRenderers`: every format the viewer opens, a KiCad board and
 schematic among them, and the file handler's extensions with them: `cad_server/mcp/server.py`'s
-`EXTENSIONS`), behind a different host — an MCP Apps bridge instead of an HTTP origin. The installation's engine serves its tools, page resource and HTTP routes.
-`cad-mcp` is the stateless stdio shim that agent hosts launch: it ensures that
-engine, then forwards JSON-RPC to `/mcp` using its installation token. Each shim
+`EXTENSIONS`), behind a different host — an MCP Apps bridge instead of an HTTP origin. The computer's engine serves its tools, page resource and HTTP routes.
+`cad mcp` is the stateless stdio shim that agent hosts launch (Codex's plugin line runs it as
+`uvx --no-config --managed-python --python 3.14 cad@<VERSION> mcp`): it starts that
+engine once, as `cad server start` does, then forwards JSON-RPC to `/mcp` using its token. Each shim
 negotiates a separate MCP session. Closing a shim releases that session and leaves
 the engine, its workers and other clients alive.
 
-Hosts present it in one of two ways, which `initialize` selects (`cad_server/mcp/host.py`):
-a host can declare the `dev.texttocad/tabs` extension with the `global`, `thread` and `file`
-entrypoints, and an MCP Apps host advertises the `io.modelcontextprotocol/ui` extension.
-Codex declares neither, from its app or from `codex exec`, and names itself
-`codex-mcp-client` from both, so the shim reads which host started it from its parent
-processes: the Codex app's `codex app-server` shows tabs, while `codex exec` and the `codex`
-terminal UI show none and are served as text clients.
+Which apps are offered CAD's tools, and how, `initialize` decides (`cad_server/mcp/host.py`). **Browser
+first**: the CAD server ships to, and offers tools to, one app, the Codex app, the only one whose CAD view
+is verified as solid (a tab beside the thread). Only Codex's manifest names a server
+(`.codex-plugin/plugin.json` → `codex.mcp.json`); every other app gets the skills alone, and its agent shows
+a model in the app's own browser or by the link `cad viewer` prints, as the skills say. A server someone adds
+by hand to another app is offered no tools either, whatever that app declares: its `tools/list` is empty,
+its connection completes, and its instructions name the `cad` command
+([decisions](../../docs/contributing/decisions.md)).
 
-- **Tabs (the Codex app, and hosts that declare those entrypoints).** **CAD** in the
+The Codex app, `codex exec` and the `codex` terminal UI all greet the server as `codex-mcp-client`, and from
+0.169 the app declares the `io.modelcontextprotocol/ui` extension (`codex exec` may too: unmeasured), so
+neither the name nor the declaration tells them apart. The shim reads which program started it from its
+parent processes: the Codex app's `codex app-server` shows tabs, while `codex exec` and the terminal UI show
+none and are offered no tools, whatever they declare.
+
+| App | What it declares at `initialize` | Offered |
+| --- | --- | --- |
+| Codex app (`codex-mcp-client`, launched by `codex app-server`) | nothing through 0.163; `io.modelcontextprotocol/ui` from 0.169 (measured 2026-11-15) | tabs |
+| `codex exec`, the `codex` terminal UI | nothing, or the extension | no tools |
+| Codex where the launcher cannot be read (Windows, a wrapper) | either | tabs; a call whose turn says `exec` is answered as below, by opening the browser, before anything declared |
+| Every other app (Cursor, the Claude apps, Gemini CLI, Grok Build, ...) | anything | no tools |
+
+Known limit, not fixed: on Windows the shim cannot read its parent processes, so the `codex` terminal UI there
+is taken for the app and offered tabs it cannot show (a turn of `codex exec` is still told by its own metadata).
+Its CAD calls answer, but no tab opens; the skills' web link still shows the model.
+
+The shim takes `app-server` anywhere on Codex's command line for the app server (`codex --log-dir DIR
+app-server` among them: Codex has options whose values it spells apart that the shim does not list); the Codex
+app's own Electron processes (`Codex --type=...`) name no subcommand and are never it.
+
+To add an app back: verify its CAD view in the real app, then add its manifest's server entry and its name
+to `host.presentation`, in one change.
+
+- **Tabs (the Codex app).** **CAD** in the
   sidebar (the home: the models opened before, and Open), a **CAD** tab beside
   each thread, and *Open with CAD* for a model file. The sidebar and every tab are the
   whole viewer under its navbar, as a card is (below); *Open with CAD* alone shows its file
-  bare, with no navbar. The agent opens a tab once
+  bare, with no navbar. A tab's name and icon in Codex's tab strip are the page's own `<title>` and icon
+  (`shell.html`: **CAD**, and the blue mark as a 32px PNG data URL), which the Codex app (26.1111.21308,
+  read from its bundle 2026-11-15) prefers to the tool's title and icon; it takes an icon only as a PNG, JPEG, WebP or GIF
+  data URL of at most 8192 characters (or an `https:` URL), so never the tools' `currentColor` SVG. The agent opens a tab once
   (`cad_open`) and drives it (`cad_show`). These remain separate because the host mounts
   the UI from static tool metadata: adding that metadata to `cad_show` would mount a new
-  view on updates too. A conditional server result cannot promise host-side tab reuse. A host that declares tabs does what
-  Codex does: it starts one `cad-mcp` shim per thread. Each connects to a separate
-  engine session, so an unnamed view belongs to that thread.
-- **Inline (Claude Desktop, and every other MCP Apps host).** Each `cad_show`
+  view on updates too. A conditional server result cannot promise host-side tab reuse. Codex starts one `cad mcp` shim per
+  thread. Each connects to a separate engine session, so an unnamed view belongs to that thread.
+- **Inline (no app: the development switch alone).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
   the whole viewer at card size, as a tab is: its navbar (`chrome: "page"`: the logo, which
   opens the app menu, first; Back and Forward; the file name that opens the name menu; the ⋯,
   the file menu: Copy path, Copy link (the engine's own page of the document,
-  `<engine origin>/<id>?token=<fresh link>`, the origin from the launch and the link asked through the
+  `<engine origin>/<id>?token=<link>`, the origin from the launch and the link asked through the
   tunnel; never the tunnel's address), then Open in › Browser and Finder (File Explorer, File manager), a
   model's Copy path and Finder acting on its script (Finder disabled, with its reason, where the
   script was moved or deleted; Browser needs none), then the apps the server finds on this computer
   for the document's files, through the tunnel as Reveal goes (the source's, each export's as "App
   (file name)", then Default app) — no Export, as this host has no downloads;
-  then, at the right, only Full size where the host can show a view full size and, last, the update
-  button; Back and Forward are dropped on a phone-width view), the tool strip ending
+  then, at the right, only Full size where the host can show a view full size; Back and Forward are dropped on a phone-width view), the tool strip ending
   in Projection, Display and Preview, the view's panel, the view cube, and Quick Edit. In
   Preview its own bar (the file's name, its settings, its exit) takes the navbar's place. A
-  newer card retires the older ones. The Claude app's Code tab draws the card of Claude Desktop's own
-  server and carries its calls; a server Claude Code starts there gets cards whose calls it refuses, so
-  that server lists no tools ([Claude: where the card comes from](#claude-where-the-card-comes-from)).
+  newer card retires the older ones. The page keeps this presentation, tested and shipped in the same
+  bundle, for the day a host's cards are verified; `CAD_MCP_PRESENTATION=inline` reaches it (below).
 
-A client that renders no MCP Apps never loads this page. Its `cad_show` opens the
-model's page in this machine's CAD Viewer, `/<id>` (the file registered by its id, as
-a launch registers it), started if none runs (`cad_server/mcp/browser.py`), in the person's
-browser through an owner-only redirect file (`cad_mcp/browser.py`), and answers with the page's URL
-for the agent to give the person: "opened in your browser at <url>". The host's stdio process
-(`cad-mcp`) makes that open, in the agent's own environment (its `BROWSER`, its display), from
-the page the engine's answer names (`_meta["dev.texttocad/open"]`, stripped before the host sees
-it), and tells the engine whether it opened before the host has the answer
-(`notifications/dev.texttocad/opened`); the engine, which runs in the environment of whatever
-started it, never opens a browser for a tool. Where a browser page already
-reads that document (the engine's `Server.in_page`: a version read within the last 90 seconds,
-or a browser the stdio process said it opened on it in the last 30), it opens nothing and answers
-"already open in your browser at <url>"; an open that failed counts for nothing, so the next
-`cad_show` opens the page again. Where no browser can be opened from the stdio process (no
-display), it answers with the URL alone, as it does a client with no stdio process (a direct HTTP
-client): "nothing was opened".
-A tab is claimed only on evidence, never on a client's name. Strongest first: an extension the
-host declares; a view that reached the server (its first `cad_sync` or `cad_http` with the app
-capability: only a host that draws views makes one); the call's own metadata (the 0.163 app
-server's binary sends `x-codex-turn-metadata.turn_trigger: exec` for an exec turn, and that
-call acts as a text client's); the host the shim found among its parent processes (exactly as
-started: `KERN_PROCARGS2` on macOS, `/proc` on Linux, nothing on Windows); and last the name. A
-Codex client with nothing but its name gets Codex's catalog, and its `cad_open` says the tab
-opens with that answer where the app shows CAD tabs, and gives the page's URL for the person
-otherwise. A `cad_show` after a `cad_open` waits for that tab (`OPENING_SECONDS`) and shows the
-model in it, says it is still opening (and shows the model once it opens), or, where nothing
-said the host shows tabs, takes a tab that never came as evidence that it shows none and opens
-the browser page. A host that renders apps never has a browser opened by a tool. `CAD_MCP_PRESENTATION=inline|text`
-settles how a client that does not say so presents CAD: `inline`, a client that renders apps
-without advertising them, as the reference host `basic-host` does; `text`, one that renders
-nothing.
+A Codex call made in a turn that shows no app (`x-codex-turn-metadata.turn_trigger: exec`, which the 0.163 app
+server's binary sends) never loads this page: its `cad_show` and `cad_open` open the model's page in this
+machine's CAD Viewer, `/<id>` (the file registered by its id, as a launch registers it), started if none runs
+(`cad_server/mcp/browser.py`), in the person's browser through an owner-only redirect file
+(`cad_mcp/browser.py`), and answer with the page's URL for the agent to give the person: "opened in your
+browser at <url>". The host's stdio process (`cad mcp`) makes that open, in the agent's own environment (its
+`BROWSER`, its display), from the page the engine's answer names (`_meta["dev.texttocad/open"]`, stripped
+before the host sees it), and tells the engine whether it opened before the host has the answer
+(`notifications/dev.texttocad/opened`); the engine, which runs in the environment of whatever started it,
+never opens a browser for a tool. Where a browser page already reads that document (the engine's
+`Server.in_page`: a version read within the last 90 seconds, or a browser the stdio process said it opened
+on it in the last 30), it opens nothing and answers "already open in your browser at <url>"; an open that
+failed counts for nothing, so the next `cad_show` opens the page again. Where no browser can be opened from
+the stdio process (no display), it answers with the URL alone, as it does a client with no stdio process (a
+direct HTTP client): "nothing was opened".
+A tab is claimed only on evidence. Strongest first: a view that called back; the call's own metadata (an
+exec turn), which comes before anything the host declared; the host the shim found among its parent
+processes (exactly as started: `KERN_PROCARGS2` on macOS, `/proc` on Linux, nothing on Windows), and, where
+that says nothing, the extension the host declares; and last the name. A Codex client with nothing but its
+name gets Codex's catalog, and its `cad_open` says the tab opens with that answer where the app shows CAD
+tabs; until a view calls back, its answers that show a model also give the model's web page, "Until a CAD
+tab opens in this thread, give the user this link too, to open the model in their browser: <url>". The
+Codex app known by its launcher gets the tab alone. A `cad_show` right after a `cad_open` never waits for
+that tab: it says the tab is still opening, and the tab shows the model as it first syncs. A host that
+renders apps never has a browser opened by a tool.
+`CAD_MCP_PRESENTATION=inline|tabs|text` in `cad mcp`'s environment is the development switch: it forces that
+presentation on any client, to test the page's cards (`inline`, as with the reference host `basic-host`),
+its tabs outside Codex, or no tools.
+
+**What a connecting app declared** is in the server's log, one line per session at `initialize`
+(`cad_server.mcp`, INFO): `client <name> <version>: <tabs views | inline views | no tools>, <why> (extensions:
+<declared>; launcher: <host>)`, and `a view called back: <app> shows CAD views` at its first call back. The
+log is the engine's (`cad server` in a terminal shows it; a started engine writes it to its log file).
 
 No tool exports, inspects or draws a picture for the agent: those are the `cad` command's, which the
 agent runs in its shell (`cad model export <id> <file>`, `cad model inspect <id>`, `cad model snapshot
 <id> out.png`; a file's, `cad <type> ...` with its path), and every presentation's instructions say so
-at initialize, Claude Code's among them, for an agent that has not loaded the cad skill. No tool builds
+at initialize, an app offered no tools among them. The three tools
+0.11.10 removed (`cad_export`, `cad_snapshot`, `cad_inspect`) are never listed, but a call by one of those
+names, from a session that still lists it, answers with the `cad` command that replaced it. No tool builds
 source text: to build a shape, wrap the shape in a decorated function and run its script. The web
 viewer's Export is a browser download; this page has no Export, having no HTTP origin to download from.
 
-## Claude: where the card comes from
+## What each host offers, and why browser first
+
+A record of the hosts' MCP Apps display modes (researched 2026-11-15), the reason the CAD server goes to
+Codex alone: a card is small and scrolls away with the chat, and only Codex's tab is a proper view.
+
+| Host | Its modes | Verified with CAD |
+| --- | --- | --- |
+| Codex app | a tab beside the thread, the sidebar, *Open with CAD*: always full size | yes: its CAD tab draws and its tools answer |
+| Cursor (3.29.15, read from its bundle) | `inline` alone: it answers `ui/request-display-mode` with `inline` | its card draws, small, in the chat |
+| Claude's chat (claude.ai, Claude Desktop) | `inline`, `fullscreen` (a side panel), the resource's `_meta.ui.preferredDisplayMode` | not verified |
+| Claude Code | none: its cards are broken (below) | no |
+| VS Code (GitHub Copilot) | `inline` alone | not verified |
+| ChatGPT and OpenAI's other hosts | `inline`, `fullscreen` | not verified |
+| Goose | `inline`, `fullscreen`, `pip` | not verified |
+
+## Starting: how long a host waits for `cad mcp`
+
+The first start of a release on a computer has uvx fetch it from PyPI, so how long the
+host waits for `initialize`, and what it does with a late tool list, decide whether that thread gets
+CAD's tools.
+
+| Host | Startup timeout | A late `initialize` | `tools/list_changed` |
+| --- | --- | --- | --- |
+| Codex (codex-cli 0.169.0-alpha.11.1, measured 2026-11-14) | 30 s where the server config sets no `startup_timeout_sec`; ours (`codex.mcp.json`, and the OpenAI directory's ZIP made from it) sets 300 | a turn never waits for MCP servers; a server answered late (9 s and 25 s tried) has its tools added to the running turn | not acted on for the rest of a turn: a list answered empty stays empty in that turn |
+
+So `cad mcp` answers `initialize` within 20 seconds, inside Codex's 30, whether or not the server has
+finished starting; a tool call made before it has is answered with a line saying it is starting. The
+repository's `codex.mcp.json` sets `startup_timeout_sec` to 300, so the copies from `latest` and `main`
+and the OpenAI ZIP (`scripts/release/plugin_zip.py`) leave uvx time for a first fetch. An older
+release's `--startup-timeout N` is taken and ignored.
+
+Which config Codex reads (measured 2026-11-15, Codex CLI 0.153.4 and 0.169.0-alpha.11.1, `codex mcp get
+cad --json` in a private `CODEX_HOME`): a folder with the Agent Plugins standard's root `plugin.json` is
+read as an Agent Plugin, ahead of `.codex-plugin/plugin.json`, whose interface it still takes, and its MCP
+servers come from the root `mcp.json` alone (Codex refuses a Codex-only key there, so no start allowance).
+A folder without the root `plugin.json` is read by `.codex-plugin/plugin.json`: `codex.mcp.json`, with
+its 300 s. So the repository carries no root `plugin.json` (nor a root `mcp.json`): with the first and not
+the second, a copy of `latest` or `main` registered no `cad` server in Codex. Without either, `latest`,
+`main`, a development install's copy and the store's ZIP each register `cad` with 300 s (measured
+2026-11-15 with both CLIs).
+
+## Claude: no CAD server
+
+Decided 2026-11-13: Claude gets text-to-cad as skills alone, on every install route, the install
+command's and by hand: its MCP Apps support was too flaky to build on. A model is shown by the
+skills' `cad viewer` link, in the browser pane or the browser.
 
 | Host | CAD's server | Cards |
 | --- | --- | --- |
-| Claude Desktop, Chat tab | `mcpServers.cad` in `claude_desktop_config.json`, which `cad setup` writes wherever Claude Desktop is | yes |
-| Claude Desktop, Code tab | the same entry: the desktop app starts it and offers it to the Claude Code session | yes |
-| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone, and `cad setup` removes a `claude mcp add` CAD server, the user's or a project's. claude.ai's directory's copy (`claude-plugin`) still names one, which lists no tools when Claude Code starts it | none: the skills' `cad viewer` link, in the browser pane or the browser |
+| Claude Desktop (Chat and Code tabs) | none: nothing writes an entry in `claude_desktop_config.json`, and the install script (`scripts/install/install.py`'s `claude_desktop`) takes out the `mcpServers.cad` releases 0.7.6 through 0.11.11 wrote there (the rest of the file kept, a copy of the file as it was beside it) | none |
+| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone (the install script removes no `claude mcp add` server). claude.ai's directory's copy (`claude-plugin`) carries the skills alone too; its copies through 0.11.11 name one, which lists no tools when Claude Code starts it | none |
 | Claude Code in a terminal | none | it draws none |
 
-Claude Desktop reads its config only when it starts: once `cad setup` first gives it CAD's server,
-quit and reopen it (setup's last lines say so; on Windows, quit it from the system tray). A new pin
-needs no restart: the server it runs keeps working with the newer engine. No developer mode is needed.
-
-What decides it, measured:
+The server offers no tools to a Claude host that starts it (a config someone wrote by hand, or an
+older entry until Claude Desktop next starts). What was measured of those hosts, for whoever revisits this:
 
 - **The desktop-config server works in the Code tab.** 2026-10-04: its card drew and `cad_view`
   and `cad_screenshot` answered. 2026-11-09, Claude Desktop 4.23118: the same (the server
-  `CAD_INSTALL_CHANNEL=claude-desktop`), and again with `developer_settings.json` at
+  as releases through 0.11.11 wrote it), and again with `developer_settings.json` at
   `"allowDevTools": false`. The first card after the app starts can take a while to connect: a
   `cad_view` about 6 s after `cad_show` said it had not reached CAD's server, and at about 20 s it
   answered.
@@ -113,27 +184,25 @@ What decides it, measured:
   `quietOrchard` gate on, which needs GrowthBook flag 1824765482, off on the accounts we tried. To see
   whether an account has it: `~/Library/Application Support/<profile>/fcache` (`Claude`, or the
   profile's folder) is an 8-byte header, then gzipped JSON whose `features` holds the flags by id.
-- **The marker.** Claude Code sets `CLAUDE_CODE_ENTRYPOINT` for every server it starts (`cli` in a
-  terminal, `sdk-cli` headless, `claude-desktop` in the Code tab, with `CLAUDECODE=1`); the
-  `cad-mcp` processes the desktop app starts have neither (measured 2026-11-09). `cad-mcp` passes it
-  with the host's `initialize` (`claudeCode`), and the server lists no tools for that session
-  (`cad_server/mcp/host.py`'s `claude_code`), its instructions naming the cad skill, the `cad` command
-  and the desktop config. `CAD_MCP_CARDS=1` in `cad-mcp`'s environment keeps the tools, to test the
-  Claude Code path.
 
-Decided 2026-11-09: Claude Code gets the skills from the plugin, and CAD's card from Claude
-Desktop's config. To undo it once flag 1824765482 is on: name `./claude.mcp.json` in
-`.claude-plugin/plugin.json` again, drop `CLAUDE_SERVER` from `scripts/release/plugin_branch.py`
-(the directory's copy is then main's), drop the `remove server` step for Claude Code in
-`cad_server/_internal/providers.py`'s `_removal`, and drop `host.claude_code`. Then decide which one
-server the Code tab gets: with both, it lists CAD twice.
+A server a Claude host starts anyway is offered no tools, as every app's but Codex's. To give Claude Code a
+server again, once flag 1824765482 is on and its view is verified: `.claude-plugin/plugin.json` would name a
+server config of its own (claude.ai's directory's copy stays the skills alone: `scripts/release/plugin_branch.py`
+fails a server in it), and `host.presentation` would name its client. The install script takes Claude Desktop's
+old `cad` entry out (`scripts/install/install.py`'s `claude_desktop`); a server there and in the plugin would
+list CAD twice in the Code tab.
 
-## Cursor: where the card's capability comes from
+## Cards: where the page's capability comes from
 
-| Host | The page's capability | Cards |
-| --- | --- | --- |
-| Codex, Claude Desktop | the launch's result `_meta["dev.texttocad/httpToken"]`, as before | yes |
-| Cursor (`cursor-vscode`, declares MCP Apps) | the launching tool's own `_meta["dev.texttocad/httpToken"]` (`cad_show`'s, in `tools/list`), which Cursor hands the card at `ui/initialize` as `hostContext.toolInfo.tool.meta` | yes, inline |
+Only the Codex app is offered tools (browser first), and its cards are tabs: every other host gets the skills alone.
+The page's card code is kept behind the development switch `CAD_MCP_PRESENTATION`, for the day a host's cards are
+verified. What follows holds for a card served through that switch.
+
+| Host | The page's capability |
+| --- | --- |
+| Codex (tabs) | the launch's result `_meta["dev.texttocad/httpToken"]` |
+| Cursor (`cursor-vscode`, declares MCP Apps), behind the switch | the launching tool's own `_meta["dev.texttocad/httpToken"]` (`cad_show`'s, in `tools/list`), which Cursor hands the card at `ui/initialize` as `hostContext.toolInfo.tool.meta` |
+| Every other host | no CAD server |
 
 Cursor drops a result's `_meta` before its card sees it. Read from Cursor 3.25.6's bundle
 (`out/vs/workbench/workbench.glass.main.js`): the card's tool result is `JSON.parse` of the string the
@@ -160,13 +229,13 @@ the launch's `_meta` first (`host/capability.ts`).
 - **A launch is enough to start.** It also carries what the server is — its
   `protocol`, `version` and `platform` — and the home's carries its `recents`,
   so the page asks nothing before it draws. A launch from another build (a tab
-  the host restored after an update, a past chat's card) says so: the page
+  the host restored after another release was installed, a past chat's card) says so: the page
   reads only its own protocol's.
 - **Every view but a file handler's has a home**: the library (the documents opened or built
   before, in any view or the web viewer). Back to home, first in the menu the navbar's logo
   opens, goes to it. The sidebar (`cad_home`) and a tab with nothing to show open on it; a
   model opened from it is shown in place. The home has the same navbar (the logo's menu, Back
-  and Forward, Full size and the update button; no file, so no ⋯); it starts with its control
+  and Forward and Full size; no file, so no ⋯); it starts with its control
   row, its links the app menu's.
 - **A view browses from its file's folder.** The file name in the navbar opens the name menu:
   Models, and Files, the explorer, starting at the file's folder. A pick shows the file in
@@ -181,7 +250,7 @@ the launch's `_meta` first (`host/capability.ts`).
   It is the view's, in memory: another tab or card has its own, and a view opened
   again starts with one step. A file handler's view, which shows its file alone,
   keeps none.
-- **What's new is a tab's.** After an update to a release with notes, a tab (the sidebar, a
+- **What's new is a tab's.** Once a release with notes is installed, a tab (the sidebar, a
   thread's CAD tab, *Open with CAD*) shows them once, as the CAD Viewer does (`@cad/ui/whats-new`),
   kept seen for every view. A card never does, and reads nothing for it: a few hundred pixels of a
   chat are no room for a dialog, and a chat keeps several cards at once.
@@ -192,7 +261,7 @@ the launch's `_meta` first (`host/capability.ts`).
   view with no navbar (`chrome: "bare"`): no logo or app menu, no name or name menu, no ⋯
   (so no Open in › Browser); what the navbar would carry that it still has is its corner at
   the viewport's top-right (`CardCorner.tsx`, the viewer's `notice`, Quick Edit under it):
-  Full size where the host offers it, then the update notice. Preview's bar hides the
+  Full size where the host offers it. Preview's bar hides the
   corner as it hides a navbar. Its launch carries no page (`browser`). The agent reads it
   (`cad_view` lists it) but shows nothing in it: `cad_show` refuses its view, and
   the page ignores a show that reaches it anyway.
@@ -202,35 +271,11 @@ the launch's `_meta` first (`host/capability.ts`).
   directly, with no file registry. `cad_show` targets the thread’s tab unless it names
   the sidebar’s view. A session closing removes its sidebar views; stale views expire
   by the same heartbeat rule as other views.
-- **Two requests to the network of its own: the version check, and analytics with consent.**
-  Both go to `api.texttocad.dev` (`apps/api`); installing a release, the person's update or an automatic
-  patch update, downloads it from PyPI as `cad update` does. At most once an hour, the server
-  reads the version feed (`cad_server/updates.py`): one anonymous GET, with no id and
-  nothing about the person (`CAD_UPDATE_CHECK=0` turns it off; never in CI or from
-  a source tree). A server of a newer release than the engine's -- an app whose plugin
-  moved ahead -- says a release is out too, with no request (`updates.see`). While this
-  install is behind, the navbar shows the shared blue `UpdateButton`
-  (`@cad/ui/update`), an icon and nothing else, last and outermost of its controls, over a
-  file and over the home; the file handler, which has no navbar, shows it in its corner,
-  under Full size. A launch carries the notice the server last read, so the button draws
-  with the page; the page reads it again (`/api/v1/server`) when the person comes back to
-  it. A press is the update (`POST /api/v1/local/update`, through `cad_http`): the engine installs
-  the release, updates each agent app's plugin and restarts on it, on the same port with
-  the same token (`cad_server/_internal/update.py`). Meanwhile the button is a ring that fills
-  as the update goes, then a spinner while the engine restarts; once the engine answers
-  with the new release, the card loads that release's app in its own place
-  (`host/release.ts`, the shell's `reload`), and nothing goes to the chat. An update that
-  fails says why in a toast, and the engine stays as it was; one whose switch fails brings
-  the release before back, and the card, reading its own release again with the update failed
-  (`useUpdate`'s `settle`), says why in the same toast and offers the button again.
-  A text client gets one line with its first `cad_show` result instead, naming the install
-  command. Where the
-  install came from is its channel, which each plugin's startup config names in
-  the server's environment (`CAD_INSTALL_CHANNEL`, `cad_server/_internal/channel.py`),
-  with `CAD_AUTO_UPDATED=1` where a store keeps the copy up to date: only a
-  copy nothing else updates checks and is told. A store's copy (the Claude or OpenAI directory, the Cursor
-  Marketplace) is left to its store, until the store moves an app's plugin ahead of the engine: then
-  the button shows there too, and moves the engine to that release. The telemetry: the server
+- **One request to the network of its own: analytics with consent.** It goes to `api.texttocad.dev`
+  (`apps/api`). The tools and the page say nothing of releases.
+  Codex, given two plugins that each name a server `cad`, lists one, the one of the plugin whose id sorts first
+  (`text-to-cad@openai-curated` before `text-to-cad@text-to-cad`; `codex mcp list`, codex-cli 0.153.4 and
+  0.169.0-alpha.11.1, measured 2026-11-14, no agent turn). The telemetry: the server
   counts its use -- tool calls (not the page's plumbing), view activity from each
   view's sync (`focused`), and the files views show (counted by format, once a day,
   as a view adds one to the library) --
@@ -248,8 +293,7 @@ the launch's `_meta` first (`host/capability.ts`).
   id of the unedited chunk the CAD Viewer may ship. It is on by default once
   a `cad` command has said so, once, and nothing asks. The app menu's **Telemetry**
   switch (`appSettings`, through `/api/v1/settings`' `telemetry`) changes the answer, one answer for
-  this app and the browser viewer. The channel is reported with the
-  counts; it decides nothing there. No tool of the agent's reads or changes it:
+  this app and the browser viewer. No tool of the agent's reads or changes it:
   the person answers in the menu or with `cad telemetry`. Opt-out deletes the
   installation ID and requests deletion of data sent under it.
 - **Told how it is presented, before it greets the host.** A host that mounts
@@ -288,7 +332,7 @@ the launch's `_meta` first (`host/capability.ts`).
   and an `.xbf`'s reads too, dispatched directly to the engine's document router
   that serves them (`/api/v1/documents/<kind>/<id>/...`) -- the
   library and its pictures, Reveal, the person's analytics
-  answer and language, the update check. One route is the server's own, not the
+  answer and language. One route is the server's own, not the
   viewer's: `/api/v1/local/browser/open`, which opens the web viewer's page of what the view shows
   in the person's browser, for the file menu's Open in › Browser. Only the clipboard stays the host's: a
   view copies through its frame. `cad_sync`, `cad_capture_reply` and `cad_http` are
@@ -296,7 +340,7 @@ the launch's `_meta` first (`host/capability.ts`).
   page launch includes the host connection's capability in result `_meta["dev.texttocad/httpToken"]`,
   which [MCP Apps hosts deliver to the UI](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx#2-tool-results), outside model context; content and structured content never
   carry it. Cursor delivers no result `_meta` to its card, so there it rides `cad_show`'s own `_meta`
-  instead ([Cursor](#cursor-where-the-cards-capability-comes-from)). A call refused for it answers
+  instead ([Cards](#cards-where-the-pages-capability-comes-from)). A call refused for it answers
   `structuredContent: {"refused": "capability" | "stale"}` beside the words, and the card says it
   cannot connect (`Unreachable`), with Open in browser. The page sends `x-cad-app` with HTTP calls, and the same capability
   as the `app` argument of `cad_sync` and `cad_capture_reply`; all three refuse a call
@@ -329,7 +373,7 @@ the launch's `_meta` first (`host/capability.ts`).
   never a cookie; where neither reaches the engine it shows the app's own notice that this chat
   cannot connect (**A card says why it cannot work**, below), in words taken from `@cad/ui`'s
   dictionaries as it is built (`scripts/shell-words.mjs`), so it carries no dictionary of its own.
-  So a card a host kept runs the engine's release, and an update needs no
+  So a card a host kept runs the engine's release, and a new release needs no
   new resource. The app is one module, with its styles, scripts and workers (as blobs)
   inside it, and the build fails if anything would be left outside the two: the host
   serves one resource and nothing beside it. Its scripts are still split where
@@ -379,7 +423,8 @@ the launch's `_meta` first (`host/capability.ts`).
 - **No channel, then the engine directly.** Every launch a tool hands an inline card carries,
   where the engine gives a page, `browser` (the CAD Viewer's page of what it shows, the same
   link — a page URL's `?token=`, good until the token is rotated ([the web README](../web/README.md#launching))
-  — a text client's `cad_show` gives, loopback only) and `engine`
+  — a Codex whose launcher is unknown gives the agent with each show until a view calls back, loopback
+  only) and `engine`
   (its origin), so the card needs no call to read them (`cad_server/mcp/server.py`, `_reach`); a
   tab host's launches, and the shows its sync carries, carry `browser` alone (for Open in
   browser), its card always having its channel; the file handler's carry neither.
@@ -446,10 +491,9 @@ values have no reader and cannot hide it. Settings files need no conversion.
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` naming the snapshot path, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
 | `live.ts`, `sync.ts` | the mounted view's live controller (`@cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`) and the catalog's revision |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
-| `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/app`), a long one a part at a time, else from the engine with the launch's link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch, the opening result, and `reload`); where neither way reaches the engine, the no-channel notice (`unconnected`) |
+| `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/app`), a long one a part at a time, else from the engine with the launch's link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch and the opening result); where neither way reaches the engine, the no-channel notice (`unconnected`) |
 | `capability.ts` | the page's capability: the launch's result `_meta`, else the launching tool's (`hostContext.toolInfo.tool`, Cursor) |
 | `unreachable.js` | the can't-connect notice's words, which the app's notice (`Notice.tsx`) and the shell both say in one look (`src/notice.css`): the line by whether there is a page and a model, or a capability from before CAD restarted (`refusalOf`), the button, the card's measured height, and the launch's page |
-| `release.ts` | the card through an update: the engine asked every half second while it restarts, and the engine's app loaded in the card's own place once it answers with another release (`useNextRelease`, `loadNextRelease`) |
 | `clipboard.ts` | the frame's clipboard, every copy's: the asynchronous clipboard where the host grants it (the resource asks for `clipboardWrite`), else the page's own copy command, still inside the press, for text |
 
 `ModelView.tsx` is the page: the shared `CadViewer` (`@cad/ui/cad-viewer`,
@@ -468,7 +512,7 @@ presentation but the file handler's (`chrome: "bare"`, above). Inline, where the
 `fullscreen` among its display modes, the card's **Full size** (lucide `Maximize2`, a small ghost
 icon button) asks it for `ui/request-display-mode` fullscreen; it is the first of the host's
 actions at the navbar's right, over a file and on the home (the corner's first in the file
-handler); with the update button after it, outermost, it is all the navbar's right end holds. The file menu's
+handler); it is all the navbar's right end holds. The file menu's
 **Open in › Browser** (the host's `fileActions.perform.browser`, `ModelView.tsx`, which `App.tsx`'s
 `openBrowserPage` implements) opens the web viewer's page of the document on screen: the page each launch carries (`browser`: the document's, `/<id>`
 with the link, or the home's), and for a file the person opened that no launch named, the
@@ -505,7 +549,7 @@ session at their next call. Only a view from before the host restarted the shim 
 no session takes.
 Host-specific capability corrections live in the stdio transport (`cad_mcp/shim.py`). Version polls use `wait=0`
 in the page’s tunnel so they never occupy a host call slot. The engine has no such
-host-specific timing rule. The manifests continue to launch `cad-mcp`.
+host-specific timing rule. Codex's manifest launches `cad mcp`.
 
 ## Develop
 
@@ -513,15 +557,14 @@ host-specific timing rule. The manifests continue to launch `cad-mcp`.
 npm run build:mcp                             # packages, then this app
 npm --prefix apps/mcp run typecheck          # tsc over src/ (the Vite build checks no types)
 npm --prefix apps/mcp run test               # jsdom units
-scripts/install/dev_install.py codex --restart  # run it in the Codex app
-scripts/install/dev_install.py claude-desktop   # run it in Claude Desktop (then restart it)
+scripts/install/dev_install.py codex          # run it in the Codex app
 ```
 
 `scripts/test/test-js.sh --select mcp` is what CI runs: the type check, the tests,
 then the build. A build names itself in the app menu (`vite.config.mjs`, through
 `@cad/ui/build-id`): the release's own build shows `v<VERSION>`, any other
 `v<VERSION>-dev.<commit>`, the commit of the checkout it was built from. Every host
-`dev_install.py` takes is in CONTRIBUTING.md ("Test In Agent Apps"). A checkout's `cad-mcp` serves `apps/mcp/dist` when it exists
+`dev_install.py` takes is in CONTRIBUTING.md ("Test In Agent Apps"). A checkout's `cad mcp` serves `apps/mcp/dist` when it exists
 (`CAD_MCP_APP_DIR` overrides it); a wheel serves `cad_server/_runtime/mcp`,
 built by `scripts/bundle/bundle.sh`.
 

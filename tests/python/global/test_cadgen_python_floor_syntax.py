@@ -14,6 +14,9 @@ everything but f-strings: their grammar is not versioned, so on 3.12+ it
 accepts PEP 701's -- the very syntax that shipped. Below a 3.12 floor the
 f-strings are checked on the tokens as well.
 
+The suites run on the floor too, so the tests and the runners in ``scripts/test`` are held to
+it as well.
+
 The floor is read from the library's own ``requires-python``, which the server's, the shim's
 and the alias distributions' declare alike (held here too), so raising the declared minimum
 automatically relaxes this check -- the two can never disagree.
@@ -149,6 +152,45 @@ def _sources() -> list[Path]:
     )
 
 
+# The suites run on the floor too (scripts/test/test-floor.sh), with their support and the runners in
+# scripts/test, so those parse on it as well.
+TEST_TREES = (REPO_ROOT / "tests", REPO_ROOT / "scripts" / "test")
+
+
+def _test_sources() -> list[Path]:
+    return sorted(
+        path for tree in TEST_TREES for path in tree.rglob("*.py")
+        if "__pycache__" not in path.parts
+    )
+
+
+def _offenders(sources: list[Path], floor: tuple[int, int]) -> list[str]:
+    """Each line of ``sources`` the ``floor``'s grammar refuses."""
+    offenders = []
+    for path in sources:
+        source = path.read_text(encoding="utf-8")
+        try:
+            ast.parse(source, filename=str(path), feature_version=floor)
+        except SyntaxError as error:
+            offenders.append(f"{path.relative_to(REPO_ROOT)}:{error.lineno}: {error.msg}")
+            continue
+        if floor < (3, 12):
+            offenders.extend(
+                f"{path.relative_to(REPO_ROOT)}:{line}: {problem} (PEP 701, 3.12+)"
+                for line, problem in sorted(_pep701_fstrings(source).items())
+            )
+    return offenders
+
+
+def _parseable_floor(case: unittest.TestCase) -> tuple[int, int]:
+    """The declared floor, or the test skipped where this interpreter cannot parse against it."""
+    floor = _declared_floor()
+    if floor < _OLDEST_SUPPORTED_FEATURE_VERSION or floor > sys.version_info[:2]:
+        case.skipTest(f"cannot parse against {floor[0]}.{floor[1]} from "
+                      f"{sys.version_info.major}.{sys.version_info.minor}")
+    return floor
+
+
 class EveryPackageParsesOnItsDeclaredFloor(unittest.TestCase):
     def test_every_distribution_declares_the_one_floor(self) -> None:
         library = _requires_python(LIBRARY / "pyproject.toml")
@@ -158,37 +200,27 @@ class EveryPackageParsesOnItsDeclaredFloor(unittest.TestCase):
                          "one release is one product: every distribution of it runs on the library's Python floor")
 
     def test_every_module_parses_with_the_declared_minimum_grammar(self) -> None:
-        floor = _declared_floor()
-        if floor < _OLDEST_SUPPORTED_FEATURE_VERSION or floor > sys.version_info[:2]:
-            self.skipTest(
-                f"cannot parse against {floor[0]}.{floor[1]} from "
-                f"{sys.version_info.major}.{sys.version_info.minor}",
-            )
-
+        floor = _parseable_floor(self)
         sources = _sources()
         self.assertTrue(sources, f"no sources found under {SOURCES}")
-
-        offenders = []
-        for path in sources:
-            source = path.read_text(encoding="utf-8")
-            try:
-                ast.parse(source, filename=str(path), feature_version=floor)
-            except SyntaxError as error:
-                offenders.append(
-                    f"{path.relative_to(REPO_ROOT)}:{error.lineno}: {error.msg}",
-                )
-                continue
-            if floor < (3, 12):
-                offenders.extend(
-                    f"{path.relative_to(REPO_ROOT)}:{line}: {problem} (PEP 701, 3.12+)"
-                    for line, problem in sorted(_pep701_fstrings(source).items())
-                )
-
+        offenders = _offenders(sources, floor)
         self.assertEqual(
             [],
             offenders,
             f"the packages declare requires-python >= {floor[0]}.{floor[1]}, so every module "
             f"must parse under that grammar; these do not:\n  " + "\n  ".join(offenders),
+        )
+
+    def test_every_test_parses_with_the_declared_minimum_grammar(self) -> None:
+        floor = _parseable_floor(self)
+        sources = _test_sources()
+        self.assertTrue(sources, f"no tests found under {TEST_TREES}")
+        offenders = _offenders(sources, floor)
+        self.assertEqual(
+            [],
+            offenders,
+            f"the suites run on Python {floor[0]}.{floor[1]}, the packages' floor (test-floor.sh), so every "
+            f"test and runner must parse under that grammar; these do not:\n  " + "\n  ".join(offenders),
         )
 
     def test_pep701_fstrings_are_caught(self) -> None:

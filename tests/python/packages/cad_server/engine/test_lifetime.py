@@ -209,6 +209,15 @@ class StatusTextTest(unittest.TestCase):
         self.assertIn("serving http://127.0.0.1:1: 0 documents opened by a page or a command", lines)
         self.assertEqual(sum(line.startswith("  live") for line in lines), 6, "the documents held, listed apart")
 
+    def test_a_port_handed_on_by_an_update_is_said_with_the_port_it_served_before(self) -> None:
+        from cad_server.engine.cli import status_text
+
+        text = status_text({"pid": 1, "up": 5, "cap": 4, "workers": [], "models": [],
+                            "serving": {"url": "http://127.0.0.1:3246", "port": 3246, "defaultPort": 3245,
+                                        "portSource": "handed", "also": [3300], "documents": []}})
+        self.assertIn("serving http://127.0.0.1:3246 (the port pages were on before this server started), and on port 3300 too: "
+                      "0 documents opened by a page or a command", text.splitlines())
+
     def test_a_shape_handed_over_is_worded_as_one_with_no_script_to_rerun(self) -> None:
         from cad_server.engine.cli import status_text
 
@@ -328,6 +337,12 @@ class LifetimeDaemonTest(unittest.TestCase):
         shutil.rmtree(self.folder, ignore_errors=True)
         shutil.rmtree(self.state, ignore_errors=True)
 
+    def restart(self, env: dict) -> None:
+        """The test's server stopped and started again with ``env``: what it reads of its environment it reads as
+        it starts."""
+        engine_daemon.run([sys.executable, "-m", "cad_server.engine", "stop"], cwd=self.folder, env=self.env)
+        engine_daemon.start(env)
+
     def ask(self, message: dict) -> dict:
         from cad.engine.client import request
 
@@ -397,6 +412,7 @@ class LifetimeDaemonTest(unittest.TestCase):
         (self.folder / "part.py").write_text(textwrap.dedent(PART), encoding="utf-8")
         (self.folder / "assembly.py").write_text(textwrap.dedent(ASSEMBLY), encoding="utf-8")
         env = {**self.env, "CAD_ENGINE_WORKER_RSS_MB": ""}  # no small cap: the assembly's worker holds both
+        self.restart(env)
         for _ in range(2):  # the second run: the child's body marks it building, and the run's end built
             done = engine_daemon.run([sys.executable, "assembly.py"], cwd=self.folder, env=env)
             self.assertEqual(done.returncode, 0, done.stderr)
@@ -478,6 +494,7 @@ class LifetimeDaemonTest(unittest.TestCase):
     def test_a_document_no_cache_keeps_names_its_rebuild_and_nothing_runs_it(self) -> None:
         # Every document leaves memory once drained, and no cache can keep it on disk (``test_cache_keeping``'s).
         tiny = {**self.env, "CAD_ENGINE_MEMORY_MB": "0.001", "CAD_CACHE_DIR": engine_daemon.unwritable(self.folder)}
+        self.restart(tiny)
         unsaved = self.built("arm", env=tiny)
         command = f"cad run {self.folder / 'arm.py'}"
         row = self.row(unsaved, "unsaved")

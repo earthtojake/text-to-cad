@@ -68,7 +68,7 @@ _SAME = 1e-4          # mm: two points this close are one as drawn (a copy of a 
 #: this is closed and said (``joined_gaps``); a wider one is open geometry.
 _JOIN = 0.01
 #: A cutout a bend line is drawn across is a window through the bend -- the bend ends at it -- where it reaches
-#: this many thicknesses to both sides of the line; short of that it is a hole in the bend. text-to-cad's own
+#: this many thicknesses to both sides of the line; short of that it is a hole in the bend. cad's own
 #: reading of a drawing that holds no bend radius: a 90 degree bend's tangent lines lie (pi / 4)(r + K t) either
 #: side of its centre line, under 2 t for any inside radius up to 2 t, so such a cutout takes the bend's whole
 #: width away.

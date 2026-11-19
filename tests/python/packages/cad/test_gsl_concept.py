@@ -2,7 +2,7 @@
 them, what refuses a part with no shape, and ``fit`` and ``bake`` given the assembly alone.
 
 Declaring a concept and carrying it through a document need the kernel and no omega. The assembly's checks score
-points with omega's evaluator (the omega-core wheel: requirements-dev.txt installs it on macOS and Linux) and skip,
+points with omega's evaluator (the omega-core wheel: the development environment installs it on macOS and Linux) and skip,
 by name, where it is absent. An assembly is given to them as the plan ``cad.omega._fit.as_plan`` writes of one
 (its exact parts as a GLB, its concepts as JSON), written here by hand, so no engine runs.
 """

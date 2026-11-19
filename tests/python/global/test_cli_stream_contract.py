@@ -73,6 +73,7 @@ def setUpModule() -> None:
     # folder registers this interpreter as the installation whose engine the builds start.
     ENGINE = str(root / "engine")
     WATCHED.update(engine_daemon.watched({"CAD_STATE_DIR": str(root / "state")}, unittest.addModuleCleanup))
+    engine_daemon.start(_env())
 
 
 def tearDownModule() -> None:
@@ -116,7 +117,7 @@ ROBOT_URDF = """<?xml version="1.0"?>
 def run(*args: str) -> subprocess.CompletedProcess:
     # Every verb lives behind the one cadgen front door.
     return subprocess.run([sys.executable, "-m", "cad_server.cli", *args], cwd=REPO, capture_output=True, text=True,
-                          check=False, env=_env())
+                          encoding="utf-8", check=False, env=_env())
 
 
 @functools.cache

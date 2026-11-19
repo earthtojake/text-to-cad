@@ -254,7 +254,7 @@ class PocketsTest(unittest.TestCase):
         self.assertEqual(len({c["edge"] for c in corners}), 4)
         self.assertEqual({c["pocket"] for c in corners}, {"part/face 11"})
         self.assertTrue(all("part/face 11" in f.refs and f.refs[0] == f.location for f in found))
-        self.assertTrue(all(f.source.startswith("text-to-cad, ") for f in found))  # the 0.025 mm is our own floor
+        self.assertTrue(all(f.source.startswith("cad, ") for f in found))  # the 0.025 mm is our own floor
         self.assertEqual(sum("cnc.internal_corner_sharp, 4 place(s)" in line for line in result.human_lines()), 1)
         # open on one side and cut from it, the same sharp corner is a side mill's root
         step = bd.Box(40, 30, 12) - bd.Pos(15, 0, 6) * bd.Box(20, 10, 8)
@@ -975,9 +975,9 @@ class RulesTest(unittest.TestCase):
     def test_the_rules_cite_what_they_use_and_the_options_resolve(self) -> None:
         for rule in rules_side.RULES.rules:
             self.assertTrue(rule.id.startswith("cnc."), rule.id)
-            # a publisher's number cites its page; text-to-cad's own figure says it is, and why
-            if rule.source == "text-to-cad":
-                self.assertIn("text-to-cad's own", rule.note, rule.id)
+            # a publisher's number cites its page; cad's own figure says it is, and why
+            if rule.source == "cad":
+                self.assertIn("cad's own", rule.note, rule.id)
             else:
                 self.assertTrue(rules_side.RULES.source(rule.source).url.startswith("https://"))
         # one tool floor: a hole, a gap and a corner's radius (half of it) fail under the same tool

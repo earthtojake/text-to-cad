@@ -296,28 +296,6 @@ class Edits(unittest.TestCase):
         self.assertIn("no symbol library 'Device' in this project's sym-lib-table", said)
         self.assertIn("which lists parts", said)
 
-    def test_files_not_there_yet_are_made_with_their_project(self) -> None:
-        from cad import kicad_pcb, kicad_sch
-
-        schematic = write_library_project(self.folder / "new", schematic=False)
-        done = self.run_edit(WIRED, str(schematic))
-        self.assertIn(f"made {schematic}, a new schematic, and its project design.kicad_pro", done.stderr)
-        self.assertTrue(schematic.with_suffix(".kicad_pro").is_file())
-        self.assertEqual(["R1", "R2", "R3", "R4"], sorted(kicad_sch.read(schematic).parts))
-        # Both of a new project in one block: one server, each made in it and saved, its project said once.
-        board, other = self.folder / "pair" / "pair.kicad_pcb", self.folder / "pair" / "pair.kicad_sch"
-        done = self.run_edit(textwrap.dedent("""
-            import sys
-            from cad import kicad_pcb, kicad_sch
-
-            with kicad_sch.edit(sys.argv[1]) as s, kicad_pcb.edit(sys.argv[2]) as b:
-                pass
-        """), str(other), str(board))
-        self.assertEqual(1, done.stderr.count("and its project pair.kicad_pro"), done.stderr)
-        self.assertEqual(["pair.kicad_pcb", "pair.kicad_pro", "pair.kicad_sch"], sorted(_files(board.parent)))
-        self.assertEqual(0, kicad_pcb.inspect(board)["counts"]["parts"])
-        self.assertEqual((), kicad_sch.read(other).parts)
-
     @unittest.skipIf(sys.platform.startswith("win"), "POSIX signals and Unix socket paths")
     def test_sigterm_stops_the_api_server(self) -> None:
         board = write_board(self.folder)

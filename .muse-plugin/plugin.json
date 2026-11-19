@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "name": "text-to-cad",
+  "displayName": "text-to-cad",
+  "version": "0.11.13",
+  "description": "The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services.",
+  "compat": {
+    "source": "native",
+    "manifestDir": ".muse-plugin"
+  },
+  "capabilities": {
+    "skills": [
+      {
+        "id": "cad",
+        "path": "skills/cad/SKILL.md"
+      },
+      {
+        "id": "engineering-drawing",
+        "path": "skills/engineering-drawing/SKILL.md"
+      },
+      {
+        "id": "fea",
+        "path": "skills/fea/SKILL.md"
+      },
+      {
+        "id": "pcb",
+        "path": "skills/pcb/SKILL.md"
+      },
+      {
+        "id": "print3d",
+        "path": "skills/print3d/SKILL.md"
+      },
+      {
+        "id": "render",
+        "path": "skills/render/SKILL.md"
+      },
+      {
+        "id": "robot-simulation",
+        "path": "skills/robot-simulation/SKILL.md"
+      },
+      {
+        "id": "sendcutsend",
+        "path": "skills/sendcutsend/SKILL.md"
+      }
+    ],
+    "commands": [],
+    "hooks": [],
+    "mcpServers": [],
+    "reminders": []
+  }
+}

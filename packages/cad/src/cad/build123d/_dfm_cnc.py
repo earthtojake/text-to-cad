@@ -139,7 +139,7 @@ CAP = 200
 #: A part of more faces than this is not measured, and said (``model``: not measured, never passed): the rays a
 #: check casts grow with the faces, and each costs with the edges of the face it crosses -- a plate of 144 holes
 #: (150 faces) takes 9 seconds and one of 576 (582 faces) a minute, about the faces' count to the power 1.4, so
-#: a part at this bound takes about a quarter of an hour and one of 20000 faces over two hours. text-to-cad's
+#: a part at this bound takes about a quarter of an hour and one of 20000 faces over two hours. cad's
 #: own bound: it keeps a check of a large part inside a check's time limit, past which the check is stopped.
 FACE_BUDGET = 4000
 WALL_CAP_MM = 5.0
@@ -267,7 +267,7 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
         copy = copies.get(index)
         if len(part.faces()) > FACE_BUDGET:
             failed.setdefault("model", f"{part.name}: {len(part.faces())} faces, over the {FACE_BUDGET} a check "
-                              "measures in one part (text-to-cad's own bound: a check's time grows with the "
+                              "measures in one part (cad's own bound: a check's time grows with the "
                               "square of a part's faces, a part of that many taking a quarter of an hour): not "
                               "measured (check its features in smaller pieces, or without its pattern of fine "
                               "detail)")
@@ -1673,7 +1673,7 @@ def _sharp_edges(model: Model, state: dict[str, Any]) -> dict[str, Any]:
             special.append((edge, way, note.get("angle")))
         if way is not None and (note.get("narrow") or note.get("obtuse_root")):
             # made, and said: a slot cutter's opening narrower than its recess is tall, or a profile's obtuse
-            # root side-milling leaves the tool's radius in (warnings, text-to-cad's own judgements)
+            # root side-milling leaves the tool's radius in (warnings, cad's own judgements)
             extra = {"reason": "narrow_opening", "opening_mm": round(note["narrow"][0], 4),
                      "recess_mm": round(note["narrow"][1], 4)} if note.get("narrow") else \
                 {"reason": "obtuse_root", "more_setups": "two more setups", "_normals": (n1, n2)}
@@ -1841,7 +1841,7 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
     cutter's disc no wider than the bore it comes down, its shank inside it; a slot or dovetail cutter's
     plunged through an opening at least as wide as the disc somewhere along the edge, or fed in at the
     recess's own level from a side it opens to (else the edge is unmade, ``no_way_in``). A slot cutter's
-    opening narrower than the recess is tall (the disc's thickness: text-to-cad's own figure) is said
+    opening narrower than the recess is tall (the disc's thickness: cad's own figure) is said
     (``narrow_opening``). A chamfer mill of 60, 90 or 120 degrees makes a V along its bisector; a V of another
     angle is a special V cutter's (the angle said), or on five axes a standard mill tilted to each flank in
     turn (each flank a setup). A square end mill also makes it along any direction a setup presents (the
@@ -2004,7 +2004,7 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
                             continue
                     reached[k] = True
                     # can the disc get here? The least disc reaching the station from the opening (its shank of
-                    # no breadth, at the opening's near side): geometry alone, no figure of text-to-cad's
+                    # no breadth, at the opening's near side): geometry alone, no figure of cad's
                     first = int(np.argmax(out))
                     shut = np.flatnonzero(~out[first:])
                     last = first + (int(shut[0]) - 1 if len(shut) else len(out) - 1 - first)

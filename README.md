@@ -32,18 +32,19 @@ Windows, in PowerShell:
 irm https://www.texttocad.dev/install.ps1 | iex
 ```
 
-It installs uv if it is missing, then sets up text-to-cad in every agent app on
-your computer with each app's own commands (the plugin, which brings the skills
-and CAD's MCP server, or for an agent without a plugin the skills alone; Claude
-Code gets the skills, and Claude Desktop the server, for its Chat and Code tabs),
-registers the `cad` command, and moves CAD's server to the new release. Run
-it again to update everything, or click CAD's update button when it shows one; it
-lists the apps to restart.
+It installs uv if it is missing, then `cad`, the command text-to-cad runs on, then
+the plugin in each agent app it finds on your computer, with that app's own command
+(Kimi Code you install by hand), and turns on automatic updates.
 
 Then ask your agent for a part or an assembly: it writes the model as a Python
 script, runs it to build the model and shows it in the CAD viewer.
 
-Installing by hand, app by app, and updates: [docs/install.md](docs/install.md)
+It works in Claude Code, Codex, Cursor, Gemini CLI, Grok Build, Antigravity,
+Devin CLI, Factory Droid, GitHub Copilot CLI, Kimi Code, Muse, Pi, Qwen Code, Amp,
+Cline, Goose, Hermes Agent, Kilo Code, Kiro CLI, OpenClaw, OpenCode, Roo Code,
+Trae and Windsurf.
+
+Installing by hand, app by app, updating and removing: [docs/install.md](docs/install.md)
 
 ## ✨ Features
 
@@ -69,18 +70,18 @@ Projects built on top of text-to-cad, and projects that text-to-cad uses.
 text-to-cad is MIT-licensed and built in the open.
 
 - **Bugs and plugin requests**: [open an issue](https://github.com/earthtojake/text-to-cad/issues/new).
-  A bug report with the model script and the output of `cad doctor --check` is the
+  A bug report with the model script and the output of `cad doctor` is the
   fastest to fix, and an agent app without a plugin gets one on request. A
   security problem is reported privately, as [SECURITY.md](SECURITY.md) says.
 - **Questions, ideas and what you made**: the [Discord](https://discord.gg/5FGB9DwJYU).
   Say what the skills got wrong, too: that is what improves them.
 - **Code, skills and models**: a new skill (a fabrication service, a printer, a
   CAD workflow) goes in `skills/`, an example model in `models/`, and fixes
-  anywhere. [CONTRIBUTING.md](CONTRIBUTING.md) has the local setup and how to
-  test in the agent apps; an agent working in the repository starts at
-  [AGENTS.md](AGENTS.md).
+  anywhere. [CONTRIBUTING.md](CONTRIBUTING.md) has the local setup, how to
+  test in the agent apps, and the guidance for agents working in the repository.
 
 By default, text-to-cad sends usage stats and crash reports, tagged with a random
 ID and never including your files, paths or prompts. The
 [privacy policy](https://www.texttocad.dev/privacy-policy) says what is sent and
-how to turn it off.
+how to turn it off, and the [terms of service](https://www.texttocad.dev/terms-of-service)
+govern using text-to-cad.

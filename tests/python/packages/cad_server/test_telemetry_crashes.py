@@ -110,7 +110,8 @@ class SignatureTest(unittest.TestCase):
 
         missing = _caught(_user_calls(lambda: bd.Boxx))
         self.assertIsInstance(missing, AttributeError)
-        self.assertIn("Did you mean: 'Box'?", "".join(traceback.format_exception_only(missing)))
+        if sys.version_info >= (3, 12):  # Python's own hint: 3.11 gives none for a module's attribute
+            self.assertIn("Did you mean: 'Box'?", "".join(traceback.format_exception_only(missing)))
         not_a_colour = _caught(_user_calls(lambda: linear(0x2E3742, "a shape's color")))
         self.assertIsInstance(not_a_colour, ValueError)
         self.assertIn("not 3028802", str(not_a_colour))
@@ -406,7 +407,7 @@ class ServerCrashTest(_Recording):
         from cad_server._internal import base
 
         core = self.tmp / "core"
-        installation = base.Installation(release="9.9.9", name="9.9.9", python="3.14.2",
+        installation = base.Installation(release="9.9.9", python="3.14.2",
                                          executable=str(base.interpreter(core)), prefix=str(core),
                                          root=str(core / "site-packages"), source=None, arch="arm64", kernel=False)
         making = base.Making(clock=lambda: 0.0)

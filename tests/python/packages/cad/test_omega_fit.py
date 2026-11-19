@@ -2,7 +2,7 @@
 
 The sampling of a GLB's surfaces, the distance from points to triangles and the grouping of changed points into
 regions are numpy alone and tested everywhere. What scores points with omega's evaluator needs the omega-core wheel
-(requirements-dev.txt installs it on macOS and Linux): those tests skip, by name, where it is absent. Every concept
+(the development environment installs it on macOS and Linux): those tests skip, by name, where it is absent. Every concept
 and every exact part is written by the test into a temporary folder, the exact parts as GLBs, so no engine runs.
 """
 

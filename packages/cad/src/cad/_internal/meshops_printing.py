@@ -106,7 +106,7 @@ _COORDINATE_NOISE = 4.0 * 2.0 ** -23
 #: exact normals: the spread itself held 66 to 100 % of the triangles, twice it every one (but the poles of the
 #: coarsest sphere). ``tests``: a 45 deg cone's every triangle reads 45 within its tolerance, fine and coarse.
 SPREADS = 2.0
-#: A reading's tolerance is at most this many degrees (text-to-cad's own cap): what a curved surface's chords
+#: A reading's tolerance is at most this many degrees (cad's own cap): what a curved surface's chords
 #: turn an angle by. A cone meshed in 8 segments reads its 45 deg 2.3 deg off, in 13 (0.5 rad of angular
 #: deflection) 0.9; a mesh coarser than that says less of its surface than the cap allows, and its angles are
 #: judged as its triangles stand.

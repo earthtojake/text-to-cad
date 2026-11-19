@@ -1,15 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import * as THREE from "three";
 import {
   getKeyboardOrbitCommand,
   reframeReason,
   runtimeFramingBounds,
+  stepKeyboardOrbit,
   VIEWING_MODE,
+  VIEW_CUBE_CORNERS,
+  VIEW_CUBE_EDGES,
   VIEW_PLANE_FACES,
   viewPlaneCameraBasis,
   viewportFitScale
 } from "./viewportCameraKit.js";
+import { turnSense } from "./turntable.js";
 
 // The framed area of a viewport with a top bar and no side sheets, then the same
 // window with a sheet open. Only the ratio between two scales is used, so these
@@ -66,62 +71,28 @@ test("degenerate viewports fall back instead of producing a non-finite scale", (
 
 // --- view-plane camera basis -------------------------------------------------------------
 //
-// A "top" view that is not top-down is the bug these cover. Orthographic projects parallel,
-// so vertical faces that should collapse to nothing acquire width at even a degree of tilt;
-// the offset used to be 0.02 (1.146 degrees, 20px across a 1000px viewport).
+// A "top" view that is not top-down was the bug the old pole offset (0.02, then 1e-4) carried:
+// orthographic projects parallel, so vertical faces that should collapse to nothing acquire
+// width at any tilt. The turntable needs no offset, so a pole view is exactly on its pole.
 
 const WORLD_UP_AXIS = [0, 0, 1];
 
-function degreesFromAxis(direction, axis) {
-  const d = Math.abs(direction[0] * axis[0] + direction[1] * axis[1] + direction[2] * axis[2]);
-  return (Math.acos(Math.min(1, d)) * 180) / Math.PI;
-}
-
-test("every view-plane preset orbits about world up", () => {
-  // The invariant that lets the pole offset exist at all: `up` never varies, so OrbitControls
-  // orbits about the same axis from every view and no drag can snap the roll. A preset that
-  // declares its own up (the poles declare [0,1,0]) may steer the offset, never the axis.
-  for (const face of VIEW_PLANE_FACES) {
-    const basis = viewPlaneCameraBasis(face, WORLD_UP_AXIS);
-    assert.deepEqual(basis.up, WORLD_UP_AXIS, `${face.id} must orbit about world up`);
-  }
-});
-
-test("a declared up that is not world up still does not become the orbit axis", () => {
-  // Guards the invariant against the presets changing: even asked directly for a Y-up pole
-  // view, the basis orbits about world up and expresses the request through the offset.
-  const basis = viewPlaneCameraBasis({ direction: [0, 0, 1], up: [0, 1, 0] }, WORLD_UP_AXIS);
-  assert.deepEqual(basis.up, WORLD_UP_AXIS);
-  assert.ok(basis.direction[1] < 0, "the offset leans toward the declared screen up");
-});
-
-test("axis views are axis-aligned to well under a pixel", () => {
-  // 0.0057 degrees is a tenth of a pixel across a 1000px viewport. The four side views are
-  // exact; only the poles carry an offset at all.
-  for (const face of VIEW_PLANE_FACES) {
-    const basis = viewPlaneCameraBasis(face, WORLD_UP_AXIS);
-    const error = degreesFromAxis(basis.direction, face.direction);
-    assert.ok(error < 0.01, `${face.id} is ${error.toFixed(4)} deg off its own axis`);
-  }
-});
-
-test("the pole offset stays clear of Spherical.makeSafe", () => {
-  // OrbitControls calls makeSafe() on every update, clamping phi to [1e-6, PI-1e-6]. An offset
-  // at or below that gets clamped and the azimuth stops being well defined, so the view would
-  // drift on the first drag. Keep a wide margin.
-  const MAKE_SAFE_EPS = 1e-6;
-  for (const face of VIEW_PLANE_FACES) {
-    const basis = viewPlaneCameraBasis(face, WORLD_UP_AXIS);
-    const alignment = Math.abs(
-      basis.direction[0] * WORLD_UP_AXIS[0]
-      + basis.direction[1] * WORLD_UP_AXIS[1]
-      + basis.direction[2] * WORLD_UP_AXIS[2]
-    );
-    const phi = Math.acos(Math.min(1, alignment));   // angle off the orbit axis
-    if (phi < 1e-9) {
-      assert.fail(`${face.id} sits exactly on the orbit axis; lookAt has no basis there`);
-    }
-    assert.ok(phi > MAKE_SAFE_EPS * 10, `${face.id} phi ${phi} is too close to makeSafe EPS`);
+test("every view lands upright and level: off the poles under the world's up, the poles exactly on them with +Y up the screen", () => {
+  for (const view of [...VIEW_PLANE_FACES, ...VIEW_CUBE_EDGES, ...VIEW_CUBE_CORNERS]) {
+    const basis = viewPlaneCameraBasis(view, WORLD_UP_AXIS);
+    const length = Math.hypot(...view.direction);
+    assert.deepEqual(basis.direction, view.direction.map(value => value / length), `${view.id} looks exactly along its own direction`);
+    const pole = Math.abs(view.direction[2]) === length;
+    assert.deepEqual(basis.up, pole ? [0, 1, 0] : WORLD_UP_AXIS, `${view.id}'s up`);
+    // Landed: the camera's right is level and its screen's up never points down the world.
+    const camera = new THREE.OrthographicCamera();
+    camera.position.set(...basis.direction);
+    camera.up.set(...basis.up);
+    camera.lookAt(0, 0, 0);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+    assert.ok(Math.abs(right.z) < 1e-12 && up.z > -1e-12, `${view.id} lands upright: right ${right.toArray()}, up ${up.toArray()}`);
+    if (pole) assert.ok(up.y > 1 - 1e-12, `${view.id}: +Y up the screen, as the poles always were`);
   }
 });
 
@@ -240,6 +211,37 @@ test('the lit cube face follows the camera direction, and the cube reads the cam
   assert.equal(runtime.viewPlaneScratch.axis, scratch.axis);
   assert.ok(Math.abs(front.z[1] - 1) < 1e-9, 'from the front, +Z points up the screen');
   assert.ok(Math.abs(side.x[2] - 1) < 1e-9, 'from the +X side, +X points at the viewer');
+});
+
+test("a held arrow key goes over the top and on, never rolling, and holds its sideways sense to the keys' release", () => {
+  const camera = new THREE.PerspectiveCamera();
+  camera.up.set(0, 0, 1);
+  camera.position.set(0, -10, 5);
+  camera.lookAt(0, 0, 0);
+  const keyboardOrbitState = { pressedKeys: new Set(["ArrowUp"]), directionCounts: { left: 0, right: 0, up: 1, down: 0 }, lastFrameTime: 0, sense: 1 };
+  const runtime = { THREE, camera, controls: { target: new THREE.Vector3() }, keyboardOrbitState };
+  const axes = () => ({ right: new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion), up: new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion) });
+  let highest = -1;
+  // Two seconds of ArrowUp at 60 frames a second: 151° up from 27° above the horizon.
+  for (let frame = 0; frame <= 120; frame += 1) {
+    stepKeyboardOrbit(runtime, 1000 + frame * (1000 / 60));
+    highest = Math.max(highest, camera.position.z / camera.position.length());
+    assert.ok(Math.abs(axes().right.z) < 1e-9, `frame ${frame}: level`);
+  }
+  assert.ok(highest > 0.99, "it went straight over the top");
+  assert.ok(axes().up.z < -0.5 && camera.position.y > 0, "and on, upside down beyond it");
+  // ArrowRight held with it: the sense the keys began with (upright, the plain way: anticlockwise from above).
+  const before = Math.atan2(camera.position.y, camera.position.x);
+  keyboardOrbitState.directionCounts = { left: 0, right: 1, up: 0, down: 0 };
+  stepKeyboardOrbit(runtime, 4000);
+  stepKeyboardOrbit(runtime, 4016);
+  const held = Math.atan2(camera.position.y, camera.position.x);
+  assert.ok(held > before, "held: the plain way, though the view is upside down now");
+  // Keys pressed afresh, upside down (`useViewerRuntime.js` picks the sense as the first goes down): the other way.
+  keyboardOrbitState.sense = turnSense(camera, runtime.controls.target);
+  assert.equal(keyboardOrbitState.sense, -1);
+  stepKeyboardOrbit(runtime, 4032);
+  assert.ok(Math.atan2(camera.position.y, camera.position.x) < held, "begun upside down: the other way about the world");
 });
 
 test("the arrow keys orbit and the letters reach nothing in the camera", () => {

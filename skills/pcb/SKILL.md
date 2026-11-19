@@ -10,21 +10,17 @@ metadata:
 
 ## Setup
 
-Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.exe` on Windows). If
-it is missing, install text-to-cad, outside a sandbox or with its permission:
+Written for `cad==0.11.13`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
-```bash
-curl -fsSL https://texttocad.dev/install.sh | sh
-```
-
-On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
-only just added, its server may still be starting: try again for up to a minute first. `cad doctor
---check` explains any other failure, changing nothing; `cad doctor` repairs what it reports. Tell the
-person any next step `cad setup` prints.
+If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
+https://github.com/earthtojake/text-to-cad
+A project written for an earlier version may need changes; the migration guides say what:
+https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
 text-to-cad reads a board or schematic itself, so inspecting either, and viewing a schematic or taking
-its snapshot, need no KiCad. DRC (`cad kicad_pcb drc`), ERC (`cad
-kicad_sch erc`), every export (`cad kicad_pcb export`, `cad kicad_sch export`) and an edit
+its snapshot, need no KiCad. DRC (`cad kicad_pcb drc`), ERC
+(`cad kicad_sch erc`), every export (`cad kicad_pcb export`, `cad kicad_sch export`) and an edit
 (`kicad_pcb.edit`, `kicad_sch.edit`) run KiCad's command line, `kicad-cli`,
 and its IPC API from kicode, the `kicad` extra (`cad[kicad]`): the `cad` command installs it the first
 time a board command needs it (about 100 MB to download and 340 MB on disk, once; nothing for you to install), and `cad run` gives a
@@ -214,13 +210,21 @@ the report then names every error they went ahead with.
 
 ## Show the model
 
-Show the person each model you create or change, and any model or file they ask to see. If your
-tools include `cad_show` (your host may prefix it), call it with the model's id or the file's
-absolute path; its description says the rest. Otherwise give the person the page's link once, to
-open in the app's browser pane where it has one, or their browser: a model's page is the `view:` line its run prints, and a file's is the `url` that
-`cad viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
-download: give its path. Never screenshot the viewer to check your own work; review with
-`cad <type> snapshot`. If it fails to launch, say so.
+Show the person each model you create or change as soon as its first run succeeds, and any model
+or file they ask to see. A model's page is the `view:` line its run prints, and a file's is the `url`
+that `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). Show it with
+the first of these you have:
+
+1. `cad_show` among your tools (your host may prefix it): call it with the model's id or the file's
+   absolute path; its description says the rest.
+2. A tool that opens a page in the app's own browser pane, not in the person's own browser (in the
+   Claude desktop app, the Browser pane's `preview_start` with the page's `url`, or its `navigate`):
+   open the page there yourself, and give the person the link as well.
+3. Neither: give the person the link, to open in their browser.
+
+The page follows every run of the model. A file you export is a download: give its path. Showing is
+for the person: to check your own work, review with `cad <type> snapshot`, never a screenshot
+of the page. If it fails to launch, say so.
 
 ## Board views
 
@@ -253,7 +257,7 @@ board's folder (`${KIPRJMOD}`), KiCad's installed 3D library (every `${KICADn_3D
 folders `CAD_KICAD_3DMODELS` names (separated as `PATH` is); a `.wrl` name is read as the `.step` or
 `.stp` beside it. `CAD_KICAD_3DMODELS` is read from the server's environment: a server already
 running does not see a variable set in a shell afterwards, so set it before the server starts
-(`cad stop`, then run any `cad` command with it set). A part without a model stands as a block, and
+(`cad server stop`, then `cad server start` with it set). A part without a model stands as a block, and
 **Parts** lists it under **No 3D model**, with why: VRML only (no STEP beside the VRML), not found,
 outside the folders above, too large, not a STEP, embedded in the board, or too many models.
 `cad kicad_pcb inspect board.kicad_pcb --json` reports each model the same way (`models`: found,

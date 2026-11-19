@@ -14,8 +14,9 @@ the build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 m
 ``cad.trimesh`` (a mesh's 3D printing measurements: ``printing``, ``orientations``); those that call MuJoCo
 are the mujoco integration's, ``cad.mujoco`` (a document as a ``mujoco.MjSpec``, a part's collision chosen on
 it, the spec saved, and a MuJoCo model checked by MuJoCo's own compiler: ``spec``, ``fit``, ``save``, ``check``); those that take Blender's are the blender integration's, ``cad.blender`` (``load``: a
-GLB in Blender's scene, for a render); and those that run omega-core's gsl are the omega integration's, ``cad.omega``
-(``check``: a GSL model's mesh judged against its field). Process control (``cad serve``, ``status``, ``stop``,
+GLB in Blender's scene, for a render); those that run omega-core's gsl are the omega integration's, ``cad.omega``
+(``check``: a GSL model's mesh judged against its field); and OrcaSlicer's presets, written complete for its command
+line, are the orcaslicer integration's, ``cad.orcaslicer`` (``presets``, ``complete``). Process control (``cad serve``, ``status``, ``stop``,
 ``server``) is the ``cad`` command's alone. Every name loads on first use: ``import cad`` imports no CAD
 kernel, and ``import build123d`` binds a module the kernel loads into on its first attribute
 (``_internal/lazy_kernel.py``). The earlier spellings (``cad.read_step``, ``cad.export``, ``cad.ap242``,
@@ -64,7 +65,7 @@ del _install_font_guard
 _TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch", "gsl")
 
 # The integrations' namespaces (``cad.registry.INTEGRATIONS``): our helpers that take each tool's objects.
-_INTEGRATIONS = ("build123d", "kicad", "trimesh", "mujoco", "coacd", "netgen", "calculix", "blender", "omega")
+_INTEGRATIONS = ("build123d", "kicad", "trimesh", "mujoco", "coacd", "netgen", "calculix", "blender", "orcaslicer", "omega")
 
 __all__ = [
     "__version__",

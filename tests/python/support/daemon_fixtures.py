@@ -106,8 +106,10 @@ class DaemonCase(unittest.TestCase):
         while any(state.glob("*.door")) and time.monotonic() < deadline:
             time.sleep(0.05)
 
-    def _stop_daemon(self) -> None:
+    def _restart_daemon(self) -> None:
+        """The test's engine stopped and started again, as ``cad server start`` starts one: a restart."""
         self.stopped(self.state, self.env)
+        engine_daemon.start(self.env)
 
     def cli(self, *args: str, env: dict | None = None) -> subprocess.CompletedProcess:
         return engine_daemon.run([sys.executable, "-m", "cad_server.engine", *args], cwd=self.folder, env=env or self.env)

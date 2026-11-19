@@ -1,8 +1,7 @@
 /**
  * The navbar's links as this Viewer builds them (`ViewerHost.links`): its version, and where GitHub
  * and Discord are for this build. The navbar draws them the same in every app
- * (`@cad/ui/links`). A newer release is cadgen's to say, through the update button
- * (`/api/v1/server`).
+ * (`@cad/ui/links`).
  */
 import { useMemo } from "react";
 import { viewerLinks } from "@cad/ui/links";

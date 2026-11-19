@@ -55,7 +55,12 @@ FAMILIES = ("parts", "not_sheet", "sharp_bends", "bends", "flanges", "channels",
             "hole_spacing", "hole_to_bend", "notches", "tabs", "webs", "gaps")
 ITEM_CAP = 300
 _PARALLEL = 0.9995
-#: A sheet's skin is at least this many times as wide as the sheet is thick (text-to-cad's own line, for which
+#: Surfaces with no axis to read (``_dfm_brep.Surface``): a cut or a break along an ellipse or a spline is one,
+#: and is judged by its sampled normals.
+_FREEFORM = ("bspline", "extrusion", "revolution", "offset", "other")
+#: The most points a curve's chords are sampled at (an arc's at most 720 too).
+_CURVE_POINTS = 720
+#: A sheet's skin is at least this many times as wide as the sheet is thick (cad's own line, for which
 #: of a part's opposite faces can be a sheet's two sides: a strip 7 mm wide of 2 mm sheet is cut from sheet; a
 #: grille's webs, a bar's sides, a block's faces and a tube's two ends are not). Read on each face in its own
 #: frame, so the same wherever the part stands.
@@ -63,7 +68,7 @@ SKIN_WIDTHS = 2.5
 #: Where no face is that wide, one this many times as wide, and ``STRIP_LENGTHS`` times as long, as the part is
 #: thick there still makes it a strip of sheet (a 100 x 4 mm strip of 2 mm sheet is laser cut; it has no wider
 #: face to outvote). Narrower it is as much a bar on its side (100 x 8 x 6 mm); shorter, a block (40 x 30 x 15
-#: mm). text-to-cad's own lines too.
+#: mm). cad's own lines too.
 STRIP_WIDTHS = 2.0
 STRIP_LENGTHS = 10.0
 #: A bend this far round or more is a hem (to 185 degrees, its inside diameter within ``sheet.HEM_DIAMETER_T``
@@ -434,7 +439,16 @@ def _edge_points(edge: Any, reverse: bool, count: int = 48) -> tuple[np.ndarray,
         name = "circle"
         circle = (np.array(brep._xyz(circ.Location())), np.array(brep._xyz(circ.Position().Direction())), radius)
     else:
+        # an ellipse, a spline: ``count`` points, or more where its chords must be to stay within ``CHORD_MM`` of
+        # the curve, as an arc's are (``count`` alone left an outline's extent and area short where it bends
+        # sharply)
+        from OCP.GCPnts import GCPnts_QuasiUniformDeflection
+
         params = np.linspace(first, last, count + 1)
+        sampled = GCPnts_QuasiUniformDeflection(curve, plane.CHORD_MM, first, last)
+        if sampled.IsDone() and sampled.NbPoints() > count + 1:
+            params = (np.array([sampled.Parameter(i) for i in range(1, sampled.NbPoints() + 1)])
+                      if sampled.NbPoints() <= _CURVE_POINTS else np.linspace(first, last, _CURVE_POINTS))
         name = "curve"
     if reverse:
         params = params[::-1]
@@ -636,11 +650,14 @@ class _Analysis:
     def probe(self) -> None:
         total = float(self.areas.sum())
         self.hits: dict[int, list[_Hit]] = {}
+        self.normals: dict[int, np.ndarray] = {}  # each face's samples' outward normals
         for ordinal, face in enumerate(self.faces, start=1):
             share = self.areas[ordinal - 1] / total if total > 0 else 1.0
             count = 48 if share > 0.02 else 16 if share > 0.002 else 8
             found = []
-            for sample in _samples(face, count):
+            samples = _samples(face, count)
+            self.normals[ordinal] = np.array([sample.normal for sample in samples]).reshape(-1, 3)
+            for sample in samples:
                 hit = self.rays.first(sample.point, -sample.normal, skip=1e-6)
                 if hit is None:
                     found.append(_Hit(sample.area, None, 0, sample.point))
@@ -770,6 +787,7 @@ class _Analysis:
                 self.edge_set.add(a)
         self._edge_breaks(paired, stands_for)
         self._bend_breaks(paired)
+        self._full_rounds()
         self._formed(thickness, tol, paired)
         # a face square to two opposite planar faces is a cut edge of whatever lies between them, whatever its
         # thickness: a stretch off the sheet's thickness is judged on its skins, not on its edges' rays, which
@@ -791,7 +809,8 @@ class _Analysis:
                 continue
             valid = [h for h in hs if h.distance is not None and h.face not in self.countersinks]
             if a in self.skins:
-                off = [h for h in valid if abs(h.distance - thickness) > tol]
+                # a ray that reaches the other skin's break is short by that break, reported as one
+                off = [h for h in valid if abs(h.distance - thickness) > tol and h.face not in self.breaks]
                 sampled = sum(h.area for h in hs) or 1.0
                 if sum(h.area for h in off) < 0.02 * sampled:
                     continue
@@ -905,6 +924,9 @@ class _Analysis:
             return abs(float(np.dot(surface.normal, normal))) < 0.01
         if surface.kind == "cylinder":
             return abs(float(np.dot(surface.axis, normal))) > _PARALLEL
+        if surface.kind in _FREEFORM:  # cut along an ellipse or a spline: square to it at every sample
+            cosines = np.abs(self.normals[a] @ normal)
+            return bool(len(cosines)) and float(cosines.max()) < 0.01
         return False
 
     def _break_of(self, b: int, skin: int, t: float, tol: float) -> float | None:
@@ -928,9 +950,22 @@ class _Analysis:
             if surface.concave is not False or float(size or math.inf) > t + tol or (
                     kind == "torus" and abs(float(np.dot(surface.axis, normal))) < _PARALLEL):
                 return None
+        elif kind in _FREEFORM:
+            # a chamfer or a round along an ellipse or a spline: facing the skin's side at every sample, at a
+            # slant to it somewhere, neither square to it nor flat with it all over
+            cosines = self.normals[b] @ normal
+            if not len(cosines) or float(cosines.min()) < -0.01 or float(cosines.max()) < 0.01 \
+                    or float(cosines.min()) > _PARALLEL:
+                return None
         else:
             return None
-        heights = (self._boundary([b], per_edge=3) - np.array(self.surfaces[skin - 1].origin)) @ normal
+        return self._depth(b, skin, t, tol)
+
+    def _depth(self, b: int, skin: int, t: float, tol: float) -> float | None:
+        """How deep face ``b`` reaches into the sheet from ``skin`` (along its normal), or None where it runs
+        out of the sheet."""
+        heights = (self._boundary([b], per_edge=3) - np.array(self.surfaces[skin - 1].origin)) @ \
+            np.array(self.surfaces[skin - 1].normal)
         if heights.max() > tol or heights.min() < -(t + tol):
             return None
         return float(heights.max() - heights.min())
@@ -1005,6 +1040,44 @@ class _Analysis:
                     continue
                 self.breaks[b] = float(depth.max() - depth.min())
                 self.bend_breaks[b] = c
+
+    def _full_rounds(self) -> None:
+        """A cut edge rounded whole, from one skin to the other (a full round, r = t/2): a convex cylinder along
+        the skins, or a torus or a sphere about their normal, beside both and a break of each. No face of the
+        cut is left square to the skins, and the blank ran out to where the round is widest, past both skins'
+        outlines: it is a break of both skins (``breaks``), laid into the flat as theirs are (``_halves``), and
+        no cut edge."""
+        t, tol = float(self.thickness), self.tolerance
+        rounds = []
+        for a in sorted(self.edge_set):
+            if self.surfaces[a - 1].kind not in ("cylinder", "torus", "sphere"):
+                continue
+            skins = self.neighbors[a] & self.skins
+            depths = [self._break_of(a, s, t, tol) for s in sorted(skins)]
+            if not depths or any(depth is None for depth in depths) or \
+                    not any(c in self.partners.get(b, ()) for b in skins for c in skins):
+                continue
+            self.edge_set.discard(a)
+            self.breaks[a] = max(float(depth) for depth in depths if depth is not None)
+            self.break_skins[a] = set(skins)
+            rounds.append(a)
+        # and where two meet at a corner of the outline, the face that turns it (a sphere, a torus, a swept
+        # round's surface of revolution), which touches the skins at a point, if at all: within the sheet, a break
+        # of the skins of the round beside it
+        while rounds:
+            a = rounds.pop()
+            for b in sorted(self.neighbors[a]):
+                kind = self.surfaces[b - 1].kind
+                if b in self.breaks or b in self.edge_set or b in self.skins or b in self.bend_faces or \
+                        b in self.countersinks or kind not in ("torus", "sphere", "revolution"):
+                    continue
+                depths = [self._depth(b, s, t, tol) if kind == "revolution" else self._break_of(b, s, t, tol)
+                          for s in sorted(self.break_skins[a])]
+                if any(depth is None for depth in depths):
+                    continue
+                self.breaks[b] = max(float(depth) for depth in depths if depth is not None)
+                self.break_skins[b] = set(self.break_skins[a])
+                rounds.append(b)
 
     def _formed(self, thickness: float, tol: float, paired: set[int]) -> None:
         """Cones, tori, spheres and freeform faces whose rays mostly cross the sheet's thickness: sheet formed
@@ -1360,9 +1433,10 @@ class _Analysis:
                     if self.neighbors[c] & (set(flange.faces) | set(self.breaks))}
             for b, skins in [*self.break_skins.items(), *sunk.items()]:
                 if skins & sides:
-                    projected = self._projected(b, flange)
-                    if projected is not None:
-                        broken.append(projected)
+                    for face in self._halves(b):
+                        projected = self._projected(b, flange, face)
+                        if projected is not None:
+                            broken.append(projected)
         for bend in self.bends:
             if bend.to_flat is not None:
                 pieces.extend(self._strip(bend))
@@ -1533,11 +1607,31 @@ class _Analysis:
             return None
         return bd.make_face(bd.Polyline(*[(float(x), float(y), 0.0) for x, y in polygon], close=True))
 
-    def _projected(self, ordinal: int, flange: _Flange) -> Any | None:
-        """A break's face laid into its flange's plane (its outline projected onto it), or None."""
+    def _halves(self, ordinal: int) -> list[Any]:
+        """A break's face, as it is laid into the flat: a full round in its two halves, split where it is widest,
+        at the sheet's mid-plane (each half's outline projects onto the plane as its shadow; the whole round's
+        folds back on itself to a line); any other break whole."""
         import build123d as bd
 
-        face = self.faces[ordinal - 1]
+        face, skins = self.faces[ordinal - 1], self.break_skins.get(ordinal, set())
+        if len(skins) < 2 or self.surfaces[ordinal - 1].kind not in ("cylinder", "torus", "sphere", "revolution"):
+            return [face]
+        skin = self.surfaces[min(skins) - 1]
+        normal = np.array(skin.normal, dtype=float)
+        middle = np.array(skin.origin, dtype=float) - 0.5 * float(self.thickness) * normal
+        try:
+            halves = [half for half in face.split(bd.Plane(tuple(middle), z_dir=tuple(normal)),
+                                                  keep=bd.Keep.ALL) if isinstance(half, bd.Face)]
+        except Exception:  # noqa: BLE001 - a round that does not split is laid in whole
+            return [face]
+        return halves if len(halves) == 2 else [face]
+
+    def _projected(self, ordinal: int, flange: _Flange, face: Any = None) -> Any | None:
+        """A break's face (or ``face``, a part of it) laid into its flange's plane (its outline projected onto
+        it), or None."""
+        import build123d as bd
+
+        face = self.faces[ordinal - 1] if face is None else face
         mapping = lambda points: _apply(flange.to_flat, points)  # noqa: E731
 
         def polygon_face(points: np.ndarray) -> Any | None:

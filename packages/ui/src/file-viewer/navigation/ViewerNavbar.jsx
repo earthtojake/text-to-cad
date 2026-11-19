@@ -29,8 +29,8 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
 /**
  * The row above a file and above the host's home in a page's chrome (`FileViewer`'s `chrome: "page"`,
  * the web viewer's): the same row whatever is open, so a person finds each control in the same place.
- * Over the home it has only the logo (its menu without Back to home), Back and Forward, the host's
- * update and its actions. A host that shows the view alone (`chrome: "bare"`: the CAD app's file
+ * Over the home it has only the logo (its menu without Back to home), Back and Forward and the host's
+ * actions. A host that shows the view alone (`chrome: "bare"`: the CAD app's file
  * handler) has no navbar, and Preview hides it in every host, drawing its own bar in its place.
  *
  * Left, in this order: the text-to-cad logo (the C mark, over the home and over a document
@@ -42,10 +42,9 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
  * Open in (Browser, the file manager) and the host's own items (the CAD viewer's Export) — a model's
  * Copy path and file manager acting on its script. The menu and its submenus are shadcn's own width.
  *
- * Right, only what a host or a file adds, kept for the update's nudge, in this order: the file's own
- * actions (the CAD viewer's one: a dismissed alert's icon, which brings its card back); the host's own
- * actions (`actions`: the CAD app's Full size, inline); last, outermost, the host's update button
- * while its install is behind (`update`, the blue `UpdateButton` from `@cad/ui/update`).
+ * Right, only what a host or a file adds, in this order: the file's own actions (the CAD viewer's
+ * one: a dismissed alert's icon, which brings its card back); last, outermost, the host's own actions
+ * (`actions`: the CAD app's Full size, inline).
  * The colour scheme is the app menu's. A view's own controls are never here: Display and Preview end its tool strip.
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.
@@ -266,10 +265,9 @@ function FileName({ path, name: given, kind = "file", explorer, recent }) {
  *   The ⋯ after the name: what the host can do with the document on screen, and its own items (Export).
  * @param {import("react").ReactNode} [props.trailing] The file's actions.
  * @param {import("react").ReactNode} [props.actions] The host's own controls at the right end (the CAD app's Full size).
- * @param {import("react").ReactNode} [props.update] The host's update button, last among the controls (outermost).
  * @param {string} [props.className]
  */
-export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file = null, name, kind = "file", explorer = null, recent = null, fileMenu = null, trailing = null, update = null, actions = null, className }) {
+export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file = null, name, kind = "file", explorer = null, recent = null, fileMenu = null, trailing = null, actions = null, className }) {
   const { t } = useI18n();
   const usage = useControlUsage();
   const onHome = goHome ? () => { usage.used("home"); goHome(); } : goHome;
@@ -293,7 +291,6 @@ export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file
       <div className={NAVBAR_CONTROLS_CLASS}>
         {trailing}
         {actions}
-        {update}
       </div>
     </header>
   );

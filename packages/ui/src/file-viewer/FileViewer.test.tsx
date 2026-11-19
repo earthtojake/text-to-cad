@@ -28,7 +28,7 @@ const navbar = () => document.querySelector('[data-viewer-navbar]');
 const fileName = () => document.querySelector<HTMLElement>('[data-file-name]')!;
 const labels = (selector = '[data-viewer-navbar]') => [...document.querySelectorAll(`${selector} a, ${selector} button`)].map(node => node.getAttribute('aria-label'));
 
-it('draws the navbar over every file, named by its name, and over the home with only its menu, Back and Forward, the update and the host\'s actions; never over a view shown small', async () => {
+it('draws the navbar over every file, named by its name, and over the home with only its menu, Back and Forward, the host\'s actions; never over a view shown small', async () => {
   open({});
   await screen.findByText('shown');
   // The name, as words where nothing can be browsed; no logo with no home, no ⋯ where the host can do nothing.
@@ -40,15 +40,15 @@ it('draws the navbar over every file, named by its name, and over the home with 
   expect(navbar()).toBeNull();
   cleanup();
   // The home has the same navbar: the logo's menu, Back and Forward where the host keeps the view's
-  // history, and the host's update and actions, as over a file; no file, no box for view controls.
+  // history, and the host's actions, as over a file; no file, no box for view controls.
   const back = vi.fn();
   open({ host: { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home() {} } }, file: null,
     history: { canGoBack: true, canGoForward: false, back, forward() {} },
-    update: <button type="button" aria-label="Update to 0.7.5" />, navbarActions: <button type="button" aria-label="Full size" />,
+    navbarActions: <button type="button" aria-label="Full size" />,
     presentation: { home: <p>home</p> } } as any);
   await screen.findByText('home');
   expect([labels(), document.querySelector('[data-file-name]'), document.querySelector('[data-view-controls]')])
-    .toEqual([['Menu', 'Back', 'Forward', 'Full size', 'Update to 0.7.5'], null, null]);
+    .toEqual([['Menu', 'Back', 'Forward', 'Full size'], null, null]);
   expect((screen.getByRole('button', { name: 'Forward' }) as HTMLButtonElement).disabled).toBe(true);
   await userEvent.setup().click(screen.getByRole('button', { name: 'Back' }));
   expect(back).toHaveBeenCalledOnce();
@@ -76,7 +76,6 @@ it('heads the home and a document with the one C mark, in one button that never 
 it('draws no navbar where the host asks for the view alone (`chrome: "bare"`): over a file or the home, whatever it hands the navbar', async () => {
   const homed = { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home() {} } };
   const everything = { host: homed, chrome: 'bare', history: { canGoBack: true, canGoForward: false, back() {}, forward() {} },
-    update: <button type="button" aria-label="Update to 0.7.5" />,
     navbarActions: <button type="button" aria-label="Full size" />, presentation: { home: <p>home</p> } };
   open(everything);
   await screen.findByText('shown');
@@ -89,10 +88,10 @@ it('draws no navbar where the host asks for the view alone (`chrome: "bare"`): o
   // The default is the page's chrome: the same props draw the navbar.
   open({ ...everything, chrome: undefined });
   await screen.findByText('shown');
-  expect(labels()).toEqual(['Menu', 'Back', 'Forward', 'Full size', 'Update to 0.7.5']);
+  expect(labels()).toEqual(['Menu', 'Back', 'Forward', 'Full size']);
 });
 
-it('keeps the right of the navbar for the host\'s actions (Full size) and, outermost, its update button alone, and hides the navbar while the renderer says its Preview is up', async () => {
+it('keeps the right of the navbar for the host\'s actions (Full size) alone, and hides the navbar while the renderer says its Preview is up', async () => {
   // A renderer whose Preview a test opens and closes, as the CAD shell reports it.
   let report: ((previewing: boolean) => void) | undefined;
   const previewed = defineFileRenderer({
@@ -104,9 +103,9 @@ it('keeps the right of the navbar for the host\'s actions (Full size) and, outer
     } }),
   });
   render(<FileViewer file={FILE} host={host as any} renderers={[previewed]} state={{}} onStateChange={() => {}}
-    update={<button type="button" aria-label="Update to 0.7.5" />} navbarActions={<button type="button" aria-label="Full size" />} />);
+    navbarActions={<button type="button" aria-label="Full size" />} />);
   await screen.findByText('shown');
-  expect([labels(), document.querySelector('[data-view-controls]')]).toEqual([['Full size', 'Update to 0.7.5'], null]);
+  expect([labels(), document.querySelector('[data-view-controls]')]).toEqual([['Full size'], null]);
   act(() => report!(true));
   expect([navbar(), screen.getByText('shown')]).toEqual([null, expect.anything()]);
   act(() => report!(false));

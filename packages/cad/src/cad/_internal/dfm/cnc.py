@@ -9,7 +9,7 @@ slenderness and the part's size; the milling rules that do not apply there are s
 
 The rules (``RULES``) are general practice. A number a published guide states cites it (Protolabs Network's
 CNC design guide and its service's page: the evidence, not a shop's limit). A feasibility floor no guide states
-is text-to-cad's own and says so, with its reason (``rules.OWN``: its finding's ``source`` reads ``text-to-cad,
+is cad's own and says so, with its reason (``rules.OWN``: its finding's ``source`` reads ``cad,
 ...``, never a publisher's name). A warning is a recommendation, a cost or a risk; an error is a part no
 general shop makes as drawn: a face no tool reaches, a tool that does not exist at that depth. A part's size
 alone is never one (a specialist's machine takes it: a warning), a stock given that it does not fit is. A limit that follows the tools given (``--tools``) is the smallest tool's; without
@@ -60,15 +60,15 @@ _TOOLS = {"tools_given": True}
 _SMALL_TOOL_RADIUS = 1.25
 #: Without ``--tools``, the smallest tool there is, for holes, slots and corners alike: the guide's small-features
 #: table, minimum hole diameter "Feasible: 0.05 mm (0.005 inches)". It is the guide's figure for a hole, and
-#: text-to-cad's own floor for a slot's width (no tool wider than the slot cuts it) and a corner's radius (half of
+#: cad's own floor for a slot's width (no tool wider than the slot cuts it) and a corner's radius (half of
 #: it), which the guide states no figure for: one tool, one floor.
 TOOL_FLOOR_MM = 0.05
-_FLOOR_NOTE = ("text-to-cad's own floor: the smallest tool the cited guide calls feasible, said there of a hole "
+_FLOOR_NOTE = ("cad's own floor: the smallest tool the cited guide calls feasible, said there of a hole "
                '(Hubs, minimum hole diameter: "Feasible: 0.05 mm (0.005 inches)"), held for a slot and a corner '
                "too, which the guide gives no figure for")
 #: Under this a tool is a micro tool (the guide's holes: "Feasible: any diameter larger than 1 mm"; its
 #: small-features table goes on to 0.05 mm): a hole under it warns, and a micro end mill reaches ``MICRO_REACH``
-#: diameters at most -- text-to-cad's own floor (long-neck micro end mills are catalogued to about ten diameters;
+#: diameters at most -- cad's own floor (long-neck micro end mills are catalogued to about ten diameters;
 #: the guide's 30:1 is said of specialised tooling, its example a 1 inch end mill).
 MICRO_TOOL_MM = 1.0
 MICRO_REACH = 25.0
@@ -81,10 +81,10 @@ HOLE_REACH = 40.0
 MICRO_REACH_MM = 0.5
 #: A slitting saw cuts this many of its thicknesses deep at the very most (``cnc.pocket_depth_limit`` of a slit).
 SAW_REACH = 60.0
-_SAW_NOTE = ("text-to-cad's own floor, no guide's or catalogue's figure: a slitting saw is taken to cut sixty of "
+_SAW_NOTE = ("cad's own floor, no guide's or catalogue's figure: a slitting saw is taken to cut sixty of "
              "its thicknesses deep at the very most (a saw about two hundred times its thickness across, a 0.5 mm "
              "one 100 mm, cutting under a third of its diameter deep past the arbor's flange)")
-_MICRO_NOTE = ("text-to-cad's own floor, no guide's or catalogue's figure: an end mill under 1 mm across (a micro "
+_MICRO_NOTE = ("cad's own floor, no guide's or catalogue's figure: an end mill under 1 mm across (a micro "
                "tool) is taken to reach 25 of its diameters at the very most, on a long neck made for it (stocked "
                "long-reach miniature end mills run to about a dozen diameters); the guide's 30:1 is said of "
                "specialised tooling at full size. The limit rises evenly from 25 at 0.5 mm to 30 at 1 mm, so a "
@@ -94,17 +94,17 @@ _MICRO_NOTE = ("text-to-cad's own floor, no guide's or catalogue's figure: an en
 def reach_limit(tool_mm: float, full: float = FULL_REACH) -> float:
     """How many of its diameters deep a tool ``tool_mm`` across reaches at the very most: ``full`` (the guide's
     30:1; a drill's 40:1) at 1 mm and over, ``MICRO_REACH`` at ``MICRO_REACH_MM`` and under, evenly between
-    -- a continuous limit, text-to-cad's own under 1 mm (``_MICRO_NOTE``)."""
+    -- a continuous limit, cad's own under 1 mm (``_MICRO_NOTE``)."""
     if tool_mm >= MICRO_TOOL_MM:
         return full
     share = max(0.0, (tool_mm - MICRO_REACH_MM) / (MICRO_TOOL_MM - MICRO_REACH_MM))
     return MICRO_REACH + (full - MICRO_REACH) * share
 #: A thin feature that stands over this many of its thicknesses tall warns (``cnc.tall_feature``), whatever its
-#: thickness: text-to-cad's own rule of thumb.
+#: thickness: cad's own rule of thumb.
 TALL_RATIO = 4.0
 #: Engraving: a cavity at most this deep, no deeper than twice its width and under this wide (a letter's stroke)
 #: is cut with an engraving tool, whose tip rounds its corners by about a tenth of a millimetre: no end mill's
-#: corner to judge. The depth is text-to-cad's own figure (lettering is cut to a millimetre at most, a V tool's
+#: corner to judge. The depth is cad's own figure (lettering is cut to a millimetre at most, a V tool's
 #: reach); the width is the guide's smallest standard tool (2.5 mm: under it a cavity is micro-machining, which
 #: lettering is).
 ENGRAVING_DEPTH_MM = 1.0
@@ -140,7 +140,7 @@ _EDGE_REASONS = {
                        "direction, so no tool's corner makes it sharp: round it to at least {limit:g} mm (a ball "
                        "end mill's radius), square one face to an approach direction, or give more axes"),
 }
-#: Sharp edges a tool makes, said as warnings (text-to-cad's own judgements, ``reason``): the words and the fix.
+#: Sharp edges a tool makes, said as warnings (cad's own judgements, ``reason``): the words and the fix.
 _EDGE_WARNINGS = {
     "narrow_opening": ("sharp concave edge (a slot cutter's opening narrower than its recess)",
                        "its slot cutter's way in is {opening_mm:g} mm wide where the recess is {recess_mm:g} mm "
@@ -158,7 +158,7 @@ _OTHER_AXES = ("sharp concave edge (made along a direction this machine lacks)",
 
 
 #: A corner along the tool's axis of ``BALL_VOID_DEG`` (150 degrees) or more is made by the tool's flank; the
-#: radius it leaves in the corner is said as a warning past this (mm): text-to-cad's own figure, no guide's.
+#: radius it leaves in the corner is said as a warning past this (mm): cad's own figure, no guide's.
 FLANK_RESIDUE_MM = 0.05
 
 
@@ -170,7 +170,7 @@ _UNFIT_FIX = ("sharp vertical corner: no round tool makes it, and its {opening_m
 
 def _corner_rules(source: str, sharp_note: str) -> tuple[Rule, ...]:
     """A sharp vertical corner and a sharp concave edge: no round tool makes either (the error); judged against
-    half the smallest tool with ``--tools``, else half the tool floor (``TOOL_FLOOR_MM``, text-to-cad's own),
+    half the smallest tool with ``--tools``, else half the tool floor (``TOOL_FLOOR_MM``, cad's own),
     the hint giving the radius recommended (``_SMALL_TOOL_RADIUS``, a 2.5 mm end mill's). An edge's message and
     fix follow its ``reason``; a sharp edge a tool along a direction the machine lacks would make is a warning
     (more axes make it), every other one an error. A corner is judged on a milled part and on a turned part's
@@ -299,7 +299,7 @@ _RULES: tuple[Rule, ...] = (
          fix="no end mill {width_mm:g} mm across reaches {depth_mm:g} mm; the slit runs out of the part at both "
              "ends, so a slitting saw {width_mm:g} mm thick cuts it, on an arbor, in a setup of its own: plan "
              "the saw with the shop, or widen the slit or make it shallower",
-         note="text-to-cad's own reading: a straight slit open at both ends, deeper than an end mill of its width "
+         note="cad's own reading: a straight slit open at both ends, deeper than an end mill of its width "
               "reaches (" + _MICRO_NOTE + "), is cut by a slitting saw"),
     Rule("cnc.pocket_depth_limit", "pockets", "depth_to_width", "max", SAW_REACH, "ratio",
          "slit depth to width (a slitting saw's)", OWN.id, when=_POCKETS, item_when={"saw": True},
@@ -311,14 +311,14 @@ _RULES: tuple[Rule, ...] = (
              "(30 at most), or plan wire or sinker EDM",
          note='"A tool diameter-to-cavity depth ratio of up to 30:1 is possible using specialized tooling"; a '
               "cavity takes no tool wider than itself, so its depth is at most 30 of its widths (the guide's "
-              "figure, text-to-cad's reading of it for a width)"),
+              "figure, cad's reading of it for a width)"),
     # a thin feature that stands tall: no guide's figure and no hard limit, so a warning at any height
     Rule("cnc.tall_feature", "walls", "height_to_thickness", "max", TALL_RATIO, "ratio",
          "height to thickness of a thin standing feature", OWN.id,
          severity="warning", item_when={"standing": True},
          fix="it stands {height_mm:g} mm on {thickness_mm:g} mm: shorten it, thicken it, or support it (a rib, a "
              "web to a neighbour); a tall thin feature chatters and bends under the cutter",
-         note="text-to-cad's own figure, a rule of thumb (four times the thickness): a taller thin feature is "
+         note="cad's own figure, a rule of thumb (four times the thickness): a taller thin feature is "
               "made, slower and less true -- no hard limit exists, so this is never an error"),
     Rule("cnc.wall_thickness", "walls", "thickness_mm", "min", {"metal": 0.5, "plastic": 1.0}, "mm",
          "wall thickness", "hubs-cnc", by="wall_class",
@@ -351,7 +351,7 @@ _RULES: tuple[Rule, ...] = (
          item_when={"micro_tool": True},
          fix="no {diameter_mm:g} mm drill reaches {value:.3g} diameters ({limit:.3g} at most): shorten the hole, "
              "widen it to 1 mm or more, or plan EDM drilling",
-         note="text-to-cad's own floor, no guide's or catalogue's figure: a micro drill is taken to reach as a "
+         note="cad's own floor, no guide's or catalogue's figure: a micro drill is taken to reach as a "
               "micro end mill does, 25 diameters at 0.5 mm and under, rising evenly to the guide's 40 at 1 mm (one "
               "reach for a slot and a hole of one width); the guide's 40x is said of holes it calls feasible, "
               "over 1 mm"),
@@ -366,7 +366,7 @@ _RULES: tuple[Rule, ...] = (
     Rule("cnc.drill_size", "holes", "drill_deviation_mm", "max", 0.005, "mm",
          "distance from the nearest standard drill", OWN.id, severity="warning", item_when={"drilled": True},
          fix="use a standard drill diameter (metric, fractional, number or letter), or the hole is milled",
-         note="text-to-cad's own tolerance for reading a diameter as a standard drill's (0.005 mm, a drawing's "
+         note="cad's own tolerance for reading a diameter as a standard drill's (0.005 mm, a drawing's "
               "rounding); the guide recommends a standard drill bit size and states no tolerance"),
     Rule("cnc.thread_size", "threads", "major_diameter_mm", "min", 6.0, "mm", "thread major diameter", "hubs-cnc",
          severity="warning", fix="M6 or larger where it can be: smaller threads are tapped, not thread-milled",
@@ -417,7 +417,7 @@ _RULES: tuple[Rule, ...] = (
              "recess to the outside, widen its way in to the disc that reaches it (twice the recess's depth past "
              "the opening), or make the part in pieces or plan EDM",
          detail="{face_count} adjoining face(s): faces {faces_said}",
-         note="text-to-cad's own floor, by geometry: a tool is straight, and a disc on a shank reaches no "
+         note="cad's own floor, by geometry: a tool is straight, and a disc on a shank reaches no "
               "further past an opening than the disc that opening lets in"),
     Rule("cnc.undercut", "access", "unreached_any_direction_fraction", "max", ACCESS_TOLERANCE, "share",
          "share of the face no straight tool reaches (a disc cutter through its opening does)", "hubs-cnc",
@@ -431,7 +431,7 @@ _RULES: tuple[Rule, ...] = (
          note="a tool reaches only what it can enter"),
     Rule("cnc.setups", "setups", "setup_count", "max", 5, "setups", "setups", OWN.id, severity="warning",
          when=_MILLING, fix="put the features on fewer sides: each setup is a refixturing",
-         note="text-to-cad's own count, read from the guide's words on rotations (Hubs: \"This is often "
+         note="cad's own count, read from the guide's words on rotations (Hubs: \"This is often "
               "acceptable if the part needs to be rotated up to three or four times, but anything above this "
               "limit is excessive.\"): four rotations are five clampings, so a sixth setup warns"),
     # the part's size: the largest a named network's machines take (fewer shops), and twice that (a
@@ -446,7 +446,7 @@ _RULES: tuple[Rule, ...] = (
          OWN.id, severity="warning", when=_MILLING,
          fix="a part {value:.5g} mm long is a long-bed or gantry mill's, a specialist's: name the shop and its "
              "machine, make it in pieces, or check the model's units",
-         note="text-to-cad's own figure: twice the longest part the cited network's mills take (2000 mm). Such "
+         note="cad's own figure: twice the longest part the cited network's mills take (2000 mm). Such "
               "mills exist, so this is never an error"),
     Rule("cnc.part_size", "turning", "max_diameter_mm", "max", 431.0, "mm", "the turned part's largest diameter",
          "hubs-cnc-service", severity="warning", when=_TURNING,
@@ -460,20 +460,20 @@ _RULES: tuple[Rule, ...] = (
          "the turned part's largest diameter", OWN.id, severity="warning", when=_TURNING,
          fix="a {value:.5g} mm swing is a vertical lathe's, a specialist's: name the shop and its lathe, mill "
              "it, or check the model's units",
-         note="text-to-cad's own figure: over twice the diameter the cited network's lathes take (431 mm). "
+         note="cad's own figure: over twice the diameter the cited network's lathes take (431 mm). "
               "Vertical lathes turn it, so this is never an error"),
     Rule("cnc.part_size_limit", "turning", "length_mm", "max", 4000.0, "mm", "the turned part's length",
          OWN.id, severity="warning", when=_TURNING,
          fix="a part {value:.5g} mm long is a long-bed lathe's, a specialist's: name the shop and its lathe, "
              "make it in pieces, or check the model's units",
-         note="text-to-cad's own figure: four times the length the cited network's lathes take (990 mm). "
+         note="cad's own figure: four times the length the cited network's lathes take (990 mm). "
               "Long-bed lathes turn it, so this is never an error"),
     # turning's own: what its measurements (turning, grooves) are judged by
     Rule("cnc.turned_slenderness", "turned_diameters", "run_to_diameter", "max", 10.0, "ratio",
          "a turned section's length to its diameter", OWN.id, severity="warning", when=_TURNING,
          fix="a {diameter_mm:g} mm section {run_mm:g} mm long ({value:.3g} diameters) bends away from the tool: "
              "shorten or thicken it, or plan a tailstock and a steady rest, or a sliding-head (Swiss) lathe",
-         note="text-to-cad's own figure, a rule of thumb: past about ten diameters a turned section needs a "
+         note="cad's own figure, a rule of thumb: past about ten diameters a turned section needs a "
               "steady rest or a sliding-head lathe -- made either way, so never an error. Judged a section: a "
               "thin stem on a wide flange is as slender as the stem alone"),
     Rule("cnc.groove_depth_limit", "grooves", "depth_to_entry", "max", 0.5, "ratio",
@@ -482,21 +482,21 @@ _RULES: tuple[Rule, ...] = (
          fix="no grooving tool that enters the {entry_diameter_mm:g} mm bore reaches {depth_mm:g} mm past its "
              "wall: make the groove shallower (half the bore's diameter at most), widen the bore, or open the "
              "groove to an end",
-         note="text-to-cad's own floor, by geometry: a tool that passes the bore is no wider than it, and reaches "
+         note="cad's own floor, by geometry: a tool that passes the bore is no wider than it, and reaches "
               "past the bore's wall by less than its own width less its bar's -- half the bore at the very most"),
     Rule("cnc.groove_depth", "grooves", "depth_to_entry", "max", 0.25, "ratio",
          "internal groove depth to the diameter of the bore its tool enters by", OWN.id, severity="warning",
          when=_TURNING, item_when={"internal": True},
          fix="a groove {depth_mm:g} mm deep past a {entry_diameter_mm:g} mm bore takes a special grooving bar: "
              "keep it under a quarter of the bore's diameter, widen the bore, or open the groove to an end",
-         note="text-to-cad's own figure, a rule of thumb: a standard internal grooving bar reaches about a "
+         note="cad's own figure, a rule of thumb: a standard internal grooving bar reaches about a "
               "quarter of the bore it enters past its wall; half the bore is the geometric limit "
               "(cnc.groove_depth_limit)"),
     Rule("cnc.groove_depth", "grooves", "depth_to_width", "max", 5.0, "ratio", "groove depth to width",
          OWN.id, severity="warning", when=_TURNING,
          fix="a groove {value:.3g} times deeper than it is wide takes a long, thin grooving blade: widen it or "
              "make it shallower",
-         note="text-to-cad's own figure, a rule of thumb for a grooving insert's reach (five of its widths); a "
+         note="cad's own figure, a rule of thumb for a grooving insert's reach (five of its widths); a "
               "parting blade goes deeper, slower -- never an error"),
 )
 
@@ -507,9 +507,9 @@ def _detailed(rules: tuple[Rule, ...]) -> tuple[Rule, ...]:
 
 
 _NOTE = ("general practice: a published CNC design guide's numbers (Protolabs Network's) where it states one, "
-         "text-to-cad's own feasibility floors where none does (each says so); no shop's limits: compare the "
+         "cad's own feasibility floors where none does (each says so); no shop's limits: compare the "
          "measurements with a shop's own")
-RULES = RuleSet("cnc", "text-to-cad general rules", _VERSION, _detailed(_RULES), (HUBS, HUBS_SERVICE, OWN), note=_NOTE)
+RULES = RuleSet("cnc", "cad general rules", _VERSION, _detailed(_RULES), (HUBS, HUBS_SERVICE, OWN), note=_NOTE)
 
 
 def tools(text: str | None) -> tuple[float, ...] | None:
@@ -621,7 +621,7 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                     "info", "cnc.turned_corner_sharp",
                     f"{item.get('part')}: {item['sharp_profile_corners']} sharp internal corner(s) on the turned "
                     "profile: a turning insert leaves its nose radius in each (0.2 to 0.8 mm on standard inserts: "
-                    "text-to-cad's own figure, no guide's)", item.get("location"),
+                    "cad's own figure, no guide's)", item.get("location"),
                     "draw the corner's radius (0.4 mm suits most inserts), or an undercut relief where a "
                     "mating part must seat"))
         # what the milling rules judge and turning's do not: said, never read as a pass
@@ -649,7 +649,7 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
             f"{corners} corner(s): an engraving tool cuts them, its tip rounding each corner by about 0.1 mm",
             deepest.get("location"),
             "plan an engraving (V) tool; keep strokes 0.5 mm wide or more, and say if the corners must be sharper "
-            f"than the tip leaves them (text-to-cad's own reading: {ENGRAVING_DEPTH_MM:g} mm deep at most)"))
+            f"than the tip leaves them (cad's own reading: {ENGRAVING_DEPTH_MM:g} mm deep at most)"))
     balls = [item for item in _items(report, "sharp_edges") if item.get("made_by") == "ball_mill"]
     if balls:
         worst = max(balls, key=lambda item: item.get("deviation_mm") or 0)
@@ -674,7 +674,7 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                 "warning", "cnc.flank_corner_residue",
                 f"{len(over)} corner(s) along the tool's axis keep more than {FLANK_RESIDUE_MM:g} mm of the "
                 f"{mm(worst['radius_mm'])} mm tool's radius, up to {mm(worst['deviation_mm'])} mm ({worst['edge']}, "
-                f"a {worst['void_angle_deg']:.0f}-degree corner; {FLANK_RESIDUE_MM:g} mm is text-to-cad's own "
+                f"a {worst['void_angle_deg']:.0f}-degree corner; {FLANK_RESIDUE_MM:g} mm is cad's own "
                 "figure, no guide's)", worst.get("location"), "draw the corners' radius, or open the corners"))
     small = report.get("small_features") or {}
     if isinstance(small, dict) and (small.get("fine_faces") or 0) >= 20:

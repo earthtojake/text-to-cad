@@ -7,14 +7,10 @@
         "--managed-python",
         "--python",
         "3.14",
-        "--from",
-        "cad-mcp==0.11.11",
-        "cad-mcp"
+        "cad@0.11.13",
+        "mcp"
       ],
-      "startup_timeout_sec": 300,
-      "env": {
-        "CAD_INSTALL_CHANNEL": "codex-github"
-      }
+      "startup_timeout_sec": 300
     }
   }
 }
