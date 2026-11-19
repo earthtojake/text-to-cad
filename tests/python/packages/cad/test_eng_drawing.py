@@ -6002,6 +6002,30 @@ class PartSheetTests(unittest.TestCase):
         self.assertTrue(0 < len(angles) < 12, angles)
         self.assertTrue(all("inclined face" in line or "face at" in line for line in unstated), unstated)
 
+    def test_a_hole_no_callout_states_is_reported_and_the_rest_is_drawn(self) -> None:
+        """A counterbore with a chamfered mouth opens out in two steps, and no one
+        callout states it. A first pass names it in its report and states the
+        plain hole beside it; holes() called by hand still refuses."""
+        from build123d import Align, Box, Cone, Cylinder, Pos
+        from cad._internal.drawing_render import _render_sheet
+        from cad.eng_drawing import Sheet
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        plate = Box(80, 40, 12, align=align) - Pos(-20, 0, 0) * Cylinder(3, 12, align=align)
+        plate -= Pos(20, 0, 0) * Cylinder(3, 12, align=align) + Pos(20, 0, 6) * Cylinder(5.5, 6, align=align)
+        plate -= Pos(20, 0, 11) * Cone(5.5, 6.5, 1, align=align)
+        sheet, doc, unstated = self._drawn(plate)
+        self.assertEqual(_callouts(doc), ["%%c6 THRU"])
+        named = [line for line in unstated if "opens out in 2 steps" in line]
+        self.assertEqual(len(named), 1, unstated)
+        self.assertIn("the hole at (20, 0, 12)", named[0], "where the part has it, not where the sheet turned it")
+        self.assertIn("cut a section through it", named[0])
+        by_hand = Sheet("A3", 1.0)
+        top, _front = by_hand.three_views(plate, views=("top", "front"))
+        top.holes()
+        with self.assertRaisesRegex(ValueError, "cannot be stated in one callout"):
+            _render_sheet(by_hand, index=1, count=1, label="hand")
+
     def test_a_round_bar_cut_on_a_slant_is_stated_by_its_angle(self) -> None:
         """The cut face of a mitred rod is bounded by an ellipse, which has one vertex:
         its two ends are where that outline turns back, not its corners."""

@@ -203,6 +203,10 @@ class View:
     #: turned part lies down), the turn. The points given to the view are in the
     #: part's own frame, and turned with it.
     _turn: Any = None
+    #: On a first pass's view: ``holes()`` and ``hole_table()`` leave a hole no one
+    #: callout can state (its mouth opens out in steps) to the report, and state
+    #: the rest. Called by hand, both refuse it, as ``hole()`` does.
+    _first_pass: bool = False
     #: The view's centre lines the part is stated symmetric about: "h", "v".
     _symmetric: set = field(default_factory=set)
     #: What its calls have to say when the sheet renders: a value an earlier
@@ -1541,8 +1545,11 @@ def _first_pass(sheet: Sheet, shape) -> None:
         if turned is None:
             # A hole on a hexagon's axis is located by it: a nut's bore.
             loose = [f for f in seen if not any(_on_hex(f, h) for h in hexagons)]
-            if len(seen) > _FEW_HOLES or (loose and not _locate(view, shape, [(f.mouth, (0, 1, 2)) for f in loose],
-                                                                 placed)):
+            # A hole no one callout states (its mouth opens out in steps) is in no
+            # table either: the report names it, and the sheet states the rest.
+            plain = [f for f in seen if getattr(f, "problem", None) is None]
+            if plain and (len(plain) > _FEW_HOLES or (
+                    loose and not _locate(view, shape, [(f.mouth, (0, 1, 2)) for f in loose], placed))):
                 view.hole_table()  # each hole's X and Y from one corner: called out and located
             else:
                 view.holes()
@@ -1565,6 +1572,7 @@ def _first_pass(sheet: Sheet, shape) -> None:
     for view in sheet.views:
         # The author's points are in the part's own frame, as the shape given is.
         view._turn = turn
+        view._first_pass = True
 
 
 #: Up to this many holes and slots in a view are called out on it and located by

@@ -900,6 +900,10 @@ def _expand_holes(view: View, proj, bounds, dim: "_Dim", seen, look, warnings: l
         # What a hole() or slot() states is its own; holes() calls out the rest
         # of a kind, a tapped one among identical bores taken out of the count.
         members = [member for member in members if id(member) not in stated]
+        if view._first_pass:
+            # A first pass states what it can: a hole no one callout states is the
+            # report's to name, not a reason to draw no sheet.
+            members = [member for member in members if getattr(member, "problem", None) is None]
         if not members:
             continue
         if isinstance(members[0], Slot):
@@ -1129,6 +1133,8 @@ def _hole_table(view: View, proj, features, cut, items) -> _HoleTable:
     for members in _kinds([*(h for h in features.holes if _looks_into(h, look) and _shows(view, proj, h, h.length, cut)),
                     *(sl for sl in features.slots if _looks_into(sl, look) and _shows(view, proj, sl, sl.run, cut))]):
         plain = [m for m in members if id(m) not in taps]
+        if view._first_pass:
+            plain = [m for m in plain if getattr(m, "problem", None) is None]
         if plain:
             order.append((plain, None))
         for dim in tapped:

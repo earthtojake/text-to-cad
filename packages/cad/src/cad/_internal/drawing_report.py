@@ -153,6 +153,10 @@ def _unstated(facts: _Facts) -> list[str]:
             fix = (f"{where}.{verb}({_where(own.point(feature.mouth))}) states it, or {where}.holes() calls out every "
                    f"hole and slot the {where} view looks down." if where else
                    f"No view on the drawing looks into it; add the view that looks down the {verb}.")
+            if getattr(feature, "problem", None) is not None:
+                text = f"the hole at {_where(own.point(feature.mouth))} ({feature.problem})"
+                fix = ("No one callout states a hole that opens out in steps: cut a section through it and "
+                       "dimension each step with diameter() and dim().")
             lines.append(f"incomplete: {whose}{text} is not called out. {fix}")
         lines.extend(_unstated_ends(record, whose, kinds))
         size = shape.bounding_box().size
