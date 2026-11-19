@@ -308,7 +308,8 @@ where those files ship, so these scripts are what produces them.
   `uv tool update-shell` (unless `UV_NO_MODIFY_PATH` is set), installs or updates the plugin in each app found
   with that app's own command from the repository's `latest` branch (or copies the skills into an agent's
   own skills folder), removes our own older copies there, turns on `cad plugin update auto` where the run
-  ends with exit status 0, and prints a line per app. It reads no version feed. `APPS` is the one table of apps; each row says how its commands
+  ends with exit status 0, and prints a line per app (in a person's terminal also the CAD logo built from the
+  brand's profiles and a live line naming the app and command running). It reads no version feed. `APPS` is the one table of apps; each row says how its commands
   were verified. The docs site copies the three into its `public/` as it builds
   (`apps/docs/scripts/install-scripts.mjs`). Tested by `tests/python/global/test_install_script.py` (a
   temporary home, stand-in CLIs on PATH); `.github/workflows/install-windows.yml` and
