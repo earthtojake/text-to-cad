@@ -139,7 +139,7 @@ answers the tree `.shape` would, at that pose. Given such a `.shape`, it says to
 
 The laws are the package README's (**The design laws**), and this document restates none of them: it
 describes the mechanism they constrain and cites them by that README's numbers -- 1, 2, 3, 6, 7, 9,
-10, 11, 13, 19, 20, 22 and 23.
+10, 11, 13, 19, 20, 22, 23 and 31.
 
 ## Architecture
 
@@ -661,6 +661,7 @@ answers (`base.Making.claim`, `mcp.server._first_report`).
 | `description.py`, `describe.py`, `declarations.py`, `hulls.py` | the robot description: a document as a tree of rigid bodies in SI units (links with mass, centre and inertia, meshes, collision shapes, named frames; joints with frame, axis, limits and couplings; poses), built from the structure and the mechanism (`describe`), what a model declares for it (`body`, `frame`, `free`, `limits`, `link`, `mass`, `point_mass`), and a part's convex hulls for `cad.mujoco.decompose`, kept in the engine's cache (`hulls`) |
 | `export/` | `translate` and the kind registry (`__init__`); STEP through the XCAF writer (`step`); placements and meshes from the one mesh cache (`mesh`); an MJCF and a URDF with their meshes beside them from the robot description (`mjcf`, `urdf`), and the body pairs that touch at rest, which the MJCF excludes (`contact`); a mesh file read as a document of triangles, no kernel (`mesh_file`); GLB, 3MF, binary STL (`glb`, `threemf`, `stl`); a planar document's drawing through build123d's DXF exporter, with the drawing checks (`dxf`); a motion baked into a glTF clip (`motion`); a view made a document again, for a STEP of a document held without its XCAF document and an xbf written from a STEP (`tree`) |
 | `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance (or a GLB's, an STL's or a 3MF's own, **Mesh**), element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
+| `parameters.py` | a model's parameters, the standard library alone: `param` (a declaration checked, its default returned), the record of a load's declarations with where each default is spelled (`recording`, `Declared`), a model's rows (`rows`), the document's record (`record`, `recorded`), the page's view of them (`served`), and what `set` checks and writes (`changes`, `standing`, `spelled`, `splice`); the server's own half is its `parameters.py` (**Parameters**) |
 | `serve.py` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes |
 | `windows_spawn.py` | on Windows, the spawn pools' processes in the base started by its real interpreter, told the environment (`__PYVENV_LAUNCHER__`): a venv's `python.exe` is a launcher, which never passes the pool's handles on (CPython's bpo-35797) |
 | `snapshot.py` | `cad <type> snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`), or a KiCad board or one sheet of a KiCad schematic drawn flat (`render/board.py`, `render/schematic.py`), into a PNG; a script's model drawn from its worker's memory |
@@ -672,6 +673,7 @@ answers (`base.Making.claim`, `mcp.server._first_report`).
 | `daemon.py`, `worker.py`, `client.py` | one daemon for the device (its engine folder), one warm worker per model script and Python, at most one per core alive (`supervisor.py`), connect-or-start (an installation's engine, never one of the library's own environment), a hold; a worker's memory cap. The daemon is the server's; the worker and the client are the library's, which a model's process and its worker run where only the library is installed |
 | `supervisor.py`, `services.py` | the server's one supervisor of every process the daemon starts (`Supervisor`, `Process`), and their declarations (`WORKER`, `RENDER`, `CHECKS`): **Services** |
 | `checks.py`, `checks_runner.py` | the manufacturing checks the engine measures: their kept results (`Checks`, `Disk`) and the pool of checks processes (`Pool`); a check's life, from asked to answered or stopped (`Runner`): **Document types and integrations** |
+| the server's `parameters.py` | `set`: a model's parameters written into its script and its last run built again, refused by one word of a closed set (`Setting`), and the run each worker built last, kept to build again (`ran`): **Parameters** |
 | `renders.py` | the server's side of the render processes: a served document's picture, its version sent first, the process leased from the supervisor |
 | `display.py` | the engine's X display on Linux, which a render process is started with (`Service.draws`) and a worker told with an export that draws: the daemon's own `DISPLAY`, else an Xvfb it starts at the first picture and stops with it, else none |
 | `frames.py` | the frames every process of the engine's speaks to the daemon, read and written: the library's, the standard library alone (**Services**, the protocol) |
@@ -3436,7 +3438,7 @@ carries `x-cad-viewer`, the gate a cross-site form cannot pass (403 without it).
 
 A kind's routes: `model`, `xbf` and `step` -- `structure`, `parts/<key>` (and its
 `faces|edges|vertices/<ordinal>`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`,
-`POST mesh`, and a file's `source`; `dxf` -- `drawing`, `source`; `kicad_pcb` -- `plot` (the
+`POST mesh`, a model's `POST parameters` (**Parameters**) and a file's `source`; `dxf` -- `drawing`, `source`; `kicad_pcb` -- `plot` (the
 board's geometry per layer and its index, read from the file on each request: `viewer/plots.py`),
 `source`; `kicad_sch` -- `plot` (every sheet of the hierarchy a page, and the schematic's index;
 `?sheet=<path>` that sheet's page alone, `index=0` without the index; the hierarchy parsed once per
@@ -3465,6 +3467,9 @@ closing a loop, or null) and the build's `warnings`. A page poses the instances 
 placement at the values over its placement as built, applied to its instances.
 `POST .../pose` (`{"pose": NAME | {joint: value}}`) answers the id of the
 document served at that pose, where it is read (`api`), and its `kinematics.pose` the values it stands at.
+The structure's `parameters` is the list the document records, always there (`[]` for none), each
+parameter served with `writable`, `reason` and `source` (**Parameters**); a model's own `POST
+.../parameters` sets them.
 `GET /api/v1/look` is the look the regular display modes are drawn in (**The viewer and the
 snapshot**), the same for every document; `GET /api/v1/look/environment` is its environment, the
 Radiance image `render/studio.hdr`.
@@ -4062,7 +4067,9 @@ of ids is saved.
 `cad serve ID`, `cad model snapshot ID view.png`, `cad model export ID part.step`, and `cad
 inspect ID 'face 1'` take the id; `cad <type> inspect 'ID#face 1'` uses the same reference syntax.
 Each reads the document the engine holds, as it is: editing the script changes nothing until
-Python runs it again, and no verb imports, runs or builds a script. An id the engine no longer
+Python runs it again, and no verb imports, runs or builds a script -- but `cad model set`, which a
+person or an agent asks to change the script's declared parameters, and which then runs the script's
+last run again (**Parameters**). An id the engine no longer
 holds (unsaved, detached) is refused with its state and the command that builds it again
 (`cad run <the script that defines it>`; **Document lifetime**).
 `--query build` returns saved-file metadata/closure or live-build metadata; `--query closure` and
@@ -4075,3 +4082,122 @@ name="bracket")` returns the same kind of handle (**Shapes handed over**).
 
 Ids live in the library's `cad.engine.ids`, document names (a CAD file's path or an id) in
 `cad.engine.addresses`; the daemon's transient book of live models, by id, lives in [models.py](models.py).
+
+## Parameters
+
+A script declares a model's parameters at a module's top level (law 31), and goes on with the numbers
+they return:
+
+```python
+from cad import model
+import build123d as bd
+
+WALL = model.param("wall", 2.0, min=1, max=5)             # a float; WALL is 2.0
+HOLES = model.param("holes", 6, min=3, max=12)            # an integer; HOLES is 6
+ANGLE = model.param("angle", 30.0, min=0, max=90, unit="deg")
+
+@model
+def bracket():
+    ...
+```
+
+**Declaring.** `param(name, default, *, min=None, max=None, step=None, unit=None)` (`parameters.py`) is
+`cad.model.param`, the standard library alone, so `import cad` imports no kernel. It returns `default`
+unchanged, a plain `int` or `float`: the memo's keys, what a body retains and the closure see a number like
+any other. An `int` default makes an integer parameter, whose bounds, step and values are whole numbers; a
+`float` default a float one. Refused by name: a `bool`, a number that is not finite, anything else; a name that
+is not `[a-z][a-z0-9_]*`; an option outside `min`, `max`, `step` and `unit` (law 16); `min` not below `max`, a
+default outside them, a `step` not above zero, a unit other than `mm` or `deg`; and a call whose caller is not a
+module's top-level code (a body replayed from the memo does not run, and its declaration would be lost). In
+the program's own process that is all it does.
+
+**Recording.** The worker loads the script inside `parameters.recording` (`build._build`), which starts from
+no declaration, as the load starts from no model. Each call from a first-party file (`kernel.trace`'s: the
+model's own code, never a library's) is recorded as a `Declared`: what it declares, the file and line of the
+call, and where its default is spelled -- the call found by the code position its frame stands at
+(`f_lasti`, `co_positions()`; where the interpreter keeps no columns, the one call on the line that declares
+the name), its default argument found in the file's syntax tree (`ast`, columns in UTF-8 bytes), and kept as a
+byte span only when it is a plain numeric literal, with or without a leading minus, whose bytes read back as
+the value; the span comes with the digest of the file's bytes it was found in (`digest`). A default that is
+anything else (a name, an expression) is recorded with no span. A name declared twice in a run is refused,
+naming both `file:line`.
+
+**Which a model has.** `BuildContext.parameters(model)` (`parameters.rows`): every declaration of the run,
+the model's own -- declared in its script, writable where it has a span (`expression` where it has none)
+-- and the shared ones, declared in any other first-party module the run loaded, listed and never writable
+(`shared`). Every model of one script lists the same. A child model of another script lists what a build of
+its own script would: the declarations of the files its script's closure reaches.
+
+**The document.** The record (`parameters.record`): ASCII JSON on the main label under `PARAMETERS_GUID`
+(`document.py`), beside the closure and the animations' record: a list of `{name, value, kind, min, max,
+step, unit}`, an option not declared `null`, in the order declared; no file, no line, no span. A model whose
+script declares none writes no attribute, so its bytes are what they were before parameters existed. The
+record is part of the document's signature, and a model taken from its key (the worker's last build, the
+engine's cache) is built again when the record the script declares now differs from the one it holds
+(`build._taken`), so a document never lists values its code no longer has. A declared or exported xbf carries
+the same record (`Loaded.parameters`); opening that file shows them, read-only. It is an attribute of its
+own under a GUID of its own, which a reader that does not know it passes over, and a document without it reads
+as one with none: the format stays `xbf/9`, and documents earlier releases wrote read as they did (law 15,
+tier 3). STEP, GLB and the other translations carry none.
+
+**Held while the worker lives.** The build's report carries the rows with their spans and digests
+(`report["parameters"]`); the daemon takes them out of it as it registers the document (`models.Models.register`)
+and keeps them beside its record, in memory alone, never in the registry, the cache or an answer. They are
+the worker's to say: `Models.live` answers them only while the worker that recorded them is live in the
+supervisor and of the generation asked; a worker retired or gone (`prune`) takes them with it, and a build
+that records others replaces them.
+
+**What the page reads.** `serve.Server.structure` adds `parameters` to every structure it serves, `[]` for a
+document that records none, through `parameters.served`: each recorded parameter with `writable`, `reason`
+and `source`. `writable` is true only for a model's document whose live worker recorded a span for the value
+the document holds; else `reason` is one of `file` (a file's document: a declared or exported xbf, a STEP),
+`no_worker` (no live worker recorded where it is: the script must run again), `shared` or `expression`.
+`source` is the declaring file relative to the script's folder where it is under it, else its name, and null
+where nothing live says it. `cad model inspect` and `cad xbf inspect` list the same rows (`api._summary`'s
+`parameters`).
+
+**Setting.** One operation, three entrances, one code path: `cad model set ID wall=2.5 holes=8 [--json]`
+(`cli/document_types.py`), `cad.model.set(handle_or_id, **values)` (`api.set`, the daemon's `set` op) and the
+page's `POST /api/v1/documents/model/<id>/parameters` with `{"values": {...}}` (`viewer/http_app.py`, behind
+the guard header and the page token every changing route has; only a model's document has it, and it names a
+document and parameters alone, never a path or text). Each reaches `parameters.Setting.set` in the daemon,
+which does in order, and changes nothing on disk before the fifth:
+
+1. The model's rows, while its worker is live (`Models.live`), else `no_worker`; a document the engine does
+   not hold at all is not held (`serve.NotHeld`).
+2. Every name one of the rows, else `unknown_parameter`; every one writable, else `not_writable` with its
+   `reason` (`parameters.changes`).
+3. Every value a finite number of its parameter's kind -- an integer parameter takes an integral one -- within
+   its declared range, else `not_a_number` or `out_of_range`. A float is rounded to six decimals; a value equal
+   to the one the code holds is no change, and a request that changes nothing writes and builds nothing.
+4. No build of the script running and no other set of it under way, else `busy`; the script's bytes on disk
+   of the digest its last run recorded, and the bytes at each span still spelling the recorded value
+   (`parameters.standing`), else `script_changed`: run the script first.
+5. Each number spelled by the library (`parameters.spelled`: an integer as its digits, a float in the
+   shortest text that reads back as it, always with a point or an exponent, so its kind is kept), the spans
+   replaced from the last to the first (`parameters.splice`: every other byte as it was), and the file
+   replaced at once, its mode kept (`atomic_replace.put`).
+6. The script's last run built again (`Setting._built`): the daemon keeps, per worker, the run its last builds
+   were part of (`parameters.ran`: the script, the models every build of that run named, its working folder,
+   its environment, the Python it ran with and the program that asked), and sends that as one build order of a
+   run of its own through the daemon's one build path, so the model's warm worker builds it, its pages see the
+   new version as a run's, and every model the run built is built again. The answer: `{"id", "written": [{name,
+   from, to, file, line}], "rebuilt": [ids]}`.
+7. A build that fails -- a model's error, the worker's -- puts the previous bytes back the same way and builds
+   the run again, so the document and the rows are the last good ones, and answers `build_failed` with the
+   build's words: its last line in the refusal, all of it as `detail`.
+
+A refusal is `parameters.ParameterRefused`, a `ValueError` with `code` (one of `parameters.CODES`), `hint` and,
+for `not_writable`, `reason`; the daemon answers it with those beside its words, and the library raises it as
+that type (`api._failed`). The command exits 2 for a parameter the model has not or a value it does not take
+(`unknown_parameter`, `not_a_number`, `out_of_range`: `invalid_argument`) and 1 for what the model's state
+refuses now (`no_worker`, `not_writable`, `script_changed`, `busy`) and for `build_failed` (`failed`); its
+`--json` refusal is the failure contract's document with `code`, `hint`, `parameterReason` (for
+`not_writable`) and `detail` (for `build_failed`). The route answers `200` with the answer, and a refusal as
+every route does (`{"error", "hint"}`) with `code`, `reason` and `detail` likewise, `400` for
+`unknown_parameter`, `not_a_number` and `out_of_range` and `409` for the rest (`http_app.PARAMETER_STATUS`); a
+body that is not `{"values": {...}}` is a `400` with no `code`. It answers once the build is done.
+
+What it does not do: write a parameter another module declares, one whose default is an expression, or one
+of a document no live worker built; preview a value, hold an override, or build anything but the run that
+last ran; write the record into a STEP, a GLB or any other translation.

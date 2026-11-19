@@ -7,6 +7,7 @@
     serve(source, port=0) -> Served
     inspect(source, ref=None) -> Facts (the build closure without a ref)
     check(source, check) -> dict (a manufacturing check, measured in the engine's checks processes)
+    set(source, **values) -> dict (a model's parameters written into its script, the model built again)
     status() / stop()
 
 Every one goes through the daemon (``client``), so the warm worker of the script or of the
@@ -45,8 +46,8 @@ from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar, cast
 
 __all__ = ["Document", "Drawn", "EngineError", "Facts", "IN_CALLER", "IN_ENGINE", "NoDaemon", "Outdated", "Report",
-           "Served", "Stopped", "Unanswered", "Unreached", "Written", "check", "export", "hand_over", "observers", "serve", "snapshot",
-           "status", "stop", "inspect"]
+           "Served", "Stopped", "Unanswered", "Unreached", "Written", "check", "export", "hand_over", "observers", "serve", "set",
+           "snapshot", "status", "stop", "inspect"]
 
 class EngineError(RuntimeError):
     """A request the engine refused or could not run: its words; ``raised``: the type the engine failed with
@@ -365,8 +366,9 @@ def _failed(answer: dict[str, Any]) -> Exception:
         error = kind(text)
     except TypeError:  # a refusal whose type takes more than its words
         error = ValueError(text)
-    # A document not held: what it is, and what builds it again; a snapshot's refusal: the part it refused.
-    for key in ("state", "rebuild", "part"):
+    # A document not held: what it is, and what builds it again; a snapshot's refusal: the part it refused; a
+    # change of parameters refused: why, by one word, what to do, and a parameter's own reason.
+    for key in ("state", "rebuild", "part", "code", "hint", "reason"):
         if key in answer and hasattr(error, key):
             setattr(error, key, answer[key])
     error._engine_refusal = True  # type: ignore[attr-defined]  # the worker's, not this process's (``_error``)
@@ -1205,7 +1207,8 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     materials and their masses, where any part has one, and what the model declares a part or an assembly to weigh
     and its point masses (``declared``: the masses then as the robot description weighs them, ``weights``); the
     parts whose texture maps are not drawn (``untextured``); its joints,
-    mechanism states, configuration sequences and animations; and a model's declared files.
+    mechanism states, configuration sequences and animations; the parameters its script declares
+    (``parameters``); and a model's declared files.
     Nothing is built. Not ``measured`` (``query="structure"``): no bounds, volume, inside-out parts or
     masses, and nothing measured for them -- the lists alone."""
     from cad.engine.refs import placed_facts
@@ -1302,6 +1305,9 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
         "sequences": [{"name": name, "duration": motion.get("duration")}
                       for name, motion in (kinematics.get("motions") or {}).items()],
         "animations": structure.get("animations") or [],
+        # What its script declares (``parameters.served``): each its value, kind, range and unit, and whether
+        # ``cad model set`` can write it (``writable``, else ``reason``) and where (``source``).
+        "parameters": list(structure.get("parameters") or []),
         "files": list((model or {}).get("files") or []),
     }
     if not measured:
@@ -1328,6 +1334,26 @@ def stop() -> bool:
     if not wait_gone():
         raise EngineError("the engine daemon did not exit")
     return True
+
+
+def set(source: Any, /, **values: Any) -> dict[str, Any]:  # noqa: A001 - the operation's own name
+    """A model's declared parameters (``cad.engine.parameters``) given new values in its script, and the
+    model built again: ``set(handle_or_id, wall=2.5, holes=8)``. The engine that holds the model's document
+    checks each name and value against what the worker that built it recorded, checks the script's bytes are
+    the ones that run read, writes each number where its default is spelled -- nothing else of the file
+    changes -- and builds the script's last run again in that worker; a build that fails puts the script's
+    bytes back and builds again, so the document is the last good one. Answers ``{"id", "written": [{name,
+    from, to, file, line}], "rebuilt": [ids]}``; a value equal to the one the code holds writes nothing.
+    ``parameters.ParameterRefused`` (a ``ValueError``, its ``code`` one of ``parameters.CODES``) when it is
+    refused, nothing written; or, ``build_failed``, when the build at the new values failed and the script
+    is as it was."""
+    from cad.engine.ids import is_id
+
+    ident = source.id if isinstance(source, Document) else os.fspath(source) if isinstance(source, (str, os.PathLike)) \
+        else None
+    if ident is None or not is_id(ident):
+        raise ValueError(f"set takes a model's handle or its document id (cad run SCRIPT.py prints it), not {source!r}")
+    return _ask({"op": "set", "id": ident, "values": dict(values)})["done"]
 
 
 # --- what each verb did, told to its observers ------------------------------------------------

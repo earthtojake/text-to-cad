@@ -1050,6 +1050,12 @@ class Server:
         # the engine holds of it and then its record and its cached document; None for a server of
         # its own (a test's), whose application deletes the record alone.
         self.delete: Callable[[str], dict[str, Any] | None] | None = None
+        # What the live worker that built a model document recorded of its parameters at the generation served
+        # (the daemon's ``models.Models.live``: where each is spelled in the code), else None; and their ``set``,
+        # which writes them into the model's script and builds it again (the daemon's ``parameters.Setting``),
+        # None for a server of its own (a test's), whose documents no daemon built.
+        self.parameters: Callable[[str, Any], dict[str, Any] | None] = lambda _ident, _version: None
+        self.set_parameters: Callable[[str, Any], dict[str, Any]] | None = None
         if budget is not None:
             self.cache.cap = None
             self.cache.grown = self._grown
@@ -1652,8 +1658,20 @@ class Server:
 
     def structure(self, doc: Served) -> dict[str, Any]:
         """The document's structure, each part held with the faces its mesher left
-        without triangles (``unmeshed``, ordinals) and ``BRepCheck``'s verdict on each."""
+        without triangles (``unmeshed``, ordinals) and ``BRepCheck``'s verdict on each, and the
+        parameters it records (``parameters.served``: ``[]`` for none), each said writable only where
+        the live worker that built a model's document recorded where the code spells its value."""
+        from cad.engine import parameters
+
         found = dict(doc.structure)
+        model = doc.ident in self.model_loaders
+        live = None
+        if model:
+            try:
+                live = self.parameters(doc.ident, doc.version)
+            except Exception:  # noqa: BLE001 - what no worker can say is said not writable, never a failed read
+                live = None
+        found["parameters"] = parameters.served(doc.structure.get("parameters"), model=model, live=live)
         found["prototypes"] = prototypes = []
         for prototype in doc.structure["prototypes"]:
             unmeshed = self.cache.unmeshed(prototype["key"])

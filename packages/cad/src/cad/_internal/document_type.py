@@ -97,6 +97,11 @@ class DocumentType(types.ModuleType):
             value = solve_for(entry.id)
             self.__dict__[name] = value
             return value
+        if name == "set" and name in entry.operation_names:
+            # A model's parameters written into its script and the model built again (``cad.engine.api.set``).
+            value = _set(self)
+            self.__dict__[name] = value
+            return value
         if name == "ranges" and "ranges" in entry.operation_names:
             # The joint stops every type with a mechanism shares (``cad._internal.ranges``).
             from cad._internal.ranges import ranges_for
@@ -112,12 +117,15 @@ class DocumentType(types.ModuleType):
             return lookup(self.__name__, name)
         except AttributeError:
             pass
-        has = [*(["read"] if entry.reader else []), *entry.operation_names]
+        has = [*(["read"] if entry.reader else []), *entry.operation_names, *self._declarations]
         raise AttributeError(f"cad.{entry.id} has no {name!r}; it has {', '.join(has)}")
+
+    #: What a script declares with the type beside its decorator, by name: none but the model's (``ModelType``).
+    _declarations: tuple[str, ...] = ()
 
     def __dir__(self) -> list[str]:
         entry = self.entry
-        names = {*super().__dir__(), *entry.operation_names, *(["read"] if entry.reader else [])}
+        names = {*super().__dir__(), *entry.operation_names, *(["read"] if entry.reader else []), *self._declarations}
         return sorted(name for name in names if not name.startswith("_") or name.startswith("__"))
 
     def __repr__(self) -> str:
@@ -167,7 +175,20 @@ def _what(source: Any) -> str:
 
 
 class ModelType(DocumentType):
-    """``cad.model``: the one type with no file, whose decorator is the engine's model itself."""
+    """``cad.model``: the one type with no file, whose decorator is the engine's model itself, and whose
+    script declares its parameters with it (``model.param``, ``cad.engine.parameters.param``: the standard
+    library alone, so ``import cad`` stays kernel-free)."""
+
+    _declarations = ("param",)
+
+    def __getattr__(self, name: str) -> Any:
+        if name == "param":
+            # The function itself, never a wrapper: it reads the frame that calls it (a module's top level).
+            from cad.engine.parameters import param
+
+            self.__dict__[name] = param
+            return param
+        return super().__getattr__(name)
 
     def __call__(self, target: Any = None, /, *, name: str | None = None, animations: Any = None) -> Any:  # type: ignore[override]
         """``@model`` or ``@model(name=...)``: declare a model; ``model(shape, name=...)``: hand a shape over as
@@ -202,6 +223,21 @@ def _operation(owner: DocumentType, name: str) -> Any:
     operation.__module__ = owner.__name__
     operation.__doc__ = f"cad.{owner.entry.id}.{name}: {owner.entry.operation(name).summary}.\n\n{verb.__doc__ or ''}"
     return operation
+
+
+def _set(owner: DocumentType) -> Any:
+    """``cad.model.set(handle_or_id, **values)``: the engine's ``set`` (``cad.engine.api.set``), its source
+    refused when it is another type's. Its source is positional alone, so every keyword is a parameter's name."""
+    from cad.engine import api
+
+    def set(source: Any, /, **values: Any) -> dict[str, Any]:  # noqa: A001 - the operation's own name
+        owner._own(source)
+        return api.set(source, **values)
+
+    set.__module__ = owner.__name__
+    set.__qualname__ = "set"
+    set.__doc__ = f"cad.{owner.entry.id}.set: {owner.entry.operation('set').summary}.\n\n{api.set.__doc__ or ''}"
+    return set
 
 
 def bind(module_name: str) -> None:

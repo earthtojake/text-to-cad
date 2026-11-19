@@ -69,7 +69,9 @@ cad_server/
   `cad urdf validate`. `model` is a model the engine holds, by its document id, with no file. `export`,
   `snapshot` and `inspect` are shared by every type that has them; every other operation is named for
   what it does -- `dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate` -- each a check whose
-  findings carry a severity, a code and a location (`--json`). `cad <type> --help` lists a type's
+  findings carry a severity, a code and a location (`--json`) -- and a model's `set` (`cad model set <id>
+  wall=2.5`), its declared parameters written into its script and the model built again (the engine's
+  **Parameters**). `cad <type> --help` lists a type's
   operations, `cad <type> <operation> --help` its options, and a file of another type is refused by name
   (`cli/document_types.py`, each type's module `cli/<type>.py`).
 - **Integrations**, for a tool's own files that are no document type: `cad mujoco check MODEL.xml`,

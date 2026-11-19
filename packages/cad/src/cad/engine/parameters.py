@@ -434,8 +434,7 @@ def changes(listed: list[dict[str, Any]], values: dict[str, Any]) -> list[tuple[
             has = ", ".join(known) if known else "none"
             raise ParameterRefused(f"the model has no parameter {name!r}; it has {has}", "unknown_parameter",
                                    "name one of the model's parameters")
-    wanted = {}
-    for name, given in values.items():
+    for name in values:
         row = known[name]
         if row.get("reason") is not None or not row.get("span"):
             reason = row.get("reason") or "expression"
@@ -443,7 +442,7 @@ def changes(listed: list[dict[str, Any]], values: dict[str, Any]) -> list[tuple[
                    if reason == "shared" else "its default is not a plain number in the code")
             raise ParameterRefused(f"{name} cannot be set: {why}", "not_writable",
                                    "edit it in the code, then run the script", reason)
-        wanted[name] = _value(row, given)
+    wanted = {name: _value(known[name], given) for name, given in values.items()}
     return [(row, wanted[row["name"]]) for row in listed
             if row["name"] in wanted and not _same(wanted[row["name"]], row["value"])]
 

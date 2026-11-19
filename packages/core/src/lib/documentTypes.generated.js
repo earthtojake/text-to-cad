@@ -10,6 +10,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
     "interference",
     "solve",
     "ranges",
+    "set",
     "drc",
     "erc",
     "validate"
@@ -36,7 +37,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "dfm",
         "interference",
         "solve",
-        "ranges"
+        "ranges",
+        "set"
       ],
       "decorator": true
     },

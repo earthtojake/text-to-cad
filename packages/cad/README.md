@@ -90,7 +90,8 @@ These words mean one thing each, in the code, the commands and every document.
   `inspect` and `read` are where a type has them; every other operation is named for what it does: `dfm`
   (a 3D type's manufacturing check), `interference` (a B-rep type's check that no two parts share volume),
   `solve` (a B-rep type's stress study), `ranges` (a mechanism's joint stops,
-  found from its geometry), `drc` (a board's design rule check), `erc` (a schematic's electrical
+  found from its geometry), `set` (a model's declared parameters written into its script, the model's alone:
+  law 31), `drc` (a board's design rule check), `erc` (a schematic's electrical
   rules check), `validate` (a robot description's conformance check). Each type implements those that make
   sense for it.
 
@@ -149,7 +150,7 @@ the two disagree, the engine's README is right.
 |---|---|---|
 | The server's README, `src/cad_server/README.md` | The server's shape, its commands, cad's own update and where it keeps things | changing a command, the server's folders or the update |
 | The transport's README, `src/cad_mcp/README.md` | What `cad mcp` does between an agent app and the server | changing how an agent app reaches the server |
-| The engine's README, `src/cad_server/engine/README.md` | The engine: models and decorators, the engine server and its workers, the door, progress, the viewer and the snapshot, exports, kinematics, couplings and configuration sequences, materials, imports, placements, the mesh and its wire format, element names, references, body retention, queries, memo functions and the build closure | changing anything a build, an export, a snapshot or a served document does |
+| The engine's README, `src/cad_server/engine/README.md` | The engine: models and decorators, the engine server and its workers, the door, progress, the viewer and the snapshot, exports, kinematics, couplings and configuration sequences, materials, imports, placements, the mesh and its wire format, element names, references, body retention, queries, memo functions, the build closure and a model's parameters | changing anything a build, an export, a snapshot or a served document does |
 
 ## The design laws
 
@@ -164,7 +165,7 @@ law 27 gained its second form). What stays wrong is departing from a law without
 whatever is added is added for a purpose: nothing wraps a tool only to rename or repeat what the tool
 already does (law 29).
 
-Each of the 30 says, after its title, what it binds: *every document*; *models* (a model's document,
+Each of the 31 says, after its title, what it binds: *every document*; *models* (a model's document,
 built from code, in memory, no file of its own); *file documents* (a document that is a file read as
 it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf); or *the package*
 (the distributions alike).
@@ -174,7 +175,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    source, never lines on elements, never input contents, nothing of git's; names remain the
    per-element tie to code (the engine's **Build closure**).
 2. **Only requested files to disk.** *Every document.* The engine writes the files a model declares -- the xbf and the exports
-   its decorators name, nothing beside them -- and the operating system's coordination for its
+   its decorators name, nothing beside them --, a model's own script where a person or an agent asks it to set a
+   parameter the script declares (`cad model set`, law 31: the numbers asked written where its last run recorded
+   them, the file replaced at once and nothing else of it changed), and the operating system's coordination for its
    warm process: a door (a named pipe; on Windows a port file), a lock and its connections' pipes, in
    a folder only the user can make: `cad-engine` in `$XDG_RUNTIME_DIR`, else in the user's own
    temporary folder (on macOS the one the system names, whatever `$TMPDIR` a sandbox sets; else
@@ -208,7 +211,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    prune` removes what this release cannot use, `cad cache clean` all of the cache, and nothing else of cad deletes
    a past release's files. The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
-   to run the code again is the agent's call. It writes no
+   to run the code again is the agent's call; `cad model set` alone, asked, checks the script's bytes against
+   its last run's before it writes them, and runs that run again (law 31). It writes no
    sidecar, record of a build beside a model, index, memo, mesh or parsed document (but the file
    documents' derived views above, in the document cache), and no derived file beside an input. A model whose document -- in its warm worker, else the cache -- holds the closure the
    model has now is not run, whatever files it declares: they are exports of the document, written
@@ -233,8 +237,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    XCAF: a live model holds an XCAF document; `@xbf` or `--xbf` serializes it as native BinXCAF.
    It holds: units in millimetres,
    prototypes and instances with placements, a name on every part and instance, colours and
-   materials per part and per painted face, element names on face, edge and vertex labels, and
-   an assembly's mechanism. STEP, GLB, STL, 3MF and, of a planar document, DXF are translations
+   materials per part and per painted face, element names on face, edge and vertex labels,
+   an assembly's mechanism, and the parameters its script declares -- each its name, value, kind, range, step
+   and unit, never where the code spells it (law 31) -- which a declared or exported xbf carries too. STEP, GLB, STL, 3MF and, of a planar document, DXF are translations
    of it; `cad <type> export` writes any of them from the xbf alone. A file document -- a board, a
    schematic, a robot description, a mesh -- is its file, read by its type (law 24).
 5. **The memo is the only build cache, and it lives in the worker.** *Models.* Every kernel operation a model
@@ -473,9 +478,10 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 21. **Operations on documents are Python functions the CLI exposes; process control is the
     CLI's alone.** *Every document.* A type's operations -- `export` and `snapshot`, `inspect`, and those named for what
-    they do (`dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
-    `cad.xbf.export`, `cad.kicad_pcb.drc`, `cad.urdf.validate`, ...), one to one with the commands that
-    call them (`cad model export`, `cad xbf export`, `cad kicad_pcb drc`, `cad urdf validate`); serving, the engine's status, stopping it and running it (`cad serve`,
+    they do (`dfm`, `interference`, `solve`, `ranges`, `set`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
+    `cad.xbf.export`, `cad.kicad_pcb.drc`, `cad.urdf.validate`, `cad.model.set`, ...), one to one with the commands that
+    call them (`cad model export`, `cad xbf export`, `cad kicad_pcb drc`, `cad urdf validate`, `cad model set`; the
+    CAD Viewer's Parameters Save is `set`'s too, the same code: law 31); serving, the engine's status, stopping it and running it (`cad serve`,
     `status`, `stop`, `server`), and deleting a document (`cad delete`, which the home's Delete is too),
     are commands only, with no function of the library. Every successful server-backed build reports its id and localhost
     viewer URL, including a build with file outputs. A cold `daemon=False` build has no served
@@ -492,14 +498,18 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     of it again once the run is over. Two reads are not the engine reading code: a file document,
     which is the disk by definition and is read again when its bytes change; and the registry's
     record, which a run wrote. An existence check that only words a state reads no code (a model
-    whose script is gone is `detached`, the engine's **Document lifetime**).
+    whose script is gone is `detached`, the engine's **Document lifetime**). One case reads a script outside a run
+    and starts a build: `cad model set` (law 31), asked by a person or an agent -- the command, its function, the
+    page's Save -- never on its own. It reads the model's own script to check that its bytes are the ones its last
+    run read, writes the numbers asked, and runs that run again, as it was run, in the model's warm worker: what the
+    engine knows of the model is then what that run told it, as ever.
     The one startup exception is the JSON identity migration (the engine's README, **Identity
     migration**): it hashes existing scripts once for older records, without importing them or
     reading or writing an XBF.
     *Pressure-test*: build a model, then edit its script, its modules and the files its bodies
     read, without running it: every page, the home, every verb and tool and `cad server status` answer
-    as they did before the edit, and no process of the engine has opened a file of the model's code
-    since its run.
+    as they did before the edit -- but `cad model set`, which reads the script and refuses, since it changed
+    (`script_changed`) -- and no other process of the engine has opened a file of the model's code since its run.
 
 
 23. **One table names every document type and integration.** *The package.* The registry (`cad.registry`) is the
@@ -550,13 +560,16 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
     for what it does -- `dfm` a 3D type's manufacturing check, `interference` a B-rep type's check that no two
     parts share volume, `solve` a B-rep type's stress study, `ranges` a
-    mechanism's joint stops, `drc` a board's design rule check, `erc` a
+    mechanism's joint stops, `set` a model's declared parameters written into its script (a model's alone: a
+    file's document holds its parameters' values, never the code that spells them; law 31), `drc` a board's
+    design rule check, `erc` a
     schematic's electrical rules check, `validate` a robot description's conformance check -- never a
     shared word that means something different per type. Each type implements those that make sense; a
     `model`, which has no file, is named by its document id (`cad model export <id> arm.step`). A new
     shared operation must be code-free, frequently needed and meaningful across types. One result shape
     per operation: a check (`dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
-    and a location (`--json`: `cad.results.CheckResult`); `export` says the files it wrote. A type's own
+    and a location (`--json`: `cad.results.CheckResult`); `export` says the files it wrote; `set` the numbers it
+    wrote and where, and the documents it built again. A type's own
     options live with the type (`cad srdf validate robot.srdf --urdf robot.urdf`).
     A document type is a file cad shows, so a file cad writes or checks and never shows has no type's
     command: what cad does with it is its tool's integration's operation, `cad <integration> <operation>
@@ -628,7 +641,26 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     edit declares nothing, writes no other file and is never a model: what is made from an edited file (a
     STEP, Gerbers, a check) is an explicit call after the block (`kicad_pcb.export`, `kicad_pcb.drc`). A
     type has a decorator or an edit, never both; the registry says which (`Producer`, `Edit`).
+    A parameter's `set` (law 31) is neither: it opens no tool and makes no file a model declares; it rewrites
+    numbers in a model's script -- the model's source, not a native file of a type -- and the engine builds the
+    model again from it, as a run does.
 
+31. **A model's parameters are its code's, and `cad model set` is the one command that changes a script.** *Models.* A script
+    declares a parameter at a module's top level, `WALL = model.param("wall", 2.0, min=1, max=5)`
+    (`cad.model.param`: a lower-case name, one per run; a plain `int` or `float` default, which it returns
+    unchanged, so nothing of a build knows it from any other number; and the closed set `min`, `max`, `step`
+    and `unit`, `"mm"` or `"deg"`); one declared inside a function is refused, since a body can be replayed
+    without running. A build records every declaration of the run in the model's document (law 4), and the
+    worker that loaded the script keeps, in memory alone, where each default is spelled -- the bytes of the
+    literal and the digest of the file they were read in -- served while that worker lives, as provenance is
+    (law 7). A value changes only in the code: by hand, or by `cad model set ID wall=2.5` (`cad.model.set`, and
+    the CAD Viewer's Parameters Save, one path). It writes a parameter of the model's own script whose default
+    is a plain number, only once the script's bytes on disk are the ones its last run read, nothing else of the
+    file, and then runs that run again in the model's warm worker; a build that fails at the new values puts the
+    bytes back and builds again, so the document stays the last good one. There is no override, no preview
+    build and no value kept anywhere but the code: a parameter another module declares, or one whose default is
+    an expression, is listed and never written, and a document no live worker built lists its parameters
+    read-only. The mechanism: the engine's **Parameters**.
 
 ## Inspection
 
@@ -638,7 +670,8 @@ its declared outputs. An unbuilt or unsaved model requires an explicit build: on
 the engine built before names the command (`cad run` and the script that defines it). With no reference,
 `cad <type> inspect` prints what the document holds -- its state, parts, bounds, volume (and a part
 inside out, a solid's faces pointing inward), materials,
-joints, couplings (name, kind, ratio, joints), states, sequences, animations and declared files -- then its build closure (`--json`:
+joints, couplings (name, kind, ratio, joints), states, sequences, animations, parameters (each its value, range and
+unit, where it is declared, and whether `cad model set` writes it) and declared files -- then its build closure (`--json`:
 both as data; `--query structure`, the same with nothing measured: no bounds, volume or masses;
 `--query closure`, and `cad.<type>.inspect()` with no reference, the closure alone);
 with a reference it returns geometry facts. No form meshes a part, and a part's volume and box
@@ -655,8 +688,9 @@ src/cad/
                          #   kernel and the earlier spellings' aliases, first
   registry.py            # the document types and the integrations: the one table every layer
                          #   reads, kernel-free (`python -m cad.registry --js` writes the JS)
-  model/                 # the model, the type with no file: @model and a model's operations, by
-                         #   its handle or document id (a ModelType)
+  model/                 # the model, the type with no file: @model, its parameters (param, declared
+                         #   in the script; set, written back), and a model's operations, by its handle
+                         #   or document id (a ModelType)
   xbf/, step/, stl/,     # the document types, each a DocumentType (`cad.<type>`): its decorator,
   glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them, and a
                          #   B-rep type's solve and ranges: model's, xbf's and step's)

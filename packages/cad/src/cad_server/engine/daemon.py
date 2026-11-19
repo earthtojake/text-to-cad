@@ -225,9 +225,16 @@ def refused(error: Exception) -> dict[str, Any]:
     from cad.engine.serve import NotHeld
     from cad.engine.worker import refusal
 
+    from cad.engine.parameters import ParameterRefused
+
     found: dict[str, Any] = {"failed": str(error), **refusal(error)}
     if isinstance(error, NotHeld):
         found.update(state=error.state, rebuild=error.rebuild)
+    if isinstance(error, ParameterRefused):
+        # Why a change of parameters is refused (``code``), what to do, a parameter's own reason, and a failed
+        # build's whole words (``parameters.Setting``).
+        found.update({key: value for key in ("code", "hint", "reason", "detail")
+                      if isinstance(value := getattr(error, key, None), str)})
     return found
 
 
@@ -673,6 +680,10 @@ class Daemon:
         from cad_server.engine.models import Models
 
         self.models = Models(self)
+        from cad_server.engine.parameters import Setting
+
+        # A model's parameters set in its script and the script built again (``parameters``): ``set``.
+        self.setting = Setting(self)
         from cad_server.engine import registry
         from cad_server.engine.checks import Checks, Pool, pool_size
         from cad_server.engine.checks_runner import Limits, Runner
@@ -1057,6 +1068,9 @@ class Daemon:
                 self.server.revive = self.models.adopt
                 self.server.leaving = self.models.leaving
                 self.server.delete = self.models.delete
+                # A model's parameters as its live worker recorded them, and their ``set`` (``parameters``).
+                self.server.parameters = self.models.live
+                self.server.set_parameters = self.setting.set
                 application = getattr(self.server.http, "app", None)
                 if application is not None:
                     application.worked = self.stamp  # an agent's tool call is a command too (``mcp.http.Sessions``)
@@ -1430,6 +1444,16 @@ class Daemon:
                     model["rebuild"] = lost["rebuild"]
                 send({"model": model})
             return
+        if op == "set":
+            # ``cad model set``, ``cad.model.set``: a model's parameters written into its script, and the script's
+            # last run built again (``parameters.Setting``), the page's Save's one path.
+            try:
+                send({"done": self.setting.set(str(request.get("id")), request.get("values"))})
+            except ValueError as error:
+                send(refused(error))
+            except OSError as error:  # the script's folder refused the write: nothing was written
+                send({"failed": f"{error.strerror or error}: {getattr(error, 'filename', None) or ''}".rstrip(": ")})
+            return
         if op == "document":
             # What an id names while this engine holds it (``document``), asked without building.
             try:
@@ -1577,6 +1601,9 @@ class Daemon:
                         if cached is not None:
                             order["cache"] = cached  # what a fresh worker takes a model from, by its key
                         answer = worker.request(order, send)
+                        from cad_server.engine.parameters import ran
+
+                        ran(worker, request)  # the run its parameters' ``set`` builds again
                         answer["worker"] = {"pid": worker.pid, "fresh": fresh}
                         # This server's release, which a script run in its own Python says once a run
                         # when it is another (``contract.notice``); and how that run was made, which the

@@ -228,11 +228,20 @@ _FUNNEL_HINTS = {400: "fix the request as the error says", 404: "check the path 
 _ELEMENTS = {"faces": "face", "edges": "edge", "vertices": "vertex"}
 _ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /groups, /volume), measure, "
                   "kinematics, POST pose, POST mesh")
+# A model's own: its parameters set in its script.
+_MODEL_ROUTES = _ENGINE_ROUTES + ", POST parameters"
 # What each kind's collection answers, by how its document type is viewed (``cad.registry``).
 _VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, source",
                 "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, models, drc, source"}
+# The status a refused change of a model's parameters is answered with, by its ``code``
+# (``cad.engine.parameters.CODES``): 400 for a request that names what the model has not or gives a value it
+# does not take -- the same request fails again --; 409 for one the model's state refuses now -- no live worker
+# that recorded where its parameters are, one the code does not spell as a number, a script changed since its
+# run, a build of it running, a build at the new values that failed (the script put back as it was).
+PARAMETER_STATUS = {"unknown_parameter": 400, "not_a_number": 400, "out_of_range": 400, "no_worker": 409,
+                    "not_writable": 409, "script_changed": 409, "busy": 409, "build_failed": 409}
 # A model's document has no file, so no source.
-_KIND_ROUTES = {entry.wire: _VIEW_ROUTES[entry.view] if entry.has_file else _ENGINE_ROUTES
+_KIND_ROUTES = {entry.wire: _VIEW_ROUTES[entry.view] if entry.has_file else _MODEL_ROUTES
                 for entry in DOCUMENT_TYPES.values()}
 # This start of the engine: a page that sees another one (``GET /api/v1/server``'s ``instance``) is
 # served by an engine that restarted since it loaded. One per process, the engine's.
@@ -922,6 +931,8 @@ class CadApp:
             return self._methods(request, {"POST": lambda: self._pose(request, response, kind, doc)})
         if rest == ["mesh"]:
             return self._methods(request, {"POST": lambda: self._relay(request, response, f"{doc}/mesh", query)})
+        if rest == ["parameters"] and kind == "model":
+            return self._methods(request, {"POST": lambda: self._parameters(request, response, ident)})
         if len(rest) >= 2 and rest[0] == "parts" and rest[1]:
             part = f"{doc}/part/{rest[1]}"
             if len(rest) == 2:
@@ -932,6 +943,44 @@ class CadApp:
                 return self._methods(request, {"GET": lambda: self._relay(
                     request, response, f"{part}/{_ELEMENTS[rest[2]]}/{rest[3]}")})
         raise ApiError(404, f"no route {request.path}", f"a {kind}'s routes are {_KIND_ROUTES[kind]}")
+
+    def _parameters(self, request, response, ident) -> None:
+        """``POST /api/v1/documents/model/<id>/parameters`` with ``{"values": {name: number, ...}}``: the
+        model's parameters written into its script and the model built again (``set_parameters``: the engine's
+        ``set``, which ``cad model set`` runs), answered ``200 {"id", "written", "rebuilt"}`` once it is built.
+        A change refused is the routes' answer (``{"error", "hint"}``) with its ``code`` (``PARAMETER_STATUS``
+        says each one's status) and, for ``not_writable``, the parameter's ``reason``; ``build_failed`` carries
+        the build's whole words too (``detail``). The request names parameters and numbers alone: never a
+        path, never text."""
+        from cad.engine.parameters import ParameterRefused
+
+        self._limit(request, 65536)
+        payload = json.loads(request.body() or b"{}")
+        if type(payload) is not dict or set(payload) != {"values"} or type(payload["values"]) is not dict:
+            raise ValueError('a change of parameters is {"values": {name: number, ...}}')
+        try:
+            answer = self.set_parameters(ident, payload["values"])
+        except ParameterRefused as refused:
+            extra = {"code": refused.code}
+            if refused.code == "not_writable":
+                extra["reason"] = refused.reason
+            if isinstance(getattr(refused, "detail", None), str):
+                extra["detail"] = refused.detail
+            raise ApiError(PARAMETER_STATUS.get(str(refused.code), 409), str(refused),
+                           refused.hint or "run the model's script again", **extra) from None
+        except ValueError as error:
+            if not hasattr(error, "state"):
+                raise
+            # A document the engine does not hold (the engine's ``NotHeld``): its state, and what builds it again.
+            raise ApiError(404, str(error), getattr(error, "rebuild", None) or "run the model's script again",
+                           state=error.state) from None
+        send_json(response, 200, answer)
+
+    def set_parameters(self, ident, values) -> dict:
+        """A model's parameters set (``_parameters``): the engine's, so an application with none under it has
+        no model to set."""
+        raise ApiError(404, "documents are served by the installation's engine",
+                       "open the document in the CAD Viewer: `cad viewer <file>`")
 
     def _read(self, request, route: str, query=(), prefetch=True) -> tuple[int, str, dict, bytes]:
         """The engine's answer to one of its document reads (``route``: ``/api/doc/<id>...``,

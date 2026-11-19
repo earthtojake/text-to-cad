@@ -89,6 +89,8 @@ ADAPTERS: dict[str, frozenset[str]] = {
        for document_type in ("stl", "glb", "threemf")},
     **{f"{document_type} snapshot": SNAPSHOT
        for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf")},
+    # A model's parameters set in its script: NAME=VALUE repeats, a map no signature derives.
+    "model set": frozenset({"document", "values"}),
     # A B-rep type's interference check: its poses and fits repeat, lists no signature derives.
     **{f"{document_type} interference": frozenset({"document", "pose", "fit", "min_volume"})
        for document_type in ("model", "xbf", "step")},

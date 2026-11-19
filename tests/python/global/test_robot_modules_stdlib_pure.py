@@ -89,6 +89,9 @@ ALLOWED_CADGEN = {
     # (``cad.engine.ranges``, numpy) are imported in the function that sweeps.
     "cad._internal.ranges",
     "cad._internal.aliases",  # the earlier spellings: stdlib only
+    # A model's parameters (no robot type's): ``cad.model.param``, loaded on first use, and what ``set`` checks
+    # and writes, stdlib only.
+    "cad.engine.parameters",
     "cad._internal.refused",  # an argument refused by name (the command's exit 2): one ValueError, stdlib only
     # Reached only when a decorator or an engine operation is called (``cad.step.export``,
     # ``cad urdf snapshot``), never by a check: imported in the function that dispatches to it.

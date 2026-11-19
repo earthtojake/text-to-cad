@@ -9,6 +9,12 @@ wrote; ``dfm``, ``interference``, ``solve``, ``drc``, ``erc`` and ``validate`` t
 severity, a code and a location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the
 type.
 
+A model's ``set`` changes its declared parameters in its script and builds it again, the engine's own operation
+(``cad model set <id> wall=2.5 holes=8``; ``cad.model.set``): each value checked against what the worker that built
+the model recorded, each number rewritten where its last run recorded it, and the script's last run built again;
+its exit status is 0 done, 2 a parameter the model has not or a value it does not take, 1 a refusal of the model's
+state now or a build at the new values that failed, its script put back (``SET_REASONS``).
+
 A B-rep type's ``interference`` (``model``, ``xbf``, ``step``) is the check that no two parts of the document
 share volume: ``cad model interference <id> --pose open --fit pin base``. The engine measures it, in a checks
 process (``cad._internal.interference``); this command holds no kernel and needs none.
@@ -883,6 +889,103 @@ def _board_snapshot(argv: list[str], prog: str) -> int:
     return answered(VERBS["snapshot"][2], args, prog)
 
 
+# --- a model's parameters set in its script: the engine's ``set`` -------------------------------------------
+
+#: The exit status of each refusal of ``cad model set`` (``cad.engine.parameters.CODES``), by the failure contract
+#: (``cli_errors``): 2 for a command line that names a parameter the model has not, or a value it does not take,
+#: which fails again until it changes; 1 for what the model's state refuses now -- no live worker that recorded
+#: where its parameters are, one the code does not spell as a number, a script changed since its run, a build of it
+#: running, a build at the new values that failed (its script put back as it was).
+SET_REASONS = {"unknown_parameter": "invalid_argument", "not_a_number": "invalid_argument",
+               "out_of_range": "invalid_argument", "not_writable": "failed", "no_worker": "failed",
+               "script_changed": "failed", "busy": "failed", "build_failed": "failed"}
+
+
+def _set_parser(prog: str) -> argparse.ArgumentParser:
+    """``cad model set``'s parser, an ADAPTER's: ``NAME=VALUE`` repeats, a map no signature derives a flag for."""
+    from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+    from cad_server._internal.cli_parser import parser as command_parser
+
+    parser = command_parser(prog, description=DOCUMENT_TYPES["model"].operation("set").summary)
+    parser.add_argument("document", metavar="ID", help="the model's document id (cad run SCRIPT.py prints it)")
+    parser.add_argument("values", metavar="NAME=VALUE", nargs="+",
+                        help="a parameter the model's script declares (model.param) and its new value, a number: "
+                             "wall=2.5 holes=8. Repeatable; a value equal to the one in the code changes nothing")
+    parser.add_argument("--json", dest=JSON_FLAG_DEST, action="store_true",
+                        help="Print the answer as one JSON line on stdout instead of human lines.")
+    return parser
+
+
+def set_values(given: Sequence[str]) -> dict[str, Any]:
+    """``NAME=VALUE`` words as the values ``cad.model.set`` takes: each value a number where it reads as one (an
+    integer's digits an ``int``, else a ``float``), else its text, which the engine refuses by name
+    (``not_a_number``); ``ArgumentRefused`` for a word that is no such pair, or a name given twice."""
+    import re
+
+    from cad._internal.refused import ArgumentRefused
+
+    values: dict[str, Any] = {}
+    for word in given:
+        name, separator, text = str(word).partition("=")
+        name, text = name.strip(), text.strip()
+        if not separator or not name or not text:
+            raise ArgumentRefused(f"a value is NAME=VALUE (wall=2.5), not {word!r}")
+        if name in values:
+            raise ArgumentRefused(f"{name} is given twice: give each parameter once")
+        if re.fullmatch(r"[+-]?\d+", text):
+            values[name] = int(text)
+            continue
+        try:
+            values[name] = float(text)
+        except ValueError:
+            values[name] = text
+    return values
+
+
+def _model_set(argv: list[str], prog: str) -> int:
+    """``cad model set ID NAME=VALUE ... [--json]``: the engine's ``set`` (``cad.model.set``), answered with what it
+    wrote and the documents it built again; a refusal by its ``code`` (``SET_REASONS`` sets its exit status), its
+    ``--json`` document the contract's (``cli_errors.document``) with ``code``, ``hint`` and, for ``not_writable``,
+    the parameter's reason (``parameterReason``)."""
+    import json
+
+    from cad_server._internal import cli_errors
+    from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+
+    parser = _typed(_set_parser(prog), "model", "set", "document")
+    parser.checks.append(lambda parsed: _refused_value(set_values, parsed.values))  # type: ignore[attr-defined]
+    args = parser.parse_args(argv)
+    as_json = bool(getattr(args, JSON_FLAG_DEST))
+    from cad.engine.parameters import ParameterRefused
+
+    try:
+        import cad.model
+
+        answer = cad.model.set(args.document, **set_values(args.values))
+    except ParameterRefused as refused:
+        failure = cli_errors.Failure(str(refused), SET_REASONS.get(str(refused.code), "failed"))
+        if as_json:
+            said = {**cli_errors.document(failure), "code": refused.code, "hint": refused.hint,
+                    **({"parameterReason": refused.reason} if refused.code == "not_writable" else {}),
+                    **({"detail": refused.detail} if isinstance(getattr(refused, "detail", None), str) else {})}
+            print(json.dumps(said, separators=(",", ":")), flush=True)
+        else:
+            print(f"{prog}: {refused}" + (f"; {refused.hint}" if refused.hint else ""), file=sys.stderr, flush=True)
+        return failure.status
+    except Exception as error:  # noqa: BLE001 - the CLI boundary: the contract's words, never a traceback
+        return cli_errors.write(cli_errors.classify(error), prog=prog, as_json=as_json)
+    if as_json:
+        print(json.dumps(answer, separators=(",", ":")), flush=True)
+        return 0
+    if not answer["written"]:
+        print("nothing to write: every value is the one the code holds")
+        return 0
+    for row in answer["written"]:  # each number as the code spells it now
+        print(f"{row['name']}  {row['from']} -> {row['to']}  {row['file']}:{row['line']}")
+    print("rebuilt " + (", ".join(answer["rebuilt"]) or "nothing"))
+    return 0
+
+
 # A type's operations its own code runs, in place of the engine's verb of that name.
 _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
     ("kicad_pcb", "drc"): _kicad_rules("kicad_pcb", "drc"),
@@ -893,6 +996,7 @@ _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
     ("kicad_sch", "export"): _kicad_export("kicad_sch"),
     ("kicad_sch", "inspect"): _schematic_inspect,
     ("kicad_sch", "snapshot"): _schematic_snapshot,
+    ("model", "set"): _model_set,
 }
 
 
@@ -932,6 +1036,8 @@ def build_parser(document_type: str, operation: str, prog: str | None = None) ->
         return _board_parser(prog, operation)
     if (document_type, operation) == ("kicad_pcb", "snapshot"):
         return _board_snapshot_parser(prog)
+    if (document_type, operation) == ("model", "set"):
+        return _set_parser(prog)
     if document_type == "kicad_sch":
         return _schematic_parser(prog, operation)
     if operation in _ENGINE_SOURCES:

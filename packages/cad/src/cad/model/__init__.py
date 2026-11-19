@@ -10,7 +10,10 @@ a shape over), with no file of its own; the files it declares are the other type
 ``"printing"``), which checks it for manufacturing on its exact geometry, measured by the engine with the build123d
 integration (``cad._internal.manufacturing``), and
 ``model.solve(handle_or_id, study=..., out="results/")``, a stress study of it (``cad._internal.fea.operation``),
-which reads an ``.xbf`` the engine writes of it in a temporary folder. A file is
+which reads an ``.xbf`` the engine writes of it in a temporary folder. Its script declares its parameters with
+it at a module's top level, ``WALL = model.param("wall", 2.0, min=1, max=5)`` (``cad.engine.parameters.param``,
+the standard library alone), and ``model.set(handle_or_id, wall=2.5)`` writes new values into the script where its
+last run recorded them and builds the model again (``cad.engine.api.set``), as ``cad model set`` does. A file is
 refused by name: ``arm.xbf`` is an xbf's (``cad.xbf``). Everything loads on first use: ``import cad.model``
 imports no CAD kernel (``cad._internal.document_type``).
 """
