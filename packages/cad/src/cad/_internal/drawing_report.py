@@ -771,7 +771,7 @@ def _unstated_bores(record: dict, whose: str) -> list[str]:
     stated = record["values"]
     reached = None
     lines = []
-    for taper in taper_bores(shape):
+    for taper in taper_bores(shape, _found(record, "holes")):
         along = next((k for k in range(3) if abs(abs(taper.axis[k]) - 1) < 1e-9), None)
         missing = [f"⌀{_fmt(d)}" for d in (taper.small, taper.large)
                    if d > 0 and not any(abs(v - d) <= 0.01 for v in stated)]
@@ -788,7 +788,7 @@ def _unstated_bores(record: dict, whose: str) -> list[str]:
                          "none here. A section through it, with a diameter across each end (text=\"%%c<>\") "
                          "and each end placed along its axis, states it.")
     kinds: dict[tuple, list] = {}
-    for bore in open_bores(shape):
+    for bore in open_bores(shape, _found(record, "holes")):
         if round(bore.radius, 3) in record.get("radii", ()) or any(abs(v - 2 * bore.radius) <= 0.01 for v in stated):
             continue
         kinds.setdefault((round(bore.radius, 3), round(bore.span, 1), bore.axis), []).append(bore)

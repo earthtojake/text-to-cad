@@ -341,16 +341,16 @@ class _Ends:
         wall has no edge of its own at that end (a cone that closes to a point)."""
         if self._ancestors is None:
             self._ancestors = _edge_faces(self.shape)
-        reach = abs(far - end)
         seen = False
         for segment in segments:
             for face in segment.faces:
                 for edge in face.edges():
                     along = [sum((c - f) * k for c, f, k in zip(tuple(edge.position_at(t)), foot, d))
-                             for t in (0.0, 0.25, 0.5, 0.75)]
-                    # The edge round this end, not the one round the other, nor a seam
-                    # or a side that runs the wall's length.
-                    if abs(sum(along) / len(along) - end) > 0.4 * reach:
+                             for t in (0.0, 0.25, 0.5, 0.75, 1.0)]
+                    # The edge round this end: one that reaches it. Not the one round
+                    # the other end, nor a seam or a side that runs the wall's length,
+                    # nor the edge of a hole cut through the wall partway along it.
+                    if min(abs(a - end) for a in along) > _TOUCH or min(abs(a - far) for a in along) <= _TOUCH:
                         continue
                     for other in _others(self._ancestors, edge, face):
                         if any(other.IsSame(mine.wrapped) for mine in own):
@@ -601,7 +601,8 @@ def _read_chain(chain: list[_Segment], d, foot, at, air, ray: _Ray, fillets, end
         deepest = [s for s in ordered if s.kind == "cyl" and abs(s.r_lo - narrowest) < _TOUCH][-1]
         wall = max(from_mouth(deepest.lo), from_mouth(deepest.hi))
         bottom = deepest.lo if from_hi else deepest.hi
-        depth, end = _blind_end(wall, narrowest, bottom, ordered[ordered.index(deepest) + 1:], fillets, mouth, axis, ray)
+        below = ordered[ordered.index(deepest) + 1:]
+        depth, end = _blind_end(wall, narrowest, bottom, below, fillets, mouth, axis, ray)
     return Hole(
         mouth=_tidy(mouth), axis=_tidy(axis), diameter=2 * narrowest, thru=thru, depth=depth,
         cbore=mouth_end[1] if mouth_end and mouth_end[0] == "cbore" else None,
@@ -1088,14 +1089,32 @@ def tapers(shape) -> list[Taper]:
     return found
 
 
-def taper_bores(shape) -> list[Taper]:
+def _of_a_hole(found: list[Hole], d, foot, lo: float, hi: float) -> bool:
+    """Whether the stretch ``lo`` to ``hi`` of a line lies within a hole read on
+    that line: a piece of that hole, however a cross hole has cut it off from the
+    rest (a countersink left standing above a hole drilled across its bore)."""
+    key = _line_key(d, foot)
+    for hole in found:
+        line_d, line_foot = _canonical(hole.axis, hole.mouth)
+        if _line_key(line_d, line_foot) != key:
+            continue
+        ends = sorted(sum(c * k for c, k in zip(point, line_d))
+                      for point in (hole.mouth, tuple(m + hole.length * a for m, a in zip(hole.mouth, hole.axis))))
+        if ends[0] - _TOUCH <= lo and hi <= ends[1] + _TOUCH:
+            return True
+    return False
+
+
+def taper_bores(shape, found: list[Hole] | None = None) -> list[Taper]:
     """The part's tapered bores: concave full cones with air inside that belong to
     no drilled hole (a countersink, a chamfered mouth and a drill point are their
-    hole's). A hole callout states a straight bore, so a taper is stated as an
-    outside one is: a diameter at each end, each end placed. A cone that closes to
-    a point has ``small`` 0."""
+    hole's; ``found`` is the part's holes, read here when not given). A hole
+    callout states a straight bore, so a taper is stated as an outside one is: a
+    diameter at each end, each end placed. A cone that closes to a point has
+    ``small`` 0."""
     from build123d import Vector
 
+    drilled = holes(shape) if found is None else found
     found = []
     for d, foot, segments in _surface_segments(shape).values():
         bores = [s for s in _merge_split_faces(segments) if s.concave and _full(s)]
@@ -1103,6 +1122,8 @@ def taper_bores(shape) -> list[Taper]:
             if any(seg.kind == "cyl" for seg in chain):
                 continue
             for seg in chain:
+                if _of_a_hole(drilled, d, foot, seg.lo, seg.hi):
+                    continue
                 mid = (seg.lo + seg.hi) / 2
                 if shape.is_inside(Vector(*(f + mid * c for f, c in zip(foot, d)))):
                     continue  # material on its axis: a conical seat round a pin, not a bore
@@ -1129,12 +1150,14 @@ class OpenBore:
     span: float
 
 
-def open_bores(shape) -> list[OpenBore]:
+def open_bores(shape, found: list[Hole] | None = None) -> list[OpenBore]:
     """The part's bores that are not whole circles and are nobody else's: a
-    concave part cylinder that is not a slot's end, and is sharp where it meets
-    its neighbours (a fillet, or the full-round end of a notch, runs tangent
-    into the faces it joins, and is a blend or an end). No hole callout reads
-    one: a hole is a full circle."""
+    concave part cylinder that is not a slot's end, nor a piece of a hole a cross
+    hole has cut into (``found`` is the part's holes, read here when not given),
+    and is sharp where it meets its neighbours (a fillet, or the full-round end of
+    a notch, runs tangent into the faces it joins, and is a blend or an end). No
+    hole callout reads one: a hole is a full circle."""
+    drilled = holes(shape) if found is None else found
     ancestors = _edge_faces(shape)
     slot_ends = set()
     for slot in slots(shape):
@@ -1145,7 +1168,7 @@ def open_bores(shape) -> list[OpenBore]:
         for seg in _merge_split_faces(segments):
             if seg.kind != "cyl" or not seg.concave or _full(seg):
                 continue
-            if _line_key(d, foot) + (round(seg.r_lo, 4),) in slot_ends:
+            if _line_key(d, foot) + (round(seg.r_lo, 4),) in slot_ends or _of_a_hole(drilled, d, foot, seg.lo, seg.hi):
                 continue
             if any(_tangent_neighbours(ancestors, face, _surface_key(face.wrapped)) for face in seg.faces):
                 continue

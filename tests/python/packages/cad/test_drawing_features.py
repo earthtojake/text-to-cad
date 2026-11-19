@@ -502,6 +502,27 @@ class OpenEndTests(unittest.TestCase):
         self.assertFalse(found[6].thru)
         self.assertAlmostEqual(found[6].depth, 4.0, places=6)
 
+    def test_a_hole_drilled_across_another_leaves_each_its_end_and_its_pieces(self) -> None:
+        """A ⌀8 hole 15 deep from the side crosses a countersunk ⌀4.5 hole 5 short
+        of its own floor, and cuts that hole's bore off from its countersink."""
+        from build123d import Align, Box, BuildPart, CounterSinkHole, Cylinder, Locations, Pos, Rot
+        from cad._internal.drawing_features import holes, open_bores, taper_bores
+
+        with BuildPart() as plate:
+            Box(120, 80, 12, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            with Locations(Pos(50, 0, 12)):
+                CounterSinkHole(radius=2.25, counter_sink_radius=4.5, counter_sink_angle=90)
+        across = Rot(0, 90, 0) * Cylinder(4, 15, align=(Align.CENTER, Align.CENTER, Align.MAX))
+        part = plate.part - Pos(60, 0, 6) * across
+        found = {round(h.diameter, 1): h for h in holes(part)}
+        self.assertEqual(sorted(found), [4.5, 8.0])
+        self.assertFalse(found[8.0].thru, "its floor closes it: the hole crossing it is no way out of its end")
+        self.assertAlmostEqual(found[8.0].depth, 15.0, places=6)
+        self.assertTrue(found[4.5].thru)
+        self.assertIsNotNone(found[4.5].csk, "the countersink above the crossing is still this hole's")
+        self.assertEqual(taper_bores(part), [], "and is no tapered bore of its own")
+        self.assertEqual(open_bores(part), [], "nor are the slivers of bore the crossing leaves")
+
 
 def _two_circles():
     """A ⌀120 flange with a ⌀20 bore: six ⌀5 holes on ⌀60, eight more on ⌀100, and
@@ -556,7 +577,8 @@ class TwoCircleTests(unittest.TestCase):
         from cad._internal.drawing_features import bolt_circles, holes
 
         align = (Align.CENTER, Align.CENTER, Align.MIN)
-        spots = [(12 * (i + 0.5 * (j % 2)), 12 * math.sin(math.radians(60)) * j) for i in range(-2, 3) for j in range(-2, 3)]
+        rise = 12 * math.sin(math.radians(60))
+        spots = [(12 * (i + 0.5 * (j % 2)), rise * j) for i in range(-2, 3) for j in range(-2, 3)]
         plate = Box(90, 80, 4, align=align) - [Pos(x, y, 0) * Cylinder(2, 4, align=align) for x, y in spots]
         found = holes(plate)
         self.assertEqual(len(found), 25)

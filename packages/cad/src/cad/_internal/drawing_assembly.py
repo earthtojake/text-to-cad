@@ -442,7 +442,8 @@ def _laid_on(a, b):
         free = list(fb)
         for face in fa:
             at = _turned(turn, face[2])
-            hit = next((k for k, other in enumerate(free) if alike(face, other) and math.dist(at, other[2]) <= tol), None)
+            hit = next((k for k, other in enumerate(free)
+                        if alike(face, other) and math.dist(at, other[2]) <= tol), None)
             if hit is None:
                 return False
             free.pop(hit)
