@@ -574,6 +574,24 @@ class OpenEndTests(unittest.TestCase):
             self.assertIsNone(found[diameter].end, "a flat floor, whatever is cut through it")
         self.assertTrue(found[4].thru, "the cross hole leaves the block at both ends")
 
+    def test_a_rib_over_a_corner_of_a_hole_s_mouth_does_not_close_it(self) -> None:
+        """A hole through a base plate with a gusset standing over a third of it: the
+        gusset's underside is a piece of floor joined to the hole's end, and most of
+        the hole still runs on out of the plate."""
+        from build123d import Align, Box, Cylinder, Pos
+        from cad._internal.drawing_features import holes
+
+        corner = (Align.MIN, Align.MIN, Align.MIN)
+        bore = Cylinder(3, 8, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        plate = Box(60, 40, 8, align=corner) - Pos(30, 20, 0) * bore
+        plate += Pos(20, 10, 8) * Box(8, 20, 20, align=corner)          # over x 20 to 28: the hole runs 27 to 33
+        (hole,) = holes(plate)
+        self.assertTrue(hole.thru, "more than half of it leaves the plate along its own axis")
+        capped = plate + Pos(20, 10, 8) * Box(20, 20, 20, align=corner)   # over all of it
+        (hole,) = holes(capped)
+        self.assertFalse(hole.thru)
+        self.assertAlmostEqual(hole.depth, 8.0, places=6)
+
     def test_a_hole_ending_inside_a_bore_across_it_is_no_depth_to_a_floor_and_not_thru(self) -> None:
         from build123d import Align, Box, Cylinder, Pos, Rot
         from cad._internal.drawing_features import holes
