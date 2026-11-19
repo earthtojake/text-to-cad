@@ -12,8 +12,11 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
+from tests.python.support.agent_apps import a_home_of_its_own
 from tests.python.support.paths import add_sources
 
 add_sources()
@@ -79,7 +82,14 @@ class TheCommandTable(unittest.TestCase):
         """``cad update auto``, ``cad plugin install`` and ``cad plugin update [auto]``; ``cad auto-update`` and ``cad
         plugin auto-update`` answer as commands that never existed (no release had them), and ``cad plugin install``
         takes no options. Only its help and its usage errors are asked here: the command itself changes the agent apps
-        of the computer it runs on (``tests/python/packages/cad_server/plugin`` runs it on a computer of its own)."""
+        of the computer it runs on (``tests/python/packages/cad_server/plugin`` runs it on a computer of its own). So
+        that a parser that one day took one of these lines would not run it on this one, they are asked in a home of
+        their own, with nothing on PATH."""
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        root = Path(scratch.name).resolve()
+        (root / "bin").mkdir()
+        a_home_of_its_own(self, root / "home", root / "bin")
         for argv, usage in ((["update", "--help"], "usage: cad update [-h] [--major]"),
                             (["update", "auto", "--help"], "usage: cad update auto [-h] [{status,on,off}]"),
                             (["plugin", "install", "--help"], "usage: cad plugin install [-h]"),

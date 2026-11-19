@@ -10,18 +10,20 @@ gets newer -- its own automatic update, a typed ``cad update``, ``uv tool upgrad
 
 **The record** (``RECORD``, in the state folder beside ``auto-update.json``): ``for``, the release of cad the plugin is
 up to date for -- written by ``cad plugin update`` as it ends with exit status 0 (``ended``), and as the switch is
-turned on (``noted``, from ``auto_update.change_plugin``): a run of ``cad plugin install`` or ``cad plugin update``
-turns it on as its last step, right after it put the plugin in place: ending well, the switch is turned on and ``for``
-written; ending badly (every app it found failed), the switch is turned on and nothing written, so a computer whose
-runs keep failing still has the plugin kept: where an earlier run ended well (``for`` older than this cad), the server
-runs the command again for this release; where none ever did (no ``for``), the rule below takes this release as up to
-date, and the command runs once cad is newer. The install command of 0.11.12 and 0.11.13 turns it on by running ``cad
-plugin update auto on``, and says its run is ending badly in the environment of that call (``FAILED_ENV``). A person
-who turns it on by hand, with no such variable, means "from this release on". A run that fails writes nothing of
-``for``. Then the last run the server began
-(``begin``): ``release``, ``at``, ``tries`` (of that release), ``outcome`` (``underway``, then ``ok`` or ``failed``),
-``code`` (its exit status, null where it could not start) and ``ended``. It is a state record, not a choice, so it
-lives in the state folder, as the update's own record does, and not in the person's settings. ``cad doctor`` shows it.
+turned on (``noted``, from ``auto_update.change_plugin``), and only ever by this computer's global install of cad
+(``tool``): a cad run from anywhere else (the newest release from uv's cache, which the hosted install command runs
+for an installed cad with no ``cad plugin install``) is not the cad whose server asks the rule below, and its release,
+which may be of a higher major than that cad ever reaches, is never kept. A run of ``cad plugin install`` or ``cad
+plugin update`` turns the switch on as its last step, right after it put the plugin in place: ending well, the switch
+is turned on and ``for`` written; ending badly (every app it found failed), the switch is turned on and nothing
+written, so a computer whose runs keep failing still has the plugin kept: where an earlier run ended well (``for``
+older than this cad), the server runs the command again for this release; where none ever did (no ``for``), the rule
+below takes this release as up to date, and the command runs once cad is newer. A person who turns it on by hand
+(``cad plugin update auto on``) means "from this release on". A run that fails writes nothing of ``for``. Then the
+last run the server began (``begin``): ``release``, ``at``, ``tries`` (of that release), ``outcome`` (``underway``,
+then ``ok`` or ``failed``), ``code`` (its exit status, null where it could not start) and ``ended``. It is a state
+record, not a choice, so it lives in the state folder, as the update's own record does, and not in the person's
+settings. ``cad doctor`` shows it.
 
 **The rule** (``due``), asked by the server at its start and as it tends itself, only once nothing is in flight: the
 switch on; the update check not turned off for this process (``updates.checking``: ``CAD_UPDATE_CHECK=0``, CI, a
@@ -43,16 +45,30 @@ lock, as it keeps its run (``_wanted``), so two servers on one state folder neve
 nothing of this one (``auto_update._UNSET``) and names the run (``ATTEMPT_ENV``: its ``at``), its output in
 ``install-command.log`` (``auto_update.INSTALL_LOG``). Named so, that command has ``INSTALL_SECONDS`` (``deadline``):
 each command it runs is given what is left of them and stopped with every process it started, none is started past
-them, and it exits non-zero, so no run outlives its deadline whichever server began it; a person's own run has none.
+them, and it exits non-zero. That much is the run's own doing, asked between its steps, and a step that never comes
+back (a folder on a disk that stopped answering, a lock, a call of ours with no time of its own) would hold the run's
+lock, and with it cad's own update and every run that waits, for as long as the process lived. So the command also
+carries a hard stop (``HardStop``), a thread of its own that asks nothing of the run: ``GRACE_SECONDS`` past the
+deadline, where the command has still not ended, the run's record is closed as a stopped run's (``ended`` with
+``STOPPED``), it is counted as stopped, and the process exits with ``STOPPED`` there and then, waiting on nothing --
+which frees the lock. No run a server began outlives its deadline by more than that grace and the moment its last
+words take (``CLOSE_SECONDS``), whichever server began it and whether or not that server still runs -- but for a
+process no thread of which runs at all (one a signal stopped, or one held inside a call that lets no other thread
+run, which no wait of the standard library's is), which no thread of its own can end. A person's own run has no
+deadline and no stop.
 That command keeps how it ended (``ended``); where it exited without saying so, the server that started it keeps it as
 failed, with its exit status (``Catcher``). ``cad update`` never runs it.
 
 **One run at a time** (``run_lock``, ``running``): a run of ``cad plugin install`` or ``cad plugin update`` holds
 ``LOCK``, a file of its own in the state folder, from its start to its end, so it never holds the state folder's one
-lock while it works. A second run waits for it -- but one a server began (``ATTEMPT_ENV``), which ends at once with
-exit status ``BUSY``: after a person's install command updated cad, the server that starts may begin its own run at
-the moment that command goes on to the plugin. cad's own update begins none while the lock is held
-(``auto_update.due``, ``auto_update.asked``): it would replace this environment's files under the run.
+lock while it works. A second run waits for it -- but one a server began (``ATTEMPT_ENV``), which ends with exit
+status ``BUSY`` and runs nothing: after a person's install command updated cad, the server that starts may begin its
+own run at the moment that command goes on to the plugin. cad's own update begins none while the lock is held
+(``auto_update.due``, ``auto_update.asked``): it would replace this environment's files under the run. Whether it is
+held can only be asked by trying for it (``running``: neither ``flock`` nor Windows' ``locking`` says who holds a lock
+without taking it), so a server that asks holds it for an instant. A run therefore tries for ``SETTLE_SECONDS`` before
+it takes the lock as another run's (``run_lock``): only then does a server's run answer ``BUSY``, and a person's say
+that it waits.
 
 Imports the standard library alone; what it asks of cad it imports as it asks.
 """
@@ -64,6 +80,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -72,20 +89,27 @@ from typing import Any
 RECORD = "install-command.json"
 # The run ``cad plugin update`` is, where the server began it: the ``at`` of the record's run.
 ATTEMPT_ENV = "CAD_INSTALL_ATTEMPT"
-# Set to ``1`` by the install command of 0.11.12 and 0.11.13 for its own ``cad plugin update auto on`` where its run is
-# ending badly: the switch turned on, and nothing taken as up to date (see the module). Empty or absent: the run is
-# ending well, or a person typed it.
-FAILED_ENV = "CAD_INSTALL_FAILED"
+# The command the server runs, as a line of its log names it.
+SAID = "`cad plugin update`"
 # The lock one run of ``cad plugin install`` or ``cad plugin update`` holds, in the state folder (``run_lock``).
 LOCK = "install-command.lock"
 # The exit status of a run a server began that found another run holding the lock: nothing ran, and it is tried again
 # later (``EX_TEMPFAIL``).
 BUSY = 75
-
-
-def failing() -> bool:
-    """Whether this command was run by an install command whose run is ending badly (``FAILED_ENV``)."""
-    return os.environ.get(FAILED_ENV, "").strip() == "1"
+# The exit status of a run a server began that was ended at its deadline, as ``timeout(1)`` says one: the run's own,
+# where it stopped itself, and the hard stop's (``HardStop``).
+STOPPED = 124
+# How long past its deadline a run a server began may take to end by itself before it is ended (``HardStop``): what
+# stopping its last command can take at most (the command and what it started ended, then waited on: 40 seconds on
+# Windows), and its last lines.
+GRACE_SECONDS = 60.0
+# How long the hard stop gives the run's last words (its record closed, its line, its count) before the process exits
+# without them: they wait on the state folder's lock, which whatever hangs may hold.
+CLOSE_SECONDS = 5.0
+# How long a run tries for the lock, every ``SETTLE_STEP``, before it takes it as held by another run: whoever asks
+# whether a run is going (``running``) holds it for an instant, which is no run.
+SETTLE_SECONDS = 2.0
+SETTLE_STEP = 0.25
 TRIES = 3  # how many runs one release gets: once, and twice more, each an hour or more after the one before
 RETRY_SECONDS = 60 * 60.0
 UNDERWAY, OK, FAILED = "underway", "ok", "failed"
@@ -109,10 +133,11 @@ def _folder() -> Path:
 
 @contextlib.contextmanager
 def run_lock(*, wait: bool, waiting: Callable[[], None] | None = None) -> Iterator[bool]:
-    """``LOCK`` held for one run (see the module), from here to the end of the ``with``: yields True. Where another
-    run holds it: with ``wait``, ``waiting`` is called once and that run waited for, however long it takes; without,
-    yields False at once, and the caller runs nothing. Where the lock's file cannot be made or opened (a state folder
-    this process may not write), the run goes on without one: yields True."""
+    """``LOCK`` held for one run (see the module), from here to the end of the ``with``: yields True. Where it is
+    held, it is tried for again, for ``SETTLE_SECONDS``: one who only asked whether a run is going lets it go at once.
+    Where it is held still, another run holds it: with ``wait``, ``waiting`` is called once and that run waited for,
+    however long it takes; without, yields False, and the caller runs nothing. Where the lock's file cannot be made
+    or opened (a state folder this process may not write), the run goes on without one: yields True."""
     from cad_server._internal import file_lock
 
     with contextlib.ExitStack() as held:
@@ -120,18 +145,37 @@ def run_lock(*, wait: bool, waiting: Callable[[], None] | None = None) -> Iterat
         try:
             folder = _folder()
             folder.mkdir(parents=True, exist_ok=True)
-            if wait:
-                held.enter_context(file_lock.exclusive(folder / LOCK, waiting=waiting))
-            else:
-                mine = held.enter_context(file_lock.attempt(folder / LOCK))
+            mine = _settled(held, folder / LOCK)
+            if not mine and wait:
+                if waiting is not None:
+                    waiting()
+                held.enter_context(file_lock.exclusive(folder / LOCK))
+                mine = True
         except OSError:
-            pass
+            mine = True
         yield mine
 
 
+def _settled(held: contextlib.ExitStack, path: Path) -> bool:
+    """``path`` locked and kept in ``held`` where it comes free within ``SETTLE_SECONDS``, tried at once and then
+    every ``SETTLE_STEP``; whether it was."""
+    from cad_server._internal import file_lock
+
+    until = time.monotonic() + SETTLE_SECONDS
+    while True:
+        with contextlib.ExitStack() as trying:
+            if trying.enter_context(file_lock.attempt(path)):
+                held.push(trying.pop_all())
+                return True
+        if time.monotonic() >= until:
+            return False
+        time.sleep(SETTLE_STEP)
+
+
 def running() -> bool:
-    """Whether a run holds ``LOCK`` now, asked without waiting and without making the file. Never raises: where it
-    cannot be asked, none is taken to run."""
+    """Whether a run holds ``LOCK`` now, asked without waiting and without making the file -- by trying for it, the
+    one way there is, so it is held here for an instant, which a run that begins just then waits out (``run_lock``).
+    Never raises: where it cannot be asked, none is taken to run."""
     try:
         from cad_server._internal import file_lock
 
@@ -196,14 +240,16 @@ def noted(release: str | None = None) -> None:
 
 
 def ended(code: int | None) -> None:
-    """``cad plugin update`` ended with exit status ``code``: ``for`` this cad where it is 0 (a run that failed writes
-    none: it turns the switch on as it ends badly too, and takes nothing as up to date), and, where the server began
-    this run (``ATTEMPT_ENV``), the run's outcome. Never raises."""
+    """``cad plugin update`` ended with exit status ``code``: ``for`` this cad where it is 0 and this cad is the
+    computer's global install (``tool``; a run that failed writes none: it turns the switch on as it ends badly too,
+    and takes nothing as up to date; nor does a cad run from anywhere else, see the module), and, where the server
+    began this run (``ATTEMPT_ENV``), the run's outcome. Never raises."""
     try:
         attempt = os.environ.get(ATTEMPT_ENV)
+        mine = code == 0 and tool() is not None
 
         def change(found: dict[str, Any]) -> dict[str, Any]:
-            if code == 0:
+            if mine:
                 found["for"] = _version()
             if attempt and str(found.get("at")) == attempt and found.get("outcome") == UNDERWAY:
                 found.update(outcome=OK if code == 0 else FAILED, code=code, ended=time.time())
@@ -212,6 +258,57 @@ def ended(code: int | None) -> None:
         _change(change)
     except Exception:  # noqa: BLE001 - the command's own exit status is what it says
         pass
+
+
+class HardStop:
+    """What ends a run a server began for certain (see the module), armed as it is made: ``seconds`` -- the run's
+    deadline -- and ``GRACE_SECONDS`` later, where the command has not ended, the run's record is closed as a stopped
+    run's (``ended`` with ``STOPPED``), ``last`` is called (the command's: its line, its count) and the process exits
+    with ``STOPPED``, by ``os._exit``: no thread joined, no lock waited on, nothing flushed but what ``last`` flushed.
+    The record and ``last`` have ``CLOSE_SECONDS`` between them; where they take longer (the state folder's lock held
+    by what hangs), the process exits without them, and the server that began the run keeps it as failed with that
+    exit status (``Catcher``).
+
+    ``over()``: the run ended by itself, so its count and its record are its own to keep; where the stop has begun, it
+    does not return, and nothing is said twice. From then the stop says nothing and only ends a command that still
+    has not exited when its time comes. ``cancel()``: the command is done, and exits by itself."""
+
+    def __init__(self, seconds: float, last: Callable[[], None] | None = None) -> None:
+        self.last = last
+        self._turn = threading.Lock()
+        self._over = self._done = False
+        self._timer = threading.Timer(max(0.0, seconds) + GRACE_SECONDS, self._stop)
+        self._timer.daemon = True  # never what keeps the process from exiting
+        self._timer.start()
+
+    def over(self) -> None:
+        with self._turn:
+            self._over = True
+
+    def cancel(self) -> None:
+        self._timer.cancel()
+        with self._turn:
+            self._done = True
+
+    def _stop(self) -> None:
+        with self._turn:  # held until the process is gone: a run ending by itself just now waits here
+            if self._done:
+                return
+            try:
+                if not self._over:
+                    closing = threading.Thread(target=self._close, daemon=True)
+                    closing.start()
+                    closing.join(CLOSE_SECONDS)
+            finally:
+                os._exit(STOPPED)
+
+    def _close(self) -> None:
+        ended(STOPPED)
+        try:
+            if self.last is not None:
+                self.last()
+        except Exception:  # noqa: BLE001 - the process exits whatever its last words did
+            pass
 
 
 def tool() -> Path | None:
@@ -309,7 +406,7 @@ def _begin(told, *, now: float | None = None) -> tuple[subprocess.Popen | None, 
         if _change(start) is None:
             return None, None
     except Exception as error:  # noqa: BLE001 - never a failure of the server's tending
-        told(f"the install command could not begin: {type(error).__name__}: {error}")
+        told(f"{SAID} could not begin: {type(error).__name__}: {error}")
         return None, None
     at = began[-1]
     folder = _folder()
@@ -321,21 +418,21 @@ def _begin(told, *, now: float | None = None) -> tuple[subprocess.Popen | None, 
                                        stdin=subprocess.DEVNULL,
                                        stdout=out, stderr=subprocess.STDOUT, env=env, cwd=str(folder), **detached())
     except (OSError, ValueError) as error:
-        told(f"the install command could not start: {error}")
+        told(f"{SAID} could not start: {error}")
         try:
             _change(lambda kept: {**kept, "outcome": FAILED, "code": None, "ended": time.time()}
                     if kept.get("at") == at else kept)
         except OSError:
             pass
         return None, None
-    told(f"cad {version} is newer than the one the install command is up to date for: it runs once now, in the "
-         "background")
+    told(f"cad {version} is newer than the one the plugin is up to date for: {SAID} runs once now, in the background")
     return process, at
 
 
 class Catcher:
     """The server's side (``daemon.Daemon``): the run it began last, held while it runs, so it begins no second, and
-    kept as failed, with its exit status, where it exited without saying how it ended."""
+    kept as failed, with its exit status, where it exited without saying how it ended. It only asks whether the run
+    has exited: what ends a run past its deadline is the run's own command (``HardStop``), whichever server began it."""
 
     def __init__(self) -> None:
         self.process: subprocess.Popen | None = None

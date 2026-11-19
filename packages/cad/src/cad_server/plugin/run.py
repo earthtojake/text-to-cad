@@ -1,9 +1,10 @@
 """One run of ``cad plugin install`` or ``cad plugin update`` (``install``), and what it was (``Facts``).
 
 A run holds the one lock of such runs from its start to its end (``plugin_catch_up.run_lock``): where another run
-holds it, a run a server began ends at once with exit status ``plugin_catch_up.BUSY`` and one line, and any other
-(a person's, the hosted install command's) says it waits, waits, then runs. Then, for every app of ``apps.APPS`` found
-here: ours in, then old copies out (``apps.install_apps``), a line said per app. In a person's terminal
+holds it (still, after the moment a run tries for it), a run a server began ends with exit status
+``plugin_catch_up.BUSY`` and one line, and any other (a person's, the hosted install command's) says it waits, waits,
+then runs. Then, for every app of ``apps.APPS`` found here: ours in, then old copies out (``apps.install_apps``), a
+line said per app. In a person's terminal
 (``terminal.Screen``) it first builds the CAD logo, marks each app's line and keeps a live line under them; anywhere
 else the plain lines alone. Then it turns ``cad plugin update auto`` on (``switch``, the command's own code path), and
 keeps this cad's release as the one the plugin is up to date for only where the run ended well: one where every app
@@ -17,7 +18,9 @@ is written there as it ends, whole (a file beside it, renamed into place): ``{"s
 by a run that ran nothing. Writing it never fails the run, and nothing is said about it.
 
 ``Facts`` is everything a count of the run needs, made here and nowhere else: who began it, how it ended, each app
-found with its status, the word for why it failed and its seconds, and what the terminal was shown.
+found with its status, the word for why it failed and its seconds, and what the terminal was shown. It is made as the
+run begins and filled as it goes, each app as it is done, so what ends a run that never comes back
+(``plugin_catch_up.HardStop``) can still say how far it got (``install``'s ``going``).
 """
 
 from __future__ import annotations
@@ -34,7 +37,7 @@ from cad._internal.atomic_replace import replace_atomic
 from cad_server._internal import plugin_catch_up
 
 from . import computer, terminal
-from .apps import NOT_FOUND, QUIET, Report, install_apps
+from .apps import NOT_FOUND, QUIET, Outcome, Report, install_apps
 from .computer import STOPPED, Here
 from .source import Source
 
@@ -101,15 +104,19 @@ def began_by(environ: Dict[str, str]) -> str:
     return SCRIPT if environ.get(BY_ENV) == SCRIPT else PERSON
 
 
-def install(switch: Callable[[bool], str], *, prog: str, seconds: Optional[float] = None) -> Facts:
+def install(switch: Callable[[bool], str], *, prog: str, seconds: Optional[float] = None,
+            going: Optional[Callable[[Facts], None]] = None) -> Facts:
     """One run (see the module), said as it goes on this process's output: what it was, ``Facts.code`` the exit status
     of the command that ran it. ``switch(well)`` turns ``cad plugin update auto`` on, keeping this release as up to
     date only with ``well``, and gives the line that says so (``OSError`` where it could not be kept). ``prog``: the
-    command's name, for a line on stderr. ``seconds``: the run's deadline, counted from here."""
+    command's name, for a line on stderr. ``seconds``: the run's deadline, counted from here. ``going``: given the
+    run's ``Facts`` as it begins, the ones it fills as it goes and returns."""
     began = time.monotonic()
     here = Here()
     here.until = None if seconds is None else began + seconds
     facts = Facts(by=began_by(here.environ))
+    if going is not None:
+        going(facts)
 
     def waiting() -> None:
         print("Another run is setting up the plugin in the agent apps now: this one waits for it to end, then runs.",
@@ -156,15 +163,15 @@ def _steps(here: Here, facts: Facts, switch: Callable[[bool], str], prog: str, s
     print("Setting up the plugin in each agent app found here:", flush=True)
     source = Source()
     try:
-        report = install_apps(here, source, live=live)
+        report = install_apps(here, source, live=live,
+                              each=lambda key, outcome, took: facts.apps.extend(_found(key, outcome, took)))
     finally:
         source.close()
     try:
         print("", flush=True)
         facts.statuses = report.statuses()
-        facts.apps = [AppFact(key, facts.statuses[key], outcome.reason if outcome.status == "failed" else "",
-                              report.seconds.get(key, 0.0))
-                      for key, outcome in report.outcomes.items() if outcome is not NOT_FOUND and outcome is not QUIET]
+        facts.apps = [fact for key, outcome in report.outcomes.items()  # as the run left them, the loose skills done
+                      for fact in _found(key, outcome, report.seconds.get(key, 0.0))]
         if report.stopped:
             facts.stopped, facts.outcome, facts.code = True, FAILED, STOPPED
             print(f"{prog}: stopped after {seconds:g} seconds, all a run the cad server began may take; the apps it "
@@ -188,6 +195,15 @@ def _steps(here: Here, facts: Facts, switch: Callable[[bool], str], prog: str, s
             print("Start a new session in each app to use it.", flush=True)
     finally:
         write_report(here, report)
+
+
+def _found(key: str, outcome: Outcome, seconds: float) -> List[AppFact]:
+    """One app's fact from its outcome, as a report of the run words it (``Report.statuses``); none for an app that
+    is not here, or that has nothing to say."""
+    if outcome is NOT_FOUND or outcome is QUIET:
+        return []
+    return [AppFact(key, "skipped" if outcome.status == "note" else outcome.status,
+                    outcome.reason if outcome.status == "failed" else "", seconds)]
 
 
 def write_report(here: Here, report: Report) -> None:

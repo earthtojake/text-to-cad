@@ -268,8 +268,7 @@ def change_plugin(on: bool, release: str | None = None, *, note: bool = True) ->
     """``plugin.auto_update`` changed under the state folder's lock; turned on, the plugin is taken as up to date for
     ``release``, the cad that turned it on (this one's by default: ``plugin_catch_up.noted``) -- unless ``note`` is
     false: turned on by a run that is ending badly (``cad plugin install`` or ``cad plugin update`` in which every app
-    found failed; the install command of 0.11.12 and 0.11.13, ``plugin_catch_up.FAILED_ENV``), which takes nothing as
-    up to date. ``OSError`` where it cannot be written."""
+    found failed), which takes nothing as up to date. ``OSError`` where it cannot be written."""
     from cad_server.settings import update_section
 
     update_section(PLUGIN_SECTION, lambda kept: {**kept, "auto_update": on})

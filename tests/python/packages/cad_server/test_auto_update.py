@@ -1,10 +1,11 @@
 """cad's own update (``cad_server/_internal/auto_update.py``, its helper ``auto_update_helper.py``, ``cad update auto``,
 ``cad plugin``, and the starts that meet a newer server): on by default, for a global install alone; ``on`` only for
 one; no update without the feed or to an older release; the idle rule; the helper's command lines on POSIX and Windows,
-and what it runs, in order, never the install command; the server's rule for that command (``plugin_catch_up``): once
-where cad is newer than the release it is up to date for, however cad got there, bounded; each ended attempt counted
-once (``auto_update.report``); a start that joins a newer server; a start that failed still updating. No test reaches
-the real feed or PyPI, or runs uv."""
+and what it runs, in order, never ``cad plugin update``; the server's rule for that command (``plugin_catch_up``): once
+where cad is newer than the release the plugin is up to date for, however cad got there, bounded; each ended attempt
+counted once (``auto_update.report``); a start that joins a newer server; a start that failed still updating. No test
+reaches the real feed or PyPI, or runs uv, and every one runs on a computer of its own (``Case``: a temporary home, a
+PATH of its own stand-ins), so none is a mock away from the agent apps of the computer it runs on."""
 
 from __future__ import annotations
 
@@ -29,6 +30,7 @@ from cad.engine.previous import version
 from cad_server import updates
 from cad_server._internal import auto_update, auto_update_helper as helper
 from cad_server.cli import auto_update as command, plugin as plugin_command
+from tests.python.support.agent_apps import a_home_of_its_own
 
 RECEIPT = '[tool]\nrequirements = [{ name = "cad", specifier = "==0.1.0" }]\nentrypoints = [{ name = "cad" }]\n'
 BOUNDED = "cad>=0.1.0,<1"  # the requirement of 0.1.0's upgrade: inside its major, never below it (``auto_update.bound``)
@@ -39,6 +41,7 @@ class Case(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(__import__("shutil").rmtree, self.tmp, ignore_errors=True)
         self.state = self.tmp / "state"
+        self.home = self.tmp / "home"
         self.tool = self.tmp / "tools" / "cad"  # a uv tool's environment
         self.tool.mkdir(parents=True)
         (self.tool / "uv-receipt.toml").write_text(RECEIPT, encoding="utf-8")
@@ -51,7 +54,10 @@ class Case(unittest.TestCase):
         # the server the runner started for this file (``ServerSwitchesTest`` starts one of its own).
         self.engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None))
         self.addCleanup(__import__("shutil").rmtree, self.engine, ignore_errors=True)
-        for patch in (mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state), "PATH": str(self.bin),
+        # A home of its own, and PATH the stand-ins alone: ``cad plugin`` is run here, and what it would find and
+        # change, were a test's mock ever to miss, is this folder's and no agent app's.
+        a_home_of_its_own(self, self.home, self.bin)
+        for patch in (mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state),
                                                    "CAD_ENGINE_DIR": str(self.engine)}),
                       mock.patch.object(sys, "prefix", str(self.tool)),
                       mock.patch.object(cad_server, "__version__", "0.1.0"),
@@ -216,10 +222,25 @@ class PluginSwitchTest(Case):
 
         self.assertEqual(self.cli("plugin", "--refresh", main=cad), (0, "", ""))
 
-    def test_a_run_a_server_began_has_a_deadline_and_a_person_s_none(self) -> None:
-        """``cad plugin update`` where a server began it (``CAD_INSTALL_ATTEMPT``) has ``INSTALL_SECONDS``, and keeps
-        how it ended in the server's record; typed by a person, it runs as long as it runs. What it runs, and the
-        deadline's effect, are ``tests/python/packages/cad_server/plugin/test_command.py``'s."""
+    def test_a_run_of_the_command_here_would_see_a_computer_of_its_own(self) -> None:
+        """What ``cad plugin install`` and ``cad plugin update`` take this computer to be (``computer.Here``), in a
+        test of this file: a home in the test's folder, no command but the test's stand-ins, no app's folder named
+        elsewhere. A run no mock stood in for finds no agent app, and changes nothing outside that folder."""
+        from cad_server.plugin import apps, computer
+        from tests.python.support.agent_apps import ELSEWHERE
+
+        here = computer.Here()
+        self.assertEqual((here.home, here.path_only), (self.home, True))
+        places = [Path(folder) for folder in here.search_path().split(os.pathsep)]
+        places += [here.config_home(), apps.claude_dir(here), apps.hermes_home(here), *here.state_dirs()]
+        self.assertEqual([place for place in places if self.tmp not in place.parents], [])
+        self.assertEqual([name for name in ELSEWHERE if name in os.environ], [])
+
+    def test_a_run_a_server_began_has_a_deadline_and_a_hard_stop_and_a_person_s_neither(self) -> None:
+        """``cad plugin update`` where a server began it (``CAD_INSTALL_ATTEMPT``) has ``INSTALL_SECONDS``, a hard stop
+        armed for them before the run begins and let go as the command ends (``plugin_catch_up.HardStop``), and keeps
+        how it ended in the server's record; typed by a person, it runs as long as it runs. What it runs, the
+        deadline's effect and the stop's are ``tests/python/packages/cad_server/plugin/test_command.py``'s."""
         from cad_server._internal import auto_update_helper, plugin_catch_up
         from cad_server.plugin import run
 
@@ -228,17 +249,34 @@ class PluginSwitchTest(Case):
         plugin_catch_up._change(lambda found: {**found, "release": "0.1.0", "at": 7.0, "tries": 1,
                                                "outcome": "underway"})
         stopped = run.Facts(by=run.SERVER, outcome=run.FAILED, code=124, stopped=True)
+        steps = mock.Mock()
+        steps.install.return_value = stopped
         with mock.patch.dict(os.environ, {plugin_catch_up.ATTEMPT_ENV: "7.0"}), \
-                mock.patch.object(run, "install", return_value=stopped) as ran:
+                mock.patch.object(run, "install", steps.install), \
+                mock.patch.object(plugin_catch_up, "HardStop", steps.HardStop):
             self.assertEqual(plugin_catch_up.deadline(), auto_update_helper.INSTALL_SECONDS)
             self.assertEqual(self.cli("update", main=plugin_command.main)[0], 124)
-        self.assertEqual(ran.call_args.kwargs, {"prog": "cad plugin update",
-                                                "seconds": float(auto_update_helper.INSTALL_SECONDS)})
+        self.assertEqual([call[0] for call in steps.mock_calls],
+                         ["HardStop", "install", "HardStop().over", "HardStop().cancel"])
+        self.assertEqual(steps.HardStop.call_args.args, (float(auto_update_helper.INSTALL_SECONDS),))
+        self.assertEqual({name: value for name, value in steps.install.call_args.kwargs.items() if name != "going"},
+                         {"prog": "cad plugin update", "seconds": float(auto_update_helper.INSTALL_SECONDS)})
         found = plugin_catch_up.read()
         self.assertEqual((found["for"], found["outcome"], found["code"]), ("0.0.1", "failed", 124))
-        with mock.patch.object(run, "install", return_value=run.Facts(by=run.PERSON)) as ran:
+        # A crash lets the stop go too: no stop outlives its command.
+        steps.reset_mock()
+        steps.install.side_effect = RuntimeError("a mistake of ours")
+        with mock.patch.dict(os.environ, {plugin_catch_up.ATTEMPT_ENV: "7.0"}), \
+                mock.patch.object(run, "install", steps.install), \
+                mock.patch.object(plugin_catch_up, "HardStop", steps.HardStop), self.assertRaises(RuntimeError):
+            plugin_command.main(["update"])
+        self.assertEqual([call[0] for call in steps.mock_calls], ["HardStop", "install", "HardStop().cancel"])
+        with mock.patch.object(run, "install", return_value=run.Facts(by=run.PERSON)) as ran, \
+                mock.patch.object(plugin_catch_up, "HardStop") as stop:
             self.assertEqual(self.cli("update", main=plugin_command.main)[0], 0)
-        self.assertEqual(ran.call_args.kwargs, {"prog": "cad plugin update", "seconds": None})
+            self.assertEqual(self.cli("install", main=plugin_command.main)[0], 0)
+        self.assertEqual(ran.call_args_list[0].kwargs["seconds"], None)
+        stop.assert_not_called()
         self.assertEqual(plugin_catch_up.read()["for"], "0.1.0", "ended with exit status 0: this cad's")
 
     def test_an_attempt_past_its_time_is_stopped_with_everything_it_started(self) -> None:
@@ -1828,15 +1866,16 @@ class DoctorTest(Case):
 
 class PluginCatchUpTest(Case):
     """The server's rule (``plugin_catch_up``): where the person's switch is on and this cad is newer than the release
-    the install command is up to date for, ``cad plugin update`` once, by this cad's own command, detached; bounded;
-    however cad got newer; never where the check is off, there is no command, the cad is no global install or a
-    development build, or the bridge owes its own run."""
+    the plugin is up to date for, ``cad plugin update`` once, by this cad's own command, detached; bounded; however cad
+    got newer; never where the check is off, a test said the server runs nothing, the cad is no global install or a
+    development build, or the bridge owes its own run of the hosted install command."""
 
     def setUp(self) -> None:
         super().setUp()
         from cad_server._internal import install_script, plugin_catch_up
 
         self.catch_up = plugin_catch_up
+        # Not set and empty, the runner's way to say the server runs nothing by itself: here the rule is asked.
         patch = mock.patch.dict(os.environ, {install_script.INSTALLER_ENV: "the-install-command"})
         patch.start()
         self.addCleanup(patch.stop)
@@ -1875,6 +1914,8 @@ class PluginCatchUpTest(Case):
             self.assertFalse(catcher.tend(self.told.append), "never a second while this server's run runs")
         (line,), options = popen.call_args
         self.assertEqual(line, [str(auto_update.tool_command(self.tool)), "plugin", "update"])
+        self.assertEqual(self.told, ["cad 0.1.0 is newer than the one the plugin is up to date for: `cad plugin "
+                                     "update` runs once now, in the background"])
         record = self.catch_up.read()
         self.assertEqual((record["for"], record["release"], record["tries"], record["outcome"]),
                          ("0.0.9", "0.1.0", 1, "underway"))
@@ -1962,7 +2003,7 @@ class PluginCatchUpTest(Case):
             self.assertIsNone(self.catch_up.begin(self.told.append, now=later))
         record = self.catch_up.read()
         self.assertEqual((record["tries"], record["outcome"], record["code"]), (2, "failed", None))
-        self.assertIn("the install command could not start: no such file", self.told)
+        self.assertIn("`cad plugin update` could not start: no such file", self.told)
 
     def test_the_time_is_read_once_the_lock_is_held_so_a_run_begun_while_this_server_waited_is_waited_for(self) -> None:
         """Another server keeps its run while this one waits for the state folder's lock: this one's time, read once
@@ -1986,6 +2027,54 @@ class PluginCatchUpTest(Case):
         popen.assert_not_called()
         self.assertEqual((self.catch_up.read()["tries"], self.catch_up.read()["outcome"]), (1, "underway"))
 
+    def test_the_hard_stop_closes_the_run_s_record_and_ends_the_process_waiting_on_nothing(self) -> None:
+        """``HardStop``, its time come (``_stop``, here by hand: the clock is the standard library's) and the
+        process's end stood in for: a run still going is kept as stopped, says its last words once, and the process
+        ends with 124 -- whatever those words wait on; a run that ended by itself says nothing twice; a command that
+        is done is left alone. A whole command ended by it: ``plugin/test_command.py``."""
+        import threading
+
+        from cad_server.plugin import computer
+
+        catch_up = self.catch_up
+        self.assertEqual(catch_up.STOPPED, computer.STOPPED)
+        underway = {"for": "0.0.9", "release": "0.1.0", "at": 7.0, "tries": 1, "outcome": "underway"}
+
+        def stopped(stop) -> tuple:
+            self.addCleanup(stop.cancel)
+            with mock.patch.object(catch_up.os, "_exit") as gone:
+                stop._stop()
+            found = catch_up.read()
+            return [call.args for call in gone.call_args_list], found["outcome"], found.get("code")
+
+        with mock.patch.dict(os.environ, {catch_up.ATTEMPT_ENV: "7.0"}):
+            said: list[str] = []
+            catch_up._change(lambda _found: dict(underway))
+            stop = catch_up.HardStop(900.0, lambda: said.append(catch_up.read()["outcome"]))
+            self.assertEqual(stop._timer.interval, 900.0 + catch_up.GRACE_SECONDS, "the deadline, and a short grace")
+            self.assertTrue(stop._timer.daemon, "never what keeps the process from exiting")
+            self.assertEqual(stopped(stop), ([(124,)], "failed", 124))
+            self.assertEqual(said, ["failed"], "its last words, once the record is closed")
+            # The run ended by itself: its record and its count are its own, and the stop only ends the process.
+            catch_up._change(lambda _found: dict(underway))
+            stop = catch_up.HardStop(900.0, lambda: said.append("twice"))
+            stop.over()
+            self.assertEqual(stopped(stop), ([(124,)], "underway", None))
+            # The command is done: nothing is ended.
+            stop = catch_up.HardStop(900.0, lambda: said.append("twice"))
+            stop.cancel()
+            self.assertEqual(stopped(stop), ([], "underway", None))
+            self.assertTrue(stop._timer.finished.is_set())
+            # What hangs may hold the state folder's lock, which closing the record waits on: that is not waited for.
+            # The process ends, and the server that began the run keeps it as failed (``Catcher``).
+            held = threading.Event()
+            self.addCleanup(held.set)
+            with mock.patch.object(catch_up, "ended", lambda _code: held.wait()), \
+                    mock.patch.object(catch_up, "CLOSE_SECONDS", 0.0):
+                self.assertEqual(stopped(catch_up.HardStop(900.0, lambda: said.append("late"))),
+                                 ([(124,)], "underway", None))
+        self.assertEqual(said, ["failed"])
+
     def test_however_cad_got_newer_a_typed_update_or_one_by_hand_the_server_catches_up(self) -> None:
         self.switch_on()
         self.catch_up.noted("0.1.0")
@@ -1996,7 +2085,8 @@ class PluginCatchUpTest(Case):
             self.begun()
             self.assertEqual(self.catch_up.read()["release"], "0.2.0")
 
-    def test_never_where_the_check_is_off_no_command_no_global_install_a_development_build_or_the_bridge_owes_it(self):
+    def test_never_where_the_check_is_off_a_test_says_so_no_global_install_a_development_build_or_the_bridge_owes_it(
+            self) -> None:
         from cad_server._internal import install_script
 
         self.switch_on()
@@ -2023,11 +2113,11 @@ class PluginCatchUpTest(Case):
         self.assertFalse(self.catch_up.due(), "no second run after the bridge's")
         self.assertEqual(self.catch_up.read()["for"], "0.1.0")
 
-    def test_turned_on_by_an_install_run_ending_badly_it_is_on_and_nothing_is_taken_as_up_to_date(self) -> None:
-        """The install command turns the switch on wherever cad is there, and says how its run is ending
-        (``FAILED_ENV``): ending badly, the switch is on and ``for`` stays as it was, so the server runs the command
-        again for this release; ending well, or typed by a person, ``for`` is this release. By the command itself and
-        by the server alike."""
+    def test_turned_on_by_a_run_ending_badly_it_is_on_and_nothing_is_taken_as_up_to_date(self) -> None:
+        """A run of ``cad plugin install`` or ``cad plugin update`` turns the switch on as it ends, however it ends
+        (``plugin_command._keep``): ending badly, the switch is on and ``for`` stays as it was, so the server runs the
+        command again for this release; ending well, or turned on by a person, ``for`` is this release. By the command
+        itself and by the server alike."""
         from cad_server.engine.daemon import switch_plugin
 
         self.catch_up.noted("0.0.9")  # an earlier run ended well, for 0.0.9
@@ -2037,31 +2127,40 @@ class PluginCatchUpTest(Case):
                 self.catch_up._change(lambda found: {**found, "for": "0.0.9"})
                 answer = (lambda request: switch_plugin(request)) if by_the_server else (lambda _r: {"failed":
                                                                                                     "unknown request"})
-                with mock.patch.object(client, "request", side_effect=lambda request, **_o: answer(request)) as asked, \
-                        mock.patch.dict(os.environ, {self.catch_up.FAILED_ENV: "1"}):
-                    self.assertEqual(self.cli("update", "auto", "on", main=plugin_command.main),
-                                     (0, "plugin update auto: on\n", ""))
+                with mock.patch.object(client, "request", side_effect=lambda request, **_o: answer(request)) as asked:
+                    self.assertTrue(plugin_command._keep(True, note=False))
                 self.assertEqual(asked.call_args.args[0], {"op": "plugin_auto_update", "on": True, "release": "0.1.0",
                                                            "note": False})
                 self.assertTrue(auto_update.plugin_switch())
                 self.assertEqual(self.catch_up.read()["for"], "0.0.9", "nothing taken as up to date")
                 self.assertTrue(self.catch_up.due(), "so the server runs the command again for this release")
-                for ending in ("", None):  # ending well (the install command says so), or a person typing it
+                for typed in (False, True):  # a run ending well, or a person typing `cad plugin update auto on`
+                    self.catch_up._change(lambda found: {**found, "for": "0.0.9"})
                     with mock.patch.object(client, "request", side_effect=lambda request, **_o: answer(request)) \
-                            as asked, mock.patch.dict(os.environ, {} if ending is None else
-                                                      {self.catch_up.FAILED_ENV: ending}):
-                        if ending is None:
-                            os.environ.pop(self.catch_up.FAILED_ENV, None)
-                        self.catch_up._change(lambda found: {**found, "for": "0.0.9"})
-                        self.cli("update", "auto", "on", main=plugin_command.main)
+                            as asked:
+                        if typed:
+                            self.assertEqual(self.cli("update", "auto", "on", main=plugin_command.main),
+                                             (0, "plugin update auto: on\n", ""))
+                        else:
+                            self.assertTrue(plugin_command._keep(True, note=True))
                     self.assertNotIn("note", asked.call_args.args[0])
                     self.assertEqual(self.catch_up.read()["for"], "0.1.0", "from this release on")
+                # A cad that is no global install (the newest release, run from uv's cache) asks as a run ending
+                # badly does: the switch, and nothing of its own release, which the installed cad may never reach.
+                self.catch_up._change(lambda found: {**found, "for": "0.0.9"})
+                with mock.patch.object(client, "request", side_effect=lambda request, **_o: answer(request)) as asked, \
+                        mock.patch.object(sys, "prefix", str(self.tmp)), \
+                        mock.patch.object(cad_server, "__version__", "9.0.0"):
+                    self.assertTrue(plugin_command._keep(True, note=True))
+                    self.catch_up.ended(0)
+                self.assertEqual(asked.call_args.args[0], {"op": "plugin_auto_update", "on": True, "release": "9.0.0",
+                                                           "note": False})
+                self.assertEqual(self.catch_up.read()["for"], "0.0.9")
         # No record at all (a computer where no run ever ended well), the run ending badly: nothing written; the rule
         # for no record then takes this release as up to date, and the command runs once cad is newer.
         (self.state / self.catch_up.RECORD).unlink()
-        with mock.patch.object(client, "request", return_value={"failed": "unknown request"}), \
-                mock.patch.dict(os.environ, {self.catch_up.FAILED_ENV: "1"}):
-            self.cli("update", "auto", "on", main=plugin_command.main)
+        with mock.patch.object(client, "request", return_value={"failed": "unknown request"}):
+            self.assertTrue(plugin_command._keep(True, note=False))
         self.assertFalse((self.state / self.catch_up.RECORD).exists())
 
     def test_turning_it_on_takes_the_command_as_up_to_date_for_the_cad_that_asked(self) -> None:

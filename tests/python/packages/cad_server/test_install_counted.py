@@ -161,6 +161,29 @@ class CountedTest(unittest.TestCase):
                          ("failed", 2, 2, 2))
         self.assertEqual(counted(facts("person", fine, outcome=run.FAILED, code=1)), ("ok", 1, 0, 1))
 
+    def test_a_run_its_hard_stop_ends_is_counted_as_stopped_with_the_apps_it_had_done(self) -> None:
+        """A run a server began that never came back says nothing itself: what ends it (``command._cut_off``, the last
+        words of ``plugin_catch_up.HardStop``) counts it from the facts the run had filled by then."""
+        self.tell()
+        going = facts("server", ("claude", "updated", "", 2.0), ("codex", "failed", "timeout", 180.0))
+        err = io.StringIO()
+        with mock.patch.object(sys, "stderr", err):
+            command._cut_off("cad plugin update", 900.0, [going], analytics.in_force(), time.monotonic() - 961.5)
+        self.assertRegex(err.getvalue(), r"\Acad plugin update: ended after 96\d seconds, past the 900 a run the cad "
+                                         r"server began may take: a step of it never came back, and what it had not "
+                                         r"done was left as it was\n\Z")
+        [row] = kept(self.settings)
+        self.assertEqual({name: row[name] for name in ("by", "outcome", "found", "failed")},
+                         {"by": "server", "outcome": "stopped", "found": 2, "failed": 1})
+        self.assertIn(row["seconds"], (961, 962))
+        self.assertEqual((going.outcome, going.stopped, going.code), ("ok", False, 0), "the run's own facts untouched")
+        # Ended before it had any facts: counted all the same, as a server's run that found nothing yet.
+        with mock.patch.object(sys, "stderr", io.StringIO()), \
+                mock.patch.dict(os.environ, {"CAD_INSTALL_ATTEMPT": "7.0"}):
+            command._cut_off("cad plugin update", 900.0, [], analytics.in_force(), time.monotonic())
+        self.assertEqual([(each["by"], each["outcome"], each["found"]) for each in kept(self.settings)][1:],
+                         [("server", "stopped", 0)])
+
     def test_only_words_of_the_vocabulary_and_whole_seconds_within_bounds_are_counted(self) -> None:
         self.tell()
         count = analytics.install

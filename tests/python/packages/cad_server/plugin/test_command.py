@@ -5,6 +5,8 @@ the apps' CLIs), its exit statuses, the report it writes, the lock that keeps it
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -13,6 +15,7 @@ import unittest
 from unittest import mock
 
 import cad_server
+from cad_server import analytics
 from cad_server._internal import auto_update_helper, plugin_catch_up
 from cad_server.cli import plugin as command
 from cad_server.plugin import apps, computer, run, source
@@ -20,6 +23,33 @@ from tests.python.support.agent_apps import PluginRuns
 
 ADD = [["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"],
        ["plugin", "install", "text-to-cad@earthtojake"]]
+# ``cad <argv>`` as the cad of the environment named first, with a step that never comes back: the apps' phase does
+# one app and then hangs, whatever the run's deadline. The run has no time at all, and its hard stop a moment's
+# grace; so that no clock decides what the test sees, the stop's time comes only once the run is stuck.
+STUCK = """
+import sys, threading
+sys.prefix = sys.argv.pop(1)
+from cad_server._internal import auto_update_helper, plugin_catch_up, telemetry_send
+from cad_server.cli import main
+from cad_server.plugin import apps, run
+
+stuck = threading.Event()
+
+def never(here, source, live=None, each=None):
+    each("claude", apps.Outcome("updated"), 2.0)
+    stuck.set()
+    threading.Event().wait()
+
+run.install_apps = never
+auto_update_helper.INSTALL_SECONDS, plugin_catch_up.GRACE_SECONDS = 0, 0.01
+stop = plugin_catch_up.HardStop._stop
+plugin_catch_up.HardStop._stop = lambda self: (stuck.wait(), stop(self))
+telemetry_send._spawn = lambda settings: None
+sys.exit(main(sys.argv[1:]))
+"""
+# A release's process outside CI, its telemetry switches unset: one whose runs are counted once a person was told.
+COUNTED = {"CAD_INSTALLATION_VERSION": cad_server.__version__, "CI": "", "DO_NOT_TRACK": "", "CAD_TELEMETRY": "",
+           analytics.NOTICE_ENV: "", "CAD_UPDATE_CHECK": "0", "CAD_API_URL": "http://127.0.0.1:9"}
 
 
 @unittest.skipIf(os.name == "nt", "the stand-ins are scripts run by their #! line")
@@ -92,6 +122,30 @@ class InstallTests(PluginRuns):
                                       "so this one ran nothing\n")
         self.assertFalse((self.root / "report.json").exists(), "a run that ran nothing writes none")
 
+    def test_a_cad_that_is_not_the_global_install_turns_the_switch_on_and_keeps_no_release(self) -> None:
+        """For an installed cad with no ``cad plugin install`` (0.11.12, 0.11.13) the hosted install command runs the
+        newest release's, from uv's cache. That release is not the installed cad's, and may be of a major it never
+        reaches: kept as the one the plugin is up to date for, the installed cad's server, which runs ``cad plugin
+        update`` only where it is newer than the release kept, would never run it again. So only the computer's global
+        install keeps its release; any other cad does the work, turns the switch on, and leaves the record alone."""
+        self.programs("claude")
+        with self.from_elsewhere():
+            done = self.run_install()
+        self.assertEqual((0, ""), (done.returncode, done.stderr), done.stdout)
+        self.assertEqual(self.calls("claude"), ADD)
+        self.assertEqual(done.stdout.splitlines()[-2:], ["plugin update auto: on",
+                                                         "Start a new session in each app to use it."])
+        self.assertEqual(self.kept(), {"switch": True, "record": {}}, "the next server keeps its own release")
+        # What the installed cad kept stays as it was, whichever command the other cad runs.
+        self.keep(**{"for": "0.0.1"})
+        with self.from_elsewhere():
+            for argv in (["install"], ["update"], ["update", "auto", "on"]):
+                self.assertEqual(0, self.cad_plugin(*argv).returncode, argv)
+                self.assertEqual(self.kept(), {"switch": True, "record": {"for": "0.0.1"}}, argv)
+        # The installed cad's own run keeps its release.
+        self.assertEqual(0, self.run_install().returncode)
+        self.assertEqual(self.kept(), {"switch": True, "record": {"for": cad_server.__version__}})
+
     def test_the_report_names_each_app_s_status_and_changes_nothing_the_run_says(self) -> None:
         # CAD_PLUGIN_REPORT (set by the hosted install command, which hands over to this one): what the run did, each
         # app by its key, written whole; the run's output and exit status as without it, and a report that cannot be
@@ -126,7 +180,8 @@ class InstallTests(PluginRuns):
             self.assertEqual(waiting.stdout.readline(), "Another run is setting up the plugin in the agent apps now: "
                                                         "this one waits for it to end, then runs.\n")
             self.assertEqual((waiting.poll(), self.calls()), (None, []))
-            # One a server began (its run is named) ends at once: the first run is doing the work.
+            # One a server began (its run is named) ends once it has tried for the lock as long as any run does: the
+            # first run is doing the work.
             busy = subprocess.run(line, env={**environ, "CAD_INSTALL_ATTEMPT": "7.0"}, capture_output=True, text=True,
                                   encoding="utf-8", timeout=120)
             self.assertEqual((busy.returncode, busy.stdout, self.calls()), (75, "", []))
@@ -137,9 +192,30 @@ class InstallTests(PluginRuns):
         with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state)}):
             self.assertFalse(plugin_catch_up.running(), "the lock is let go as the run ends")
 
+    def test_a_lock_held_for_an_instant_is_no_run_going(self) -> None:
+        """Whether a run is going can only be asked by trying for its lock (``plugin_catch_up.running``), so a server
+        that asks holds it for the instant it asks. A run that begins just then tries again before it takes the lock
+        as another run's: a server's run does its work, where it would have answered 75 and been kept as failed for an
+        hour, and a person's says nothing of waiting."""
+        from cad_server._internal import file_lock
+
+        self.programs("claude")
+        self.state.mkdir(parents=True)
+        for began_by in ({"CAD_INSTALL_ATTEMPT": "7.0"}, {}):
+            with contextlib.ExitStack() as asking, self.subTest(began_by=began_by):
+                asking.enter_context(file_lock.exclusive(self.state / plugin_catch_up.LOCK))
+                # The one who asked lets go while the run waits its first step.
+                with mock.patch.object(plugin_catch_up.time, "sleep", side_effect=lambda _s: asking.close()) as slept:
+                    done = self.cad_plugin("install", **began_by)
+                slept.assert_called_with(plugin_catch_up.SETTLE_STEP)
+                self.assertEqual((0, ""), (done.returncode, done.stderr), done.stdout)
+                self.assertNotIn("Another run", done.stdout)
+                self.assertEqual(self.calls("claude"), ADD)
+
     def test_a_state_folder_it_may_not_lock_never_stops_the_run(self) -> None:
         self.programs("claude")
-        with mock.patch("cad_server._internal.file_lock.exclusive", side_effect=PermissionError("read-only")):
+        with mock.patch("cad_server._internal.file_lock.attempt", side_effect=PermissionError("read-only")), \
+                mock.patch("cad_server._internal.file_lock.exclusive", side_effect=PermissionError("read-only")):
             done = self.run_install()
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertEqual(self.calls("claude"), ADD)
@@ -183,6 +259,22 @@ class InstallTests(PluginRuns):
             ["person", "script", "person", "server", "server"])
         self.programs("codex", "gemini")
         (self.home / ".cline").mkdir()  # its skills come from GitHub, which nothing reaches here
+        # The facts are there from the run's start and filled as it goes, each app as it is done, for whoever must
+        # say what a run was that never ended (its hard stop): seen here as the second app's command runs.
+        going: list = []
+        so_far: list = []
+        real = computer.Here.run
+
+        def watched(here, argv, **options):
+            if os.path.basename(str(argv[0])) == "gemini":
+                so_far.append([(app.app, app.status, app.reason) for app in going[0].apps])
+            return real(here, argv, **options)
+
+        with self.on_this_computer(FAKE_FAIL="codex,git:clone", CAD_PLUGIN_BY="script"), \
+                mock.patch.object(computer.Here, "run", watched):
+            facts = run.install(lambda well: "plugin update auto: on", prog="cad plugin install", going=going.append)
+        self.assertIs(going[0], facts)
+        self.assertEqual(so_far[0], [("codex", "failed", "command")])
         with self.on_this_computer(FAKE_FAIL="codex,git:clone", CAD_PLUGIN_BY="script"):
             facts = command._run("cad plugin install")
         self.assertEqual((facts.by, facts.outcome, facts.code, facts.stopped), ("script", "ok", 0, False))
@@ -267,6 +359,34 @@ class UpdateTests(PluginRuns):
             done = self.cad_plugin("update")
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertEqual(ended(), (version, "underway", None))
+
+    def test_a_run_a_server_began_that_never_comes_back_is_ended_for_certain(self) -> None:
+        """The deadline is asked between a run's steps, so a step that never comes back would hold the run's lock, and
+        with it cad's own update and every run that waits, for as long as the process lived. The command's hard stop
+        (``plugin_catch_up.HardStop``) ends it a short while past the deadline: the record closed as a stopped run's,
+        one line, the run counted as stopped with the apps it had done, and the process gone with 124, its lock
+        free."""
+        underway = {"for": "0.0.1", "release": cad_server.__version__, "at": 7.0, "tries": 1, "outcome": "underway"}
+        self.keep(**underway)
+        with self.on_this_computer(**COUNTED):
+            self.assertTrue(analytics.notify(io.StringIO()))  # a person was told: the server's runs are counted
+        line, environ = self.child("update", CAD_INSTALL_ATTEMPT="7.0", **COUNTED)
+        done = subprocess.run([line[0], "-c", STUCK, *line[3:]], env=environ, capture_output=True, text=True,
+                              encoding="utf-8", timeout=120)
+        self.assertEqual((done.returncode, done.stdout), (124, "Setting up the plugin in each agent app found here:\n"))
+        self.assertRegex(done.stderr, r"\Acad plugin update: ended after \d+ seconds, past the 0 a run the cad server "
+                                      r"began may take: a step of it never came back, and what it had not done was "
+                                      r"left as it was\n\Z")
+        kept = self.kept()
+        self.assertEqual((kept["switch"], kept["record"]["for"], kept["record"]["outcome"], kept["record"]["code"]),
+                         (False, "0.0.1", "failed", 124))
+        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state)}):
+            self.assertFalse(plugin_catch_up.running(), "the lock went with the process")
+        [counted] = [json.loads(row)["install"] for row in
+                     (self.state / analytics.INSTALLS).read_text(encoding="utf-8").splitlines()]
+        self.assertEqual({name: counted[name] for name in ("by", "outcome", "found", "failed", "apps")},
+                         {"by": "server", "outcome": "stopped", "found": 1, "failed": 0,
+                          "apps": [{"app": "claude", "status": "updated", "seconds": 2}]})
 
     def test_a_crash_is_kept_as_the_run_s_failure(self) -> None:
         self.keep(**{"for": "0.0.1", "release": cad_server.__version__, "at": 7.0, "tries": 1, "outcome": "underway"})

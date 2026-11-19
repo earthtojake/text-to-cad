@@ -6,7 +6,9 @@ app, network, uv or cad runs: PATH holds only the stand-ins, the app table is to
 folders or app bundles (``CAD_INSTALL_PATH_ONLY``), and every proxy is a closed port.
 
 ``AgentApps`` is the test case the install command's tests and the tests of cad's own table of apps
-(``cad_server.plugin``) both stand on; ``PluginRuns`` adds the ``cad plugin`` command run on that computer.
+(``cad_server.plugin``) both stand on; ``PluginRuns`` adds the ``cad plugin`` command run on that computer. A test
+case of another kind that can reach that command's code (one mock, or one change of its parser, away from a run of it)
+stands on ``a_home_of_its_own``: no test may be one mistake away from the agent apps of the computer it runs on.
 """
 
 from __future__ import annotations
@@ -62,7 +64,6 @@ STAND_IN = textwrap.dedent('''\
     with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as log:
         log.write(json.dumps({{"name": name, "argv": sys.argv[1:], "cwd": os.getcwd(), "path": sys.argv[0],
                                "trust": os.environ.get("GEMINI_CLI_TRUST_WORKSPACE"),
-                               "failed": os.environ.get("CAD_INSTALL_FAILED"),
                                "env": {{key: os.environ.get(key) for key in os.environ.get("FAKE_LOG_ENV", "").split(",")
                                        if key}},
                                "exists": os.path.exists(os.environ.get("FAKE_LOG_EXISTS") or os.devnull + "/none")}})
@@ -175,6 +176,31 @@ STAND_IN = textwrap.dedent('''\
 ''')
 
 
+# Where an agent app, or what installs one, says its folder is: none of them names this computer's in a test.
+ELSEWHERE = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "GEMINI_CLI_HOME", "HERMES_HOME", "NPM_CONFIG_PREFIX",
+             "npm_config_prefix")
+
+
+def a_home_of_its_own(case: unittest.TestCase, home: Path, path: Path) -> None:
+    """This process's environment, for the rest of ``case``, that of a computer with no agent app on it: ``home``, a
+    folder of the test's, as HOME and USERPROFILE, with the XDG folders and Windows' two inside it; PATH the folder
+    ``path`` alone (the test's stand-ins); the table of apps told to look nowhere but PATH
+    (``CAD_INSTALL_PATH_ONLY``, and Codex's command by its name); and no variable left that names an app's folder
+    elsewhere (``ELSEWHERE``). What
+    ``AgentApps.environ`` gives a run, for a test case that changes this process's environment and keeps the rest of
+    it."""
+    home.mkdir(parents=True, exist_ok=True)
+    own = mock.patch.dict(os.environ, {
+        "HOME": str(home), "USERPROFILE": str(home), "PATH": str(path), "CAD_INSTALL_PATH_ONLY": "1",
+        "XDG_CONFIG_HOME": str(home / ".config"), "XDG_STATE_HOME": str(home / ".local" / "state"),
+        "APPDATA": str(home / "AppData" / "Roaming"), "LOCALAPPDATA": str(home / "AppData" / "Local"),
+        "CODEX_CLI": "codex"})
+    own.start()
+    case.addCleanup(own.stop)  # the whole environment as it was, what is taken out below too
+    for name in ELSEWHERE:
+        os.environ.pop(name, None)
+
+
 class AgentApps(unittest.TestCase):
     """A fresh home with stand-in programs on PATH (see the module). ``PROGRAMS``: the stand-ins every test of the
     class starts with."""
@@ -230,13 +256,26 @@ class AgentApps(unittest.TestCase):
         self.write(".claude/plugins/known_marketplaces.json", {name: {"source": source} for name, source in catalogs.items()})
 
 
+# ``cad <argv>`` in a process of its own, as the cad of the environment named first: a global install's.
+AS_THE_TOOL = ("import sys\nsys.prefix = sys.argv.pop(1)\nfrom cad_server.cli import main\n"
+               "sys.exit(main(sys.argv[1:]))\n")
+
+
 class PluginRuns(AgentApps):
     """``cad plugin`` run on that computer (``cad_plugin``, in this process, its environment the computer's alone;
     ``child``, a process of its own): cad's state folder is the home's, and its engine folder one where no server
-    runs, so the command keeps its switch and its record itself, there."""
+    runs, so the command keeps its switch and its record itself, there. The cad that runs is that computer's global
+    install (``tool``, a uv tool's environment as uv's receipt says one), the one whose release a run keeps;
+    ``from_elsewhere`` is a cad that is not."""
 
     def setUp(self) -> None:
         super().setUp()
+        self.tool = self.root / "tools" / "cad"
+        self.tool.mkdir(parents=True)
+        (self.tool / "uv-receipt.toml").write_text('[tool]\nrequirements = [{ name = "cad" }]\n', encoding="utf-8")
+        installed = mock.patch.object(sys, "prefix", str(self.tool))
+        installed.start()
+        self.addCleanup(installed.stop)
         # A short path of its own: a server's door is a socket, whose path has a limit.
         self.engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None))
         self.addCleanup(shutil.rmtree, self.engine, ignore_errors=True)
@@ -275,8 +314,13 @@ class PluginRuns(AgentApps):
     def child(self, *argv: str, **extra: str) -> tuple:
         """The command line of ``cad plugin <argv>`` as a process of its own, and its environment: this computer's,
         with the path this process imports cad by."""
-        return ([sys.executable, "-m", "cad_server.cli", "plugin", *argv],
+        return ([sys.executable, "-c", AS_THE_TOOL, str(self.tool), "plugin", *argv],
                 self.environ(**{"PYTHONPATH": os.pathsep.join(entry for entry in sys.path if entry), **extra}))
+
+    def from_elsewhere(self):
+        """For the ``with``, the cad that runs in this process is no global install: one run from uv's cache, a
+        project's, a checkout's."""
+        return mock.patch.object(sys, "prefix", str(self.root))
 
     def kept(self) -> dict:
         """What cad keeps of the plugin: ``switch``, whether ``cad plugin update auto`` is on, and ``record``, its
@@ -295,10 +339,14 @@ class PluginRuns(AgentApps):
         self.state.mkdir(parents=True, exist_ok=True)
         (self.state / "install-command.json").write_text(json.dumps(record), encoding="utf-8")
 
+    @contextlib.contextmanager
     def another_run(self):
         """The lock of a run of ``cad plugin install`` or ``cad plugin update``, held for the ``with`` as another run
-        holds it."""
+        holds it. A run in this process takes it as that run's without trying for it a while first
+        (``plugin_catch_up.SETTLE_SECONDS``); one in a process of its own tries as long as any run does."""
         from cad_server._internal import file_lock, plugin_catch_up
 
         self.state.mkdir(parents=True, exist_ok=True)
-        return file_lock.exclusive(self.state / plugin_catch_up.LOCK)
+        with file_lock.exclusive(self.state / plugin_catch_up.LOCK), \
+                mock.patch.object(plugin_catch_up, "SETTLE_SECONDS", 0.0):
+            yield

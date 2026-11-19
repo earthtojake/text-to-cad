@@ -118,14 +118,18 @@ cad_server/
 - **`cad plugin install`**: for every agent app found on this computer, the plugin installed or updated with
   that app's own command, from the GitHub repository's `latest` branch, then our older copies there removed;
   one line per app (`plugin/`: `apps.py` is the one table of apps). Then it turns `cad plugin update auto` on,
-  and keeps this cad as the release the plugin is up to date for only where the run ended well. In a person's
+  and keeps this cad as the release the plugin is up to date for only where the run ended well and this cad is
+  the computer's global install (a cad run from anywhere else, as the newest release from uv's cache, keeps
+  none: below). In a person's
   terminal it builds the CAD logo first and keeps a live line under the apps' lines; anywhere else the plain
   lines. No options. Exit status 0 where it ended well, 1 where every app it found failed, 2 for a command line
   it does not take, 75 where another run was going and a server began this one. Where `CAD_PLUGIN_REPORT` names
   a file, each app's status is written there as it ends (`{"schema": "cad plugin install/1", "apps": {...}}`).
   **`cad plugin update`**: the same run, and what the server runs after cad's own update (below); where the
   server began it, it has 15 minutes: each command it runs is stopped with all it started when they are up, no
-  further app is begun, and it exits non-zero. One run at a time: both hold a lock in the data folder for the
+  further app is begun, and it exits non-zero; one that has not ended a minute past them, because a step of it
+  never came back, is ended whatever it is doing (exit status 124). One run at a time: both hold a lock in the
+  data folder for the
   whole run, and a second run waits for the first, unless a server began it. Neither runs an install command or
   cad's own update. A run a person reads says the telemetry notice first, as every command does (one a person
   typed, or one the hosted install command handed over in a terminal; never one a server began, whose output is
@@ -207,15 +211,22 @@ newer than the release the plugin is up to date for, the server runs this cad's 
 update` once, detached, its output in `install-command.log` in the data folder; that run has 15 minutes: each
 command it runs is given what is left of them and stopped with all it started, no app is begun past them, and
 it exits non-zero (in a Windows session where `taskkill` is refused, only the command's own process is ended,
-and what it started may run on). It asks at its start and at
-each tending once nothing is in flight, so it holds however cad got newer: its own update, a typed `cad
+and what it started may run on). That deadline is asked between the run's steps, so the command carries a hard
+stop too (`plugin_catch_up.HardStop`, a thread of its own): a run that has not ended a minute past its 15,
+because a step never came back, has its record closed as a stopped run's, is counted as stopped, and its
+process exits with 124 there and then, waiting on nothing, which frees the lock it held for cad's own update
+and for every run that waits. The server asks at its start and at
+each tending once nothing is in flight, so the rule holds however cad got newer: its own update, a typed `cad
 update`, `uv tool upgrade cad` or `pipx upgrade cad` by hand. That release is kept in `install-command.json`
 in the data folder, beside the update's own record: written when `cad plugin update` ends with exit status 0
 and when the switch is turned on (the last step of `cad plugin install` and `cad plugin update`, right after
 the plugin is in place, but written only where the run ended well: one in which every app it found failed
-turns the switch on and writes none; the install command of 0.11.12 and 0.11.13 turns it on by `cad plugin
-update auto on`, and says a run ending badly with `CAD_INSTALL_FAILED=1`; turned on by hand, it means "from
-this release on"); a run that fails writes none. With no record and the switch on, the record is written for this release and nothing
+turns the switch on and writes none; turned on by hand, `cad plugin update auto on`, it means "from this
+release on"); a run that fails writes none. Only the computer's global install of cad writes it: a cad run from
+anywhere else (the newest release from uv's cache, which the hosted install command runs for an installed cad
+that has no `cad plugin install`) does the work and turns the switch on, and keeps no release, since its own may
+be of a major the installed cad never reaches, and this cad's server would then never catch up again. With no
+record and the switch on, the record is written for this release and nothing
 runs, so a fresh install runs nothing again. A run underway, of any release, begun less than an hour ago, is
 waited for, and the server that begins a run asks the record again under the state folder's lock as it keeps
 it, so two servers never both begin one. A run that failed, or never said how it ended, is tried again an
@@ -226,7 +237,9 @@ test's way to say the server runs nothing by itself; `cad plugin update` reads n
 that is no global install, or while the bridge owes its own run of the hosted install command.
 The helper and `cad update` run none. `cad doctor` shows the record. One run at a time: `cad plugin install`
 and `cad plugin update` hold `install-command.lock` in the data folder from start to end; a second run waits
-for it, but one a server began, which exits 75 at once and is tried again an hour later. While it is held,
+for it, but one a server began, which exits 75 and is tried again an hour later. Either tries for the lock for
+two seconds first: whether a run is going can only be asked by trying for the lock, so a server that asks holds
+it for an instant, which is no run. While it is held,
 cad's own update is not due, and a typed `cad update` is refused in one line.
 
 **Each attempt is counted once** (`auto_update.report`), where telemetry is on, as every count is: the server
