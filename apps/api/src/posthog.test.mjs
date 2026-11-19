@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { rowsOf, uuidV5 } from './events.mjs';
+import { reportOf } from './install.mjs';
 import { EVENTS, exceptionOf, missingSettings, posthogStore, READY_TTL_MS, SETTINGS, settingsOf } from './posthog.mjs';
 
 const INSTALL = '8c347ec3-1342-4db5-a19a-491cbc8c59be';
@@ -63,7 +64,7 @@ test("the build daemon's counts are PostHog events of their own, each a window's
   const countsOf = event => Object.fromEntries(Object.entries(event).filter(([key]) => key !== 'name'));
   assert.deepEqual(batch.map(event => event.properties), DAEMON.events.map(event => ({ ...context, ...countsOf(event) })));
   assert.deepEqual(Object.keys(EVENTS).sort(), ['arrival', 'build', 'build_failure', 'control', 'exception', 'feature', 'files',
-    'health', 'snapshot', 'snapshot_failure', 'tool', 'tool_failure', 'update', 'view']);
+    'health', 'install', 'install_app', 'snapshot', 'snapshot_failure', 'tool', 'tool_failure', 'update', 'view']);
   // Schemas before 5 name no batch: PostHog makes up each event's uuid and stamps it as it arrives, as ever.
   assert.ok(batch.every(event => !('uuid' in event) && !('timestamp' in event)));
 });
@@ -145,6 +146,67 @@ test("each of cad's own updates is PostHog's cad_updated: by version, from, outc
     plugin: 'underway', count: 1 }, 'a new attempt began while the install command still ran');
   assert.deepEqual([installed.properties.version, installed.properties.process], ['0.8.0', 'cli']);
   assert.ok(installed.uuid && installed.timestamp, 'named, so a batch sent again counts once');
+});
+
+test("a run of the plugin's install is PostHog's plugin_installed, and each app of it plugin_app_installed, by the app it was installed in", async () => {
+  const [run, installed, failed] = await at(JSON.parse(JSON.stringify({ ...NAMED, schema: 12, process: 'cli', channel: undefined, app: 'claude-code', events: [
+    { name: 'install', by: 'script', outcome: 'ok', logo: 'played', colour: '24bit', seconds: 42, found: 2, failed: 1, count: 1 },
+    { name: 'install_app', app: 'claude', status: 'installed', seconds: 7, count: 1 },
+    { name: 'install_app', app: 'codex', status: 'failed', reason: 'timeout', seconds: 30, count: 1 },
+  ] })));
+  const context = { distinct_id: INSTALL, session: SESSION, $session_id: SESSION, $geoip_disable: true, process: 'cli', version: '0.8.0',
+    app: 'claude-code', platform: 'linux', arch: 'x86_64' };
+  assert.deepEqual([run.event, installed.event, failed.event], ['plugin_installed', 'plugin_app_installed', 'plugin_app_installed']);
+  assert.deepEqual(run.properties, { ...context, by: 'script', outcome: 'ok', logo: 'played', colour: '24bit', seconds: 42, found: 2,
+    failed: 1, count: 1 });
+  // The app the plugin was installed in is `plugin_app`; `app` stays the app running cad, as on every event.
+  assert.deepEqual(installed.properties, { ...context, plugin_app: 'claude', status: 'installed', seconds: 7, count: 1 });
+  assert.deepEqual(failed.properties, { ...context, plugin_app: 'codex', status: 'failed', reason: 'timeout', seconds: 30, count: 1 });
+  assert.ok([run, installed, failed].every(event => event.uuid && event.timestamp === '2026-10-09T11:59:00.000Z'),
+    'named, so a batch sent again counts once');
+});
+
+// One report of a failed install (`install.mjs`), as the install command sends it.
+const RUN = '3b1f0c52-7a2e-4d0b-9c1e-5f6a7b8c9d0e';
+const REPORT = { schema: 1, run: RUN, at: NOW / 1000 - 60, stage: 'cad', outcome: 'failed', code: 2, platform: 'linux', arch: 'x86_64',
+  by: 'person', uv: '0.9.7' };
+
+test("a failed install is PostHog's install_failed: under its run's id, no person made of it, the country and no location lookup", async () => {
+  const { asked, store } = posthog();
+  await store.report(reportOf(REPORT), { country: 'DE' });
+  const crash = { ...REPORT, stage: 'script', outcome: 'crashed', code: 1, type: 'KeyError', frames: [{ function: 'main', line: 2560 }, { function: '<module>' }] };
+  await store.report(reportOf(crash));
+  assert.deepEqual(asked.map(({ url, method, body }) => [url, method, body.api_key, body.batch.length]),
+    Array(2).fill(['https://eu.i.posthog.com/batch/', 'POST', 'phc_project', 1]));
+  const [failed, crashed] = asked.map(({ body }) => body.batch[0]);
+  assert.deepEqual(failed, {
+    event: 'install_failed', uuid: uuidV5(`${RUN}/install_failed cad`), timestamp: '2026-10-09T11:59:00.000Z',
+    properties: { distinct_id: RUN, $process_person_profile: false, $geoip_disable: true, stage: 'cad', outcome: 'failed', code: 2,
+      platform: 'linux', arch: 'x86_64', by: 'person', uv: '0.9.7', country: 'DE' },
+  });
+  // A crash's type and frames, as sent; where the host could not tell, no country. Never a session, nor an install id.
+  assert.deepEqual(crashed.properties, { distinct_id: RUN, $process_person_profile: false, $geoip_disable: true, stage: 'script',
+    outcome: 'crashed', code: 1, platform: 'linux', arch: 'x86_64', by: 'person', uv: '0.9.7', type: 'KeyError',
+    frames: [{ function: 'main', line: 2560 }, { function: '<module>' }] });
+  // Sent again, it is the same event again.
+  await store.report(reportOf(REPORT), { country: 'DE' });
+  assert.deepEqual(asked[2].body.batch[0], failed);
+});
+
+test("failed installs go to a project of their own where the host names its key, else to the main project; a batch's rows never do", async () => {
+  const asked = [];
+  const fetch = async (url, init) => { asked.push(JSON.parse(init.body).api_key); return new Response('{}'); };
+  const env = { POSTHOG_REGION: 'eu', POSTHOG_PROJECT_KEY: 'phc_project', POSTHOG_PERSONAL_KEY: 'phx_personal', POSTHOG_PROJECT_ID: '1234' };
+  for (const extra of [{}, { POSTHOG_INSTALL_PROJECT_KEY: '' }, { POSTHOG_INSTALL_PROJECT_KEY: 'phc_installs' }]) {
+    // Optional: health never names it missing.
+    assert.deepEqual(missingSettings({ ...env, ...extra }), []);
+    const store = posthogStore(settingsOf({ ...env, ...extra }), { fetch });
+    await store.report(reportOf(REPORT));
+    await store.insert(rowsOf(BATCH));
+  }
+  assert.deepEqual(asked, ['phc_project', 'phc_project', 'phc_project', 'phc_project', 'phc_installs', 'phc_project']);
+  assert.deepEqual(settingsOf({ ...env, POSTHOG_INSTALL_PROJECT_KEY: 'phc_installs' }).installKey, 'phc_installs');
+  assert.ok(!SETTINGS.includes('POSTHOG_INSTALL_PROJECT_KEY'));
 });
 
 test('a batch sent again is the same PostHog events, uuid and time alike, so PostHog counts it once', async () => {
@@ -271,6 +333,7 @@ test("PostHog refusing or failing is the receiver's failure, named by its status
   for (const status of [400, 401, 500, 503]) {
     const { store } = posthog(status);
     await assert.rejects(store.insert(rowsOf(BATCH), { country: 'DE' }), { code: `posthog_${status}` });
+    await assert.rejects(store.report(reportOf(REPORT), { country: 'DE' }), { code: `posthog_${status}` });
     await assert.rejects(store.forget(INSTALL), { code: `posthog_${status}` });
     await assert.rejects(store.ready(), { code: `posthog_${status}` });
   }
