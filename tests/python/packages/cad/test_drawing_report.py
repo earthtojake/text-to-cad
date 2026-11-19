@@ -144,5 +144,31 @@ class GrooveDepthTests(unittest.TestCase):
         self.assertEqual(self._lines(16.0, across=True), [])
 
 
+class OwnFrameTests(unittest.TestCase):
+    """A first pass draws a plate turned to face the front; what its report says
+    is where the author will find it: in the part's own frame."""
+
+    def test_a_turned_part_s_report_is_in_the_part_s_own_frame(self) -> None:
+        from build123d import Align, Box, Cone, Cylinder, Pos
+        from cad.eng_drawing import part_sheet
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        # Holes down Z, so the top is drawn as the front; a ⌀6 hole 7 deep from
+        # below, which no view of a first pass looks into; and a tapered bore.
+        plate = Box(80, 50, 12, align=align)
+        plate -= [Pos(x, 15, 0) * Cylinder(2.5, 12, align=align) for x in (-30, 30)]
+        plate -= Pos(-20, -10, 0) * Cylinder(3, 7, align=align)
+        plate -= Pos(20, -10, 0) * Cone(3, 5, 12, align=align)
+        sheet = part_sheet(plate, title="PLATE")
+        self.assertIsNotNone(sheet.views[0]._turn, "the first pass turned it")
+        lines = _report(sheet)
+        floor = [line for line in lines if "the face at" in line]
+        self.assertEqual(len(floor), 1, lines)
+        self.assertIn("the face at Z = 7 (square to Z)", floor[0], "the blind hole's floor, 7 up the part's own Z")
+        taper = [line for line in lines if "tapered bore" in line]
+        self.assertEqual(len(taper), 1, lines)
+        self.assertIn("along Z through (20, -10, 12)", taper[0])
+
+
 if __name__ == "__main__":
     unittest.main()
