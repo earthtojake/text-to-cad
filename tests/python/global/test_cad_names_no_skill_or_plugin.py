@@ -42,9 +42,10 @@ NOT_MESSAGES = {
                                    "cad's updates do"},
     # The settings section that keeps the command's switch (``plugin.auto_update``).
     "cad_server/_internal/auto_update.py": {"plugin"},
-    # The command words of ``cad plugin update``, which the server runs where cad is newer than the release that
-    # command is up to date for.
-    "cad_server/_internal/plugin_catch_up.py": {"plugin"},
+    # The command words of ``cad plugin update``, which the server runs where cad is newer than the release the plugin
+    # is up to date for, and the lines of the server's log that say so: the command by its name, and why it runs.
+    "cad_server/_internal/plugin_catch_up.py": {"plugin", "`cad plugin update`",
+                                                " is newer than the one the plugin is up to date for: "},
     # ``cad doctor`` names the command's switch as it reports it (``cad plugin update auto``), and its record's line.
     "cad_server/cli/doctor.py": {"plugin update auto ", "plugin"},
     # The ``update`` event's field that says how the command's run after an update went (``plugin``), a name the

@@ -20,10 +20,10 @@ written, so a computer whose runs keep failing still has the plugin kept: where 
 older than this cad), the server runs the command again for this release; where none ever did (no ``for``), the rule
 below takes this release as up to date, and the command runs once cad is newer. A person who turns it on by hand
 (``cad plugin update auto on``) means "from this release on". A run that fails writes nothing of ``for``. Then the
-last run the server began (``begin``):
-``release``, ``at``, ``tries`` (of that release), ``outcome`` (``underway``, then ``ok`` or ``failed``), ``code`` (its
-exit status, null where it could not start) and ``ended``. It is a state record, not a choice, so it lives in the
-state folder, as the update's own record does, and not in the person's settings. ``cad doctor`` shows it.
+last run the server began (``begin``): ``release``, ``at``, ``tries`` (of that release), ``outcome`` (``underway``,
+then ``ok`` or ``failed``), ``code`` (its exit status, null where it could not start) and ``ended``. It is a state
+record, not a choice, so it lives in the state folder, as the update's own record does, and not in the person's
+settings. ``cad doctor`` shows it.
 
 **The rule** (``due``), asked by the server at its start and as it tends itself, only once nothing is in flight: the
 switch on; the update check not turned off for this process (``updates.checking``: ``CAD_UPDATE_CHECK=0``, CI, a
@@ -89,6 +89,8 @@ from typing import Any
 RECORD = "install-command.json"
 # The run ``cad plugin update`` is, where the server began it: the ``at`` of the record's run.
 ATTEMPT_ENV = "CAD_INSTALL_ATTEMPT"
+# The command the server runs, as a line of its log names it.
+SAID = "`cad plugin update`"
 # The lock one run of ``cad plugin install`` or ``cad plugin update`` holds, in the state folder (``run_lock``).
 LOCK = "install-command.lock"
 # The exit status of a run a server began that found another run holding the lock: nothing ran, and it is tried again
@@ -404,7 +406,7 @@ def _begin(told, *, now: float | None = None) -> tuple[subprocess.Popen | None, 
         if _change(start) is None:
             return None, None
     except Exception as error:  # noqa: BLE001 - never a failure of the server's tending
-        told(f"the install command could not begin: {type(error).__name__}: {error}")
+        told(f"{SAID} could not begin: {type(error).__name__}: {error}")
         return None, None
     at = began[-1]
     folder = _folder()
@@ -416,15 +418,14 @@ def _begin(told, *, now: float | None = None) -> tuple[subprocess.Popen | None, 
                                        stdin=subprocess.DEVNULL,
                                        stdout=out, stderr=subprocess.STDOUT, env=env, cwd=str(folder), **detached())
     except (OSError, ValueError) as error:
-        told(f"the install command could not start: {error}")
+        told(f"{SAID} could not start: {error}")
         try:
             _change(lambda kept: {**kept, "outcome": FAILED, "code": None, "ended": time.time()}
                     if kept.get("at") == at else kept)
         except OSError:
             pass
         return None, None
-    told(f"cad {version} is newer than the one the install command is up to date for: it runs once now, in the "
-         "background")
+    told(f"cad {version} is newer than the one the plugin is up to date for: {SAID} runs once now, in the background")
     return process, at
 
 

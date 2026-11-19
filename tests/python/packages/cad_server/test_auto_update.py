@@ -1,11 +1,11 @@
 """cad's own update (``cad_server/_internal/auto_update.py``, its helper ``auto_update_helper.py``, ``cad update auto``,
 ``cad plugin``, and the starts that meet a newer server): on by default, for a global install alone; ``on`` only for
 one; no update without the feed or to an older release; the idle rule; the helper's command lines on POSIX and Windows,
-and what it runs, in order, never the install command; the server's rule for that command (``plugin_catch_up``): once
-where cad is newer than the release it is up to date for, however cad got there, bounded; each ended attempt counted
-once (``auto_update.report``); a start that joins a newer server; a start that failed still updating. No test reaches
-the real feed or PyPI, or runs uv, and every one runs on a computer of its own (``Case``: a temporary home, a PATH of
-its own stand-ins), so none is a mock away from the agent apps of the computer it runs on."""
+and what it runs, in order, never ``cad plugin update``; the server's rule for that command (``plugin_catch_up``): once
+where cad is newer than the release the plugin is up to date for, however cad got there, bounded; each ended attempt
+counted once (``auto_update.report``); a start that joins a newer server; a start that failed still updating. No test
+reaches the real feed or PyPI, or runs uv, and every one runs on a computer of its own (``Case``: a temporary home, a
+PATH of its own stand-ins), so none is a mock away from the agent apps of the computer it runs on."""
 
 from __future__ import annotations
 
@@ -1866,15 +1866,16 @@ class DoctorTest(Case):
 
 class PluginCatchUpTest(Case):
     """The server's rule (``plugin_catch_up``): where the person's switch is on and this cad is newer than the release
-    the install command is up to date for, ``cad plugin update`` once, by this cad's own command, detached; bounded;
-    however cad got newer; never where the check is off, there is no command, the cad is no global install or a
-    development build, or the bridge owes its own run."""
+    the plugin is up to date for, ``cad plugin update`` once, by this cad's own command, detached; bounded; however cad
+    got newer; never where the check is off, a test said the server runs nothing, the cad is no global install or a
+    development build, or the bridge owes its own run of the hosted install command."""
 
     def setUp(self) -> None:
         super().setUp()
         from cad_server._internal import install_script, plugin_catch_up
 
         self.catch_up = plugin_catch_up
+        # Not set and empty, the runner's way to say the server runs nothing by itself: here the rule is asked.
         patch = mock.patch.dict(os.environ, {install_script.INSTALLER_ENV: "the-install-command"})
         patch.start()
         self.addCleanup(patch.stop)
@@ -1913,6 +1914,8 @@ class PluginCatchUpTest(Case):
             self.assertFalse(catcher.tend(self.told.append), "never a second while this server's run runs")
         (line,), options = popen.call_args
         self.assertEqual(line, [str(auto_update.tool_command(self.tool)), "plugin", "update"])
+        self.assertEqual(self.told, ["cad 0.1.0 is newer than the one the plugin is up to date for: `cad plugin "
+                                     "update` runs once now, in the background"])
         record = self.catch_up.read()
         self.assertEqual((record["for"], record["release"], record["tries"], record["outcome"]),
                          ("0.0.9", "0.1.0", 1, "underway"))
@@ -2000,7 +2003,7 @@ class PluginCatchUpTest(Case):
             self.assertIsNone(self.catch_up.begin(self.told.append, now=later))
         record = self.catch_up.read()
         self.assertEqual((record["tries"], record["outcome"], record["code"]), (2, "failed", None))
-        self.assertIn("the install command could not start: no such file", self.told)
+        self.assertIn("`cad plugin update` could not start: no such file", self.told)
 
     def test_the_time_is_read_once_the_lock_is_held_so_a_run_begun_while_this_server_waited_is_waited_for(self) -> None:
         """Another server keeps its run while this one waits for the state folder's lock: this one's time, read once
@@ -2082,7 +2085,8 @@ class PluginCatchUpTest(Case):
             self.begun()
             self.assertEqual(self.catch_up.read()["release"], "0.2.0")
 
-    def test_never_where_the_check_is_off_no_command_no_global_install_a_development_build_or_the_bridge_owes_it(self):
+    def test_never_where_the_check_is_off_a_test_says_so_no_global_install_a_development_build_or_the_bridge_owes_it(
+            self) -> None:
         from cad_server._internal import install_script
 
         self.switch_on()

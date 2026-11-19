@@ -248,7 +248,8 @@ def _keep(on: bool, *, note: bool, release: str | None = None) -> bool:
     from cad_server._internal import auto_update, plugin_catch_up
     from cad_server.cli.auto_update import _by_the_server
 
-    note = note and on and plugin_catch_up.tool() is not None
+    if on and note and plugin_catch_up.tool() is None:
+        note = False
     release = release or auto_update._version()
     found = _by_the_server("plugin_auto_update", on, release=release, **({} if note else {"note": False}))
     return auto_update.change_plugin(on, release, note=note) if found is None else found

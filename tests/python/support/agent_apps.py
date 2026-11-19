@@ -257,7 +257,8 @@ class AgentApps(unittest.TestCase):
 
 
 # ``cad <argv>`` in a process of its own, as the cad of the environment named first: a global install's.
-AS_THE_TOOL = "import sys\nsys.prefix = sys.argv.pop(1)\nfrom cad_server.cli import main\nsys.exit(main(sys.argv[1:]))\n"
+AS_THE_TOOL = ("import sys\nsys.prefix = sys.argv.pop(1)\nfrom cad_server.cli import main\n"
+               "sys.exit(main(sys.argv[1:]))\n")
 
 
 class PluginRuns(AgentApps):

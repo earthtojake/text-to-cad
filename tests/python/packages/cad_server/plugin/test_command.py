@@ -205,7 +205,7 @@ class InstallTests(PluginRuns):
             with contextlib.ExitStack() as asking, self.subTest(began_by=began_by):
                 asking.enter_context(file_lock.exclusive(self.state / plugin_catch_up.LOCK))
                 # The one who asked lets go while the run waits its first step.
-                with mock.patch.object(plugin_catch_up.time, "sleep", side_effect=lambda _step: asking.close()) as slept:
+                with mock.patch.object(plugin_catch_up.time, "sleep", side_effect=lambda _s: asking.close()) as slept:
                     done = self.cad_plugin("install", **began_by)
                 slept.assert_called_with(plugin_catch_up.SETTLE_STEP)
                 self.assertEqual((0, ""), (done.returncode, done.stderr), done.stdout)
