@@ -423,8 +423,8 @@ change to it runs them first.
 Those numbers come from one batch, measured once every change that moves them is
 in the branch: on one machine with nothing else building, `main` and the branch side
 by side on the same models, each on a daemon of its own (`CAD_ENGINE_DIR`), cold
-and warm. The benchmarks are manual and write under `tmp/` (`scripts/bench/`); their
-output is never committed.
+and warm. They are timed by hand: each build's own line says its seconds, the bodies it ran and
+replayed and its memo's hits and misses. Nothing measured is committed.
 
 A part is meshed at one tolerance, 0.25 % of its size and 28.5 degrees, by
 `BRepMesh_IncrementalMesh` as it is (`engine/mesh.py`): no check before it, no
