@@ -7,7 +7,7 @@ shares (the result in full, a shop's own limits, the review, a redesign) is
 ## Design it
 
 The numbers are recommendations of Protolabs' and Protolabs Network's (Hubs) injection molding guides
-and Xometry's rib guide: a finding's `source` says which. The few errors are the floors under
+and of Xometry's rib guide, named beside each. The few errors are the floors under
 [Check it](#check-it).
 
 - **The pull first.** Decide which way the mold opens (`--pull z`: the open side of a box faces +Z)
@@ -16,7 +16,7 @@ and Xometry's rib guide: a finding's `source` says which. The few errors are the
 
   ```python
   body = bd.extrude(bd.Rectangle(60, 40), 20, taper=2)                      # 2 degrees, narrowing upward
-  cavity = bd.Pos(0, 0, 20) * bd.extrude(bd.Rectangle(56, 36), -17, taper=2)  # from the open face down, narrowing
+  cavity = bd.Pos(0, 0, 20) * bd.extrude(bd.Rectangle(56, 36), -18, taper=2)  # from the open face down, narrowing
   body = body - cavity
   ```
 
@@ -26,7 +26,7 @@ and Xometry's rib guide: a finding's `source` says which. The few errors are the
   wall is.
 - **One wall.** A nominal wall in the resin's recommended range (Protolabs' table: ABS 1.1 to
   3.6 mm, PC 1.0 to 3.8, nylon 0.8 to 2.9; a check's `measurements.rules` has the range of the
-  resin it was given) and no section over 1.7 times it (Protolabs): core out thick spots. Change
+  resin it was given) and no section over 1.67 times it (Protolabs): core out thick spots. Change
   thickness over a length of 3 times the step (Hubs).
 - **Ribs and bosses.** A rib is at most 60% of the wall it stands on (Xometry), at most 3 walls
   tall (Hubs) and at least 2.5 walls from the next (Xometry), drafted 0.5 degree or more (Xometry),
@@ -103,11 +103,12 @@ The result is read as [every process's](manufacturing-review.md#read-the-result)
 - `clamp` is an estimate (`clamp_estimate`): the part's projected area alone, no runner, at a
   molder's tonnage factor for the resin.
 - `pull_better` (a warning): another of the part's own directions does better than the pull
-  measured, by leaving fewer features nothing releases, or no more of anything and less of
-  something. Its hint is the `--pull` to try. Confirm the pull before budgeting side actions or
-  drafting walls; no `pull_better` is not a confirmed pull. The pulls compared, and the ones
-  `--candidates` ranks, are `x`, `y`, `z` and the part's own: `face0`.. (the directions most of its
-  surface is square to or turns about) and `principal0`.. (its principal axes).
+  measured. It leaves fewer features nothing releases or, with as many, is no worse in actions,
+  trapped area, wall without draft and parting, and better in one. Its hint is the `--pull` to try.
+  Confirm the pull before budgeting side actions or drafting walls; no `pull_better` is not a
+  confirmed pull. The pulls compared, and the ones `--candidates` ranks, are `x`, `y`, `z` and the
+  part's own: `face0`.. (the directions most of its surface is square to or turns about) and
+  `principal0`.. (its principal axes).
 - An assembly (`several_bodies`): each part is judged along its own pull, the one given unless one
   of its own directions does better for it (`part_pull`, a warning, names the part and the pull),
   and the areas and the clamp force count every occurrence. Report it as an assembly, not as one

@@ -8,16 +8,15 @@ is [the review reference](manufacturing-review.md).
 
 The numbers are multiples of the thickness `t`: Protolabs Network's (Hubs) bending and laser-cutting
 rules, and Protolabs' for one thickness, notches, tabs and hems. Those marked *own* are
-text-to-cad's where no guide states one, and a finding's `source` says which. The errors are one
-thickness, a sharp bend, the flange height, the relief, the hole-to-bend distance, a hem's diameter
-and plate; the other limits are recommendations (warnings). A shop's tooling and bend table move
-them all.
+text-to-cad's where no guide states one. The errors are one thickness, a sharp bend, the flange
+height, the relief, the hole-to-bend distance, a hem's diameter and plate; the other limits are
+recommendations (warnings). A shop's tooling and bend table move them.
 
 - **One thickness.** Every face is the sheet's top, its bottom or a cut edge: no boss, pocket, second
-  thickness or solid block (a countersink is read as one). A chamfered or rounded cut edge is a
-  second operation (`sheet.edge_break`, a warning). A cone or a torus between flanges is formed, not
-  bent (`sheet.formed_surface`, a warning: not measured), so an emboss, a louver or a bead is quoted
-  as a formed feature and checked by hand.
+  thickness or solid block. A countersunk hole is read as a hole. A chamfered or rounded cut edge
+  is a second operation (`sheet.edge_break`, a warning). A cone or a torus between flanges is
+  formed, not bent (`sheet.formed_surface`, a warning: not measured), so an emboss, a louver or a
+  bead is quoted as a formed feature and checked by hand.
 - **A bend is two arcs.** Inside radius `r` of at least `t` (`--bend-radius` when the shop's is
   known) and outside radius `r + t` about the same axis. Build the legs, union them and fillet both
   edges of the corner:
@@ -76,8 +75,8 @@ face.
   not a production blank. No limit turns on `--material`.
 - `--kerf`: a hole, web or gap narrower is `sheet.under_kerf`, an error.
 - `--sheet-size 1219x2438`: the shop's largest sheet, an error to pass. With none a standard 5 x 10
-  ft sheet (1524 x 3048 mm) is assumed, a warning to pass, and a flat no stock plate holds (3048 x
-  12192 mm, own) is an error.
+  ft sheet (1524 x 3048 mm, Xometry) is assumed, a warning to pass, and a flat no stock plate holds
+  (3048 x 12192 mm, own) is an error.
 
 Compare a shop's gauges, tooled radius per gauge, die widths and part sizes with `measurements`
 `parts`, `bends`, `flanges`, `hole_to_bend` and `reliefs`.

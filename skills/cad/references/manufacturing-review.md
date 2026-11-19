@@ -1,9 +1,8 @@
 # Manufacturing checks: the result, the review, a redesign
 
-Read this file to read a manufacturing check's result in full, to hold a part to a shop's own
-limits, to write a review or to check a redesign. It is what every process shares: SKILL.md's
-[Can it be made?](../SKILL.md#can-it-be-made) says when a check runs, and each process's reference
-what is particular to it.
+Read this file for a manufacturing check's result in full, a shop's own limits, a review or a
+redesign. It is what every process shares: SKILL.md's [Can it be made?](../SKILL.md#can-it-be-made)
+says when a check runs, and each process's reference what is particular to it.
 
 - [The check](#the-check)
 - [A shop's own limits](#a-shops-own-limits)
@@ -72,12 +71,12 @@ why nothing was judged, not that the part fails.
   `mesh_empty`, a cut file's `no_cut_geometry`). Part of it not judged, the rest still reported: a
   family (`measurement_failed`), faces the kernel failed on (`rays_unintersected`), features a rule
   had no figure for (`rule_partly_judged`: its `refs`), or no rule with a limit here
-  (`rules_none_evaluated`). Or the check did not run to its end: past its time or memory
-  (`over_time`, `over_memory`: a smaller part, or the limit its message names, raised), the server
-  stopped, or the model built again under it (`superseded`): run it again. A check the server
-  stopped has no findings: `--json` is `{"ok": false, "error": ..., "reason": ...,
-  "status": "not_checked"}`, and stderr says `NOT CHECKED (<reason>)` and why. A part that fails
-  and was not wholly checked is `FAILED`, its line ending `; not checked: <code> xN`.
+  (`rules_none_evaluated`). Or the check did not run to its end: past half an hour or its memory
+  limit (`over_time`, `over_memory`: check a smaller part, or raise the limit the message names),
+  the server stopped, or the model built again under it (`superseded`): run it again. A check the server stopped has no findings: `--json`
+  is `{"ok": false, "error": ..., "reason": ..., "status": "not_checked"}`, and stderr says
+  `NOT CHECKED (<reason>)` and why. A part that fails and was not wholly checked is `FAILED`, its
+  line ending `; not checked: <code> xN`.
 - **One count.** The line's errors and warnings count features, one finding each, and
   `failed: <code> xN` is the same count by rule. Past eight features of one rule the text says
   `and N more`, and `--json` has one more finding that lists them.
@@ -99,10 +98,10 @@ why nothing was judged, not that the part fails.
   (a warning: one part of several solids, its message saying how the process read them) and
   `several_bodies` (several parts, every occurrence counted).
 - **The place and the figures.** Resolve a ref with `cad model inspect "$ID" '<ref>'`, a file's
-  with `cad step inspect part.step '<ref>'`: a face's surface, radius, area and box. The figures
-  behind a finding are `measurements.<family>.items`, worst first.
+  with `cad step inspect part.step '<ref>'`. The figures behind a finding are
+  `measurements.<family>.items`, worst first.
 - **What was not judged.** `measurements.rules.outcomes` has one entry for every rule, failed or
-  not: `rule`, `status`, `limit` (as this part was judged), `source`, `reason` and `failures`, each
+  not: `rule`, `status`, `limit` (for this part's options), `source`, `reason` and `failures`, each
   with its `refs`, its `xyz` and the index of its `item` in its family. `measurements.rules.sources`
   has each guide's URL. By `status`:
 

@@ -7,8 +7,8 @@ shares (the result in full, a shop's own limits, the review, a redesign) is
 ## Design it
 
 The numbers are Protolabs Network's (Hubs) CNC design guide's, and those marked *own* are
-text-to-cad's where the guide states none: a finding's `source` says which. `--tools` puts the
-shop's end mills in place of the tool sizes here.
+text-to-cad's where the guide states none. `--tools` puts the shop's end mills in place of the tool
+sizes here.
 
 - **Setups.** Put the features on as few sides as can be: each side a tool must face is a setup,
   and a sixth warns (own, from the guide's "rotated up to three or four times"). Each part is
