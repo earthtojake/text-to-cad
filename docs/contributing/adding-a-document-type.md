@@ -3,8 +3,8 @@
 A **document type** is what is in a file: one lowercase underscore id, the same in Python, the CLI,
 the registry, the server, the viewer and the JavaScript. The definitions and the laws they bind
 are the library's README ([`packages/cad/README.md`](../../packages/cad/README.md), **Definitions**
-and laws 22 to 27); the mechanism is the engine README's **Document types and integrations**
-([`packages/cad/src/cad_server/engine/README.md`](../../packages/cad/src/cad_server/engine/README.md)).
+and laws 22 to 27); the mechanism is the engine's
+[Document types and integrations](../../packages/cad/src/cad_server/engine/docs/document-types-and-integrations.md).
 
 A document type is a file cad **shows**: every type has a view (`document`, `mesh`, `drawing`, `robot`,
 `plot`), is listed by the CAD Viewer and has a snapshot. A file cad only writes or checks is not one,
@@ -70,7 +70,7 @@ where a command or a program first needs it.
       `scripts/github-workflows/select_checks.py` names runs everything until it has one
       ([testing](testing.md#ci)).
 - [ ] **Docs to touch**: the library README's **Definitions** (the list of ids) and its shape of the
-      package, the engine README's **CLI**, the server README's **Commands**, the skill that teaches
+      package, the engine's **CLI** page, the server README's **Commands**, the skill that teaches
       the type, the README and the docs site's homepage (`apps/docs/src/lib/content.ts`) if they list
       formats, and `AGENTS.md` only if a repo-level rule changed.
 

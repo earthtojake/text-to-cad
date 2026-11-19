@@ -11,7 +11,7 @@ the server's release and the integrations its imports use; a tool's own command 
 (`cad run kicad-cli …`) gets that integration and runs headless; a script that imports `bpy` gets the
 blender integration, its environment made on Python 3.13, the one Blender is built for.
 
-The mechanisms its laws constrain are [`engine/README.md`](engine/README.md).
+The mechanisms its laws constrain are the engine's pages: [`engine/README.md`](engine/README.md) is their index.
 
 ## The shape of the package
 
@@ -20,7 +20,8 @@ cad_server/
   engine/                # the engine's server half: the daemon, its supervisor and the services it
                          #   declares (its workers, its render processes), its registry of documents,
                          #   the live models' book, the document cache, the verbs as commands
-                         #   (cli), and the engine's README, the mechanisms the laws constrain
+                         #   (cli), and the engine's README and pages (docs/), the mechanisms the laws
+                         #   constrain
   cli/                   # the `cad` command: a module per command and per document type
                          #   (`cad <type> <operation>`: document_types, from the library's
                          #   registry), each a shell over the function or parser that does the work

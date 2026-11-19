@@ -29,7 +29,7 @@ Read the one document for what you are changing, then the link it gives you. Not
 | Changing | Read first |
 |---|---|
 | A skill | [Writing a skill](docs/contributing/writing-a-skill.md) |
-| The library, the server or the `cad` command | [The design laws](packages/cad/README.md#the-design-laws), then the mechanism: the [engine](packages/cad/src/cad_server/engine/README.md), the [server](packages/cad/src/cad_server/README.md) or the [transport](packages/cad/src/cad_mcp/README.md) |
+| The library, the server or the `cad` command | [The design laws](packages/cad/README.md#the-design-laws), then the mechanism: the [engine](packages/cad/src/cad_server/engine/README.md) (an index: read the one page it points you to), the [server](packages/cad/src/cad_server/README.md) or the [transport](packages/cad/src/cad_mcp/README.md) |
 | A document type or an integration | [Adding a document type](docs/contributing/adding-a-document-type.md), [adding an integration](docs/contributing/adding-an-integration.md) |
 | An environment variable | Law 30: declare it in `cad._internal.environment` first, and prefer not to add one |
 | The CAD Viewer or shared JS | [apps/web](apps/web/README.md), [packages/ui](packages/ui/README.md) (its `docs/settings-ui.md` binds every settings control), [packages/core](packages/core/README.md) |

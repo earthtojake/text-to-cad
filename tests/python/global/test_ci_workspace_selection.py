@@ -473,7 +473,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         # The light contracts read them, and static runs those on every change.
         for path in ("README.md", "CONTRIBUTING.md", "AGENTS.md", "docs/install.md", "docs/contributing/testing.md",
                      "skills/cad/SKILL.md", ".claude-plugin/plugin.json", "models/README.md",
-                     "packages/cad/src/cad_server/engine/README.md", "apps/api/package.json",
+                     "packages/cad/src/cad_server/engine/README.md",
+                     "packages/cad/src/cad_server/engine/docs/kinematics.md", "apps/api/package.json",
                      ".github/workflows/release-publish.yml", "scripts/release/bump-version.sh"):
             with self.subTest(path=path):
                 self.assertEqual(jobs_for(path), set())

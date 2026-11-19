@@ -205,7 +205,7 @@ where those files ship, so these scripts are what produces them.
 - `check-wheel-contents.sh` — builds the four wheels and asserts the aliases carry no package of
   their own and only `cad` at the release as their requirement; that the `cad` wheel carries the
   modules of `cad`, `cad_server` and `cad_mcp`, the engine's page and environment image,
-  the engine's README and `_runtime/{viewer,mcp}` with each page's third-party notice, and
+  the engine's README and its pages and `_runtime/{viewer,mcp}` with each page's third-party notice, and
   nothing else at the top of `_runtime`, and the runtime with bytes identical to the bundled
   source; and that no engine test golden ships. The only gate on package data, which fails
   quietly. `CAD_KEEP_WHEEL=1` keeps the wheels in `CAD_WHEEL_OUT_DIR`. Called by `test.yml`

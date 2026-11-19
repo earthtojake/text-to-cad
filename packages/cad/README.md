@@ -139,14 +139,14 @@ every STEP and `.xbf` a page opens on one authenticated listener, without a rela
 
 ## The rest of the package's documentation
 
-This file holds the laws. The engine's own README holds the mechanisms they constrain; where
-the two disagree, the engine's README is right about what the code does.
+This file holds the laws. The engine's pages hold the mechanisms they constrain; where the two
+disagree, the engine's pages are right about what the code does.
 
 | Document | What it is for | Go there when |
 |---|---|---|
 | The server's README, `src/cad_server/README.md` | The server's shape, its commands, cad's own update and where it keeps things | changing a command, the server's folders or the update |
 | The transport's README, `src/cad_mcp/README.md` | What `cad mcp` does between an agent app and the server | changing how an agent app reaches the server |
-| The engine's README, `src/cad_server/engine/README.md` | The engine: models and decorators, the engine server and its workers, the door, progress, the viewer and the snapshot, exports, kinematics, couplings and configuration sequences, materials, imports, placements, the mesh and its wire format, element names, references, body retention, queries, memo functions and the build closure | changing anything a build, an export, a snapshot or a served document does |
+| The engine's README, `src/cad_server/engine/README.md`, and the pages it indexes in `docs/` beside it | The engine, a page per mechanism: models, the server and its workers, the door, document lifetime, progress, the viewer and the snapshot, exports, kinematics, materials, imports, the mesh, the wire format, element names, references, the memo and the build closure. Read the index, then the one page | changing anything a build, an export, a snapshot or a served document does |
 
 ## The design laws
 

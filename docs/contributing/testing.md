@@ -414,7 +414,7 @@ that removes a cache or a performance mechanism first lists what it made faster.
 #478 removed a kernel-op memo for correctness and slowed re-runs (f1's
 `power_unit` forced rebuild went from 24 s to 102 s); that cost sat deep in a long
 PR body instead of being approved as a trade-off. The engine's memo
-(`packages/cad/src/cad_server/engine/README.md`, **Body retention**) is keyed by
+(`packages/cad/src/cad_server/engine/docs/body-retention.md`) is keyed by
 each operation's parameters and the keys of the shapes it was given, and answers
 a hit with the live object the first run made; its pressure tests are
 `tests/python/packages/cad/engine/test_memo.py` and `test_bodies.py`, and a

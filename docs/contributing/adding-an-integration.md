@@ -7,7 +7,8 @@ code for it --
 helpers that take its objects, producers and operations; and a process kind: in-process, separate
 process, or both. The definitions and laws are the library's README
 ([`packages/cad/README.md`](../../packages/cad/README.md), **Definitions** and laws 22 to 27); the
-mechanism is the engine README's **Document types and integrations**.
+mechanism is the engine's
+[Document types and integrations](../../packages/cad/src/cad_server/engine/docs/document-types-and-integrations.md).
 
 ## Start from the tool
 
