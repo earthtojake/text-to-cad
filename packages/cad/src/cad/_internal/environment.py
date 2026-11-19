@@ -13,6 +13,19 @@ call's option, and how a third-party tool is found is the integration's own busi
 runs the program its extra pins, and a person who wants another build runs it themselves on the files cad
 writes.
 
+A public variable that is configuration a person keeps -- the server's limits and port, how an integration finds
+what it reads or runs -- is also a saved setting (``setting=True``), which the variable overrides: the variable is
+for one process (a test, a shell, a launcher), the setting for every process on the computer, whoever starts it.
+The one declaration gives both: the setting's key, derived from the name (``key``: ``CAD_ENGINE_WORKERS`` is
+``engine_workers``), what values it takes (``kind``, checked before one is saved), whether the server reads it only
+as it starts (``at_start``), the ``cad config`` command that shows and changes it, and its column in the server's
+README. Every read of such a variable goes through ``value``: the environment's value where it is set and not
+blank, else the saved one, else ``""`` (the reader's own default). Saved values are the ``config`` section of the
+person's ``settings.json`` in the state folder, ``{key: "value as typed"}``, which this module only reads, and never
+fails to: a file that is missing, unreadable or malformed holds no saved value. The server writes it
+(``cad_server.settings``). The other public variables are no setting: three say where the settings and the server
+are, and two already override a choice with a command of its own (``cad telemetry``, ``cad update auto``).
+
 The tiers:
 
 - ``PUBLIC``: a person or an agent may set it. Listed in the server's README; the only tier a skill may name.
@@ -25,26 +38,59 @@ The standard library alone: the server and the library both read it.
 
 from __future__ import annotations
 
+import json
+import math
 import os
+import re
 import sys
 from dataclasses import dataclass
 
-__all__ = ["DEPRECATED", "DEVELOPMENT", "INTERNAL", "PUBLIC", "TIERS", "VARIABLES", "Variable", "deprecated",
-           "named", "off", "table"]
+__all__ = ["DEFAULT", "DEPRECATED", "DEVELOPMENT", "ENVIRONMENT", "INTERNAL", "KINDS", "PUBLIC", "SAVED", "SECTION",
+           "SOURCES", "TIERS", "VARIABLES", "Variable", "check", "deprecated", "named", "off", "resolved", "saved",
+           "setting", "settings", "table", "value"]
 
 PUBLIC, DEVELOPMENT, INTERNAL, DEPRECATED = "public", "development", "internal", "deprecated"
 TIERS = (PUBLIC, DEVELOPMENT, INTERNAL, DEPRECATED)
+#: Where a value in effect came from (``resolved``).
+ENVIRONMENT, SAVED, DEFAULT = "environment", "saved", "default"
+SOURCES = (ENVIRONMENT, SAVED, DEFAULT)
+#: The section of ``settings.json`` the saved values are kept in.
+SECTION = "config"
+#: The values a setting takes, by its kind, as ``check`` says them when it refuses one.
+KINDS = {
+    "count": "a whole number of zero or more",
+    "number": "a number of zero or more",
+    "port": "a port, a whole number from 0 to 65535",
+    "file": "the full path of a file",
+    "folders": "full paths of folders, separated as PATH is",
+}
 
 
 @dataclass(frozen=True)
 class Variable:
     """One environment variable: its name, who sets it (``tier``) and what it does, in a line. A deprecated
-    one says what to do instead (``instead``)."""
+    one says what to do instead (``instead``). A public one that is configuration a person keeps is also a saved
+    setting (``setting``), whose values are of a ``kind`` (``KINDS``), and which the server may read only as it
+    starts (``at_start``), so a running one keeps the value it started with."""
 
     name: str
     tier: str
     summary: str
     instead: str = ""
+    setting: bool = False
+    kind: str = ""
+    at_start: bool = False
+
+    def __post_init__(self) -> None:
+        assert not self.setting or (self.tier == PUBLIC and self.kind in KINDS), \
+            f"{self.name}: a setting is a public variable of a declared kind"
+        assert self.setting or not (self.kind or self.at_start), f"{self.name}: a kind is a setting's"
+
+    @property
+    def key(self) -> str:
+        """The setting's key, from the variable's name by the one rule: without ``CAD_``, in lower case; "" for a
+        variable that is no setting."""
+        return self.name.removeprefix("CAD_").lower() if self.setting else ""
 
 
 def _table(*rows: Variable) -> dict[str, Variable]:
@@ -62,28 +108,38 @@ VARIABLES: dict[str, Variable] = _table(
     Variable("CAD_ENGINE_DIR", PUBLIC, "the folder of the server's door and lock: one server runs per folder"),
     # --- the server ------------------------------------------------------------------------------------------
     Variable("CAD_ENGINE_PORT", PUBLIC, "the server's HTTP port (0: any free one); `cad server start --port` says "
-                                        "the same for one start"),
-    Variable("CAD_ENGINE_WORKERS", PUBLIC, "the most model workers alive at once (default: the machine's cores)"),
+                                        "the same for one start",
+             setting=True, kind="port", at_start=True),
+    Variable("CAD_ENGINE_WORKERS", PUBLIC, "the most model workers alive at once (default: the machine's cores)",
+             setting=True, kind="count", at_start=True),
     Variable("CAD_ENGINE_WORKER_RSS_MB", PUBLIC, "the memory the server's kernel processes may hold together, in "
-                                                 "MiB (default: a quarter of the machine's; 0: no cap)"),
+                                                 "MiB (default: a quarter of the machine's; 0: no cap)",
+             setting=True, kind="number", at_start=True),
     Variable("CAD_ENGINE_MEMORY_MB", PUBLIC, "the memory the server may hold documents in, in MiB (default: a "
-                                             "quarter of the machine's)"),
+                                             "quarter of the machine's)",
+             setting=True, kind="number", at_start=True),
     Variable("CAD_ENGINE_CHECKS", PUBLIC, "how many checks are measured at once (default: half the cores, one to "
-                                          "four)"),
+                                          "four)",
+             setting=True, kind="count", at_start=True),
     Variable("CAD_ENGINE_CHECK_SECONDS", PUBLIC, "the longest one check may run before it is stopped (default: "
-                                                 "half an hour; 0: no limit)"),
+                                                 "half an hour; 0: no limit)",
+             setting=True, kind="number", at_start=True),
     Variable("CAD_ENGINE_CHECK_RSS_MB", PUBLIC, "the most memory one check may take, in MiB (default: the kernel "
-                                                "processes' cap; 0: no limit)"),
+                                                "processes' cap; 0: no limit)",
+             setting=True, kind="number", at_start=True),
     # --- what cad sends and fetches --------------------------------------------------------------------------
     Variable("CAD_TELEMETRY", PUBLIC, "0: no usage counts from this process; 1: on, over the person's saved "
                                       "choice. DO_NOT_TRACK=1 turns it off too"),
     Variable("CAD_UPDATE_CHECK", PUBLIC, "0: this server neither looks for a newer release nor installs one"),
     # --- integrations ----------------------------------------------------------------------------------------
-    Variable("CAD_KICAD_3DMODELS", PUBLIC, "more folders a board's 3D models are read from, separated as PATH is"),
+    Variable("CAD_KICAD_3DMODELS", PUBLIC, "more folders a board's 3D models are read from, separated as PATH is",
+             setting=True, kind="folders"),
     Variable("CAD_KICAD_CLI", PUBLIC, "another `kicad-cli` to check, export and edit boards with, in place of the "
-                                      "one `cad[kicad]` brings (KiCad 9 or newer; a nightly's to edit)"),
+                                      "one `cad[kicad]` brings (KiCad 9 or newer; a nightly's to edit)",
+             setting=True, kind="file"),
     Variable("CAD_CCX", PUBLIC, "another CalculiX `ccx` to solve studies with, in place of the one `cad[calculix]` "
-                                "brings (2.20 or newer)"),
+                                "brings (2.20 or newer)",
+             setting=True, kind="file"),
 
     # --- development: tests, experiments and a checkout --------------------------------------------------------
     Variable("CAD_ENGINE_DEFAULT_PORT", DEVELOPMENT, "the port a server takes where none is named, in place of 3245"),
@@ -139,6 +195,82 @@ def named(tier: str) -> tuple[Variable, ...]:
     return tuple(row for row in VARIABLES.values() if row.tier == tier)
 
 
+def settings() -> tuple[Variable, ...]:
+    """The variables that are also saved settings, in the table's order."""
+    return tuple(row for row in VARIABLES.values() if row.setting)
+
+
+def setting(word: str) -> Variable | None:
+    """The setting ``word`` names, by its key (``engine_workers``) or its variable's name (``CAD_ENGINE_WORKERS``);
+    None for a word that names none."""
+    for row in settings():
+        if word in (row.key, row.name):
+            return row
+    return None
+
+
+def check(row: Variable, text: str) -> str:
+    """``text`` as a value of the setting ``row``, unchanged, or ``ValueError`` saying what its kind takes: checked
+    before a value is saved, so a saved one is never what the variable's reader would take for unset or refuse."""
+    given = text.strip()
+    ok = bool(given)
+    if ok and row.kind in ("count", "port"):
+        ok = re.fullmatch(r"\d+", given) is not None and (row.kind == "count" or int(given) <= 65535)
+    elif ok and row.kind == "number":
+        try:
+            number = float(given)
+        except ValueError:
+            ok = False
+        else:
+            ok = math.isfinite(number) and number >= 0
+    elif ok and row.kind == "file":
+        ok = os.path.isabs(os.path.expanduser(given))
+    elif ok and row.kind == "folders":
+        parts = [part for part in given.split(os.pathsep) if part.strip()]
+        ok = bool(parts) and all(os.path.isabs(os.path.expanduser(part.strip())) for part in parts)
+    if not ok:
+        raise ValueError(f"{row.key} takes {KINDS[row.kind]}, not {text!r}")
+    return text
+
+
+def saved() -> dict[str, str]:
+    """The saved settings, by key: the ``config`` section of ``settings.json`` in the state folder
+    (``cad.engine.places.state_dir``), its text values (a number written by hand is read as its text). Never
+    raises: a file that is missing, unreadable or malformed, or a section that is not an object, saves nothing,
+    as it would be read with no settings kept at all."""
+    try:
+        from cad.engine.places import state_dir
+
+        with open(state_dir() / "settings.json", encoding="utf-8") as handle:
+            section = json.load(handle).get(SECTION)
+    except (OSError, ValueError, AttributeError):
+        return {}
+    if not isinstance(section, dict):
+        return {}
+    return {key: str(found) for key, found in section.items()
+            if isinstance(key, str) and isinstance(found, (str, int, float)) and not isinstance(found, bool)}
+
+
+def resolved(name: str) -> tuple[str, str]:
+    """The value of the variable ``name`` in effect and where it came from (``SOURCES``): the environment's where it
+    is set and not blank, as it is set; else, for a setting, the saved value where one is; else ``""``, which its
+    reader takes for its own default. Only a setting consults the saved file."""
+    row = VARIABLES[name]
+    given = os.environ.get(name, "")
+    if given.strip():
+        return given, ENVIRONMENT
+    if row.setting:
+        kept = saved().get(row.key, "")
+        if kept.strip():
+            return kept, SAVED
+    return "", DEFAULT
+
+
+def value(name: str) -> str:
+    """The value of the variable ``name`` in effect (``resolved``): every read of a setting's variable is this."""
+    return resolved(name)[0]
+
+
 def off(name: str) -> bool:
     """Whether the switch ``name`` is turned off: set to ``0``. A switch is on unless it says so."""
     return os.environ.get(name, "").strip() == "0"
@@ -156,10 +288,11 @@ def deprecated(name: str) -> str:
 
 
 def table() -> str:
-    """The public variables as the Markdown table the server's README carries: ``python -m
-    cad._internal.environment`` prints it."""
-    lines = ["| Variable | What it sets |", "| --- | --- |"]
-    lines += [f"| `{row.name}` | {row.summary[0].upper()}{row.summary[1:]} |" for row in named(PUBLIC)]
+    """The public variables as the Markdown table the server's README carries, each with its setting's key where it
+    is one: ``python -m cad._internal.environment`` prints it."""
+    lines = ["| Variable | Setting | What it sets |", "| --- | --- | --- |"]
+    lines += [f"| `{row.name}` | {f'`{row.key}`' if row.setting else ''} | {row.summary[0].upper()}{row.summary[1:]} |"
+              for row in named(PUBLIC)]
     return "\n".join(lines) + "\n"
 
 
