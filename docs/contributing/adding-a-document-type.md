@@ -126,8 +126,8 @@ that runs KiCad's own command, `kicad-cli`. Each step names the checklist it bel
    Reading a `.kicad_pcb` file is not KiCad's code but ours, for a file format: that is the document
    type's, not the integration's.
 2. **The integration's entry** (`INTEGRATIONS["kicad"]`): process kind `separate`, the probe
-   `kicad-cli` with the minimum version our exports need and the install hint said when it is missing,
-   and `CAD_KICAD_CLI` as the variable that names it outright. Its extra, `cad[kicad]`, is kicode
+   `kicad-cli` with the minimum version our exports need and the install hint said when it is missing.
+   No variable names another program: cad runs the one its extra pins (law 31). Its extra, `cad[kicad]`, is kicode
    (`kicode==10.99.0.dev20261106`, GPL-3.0-or-later as KiCad is, run as a program and imported as KiPy's
    MIT client): KiCad's headless `kicad-cli` and its IPC API client, KiPy (as `kicode`), one nightly's
    build of both. The person's own KiCad is never run; the `cad` command installs the extra's

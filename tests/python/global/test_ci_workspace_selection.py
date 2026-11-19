@@ -308,7 +308,7 @@ class TheWorkflowFollowsTheSelector(unittest.TestCase):
 
 
 class TheOneRequiredCheck(unittest.TestCase):
-    """main's branch protection requires `CI` alone (CONTRIBUTING.md, Repository settings)."""
+    """main's branch protection requires `CI` alone (docs/contributing/releases.md, Repository settings)."""
 
     def test_the_gate_needs_every_job_and_runs_whatever_became_of_them(self):
         ci = JOBS["ci"]

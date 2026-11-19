@@ -65,19 +65,17 @@ These words mean one thing each, in the code, the commands and every document.
   `xbf` is the `.xbf` file the engine writes of one, and takes files alone. A document type is a file cad
   shows: each has a view. A file cad writes or checks and never shows is none, whatever cad does with it: an
   MJCF, MuJoCo's own model file, is an export's destination and the mujoco integration's to check, and
-  MuJoCo Studio shows it; an OrcaSlicer preset is the orcaslicer integration's to write complete, and
-  OrcaSlicer reads it.
+  MuJoCo Studio shows it.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`, `orcaslicer`),
-  never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
-  for it needs, where it needs any (`orcaslicer`'s code is the standard library alone, so it has none); our
-  code for it -- helpers that take its objects, producers and operations; and a process kind: in-process,
-  separate process, or both. An integration has operations of its own only on its tool's own files that are
-  no document type: one file it checks (`cad mujoco check robot.xml`, `cad.mujoco.check`), or the files the
-  tool keeps in its own folders, named as the tool names them (`cad orcaslicer presets machine`, `cad
-  orcaslicer complete`, `cad.orcaslicer.complete`): a closed set too, `check`, answering findings as a type's
-  check does, `presets`, answering names, and `complete`, answering the files it wrote.
+  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`), never for a capability. It is
+  three things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs; our code for it --
+  helpers that take its objects, producers and operations; and a process kind: in-process, separate process,
+  or both. An integration has an operation of its own only on a file of its tool's that is no document type:
+  `check`, answering findings as a type's check does (`cad mujoco check robot.xml`, `cad.mujoco.check`).
+  The `orcaslicer` integration (`cad orcaslicer presets|complete`, `cad.orcaslicer`) is deprecated: it
+  rebuilt complete presets from OrcaSlicer's own folders, which OrcaSlicer's app exports itself (law 29). It
+  is kept, unlisted, for the 30 days law 15's first tier gives a command the skills used.
 - **Dependency**: one installable package or binary, named only in the distribution's metadata and lock
   files, never in the API, the CLI or the docs. It becomes an integration only when we write code for that
   tool: OCP is a dependency of `build123d`, not an integration.
@@ -102,8 +100,7 @@ makes an edit cost what it changed, documents and their exports, kinematics and 
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a MuJoCo model's
-check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); OrcaSlicer's
-presets written complete for its command line (`cad.orcaslicer`); a 3D
+check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
 exact geometry measured by the build123d integration, a mesh by trimesh, judged against general, cited rules); a
 B-rep document's interference check (`cad.<type>.interference(source, poses=..., fits=...)`: every
@@ -142,8 +139,8 @@ every STEP and `.xbf` a page opens on one authenticated listener, without a rela
 
 ## The rest of the package's documentation
 
-This file holds the LAWS. The engine's own README holds the mechanisms they constrain; where
-the two disagree, the engine's README is right.
+This file holds the laws. The engine's own README holds the mechanisms they constrain; where
+the two disagree, the engine's README is right about what the code does.
 
 | Document | What it is for | Go there when |
 |---|---|---|
@@ -153,481 +150,212 @@ the two disagree, the engine's README is right.
 
 ## The design laws
 
-These laws say how the package is built today and why, and a change to what exists follows them. They
-are not a template for what comes next: each was written from the document types and the tools the
-package had at the time. So when adding a feature, a document type, an integration or a command, read
-them with a grain of salt and think from first principles about what is best for that tool: what it
-already does, who looks at its files, and what is missing without us. Where that leads away from a law,
-do not force the fit. Say which law and why in the change, and where the law itself should read
-differently, change its text in the same change (an MJCF came to have no document type that way, and
-law 27 gained its second form). What stays wrong is departing from a law without saying so. And
-whatever is added is added for a purpose: nothing wraps a tool only to rename or repeat what the tool
-already does (law 29).
+A law is a rule the package keeps and the reason for it, in a few sentences. How each is carried out is
+a mechanism's business, and the mechanisms are in the engine's README and the server's; each law names
+where. Where a law and the code disagree, one of them is wrong: fix it in the change that found it.
 
-Each of the 30 says, after its title, what it binds: *every document*; *models* (a model's document,
-built from code, in memory, no file of its own); *file documents* (a document that is a file read as
-it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf); or *the package*
-(the distributions alike).
+The laws describe what was built, not a template for what comes next. When adding a feature, a document
+type, an integration or a command, think from first principles about what is best for that tool: what
+it already does, who looks at its files, and what is missing without us. Where that leads away from a
+law, say which and why in the change, and amend the law in the same change. Departing from one without
+saying so is the only wrong move.
+
+Each law says what it binds: *every document*; *models* (built from code, held in memory); *file
+documents* (a file read as it is: a board, a robot description, a mesh, an opened STEP or xbf); or *the
+package*. The numbers are stable, because code and tests cite them: a law merged or retired keeps its
+number as a pointer, and a new one takes the next.
 
 1. **An xbf carries its build closure as pointers and digests.** *Models.* Script and function,
-   modules, data inputs, the toolchain (versions, the Python and the machine) and the key; never
-   source, never lines on elements, never input contents, nothing of git's; names remain the
-   per-element tie to code (the engine's **Build closure**).
-2. **Only requested files to disk.** *Every document.* The engine writes the files a model declares -- the xbf and the exports
-   its decorators name, nothing beside them -- and the operating system's coordination for its
-   warm process: a door (a named pipe; on Windows a port file), a lock and its connections' pipes, in
-   a folder only the user can make: `cad-engine` in `$XDG_RUNTIME_DIR`, else in the user's own
-   temporary folder (on macOS the one the system names, whatever `$TMPDIR` a sandbox sets; else
-   `$TMPDIR`), else `/tmp/cad-<uid>`; on Windows `~\.local\state\cad-engine`, out of the local
-   application data an app package virtualizes (0.8's was `cadgen-engine`: neither release finds the
-   other's door) -- and the server's own
-   state in the user's state folder (`cad`): settings, Recents' small previews, and the registry of the
-   documents it has built, been handed or opened, one record each that points at its script or
-   file, the user's one page token, the engine's record (the port it rolled to while 3245 is another
-   program's; both this user's alone);
-   never geometry and never source. In the
-   platform's cache folder (`~/.cache/cad`, on Windows too) it keeps, under `documents/`, the
-   engine's cache for documents, and nowhere else there: each model document's bytes as it last
-   built them, its own file, never a declared or exported xbf (the same bytes), made again by a run
-   of its script (a shape's by the program that handed it over), so a restart opens every project
-   at once; and, for a file document, the views derived from its bytes under that document, keyed by
-   those bytes (a KiCad board's plot, its refilled pours, its DRC and its kept exports:
-   `documents/<id>/kicad/<key>/`), so a changed file is a new entry and nothing stale is served --
-   every one regenerable, kept until the document is deleted (`cad delete`, the home's Delete), which
-   deletes it with them -- nothing evicts it; under `pycache/` the bytecode its own processes compile of the libraries they load
-   (`PYTHONPYCACHEPREFIX`), regenerable too, so nothing is written
-   beside a library or a model; and under `base/` the environment the engine's kernel processes run in, the
-   base, `cad[build123d]` at its release, made by uv from its cache on first need, and
-   beside it each environment a program's run made (`cad run`: the library pinned with the integrations
-   its imports use, and the packages it names), regenerable as well (the engine's **Running a model**); and under `homes/` the private settings
-   folders a run hands a tool that would otherwise read the person's own (Blender's, for a script that
-   imports bpy: `homes/blender`), empty but for what the tool itself writes there. One state folder, one cache
-   folder and one engine folder a user, whatever release of cad runs -- the layout of 0.11.11 and earlier, kept as
-   it was, so an update keeps the person's settings, records and links, and every path is `cad.engine.places`'
-   (`CAD_STATE_DIR`, `CAD_CACHE_DIR` and `CAD_ENGINE_DIR` move them, for a test or an experiment). `cad cache
-   prune` removes what this release cannot use, `cad cache clean` all of the cache, and nothing else of cad deletes
-   a past release's files. The code stays the only source of truth: a document is what its
-   last run made, the engine never checks the code on disk against it, and nothing reruns -- when
-   to run the code again is the agent's call. It writes no
-   sidecar, record of a build beside a model, index, memo, mesh or parsed document (but the file
-   documents' derived views above, in the document cache), and no derived file beside an input. A model whose document -- in its warm worker, else the cache -- holds the closure the
-   model has now is not run, whatever files it declares: they are exports of the document, written
-   after it. Explicit viewer exports write only the requested
-   artifact to managed temporary storage for delivery; no source or intermediate XBF
-   is written (the engine's **Viewer exports**).
-3. **Three sides, by where the code runs.** *The package.* The library -- what a model imports and what runs in
-   a worker: the model API, the kernel side of the engine, the document model and the protocol a
-   client speaks -- imports nothing of the server's or the shim's, so a model runs where only it is
-   installed; it imports nothing outside itself but its own dependencies, the standard library and
-   each integration's extra, that extra only in that integration's environment (law 25; the kernel is
-   the `build123d` extra's, which the engine's workers run in). The server -- what runs in the daemon
-   or a `cad` command: the daemon, the registry, the CAD Viewer's and the CAD app's servers, every
-   verb, the environment makers, telemetry -- imports the library's kernel-free modules, and never
-   the kernel or an integration's code (law 28). The shim (`cad_mcp`), the stdio transport
-   an agent app starts, is the standard library, the engine's client, the server's MCP protocol and what cad's own
-   update knows of the global `cad` (whose server it starts, and which it installs where the computer has none),
-   and loads no kernel. The server reaches into the library, never the
-   other way: its telemetry is an observer the engine calls with plain facts (`engine.api.observers`),
-   which the server's commands append.
-4. **A model's document is XCAF; files are explicit.** *Every document.* A model's document is
-   XCAF: a live model holds an XCAF document; `@xbf` or `--xbf` serializes it as native BinXCAF.
-   It holds: units in millimetres,
-   prototypes and instances with placements, a name on every part and instance, colours and
-   materials per part and per painted face, element names on face, edge and vertex labels, and
-   an assembly's mechanism. STEP, GLB, STL, 3MF and, of a planar document, DXF are translations
-   of it; `cad <type> export` writes any of them from the xbf alone. A file document -- a board, a
-   schematic, a robot description, a mesh -- is its file, read by its type (law 24).
-5. **The memo is the only build cache, and it lives in the worker.** *Models.* Every kernel operation a model
-   runs is keyed by its inputs, and so is every question it asks of what they made: a validity
-   check, a volume, a distance. A hit hands back the objects the first run made, or the answer it
-   gave, and a miss makes everything downstream of it miss. So an edit costs what it changed, and an element
-   keeps the name its feature history gave it across edits. Across a restart, a model's build
-   is cold but for its document in the cache -- every model's alike, taken whole by its key or not
-   at all; a declared file, its xbf too, is never a source -- and what a restart shows without a build
-   is the engine's document cache (law 2): the last built state, never a step of a build. A file
-   document's derived views kept under law 2 are views of its bytes, not a build cache.
-6. **One document per model, with one id.** *Every document.* Every called model makes one document, and a call
-   returns its handle (`.id`, `.url`, `.name`, `.shape`, `.export`, `.snapshot`), never a bare
-   shape. Every id is one formula, `uuid5(NAMESPACE, canonical(scope) + "::" + name)`
-   (`ids.derived_id`): a model's script and function (`ids.model_id`), an opened file's path and
-   no name (`ids.file_id`, inside the engine only: its public name stays its path), a shape handed
-   over its calling script, or the working folder, and its name -- the same in every process,
-   worked out without asking the engine. Identity is namespace plus name: the namespace is
-   the script's folder, with no project detection. A model's name is its identity within its
-   namespace, the function's name by default, `name=` gives it another. An explicit name uses the
-   folder as the formula's scope; one that another file of the folder declared at its last run is
-   refused, naming both declaration locations, until that file is gone or runs again without it. Unnamed functions in different files keep their script/function ids. A
-   function in a file is a model (the registry points at its script), and a shape is handed over
-   (`model(shape, name=...)`: held and kept, never rebuilt); every one is recorded and kept in
-   the engine's document cache alike. A function is declared by `@model` (no file) or by its file
-   decorators (those files), never both; file decorators write only their named outputs. No xbf,
-   mesh, memo, provenance or derived file is written for a document beyond what it declares. A
-   document lives until a person deletes it (`cad delete`, the home's Delete); its worker
-   retiring does not end it, nor does memory, which reads it again from the cache. A document
-   that is not held names the command that builds it again; the engine never runs it (the
-   engine's **Document lifetime**).
-7. **Provenance is served live, never written.** *Models.* What made an element -- the feature, its
-   operation, the function, file and line of its call -- lives in the trace of the worker that
-   built the document, and is asked of it while it lives (`made_by`, `cad <type> inspect`). A model's
-   document opened with no such worker has none to give, and says so (`made_by: null`); a file --
-   a model's declared xbf among them -- names no model and answers none.
-8. **Poses and motion definitions, never frames.** *Models.* The document carries kinematics -- the
-   mechanism, its mechanism states and its configuration sequences -- as poses and definitions,
-   never baked frames or clips. A GLB export is the one place a sequence is baked, into a clip of
-   the GLB; the engine plays nothing.
-9. **Names are the durable tie to code.** *Models.* An element's name is spelled from the function that
-   made its feature and the author's name for that feature, never from a line or a file: moving
+   modules, data inputs, the toolchain and the key; never source, never lines on elements, never input
+   contents, nothing of git's. Names remain the per-element tie to code (the engine's **Build
+   closure**).
+2. **Only requested files reach the disk.** *Every document.* The engine writes the files a model
+   declares and the exports a command or a person asks for, and nothing beside a model or an input: no
+   sidecar, index, memo, mesh or record of a build. What it keeps for itself lives in three folders of
+   the user's own, the same whatever release runs: state (settings and the records of documents, never
+   geometry or source), cache (each document's bytes as last built, a file document's views keyed by
+   its bytes, bytecode and the environments it installs, every one regenerable) and the engine's folder
+   (its door and lock). The code stays the only source of truth: a document is what its last run made,
+   and nothing reruns (the server's **Folders**; `cad.engine.places`).
+3. **Three sides, by where the code runs.** *The package.* The library (`cad`: what a model imports
+   and what runs in a worker) imports nothing of the server's or the transport's, so a model runs where
+   only it is installed. The server (`cad_server`: the daemon, the commands, the viewer, telemetry)
+   imports the library's kernel-free modules and never the kernel or an integration's code (law 28).
+   The transport (`cad_mcp`) is the standard library, the engine's client and the server's MCP
+   protocol, and loads no kernel. The server reaches into the library, never the other way: its
+   telemetry is an observer the engine calls with plain facts.
+4. **A model's document is XCAF; files are explicit.** *Every document.* A live model holds an XCAF
+   document: millimetres, prototypes and instances with placements, a name on every part and instance,
+   colours and materials per part and per painted face, element names, and an assembly's mechanism.
+   STEP, GLB, STL, 3MF and, of a planar document, DXF are translations of it, which `cad <type> export`
+   writes from the xbf alone. A file document is its file, read by its type (law 24).
+5. **The memo is the only build cache, and it lives in the worker.** *Models.* Every kernel operation
+   a model runs is keyed by its inputs, as is every question it asks of what they made. A hit hands
+   back what the first run made, and a miss makes everything downstream of it miss, so an edit costs
+   what it changed and an element keeps its name across edits. Across a restart a build is cold but for
+   its document in the cache, taken whole by its key or not at all; a declared file is never a source.
+6. **One document per model, with one id.** *Every document.* A called model makes one document and
+   returns its handle, never a bare shape. Every id is one formula over a scope and a name
+   (`ids.derived_id`): a model's script and function, an opened file's path, a handed-over shape's
+   calling script and name; the same in every process, worked out without asking the engine. A function
+   is declared by `@model` or by its file decorators, never both. A document lives until a person
+   deletes it: neither its worker retiring nor memory ends it, and one that is not held names the
+   command that builds it again (the engine's **Document lifetime**).
+7. **Provenance is served live, never written.** *Models.* What made an element (the feature, its
+   operation, the function, file and line of its call) lives in the trace of the worker that built the
+   document and is asked of it while it lives (`made_by`). A document opened with no such worker says
+   so (`made_by: null`); a file names no model and answers none.
+8. **Poses and motion definitions, never frames.** *Models.* The document carries kinematics as poses
+   and definitions: the mechanism, its states and its configuration sequences. A GLB export is the one
+   place a sequence is baked into a clip; the engine plays nothing.
+9. **Names are the durable tie to code.** *Models.* An element's name is spelled from the function
+   that made its feature and the author's name for that feature, never from a line or a file: moving
    code renames nothing, and the file holds no line to go stale.
-10. **A file decorator requires an explicit output path.** *Models.* `out` is required; `name=` optionally names the model;
-    omitted paths and `None` are refused. Whenever the model it decorates runs in a
-    build -- the build's target, or a child another model's body calls -- or is taken from its
-    key, that file is written, once per build, from the model's own document, exactly as an export
-    of it writes it: translated, compared, and written only where it differs or is missing; a
-    GLB's animations are baked from the code when that GLB is written. A model with no file
-    decorator writes nothing.
-11. **Decoration only declares; a model script is Python.** *Models.* A script runs only when Python
-    runs it; no verb imports or builds a script. Importing the library or
-    defining a decorated function never builds a model, writes its outputs, starts a
-    worker, or exits the caller. An explicit call builds the model and writes its
-    declared files, then returns to the caller. Python controls which calls run and
-    in what order, including its `__main__` block and conditions; watchers never
-    change that control flow. The library consumes no script arguments. Engine switches
-    are environment variables.
-12. **A model is a Python script.** *Models.* Decorated functions declare models; explicit calls
-    build them; `python script.py` runs the program. No command builds source text.
-13. **The document's kinematics are AP242's, and the library stores no kinematic fact the
-    standard cannot name.** *Models.* Every entity and attribute of the mechanism subtree is ISO
-    10303-105's as Part 21 writes it (edition 4's domain model's where Part 21 has none);
-    only the root says the schema and the units. What the standard cannot say is not
-    patched with an attribute of its own: it is dropped, or refused by name at document
-    time (the engine's **Kinematics**; a conformance test walks the subtree and holds it). The
-    authoring functions are named after the entities they write: `mechanism_state`
-    (`mechanism_state_representation`), `configuration_sequence`
-    (`interpolated_configuration_sequence`), and `gear_pair`, `rack_and_pinion_pair` and
-    `screw_pair`, each refusing a joint its pair does not relate.
-14. **The distribution ships alone.** *The package.* An installed distribution is the whole world: its Python,
-    what it bundles (the server's `_runtime/`), and its documents. It works with the repository it
-    was built from gone -- and its markdown must read that way, referring to nothing outside its
-    own distribution.
-    *Pressure-test*: every sentence in the distribution's markdown must be true and actionable for
-    someone who only ran `uv tool install cad` or `pip install cad==<release>`. Naming a bundled thing ("the JavaScript runtime
-    bundled at build time") passes; a repository path to its source, a repository script, or a
-    repository workflow does not. A law may name a file of the server's or the transport's, said as
-    theirs ("the server's `updates.py`").
-15. **Compatibility, by who pays for a break.** *The package.* A change is judged by who absorbs it and whether
-    they can. Four tiers:
+10. **A file decorator requires an explicit output path.** *Models.* `out` is required; an omitted
+    path or `None` is refused. Whenever its model runs in a build, or is taken from its key, the file
+    is written once, from the model's own document, exactly as an export writes it, and only where it
+    differs or is missing. A model with no file decorator writes nothing.
+11. **A model script is Python, and decoration only declares.** *Models.* Decorated functions declare
+    models, explicit calls build them, and `python script.py` or `cad run script.py` runs the program.
+    Importing the library or defining a decorated function builds nothing, writes nothing and starts
+    nothing. Python decides which calls run and in what order; no command imports, builds or watches a
+    script, and the library consumes no script arguments.
+12. *Merged into law 11.*
+13. **The document's kinematics are AP242's.** *Models.* Every entity and attribute of the mechanism
+    subtree is ISO 10303-105's as Part 21 writes it, and the library stores no kinematic fact the
+    standard cannot name: what it cannot say is dropped or refused by name, never patched with an
+    attribute of our own. The authoring functions are named after the entities they write
+    (`mechanism_state`, `configuration_sequence`, `gear_pair`, `rack_and_pinion_pair`, `screw_pair`);
+    a conformance test holds the subtree (the engine's **Kinematics**).
+14. **The distribution ships alone.** *The package.* An installed distribution is the whole world: its
+    Python, what it bundles and its documents. It works with the repository it was built from gone, and
+    its markdown reads that way, referring to nothing outside the distribution.
+    *Pressure-test*: every sentence of the distribution's markdown is true and actionable for someone
+    who only ran `uv tool install cad`. Naming a bundled thing passes; a repository path, script or
+    workflow does not.
+15. **Compatibility, by who pays for a break.** *The package.* A change is judged by who absorbs it
+    and whether they can. cad installs by itself every newer release of the major it is on, and never
+    a higher major (`cad update --major`); below 1.0 a break bumps the minor, so a breaking release
+    arrives by itself with its migration guide. Four tiers, which hold within a major as across one:
 
-    **Which releases reach a computer by themselves.** cad installs by itself every newer release of the
-    major version it is on, a patch or a minor, a minor that breaks included; a release of a higher major
-    never arrives by itself: the person runs `cad update --major`. The bound lives in the update a computer
-    already has (`cad>=<installed>,<<next major>`, worked out from the installed release each time). So below
-    1.0, where a break bumps the minor, a breaking release reaches every computer by itself with its migration
-    guide; from 1.0, where a break bumps the major, it waits for the person. The tiers below hold within a
-    major as across one.
+    - **Tier 1, what an agent reads each session**: the skills, the commands' verbs and flags, the CAD
+      tools' arguments. Whatever the skills of the last 30 days used keeps working, hidden if need be,
+      and CI checks each release against that text. Past the window it is a hard cutover in any
+      release: no alias, no shim, and no error that recognizes the old spelling.
+      *Pressure-test*: a removed spelling fails exactly as a name that never existed.
+    - **Tier 2, the library's public imports**: what a model script imports. Changed only when a
+      release must. The earlier spelling stays an alias of the same object for a release at least and
+      warns once per name per process (`CadDeprecationWarning`), naming the new path at the line that
+      spelled the old. An alias is kept out of every `__all__` and every document but the migration
+      guide; a test pins the table (`cad._internal.aliases`). Its removal is the breaking change.
+    - **Tier 3, a person's data**: documents, the state folder and its records, settings. A release
+      reads what the previous shipped release wrote, writes the current form and migrates on first
+      touch, once. Opening, viewing or exporting a saved document never needs its source or a rebuild
+      because cad was upgraded (the engine's **Build closure**).
+    - **Tier 4, protocols where two releases meet while both run**: the door, the HTTP API, the CAD
+      app's server and page, the version feed, the installation records, the analytics schemas, the
+      worker contract. Each is numbered or frozen in a golden, so a break is never silent: a change
+      within a number is additive, a breaking change bumps the number, and the side that meets a number
+      it does not speak says so in one line, naming which package to update.
 
-    **Tier 1: what an agent reads each session** -- the skills, the `cad` command's verbs and flags,
-    the CAD tools' arguments, the wording of docs. cad moves to the newest release of its major on every
-    computer while a store's copy of the skills may be weeks older, so a command, flag or tool the skills used
-    keeps working for 30 days after the release whose skills stopped using it, hidden if need be; CI
-    checks each release against the skill text released in the last 30 days. Past that window, hard
-    cutovers only, in any release: removing or renaming one is not a breaking change and needs no
-    migration guide. A retired surface does not exist: no alias, no shim, and no error that
-    recognizes its old spelling to explain what replaced it. A removed command, flag, argument, key, module or name gets what the
-    current contract's ordinary validation says -- an unknown command, an unrecognized argument, an
-    unknown key, an `ImportError`, an `AttributeError`.
-    *Pressure-test*: use a removed spelling; the error must read exactly as it would for a name that
-    never existed.
-
-    **Tier 2: the library's public imports** -- `from cad import model` and the rest of what a model
-    script imports: the document types, the integrations' helpers, the model contract. These are changed
-    only when a release must: a change breaks scripts a person already has, which an agent then has
-    to find out about and rewrite. When one is unavoidable, the earlier spelling stays an alias of the
-    SAME object for a release at least: it warns once per name per process, with `CadDeprecationWarning`
-    (a `FutureWarning`, which Python shows by default), naming the new path ("cad.read_step is deprecated;
-    use cad.step.read"), from the lookup itself, so the warning names the line of the program that spelled
-    it, as the person named the file. A run says each once: the program's own process says what its import
-    spells, and the worker that imports the same script to build its models does not say it again. An
-    alias needs what its new path needs, so `cad run` gives a 0.10 script the integration its 0.11 spelling
-    gets. An alias is kept out of every `__all__` and every document but the migration guide; a test pins the
-    table of them (`cad._internal.aliases`). An agent migrates a project on first touch.
-
-    **Tier 3: a person's data** -- documents, the state folder and its records, Recents, settings. A release reads what the previous shipped release wrote, writes the
-    current form, and migrates on first touch, once: never the old form written, never a downgrade.
-    Opening, viewing, importing and exporting a saved document never requires its source or a rebuild
-    because cad was upgraded: the engine reads `xbf/8` and `xbf/9` and converts `xbf/8` in
-    memory, without executing model code or changing source or cache bytes, under a migration record
-    that leaves the original build closure and toolchain provenance unchanged; an explicit export to
-    another XBF path saves the upgraded document atomically, and opening one does not rewrite it;
-    an unsupported format or a failed conversion keeps the original bytes and record and says why.
-    Build-cache reuse is separate: running a model compares the current key and may rebuild. This tier
-    retains no retired authoring API. The engine's README's **Build closure** describes the conversion.
-
-    **Tier 4: protocols where two releases meet while both run** -- the door, the CAD app's server and
-    its page, the hidden `cad setup --engine-update` that the updaters of 0.10.0 to 0.11.11 call, the HTTP API (`/api/v1`), a page's reload probe, the version feed,
-    the installation and release records, the analytics schemas, and the PyPI names old pins resolve
-    through. Each is numbered or frozen in a golden, so a break is never silent: a change within a
-    number is additive, and unknown keys and ops are ignored; a breaking change bumps the number.
-    Whether the newer side keeps answering the previous number is decided case by case, by what a
-    mismatch would strand and whether the stranded side can say what to do. Where it does not, the
-    side that meets a number it does not speak says so in one line and names which package to update,
-    and to what release, never how to install it: the person or the agent has their own way; installing
-    `cad` into a project's environment neither replaces nor moves the computer's cad. The analytics receiver
-    keeps every schema a released client sends. The worker contract (`cad.engine.contract`: the worker
-    protocol's number, the document format, the kernel), by which a script run with a Python of its
-    own and the server meet, is decided so: a contract the server does not speak is refused before any
-    worker starts, in that one line, with no window; one contract of two releases builds, and the
-    script says once which package to update. 0.8's door had no number, and 0.10
-    meets 0.8 by never answering it: 0.8's engines keep their own folder, and no process of 0.10's speaks
-    to one of 0.8's.
-
-    **The earlier name.** `cadgen` is the library's deprecated alias, still published at every
-    release for backwards compatibility. The `cadgen` distribution installs `cad` at the same
-    release. The `cadgen` import is the library itself, every name and every module of it `cad`'s
-    own object (one copy), and it says so as tier 2's aliases do: once per process, with
-    `CadDeprecationWarning`, at the line that imported it ("cadgen is deprecated; use cad"). New text
-    and examples name `cad`. Nothing else of 0.8's names is kept: the `cadgen`
-    command, the `CADGEN_*` variables and `cadgen mcp` are gone, as this law says.
-
-
-16. **Closed vocabularies.** *The package.* Every declaration surface has a closed key/kind set. An unknown key
-    is an error naming the supported set, never silently ignored.
-17. **Loud failure or correct output, nothing between.** *The package.* The cardinal sin is plausible-wrong
-    output at exit 0. No silent fallbacks, no globs, no guessing; a failed write or render leaves
-    no file this run wrote; an earlier file stays byte for byte.
+    `cadgen` is the library's deprecated alias, published at every release and warning as tier 2's do.
+16. **Closed vocabularies.** *The package.* Every declaration surface has a closed set of keys and
+    kinds. An unknown key is an error naming the supported set, never silently ignored.
+17. **Loud failure or correct output, nothing between.** *The package.* The cardinal sin is
+    plausible-wrong output at exit 0. No silent fallbacks, no globs, no guessing; a failed write or
+    render leaves no file this run wrote, and an earlier file stays byte for byte.
 18. **Nothing waits on the network.** *The package.* Once installed, cad works offline: every command,
-    build, snapshot, server and page. Its own requests are two: telemetry (the server's `analytics.py`, usage
-    counts under a random id, sent by default once a `cad` command has said so -- never its help, nor an
-    answer in JSON, which no person reads --, and never
-    after the person's no) and the hourly version check (the server's `updates.py`). Both run in the
-    background and fail silently: no start, command, build, request or tool call waits on them -- but three a
-    person or an app asks for by name: `cad update`, typed to get the newest release of its major now (`--major`:
-    the newest of all), which waits on PyPI (5 s at most) and the install, and says in one line when either fails;
-    `cad plugin update`, the hosted install command in the foreground; and `cad mcp` run from uv's cache on a
-    computer with no global cad, which installs one first, the newest of its own major (four minutes at most).
-    A global install of cad (`uv tool install cad`) updates itself unless the person turned it off (`cad
-    update auto off`), and when asked (`cad update`): its server, at its start, after a failed start or once nothing
-    has run for a minute, where the feed as last read names a newer release of its major, hands the update to a
-    detached helper (the server's `_internal/auto_update.py`), which stops it, runs the installer's own upgrade
-    bounded to that major (`uv tool install --upgrade "cad>=<installed>,<<next major>"`) and starts it again (where no
-    server runs, `cad update` hands it over itself, and the helper starts none); a higher major only by `cad update
-    --major` (`uv tool install --upgrade "cad>=<installed>"`). Where `cad plugin update auto` is on and cad is newer than the release
-    the install command last ended well for, however it got newer, its server runs `cad plugin update` once,
-    detached, stopped with all it started after 15 minutes. Nothing waits on the install but a start that would
-    otherwise start the release it replaces.
-    An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
-    `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
-    it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot
-    reach the network says so in a line, and nothing else waits on it.
-    A command sends nothing itself: what it counted -- an engine verb's export or snapshot
-    (`_internal/engine_telemetry.py`, the server's observer of the engine), a drawing, a crash --
-    and each model build the daemon answered, counted there after its answer, for the person who
-    asked it (a model's own process, where only the library is installed, counts nothing), are kept
-    in a small file beside the settings (`analytics.spool`), which the CAD app's
-    and the viewer's background sends take, and a command or the daemon that finds it has waited more
-    than a window, with no other process sending, starts a sender detached that sends it and exits
-    (the server's `_internal/telemetry_send.py`). A process that exits sends nothing either: its last batch is
-    kept beside the settings, and the next process that sends sends it, in the background -- each row saying the
-    version and app that counted it, each kept batch under its own id, so a resend of a batch counts once. One
-    wait remains, bounded: `cad telemetry off`, which waits for the deletion it asks for.
-    The pages load nothing from the internet: everything they show ships in the wheel.
-    *Pressure-test*: with an installed server, each integration's environment made by its first
-    need, and every request refused (a proxy on a closed port), and again with every request
+    build, snapshot, server and page. Its own requests are telemetry and the hourly version check;
+    both run in the background and fail silently, and no start, command, build or tool call waits on
+    them. The waits are the ones a person asks for by name (`cad update`, `cad plugin update`, `cad
+    telemetry off`) and the first fetch of an integration's environment, which says so in a line. The
+    pages load nothing from the internet (the server's **cad's own update** and **Telemetry**).
+    *Pressure-test*: with every integration's environment made, and every request refused, then
     hanging, start a server, open a view, call each tool, and run a build, a snapshot and each
-    integration's operation: each works, and nothing waits on a request beyond the one wait above.
-
-19. **Connected means warm.** *Models.* A served document's outstanding version wait or recent
-    sync marks it watched; a watched model document keeps its worker, and a watched file -- a
-    model's declared xbf among them -- none. No timer retires a worker: memory does, and it
-    retires one whose document a page watches only when no other is left. The engine outlives its clients; a page
-    closing never stops a worker. The worker-count cap never retires a worker whose document a
-    page watches; it is exceeded instead. The memory cap may retire it (the
-    engine's **Architecture** and **The engine server and its workers**). Memory may take a
-    document out of memory, for the engine's cache to give back, only when nothing watches it (the
-    engine's **Document lifetime**).
-
-20. **One engine per computer; tabs select documents at `/<uuid>`.** *Every document.* Every process reaches the
-    one engine, through the one door in the engine folder, whatever release it is -- one of 0.11.11 or earlier
-    too. Only `cad server start` and `cad mcp` start it; every other client that finds none says so in one line
-    and starts none, and the library never starts a server of its own environment. A start of a newer release
-    replaces an older release's engine; an older one joins a newer engine that runs (forward only); a `cad mcp` that
-    is not the global `cad` installed on the computer runs that cad's own `cad server start` and joins its engine,
-    whatever the two releases are, and one run from uv's cache on a computer with no global cad installs one first;
-    a `cad` command of another release than the engine says so in one line. cad's own update stops the engine, installs
-    the new release and starts it again (the engine's **Starting and updating**). A tab names a model's id, or a file's id after a launcher
-    registers it; Python scripts are never documents. A page never replaces or re-executes the engine. Its one page and document reads
-    share its authenticated HTTP listener. `serve` and `viewer` reuse it and start none, with no
-    standalone serving mode, and no Python function starts, stops or serves it (law 21). Launchers
-    exit; clients closing never stop it. Kernel operations run in child processes, never in the
-    engine's request threads. There are no page sessions: the explorer opens where it was last, else
-    the person's home folder, and a launch's folder resolves only the relative files it names; each
-    MCP session owns its views and resource. The
-    stdio shim owns only connection metadata, and the one act a text host's `cad_show` asks of
-    the person's machine: it opens their browser, in the environment its host gave it, and the
-    engine, which runs in whatever environment started it, never does. The shim tells the engine,
-    on its session, whether the page opened before its host has the answer, and keeps nothing of
-    it after; the engine counts a page as open in a browser only once told it opened. Sidebar
-    sharing stays in memory, and host quirks stay in the shim and page. The viewer's routes are
-    the page's alone (`cad_http`), behind the session capability delivered in UI-only launch
-    metadata. Only the person answers telemetry, through a page or the telemetry CLI. See the
-    engine's **Architecture**.
-
-21. **Operations on documents are Python functions the CLI exposes; process control is the
-    CLI's alone.** *Every document.* A type's operations -- `export` and `snapshot`, `inspect`, and those named for what
-    they do (`dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
-    `cad.xbf.export`, `cad.kicad_pcb.drc`, `cad.urdf.validate`, ...), one to one with the commands that
-    call them (`cad model export`, `cad xbf export`, `cad kicad_pcb drc`, `cad urdf validate`); serving, the engine's status, stopping it and running it (`cad serve`,
-    `status`, `stop`, `server`), and deleting a document (`cad delete`, which the home's Delete is too),
-    are commands only, with no function of the library. Every successful server-backed build reports its id and localhost
-    viewer URL, including a build with file outputs. A cold `daemon=False` build has no served
-    URL.
-
-22. **Push, not pull: a model is what its last run told the engine.** *Models.* The engine's knowledge of a
-    model comes from a run an agent or a person starts (`python model.py`, `cad run model.py`),
-    which pushes the model's code, its key and its document to the engine. The engine never reads a
-    script to learn what a model is, never watches one, never infers a document from a path on
-    disk, and never runs code on its own: a script edited and not run changes nothing the engine
-    holds or says, until the next run tells it. What it reads at a run is what that run executes
-    and declares -- the script and the modules its program imports, the files its bodies read,
-    their digests for the build closure, and the files its decorators declare (law 10) -- and none
-    of it again once the run is over. Two reads are not the engine reading code: a file document,
-    which is the disk by definition and is read again when its bytes change; and the registry's
-    record, which a run wrote. An existence check that only words a state reads no code (a model
-    whose script is gone is `detached`, the engine's **Document lifetime**).
-    The one startup exception is the JSON identity migration (the engine's README, **Identity
-    migration**): it hashes existing scripts once for older records, without importing them or
-    reading or writing an XBF.
-    *Pressure-test*: build a model, then edit its script, its modules and the files its bodies
-    read, without running it: every page, the home, every verb and tool and `cad server status` answer
-    as they did before the edit, and no process of the engine has opened a file of the model's code
-    since its run.
-
-
-23. **One table names every document type and integration.** *The package.* The registry (`cad.registry`) is the
-    single source of every layer: each type's id, extensions, MIME type, how it is viewed (an engine
-    document, a mesh, a drawing, a robot, a plot), the content it carries, its operations and the
-    integration each needs, and whether it has a decorator or an edit; each integration's name, extra,
-    process kind, the operations it has on its tool's own files that are no document type, with the
-    suffixes those on one file take (`mujoco`: `check` on `.xml` and `.mjcf`; `orcaslicer`'s `presets` and
-    `complete` take preset names and no file), and, for an external program our code runs, its probe (the program, the oldest version our code supports, the
-    install hint -- for a program that comes with an extra, as kicad-cli comes with `cad[kicad]`, that
-    extra -- and the variable that names a program outright, as `CAD_KICAD_CLI` does). A document type
-    either has files (its extensions) or has none (`model`, a document in memory, named by its id): a
-    document is known by its id either way, and nothing in the engine assumes a file behind a
-    document. It is kernel-free, the standard library alone, because the server imports it; the
-    server's, the viewer's and the JavaScript's lists of formats are read from it, the JavaScript's
-    generated (`python -m cad.registry --js`), never kept by hand. Where a released protocol spells a type
-    otherwise -- the HTTP API's document kinds and the analytics schemas say `3mf` -- the entry names that
-    spelling (`wire`); nothing else does.
-
-24. **A document type is one object.** *The package.* `cad.<type>` is a `DocumentType`: the type's decorator where it
-    has one (`@step("arm.step")`), its reader where it has one (`step.read`), its operations one to one
-    with the CLI's, and the vocabulary the type's own standard defines where it takes no third-party
-    objects (`sdf.GZ_CHECK_MODES`). Its attributes load on first use: `import cad` imports no kernel. A
-    file of another type is refused by name before anything runs (`part.glb is a glb, not a stl`). A
-    type's package (`cad/<type>/`) holds its reader, its operations' dispatch and its checks, and is
-    neutral about producers: it imports no third-party library.
-
-25. **An integration is named for its tool and holds only our code for it.** *The package.* `cad.<integration>` (code in
-    `cad/<integration>/`) holds the helpers WE define that take that tool's objects and the producers it
-    registers for the types they make; it re-exports nothing of the tool (`import build123d as bd` stays
-    build123d's), and imports only its own extra's dependencies. Every extra, every `cad.<name>` namespace
-    and every `cad/<name>/` package is a registered integration or document type. cad supports a tool only
-    where cad's own code calls it, or makes a file the tool needs and cannot make itself (`orcaslicer`: a
-    complete preset, which OrcaSlicer's command line reads and the agent runs): a tool only the agent runs
-    with nothing of ours between, a remote service, or a desktop app the person uses is no integration.
-    *The signature rule* decides where a helper goes: one taking only paths, plain values or our own types
-    goes under the document type; one taking a third-party library's objects goes under that integration.
-
-26. **A decorator works out its producer from what the function returns.** *The package.* A file decorator declares a
-    persistent script's output; the registry's producers -- each a type, a matcher, the code that writes
-    it and its integration -- decide which makes the file of the returned value. A matcher reads the
-    value's type names and modules, never importing a library to ask. Exactly one producer per return
-    type per document type; a return none takes fails loudly, naming the types the document is made of and
-    the integration that would add more.
-
-27. **The CLI is `cad <document_type> <operation> <file>`, and `cad <integration> <operation> [<file>]` for a
-    tool's own files.** *Every document.* `export` and `snapshot` are shared by every
-    type that has them (and `inspect` and `read` where a type has them); every other operation is named
-    for what it does -- `dfm` a 3D type's manufacturing check, `interference` a B-rep type's check that no two
-    parts share volume, `solve` a B-rep type's stress study, `ranges` a
-    mechanism's joint stops, `drc` a board's design rule check, `erc` a
-    schematic's electrical rules check, `validate` a robot description's conformance check -- never a
-    shared word that means something different per type. Each type implements those that make sense; a
-    `model`, which has no file, is named by its document id (`cad model export <id> arm.step`). A new
-    shared operation must be code-free, frequently needed and meaningful across types. One result shape
-    per operation: a check (`dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
-    and a location (`--json`: `cad.results.CheckResult`); `export` says the files it wrote. A type's own
-    options live with the type (`cad srdf validate robot.srdf --urdf robot.urdf`).
-    A document type is a file cad shows, so a file cad writes or checks and never shows has no type's
-    command: what cad does with it is its tool's integration's operation, `cad <integration> <operation>
-    <file>`, one to one with `cad.<integration>.<operation>` (`cad mujoco check robot.xml`: a MuJoCo
-    model, which MuJoCo Studio shows). The noun is still the file, named by the tool that owns its format.
-    Where the tool keeps its files in its own folders and a person knows them by the names the tool shows,
-    never by a path, the operation takes those names and no file: OrcaSlicer's presets, which `cad
-    orcaslicer presets machine` lists and `cad orcaslicer complete --printer … --process … --filament …`
-    writes complete for OrcaSlicer's command line. The noun is still the tool's own files.
-    A name is a type's or an integration's, never both; an operation lives in one place, so a file that
-    has a document type has its operations there and its integration has none for it (no `cad kicad drc`
-    beside `cad kicad_pcb drc`); and an integration is never a way to name the means of a type's
-    operation (`cad stl dfm` is trimesh's and nobody says so). An integration's operations are a closed
-    set too: `check` takes one file and answers findings as a type's check does; `presets` answers the
-    names of a tool's presets of one kind; `complete` writes chosen presets complete and, as `export`
-    does, says the files it wrote.
-    `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
-    --help` groups the commands: the document types, the integrations with operations of their own, the rest. The commands that are no document's -- setup,
-    doctor, cache, viewer, status, stop, server, telemetry, update (and its `update auto`), plugin, mcp, run,
-    requirement, serve and delete -- stay top-level; the bridge's (setup, status, stop) and those for programs
-    rather than people (serve, requirement) run but are not listed.
-
-28. **An integration runs where its extra is installed.** *The package.* An integration's code runs
-    in the command's own process when that environment holds the integration's extra, else in that
-    integration's environment -- `cad[<integration>]` at the installation's release, made once per
-    installation on first need, as `cad run` makes a program's -- run as a subprocess, the library's
-    runner of one operation (`cad._internal.operation`; the server's `_internal/integration_env.py`).
-    No module of the server imports an integration's code: the runner does, in whichever process
-    runs it. An integration with no extra (`orcaslicer`, the standard library alone) is held by every
-    environment the library is in, so its operations always run in the command's own process: no
-    environment made, no engine asked. A function of the library called where its integration is missing says which extra to
-    add, or to run the script with `cad run`. A command line an integration's extra installs
-    (`kicad-cli`, the registry's `commands`) runs the same way: `cad run kicad-cli …` adds the extra,
-    and the integration's `_command` module runs the environment's own command there, headless in
-    private homes, never one on PATH. A tool built for one Python alone (blender's bpy, CPython 3.13) is
-    an integration like any other, its extra installing it only there: the registry names that Python, the
-    platforms it has builds for and the folders its settings are read from, an environment with it is
-    made on that Python with the library pinned in it, and a run's settings folders are private. So the
-    library runs on Python 3.13 for blender's sake while cad itself, installed as a uv tool, runs on a newer
-    one; its floor, 3.11, admits both.
-
-29. **cad wraps a tool only where it adds something.** *The package.* Nothing is a superficial wrapper:
-    a helper in the library and a typed command alike are added because something is missing without
-    them, and each can say what. `cad <type> <operation>` (and an integration's own `cad <integration>
-    <operation>`) runs a tool for a reason the tool's own line lacks: one result shape (law 27's
-    findings, the files an export wrote), a safety guarantee (a board's folder left as found, a refused
-    output path), parity with the viewer (the same check, the same export), a fact the tool does not
-    report (what a MuJoCo model collides as, which `cad mujoco check` says beside MuJoCo's own compile), or
-    a file the tool's own line needs and cannot make (a complete OrcaSlicer preset, every parent merged in,
-    which `cad orcaslicer complete` writes and OrcaSlicer's command line then slices with, run as it is).
-    A helper of an integration's (`cad.<integration>.<name>`) takes the tool's objects for a reason of
-    the same kind: it ties them to our documents (a part found by its label path), does what the tool
-    leaves undone (a spec saved with its files, so the folder travels), or reports what it does not.
-    Everything else of the tool is the tool's own, used as it is: its Python API in the script that
-    imports it (law 25: nothing of it is re-exported), and its command line run through `cad run` (`cad
-    run kicad-cli pcb render …`, `cad run mujoco-studio …`), which the skill documents with the tool's
-    own flags at the pinned version. No helper and no typed command is added to rename one, and none to
-    do again what the tool does: where the tool has it, cad has none (no still of a MuJoCo model, which
-    MuJoCo Studio shows).
-
-30. **A producer regenerates a file from code; an edit changes a native file in place.** *The package.*
-    A producer is the engine's (law 26): a file decorator (`@model`, `@xbf`, `@step`, `@glb`, `@stl`,
-    `@threemf`, `@dxf`) declares a persistent script's output, the function is a model the engine builds,
-    and the file is written again from the model whenever it runs. An edit is a native file's own: the file
-    is the source, and `with <type>.edit(path) as document:` opens it in its tool, in the caller's process,
-    hands the block the tool's live document, and saves it where it is at the block's end only when the
-    block changed it, and not at all when the block raises (a KiCad board's and schematic's,
-    `kicad_pcb.edit` and `kicad_sch.edit`, through KiCad's IPC API, one KiCad per project for both). An
-    edit declares nothing, writes no other file and is never a model: what is made from an edited file (a
-    STEP, Gerbers, a check) is an explicit call after the block (`kicad_pcb.export`, `kicad_pcb.drc`). A
-    type has a decorator or an edit, never both; the registry says which (`Producer`, `Edit`).
+    integration's operation: each works, and nothing waits on a request.
+19. **Connected means warm.** *Models.* A document a page watches keeps its worker. No timer retires
+    a worker: memory does, and it retires a watched one only when no other is left; the worker-count
+    cap is exceeded rather than retire one. The engine outlives its clients, and a page closing never
+    stops a worker (the engine's **The engine server and its workers**).
+20. **One engine per computer; a tab selects a document at `/<id>`.** *Every document.* Every process
+    reaches the one engine through the one door in the engine folder, whatever release it is. Only
+    `cad server start` and `cad mcp` start it: any other client that finds none says so in a line and
+    starts none, and no Python function starts, stops or serves it. A newer release's start replaces
+    an older engine, and an older one joins a newer engine that runs: forward only. Launchers exit and
+    clients closing never stop it; kernel work runs in child processes, never in its request threads;
+    there are no page sessions (the engine's **Architecture** and **Starting and updating**).
+21. **Operations on documents are Python functions the CLI exposes; process control is the CLI's
+    alone.** *Every document.* A type's operations are functions of that type (`cad.model.export`,
+    `cad.kicad_pcb.drc`, `cad.urdf.validate`), one to one with the commands that call them (`cad model
+    export`, `cad kicad_pcb drc`, `cad urdf validate`). Serving, the engine's status, stopping it and
+    deleting a document are commands only, with no function of the library. Every successful
+    server-backed build reports its id and its page.
+22. **Push, not pull: a model is what its last run told the engine.** *Models.* The engine's knowledge
+    of a model comes from a run an agent or a person starts, which pushes the model's code, key and
+    document to it. The engine never reads a script to learn what a model is, never watches one, never
+    infers a document from a path and never runs code on its own: a script edited and not run changes
+    nothing it holds or says. A file document is the disk by definition and is read again when its
+    bytes change.
+    *Pressure-test*: build a model, then edit its script, its modules and the files its bodies read
+    without running it: every page, command and tool answers as before the edit, and no process of the
+    engine has opened a file of the model's code since its run.
+23. **One table names every document type and integration.** *The package.* The registry
+    (`cad.registry`) is the single source for every layer: each type's id, extensions, MIME type, view,
+    content and operations, with the integration each needs; each integration's name, extra, process
+    kind and any operation of its own. It is the standard library alone, because the server imports
+    it, and the server's, the viewer's and the JavaScript's lists of formats are read or generated from
+    it (`python -m cad.registry --js`), never kept by hand.
+24. **A document type is one object.** *The package.* `cad.<type>` holds the type's decorator where it
+    has one, its reader where it has one, and its operations one to one with the CLI's. Its attributes
+    load on first use, so `import cad` imports no kernel. A file of another type is refused by name
+    before anything runs. A type's package is neutral about producers: it imports no third-party
+    library.
+25. **An integration is named for its tool and holds only our code for it.** *The package.*
+    `cad.<integration>` holds the helpers we define that take that tool's objects and the producers it
+    registers; it re-exports nothing of the tool and imports only its own extra's dependencies. cad
+    supports a tool only where cad's own code calls it: a tool only the agent runs, a remote service or
+    a desktop app the person uses is no integration, and a skill teaches it directly.
+    *The signature rule*: a helper taking only paths, plain values or our own types goes under the
+    document type; one taking a third-party library's objects goes under that integration.
+26. **A decorator works out its producer from what the function returns.** *The package.* The
+    registry's producers (a type, a matcher, the code that writes it, its integration) decide which
+    makes the file of the returned value. A matcher reads the value's type names and modules, never
+    importing a library to ask. Exactly one producer per return type per document type; a return none
+    takes fails loudly, naming what the document is made of.
+27. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot`
+    are shared by every type that has them (`inspect` and `read` where a type has them); every other
+    operation is named for what it does and means one thing: `dfm`, `interference`, `solve`, `ranges`,
+    `drc`, `erc`, `validate`. One result shape per operation: a check returns findings, each with a
+    severity, a code and a location (`cad.results.CheckResult`), and `export` says the files it wrote.
+    A new shared operation must be code-free, frequently needed and meaningful across types. A file cad
+    checks and never shows has no document type, and its check is its tool's integration's (`cad mujoco
+    check robot.xml`, the one such operation). A name is a type's or an integration's, never both, and
+    an operation lives in one place.
+28. **An integration runs where its extra is installed.** *The package.* In the command's own process
+    when that environment holds the extra, else in the integration's own environment
+    (`cad[<integration>]` at the installation's release, made once on first need), as a subprocess. No
+    module of the server imports an integration's code. A command line an extra installs runs the same
+    way (`cad run kicad-cli …`), headless in private homes, never one on PATH. cad runs the program its
+    extra pins, and nothing names another (law 31).
+29. **cad wraps a tool only where it adds something.** *The package.* A helper or a typed command is
+    added because something is missing without it, and can say what: one result shape, a safety
+    guarantee, parity with the viewer, or a fact the tool does not report. Everything else of the tool
+    is the tool's own, used as it is: its Python API in the script that imports it, its command line
+    through `cad run`, its app in the person's hands. Nothing is added to rename or repeat what a tool
+    does, nor to reconstruct from a tool's private files what the tool itself exports: a skill teaches
+    the tool's own way, and cad adds nothing.
+30. **A producer regenerates a file from code; an edit changes a native file in place.** *The
+    package.* A producer is the engine's (law 26): a file decorator declares a persistent script's
+    output, and the file is written again from the model whenever it runs. An edit is a native file's
+    own: `with <type>.edit(path) as document:` opens the file in its tool, hands the block the tool's
+    live document, and saves at the block's end only when the block changed it, never when it raises.
+    A type has a decorator or an edit, never both.
+31. **A variable is the last resort, and every one is declared.** *The package.* An environment
+    variable exists only where nothing else can carry the value: a folder, a port or a limit a process
+    must know before it starts, or a fact one of cad's processes hands the next. A choice a person
+    keeps is a setting, and an input of one call is that call's option. Every variable is declared
+    once with who sets it (`cad._internal.environment`: public, development, internal, deprecated),
+    only the public ones are named to a person or in a skill, and a test holds the table to the source.
 
 
 ## Inspection
@@ -1057,7 +785,8 @@ only where netgen publishes wheels (macOS, Linux x86_64 and Windows x86_64; else
 naming the platform) and always run in a process of its own, since its OpenCascade and OCP's cannot
 share one. The solver is `calculix` (`cad[calculix]`): CalculiX's own `ccx`, which the `cad-ccx` package
 carries for each platform (conda-forge's build, unmodified, pinned exactly), found by the integration's
-probe: `CAD_CCX` names another (2.20 or newer), and a `ccx` on PATH is never run. It runs headless, on
+probe; a `ccx` on PATH is never run, and a person who wants another solves the deck `--deck` writes with
+it themselves. It runs headless, on
 one thread, in a private folder with homes of its own, so it reads and writes nothing of the person's,
 and the result names the CalculiX version that ran; `cad run ccx ARGS` runs the same program on a deck of
 a person's own (`cad.calculix._command`). The operation is the calculix integration's, which names the

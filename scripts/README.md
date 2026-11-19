@@ -175,14 +175,14 @@ where those files ship, so these scripts are what produces them.
   derived metadata and every mention of the release's own (`sync-version.mjs`). Relative to `REF`,
   so a second run changes nothing. `--check-incremented-from REF` compares
   `VERSION` against a ref, for `check-version.sh`. Run by hand and by
-  `release-prepare.yml`; see `CONTRIBUTING.md`, "Shipping a release".
+  `release-prepare.yml`; see `docs/contributing/releases.md`, "Shipping a release".
 - `check-pr-version.sh HEAD_REPO` — on a pull request's merge commit, says what
   merging it releases: nothing when `VERSION` is unchanged against the target
   branch; otherwise the bump must come from a branch of this repository (never a
   fork) and pass both the target's version and the latest tag, and a patch, which
   breaks nothing, may not add a migration guide, though it may correct one already
   there (a minor may carry one: it installs itself on every computer of its major,
-  `release-tags.sh`'s `version_installs_itself`). Called by `test.yml` (`static`); see `CONTRIBUTING.md`,
+  `release-tags.sh`'s `version_installs_itself`). Called by `test.yml` (`static`); see `docs/contributing/releases.md`,
   "Which number a release bumps".
 - `pypi_release.py --project NAME --version X.Y.Z --built DIR --upload DIR --released DIR`
   (or `--wait`) — what a release uploads to PyPI of one of its four projects
@@ -233,7 +233,7 @@ where those files ship, so these scripts are what produces them.
   (`plugin_zip.text_errors`, `PIPE_TO_SHELL`). Its README, like `latest`'s, installs cad by
   uv's line rather than the install script, and it leaves out the manifest's four listing
   links; each substitution fails `--check` when what it replaces is not there exactly once
-  (`CONTRIBUTING.md`, "The install branches"). The `codex` copy is the files of
+  (`docs/contributing/releases.md`, "The install branches"). The `codex` copy is the files of
   `plugin_zip.py`'s ZIP, from the same build. Called by
   `release-publish.yml`, whose `tag-release` job first pushes the `latest` copy to `latest`, the
   `directory` copy to `claude-plugin` and the `codex` copy to `codex-plugin`, together;
@@ -251,7 +251,7 @@ where those files ship, so these scripts are what produces them.
   `release-publish.yml`.
 - `unavailable-versions.txt` — the versions no release can take (the PyPI project `cad`'s
   earlier owner published them); `check-version.sh` and `bump-version.sh` refuse a `VERSION` on
-  it, and `CONTRIBUTING.md` lists the same ("Versions a release cannot take").
+  it, and `docs/contributing/releases.md` lists the same ("Versions a release cannot take").
 - `sourcemaps.py collect --out DIR [--zip FILE]` — gathers the pages' source maps, each chunk
   with its map under its debug id, for the PostHog upload and the GitHub Release. Called by
   `release-publish.yml`.
@@ -345,8 +345,9 @@ hand when the studio or the look changes.
 `bench/` — manual measurements, never run in CI ([`bench/README.md`](bench/README.md)):
 `corpus_bench.py`, the corpus batch (the xbf engine's cold, no-op, edit, revert and
 restart builds of the models in `corpus.json`, then each document's whole mesh and a
-snapshot); and `occt_parity.py`, the viewer against
-OCCT, mode by mode. Their reports are local output under `tmp/`, never committed here;
+snapshot); `occt_parity.py`, the viewer against
+OCCT, mode by mode; and `skill_ab.py`, which lays out an A/B test of the skills (a Git ref's against
+the working tree's, one fresh agent a task) from the tasks in `bench/skill_ab/`. Their reports are local output under `tmp/`, never committed here;
 only their pure helpers are tested (`tests/python/global/test_bench_helpers.py`).
 
 ## CI
