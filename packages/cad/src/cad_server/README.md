@@ -231,11 +231,11 @@ cad's own update is not due, and a typed `cad update` is refused in one line.
 
 **Each attempt is counted once** (`auto_update.report`), where telemetry is on, as every count is: the server
 that runs after it, at its start or a quiet tending, sends one `update` event from the record (the release
-before, how it ended, which step failed, the tries, the installer, whether it was typed, and how the install
-command's run for a newer cad went: a run begun since the attempt began) and marks the record `reported`. A
+before, how it ended, which step failed, the tries, the installer, whether it was typed, and how the server's
+run of `cad plugin update` for a newer cad went: a run begun since the attempt began) and marks the record `reported`. A
 failed update is counted by the next server of the old cad that runs, a successful one by the new cad's
 server; a new attempt counts the one before it first, whatever begins it (a server, or a typed `cad update`
-with no server running, in its own process), and counts it as it stands where the install command's run for
+with no server running, in its own process), and counts it as it stands where the `cad plugin update` run for
 it is still underway (`underway`).
 
 `cad update` asks the server that runs (`{"op": "update"}`, which an agent's sandboxed shell may send with no

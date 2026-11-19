@@ -55,7 +55,7 @@ skills/<name>/
   Code a skill needs is cad's, reached by a command or an import, and what a skill would script is a
   `cad` command. Its SKILL.md carries the Setup block (below).
 - **Independent of other skills.** A skill never imports another, and never puts `skills/` or the
-  repository root on a lookup path. The install script copies each alone into an agent's skills folder.
+  repository root on a lookup path. `cad plugin install` copies each alone into an agent's skills folder.
 
 ## What goes in a skill
 
@@ -139,6 +139,9 @@ tool's description, which only agents that have the tool read, never in a skill.
 - [ ] The Setup and Show the model blocks are the shared text, word for word, where they apply.
 - [ ] A command the skill stops using still works for 30 days ([The shared blocks](#the-shared-blocks)).
 - [ ] It installs nothing and imports no other skill.
+- [ ] Its name is in `SKILLS` in `packages/cad/src/cad_server/plugin/source.py`, in the same release
+      (a skill taken out moves to `RETIRED_SKILLS`): the names `cad plugin install` takes as ours.
+      A copy under a name it does not know is left as someone else's, so never replaced or removed.
 - [ ] A feature in README.md's Features and the docs site's (`features` in
       `apps/docs/src/lib/content.ts`, the same list) links it, and `.muse-plugin/plugin.json`, which
       lists every skill by id and path, names it.
