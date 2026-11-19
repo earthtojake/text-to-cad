@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import path from "node:path";
+import { SHOP_LINK_PREFIX, shopLinks } from "./src/lib/shop-links";
 
 const repoRoot = path.resolve(process.cwd(), "../..");
 const nextConfig: NextConfig = {
@@ -16,6 +17,12 @@ const nextConfig: NextConfig = {
       // The reference's page of commands was /docs/reference/commands before it was generated.
       { source: "/docs/reference/commands", destination: "/docs/reference/cli", permanent: true },
       { source: "/docs/reference/commands.md", destination: "/docs/reference/cli.md", permanent: true },
+      // The Shop's links to stores (src/lib/shop-links.ts). Temporary, so a store's address can change.
+      ...Object.entries(shopLinks).map(([slug, destination]) => ({
+        source: `${SHOP_LINK_PREFIX}${slug}`,
+        destination,
+        permanent: false,
+      })),
     ];
   },
   // /docs/<page>.md, and /docs.md for /docs itself: a page of the documentation as Markdown, for an
