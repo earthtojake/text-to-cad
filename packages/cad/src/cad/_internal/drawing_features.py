@@ -171,6 +171,8 @@ class _Segment:
     #: Unit radial direction from the axis to the middle of the face: which way a
     #: part cylinder (a slot's end, a fillet) faces.
     bulge: tuple = (0.0, 0.0, 0.0)
+    #: The faces the segment is read off: one, or the pieces of a split surface.
+    faces: tuple = ()
 
 
 def _canonical(direction, point) -> tuple[tuple, tuple]:
@@ -243,7 +245,7 @@ def _surface_segments(shape) -> dict[tuple, tuple[tuple, tuple, list[_Segment]]]
         concave = sum(a * b for a, b in zip(radial, (normal.X, normal.Y, normal.Z))) < 0
         reach = math.sqrt(sum(c * c for c in radial)) or 1.0
         segment = _Segment("cyl" if kind == GeomAbs_Cylinder else "cone", lo, hi, r_lo, r_hi, concave, u1 - u0,
-                           tuple(c / reach for c in radial))
+                           tuple(c / reach for c in radial), (face,))
         lines.setdefault(_line_key(d, foot), (d, foot, []))[2].append(segment)
     return lines
 
@@ -263,9 +265,11 @@ def _merge_split_faces(segments: list[_Segment]) -> list[_Segment]:
                 reach = math.sqrt(sum(c * c for c in summed)) or 1.0
                 other.bulge = tuple(c / reach for c in summed)
                 other.span += seg.span
+                other.faces += seg.faces
                 break
         else:
-            merged.append(_Segment(seg.kind, seg.lo, seg.hi, seg.r_lo, seg.r_hi, seg.concave, seg.span, seg.bulge))
+            merged.append(_Segment(seg.kind, seg.lo, seg.hi, seg.r_lo, seg.r_hi, seg.concave, seg.span, seg.bulge,
+                                   seg.faces))
     return merged
 
 
@@ -284,16 +288,76 @@ def _chains(segments: list[_Segment]) -> list[list[_Segment]]:
     return chains
 
 
-class _Ray:
-    """Whether a feature is open past one of its ends, asked of one solid.
+class _Ends:
+    """Whether a hole's or a slot's end is closed, read off the faces its wall
+    runs into there.
 
-    Open means air just past the end AND no face of the part ahead within the
-    feature's own width. Air alone was the old test, and a blind hole or slot
-    with a filleted or ball floor has air just past where its straight wall
-    stops: it read THRU. A face far ahead is a different matter -- a through
-    hole in the floor of a closed box looks out at the lid -- so only a face
-    close enough to be the feature's own floor closes it.
+    A wall ends at an edge, and the face on the other side of that edge says
+    what the end is. A floor lies inside the feature's own section: a flat
+    bottom, the fillet round it, a ball, a cone are all within the bore's
+    radius of its axis (within a slot's outline). Anything else reaches out
+    past the wall -- the face the hole breaks out through, a cavity's wall, a
+    cross hole -- and the feature leaves the material there: it is open, and a
+    hole open at both ends is THRU.
+
+    How far away the next wall stands does not come into it. It used to: an end
+    was open when the air past it met no face within one bore diameter, a bound
+    put there so that a blind hole with a filleted or ball floor, which has air
+    just past where its straight wall stops, did not read THRU. That bound made
+    a hole through a wall into a gap narrower than itself read blind, as deep
+    as the wall is thick. The floor is told from the far wall by what it is
+    joined to, not by its distance.
     """
+
+    def __init__(self, shape) -> None:
+        self.shape = shape
+        self._ancestors = None
+        self._points: dict = {}
+
+    def _reach(self, face) -> list:
+        """Points round a face that show how far it reaches: its corners, and three
+        along each of its edges. Read once a face: a plate's top is every hole's."""
+        from build123d import Face
+
+        beyond = Face(face)
+        if beyond not in self._points:
+            points = [tuple(v) for v in beyond.vertices()]
+            points += [tuple(e.position_at(t)) for e in beyond.edges() for t in (0.25, 0.5, 0.75)]
+            self._points[beyond] = points
+        return self._points[beyond]
+
+    def closed(self, segments, own, d, foot, end: float, far: float, within) -> bool | None:
+        """Whether the end at ``end`` along the line (``d``, ``foot``) of the wall
+        ``segments`` (whose other end is toward ``far``) is closed: every face
+        joined to the wall there lies ``within`` the feature's section. ``own`` are
+        the feature's own faces, which are not what it runs into. None when the
+        wall has no edge of its own at that end (a cone that closes to a point)."""
+        if self._ancestors is None:
+            self._ancestors = _edge_faces(self.shape)
+        reach = abs(far - end)
+        seen = False
+        for segment in segments:
+            for face in segment.faces:
+                for edge in face.edges():
+                    along = [sum((c - f) * k for c, f, k in zip(tuple(edge.position_at(t)), foot, d))
+                             for t in (0.0, 0.25, 0.5, 0.75)]
+                    # The edge round this end, not the one round the other, nor a seam
+                    # or a side that runs the wall's length.
+                    if abs(sum(along) / len(along) - end) > 0.4 * reach:
+                        continue
+                    for other in _others(self._ancestors, edge, face):
+                        if any(other.IsSame(mine.wrapped) for mine in own):
+                            continue
+                        seen = True
+                        if not all(within(point) for point in self._reach(other)):
+                            return False
+        return True if seen else None
+
+
+class _Ray:
+    """Lines cast through one solid: how deep a blind feature's floor is, and,
+    where its wall has no edge to read at an end (:class:`_Ends`), whether the
+    air past that end meets the part within the feature's own width."""
 
     def __init__(self, shape) -> None:
         from OCP.IntCurvesFace import IntCurvesFace_ShapeIntersector
@@ -397,6 +461,7 @@ def holes(shape) -> list[Hole]:
     found: list[Hole] = []
     ray = None
     tori = None
+    ends = _Ends(shape)
     for key, (d, foot, segments) in _surface_segments(shape).items():
         u, v = _perpendicular(d)
 
@@ -428,13 +493,13 @@ def holes(shape) -> list[Hole]:
                 groups.append([chain])
         for group in groups:
             ray = ray or _Ray(shape)
-            hole = _read_chain([seg for chain in group for seg in chain], d, foot, at, air, ray, fillets)
+            hole = _read_chain([seg for chain in group for seg in chain], d, foot, at, air, ray, fillets, ends)
             if hole == "sealed" and len(group) > 1:
                 # Closed at both ends, the pieces are not one bore drilled through
                 # air: two blind holes facing each other across a gap (into the
                 # two walls of a channel) are each their own.
                 for chain in group:
-                    piece = _read_chain(chain, d, foot, at, air, ray, fillets)
+                    piece = _read_chain(chain, d, foot, at, air, ray, fillets, ends)
                     if isinstance(piece, Hole):
                         found.append(piece)
             elif isinstance(hole, Hole):
@@ -443,7 +508,7 @@ def holes(shape) -> list[Hole]:
     return found
 
 
-def _read_chain(chain: list[_Segment], d, foot, at, air, ray: _Ray, fillets=()) -> "Hole | str | None":
+def _read_chain(chain: list[_Segment], d, foot, at, air, ray: _Ray, fillets, ends: _Ends) -> "Hole | str | None":
     """One run of bore segments on a line as a hole: None when it is not one (no
     bore, material inside, a conical recess), ``"sealed"`` when it is closed at
     both ends."""
@@ -455,8 +520,22 @@ def _read_chain(chain: list[_Segment], d, foot, at, air, ray: _Ray, fillets=()) 
         return None
     lo, hi = chain[0].lo, chain[-1].hi
     narrowest = min(s.r_lo for s in cylinders)
-    open_lo = ray.open(tuple(at(lo - _PROBE)), tuple(-c for c in d), 2 * narrowest)
-    open_hi = ray.open(tuple(at(hi + _PROBE)), d, 2 * narrowest)
+    own = [face for seg in chain for face in seg.faces]
+
+    def is_open(seg: _Segment, end: float, far: float, radius: float, direction) -> bool:
+        def within(point) -> bool:
+            rel = tuple(p - f for p, f in zip(point, foot))
+            along = sum(a * b for a, b in zip(rel, d))
+            return math.sqrt(max(0.0, sum(c * c for c in rel) - along * along)) <= radius + _TOUCH
+
+        closed = ends.closed([seg], own, d, foot, end, far, within)
+        if closed is None:
+            start = at(end + _PROBE * (1 if end > far else -1))
+            return ray.open(tuple(start), direction, 2 * narrowest)
+        return not closed
+
+    open_lo = is_open(chain[0], lo, chain[0].hi, chain[0].r_lo, tuple(-c for c in d))
+    open_hi = is_open(chain[-1], hi, chain[-1].lo, chain[-1].r_hi, d)
     if not (open_lo or open_hi):
         return "sealed"  # a sealed void, not something a drill makes
     thru = open_lo and open_hi
@@ -589,7 +668,7 @@ def slots(shape) -> list[Slot]:
     all along the gap between them. Ends are paired nearest first, so three slots
     in a row stay three. Pairs stacked on one centre line make one slot with a
     counterbore, and a chamfer at an end belongs to the slot's depth. Through
-    when it is open past both ends (see :class:`_Ray`)."""
+    when it is open at both ends (see :class:`_Ends`)."""
     from build123d import Vector
 
     halves, cones = [], []
@@ -634,7 +713,7 @@ def slots(shape) -> list[Slot]:
         middle = tuple(f + c / 2 for f, c in zip(foot_a, between))
         toward = _canonical(tuple(c / gap for c in between), (0.0, 0.0, 0.0))[0]
         pairs.append({"d": d, "middle": _canonical(d, middle)[1], "toward": toward, "lo": a.lo, "hi": a.hi,
-                      "r": a.r_lo, "gap": gap, "feet": (foot_a, halves[j][1])})
+                      "r": a.r_lo, "gap": gap, "feet": (foot_a, halves[j][1]), "walls": (a, halves[j][2])})
 
     # Pairs stacked on one centre line, touching end to end, are one slot.
     lines: dict[tuple, list] = {}
@@ -642,6 +721,7 @@ def slots(shape) -> list[Slot]:
         key = _line_key(pair["d"], pair["middle"]) + tuple(round(c, 4) for c in pair["toward"])
         lines.setdefault(key, []).append(pair)
     ray = _Ray(shape) if pairs else None
+    joined = _Ends(shape)
     found: list[Slot] = []
     for stack in lines.values():
         stack.sort(key=lambda p: p["lo"])
@@ -669,8 +749,29 @@ def slots(shape) -> list[Slot]:
             # a hole through its floor is open where the hole is.
             feet = [_canonical(d, f)[1] for f in narrow["feet"]]
             along = [tuple(a + t * (b - a) for a, b in zip(*feet)) for t in (0.0, 0.25, 0.5, 0.75, 1.0)]
-            open_lo = all(ray.open(point(c, d, lo - _PROBE), tuple(-k for k in d), 2 * narrow["r"]) for c in along)
-            open_hi = all(ray.open(point(c, d, hi + _PROBE), d, 2 * narrow["r"]) for c in along)
+            own = [face for pair in chain for wall in pair["walls"] for face in wall.faces]
+
+            def is_open(pair, end: float, far: float, direction) -> bool:
+                a, b = (_canonical(d, f)[1] for f in pair["feet"])
+                ab = tuple(q - r for q, r in zip(b, a))
+                run = sum(c * c for c in ab)
+
+                def within(p) -> bool:
+                    # Inside the slot's outline: within its radius of the line between its ends' axes.
+                    ap = tuple(q - r for q, r in zip(p, a))
+                    lift = sum(x * y for x, y in zip(ap, d))
+                    ap = tuple(c - lift * k for c, k in zip(ap, d))
+                    t = max(0.0, min(1.0, sum(x * y for x, y in zip(ap, ab)) / run))
+                    return math.dist(ap, tuple(t * c for c in ab)) <= pair["r"] + _TOUCH
+
+                closed = joined.closed(pair["walls"], own, d, pair["feet"][0], end, far, within)
+                if closed is None:
+                    past = end + _PROBE * (1 if end > far else -1)
+                    return all(ray.open(point(c, d, past), direction, 2 * narrow["r"]) for c in along)
+                return not closed
+
+            open_lo = is_open(chain[0], chain[0]["lo"], chain[0]["hi"], tuple(-k for k in d))
+            open_hi = is_open(chain[-1], chain[-1]["hi"], chain[-1]["lo"], d)
             if not (open_lo or open_hi):
                 continue
             thru = open_lo and open_hi

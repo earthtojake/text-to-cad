@@ -464,3 +464,40 @@ def _plain_blind(radius: float, depth: float):
 
     return Box(40, 40, 20, align=(Align.CENTER, Align.CENTER, Align.MIN)) - Pos(0, 0, 20) * Cylinder(
         radius, depth, align=(Align.CENTER, Align.CENTER, Align.MAX))
+
+
+class OpenEndTests(unittest.TestCase):
+    """A hole or slot that leaves the wall it is in is through that wall, however
+    near the next wall stands; a floor closes it, however it is rounded."""
+
+    def test_a_hole_and_a_slot_into_a_gap_narrower_than_themselves_are_thru(self) -> None:
+        from build123d import Align, Box, Cylinder, Pos, Rot, SlotCenterToCenter, extrude
+        from cad._internal.drawing_features import holes, slots
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        # Two arms 10 thick, 5 apart: a ⌀8 hole through one, an 8 wide slot through the other.
+        channel = Box(60, 25, 30, align=align) - Pos(0, 0, 10) * Box(60, 5, 20, align=align)
+        channel -= Pos(-15, 12.5, 20) * Rot(90, 0, 0) * Cylinder(4, 10, align=align)
+        channel -= Pos(15, -12.5, 20) * Rot(-90, 0, 0) * extrude(SlotCenterToCenter(10, 8), 10)
+        (hole,) = holes(channel)
+        self.assertTrue(hole.thru, "through the arm it is in: the other arm, 5 away, is not its floor")
+        self.assertIsNone(hole.depth)
+        self.assertAlmostEqual(hole.length, 10.0, places=6)
+        (slot,) = slots(channel)
+        self.assertTrue(slot.thru)
+        self.assertIsNone(slot.depth)
+
+    def test_a_floor_closes_a_hole_and_a_lid_close_above_it_does_not(self) -> None:
+        from build123d import Align, Box, Cylinder, Pos
+        from cad._internal.drawing_features import holes
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        # A box with a cavity 3 high under a 3 thick lid: one ⌀8 hole through the lid,
+        # one ⌀6 hole 4 deep into the 10 thick floor from below.
+        box = Box(60, 40, 16, align=align) - Pos(0, 0, 10) * Box(54, 34, 3, align=align)
+        box -= Pos(-15, 0, 13) * Cylinder(4, 3, align=align)
+        box -= Pos(15, 0, 0) * Cylinder(3, 4, align=align)
+        found = {round(h.diameter): h for h in holes(box)}
+        self.assertTrue(found[8].thru, "the lid's hole opens into the cavity")
+        self.assertFalse(found[6].thru)
+        self.assertAlmostEqual(found[6].depth, 4.0, places=6)
