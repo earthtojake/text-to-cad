@@ -2095,6 +2095,53 @@ class PluginCatchUpTest(Case):
         self.assertEqual(calls, ["catch up", "count"])
 
 
+class UnderAPluginRunTest(Case):
+    """cad's own update while a run of ``cad plugin install`` or ``cad plugin update`` is going (its lock held:
+    ``plugin_catch_up.running``): the automatic one is not due, a typed one is refused in one line, and none begins,
+    which would replace the environment's files under the run."""
+
+    def another_run(self):
+        from cad_server._internal import file_lock, plugin_catch_up
+
+        self.state.mkdir(parents=True, exist_ok=True)
+        return file_lock.exclusive(self.state / plugin_catch_up.LOCK)
+
+    def test_no_update_begins_while_a_run_holds_its_lock_and_one_does_once_it_has_ended(self) -> None:
+        from cad_server._internal import plugin_catch_up
+        from cad_server.cli import update as typed
+
+        newer = {"latest": "0.2.0", "lines": {"0": "0.2.0"}}
+        self.assertFalse(plugin_catch_up.running())
+        self.assertFalse((self.state / plugin_catch_up.LOCK).exists(), "asked without making the lock's file")
+        with self.feed("0.2.0"), mock.patch.object(updates, "pypi", return_value=newer), \
+                mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True), \
+                mock.patch.object(auto_update.subprocess, "Popen") as popen:
+            self.assertEqual(auto_update.due(), auto_update.Due("0.2.0", "0.2.0"))
+            with self.another_run():
+                self.assertTrue(plugin_catch_up.running())
+                # The automatic update: not due, at a start and at a tending alike.
+                self.assertIsNone(auto_update.due())
+                self.assertFalse(auto_update.at_start())
+                self.assertFalse(auto_update.tend(working=False, ran=False, quiet_for=0.0))
+                self.assertIsNone(auto_update.after_failed_start())
+                # A typed one: refused in one line, by the server that judges it and by the command with none.
+                self.assertEqual(auto_update.asked(), {"failed": auto_update.INSTALLING})
+                err = io.StringIO()
+                with mock.patch.object(client, "request", side_effect=client.NotRunning(client.NOT_RUNNING)), \
+                        mock.patch.object(client, "_sandboxed", return_value=False), redirect_stderr(err):
+                    self.assertEqual(typed.main([]), 1)
+                self.assertEqual(err.getvalue(), "cad update: an install into the agent apps is running now, and cad "
+                                                 "is not updated under it: run `cad update` again once it has ended\n")
+                # And where a run began after the check, asked again as the update begins.
+                self.assertFalse(auto_update.trigger("0.2.0"))
+                self.assertIsNone(auto_update.begin("0.2.0"))
+                self.assertEqual((popen.call_count, auto_update.last()), (0, None))
+            self.assertFalse(plugin_catch_up.running())
+            self.assertEqual(auto_update.asked(), {"ok": True, "updating": "0.2.0", "from": "0.1.0"})
+            self.assertTrue(auto_update.at_start())
+            self.assertEqual((popen.call_count, auto_update.last()["outcome"]), (1, "underway"))
+
+
 class UpdateCountTest(Case):
     """Each ended attempt of cad's own update counted once (``auto_update.report``, ``event``): the event each kind of
     record makes, marked as counted, the one before a new attempt counted first, and the wait for the install
