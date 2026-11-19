@@ -23,9 +23,9 @@ shot. A clip that swings a part out of the box needs `model.bounds()` at its wid
 
 A sun is one parallel light; its `energy` is in W/m² (3 to 5 for a bright day). For a product look,
 three area lights around the model in place of the sun, their power in watts scaled by the square
-of their distance so the light on the model is the same at any size. These numbers are a start:
-with the world below and the Standard view they take a pale part's lit faces to full white in
-Cycles, and 0.4 of each keeps a white part under it, so draft and adjust:
+of their distance so the light on the model is the same at any size. These numbers keep a white
+part's lit faces just under full white in Cycles, with the world below and the Standard view; scale
+the three together for a brighter or a darker look, and draft before the final:
 
 ```python
 def area(name, direction, power, size):
@@ -35,9 +35,9 @@ def area(name, direction, power, size):
     light.constraints.new("TRACK_TO").target = aim
     scene.collection.objects.link(light)
 
-area("key", (1, -1, 1), 10, 0.5)  # the main light, above and in front
-area("fill", (-1, -1, 0.3), 2.5, 1.0)  # softer, from the other side
-area("rim", (0, 1, 0.8), 7.5, 0.3)  # behind, for the outline
+area("key", (1, -1, 1), 4, 0.5)  # the main light, above and in front
+area("fill", (-1, -1, 0.3), 1, 1.0)  # softer, from the other side
+area("rim", (0, 1, 0.8), 3, 0.3)  # behind, for the outline
 ```
 
 The world is the light from everywhere else and the background behind the model:
