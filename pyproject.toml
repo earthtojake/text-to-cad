@@ -33,14 +33,14 @@ dev = [
   # The viewer's launch smoke test drives a headless Chromium through Python Playwright
   # (scripts/test/test-viewer-launch.sh), as does the manual parity bench (scripts/bench/occt_parity.py). Pinned
   # exactly: each Playwright release fetches its own browser build.
-  "playwright==1.63.0",
+  "playwright==1.65.2",
   # The wheels and sdists the packaging checks and the release build (scripts/release/check-wheel-contents.sh,
   # scripts/test/test-installed.sh).
   "build",
   # The server's Windows dependency (cad.exe's launcher stub), which the tests of the cad command read on every
   # system.
   "distlib",
-  "pyrefly==1.3.2",
+  "pyrefly==1.4.1",
 ]
 # The fea job's (`uv sync --group fea`): the netgen and calculix integrations a stress study runs on, with netgen
 # at the version the accuracy tests' margins were measured with (the round rod's top-fibre stress is +8.6%
