@@ -103,8 +103,9 @@ for each net's current ([layout](references/layout.md)). A plausible-looking lay
 establish electrical correctness: pin numbers, footprint orientation and connector mating side come
 from the datasheet.
 
-For anything the typed commands do not cover, `cad run kicad-cli ...` runs the same KiCad command
-line with its own subcommands and flags (`cad run kicad-cli pcb --help`):
+For anything the typed commands do not cover, `cad run kicad-cli ...` runs the fetched KiCad's
+command line with its own subcommands and flags (`cad run kicad-cli pcb --help`); `CAD_KICAD_CLI`
+does not change which one that is:
 
 ```bash
 cad run kicad-cli pcb render --side top --rotate -45,0,45 -o tmp/board.png board.kicad_pcb

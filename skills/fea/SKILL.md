@@ -25,7 +25,7 @@ safety factor is no answer to them (a drop or a braking load can be estimated as
 | Write or edit a study | One JSON object: fixtures and loads, then material, mesh, margin and checks | [Study file](references/study-file.md) |
 | Choose a material | The model's own, or the E, ν and yield the person gives | [Materials](references/materials.md) |
 | Judge the answer | `result.json` and its findings, against a hand estimate | [Findings](#findings), [judging the answer](references/linear-static.md#judging-the-answer) |
-| Find the load a part takes | Solve at any load: the model is linear, so the load at yield is the load applied times the safety factor | [`checks`](references/study-file.md#checks) |
+| Find the load a part takes | Solve at any load: the model is linear, so yield comes at the loads applied, all scaled by the safety factor | [`checks`](references/study-file.md#checks) |
 | Answer what the summary does not | `result.vtu`, read with meshio | [Your own questions](#your-own-questions) |
 | Compare design variants | The same study on each, faces mapped, mesh size held | [Compare variants](#compare-variants) |
 
@@ -193,4 +193,5 @@ the face and the point in mm.
 | `bonded_edge_peak` | warning | The peak sits on the edge of a bonded joint | Read the stress a little away; a bolted or welded joint is softer than this model |
 | `solver_note` | warning | About the run: a slow solve, a finer solve skipped, pictures not drawn | Mention it when it bears on the answer |
 
-`peak_at_fixture` and `peak_concentration` appear only when the safety factor is under the `margin`.
+`peak_at_fixture` and `peak_concentration` appear only when the safety factor is under the `margin`
+and no finer solve settled the peak.

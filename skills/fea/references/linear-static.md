@@ -50,9 +50,9 @@ say the stopping distance you assumed.
 
 ## The solver
 
-Every study is solved by the CalculiX cad installs; a `ccx` on PATH is never run. `--deck` keeps
-the input of the solve written, which any CalculiX of your own solves too. A mesh or a solve that
-runs past an hour is stopped and says so.
+Every study is solved by the CalculiX cad installs, or by the one `CAD_CCX` names where that is set;
+a `ccx` on PATH is never run. `--deck` keeps the input of the solve written, which any CalculiX of
+your own solves too. A mesh or a solve that runs past an hour is stopped and says so.
 
 ## Judging the answer
 

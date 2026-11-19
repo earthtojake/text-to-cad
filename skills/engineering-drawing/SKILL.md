@@ -94,10 +94,10 @@ leader crosses the part. A dimension of a few millimetres puts its value on its 
 dimension the larger feature instead.
 
 The script raises instead of writing a wrong or partial document: views that run off the frame (the
-error names a scale that fits), an argument outside the vocabulary (an unknown view, sheet size or
-projection; a hole both `thru` and given a depth; `notes=` given a bare string instead of a list; a
-note wider than the sheet's note column), or a missing renderer. A failed run leaves any earlier PDF
-untouched.
+error names a scale that fits, or says that none does), an argument outside the vocabulary (an
+unknown view, sheet size or projection; a hole both `thru` and given a depth; `notes=` given a bare
+string instead of a list; a note wider than the sheet's note column), or a missing renderer. A failed
+run leaves any earlier PDF untouched.
 
 ## What the drawing holds, and what it does not
 

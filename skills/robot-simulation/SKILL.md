@@ -140,9 +140,9 @@ cad mujoco check sim/scene.xml
 
 `spec`, `fit`, `decompose`, `collisions`, `parts` and `save` are the only helpers; they name a part by
 its label path, as `cad model inspect` prints it. Everything else is MuJoCo's API. `save` writes the
-file with its meshes and a `scene.xml`, then prints the check's warnings, what the model collides as
-and its contact excludes: read them against the choices the function made. This file replaces the
-plain export ([MuJoCo environment](references/mujoco-environment.md#the-mujoco-function)).
+file with its meshes, and a `scene.xml` where there is none, then prints the check's warnings, what
+the model collides as and its contact excludes: read them against the choices the function made. This
+file replaces the plain export ([MuJoCo environment](references/mujoco-environment.md#the-mujoco-function)).
 
 ## Author by hand
 
