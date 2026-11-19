@@ -13,7 +13,9 @@ the machine frame's. The families, and how each is measured:
 - ``holes`` (``_dfm_cnc_holes``): concave cylinders and their coaxial neighbours; diameter, depth (the drilled
   length below any counterbore; ``overall_depth_mm`` the whole), blind or through by an exact ray along the
   axis, the floor (drill point and its angle, or flat), counterbores (each with its own depth to diameter),
-  countersinks, the standard drill each diameter is.
+  countersinks, the standard drill each diameter is; and its mouth (``mouths``, once the threads are known):
+  whole, or cut by a wall that rises along the hole's axis -- a cavity's, a step's, the part's side --, with
+  how far the hole reaches past it (a partial hole).
 - ``pockets``: one cavity model (``_pockets``). Every planar face that meets, by a concave edge (or through
   a concave root fillet), a face that rises from it is a pocket's floor; a face rises where it lies along the
   floor's normal or is drafted back from it (``Model.rises``, ``DRAFT_MAX_DEG``), so a drafted, lofted or

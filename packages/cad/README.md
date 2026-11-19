@@ -644,7 +644,8 @@ the same limits (`CAD_ENGINE_CHECK_SECONDS`, `CAD_ENGINE_CHECK_RSS_MB`): past on
 document): an option refused by name, a file of another type or not there, a document the engine does not hold.
 
 - **CNC machining** (`--axes 3|4|5`, `--turning`, `--tools`, `--stock`): holes (drill sizes, depth, drill
-  points, counterbores, threads), pockets and slots, internal corners against tool radius and depth, sharp
+  points, counterbores, threads, a wall that cuts a hole's mouth), pockets and slots, internal corners against
+  tool radius and depth, sharp
   internal edges no tool makes, walls and gaps, tool access per setup direction and the setups it needs,
   undercuts, voids, stock; turned parts' axis, diameters, bores, grooves and live-tooling features.
 - **Sheet metal** (`--thickness`, `--k-factor`, `--bend-radius`, `--kerf`, `--sheet-size`): constant
