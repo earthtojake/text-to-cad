@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import unittest
 from unittest import mock
 
@@ -204,10 +205,18 @@ class InstallTests(PluginRuns):
         for began_by in ({"CAD_INSTALL_ATTEMPT": "7.0"}, {}):
             with contextlib.ExitStack() as asking, self.subTest(began_by=began_by):
                 asking.enter_context(file_lock.exclusive(self.state / plugin_catch_up.LOCK))
-                # The one who asked lets go while the run waits its first step.
-                with mock.patch.object(plugin_catch_up.time, "sleep", side_effect=lambda _s: asking.close()) as slept:
+                # The one who asked lets go while the run waits its first step. ``time.sleep`` is the one function for
+                # every module, so only the lock's own step is taken over: whatever else sleeps in the run (on Python
+                # 3.11, a wait on a command with a time limit) sleeps as it would.
+                def step(seconds: float, sleep=time.sleep) -> None:
+                    if seconds == plugin_catch_up.SETTLE_STEP:
+                        asking.close()
+                    else:
+                        sleep(seconds)
+
+                with mock.patch.object(plugin_catch_up.time, "sleep", side_effect=step) as slept:
                     done = self.cad_plugin("install", **began_by)
-                slept.assert_called_with(plugin_catch_up.SETTLE_STEP)
+                slept.assert_any_call(plugin_catch_up.SETTLE_STEP)
                 self.assertEqual((0, ""), (done.returncode, done.stderr), done.stdout)
                 self.assertNotIn("Another run", done.stdout)
                 self.assertEqual(self.calls("claude"), ADD)
