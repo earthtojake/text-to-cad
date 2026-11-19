@@ -237,19 +237,17 @@ its pull request. The tier holds:
   today.
 - **The real install** (`real-install.yml`, `scripts/test/real-install.py`): the install script
   against the real `claude`, `codex` and `gemini` on Windows, macOS and Linux, each on a private
-  computer. It installs, runs the script again, and migrates each program from the state 0.11.10's
-  installer left; cad comes from this tree's wheel, the plugin from this tree's `latest` copy in a
-  local repository each program's git reads in GitHub's place. It is the one test of the half of the
-  script that touches agent apps on Windows, where its unit tests (stand-in programs) are skipped. It
-  cannot test the desktop apps (they need a person) or GitHub's `latest` branch, which before a
-  release is the last release's. About 10 minutes a system.
+  computer, with cad from this tree's wheel and the plugin from this tree's `latest` copy: an
+  install, the script again, and a migration from the state 0.11.10's installer left. It is the one
+  test of the half of the script that touches agent apps on Windows, where its unit tests (stand-in
+  programs) are skipped. It cannot test the desktop apps (they need a person) or GitHub's `latest`
+  branch, which before a release is the last release's. About 10 minutes a system.
 - **The update rehearsal** (`scripts/test/rehearse-update.py`): the one test of the move every
   computer makes, unattended or by the install command, on Linux, macOS and Windows. On private
   computers it installs the real releases 0.11.11, 0.11.0 and 0.10.4 from PyPI (and 0.10.0, on
-  Windows) and brings each to this tree's build by the route it takes: its updater or its automatic
-  update, a typed `cad update`, the uv line, the install command. Then cad's own update: automatic
-  and typed, with and without a server running, inside its major with a higher major out and across
-  one only by `cad update --major`, and installed by pipx. `--help` lists the routes.
+  Windows) and brings each to this tree's build by the route it takes; then cad's own update,
+  automatic and typed, inside its major and across one only by `cad update --major`. `--help` lists
+  the routes.
 
 The last three start on one selector flag, `installer`: a change under `scripts/install`, to the
 three workflows, to the two scripts or `scripts/test/real_computer.py`, or to a server module the
@@ -317,9 +315,9 @@ slowest run and 11 minutes: the guard fires before the job's timeout does.
 
 Read the failing job, not the run: `CI` names the jobs that failed, and each job ran only itself.
 
-- **A test failed.** Most failures are defects in the change, so do not re-run first. Reproduce it
-  with the runner the job ran (for a package test, `scripts/test/test-python.sh <the test file>`,
-  under `xvfb-run -a` on a Linux machine with no display), fix the change, and never skip the test.
+- **A test failed.** Most failures are defects in the change. Reproduce it with the runner the job
+  ran (for a package test, `scripts/test/test-python.sh <the test file>`, under `xvfb-run -a` on a
+  Linux machine with no display), fix the change, and never skip the test.
 - **A file hung.** The log has `hung:` naming the file, with every thread's stack as it hung: the
   stack says where it waits. `RUN CUT SHORT` says how many files never started.
 - **A job timed out with nothing said.** Its last `still running:` line names the files that were

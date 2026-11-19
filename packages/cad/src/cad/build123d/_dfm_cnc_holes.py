@@ -23,9 +23,10 @@ edge, and from the axis, just inside that end, a ray through the middle of the o
 no wall of the hole: a drill starts there with part of its tip over the void (a partial hole).
 ``past_wall_mm`` is how far the hole's circle reaches past that wall, the move back that clears it;
 ``open_deg`` the angle of the cylinder the wall opens, ``open_mm`` how far along the axis. The mouth is
-``stepped`` where the cylinder goes all round again beyond the wall's foot (the mouth lies on two levels;
-``to_floor_mm`` is the move the other way that takes the hole whole into the lower one) and ``open`` where it
-does not (a hole that breaks out of the part's side along its whole length). An opening whose two sides face
+``stepped`` where the opening ends at a floor, the cylinder going all round again beyond it (the mouth lies
+on two levels), and ``open`` where it does not (a hole that breaks out of the part's side along its whole
+length); ``behind_wall_mm`` is what of the hole's diameter stays behind the wall, how far the wall is brought
+back to take the hole whole. An opening whose two sides face
 each other (``SLOT_SIDES``) is a slot's that runs into the hole -- a slit across a clamp's bore, a keyway, a
 channel that leaves a hole --, cut after it: ``slotted``, no wall the hole crosses. An opening in the hole's
 side below its mouth (a cross hole's, a cavity's) and an end on a face that does not rise (an inclined one, a
@@ -416,8 +417,9 @@ def _axis_length(model: Model, ordinal: int, a: np.ndarray) -> float | None:
     return (max(ends[True]) + min(ends[True])) / 2.0 - (max(ends[False]) + min(ends[False])) / 2.0
 
 
-#: How far inside an end of a hole, and beyond a wall's foot, the hole's own wall is looked for (``_mouth``):
-#: mm, a tenth of the hole's run where that is less (a station's inset: ``_dfm_cnc_model.stations_at``).
+#: How far inside an end of a hole, and beyond a floor that closes an opening in its wall, the hole's own wall
+#: is looked for (``_mouth``): mm, a tenth of the hole's run where that is less (a station's inset:
+#: ``_dfm_cnc_model.stations_at``).
 MOUTH_INSET_MM = 0.05
 #: The two sides of an opening in a hole's wall face each other within this (the cosine of their normals, as a
 #: gap's two faces do: ``_dfm_cnc.OPPOSED``): a slot that runs into the hole, no wall the hole crosses.
@@ -426,31 +428,32 @@ SLOT_SIDES = -0.7
 
 def _mouth(model: Model, group: set[int], hole: dict[str, Any]) -> dict[str, Any]:
     """What a wall that cuts the hole's mouth makes of it (the module), as its item's fields: ``mouth``
-    (``whole``, ``slotted``, ``stepped`` or ``open``), ``past_wall_mm``, ``to_floor_mm``, ``open_deg``,
-    ``open_mm``, ``cut_by`` (the wall the hole reaches furthest past) and ``cut_faces`` (the faces the opening
+    (``whole``, ``slotted``, ``stepped`` or ``open``), ``past_wall_mm``, ``behind_wall_mm``, ``open_deg``,
+    ``open_mm``, ``cut_by`` (the wall the hole reaches furthest past) and ``cut_faces`` (the faces its opening
     lies between). Of several openings, the one that reaches furthest past its wall.
 
     Each convex edge the narrowest cylinder shares with a face that rises along the axis is a **side** of an
     opening, which lies the way the wall looks from it; a side and the next one round the axis that runs
     beside it and looks back are one opening's two (a side with none is read alone, its opening's angle a
-    straight wall's). An opening counts where the hole's wall is not met through its middle just inside an
-    end the hole opens by: one that stops short of the mouth is in the hole's side, not across its mouth."""
-    found: dict[str, Any] = {"mouth": "whole", "past_wall_mm": 0.0, "to_floor_mm": None, "open_deg": 0.0,
+    straight wall's). An opening is across the mouth where the hole's wall is not met through its middle just
+    inside an end the hole opens by: one that stops short of it is in the hole's side. It ends at a floor where
+    an edge of the cylinder crosses its middle and the wall is met just beyond: ``stepped``, else ``open``."""
+    found: dict[str, Any] = {"mouth": "whole", "past_wall_mm": 0.0, "behind_wall_mm": None, "open_deg": 0.0,
                              "open_mm": 0.0, "cut_by": None, "cut_faces": []}
     a = unit(hole["_axis"])
     o = np.asarray(hole["_origin"], dtype=float)
     radius = hole["diameter_mm"] / 2.0
     narrow = {i for i in group if model.surface(i).kind == "cylinder"
               and abs(float(model.surface(i).radius) - radius) < 1e-6}
+    edges = [(edge, other, _edge_points(model, edge)) for i in sorted(narrow)
+             for edge, other in model.neighbours(i) if other not in narrow]
     sides = []
-    for i in sorted(narrow):
-        for edge, other in model.neighbours(i):
-            if other in group or edge.concave or edge.smooth:
-                continue
-            if not (model.rises(other, a) or model.rises(other, -a)):
-                continue
+    for edge, other, points in edges:
+        if other in group or edge.concave or edge.smooth:
+            continue
+        if model.rises(other, a) or model.rises(other, -a):
             normal = edge_normals(model, edge)[edge.faces.index(other)]
-            sides.append((other, _edge_points(model, edge), unit(normal - a * float(normal @ a))))
+            sides.append((other, points, unit(normal - a * float(normal @ a))))
     opening = hole.get("opening")
     if hole["through"]:
         ends: tuple[int, ...] = (1, -1)
@@ -514,11 +517,15 @@ def _mouth(model: Model, group: set[int], hole: dict[str, Any]) -> dict[str, Any
             past = members[0]["past"]
             if past <= max(1e-9, found["past_wall_mm"]):
                 continue
-            foot = min(row["foot"] for row in members)
-            stepped = foot - inset > far and walled(foot - inset, way)
-            found = {"mouth": "stepped" if stepped else "open", "past_wall_mm": round(past, 9),
-                     "to_floor_mm": round(2.0 * radius - past, 4) if stepped else None,
-                     "open_deg": round(math.degrees(turn), 4), "open_mm": round(top - foot, 4),
+            floor = None
+            for level in sorted({level for _, _, points in edges for level in _crossings(
+                    (points @ a) * sign, np.arctan2((points - o) @ v, (points - o) @ u), middle)}, reverse=True):
+                if far + inset < level < top - inset and walled(level - inset, way):
+                    floor = level
+                    break
+            found = {"mouth": "open" if floor is None else "stepped", "past_wall_mm": round(past, 9),
+                     "behind_wall_mm": round(2.0 * radius - past, 4), "open_deg": round(math.degrees(turn), 4),
+                     "open_mm": round(top - (far if floor is None else floor), 4),
                      "cut_by": model.ref(members[0]["wall"]),
                      "cut_faces": [model.ref(wall) for wall in dict.fromkeys(row["wall"] for row in members)]}
     return found
@@ -531,6 +538,19 @@ def _edge_points(model: Model, edge: brep.Edge) -> np.ndarray:
     curve = BRepAdaptor_Curve(model.part.edges()[edge.ordinal - 1].wrapped)
     first, last = curve.FirstParameter(), curve.LastParameter()
     return np.array([curve.Value(first + (last - first) * k / 16).Coord() for k in range(17)])
+
+
+def _crossings(levels: np.ndarray, angles: np.ndarray, middle: float) -> list[float]:
+    """The levels at which a line of points about an axis crosses the direction ``middle``: where a point
+    stands on it, or its angle from it changes sign from one point to the next (within half a turn: the far
+    side of the axis is no crossing)."""
+    turned = (angles - middle + math.pi) % (2 * math.pi) - math.pi
+    found = [float(levels[k]) for k in range(len(levels)) if abs(turned[k]) < 1e-9]
+    for k in range(len(levels) - 1):
+        p, q = float(turned[k]), float(turned[k + 1])
+        if (p < 0.0) != (q < 0.0) and abs(p - q) < math.pi:
+            found.append(float(levels[k] + p / (p - q) * (levels[k + 1] - levels[k])))
+    return found
 
 
 def _past(model: Model, wall: int, a: np.ndarray, o: np.ndarray, radius: float, radial: np.ndarray,

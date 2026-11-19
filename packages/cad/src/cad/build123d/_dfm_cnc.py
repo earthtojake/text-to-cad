@@ -3009,7 +3009,7 @@ _RAN = {"holes": ("holes", "counterbores"), "access": ("access", "setups"),
 _FAMILIES = ("holes", "counterbores", "threads", "pockets", "internal_corners", "sharp_edges", "knife_edges", "walls", "gaps",
              "access", "setups", "voids", "stock", "small_features")
 _ORDER: dict[str, Callable[[dict[str, Any]], Any]] = {
-    "holes": lambda item: -(item["depth_to_diameter"] or 0),
+    "holes": lambda item: (-item["past_wall_mm"], -(item["depth_to_diameter"] or 0)),
     "counterbores": lambda item: -(item["depth_to_diameter"] or 0),
     "pockets": lambda item: -(item["depth_to_width"] or 0),
     "internal_corners": lambda item: item["radius_mm"],
