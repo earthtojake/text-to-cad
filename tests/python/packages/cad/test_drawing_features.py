@@ -420,6 +420,36 @@ class EdgeTests(unittest.TestCase):
                          "so no fillet note claims the bevelled corner is R3")
 
 
+class OrderTests(unittest.TestCase):
+    """What a part's holes and slots are read in is an order, whatever they have."""
+
+    def test_two_holes_of_one_diameter_one_of_them_sunk_sort(self) -> None:
+        """A plain ⌀6 hole beside a countersunk one, and a plain slot beside one sunk
+        at its mouth: each pair differs where one has a size and the other none."""
+        from build123d import Align, Box, Cone, Cylinder, Pos, SlotCenterToCenter, extrude
+        from cad._internal.drawing_features import holes, slots
+        from cad._internal.drawing_render import _render_sheet
+        from cad.eng_drawing import Sheet
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        plate = Box(120, 60, 10, align=align)
+        plate -= [Pos(x, 15, 0) * Cylinder(3, 10, align=align) for x in (-40, -20)]
+        plate -= Pos(-20, 15, 7) * Cone(3, 6, 3, align=align)                        # countersunk ⌀12 x 90°
+        plate -= Pos(40, 15, 0) * Cylinder(3, 10, align=align) + Pos(40, 15, 6) * Cylinder(5.5, 4, align=align)
+        plate -= [Pos(x, -15, 0) * extrude(SlotCenterToCenter(10, 6), 10) for x in (-30, 30)]
+        plate -= Pos(30, -15, 7) * extrude(SlotCenterToCenter(10, 10), 3)            # one slot sunk 3 at its mouth
+        found = holes(plate)
+        self.assertEqual([(h.csk is not None, h.cbore is not None) for h in found],
+                         [(False, False), (True, False), (False, True)], "the plain one first")
+        self.assertEqual([s.cbore is not None for s in slots(plate)], [False, True])
+        sheet = Sheet("A3", 1.0)
+        top, _front = sheet.three_views(plate, views=("top", "front"))
+        top.holes()
+        said = " ".join(t.dxf.text for t in _render_sheet(sheet, index=1, count=1, label="sorted").modelspace()
+                        .query("TEXT[layer=='DIM']"))
+        self.assertIn("6 THRU", said)
+
+
 def _blind_ends():
     """A block with four blind holes, each ended its own way: ⌀10 to a floor
     filleted R2, ⌀8 to a ball, ⌀6 to a drill point, ⌀4 to a plain flat floor."""

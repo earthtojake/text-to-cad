@@ -18,7 +18,7 @@ from cad._internal.drawing_base import (
     _SAME_PLACE, _SIDES,
     _dot, _exact, _fmt, _ink_width, _look, _looks_down, _near, _places, _shown, _spans, _text_width, _where,
 )
-from cad._internal.drawing_features import Slot
+from cad._internal.drawing_features import Slot, order as _in_order
 from cad._internal.drawing_gdt import _DATUM_REACH, _datum_toward, _side_of, frame_size, mark_width
 from cad._internal.drawing_sheet import _CAPTION_HEIGHT
 
@@ -392,7 +392,7 @@ def _kinds(features) -> list[list]:
         groups.setdefault((isinstance(feature, Slot), _kind(feature)), []).append(feature)
     return sorted(groups.values(), key=lambda g: (isinstance(g[0], Slot),
                                                   0.0 if isinstance(g[0], Slot) else -g[0].diameter,
-                                                  g[0].signature()))
+                                                  _in_order(g[0])))
 
 
 @dataclass

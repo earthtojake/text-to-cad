@@ -58,6 +58,15 @@ _PROBE = 0.05
 _POINT = 0.01
 
 
+def order(feature) -> tuple:
+    """A hole's or a slot's signature as a key that always sorts. A signature
+    says what a feature has, with None for what it lacks (no depth: it is
+    through; no countersink), and two holes of one diameter, one countersunk
+    and one plain, differ first at a None against a pair, which Python will
+    not order. None sorts before any value here."""
+    return tuple((0,) if value is None else (1, value) for value in feature.signature())
+
+
 @dataclass(frozen=True)
 class Hole:
     """One hole, as a callout states it.
@@ -609,7 +618,7 @@ def holes(shape) -> list[Hole]:
     on = {mouth: (circle.diameter, circle.centre)
           for circle in _bolt_circles(found, list(surfaces.values())) for mouth in circle.mouths}
     found = [replace(hole, circle=on[hole.mouth]) if hole.mouth in on else hole for hole in found]
-    found.sort(key=lambda h: (h.signature(), h.axis, h.mouth))
+    found.sort(key=lambda h: (order(h), h.axis, h.mouth))
     return found
 
 
@@ -934,7 +943,7 @@ def slots(shape) -> list[Slot]:
                 ends=(ends[0], ends[1]), width=2 * narrow["r"], length=narrow["gap"] + 2 * narrow["r"],
                 thru=thru, depth=depth, run=hi - lo, cbore=cbore,
             ))
-    found.sort(key=lambda sl: (sl.signature(), sl.axis, sl.mouth))
+    found.sort(key=lambda sl: (order(sl), sl.axis, sl.mouth))
     return found
 
 
