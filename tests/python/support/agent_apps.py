@@ -6,7 +6,9 @@ app, network, uv or cad runs: PATH holds only the stand-ins, the app table is to
 folders or app bundles (``CAD_INSTALL_PATH_ONLY``), and every proxy is a closed port.
 
 ``AgentApps`` is the test case the install command's tests and the tests of cad's own table of apps
-(``cad_server.plugin``) both stand on; ``PluginRuns`` adds the ``cad plugin`` command run on that computer.
+(``cad_server.plugin``) both stand on; ``PluginRuns`` adds the ``cad plugin`` command run on that computer. A test
+case of another kind that can reach that command's code (one mock, or one change of its parser, away from a run of it)
+stands on ``a_home_of_its_own``: no test may be one mistake away from the agent apps of the computer it runs on.
 """
 
 from __future__ import annotations
@@ -173,6 +175,31 @@ STAND_IN = textwrap.dedent('''\
             (target / "skills" / skill / "SKILL.md").write_text(
                 f"---\\nname: {{skill}}\\nmetadata:\\n  repository: earthtojake/text-to-cad\\n---\\nnew\\n")
 ''')
+
+
+# Where an agent app, or what installs one, says its folder is: none of them names this computer's in a test.
+ELSEWHERE = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "GEMINI_CLI_HOME", "HERMES_HOME", "NPM_CONFIG_PREFIX",
+             "npm_config_prefix")
+
+
+def a_home_of_its_own(case: unittest.TestCase, home: Path, path: Path) -> None:
+    """This process's environment, for the rest of ``case``, that of a computer with no agent app on it: ``home``, a
+    folder of the test's, as HOME and USERPROFILE, with the XDG folders and Windows' two inside it; PATH the folder
+    ``path`` alone (the test's stand-ins); the table of apps told to look nowhere but PATH
+    (``CAD_INSTALL_PATH_ONLY``, and Codex's command by its name); and no variable left that names an app's folder
+    elsewhere (``ELSEWHERE``). What
+    ``AgentApps.environ`` gives a run, for a test case that changes this process's environment and keeps the rest of
+    it."""
+    home.mkdir(parents=True, exist_ok=True)
+    own = mock.patch.dict(os.environ, {
+        "HOME": str(home), "USERPROFILE": str(home), "PATH": str(path), "CAD_INSTALL_PATH_ONLY": "1",
+        "XDG_CONFIG_HOME": str(home / ".config"), "XDG_STATE_HOME": str(home / ".local" / "state"),
+        "APPDATA": str(home / "AppData" / "Roaming"), "LOCALAPPDATA": str(home / "AppData" / "Local"),
+        "CODEX_CLI": "codex"})
+    own.start()
+    case.addCleanup(own.stop)  # the whole environment as it was, what is taken out below too
+    for name in ELSEWHERE:
+        os.environ.pop(name, None)
 
 
 class AgentApps(unittest.TestCase):

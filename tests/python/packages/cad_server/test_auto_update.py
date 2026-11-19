@@ -4,7 +4,8 @@ one; no update without the feed or to an older release; the idle rule; the helpe
 and what it runs, in order, never the install command; the server's rule for that command (``plugin_catch_up``): once
 where cad is newer than the release it is up to date for, however cad got there, bounded; each ended attempt counted
 once (``auto_update.report``); a start that joins a newer server; a start that failed still updating. No test reaches
-the real feed or PyPI, or runs uv."""
+the real feed or PyPI, or runs uv, and every one runs on a computer of its own (``Case``: a temporary home, a PATH of
+its own stand-ins), so none is a mock away from the agent apps of the computer it runs on."""
 
 from __future__ import annotations
 
@@ -29,6 +30,7 @@ from cad.engine.previous import version
 from cad_server import updates
 from cad_server._internal import auto_update, auto_update_helper as helper
 from cad_server.cli import auto_update as command, plugin as plugin_command
+from tests.python.support.agent_apps import a_home_of_its_own
 
 RECEIPT = '[tool]\nrequirements = [{ name = "cad", specifier = "==0.1.0" }]\nentrypoints = [{ name = "cad" }]\n'
 BOUNDED = "cad>=0.1.0,<1"  # the requirement of 0.1.0's upgrade: inside its major, never below it (``auto_update.bound``)
@@ -39,6 +41,7 @@ class Case(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(__import__("shutil").rmtree, self.tmp, ignore_errors=True)
         self.state = self.tmp / "state"
+        self.home = self.tmp / "home"
         self.tool = self.tmp / "tools" / "cad"  # a uv tool's environment
         self.tool.mkdir(parents=True)
         (self.tool / "uv-receipt.toml").write_text(RECEIPT, encoding="utf-8")
@@ -51,7 +54,10 @@ class Case(unittest.TestCase):
         # the server the runner started for this file (``ServerSwitchesTest`` starts one of its own).
         self.engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None))
         self.addCleanup(__import__("shutil").rmtree, self.engine, ignore_errors=True)
-        for patch in (mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state), "PATH": str(self.bin),
+        # A home of its own, and PATH the stand-ins alone: ``cad plugin`` is run here, and what it would find and
+        # change, were a test's mock ever to miss, is this folder's and no agent app's.
+        a_home_of_its_own(self, self.home, self.bin)
+        for patch in (mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state),
                                                    "CAD_ENGINE_DIR": str(self.engine)}),
                       mock.patch.object(sys, "prefix", str(self.tool)),
                       mock.patch.object(cad_server, "__version__", "0.1.0"),
@@ -215,6 +221,20 @@ class PluginSwitchTest(Case):
         from cad_server.cli import main as cad
 
         self.assertEqual(self.cli("plugin", "--refresh", main=cad), (0, "", ""))
+
+    def test_a_run_of_the_command_here_would_see_a_computer_of_its_own(self) -> None:
+        """What ``cad plugin install`` and ``cad plugin update`` take this computer to be (``computer.Here``), in a
+        test of this file: a home in the test's folder, no command but the test's stand-ins, no app's folder named
+        elsewhere. A run no mock stood in for finds no agent app, and changes nothing outside that folder."""
+        from cad_server.plugin import apps, computer
+        from tests.python.support.agent_apps import ELSEWHERE
+
+        here = computer.Here()
+        self.assertEqual((here.home, here.path_only), (self.home, True))
+        places = [Path(folder) for folder in here.search_path().split(os.pathsep)]
+        places += [here.config_home(), apps.claude_dir(here), apps.hermes_home(here), *here.state_dirs()]
+        self.assertEqual([place for place in places if self.tmp not in place.parents], [])
+        self.assertEqual([name for name in ELSEWHERE if name in os.environ], [])
 
     def test_a_run_a_server_began_has_a_deadline_and_a_person_s_none(self) -> None:
         """``cad plugin update`` where a server began it (``CAD_INSTALL_ATTEMPT``) has ``INSTALL_SECONDS``, and keeps
