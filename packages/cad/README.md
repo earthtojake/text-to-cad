@@ -422,7 +422,7 @@ src/cad/
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
-                         #   measurements of native geometry (_geometry), flat patterns (_flatten),
+                         #   measurements of native geometry (_geometry),
                          #   the manufacturing checks of exact geometry (_dfm_brep, the core; _dfm_cnc,
                          #   _dfm_sheet with unfold, _dfm_molding, _dfm_printing; _dfm_dxf, a cut file;
                          #   _dfm_check, the entry), the interference check's measuring

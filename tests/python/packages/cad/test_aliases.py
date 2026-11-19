@@ -29,6 +29,8 @@ NAMES = {
             "memo": "cad.build123d.memo", "paint": "cad.build123d.paint", "export": "cad.engine.api.export",
             "snapshot": "cad.engine.api.snapshot", "inspect": "cad.engine.api.inspect"},
     "cad.results": {"ValidationResult": "cad.results._ValidationResult", "ValidationIssue": "cad.results._ValidationIssue"},
+    "cad.build123d": {name: f"cad.build123d._flatten.{name}" for name in (
+        "flat_pattern", "planar_faces", "flatten_face", "flatten_faces", "union_faces", "offset_profile")},
     "cad.mujoco": {"compile_model": "cad.mujoco._compile.compile_model",
                    "compile_findings": "cad.mujoco._compile.compile_findings"},
 }

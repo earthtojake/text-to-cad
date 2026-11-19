@@ -22,8 +22,6 @@ and the helpers a model calls with build123d objects:
 * measurements of native geometry: ``closest_points``, ``overlap_volume``, ``is_sound``,
   ``topology_errors``, ``boundary_edges``, ``self_intersections``, ``mass_properties`` and their
   result types;
-* flat patterns, exact 2D geometry from a solid's planar faces: ``flat_pattern``, ``planar_faces``,
-  ``flatten_face``, ``flatten_faces``, ``union_faces``, ``offset_profile``;
 * ``leaves(tree)``: every leaf of a tree (``step.read``'s, ``xbf.read``'s, a model's ``.shape``) placed where
   it stands, out of the tree, on the same B-rep: what ``located`` gives without copying the tree;
 * the manufacturing check of exact geometry, a ``CheckResult`` with its findings at refs (``plate/face 7``):
@@ -63,8 +61,6 @@ _NAMES = {
         "GeometryError", "GeometryIssue", "ClosestPoints", "MassProperties", "closest_points", "overlap_volume",
         "is_sound", "topology_errors", "boundary_edges", "self_intersections", "mass_properties")},
     "leaves": "cad.build123d._leaves",
-    **{name: "cad.build123d._flatten" for name in (
-        "flat_pattern", "planar_faces", "flatten_face", "flatten_faces", "union_faces", "offset_profile")},
     **{name: "cad.build123d._dfm_check" for name in ("dfm", "cnc", "sheet_metal", "molding", "printing")},
     "unfold": "cad.build123d._dfm_sheet",
 }
@@ -82,7 +78,9 @@ def __getattr__(name: str) -> Any:
         return importlib.import_module(f"{__name__}.{name}")
     module = _NAMES.get(name)
     if module is None:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+        from cad._internal.aliases import lookup  # an earlier spelling, after its warning; else AttributeError
+
+        return lookup(__name__, name)
     return getattr(importlib.import_module(module), name)
 
 
@@ -96,8 +94,6 @@ if TYPE_CHECKING:
     from cad.build123d import materials
     from cad.build123d._dfm_check import cnc, dfm, molding, printing, sheet_metal
     from cad.build123d._dfm_sheet import unfold
-    from cad.build123d._flatten import (flat_pattern, flatten_face, flatten_faces, offset_profile, planar_faces,
-                                        union_faces)
     from cad.build123d._geometry import (ClosestPoints, GeometryError, GeometryIssue, MassProperties,
                                          boundary_edges, closest_points, is_sound, mass_properties, overlap_volume,
                                          self_intersections, topology_errors)
