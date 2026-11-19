@@ -10,8 +10,9 @@ it starts and ends; a verbose one says each step as it starts. A pair near as bu
 joint turns, stops nothing until it truly closes, and is reported with its gaps. A pair drawn one inside the other
 stops nothing where its overlap shrinks or slides, only where it deepens, and is reported with its volume and
 depth. A lid hinged on its edge, near its box's wall all along the hinge line long before it folds back onto it, stops
-within a tenth of a radian of lying on it, as does one drawn a millimetre off its rim and a door on a vertical hinge;
-a tab 2 mm from its axis still stops at its block."""
+within a tenth of a radian of lying on it, as does one drawn a millimetre off its rim, a door on a vertical hinge and
+a flap 3 mm wide, whose end face is less than a contact asks for far from an axis; a tab 2 mm from its axis still
+stops at its block."""
 
 from __future__ import annotations
 
@@ -256,6 +257,26 @@ def door():
     bd.RigidJoint("hinge", leaf, hinge.location)
     hinge.connect_to(leaf.joints["hinge"], angle=0)
     return bd.Compound(children=[frame, leaf], label="door")
+"""
+
+
+# A flap 3 mm wide lying along the top of a base, hinged on its edge as the lid is: its end face, 3 x 3 mm, lands on the
+# base's back face a half turn round (at 181 degrees the solids overlap). That is 9 mm^2 of contact, under the 15 a
+# contact grown is far from an axis.
+FLAP = """
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/flap.xbf")
+def flap():
+    base = bd.Box(10, 30, 20, align=(bd.Align.CENTER, bd.Align.MAX, bd.Align.MIN))
+    leaf = bd.Pos(0, 0, 20) * bd.Box(3, 30, 3, align=(bd.Align.CENTER, bd.Align.MAX, bd.Align.MIN))
+    base.label, leaf.label = "base", "flap"
+    hinge = bd.RevoluteJoint("hinge", base, axis=bd.Axis((0, 0, 20), (-1, 0, 0)), angular_range=(0, 180))
+    bd.RigidJoint("hinge", leaf, hinge.location)
+    hinge.connect_to(leaf.joints["hinge"], angle=0)
+    return bd.Compound(children=[base, leaf], label="flap")
 """
 
 
@@ -513,6 +534,21 @@ class Ranges(unittest.TestCase):
         # Turned in it goes into its stop where it stands; turned out, its face lands on the wall's at 180 degrees,
         # near it along the hinge line long before: it stops within a tenth of a radian and a step of landing.
         self.assertEqual(("stop", "wall"), (hinge["lower_contact"]["still"], hinge["upper_contact"]["still"]), hinge)
+        self.assertEqual(0.0, hinge["lower"], hinge)
+        self.assertTrue(174.0 <= hinge["upper"] < 180.0, hinge)
+
+    def test_a_flap_3_mm_wide_stops_short_of_folding_back_onto_its_base(self) -> None:
+        from cad import xbf
+        from cad.engine import build as engine_build
+
+        script = self.folder / "flap.py"
+        script.write_text(textwrap.dedent(FLAP), encoding="utf-8")
+        self.assertTrue(engine_build.build(script, ["flap"], cwd=self.folder)[0]["ok"])
+        [hinge] = xbf.ranges(self.folder / "XBF/flap.xbf").measurements["joints"]
+        # Its end face lands on the base at 180 degrees, 9 mm^2 of it. Within 3 mm of the axis a sample counts for as
+        # many as its band is narrower than 0.3 mm, so that is a contact: the flap stops short of landing, as the
+        # lid does, not two degrees into the base.
+        self.assertEqual(("base", "base"), (hinge["lower_contact"]["still"], hinge["upper_contact"]["still"]), hinge)
         self.assertEqual(0.0, hinge["lower"], hinge)
         self.assertTrue(174.0 <= hinge["upper"] < 180.0, hinge)
 

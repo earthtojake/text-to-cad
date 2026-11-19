@@ -50,13 +50,13 @@ meets where no more than that much turning is left, whatever the clearance and h
 holds from ten times itself out. Nearer the axis the share is under ``RESOLUTION``, which the samples do not resolve
 (a sample lying on a face may stand that far from the face's nearest sample): there its gap is measured to the still
 part's surface itself, the triangles that its samples within ``2 * RESOLUTION`` lie on (``_Sweep._surface``), its
-true distance wherever that is under ``RESOLUTION``. A sample near within such a share counts towards a contact for
-``RESOLUTION`` over the share of samples, as many as that band is narrower than the ``RESOLUTION`` a contact is
-counted in: an edge or a small face coming down near the axis brings that much less of its surface into the band, and
-is the contact it would be farther out (a flap 3 mm wide landing on its end face, a thin lid's back edge coming round
-onto its wall). A part moved by a joint that follows this one turns about that joint's axis, or slides along it: its
-samples are read by the two halves alone, as a slide's are. Neither the share nor that count reads the clearance, so
-the rule below holds.
+true distance wherever that is under ``RESOLUTION``. There, too, a sample that is near counts towards a contact as
+``RESOLUTION`` over its share of samples: its band is that much narrower than the ``RESOLUTION`` a contact is counted
+in, and an edge or a small face coming down near the axis brings that much less of its surface into it, the contact
+it would be farther out (a flap 3 mm wide landing on its end face, a thin lid's back edge coming round onto its
+wall). A part moved by a joint that follows this one turns about that joint's axis, or slides along it: its samples
+are read by the two halves alone, as a slide's are. Neither the share nor that count reads the clearance, so the rule
+below holds.
 
 **Parts drawn overlapping.** A pair touching as built may be drawn one inside the other (a vendor's simplified
 envelope sunk into its neighbour, a carriage drawn inside its rail, a link drawn a little too wide for its
@@ -931,16 +931,18 @@ class _Sweep:
             found = self.facets[still] = (vertices[faces], self.lying[link][self.owners[link] == still])
         corners, lying = found
         least = np.full(len(points), np.inf)
-        asked, held, apart = self._hashed(still, 2 * self.resolution).pairs(points)
-        if not len(asked):
-            return least
-        if len(corners):
-            # Each (point, triangle) once, however many of the triangle's samples are that near.
-            pairs = np.unique(asked * len(corners) + lying[held])
-            asked, triangle = pairs // len(corners), corners[pairs % len(corners)]
-            apart = _to_triangle(points[asked], triangle[:, 0], triangle[:, 1], triangle[:, 2])
-        each, nearest = _least(asked, apart)
-        least[each] = nearest
+        for first in range(0, len(points), 2000):  # a couple of thousand at once: a fine mesh holds hundreds a point
+            block = points[first:first + 2000]
+            asked, held, apart = self._hashed(still, 2 * self.resolution).pairs(block)
+            if not len(asked):
+                continue
+            if len(corners):
+                # Each (point, triangle) once, however many of the triangle's samples are that near.
+                pairs = np.unique(asked * len(corners) + lying[held])
+                asked, triangle = pairs // len(corners), corners[pairs % len(corners)]
+                apart = _to_triangle(block[asked], triangle[:, 0], triangle[:, 1], triangle[:, 2])
+            each, nearest = _least(asked, apart)
+            least[first + each] = nearest
         return least
 
     def _deep(self, still: int, depth: float) -> tuple[np.ndarray, float, np.ndarray]:
