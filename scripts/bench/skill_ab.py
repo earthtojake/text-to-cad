@@ -145,6 +145,15 @@ def prepare(run: Path, task: dict, ref: str | None, scratch: Path) -> None:
 
         script, function = task["id"].split("::")
         request = request.replace("{ID}", ids.model_id(work / script, function))
+        # A request that names a document's id speaks of one the person has built: build it on the run's own
+        # server, which keeps it, so the id resolves as it would on their computer.
+        env = {**os.environ, **variables, "PATH": f"{BIN}{os.pathsep}{os.environ.get('PATH', '')}"}
+        cad = str(BIN / "cad")
+        subprocess.run([cad, "server", "start"], env=env, check=True, capture_output=True)
+        try:
+            subprocess.run([cad, "run", script], env=env, cwd=work, check=True, capture_output=True)
+        finally:
+            subprocess.run([cad, "server", "stop"], env=env, check=False, capture_output=True)
     (run / "BRIEF.md").write_text(BRIEF.format(run=run, skill=task["skill"], request=request), encoding="utf-8")
 
 
