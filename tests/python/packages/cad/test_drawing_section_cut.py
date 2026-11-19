@@ -81,5 +81,24 @@ class PlaneCutTests(unittest.TestCase):
         self.assertEqual(len(faces), 1)
 
 
+class TouchedFaceTests(unittest.TestCase):
+    """A section hatches what the plane cut, not a face it only touches."""
+
+    def test_a_face_lying_in_the_cutting_plane_is_not_a_cut_face(self):
+        from build123d import Align, Box, Pos
+
+        from cad._internal.drawing_views import _plane_cut
+
+        corner = (Align.MIN, Align.MIN, Align.MIN)
+        # One block behind the plane y = 0, its front face in it; one block the plane cuts.
+        part = Box(40, 20, 20, align=corner) + Pos(40, -20, 0) * Box(40, 40, 20, align=corner)
+        self.assertEqual(len(part.solids()), 1)
+        kept, faces = _plane_cut(part, (0.0, 0.0, 10.0), (0.0, -1.0, 0.0))   # seen from -Y, as a front view is
+        self.assertAlmostEqual(kept.volume, 40 * 20 * 20 * 2, places=6, msg="the half beyond the plane, whole")
+        self.assertEqual(len(faces), 1, "the block the plane only touches is seen, not cut")
+        self.assertAlmostEqual(faces[0].area, 800.0, places=6)
+        self.assertAlmostEqual(faces[0].center().X, 60.0, places=6)
+
+
 if __name__ == "__main__":
     unittest.main()

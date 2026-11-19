@@ -413,9 +413,33 @@ def _plane_cut(shape, point, look) -> tuple:
             continue
         normal, centre = face.normal_at(), face.center()
         if (abs(abs(_dot((normal.X, normal.Y, normal.Z), look)) - 1) < 1e-6
-                and abs(_dot((centre.X - point[0], centre.Y - point[1], centre.Z - point[2]), look)) < 1e-6):
+                and abs(_dot((centre.X - point[0], centre.Y - point[1], centre.Z - point[2]), look)) < 1e-6
+                and _was_cut(shape, face, look)):
             faces.append(face)
     return kept, faces
+
+
+#: How far past a face in the cutting plane the part is asked for material, mm.
+_CUT_PROBE = 1e-3
+
+
+def _was_cut(shape, face, look) -> bool:
+    """Whether a face of the kept half that lies in the cutting plane is one the
+    cut made: the part had material on the other side of it, which the cut took
+    away. A face of the part's own that the plane only touches (a step whose
+    face lies in the plane) has air there: it is seen beyond the plane, not cut,
+    and is not hatched."""
+    from build123d import Vector
+
+    step = Vector(*look) * _CUT_PROBE
+    # A point on the face: the middle of its surface, or, where that falls in a
+    # hole of it, the first of a few others that does not.
+    for u, v in ((0.5, 0.5), (0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75), (0.1, 0.5), (0.9, 0.5),
+                 (0.5, 0.1), (0.5, 0.9)):
+        on = face.position_at(u, v)
+        if face.distance_to(on) < 1e-7:
+            return bool(shape.is_inside(on + step))
+    return True  # no point found on it to ask from: drawn as a cut, as it always was
 
 
 def _cut(view: View) -> tuple:
