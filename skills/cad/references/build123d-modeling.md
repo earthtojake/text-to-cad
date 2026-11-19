@@ -32,10 +32,15 @@ selectors ([a picked element in a model's body](inspection-and-validation.md#a-p
 
 A sharp edge is a design decision, not a default. For a physical part, round or
 break the edges its manufacturing process and use call for, and keep sharp the
-edges they need sharp. Take the process from the request or project; when none
-is given, infer the likely one from the part and record it as an assumption.
-Fillets and chamfers round the geometry the design has; they are not a reason
-to add ribs, gussets or other features.
+edges they need sharp. The process is the one the request or the project names
+or implies; its reference holds its limits and wins where a line below differs
+([Design for the process](../SKILL.md#design-for-the-process)).
+With no process named or implied, treat edges for use alone: assume no process,
+add no tool radius or edge break for one, and say which process the design suits
+if one is evident. This is for a new part: an edit to an existing one adds what
+was asked and no edge treatment of its own, and the reply names the new edges it
+left sharp. Fillets and chamfers round the geometry the design has; they are not
+a reason to add ribs, gussets or other features.
 
 - **Use.** Fillet inside corners that carry load: rib, boss and gusset roots,
   wall-to-floor junctions, a stepped shaft's shoulder. Round or break exposed
@@ -61,7 +66,8 @@ Size each radius from the user's shop spec, else from the process's design
 guide, within the local space, and make it an argument of the part's helper
 function. A radius with neither source is an assumption the reply names with
 its value.
-Report added fillets and chamfers with the process they assume. They never
+Report added fillets and chamfers, and the process they are for where one was
+named. They never
 change a specified dimension, and one that fails to build is reported, not
 silently dropped; see [kernel pitfalls](#kernel-pitfalls). A body that catches
 a failed fillet and goes on (a retry ladder) leaves those edges sharp with no

@@ -168,10 +168,12 @@ is the script's folder; two explicit names in it must differ.
   cache, as last built. When the cache holds no file of one (deleted by hand, or never
   saved), the page, `cad model inspect <id>` and `cad_show` print the command that brings it
   back (`cad run src/bracket.py`). Run it.
-- **A new part's edges get the fillets and chamfers its process and use call for**,
-  not every edge left sharp; an edit treats only the edges it makes. The process is
-  the request's or the project's; one inferred from the part is an assumption the
-  reply names ([fillets and chamfers](references/build123d-modeling.md#fillets-and-chamfers)).
+- **A new part's edges get the fillets and chamfers its use calls for, and its process's
+  where the request names or implies one** ([Design for the process](#design-for-the-process)),
+  not every edge left sharp. An edit adds what was asked and no edge treatment of its own:
+  the reply names the new edges it left sharp. With no process, none is assumed and nothing
+  is added for one
+  ([fillets and chamfers](references/build123d-modeling.md#fillets-and-chamfers)).
 - Model units are millimetres, +Z up.
 - An image without a scale sets no fit dimension, and a drawing's units, projection and
   revision decide how its numbers read. A missing or conflicting dimension that changes
