@@ -5,8 +5,10 @@ a link that lands nowhere strands them at the moment they are following instruct
 and renamed (the release runbook out of CONTRIBUTING.md, the engine's README into a page per mechanism), and
 nothing else notices a link that pointed at the old place.
 
-The skills' links are held by ``test_skill_shape.py``, which also keeps each inside its skill. This holds every
-other tracked Markdown file. Standard library alone.
+The skills' links are held by ``test_skill_shape.py``, which also keeps each inside its skill, and the
+documentation site's pages (``apps/docs/content``) by the site's own build, which resolves their routes
+(``/docs/cad#...``) and their ``repo:`` paths. This holds every other tracked Markdown file. Standard library
+alone.
 """
 
 from __future__ import annotations
@@ -22,13 +24,15 @@ FENCED = re.compile(r"^ *```.*?^ *```", re.S | re.M)
 INLINE = re.compile(r"`[^`\n]*`")
 #: Not documents of ours: a task's or a test's sample text, whose links are part of the sample.
 SAMPLES = ("__fixtures__/", "/fixtures/", "scripts/bench/skill_ab/tasks/")
+#: Held elsewhere: the skills, and the site's pages, whose links are the site's routes.
+ELSEWHERE = ("skills/", "apps/docs/content/")
 
 
 def _documents() -> list[Path]:
-    """The tracked Markdown files but the skills' and the samples'."""
+    """The tracked Markdown files but those held elsewhere and the samples'."""
     listed = subprocess.run(["git", "-C", str(REPO), "ls-files", "*.md"], capture_output=True, text=True, check=True)
     return [REPO / name for name in listed.stdout.splitlines()
-            if not name.startswith("skills/") and not any(sample in name for sample in SAMPLES)]
+            if not name.startswith(ELSEWHERE) and not any(sample in name for sample in SAMPLES)]
 
 
 def _anchor(heading: str) -> str:
