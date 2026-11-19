@@ -85,7 +85,10 @@ part = step.read(Path(__file__).parent / "../vendor/enclosure.step")
 script, since it resolves against the process's working directory otherwise. Any
 build123d shape works: a drawing takes geometry, not a file.
 
-## `Sheet(size="A3", scale=1.0, title=..., part_number="", material="", spec="", finish="", revision="A", author="", date="", units="mm", projection="THIRD ANGLE", notes=(), ink="mono", text_height=3.5, general_tolerance="", general_profile=None, revisions=(), stage=None, profile=None, category="", company="", fields={})`
+## `Sheet(size="A3", scale=1.0, title=..., part_number="", material="", revision="A", author="", units="mm", projection="THIRD ANGLE", notes=(), ink="mono", text_height=3.5, general_tolerance="", revisions=(), *, spec="", finish="", date="", general_profile=None, subtitle="", stage=None, profile=None, category="", company="", fields={})`
+
+Give the fields by name. The ones before the `*` keep the order earlier
+releases had; the rest are taken by name only.
 
 - `size`: `A4`, `A3`, `A2`, `A1`, `A0`, landscape, with an ISO 5457 zone grid.
   `None` lets `three_views` choose: the smallest of A4 to A2 that draws the
@@ -99,13 +102,16 @@ build123d shape works: a drawing takes geometry, not a file.
   set afterwards is yours.
 - `title`, `part_number` (DWG NO.), `material`, `finish`, `revision`, `author`
   (DRAWN), `date`: title block cells. A long title is set smaller to end inside
-  its cell; any other value too long for its cell at the smallest legible text
-  is refused, never cut. `spec` is the material's specification:
+  its cell. Any other value too long for its cell at the smallest legible text
+  is wrong cut short: a finish, a date or a material with its spec is refused,
+  and a part number, a revision, an author or a material alone is cut, as it
+  always was, and reported. `spec` is the material's specification:
   MATERIAL reads `AL 6061-T6 PER AMS 4027`; a spec without a material is
   refused. A field left empty prints as an empty,
   captioned cell. Nothing is stamped from the clock. The drawing function's
   name prints small under the title, so a print leads back to its script.
-- `units`: `"mm"`, the unit every value is measured in; anything else is refused.
+- `units`: `"mm"`, the unit every value is measured in. Any other word prints
+  in the UNITS cell and changes no value: the run reports it. Leave it.
 - `projection`: `"THIRD ANGLE"` or `"FIRST ANGLE"`. It sets the arrangement
   `three_views` makes and the projection symbol the title block draws.
 - `general_tolerance="ISO 2768-m"`: a note, "TOLERANCES PER ISO 2768-m UNLESS
@@ -193,8 +199,10 @@ sheet millimetres.
   value; `"<>"` inserts the measurement, `"%%c<>"` prefixes ⌀ (a diameter on a
   profile). `tol=0.1` prints ±0.1, `tol=(0.05, 0.02)` +0.05/-0.02, `fit="H7"`
   appends an ISO 286-1 tolerance class (a hole's in capitals, `"g6"` a
-  shaft's, `"H7/g6"` a fit; anything else is refused) and is the size's whole
-  tolerance, so it takes no `tol` or `limits`; `limits=(39.98, 40.02)` prints
+  shaft's, `"H7/g6"` a fit) and is the size's whole tolerance, so give it or
+  `tol`, never both, and it takes no `limits`. Any other text given as a fit,
+  or a fit beside a `tol`, prints as typed, as it always did, and the run
+  reports it. `limits=(39.98, 40.02)` prints
   the two limits (checked against the part). `basic=True` boxes the value; `reference=True` puts it in
   parentheses; neither takes a tolerance. `frame=` draws a `Frame` beyond the
   value on a row of its own, `datum="B"` makes the feature a datum, `key=True`
@@ -235,7 +243,8 @@ sheet millimetres.
   a letter of their own (nothing in the part says a bore is tapped).
 - `view.hole(point, diameter=None, depth=None, thru=None, cbore=None, csk=None, thread=None, count=None, angle=45, tol=None, fit=None, label=None, frame=None, datum=None, key=False)`:
   one callout on the hole whose axis passes through `point`, in a view looking
-  down that axis. Every size and the count come from the part; a value given is
+  down that axis. Every size and the count come from the part, so leave them
+  unset; a depth, counterbore or count given is
   checked and a contradiction is refused, naming what the part has. `label`
   is appended (`"WHEEL"`). `thread` states a tapped hole: a metric thread
   of ISO 261's sizes and pitches, with an optional ISO 965-1 class for a tapped
@@ -243,7 +252,7 @@ sheet millimetres.
   inch thread of ASME B1.1's sizes and its UNC, UNF or UNEF count
   (`"1/4-20 UNC-2B"`, `"#10-32 UNF"`, `"1-8 UNC"`); any other thread, such as a
   pitch the size does not have (`"M6x5"`, `"1/4-28 UNC"`), is refused. The bore is its tap drill (basic minor diameter to about d - P: ⌀5 for
-  M6x1, the #7 drill for 1/4-20) or the thread's own size (⌀6). It takes no `diameter`,
+  M6x1, the #7 drill for 1/4-20) or the thread's own size (⌀6). It takes no
   `tol` or `fit`; a plain hole takes `tol` or a hole's `fit` (`"H7"`,
   `"H7/g6"`), not both. A tap drill is stated with the thread after it: `⌀5 ↧12
   M6x1 - 6H ↧10`. `count` is how many of the identical bores are tapped (all,
@@ -257,6 +266,17 @@ sheet millimetres.
   hole; a groove or a pocket with material inside is not a hole. `frame=`
   hangs a `Frame` (its position, say) under the callout; `datum=` and `key=`
   as `dim` takes them.
+  **A callout typed whole.** With `diameter` given
+  (`view.hole(point, 6.6, thru=True, cbore=(11, 6.5), count=4)`), the call is
+  the one earlier releases took, and it draws what it drew: exactly what is
+  typed (no THRU, depth or count that is not; a `thread` in the diameter's
+  place; any text as a `thread` or a `fit`), on a circle of that diameter at
+  `point`, whatever the part has there, in any view. Nothing is refused. The
+  run reports each one the part does not bear out, with what the part reads:
+  `top.hole((20, 0, 10)) prints ⌀6.6 THRU, as typed: the part's hole there
+  reads ⌀6 THRU.` One that agrees says nothing and states its hole (its like
+  too, with `count`). Scripts written before sizes were read off the part keep
+  working this way; in a new one, leave the sizes unset.
 - `view.slot(point, width=None, length=None, thru=None, depth=None, count=None, angle=45, label=None, frame=None, datum=None, key=False)`:
   one slot callout, `point` being the slot's centre or either end's centre.
   Width, length end to end, THRU or depth and the count come from the part;
@@ -264,7 +284,11 @@ sheet millimetres.
   and air between; a half-round notch in an edge is not one.
 - `view.diameter(center, size=None, angle=45, text=None, basic=False, reference=False, frame=None, datum=None, key=False)` and
   `view.radius(center, size=None, ...)`: the circle or arc centred there,
-  measured; `size` (a diameter, or a radius) picks one of several.
+  measured; `size` (a diameter, or a radius) picks one of several, and none of
+  that size there is refused. The radius given second
+  (`view.diameter(center, 8)`, `view.radius(center, 8)`) is the earlier
+  spelling: the callout is drawn on a circle of that radius as typed, and
+  reported when the view shows none.
 - `view.section(letter="A", through=None, parts=None, materials=False)`: draw the view as a full section
   through `through` (default: the part's middle), square to the line of sight.
   Cut faces are hatched, hidden lines are left out, the view is labelled
@@ -391,12 +415,18 @@ note giving the size (`CHAMFER 0.5 × 45°`, `4 FILLETS R1`) states either.
 | `incomplete: 4 rounds R2 are not stated. Sheet(notes=geometry_notes(part)) ...` | a blend radius is not stated |
 | `incomplete: 2 chamfers 1 × 45° are not stated ...` | a chamfer is not stated |
 | `front.broken(): the break from X = 100 to 500 hides some of the part ...` (stops the script) | the part changes inside a break; move it |
-| `front dim 2: ... would measure blank paper ...` (stops the script) | a dimension's points miss the view |
-| `annotation overlaps: '120' would print over 'TOP' ...` (stops the script) | two pieces of text collide; give the view room, or place one with `offset=` |
+| `front dim 2: ... It is drawn, but it measures blank paper ...` | a dimension's, callout's or note's point misses the view; fix the coordinates (a flag note or a frame there stops the script) |
+| `top.hole((20, 0, 10)) prints ⌀6.6 THRU, as typed: the part's hole there reads ⌀6 THRU ...` | a callout typed whole says what the part does not; leave the sizes unset |
+| `top.hole((0, 0, 20)) prints ⌀16 THRU, as typed: no hole runs along the top view's line of sight there ...` | a typed callout on what is no hole (a boss); state a boss with `diameter()` |
+| `top.radius((0, 0, 20), 9): no arc of radius 9 is centred there ... The callout is drawn as typed.` | a circle given its radius that the view does not show |
+| `top.dim(...): fit='loose' is not an ISO 286-1 tolerance class or fit ... It prints as typed.` | give a class (`"H7"`), or put the word in `text=` |
+| `top.dim(...): fit='H7' and tol= are two tolerances for one size, and both print ...` | give one of them |
+| `units='in': the title block reads IN, and every value on the sheet is measured ... in millimetres` | leave `units` alone; nothing converts the values |
+| `annotation overlaps: '120' is printed over 'TOP' ...` | two pieces of text collide on a sheet whose size you gave; give the view room, or place one with `offset=` (a sheet choosing its size takes a larger one) |
 | `views crowded: ... Sheet("A2") or Sheet(scale=0.5) gives them room` | the views' annotation needs more paper |
 | `SECTION A-A has no view on this sheet that sees its cutting plane ...` (stops the script) | add the view that shows the plane |
-| `front dim 0: ... so it could measure either ...` (stops the script) | pass `orientation=` |
-| `the part in the top view is 2 separate solids ...` (stops the script) | the model is in pieces |
+| `front dim 0: ... so it could measure either; it measures the larger, 12 ...` | pass `orientation=` |
+| `the part in the top view is 2 separate solids ... it is drawn as given ...` | the model is in pieces |
 | `DETAIL B: no free paper on A3 for a 50 mm circle at 10:1 ...` | give `at=`, a smaller `scale=`, or a larger sheet |
 | `VIEW C: no free paper on A3 for it at 1:1 ...` | the same, for an auxiliary view |
 | `top.hole_table(): no free paper on A3 for a 70 x 48 mm table ...` | give the table `at=`, or a larger sheet or smaller scale |
@@ -420,8 +450,9 @@ note giving the size (`CHAMFER 0.5 × 45°`, `4 FILLETS R1`) states either.
 | `top dim 2: a basic dimension, and no GD&T frame on the sheet bounds it ...` (stops the script) | add the frame, or make it toleranced |
 | `sheet 2 (BRACKET), top hole 0: its frame names datum A, which no view of this sheet defines ...` | define the datum on that sheet with `view.datum` (a refusal) |
 | `sheet 1 (BRACKET), top hole 0: a GD&T frame is read by ISO GPS or ASME Y14.5-2018 ... the sheet names neither ...` | give the sheet `profile=GENERIC` or the person's own `Profile` (a refusal) |
-| `the title block's MATERIAL '...' does not fit its 60 mm cell ...` | shorten the value (a refusal) |
-| `0.00001: a stated tolerance prints exactly as given, to at most 4 decimal places` | state it to four places or fewer (a refusal) |
+| `the title block's FINISH '...' does not fit its 50 mm cell ...` | shorten the value (a refusal; a part number, revision, author or material alone is cut short and reported) |
+| `0.00001: a stated tolerance prints exactly as given, to at most 4 decimal places` | state a frame's tolerance or a limit to four places or fewer (a refusal) |
+| `top.dim(...): tol=0.000125 is finer than the 4 decimal places a tolerance prints to; it prints 0.0001.` | state the tolerance to four places or fewer |
 | `front: the thin layer '...' has no clear place for its callout ...` | give the section more room, or draw a detail of it |
 | `top hole 0: its leader crosses a dimension line ...` | no clear way out; move the callout or the dimension |
 | `the top and right views draw the same picture ...` | `three_views(views=(...))` leaves one out |

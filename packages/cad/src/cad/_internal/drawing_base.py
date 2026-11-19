@@ -110,10 +110,6 @@ _MIN_TEXT_MM = 1.6
 #: refused with the first of these that fits rather than an arbitrary ratio.
 _STANDARD_SCALES = (50.0, 20.0, 10.0, 5.0, 2.0, 1.0, 1 / 2, 1 / 2.5, 1 / 5, 1 / 10, 1 / 20, 1 / 50, 1 / 100,
                     1 / 200, 1 / 500, 1 / 1000)
-#: The only unit a sheet prints. Every value on it is measured off the model, whose
-#: unit is the millimetre; a title block reading IN over millimetre values is a
-#: drawing that is wrong by 25.4 everywhere and looks right.
-UNITS = ("mm",)
 
 
 def _fmt(value: float) -> str:

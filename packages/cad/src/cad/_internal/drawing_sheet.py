@@ -280,6 +280,8 @@ _BAND_CELLS = {
     "COMPANY": (0.0, 40.0, 110.0, 10.0),
     "STAGE": (110.0, 40.0, 70.0, 10.0),
 }
+#: The cells whose values earlier releases printed, shrunk and then cut to fit.
+_RELEASED_CELLS = ("DWG NO.", "REV", "MATERIAL", "DRAWN", "UNITS")
 #: The grid between those cells, drawn as lines so no edge is written twice.
 _TITLE_RULES = (
     ((0.0, 10.0), (180.0, 10.0)), ((0.0, 20.0), (180.0, 20.0)), ((110.0, 30.0), (180.0, 30.0)),
@@ -418,7 +420,7 @@ def _draw_parts_list(msp, sheet: Sheet, text, continued: dict) -> None:
 
 
 def _draw_furniture(msp, sheet: Sheet, *, index: int, count: int, label: str, text,
-                    continued: dict | None = None) -> None:
+                    continued: dict | None = None, warnings: list | None = None) -> None:
     """Frame, zone grid, title block, notes and any parts list: what makes a page a
     drawing sheet."""
     from ezdxf.enums import TextEntityAlignment as A
@@ -465,7 +467,7 @@ def _draw_furniture(msp, sheet: Sheet, *, index: int, count: int, label: str, te
         "DWG NO.": (sheet.part_number, 3.5), "REV": (sheet.revision, 2.5), "SHEET": (f"{index} OF {count}", 2.5),
         "MATERIAL": (sheet._material_label(), 2.5), "FINISH": (sheet.finish, 2.5),
         "SCALE": (_scale_label(sheet._scale()), 2.5), "SIZE": (sheet._size(), 2.5),
-        "DRAWN": (sheet.author, 2.5), "DATE": (sheet.date, 2.5), "UNITS": (sheet.units.upper(), 2.5),
+        "DRAWN": (sheet.author, 2.5), "DATE": (sheet.date, 2.5), "UNITS": (str(sheet.units).upper(), 2.5),
         "COMPANY": (sheet.company, 2.5), "STAGE": (sheet._stage_label(), 2.5),
         **{name: (sheet.fields.get(name, ""), 2.5) for name in band if name not in _BAND_CELLS},
     }
@@ -473,9 +475,14 @@ def _draw_furniture(msp, sheet: Sheet, *, index: int, count: int, label: str, te
         value = values.get(name, ("", 0.0))[0]
         if value and _text_width(str(value), _MIN_TEXT_MM) > w - 3.0:
             # A long title may end inside its cell; a material, a spec or a number
-            # cut short states a different one.
-            raise ValueError(f"the title block's {name} {value!r} does not fit its {w:.0f} mm cell even at the "
-                             f"smallest legible text, and a value cut short is wrong; shorten it")
+            # cut short states a different one. A field earlier releases cut short
+            # is cut still, and said; one this release added is refused.
+            said = (f"the title block's {name} {value!r} does not fit its {w:.0f} mm cell even at the "
+                    f"smallest legible text")
+            if name not in _RELEASED_CELLS or (name == "MATERIAL" and sheet.spec):
+                raise ValueError(f"{said}, and a value cut short is wrong; shorten it")
+            if warnings is not None:
+                warnings.append(f"{said}: it is cut short there, which states a different one. Shorten it.")
     for name, (x, y, w, h) in {**_TITLE_CELLS, **band}.items():
         if name == "PROJECTION":
             continue  # the symbol is its own caption

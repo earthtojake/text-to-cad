@@ -116,8 +116,8 @@ Name the pictures by item and show them beside each question.
 | reference | `reference=True` | `(40)` | information only, never inspected; an assembly's envelope |
 
 Every stated value prints exactly as given (`tol=0.005` prints `±0.005`),
-to at most four decimal places; a value needing more is refused, never
-rounded. A dimension with none of these is governed by the general tolerance
+to at most four decimal places; a limit or a frame's tolerance needing more is
+refused, and a `tol=` needing more prints to four and is reported. A dimension with none of these is governed by the general tolerance
 or the general profile. A basic dimension with no frame on its sheet is reported:
 nothing bounds it. `diameter()` and `radius()` take `basic` and `reference`;
 `overall(reference=True)` makes both overall sizes reference.

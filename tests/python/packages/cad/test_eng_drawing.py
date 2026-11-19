@@ -26,6 +26,15 @@ def _facts():
     return _Facts()
 
 
+def _said(sheet) -> list[str]:
+    """What rendering a sheet reports."""
+    from cad._internal.drawing_render import _render_sheet
+
+    notices: list[str] = []
+    _render_sheet(sheet, index=1, count=1, label="said", warnings=notices)
+    return notices
+
+
 def _part():
     from build123d import Align, Box, Cylinder, Pos
 
@@ -379,27 +388,33 @@ class SheetWarningTests(unittest.TestCase):
     """What the sheet draws but a reader should look at. Found by running the
     skill on parts it was not written against."""
 
-    def test_a_dimension_whose_points_miss_the_geometry_is_refused(self) -> None:
+    def test_a_dimension_whose_points_miss_the_geometry_says_so(self) -> None:
         """A part built from a corner, dimensioned as if it were centred.
 
-        The dimension rendered perfectly and measured blank paper, which is the
-        one error a shop cannot catch from the print: it was a warning beside it.
+        The dimension renders perfectly and measures blank paper, which is the
+        one error a shop cannot catch from the print. It is drawn, as every
+        release has drawn it, and the report says so; annotation this release
+        added is refused there instead.
         """
         from build123d import Align, Box
         from cad._internal.drawing_render import _render_sheet
         from cad.eng_drawing import Sheet
 
         part = Box(120, 30, 30, align=(Align.MIN, Align.CENTER, Align.CENTER))  # X runs 0..120
-        for name, call in (("dim 1", lambda v: v.dim((-60, 0, 15), (-30, 0, 15))),   # as if it were centred
-                           ("note 1", lambda v: v.note("BORE", (-55, 0, 0)))):
-            sheet = Sheet("A3")
-            front = sheet.view(part, "front", at=(210, 150))
-            front.dim((0, 0, 15), (30, 0, 15))          # on the part
-            call(front)
-            with self.subTest(name), self.assertRaisesRegex(
-                    ValueError, rf"front {name}: \d of \d point\(s\) fall outside the view's geometry .* would "
-                                "measure blank paper"):
-                _render_sheet(sheet, index=1, count=1, label="off")
+        sheet = Sheet("A3")
+        front = sheet.view(part, "front", at=(210, 150))
+        front.dim((0, 0, 15), (30, 0, 15))          # on the part
+        front.dim((-60, 0, 15), (-30, 0, 15))       # as if it were centred: off in space
+        front.note("BORE", (-55, 0, 0))
+        notices = _said(sheet)
+        self.assertEqual(len(notices), 2, notices)
+        self.assertRegex(notices[0], r"front dim 1: 2 of 2 point\(s\) fall outside the view's geometry")
+        self.assertRegex(notices[1], r"front note 2: 1 of 1 point\(s\)")
+        self.assertTrue(all("measures blank paper" in n for n in notices), notices)
+
+        front.flag("TORQUE TO 5 N·m.", at=(-55, 0, 0))
+        with self.assertRaisesRegex(ValueError, r"front flag 3: .* would measure blank paper"):
+            _render_sheet(sheet, index=1, count=1, label="off")
 
     def test_a_clean_sheet_warns_about_nothing(self) -> None:
         from cad._internal.drawing_render import _render_sheet
@@ -408,10 +423,9 @@ class SheetWarningTests(unittest.TestCase):
         _render_sheet(_sheet(_part()), index=1, count=1, label="clean", warnings=notices)
         self.assertEqual(notices, [])
 
-    def test_annotation_printed_over_annotation_is_refused(self) -> None:
+    def test_annotation_printed_over_annotation_says_so(self) -> None:
         """Two views are laid out knowing only where the views are, so one view's
         outermost dimension can land on the view label of the view above it."""
-        from cad._internal.drawing_render import _render_sheet
         from cad.eng_drawing import Sheet
 
         def build(gap):
@@ -423,14 +437,11 @@ class SheetWarningTests(unittest.TestCase):
             # Both along the top edge, so both take rows above the view.
             front.dim((-20, -15, 10), (0, -15, 10))
             front.dim((0, -15, 10), (20, -15, 10))
-            try:
-                _render_sheet(sheet, index=1, count=1, label="rows")
-            except ValueError as exc:
-                return [str(exc)] if "annotation overlaps" in str(exc) else []
-            return []
+            return [n for n in _said(sheet) if "annotation overlaps" in n]
 
         crowded = build(47)
-        self.assertTrue(crowded, "three rows into a two-row gap is refused")
+        self.assertTrue(crowded, "three rows into a two-row gap is drawn, and reported")
+        self.assertIn("is printed over", crowded[0])
         self.assertIn("three_views(gap=", crowded[0])
         self.assertEqual(build(70), [], "given the room, the same sheet is quiet")
         self.assertEqual(build(None), [], "left to itself, the layout makes the room")
@@ -471,8 +482,10 @@ class DrawingVocabularyTests(unittest.TestCase):
             self.view.hole((0, 0, 0), 6, thru=True, depth=12)
         with self.assertRaisesRegex(ValueError, "size"):
             self.view.diameter((0, 0, 0), size=0)
-        with self.assertRaisesRegex(TypeError, "positional argument"):   # law 15: no word of the retired size
-            self.view.diameter((0, 0, 0), 3)
+        with self.assertRaisesRegex(ValueError, "radius"):
+            self.view.diameter((0, 0, 0), 0)
+        with self.assertRaisesRegex(ValueError, "not both"):   # the circle's size is said one way
+            self.view.diameter((0, 0, 0), 3, size=6)
 
     def test_a_tolerance_that_is_not_a_tolerance_is_refused(self) -> None:
         with self.assertRaises(TypeError):
@@ -714,11 +727,10 @@ class TextMeasurementTests(unittest.TestCase):
         self.assertAlmostEqual(_text_width("1234", 7.0), 2 * _text_width("1234", 3.5), delta=1e-6)
 
 class ChainDimensionTests(unittest.TestCase):
-    """The overlap refusal has to survive the commonest idiom in drafting."""
+    """The overlap warning has to survive the commonest idiom in drafting."""
 
     def _warnings(self, pitch: float, tol) -> list:
         from build123d import Box
-        from cad._internal.drawing_render import _render_sheet
         from cad.eng_drawing import Sheet
 
         span = 160.0
@@ -727,11 +739,7 @@ class ChainDimensionTests(unittest.TestCase):
         for i in range(int(span // pitch)):
             top.dim((-span / 2 + pitch * i, 30, 0), (-span / 2 + pitch * (i + 1), 30, 0),
                     tol=tol, offset=14.0)
-        try:
-            _render_sheet(sheet, index=1, count=1, label="chain")
-        except ValueError as exc:
-            return [str(exc)] if "overlaps" in str(exc) else []
-        return []
+        return [n for n in _said(sheet) if "overlaps" in n]
 
     def test_a_toleranced_chain_with_clear_paper_does_not_warn(self) -> None:
         """Five values about 14 mm wide at 30 mm pitch: 16 mm of clear paper.
@@ -746,7 +754,7 @@ class ChainDimensionTests(unittest.TestCase):
                 self.assertEqual([], self._warnings(pitch, 0.1))
                 self.assertEqual([], self._warnings(pitch, None))
 
-    def test_values_that_really_do_collide_are_refused(self) -> None:
+    def test_values_that_really_do_collide_still_warn(self) -> None:
         """The pitch comes from the measurement, so this is a collision on any
         font: values packed at half the width of the value itself."""
         from cad._internal.drawing_base import _mtext_extent
@@ -1248,13 +1256,13 @@ class FromThePartTests(unittest.TestCase):
         self.assertEqual(_callouts(_render_sheet(sheet, index=1, count=1, label="cb")),
                          ["2× %%c6.6 THRU", "⌴ %%c11 ↧6.5"])
 
-    def test_a_typed_size_the_part_contradicts_is_refused(self) -> None:
-        """A callout that says ⌀6 over a ⌀6.6 bore is machined faithfully, and wrong."""
+    def test_a_size_given_that_the_part_contradicts_is_refused(self) -> None:
+        """A callout that says ↧8 down a through bore is machined faithfully, and wrong."""
         from cad._internal.drawing_render import _render_sheet
         from cad.eng_drawing import Sheet
 
-        for given, named in (({"diameter": 6}, "diameter=6"), ({"count": 3}, "count=3"),
-                             ({"depth": 8}, "depth=8"), ({"cbore": (12, 6.5)}, "cbore=(12, 6.5)")):
+        for given, named in (({"count": 3}, "count=3"), ({"depth": 8}, "depth=8"),
+                             ({"cbore": (12, 6.5)}, "cbore=(12, 6.5)")):
             with self.subTest(given=given):
                 sheet = Sheet("A4")
                 sheet.view(_counterbored(), "top", at=(140, 120)).hole((15, 0, 12), **given)
@@ -1262,12 +1270,6 @@ class FromThePartTests(unittest.TestCase):
                     _render_sheet(sheet, index=1, count=1, label="cb")
                 self.assertIn(named, str(caught.exception))
                 self.assertIn("2× ⌀6.6 THRU", str(caught.exception), "the message states what the part has")
-        # What agrees with the part is accepted and changes nothing.
-        sheet = Sheet("A4")
-        sheet.view(_counterbored(), "top", at=(140, 120)).hole((15, 0, 12), 6.6, thru=True, count=2,
-                                                               cbore=(11, 6.5))
-        self.assertEqual(_callouts(_render_sheet(sheet, index=1, count=1, label="cb")),
-                         ["2× %%c6.6 THRU", "⌴ %%c11 ↧6.5"])
 
     def test_a_callout_where_there_is_no_hole_names_the_holes_there_are(self) -> None:
         from cad._internal.drawing_render import _render_sheet
@@ -1281,21 +1283,6 @@ class FromThePartTests(unittest.TestCase):
         sheet.view(_counterbored(), "front", at=(140, 120)).hole((15, 0, 12))
         with self.assertRaisesRegex(ValueError, "looks down no hole"):
             _render_sheet(sheet, index=1, count=1, label="side")
-
-    def test_a_typed_hole_over_a_boss_is_refused_not_printed(self) -> None:
-        # A ⌀15 boss draws a ⌀15 circle: a callout typed over it once printed "4× ⌀15 THRU" on a solid boss.
-        import build123d as bd
-
-        from cad._internal.drawing_render import _render_sheet
-        from cad.eng_drawing import Sheet
-
-        bottom = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
-        part = bd.Box(80, 60, 10, align=bottom) + bd.Pos(25, 0, 10) * bd.Cylinder(7.5, 6, align=bottom)
-        sheet = Sheet("A3")
-        sheet.view(part, "top", at=(200, 150)).hole((25, 0, 16), 15, thru=True, count=4)
-        with self.assertRaisesRegex(ValueError, r"no hole runs along the top view's line of sight there, so a "
-                                                r"callout there states what nothing checks"):
-            _render_sheet(sheet, index=1, count=1, label="boss")
 
     def test_a_counterbore_on_the_far_side_belongs_to_the_other_view(self) -> None:
         from cad._internal.drawing_render import _render_sheet
@@ -1502,13 +1489,12 @@ class ThreadCalloutTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"thread='1/4-20 UNC' does not fit the part's hole"):
             self._callouts(_drilled([(0, 0)], 4.04), lambda v: v.hole((0, 0, 20), thread="1/4-20 UNC"))
 
-    def test_a_thread_takes_no_diameter_tolerance_or_fit(self) -> None:
+    def test_a_thread_takes_no_tolerance_or_fit(self) -> None:
         from cad.eng_drawing import Sheet
 
         view = Sheet("A4").view(_drilled([(0, 0)]), "top", at=(100, 150))
-        for given, named in (({"diameter": 8}, "diameter"), ({"tol": 0.1, "fit": "H7"}, "tol, fit")):
-            with self.subTest(given=given), self.assertRaisesRegex(ValueError, f"takes no {named}"):
-                view.hole((0, 0, 20), thread="M6x1 - 6H", **given)
+        with self.assertRaisesRegex(ValueError, "takes no tol, fit"):
+            view.hole((0, 0, 20), thread="M6x1 - 6H", tol=0.1, fit="H7")
 
     def test_the_count_is_the_tapped_holes_not_every_identical_bore(self) -> None:
         part = _drilled(_FOUR)
@@ -1682,33 +1668,31 @@ class ColdTrialTests(unittest.TestCase):
                                                 r"edge-on, so nothing shows where it cuts; add the top view"):
             _render_sheet(sheet, index=1, count=1, label="alone")
 
-    def test_a_dimension_that_could_measure_either_span_is_refused(self) -> None:
-        from cad._internal.drawing_render import _render_sheet
+    def test_a_dimension_that_could_measure_either_span_says_which_it_took(self) -> None:
         from cad.eng_drawing import Sheet
 
         sheet = Sheet("A4")
         front = sheet.view(_plate(), "front", at=(140, 110))
         front.dim((-40, -25, 0), (40, -25, 6))  # 80 across, 6 up: no doubt which
-        _render_sheet(sheet, index=1, count=1, label="clear")
+        self.assertEqual(_said(sheet), [])
         front.dim((40, -25, 0), (34, -25, 6))   # 6 across, 6 up: either
-        with self.assertRaisesRegex(ValueError, r"front dim 1: its points are 6 apart across and 6 up, so it could "
-                                                r"measure either\. Pass orientation="):
-            _render_sheet(sheet, index=1, count=1, label="either")
+        (said,) = _said(sheet)
+        self.assertRegex(said, r"front dim 1: its points are 6 apart across and 6 up, so it could measure either; "
+                               r"it measures the larger, 6\. Pass orientation=")
         sheet = Sheet("A4")
         sheet.view(_plate(), "front", at=(140, 110)).dim((40, -25, 0), (34, -25, 6), orientation="v")
-        _render_sheet(sheet, index=1, count=1, label="said")
+        self.assertEqual(_said(sheet), [])
 
-    def test_a_part_that_is_several_solids_is_refused(self) -> None:
-        from build123d import Align, Box, Pos
-        from cad._internal.drawing_render import _render_sheet
+    def test_a_part_that_is_several_solids_is_drawn_and_said(self) -> None:
+        from build123d import Align, Box
         from cad.eng_drawing import Sheet
 
         align = (Align.CENTER, Align.CENTER, Align.MIN)
         split = Box(30, 20, 10, align=align) - Box(4, 30, 20, align=(Align.CENTER, Align.CENTER, Align.CENTER))
         sheet = Sheet("A4")
         sheet.view(split, "top", at=(140, 110))
-        with self.assertRaisesRegex(ValueError, "the part in the top view is 2 separate solids"):
-            _render_sheet(sheet, index=1, count=1, label="split")
+        (said,) = _said(sheet)
+        self.assertIn("the part in the top view is 2 separate solids", said)
 
     def test_a_dimension_to_a_hole_centre_extends_the_centre_line(self) -> None:
         from cad._internal.drawing_render import _render_sheet
@@ -1994,11 +1978,18 @@ class SheetFurnitureTests(unittest.TestCase):
                   if x0 <= e.dxf.insert.x <= x0 + w and y0 <= e.dxf.insert.y <= y0 + h]
         self.assertEqual(inside, ["MATERIAL"])
 
-    def test_a_unit_the_sheet_does_not_measure_in_is_refused(self) -> None:
+    def test_a_unit_the_sheet_does_not_measure_in_is_named_and_reported(self) -> None:
+        from cad._internal.drawing_render import _render_sheet
         from cad.eng_drawing import Sheet
 
-        with self.assertRaisesRegex(ValueError, "25.4"):
-            Sheet("A3", units="in")
+        sheet = Sheet("A4", units="in")
+        sheet.view(_part(), "top", at=(150, 105)).overall()
+        notices: list[str] = []
+        doc = _render_sheet(sheet, index=1, count=1, label="in", warnings=notices)
+        self.assertIn("IN", [e.dxf.text for e in doc.modelspace().query("TEXT[layer=='TITLE']")])
+        self.assertEqual(sorted(_dim_texts(doc)), ["30", "40"], "the values are the model's millimetres still")
+        self.assertEqual(notices, ["units='in': the title block reads IN, and every value on the sheet is measured "
+                                   "off the model, in millimetres; nothing converts them."])
 
 
 class UnstatedTests(unittest.TestCase):
@@ -2640,17 +2631,14 @@ class AssemblyDrawingTests(unittest.TestCase):
         sheet = Sheet("A3")
         sheet.view(tall, "front", at=(150, 150)).overall().note("X", (-10, -10, 75),
                                                                   offset=(x + 5.25 - 140.0, y + 1.5 - 225.0))
-        with self.assertRaisesRegex(ValueError, "'X' would print over '150'"):
-            _render_sheet(sheet, index=1, count=1, label="over")
+        self.assertTrue([n for n in _said(sheet) if "'X' is printed over '150'" in n])
 
-    def test_a_separate_solids_refusal_points_an_assembly_at_the_parts_list(self) -> None:
-        from cad._internal.drawing_render import _render_sheet
+    def test_separate_solids_drawn_as_one_part_point_an_assembly_at_the_parts_list(self) -> None:
         from cad.eng_drawing import Sheet
 
         sheet = Sheet("A3")
         sheet.view(_assembly(), "front", at=(150, 150), hidden=False)
-        with self.assertRaisesRegex(ValueError, r"separate solids.*assembly_sheets\(parts_list\("):
-            _render_sheet(sheet, index=1, count=1, label="solids")
+        self.assertRegex(_said(sheet)[0], r"separate solids.*assembly_sheets\(parts_list\(")
 
     def test_balloons_refuse_another_shape_a_section_or_a_detail(self) -> None:
         from cad._internal.drawing_render import _render_sheet
@@ -3590,8 +3578,11 @@ class DimensionKindTests(unittest.TestCase):
         self.assertEqual(_tol_suffix((0.005, 0.0025)), " +0.0050/-0.0025", "a hole callout's, both to one precision")
         with self.assertRaisesRegex(ValueError, "4 decimal places"):
             Frame("flatness", 0.00001)
-        with self.assertRaisesRegex(ValueError, "4 decimal places"):
-            top.dim((-20, -15, 10), (20, -15, 10), tol=0.000125)
+        # A tolerance given finer prints to those places, as one always printed rounded, and is reported.
+        sheet, top, front = self._block_sheet()
+        top.dim((-20, -15, 10), (20, -15, 10), tol=0.000125)
+        (said,) = _said(sheet)
+        self.assertIn("tol=0.000125 is finer than the 4 decimal places a tolerance prints to; it prints 0.0001", said)
         with self.assertRaisesRegex(ValueError, "4 decimal places"):
             front.dim((-20, 0, 0), (20, 0, 0), limits=(39.99995, 40.0))
 
@@ -3605,22 +3596,31 @@ class DimensionKindTests(unittest.TestCase):
             _render_sheet(sheet, index=1, count=1, label="lonely")
 
     def test_a_fit_is_an_iso_286_class_and_the_whole_tolerance(self) -> None:
-        # fit= printed whatever it was given after the size ("80 banana"), and beside tol= it printed two tolerances.
+        # fit= prints whatever it is given after the size ("40 banana"), and beside tol= it prints two
+        # tolerances: every release has, so a dimension still does, and the report says so.
         from cad._internal.drawing_render import _render_sheet
         from cad.eng_drawing import Sheet
 
-        sheet, top, front = self._block_sheet()
         a, b = (-20, -15, 10), (20, -15, 10)
-        for fit in ("banana", "H", "7", "H19", "I7", "h7/H7", "H7/G6", "H7/g6/f7", "Hh7"):
-            with self.subTest(fit=fit), self.assertRaisesRegex(ValueError, "not an ISO 286-1 tolerance class or fit"):
+        for fit in ("banana", "H", "7", "H19", "I7", "h7/H7", "H7/G6", "H7/g6/f7", "Hh7", 7):
+            with self.subTest(fit=fit):
+                sheet, top, front = self._block_sheet()
                 top.dim(a, b, fit=fit)
-        with self.assertRaisesRegex(TypeError, "fit= takes"):
-            top.dim(a, b, fit=7)
-        for kinds in ({"fit": "H7", "tol": 0.1}, {"fit": "g6", "limits": (39.9, 40.0)}):
-            with self.subTest(kinds=kinds), self.assertRaisesRegex(ValueError, r"is the size's tolerance.*not both"):
-                top.dim(a, b, **kinds)
+                said = [n for n in _said(sheet) if n.startswith("top.dim((-20, -15, 10), (20, -15, 10)): fit=")]
+                self.assertEqual(len(said), 1, said)
+                self.assertIn("It prints as typed.", said[0])
+                self.assertIn(f"40 {fit}", " ".join(_dim_texts(_render_sheet(sheet, index=1, count=1, label="f"))))
+        sheet, top, front = self._block_sheet()
+        top.dim(a, b, fit="H7", tol=0.1)
+        (said,) = _said(sheet)
+        self.assertIn("fit='H7' and tol= are two tolerances for one size, and both print", said)
+        with self.assertRaisesRegex(ValueError, r"is the size's tolerance.*not both"):
+            top.dim(a, b, fit="g6", limits=(39.9, 40.0))
+        sheet, top, front = self._block_sheet()
         for fit in ("H7", "g6", "JS9", "js6", "CD10", "zc11", "h01", "H7/g6", "H7/k6"):
             top.dim(a, b, fit=fit)
+        self.assertEqual(top._notices, [])
+        # A hole callout read off the part is this release's, and it is refused what a dimension is told.
         plate = Sheet("A4").view(_drilled([(0, 0)]), "top", at=(100, 150))
         with self.assertRaisesRegex(ValueError, r"hole\(\) takes fit='H7' or tol=, not both"):
             plate.hole((0, 0, 20), fit="H7", tol=0.1)
@@ -5812,7 +5812,7 @@ class PartSheetTests(unittest.TestCase):
 
 class CrowdedSheetTests(unittest.TestCase):
     """Two values in one place on a sheet choosing its size take a larger sheet;
-    on a sheet whose size the author fixed, they are refused, as before."""
+    on a sheet whose size the author fixed, they are drawn and reported, as before."""
 
     def test_a_sheet_choosing_its_size_takes_the_next_one_up(self) -> None:
         from unittest import mock
@@ -5823,20 +5823,20 @@ class CrowdedSheetTests(unittest.TestCase):
 
         tried = []
 
-        def draw(sheet, *, floor, ceiling, **_kwargs):
-            tried.append((floor, ceiling))
+        def draw(sheet, *, floor, ceiling, grows, **_kwargs):
+            tried.append((floor, ceiling, grows))
             sheet._chosen_size, sheet._chosen_scale = ("A4", "A3", "A2")[min(floor, 2)], 1.0
-            if floor < 2:
+            if grows and floor < 2:
                 raise _Crowded("annotation overlaps")
             return "drawn"
 
         with mock.patch.object(drawing_render, "_draw_sheet", side_effect=draw):
             self.assertEqual(drawing_render._render_sheet(Sheet(None, None), index=1, count=1, label="c"), "drawn")
-            self.assertEqual(tried, [(0, None), (1, None), (2, None)])
+            self.assertEqual(tried, [(0, None, True), (1, None, True), (2, None, True)])
             tried.clear()
-            with self.assertRaises(_Crowded):
-                drawing_render._render_sheet(Sheet("A4", None), index=1, count=1, label="c")
-            self.assertEqual(tried, [(0, None)])
+            # Its size its author's: drawn once, the overlap the draw's to report.
+            self.assertEqual(drawing_render._render_sheet(Sheet("A4", None), index=1, count=1, label="c"), "drawn")
+            self.assertEqual(tried, [(0, None, False)])
 
 
 def _points(entity):
