@@ -1450,6 +1450,13 @@ tessellations, is under one memory budget: **Document lifetime**.)
   measured; a test's seam, `Pressure.from_environment`). A busy process is never retired, and an idle worker under the cap lives as long as the
   engine. A worker alone over the cap after a build is retired at once: the report says so
   (`retired`), and once it has answered the daemon drains it and closes its stdin.
+- **A busy process has a ceiling.** Retiring never takes a busy process, and a build in native code
+  (an OCCT boolean that runs away, say) cannot stop itself, so each `Daemon.tend` round kills a busy
+  process past `CAD_ENGINE_WORKER_CEILING_MB` (default: half the machine's memory, at least 4 GiB;
+  `0` for none; `Supervisor.overrun`). Its memory is read from outside, as the system counts it
+  (`worker.footprint_mb`: compressed and swapped pages too), since a busy worker says its own only
+  when it answers; a platform that will not say has no ceiling. Its build fails as a worker that
+  died does, and the error says the engine stopped it and at what size.
 - **Collected when idle.** A worker builds with Python's cyclic collector off and collects once
   no request has come for half a second, so a script's calls one after another never wait on
   it. A worker over its memory cap collects before it measures again.

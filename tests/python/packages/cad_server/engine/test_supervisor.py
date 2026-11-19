@@ -61,6 +61,10 @@ class Fake:
         self.said.append(("stop", self.label))
         self.stopped = True
 
+    def kill(self) -> None:
+        self.said.append(("kill", self.label))
+        self.stopped = True
+
     def adopt(self, key: str, label: str, environment: dict, cwd: str | None) -> None:
         self.key, self.label, self.environment, self.cwd = key, label, environment, cwd
 
@@ -194,6 +198,35 @@ class SchedulingTest(unittest.TestCase):
         self.assertEqual(supervisor.shed(), [measured], "the unmeasured one frees nothing countable; the busy one stays")
         self.assertFalse(busy.stopped or unmeasured.stopped)
         self.assertEqual([row["reason"] for row in supervisor.retired], ["RSS", "pressure"])
+
+    def test_a_busy_process_past_the_ceiling_is_killed_and_says_why(self) -> None:
+        supervisor = self.supervisor(8)
+        idle = self.used(supervisor, "worker", "idle.py")[0]
+        busy = supervisor.lease("worker", "busy.py", {})
+        calm = supervisor.lease("worker", "calm.py", {})
+        held = {idle.pid: 90_000.0, busy.pid: 30_000.0, calm.pid: 2_000.0}
+        supervisor.measure = held.get
+        self.assertEqual(supervisor.overrun(), [], "no ceiling: nothing is killed")
+        supervisor.ceiling = lambda: 24_576.0
+        self.assertEqual(supervisor.overrun(), [busy], "an idle one is shed's; a busy one under it goes on")
+        self.assertIn("stopped it at 29.3 GB of memory, over the 24.0 GB", busy.overran)
+        self.assertIn(("kill", "busy.py"), self.said)
+        self.assertFalse(calm.stopped or idle.stopped)
+        supervisor.measure = lambda _pid: None
+        self.assertEqual(supervisor.overrun(), [], "a process the platform will not measure is never killed")
+
+    def test_the_ceiling_is_its_setting_none_at_zero_else_half_the_machine(self) -> None:
+        from cad.engine import worker
+
+        for given, expected in (("6000", 6000.0), ("0", None)):
+            with mock.patch.dict(os.environ, {"CAD_ENGINE_WORKER_CEILING_MB": given}):
+                self.assertEqual(worker.memory_ceiling_mb(), expected, given)
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_WORKER_CEILING_MB": "lots"}), \
+                mock.patch.object(worker, "_physical_mb", return_value=65_536.0):
+            self.assertEqual(worker.memory_ceiling_mb(), 32_768.0, "no number: the default, half the machine")
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_WORKER_CEILING_MB": ""}), \
+                mock.patch.object(worker, "_physical_mb", return_value=4_096.0):
+            self.assertEqual(worker.memory_ceiling_mb(), 4_096.0, "at least 4 GiB")
 
     def test_a_count_cap_victim_is_the_lowest_ranked_idle_process(self) -> None:
         kept = Service("kept", ("{python}",), "kernel", "lease", WORDS, rank=4, noted=("script", "builds"))
@@ -544,6 +577,32 @@ class ProtocolTest(unittest.TestCase):
         supervisor.release(process)
         self.assertEqual(self.start(self.service()).request({"op": "cap"}), {"done": "none given"},
                          "a process no supervisor started is told none: its own environment's")
+
+    def test_a_child_past_the_ceiling_mid_request_is_killed_by_its_measured_memory_and_says_why(self) -> None:
+        from cad.engine.worker import footprint_mb
+
+        supervisor = Supervisor(1, (self.service(),), ceiling=lambda: 1.0, measure=footprint_mb)
+        self.addCleanup(supervisor.stop)
+        process = supervisor.lease("child", "doc", {}, label="/w/doc.xbf")
+        self.assertGreater(footprint_mb(process.pid) or 0.0, 1.0, "the system counts a live child's memory")
+        failed: list = []
+
+        def slow() -> None:
+            try:
+                process.request({"op": "slow"})
+            except Gone as error:
+                failed.append(error)
+
+        asking = threading.Thread(target=slow, daemon=True)
+        asking.start()
+        await_(lambda: process.op == "slow", "the slow request to run")
+        self.assertEqual(supervisor.overrun(), [process])
+        asking.join(30)
+        self.assertEqual(len(failed), 1, "the request failed")
+        self.assertTrue(failed[0].during)
+        self.assertIn("the child doc.xbf exited (", str(failed[0]), "said as a child gone mid-request is")
+        self.assertIn("one process may hold (CAD_ENGINE_WORKER_CEILING_MB)", str(failed[0]))
+        supervisor.release(process)
 
     def test_an_answer_that_says_retire_retires_its_process_once_let_go(self) -> None:
         supervisor = Supervisor(1, (self.service(),))
