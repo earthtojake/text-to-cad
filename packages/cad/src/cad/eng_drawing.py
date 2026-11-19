@@ -1645,9 +1645,7 @@ def _slope_angle(view: "View", face, shape) -> tuple | None:
     axes = _view_axes(view.name)
     look = _look(view)
     run = _cross(tuple(face.normal_at()), look)
-    points = sorted({tuple(round(c, 6) for c in tuple(v)) for v in face.vertices()},
-                    key=lambda q: sum(a * b for a, b in zip(q, run)))
-    ends = (points[0], points[-1])
+    ends = _slope_ends(view, face)
     depth = tuple(face.center())
     edges = [_edge_face(shape, j) for j in axes]
     starts = [tuple(e.center())[j] if e is not None else 0.0 for e, j in zip(edges, axes)]
@@ -1670,6 +1668,37 @@ def _slope_angle(view: "View", face, shape) -> tuple | None:
         return None
     _key, vertex, other, along = min(chosen, key=lambda c: c[0])
     return vertex, other, along
+
+
+def _slope_ends(view: "View", face) -> tuple[tuple, tuple]:
+    """The two ends of a sloping flat face as a view that sees it edge-on draws it:
+    the points of its outline furthest apart along the line it is seen as. They
+    are corners where its outline has corners; a face cut across a round bar is
+    bounded by an ellipse, which has one vertex or none, and its ends are where
+    that curve turns back."""
+    run = _cross(tuple(face.normal_at()), _look(view))
+
+    def along(point) -> float:
+        return sum(a * b for a, b in zip(tuple(point), run))
+
+    found = []
+    for sign in (1.0, -1.0):
+        best = None
+        for edge in face.edges():
+            steps = 16
+            at = max(range(steps + 1), key=lambda i: sign * along(edge.position_at(i / steps)))
+            lo, hi = max(0.0, (at - 1) / steps), min(1.0, (at + 1) / steps)
+            for _round in range(40):
+                a, b = lo + (hi - lo) / 3, hi - (hi - lo) / 3
+                if sign * along(edge.position_at(a)) > sign * along(edge.position_at(b)):
+                    hi = b
+                else:
+                    lo = a
+            point = tuple(edge.position_at((lo + hi) / 2))
+            if best is None or sign * along(point) > sign * along(best) + 1e-9:
+                best = point
+        found.append(tuple(round(c, 6) for c in best))
+    return found[1], found[0]
 
 
 def _look_axis(view: "View") -> int:
@@ -1818,7 +1847,7 @@ def _place_faces(views, shape, features, placed: dict, hexagons=()) -> None:
                 leans = tuple(k for k in range(3) if abs(normal[k]) >= 1e-9)
                 stated = _slope_angle(view, face, shape) if at not in angled else None
                 if stated is None:
-                    points.extend((face.area, tuple(v), leans) for v in face.vertices())
+                    points.extend((face.area, end, leans) for end in _slope_ends(view, face))
                     continue
                 angled.add(at)
                 vertex, other, along = stated

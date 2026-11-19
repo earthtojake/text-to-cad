@@ -5987,6 +5987,18 @@ class PartSheetTests(unittest.TestCase):
         self.assertEqual([text for text in _dim_texts(doc) if "°" in text], ["45°"])
         self.assertEqual(unstated, [], "one angle states both slopes, and each gusset is placed")
 
+    def test_a_round_bar_cut_on_a_slant_is_stated_by_its_angle(self) -> None:
+        """The cut face of a mitred rod is bounded by an ellipse, which has one vertex:
+        its two ends are where that outline turns back, not its corners."""
+        from build123d import Align, Box, Cylinder, Pos, Rot
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        rod = Cylinder(10, 60, align=align) - Pos(0, 0, 50) * Rot(0, 30, 0) * Box(80, 80, 40, align=align)
+        sheet, doc, unstated = self._drawn(rod)
+        texts = _dim_texts(doc)
+        self.assertEqual([text for text in texts if "°" in text], ["30°"])
+        self.assertEqual(unstated, [], "its angle, its diameter and the length to the cut's far end")
+
 
 class CrowdedSheetTests(unittest.TestCase):
     """Two values in one place on a sheet choosing its size take a larger sheet;
