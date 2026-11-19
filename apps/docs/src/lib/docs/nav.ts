@@ -88,7 +88,6 @@ export const docSections: DocSection[] = [
     title: "Migrations",
     pages: [
       index("migrations"),
-      repo("migrations/0.11-to-next", "docs/migrations/migrating-0.11-to-next.md", "0.11 to the next release"),
       repo("migrations/0.10-to-0.11", "docs/migrations/migrating-0.10-to-0.11.md", "0.10 to 0.11"),
       repo("migrations/0.8-to-0.10", "docs/migrations/migrating-0.8-to-0.10.md", "0.8 to 0.10"),
       repo("migrations/0.7-to-0.8", "docs/migrations/migrating-0.7-to-0.8.md", "0.7 to 0.8"),
