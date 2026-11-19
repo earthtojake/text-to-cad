@@ -1141,11 +1141,13 @@ class Report:
 
 def install_apps(here: Here, source: Source, apps: Sequence[App] = APPS,
                  say: Callable[[str], None] = lambda line: print(line, flush=True),
-                 live: Optional[Live] = None) -> Report:
+                 live: Optional[Live] = None,
+                 each: Optional[Callable[[str, Outcome, float], None]] = None) -> Report:
     """``apps``, each in turn: ours in, then old copies out, each app's line said as it finishes; one line for the
     loose skills, one counting the apps not found. ``live``: a person's terminal, told which app is being set up, and
-    each line said with its mark. Where the run's deadline passes (``Here.expired``), no further app is begun and
-    nothing more is removed."""
+    each line said with its mark. ``each``: told every app's key, outcome and seconds as it is done, for whoever must
+    know how far the run got should it never return. Where the run's deadline passes (``Here.expired``), no further
+    app is begun and nothing more is removed."""
     context = Context(source)
     lines: List[str] = []
     outcomes: Dict[str, Outcome] = {}
@@ -1175,6 +1177,8 @@ def install_apps(here: Here, source: Source, apps: Sequence[App] = APPS,
             outcome = Outcome("failed", f"{type(error).__name__}: {error}", reason=EXCEPTION)
         outcomes[app.key] = outcome
         seconds[app.key] = time.monotonic() - began
+        if each is not None:
+            each(app.key, outcome, seconds[app.key])
         if outcome is NOT_FOUND:
             missing.append(app.name)
         elif outcome is not QUIET:

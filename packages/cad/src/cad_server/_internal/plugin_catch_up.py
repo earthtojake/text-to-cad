@@ -45,7 +45,17 @@ lock, as it keeps its run (``_wanted``), so two servers on one state folder neve
 nothing of this one (``auto_update._UNSET``) and names the run (``ATTEMPT_ENV``: its ``at``), its output in
 ``install-command.log`` (``auto_update.INSTALL_LOG``). Named so, that command has ``INSTALL_SECONDS`` (``deadline``):
 each command it runs is given what is left of them and stopped with every process it started, none is started past
-them, and it exits non-zero, so no run outlives its deadline whichever server began it; a person's own run has none.
+them, and it exits non-zero. That much is the run's own doing, asked between its steps, and a step that never comes
+back (a folder on a disk that stopped answering, a lock, a call of ours with no time of its own) would hold the run's
+lock, and with it cad's own update and every run that waits, for as long as the process lived. So the command also
+carries a hard stop (``HardStop``), a thread of its own that asks nothing of the run: ``GRACE_SECONDS`` past the
+deadline, where the command has still not ended, the run's record is closed as a stopped run's (``ended`` with
+``STOPPED``), it is counted as stopped, and the process exits with ``STOPPED`` there and then, waiting on nothing --
+which frees the lock. No run a server began outlives its deadline by more than that grace and the moment its last
+words take (``CLOSE_SECONDS``), whichever server began it and whether or not that server still runs -- but for a
+process no thread of which runs at all (one a signal stopped, or one held inside a call that lets no other thread
+run, which no wait of the standard library's is), which no thread of its own can end. A person's own run has no
+deadline and no stop.
 That command keeps how it ended (``ended``); where it exited without saying so, the server that started it keeps it as
 failed, with its exit status (``Catcher``). ``cad update`` never runs it.
 
@@ -70,6 +80,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -83,6 +94,16 @@ LOCK = "install-command.lock"
 # The exit status of a run a server began that found another run holding the lock: nothing ran, and it is tried again
 # later (``EX_TEMPFAIL``).
 BUSY = 75
+# The exit status of a run a server began that was ended at its deadline, as ``timeout(1)`` says one: the run's own,
+# where it stopped itself, and the hard stop's (``HardStop``).
+STOPPED = 124
+# How long past its deadline a run a server began may take to end by itself before it is ended (``HardStop``): what
+# stopping its last command can take at most (the command and what it started ended, then waited on: 40 seconds on
+# Windows), and its last lines.
+GRACE_SECONDS = 60.0
+# How long the hard stop gives the run's last words (its record closed, its line, its count) before the process exits
+# without them: they wait on the state folder's lock, which whatever hangs may hold.
+CLOSE_SECONDS = 5.0
 # How long a run tries for the lock, every ``SETTLE_STEP``, before it takes it as held by another run: whoever asks
 # whether a run is going (``running``) holds it for an instant, which is no run.
 SETTLE_SECONDS = 2.0
@@ -237,6 +258,57 @@ def ended(code: int | None) -> None:
         pass
 
 
+class HardStop:
+    """What ends a run a server began for certain (see the module), armed as it is made: ``seconds`` -- the run's
+    deadline -- and ``GRACE_SECONDS`` later, where the command has not ended, the run's record is closed as a stopped
+    run's (``ended`` with ``STOPPED``), ``last`` is called (the command's: its line, its count) and the process exits
+    with ``STOPPED``, by ``os._exit``: no thread joined, no lock waited on, nothing flushed but what ``last`` flushed.
+    The record and ``last`` have ``CLOSE_SECONDS`` between them; where they take longer (the state folder's lock held
+    by what hangs), the process exits without them, and the server that began the run keeps it as failed with that
+    exit status (``Catcher``).
+
+    ``over()``: the run ended by itself, so its count and its record are its own to keep; where the stop has begun, it
+    does not return, and nothing is said twice. From then the stop says nothing and only ends a command that still
+    has not exited when its time comes. ``cancel()``: the command is done, and exits by itself."""
+
+    def __init__(self, seconds: float, last: Callable[[], None] | None = None) -> None:
+        self.last = last
+        self._turn = threading.Lock()
+        self._over = self._done = False
+        self._timer = threading.Timer(max(0.0, seconds) + GRACE_SECONDS, self._stop)
+        self._timer.daemon = True  # never what keeps the process from exiting
+        self._timer.start()
+
+    def over(self) -> None:
+        with self._turn:
+            self._over = True
+
+    def cancel(self) -> None:
+        self._timer.cancel()
+        with self._turn:
+            self._done = True
+
+    def _stop(self) -> None:
+        with self._turn:  # held until the process is gone: a run ending by itself just now waits here
+            if self._done:
+                return
+            try:
+                if not self._over:
+                    closing = threading.Thread(target=self._close, daemon=True)
+                    closing.start()
+                    closing.join(CLOSE_SECONDS)
+            finally:
+                os._exit(STOPPED)
+
+    def _close(self) -> None:
+        ended(STOPPED)
+        try:
+            if self.last is not None:
+                self.last()
+        except Exception:  # noqa: BLE001 - the process exits whatever its last words did
+            pass
+
+
 def tool() -> Path | None:
     """This cad's environment where it is a global install (an installer of ``auto_update.INSTALLERS`` made it), else
     None. Only whether it is one: the installer's program need not be found, as the update's must."""
@@ -358,7 +430,8 @@ def _begin(told, *, now: float | None = None) -> tuple[subprocess.Popen | None, 
 
 class Catcher:
     """The server's side (``daemon.Daemon``): the run it began last, held while it runs, so it begins no second, and
-    kept as failed, with its exit status, where it exited without saying how it ended."""
+    kept as failed, with its exit status, where it exited without saying how it ended. It only asks whether the run
+    has exited: what ends a run past its deadline is the run's own command (``HardStop``), whichever server began it."""
 
     def __init__(self) -> None:
         self.process: subprocess.Popen | None = None

@@ -127,7 +127,8 @@ cad_server/
   a file, each app's status is written there as it ends (`{"schema": "cad plugin install/1", "apps": {...}}`).
   **`cad plugin update`**: the same run, and what the server runs after cad's own update (below); where the
   server began it, it has 15 minutes: each command it runs is stopped with all it started when they are up, no
-  further app is begun, and it exits non-zero. One run at a time: both hold a lock in the data folder for the
+  further app is begun, and it exits non-zero; one that has not ended a minute past them, because a step of it
+  never came back, is ended whatever it is doing (exit status 124). One run at a time: both hold a lock in the data folder for the
   whole run, and a second run waits for the first, unless a server began it. Neither runs an install command or
   cad's own update. A run a person reads says the telemetry notice first, as every command does (one a person
   typed, or one the hosted install command handed over in a terminal; never one a server began, whose output is
@@ -209,7 +210,11 @@ newer than the release the plugin is up to date for, the server runs this cad's 
 update` once, detached, its output in `install-command.log` in the data folder; that run has 15 minutes: each
 command it runs is given what is left of them and stopped with all it started, no app is begun past them, and
 it exits non-zero (in a Windows session where `taskkill` is refused, only the command's own process is ended,
-and what it started may run on). It asks at its start and at
+and what it started may run on). That deadline is asked between the run's steps, so the command carries a hard
+stop too (`plugin_catch_up.HardStop`, a thread of its own): a run that has not ended a minute past its 15,
+because a step never came back, has its record closed as a stopped run's, is counted as stopped, and its
+process exits with 124 there and then, waiting on nothing, which frees the lock it held for cad's own update
+and for every run that waits. It asks at its start and at
 each tending once nothing is in flight, so it holds however cad got newer: its own update, a typed `cad
 update`, `uv tool upgrade cad` or `pipx upgrade cad` by hand. That release is kept in `install-command.json`
 in the data folder, beside the update's own record: written when `cad plugin update` ends with exit status 0

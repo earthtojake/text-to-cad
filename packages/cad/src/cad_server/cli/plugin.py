@@ -14,8 +14,11 @@ them (``cad_server.plugin``).
   plugin is up to date for (``plugin_catch_up``). Where it ends with exit status 0, this cad is kept as that release
   (``plugin_catch_up.ended``, a global install's alone); a run that fails writes none. Where a server began this run
   (``plugin_catch_up.ATTEMPT_ENV``), it has ``INSTALL_SECONDS`` (``plugin_catch_up.deadline``): each command it runs is
-  stopped, with every process it started, when they are up, no further app is begun, and it exits non-zero; a
-  person's own run has no deadline. ``cad plugin install`` keeps nothing of a server's run and has no deadline: one
+  stopped, with every process it started, when they are up, no further app is begun, and it exits non-zero
+  (``computer.STOPPED``). And where the run has not ended by itself a short while past them, because a step of it
+  never came back, it is ended all the same (``plugin_catch_up.HardStop``, ``_cut_off``): its record closed and the
+  run counted as stopped, and the process gone with that exit status, so the lock it held is free. A person's own
+  run has no deadline, and no such stop. ``cad plugin install`` keeps nothing of a server's run and has neither: one
   started under the install command an earlier cad's server ran carries that run's name, and must not end its record.
 - ``cad plugin update auto [status|on|off]``: whether the server runs ``cad plugin update`` once where this cad is
   newer than the release the plugin is up to date for, however cad got newer (``plugin_catch_up``), off by default; a
@@ -47,8 +50,10 @@ Bare ``cad plugin`` prints this help. ``--refresh``, hidden, does nothing: the u
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import os
 import sys
+import time
 from collections.abc import Sequence
 from typing import Any
 
@@ -121,23 +126,52 @@ def _load() -> str:
     return auto_update._version()
 
 
-def _run(prog: str, *, seconds: float | None = None) -> Any:
+def _run(prog: str, *, seconds: float | None = None, stop: Any = None) -> Any:
     """One run of the plugin's install (``cad_server.plugin.run.install``), by ``install`` and ``update`` alike: what
     it was (``run.Facts``, the one account of a run), its ``code`` the command's exit status. Told before it begins
-    (``_tell``) and counted as it ends (``_count``), here and nowhere else."""
+    (``_tell``) and counted as it ends (``_count``), here and nowhere else -- but a run a server began that never
+    ends by itself, which its hard stop (``stop``: ``plugin_catch_up.HardStop``) counts in its place (``_cut_off``),
+    never both."""
     release = _load()
     from cad_server import analytics
     from cad_server.plugin import run
 
+    began = time.monotonic()
     _tell(run.began_by(os.environ))
     under = analytics.in_force()  # the answer the run begins under: one that ends under another is not counted
+    going: list[Any] = []  # the run's facts, from the moment it has any
+    if stop is not None:
+        stop.last = lambda: _cut_off(prog, seconds, going, under, began)
 
     def switch(well: bool) -> str:
         return _line(_keep(True, note=well, release=release))
 
-    facts = run.install(switch, prog=prog, seconds=seconds)
+    facts = run.install(switch, prog=prog, seconds=seconds, going=going.append)
+    if stop is not None:
+        stop.over()  # ended by itself: its own to count, and where the stop has begun this does not return
     _count(facts, under)
     return facts
+
+
+def _cut_off(prog: str, seconds: float | None, going: Sequence[Any], under: Any, began: float) -> None:
+    """The last words of a run a server began that its hard stop is ending (``plugin_catch_up.HardStop``, which has
+    closed its record, and ends the process whatever becomes of this): one line where the run's lines go, and the
+    run counted as one its deadline stopped (``_count``), with the apps it had done by then."""
+    from cad_server.plugin import run
+
+    took = time.monotonic() - began
+    try:
+        print(f"{prog}: ended after {took:.0f} seconds, past the {seconds:g} a run the cad server began may take: a "
+              "step of it never came back, and what it had not done was left as it was", file=sys.stderr, flush=True)
+    except (OSError, ValueError):
+        pass
+    facts = going[0] if going else run.Facts(by=run.began_by(os.environ))
+    _count(dataclasses.replace(facts, outcome=run.FAILED, code=run.STOPPED, stopped=True, seconds=took,
+                               apps=list(facts.apps)), under)
+    try:
+        sys.stdout.flush()  # the lines the run had said: the process exits without closing anything
+    except (OSError, ValueError):
+        pass
 
 
 def _tell(by: str) -> None:
@@ -181,15 +215,22 @@ def _count(facts: Any, under: Any) -> None:
 
 
 def _update(prog: str) -> int:
+    _load()  # before the hard stop is armed: what it says and counts by is this release's, as the run's is
     from cad_server._internal import plugin_catch_up
 
+    seconds = plugin_catch_up.deadline()
+    stop = None if seconds is None else plugin_catch_up.HardStop(seconds)  # a run a server began: ended for certain
     try:
-        code = _run(prog, seconds=plugin_catch_up.deadline()).code
-    except Exception:
-        plugin_catch_up.ended(1)  # a crash: the status Python gives it
-        raise
-    plugin_catch_up.ended(code)
-    return code
+        try:
+            code = _run(prog, seconds=seconds, stop=stop).code
+        except Exception:
+            plugin_catch_up.ended(1)  # a crash: the status Python gives it
+            raise
+        plugin_catch_up.ended(code)
+        return code
+    finally:
+        if stop is not None:
+            stop.cancel()
 
 
 def _keep(on: bool, *, note: bool, release: str | None = None) -> bool:

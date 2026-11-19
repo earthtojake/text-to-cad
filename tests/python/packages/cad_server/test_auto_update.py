@@ -236,10 +236,11 @@ class PluginSwitchTest(Case):
         self.assertEqual([place for place in places if self.tmp not in place.parents], [])
         self.assertEqual([name for name in ELSEWHERE if name in os.environ], [])
 
-    def test_a_run_a_server_began_has_a_deadline_and_a_person_s_none(self) -> None:
-        """``cad plugin update`` where a server began it (``CAD_INSTALL_ATTEMPT``) has ``INSTALL_SECONDS``, and keeps
-        how it ended in the server's record; typed by a person, it runs as long as it runs. What it runs, and the
-        deadline's effect, are ``tests/python/packages/cad_server/plugin/test_command.py``'s."""
+    def test_a_run_a_server_began_has_a_deadline_and_a_hard_stop_and_a_person_s_neither(self) -> None:
+        """``cad plugin update`` where a server began it (``CAD_INSTALL_ATTEMPT``) has ``INSTALL_SECONDS``, a hard stop
+        armed for them before the run begins and let go as the command ends (``plugin_catch_up.HardStop``), and keeps
+        how it ended in the server's record; typed by a person, it runs as long as it runs. What it runs, the
+        deadline's effect and the stop's are ``tests/python/packages/cad_server/plugin/test_command.py``'s."""
         from cad_server._internal import auto_update_helper, plugin_catch_up
         from cad_server.plugin import run
 
@@ -248,17 +249,34 @@ class PluginSwitchTest(Case):
         plugin_catch_up._change(lambda found: {**found, "release": "0.1.0", "at": 7.0, "tries": 1,
                                                "outcome": "underway"})
         stopped = run.Facts(by=run.SERVER, outcome=run.FAILED, code=124, stopped=True)
+        steps = mock.Mock()
+        steps.install.return_value = stopped
         with mock.patch.dict(os.environ, {plugin_catch_up.ATTEMPT_ENV: "7.0"}), \
-                mock.patch.object(run, "install", return_value=stopped) as ran:
+                mock.patch.object(run, "install", steps.install), \
+                mock.patch.object(plugin_catch_up, "HardStop", steps.HardStop):
             self.assertEqual(plugin_catch_up.deadline(), auto_update_helper.INSTALL_SECONDS)
             self.assertEqual(self.cli("update", main=plugin_command.main)[0], 124)
-        self.assertEqual(ran.call_args.kwargs, {"prog": "cad plugin update",
-                                                "seconds": float(auto_update_helper.INSTALL_SECONDS)})
+        self.assertEqual([call[0] for call in steps.mock_calls],
+                         ["HardStop", "install", "HardStop().over", "HardStop().cancel"])
+        self.assertEqual(steps.HardStop.call_args.args, (float(auto_update_helper.INSTALL_SECONDS),))
+        self.assertEqual({name: value for name, value in steps.install.call_args.kwargs.items() if name != "going"},
+                         {"prog": "cad plugin update", "seconds": float(auto_update_helper.INSTALL_SECONDS)})
         found = plugin_catch_up.read()
         self.assertEqual((found["for"], found["outcome"], found["code"]), ("0.0.1", "failed", 124))
-        with mock.patch.object(run, "install", return_value=run.Facts(by=run.PERSON)) as ran:
+        # A crash lets the stop go too: no stop outlives its command.
+        steps.reset_mock()
+        steps.install.side_effect = RuntimeError("a mistake of ours")
+        with mock.patch.dict(os.environ, {plugin_catch_up.ATTEMPT_ENV: "7.0"}), \
+                mock.patch.object(run, "install", steps.install), \
+                mock.patch.object(plugin_catch_up, "HardStop", steps.HardStop), self.assertRaises(RuntimeError):
+            plugin_command.main(["update"])
+        self.assertEqual([call[0] for call in steps.mock_calls], ["HardStop", "install", "HardStop().cancel"])
+        with mock.patch.object(run, "install", return_value=run.Facts(by=run.PERSON)) as ran, \
+                mock.patch.object(plugin_catch_up, "HardStop") as stop:
             self.assertEqual(self.cli("update", main=plugin_command.main)[0], 0)
-        self.assertEqual(ran.call_args.kwargs, {"prog": "cad plugin update", "seconds": None})
+            self.assertEqual(self.cli("install", main=plugin_command.main)[0], 0)
+        self.assertEqual(ran.call_args_list[0].kwargs["seconds"], None)
+        stop.assert_not_called()
         self.assertEqual(plugin_catch_up.read()["for"], "0.1.0", "ended with exit status 0: this cad's")
 
     def test_an_attempt_past_its_time_is_stopped_with_everything_it_started(self) -> None:
@@ -2005,6 +2023,54 @@ class PluginCatchUpTest(Case):
             self.assertFalse(self.catch_up.Catcher().tend(self.told.append))
         popen.assert_not_called()
         self.assertEqual((self.catch_up.read()["tries"], self.catch_up.read()["outcome"]), (1, "underway"))
+
+    def test_the_hard_stop_closes_the_run_s_record_and_ends_the_process_waiting_on_nothing(self) -> None:
+        """``HardStop``, its time come (``_stop``, here by hand: the clock is the standard library's) and the
+        process's end stood in for: a run still going is kept as stopped, says its last words once, and the process
+        ends with 124 -- whatever those words wait on; a run that ended by itself says nothing twice; a command that
+        is done is left alone. A whole command ended by it: ``plugin/test_command.py``."""
+        import threading
+
+        from cad_server.plugin import computer
+
+        catch_up = self.catch_up
+        self.assertEqual(catch_up.STOPPED, computer.STOPPED)
+        underway = {"for": "0.0.9", "release": "0.1.0", "at": 7.0, "tries": 1, "outcome": "underway"}
+
+        def stopped(stop) -> tuple:
+            self.addCleanup(stop.cancel)
+            with mock.patch.object(catch_up.os, "_exit") as gone:
+                stop._stop()
+            found = catch_up.read()
+            return [call.args for call in gone.call_args_list], found["outcome"], found.get("code")
+
+        with mock.patch.dict(os.environ, {catch_up.ATTEMPT_ENV: "7.0"}):
+            said: list[str] = []
+            catch_up._change(lambda _found: dict(underway))
+            stop = catch_up.HardStop(900.0, lambda: said.append(catch_up.read()["outcome"]))
+            self.assertEqual(stop._timer.interval, 900.0 + catch_up.GRACE_SECONDS, "the deadline, and a short grace")
+            self.assertTrue(stop._timer.daemon, "never what keeps the process from exiting")
+            self.assertEqual(stopped(stop), ([(124,)], "failed", 124))
+            self.assertEqual(said, ["failed"], "its last words, once the record is closed")
+            # The run ended by itself: its record and its count are its own, and the stop only ends the process.
+            catch_up._change(lambda _found: dict(underway))
+            stop = catch_up.HardStop(900.0, lambda: said.append("twice"))
+            stop.over()
+            self.assertEqual(stopped(stop), ([(124,)], "underway", None))
+            # The command is done: nothing is ended.
+            stop = catch_up.HardStop(900.0, lambda: said.append("twice"))
+            stop.cancel()
+            self.assertEqual(stopped(stop), ([], "underway", None))
+            self.assertTrue(stop._timer.finished.is_set())
+            # What hangs may hold the state folder's lock, which closing the record waits on: that is not waited for.
+            # The process ends, and the server that began the run keeps it as failed (``Catcher``).
+            held = threading.Event()
+            self.addCleanup(held.set)
+            with mock.patch.object(catch_up, "ended", lambda _code: held.wait()), \
+                    mock.patch.object(catch_up, "CLOSE_SECONDS", 0.0):
+                self.assertEqual(stopped(catch_up.HardStop(900.0, lambda: said.append("late"))),
+                                 ([(124,)], "underway", None))
+        self.assertEqual(said, ["failed"])
 
     def test_however_cad_got_newer_a_typed_update_or_one_by_hand_the_server_catches_up(self) -> None:
         self.switch_on()
