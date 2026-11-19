@@ -1812,17 +1812,17 @@ class DoctorTest(Case):
         (self.state / updates.FILE).write_text(json.dumps(known), encoding="utf-8")
         self.assertEqual(doctor._newest()["detail"], "the version feed names no 0.x release; its newest is cad 1.2.0")
 
-    def test_doctor_shows_the_install_command_s_record(self) -> None:
+    def test_doctor_shows_the_plugin_s_record(self) -> None:
         from cad_server._internal import plugin_catch_up
         from cad_server.cli import doctor
 
-        self.assertEqual(doctor._catch_up(), (doctor.INFO, "no record of the install command being up to date on "
-                                                           "this computer"))
+        self.assertEqual(doctor._catch_up(), (doctor.INFO, "no record of the plugin being up to date on this "
+                                                           "computer"))
         plugin_catch_up.noted("0.0.9")
-        self.assertEqual(doctor._catch_up()[1], "the install command is up to date for cad 0.0.9")
+        self.assertEqual(doctor._catch_up()[1], "the plugin is up to date for cad 0.0.9")
         plugin_catch_up._change(lambda found: {**found, "release": "0.1.0", "at": 0.0, "tries": 2,
                                                "outcome": "failed", "code": 1})
-        self.assertRegex(doctor._catch_up()[1], r"^the install command is up to date for cad 0\.0\.9; the last run, "
+        self.assertRegex(doctor._catch_up()[1], r"^the plugin is up to date for cad 0\.0\.9; the last run, "
                                                 r"for cad 0\.1\.0 on \S+ \S+: failed \(exit 1\), try 2 of 3$")
 
 

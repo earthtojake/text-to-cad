@@ -5,9 +5,9 @@ build ran in, if one was (``extras.last_with_kernel``) --, where each integratio
 its release, and cad's own update (``cad_server._internal.auto_update``: the switches, whether this cad is a global
 install and by which installer, the newest release of this cad's major the version feed as last read names and,
 where it names a release of a higher major, the one line that says how to get it (``auto_update.MAJOR_LINE``), whether
-that installer is found, and the last attempt) and the install command's
-record (``cad_server._internal.plugin_catch_up``: the release it is up to date for, and the last run the server
-began for a newer cad, and how it went); on Windows, uv's folder in
+that installer is found, and the last attempt) and the plugin's
+record (``cad_server._internal.plugin_catch_up``: the release of cad the plugin in the agent apps is up to date for,
+and the last run of ``cad plugin update`` the server began for a newer cad, and how it went); on Windows, uv's folder in
 an app's private copy of AppData, a copy of cad or uv's leftovers, to delete (``private_folders``). It repairs,
 registers, starts, writes and deletes nothing: ``--check`` prints the same report.
 
@@ -143,8 +143,8 @@ def _auto():
 
 def _update() -> tuple[str, str]:
     """cad's own update: whether it updates itself (``cad update auto``), a global install alone (and by which
-    installer), and whether the server runs the install command once where cad is newer than the release it is up to
-    date for (``cad plugin update auto``)."""
+    installer), and whether the server runs ``cad plugin update`` once where cad is newer than the release the plugin
+    is up to date for (``cad plugin update auto``)."""
     auto = _auto()
     found, word = auto.global_install(), {True: "on", False: "off"}
     plugin = f"plugin update auto {word[auto.plugin_switch()]}"
@@ -208,17 +208,18 @@ def _attempt() -> tuple[str, str]:
 
 
 def _catch_up() -> tuple[str, str]:
-    """The install command's record: the release of cad it is up to date for -- the one it last ended with exit status
-    0 for, or the one that turned ``cad plugin update auto`` on --, and the last run the server began for a newer cad --
-    its release, when, how it went and its exit status, the try of how many."""
+    """The plugin's record: the release of cad the plugin in the agent apps is up to date for -- the one ``cad plugin
+    update`` last ended with exit status 0 for, or the one that turned ``cad plugin update auto`` on (a run of ``cad
+    plugin install`` or ``cad plugin update`` that ended well) --, and the last run of ``cad plugin update`` the server
+    began for a newer cad -- its release, when, how it went and its exit status, the try of how many."""
     import time
 
     from cad_server._internal import plugin_catch_up
 
     found = plugin_catch_up.read()
     named = found.get("for")
-    said = (f"the install command is up to date for cad {named}" if isinstance(named, str)
-            else "no record of the install command being up to date on this computer")
+    said = (f"the plugin is up to date for cad {named}" if isinstance(named, str)
+            else "no record of the plugin being up to date on this computer")
     if not isinstance(found.get("release"), str) or not isinstance(found.get("at"), (int, float)):
         return INFO, said
     when = time.strftime("%Y-%m-%d %H:%M", time.localtime(found["at"]))

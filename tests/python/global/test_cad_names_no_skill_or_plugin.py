@@ -45,8 +45,10 @@ NOT_MESSAGES = {
     # The command words of ``cad plugin update``, which the server runs where cad is newer than the release that
     # command is up to date for.
     "cad_server/_internal/plugin_catch_up.py": {"plugin"},
-    # ``cad doctor`` names the command's switch as it reports it (``cad plugin update auto``), and its record's line.
-    "cad_server/cli/doctor.py": {"plugin update auto ", "plugin"},
+    # ``cad doctor`` names the command's switch as it reports it (``cad plugin update auto``), and its record's line:
+    # the line's name, and what it says of the release the plugin is up to date for.
+    "cad_server/cli/doctor.py": {"plugin update auto ", "plugin", "the plugin is up to date for cad ",
+                                 "no record of the plugin being up to date on this computer"},
     # The ``update`` event's field that says how the command's run after an update went (``plugin``), a name the
     # receiver reads, never a message.
     "cad_server/analytics.py": {"plugin"},
