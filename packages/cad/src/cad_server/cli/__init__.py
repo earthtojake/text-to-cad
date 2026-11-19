@@ -342,7 +342,8 @@ def _report(error: Exception) -> None:
 _ANY_RELEASE = frozenset({"server", "status", "stop", "mcp", "doctor", "cache", "update", "plugin"})
 # Commands that never carry the analytics notice: the engine's server and `mcp`, writing nowhere a person reads;
 # `telemetry`, which says it its own way; `setup`, which an updater of 0.11.11 and earlier runs with no person to read
-# it, and `plugin`, which cad's own update runs with none, its output in a log; `run`, which is only the python it runs,
+# it, and `plugin`, which cad's own update runs with none, its output in a log, and which says it itself before a run
+# of `install` or `update` a person reads (``cad_server.cli.plugin._tell``); `run`, which is only the python it runs,
 # as the `cad` command's `run` is; and `requirement`, whose output a program reads.
 _UNTOLD = frozenset({"server", "mcp", "telemetry", "setup", "plugin", "run", "requirement"})
 # Commands that only report, and so write nothing a command's run writes (``_tell``).

@@ -127,7 +127,10 @@ cad_server/
   server began it, it has 15 minutes: each command it runs is stopped with all it started when they are up, no
   further app is begun, and it exits non-zero. One run at a time: both hold a lock in the data folder for the
   whole run, and a second run waits for the first, unless a server began it. Neither runs an install command or
-  cad's own update. **`cad plugin update auto [status|on|off]`**: whether the server runs `cad plugin update`
+  cad's own update. A run a person reads says the telemetry notice first, as every command does (one a person
+  typed, or one the hosted install command handed over in a terminal; never one a server began, whose output is
+  a log's, nor one reached from an install command cad itself started), and each run is counted as it ends
+  (Telemetry, below). **`cad plugin update auto [status|on|off]`**: whether the server runs `cad plugin update`
   once where cad is newer than the release the plugin is up to date for (below), off by default, kept by the
   server as `cad update auto` is. `cad plugin` is the one command that reaches `plugin/`, and that package the
   one place in cad that names an agent app, a plugin or a skill.
@@ -273,6 +276,22 @@ with their size, and the person deletes them once no such release is left.
 detected (the MCP handshake's client name, else the markers an app sets in its shell, else `unknown`). A
 no, wherever it is said (`cad telemetry off`, the app menu's switch), is kept in the settings and asks the
 receiver to delete what was sent under the install id.
+
+**A run of `cad plugin install` or `cad plugin update` is counted as it ends** (`cli/plugin.py`'s `_count`,
+`analytics.install`), where telemetry is on, as every count is. One `install` event: who began the run (a
+person, the hosted install command handing over, cad's server), how it ended (well; every app it found failed;
+another run was going and this one ran nothing), what its terminal showed of the logo and in which colours, its
+whole seconds, how many agent apps it found and how many of those failed. And one `install_app` event for each
+app found: the app by cad's own key for it in `plugin/apps.py`, what was done there (`installed`, `updated`,
+`removed`, `skipped`, `failed`), for a failure why in one word chosen where it failed (`timeout`, `command`,
+`network`, `exception`, `other`), and its whole seconds. Never a path, a version of an app's, a line an app
+printed or an error's message. How a run ended is read from its apps where they are counted, so the two never
+disagree: it is counted `failed` exactly where every app it found failed, a run its deadline stopped included.
+The run is kept as one line in a file of its own beside the settings (`telemetry-installs.jsonl`, which no
+sender of an earlier release takes) and a sender is started at once, detached, as for a version's arrival and
+for cad's own update: the run may be the last thing cad does on the computer for a long while. Nothing of it
+is kept for a run that began before the person was told, and a crash of the command is reported as any
+command's is.
 
 ## HTTP
 

@@ -29,6 +29,17 @@ hosted or other, nor cad's own update, which begins none while a run is going. E
 before it begins (``_load``): an update of cad by hand may replace this environment's files under it, and a module
 imported later would be another release's.
 
+Each run of ``install`` or ``update`` is told and counted in the one place both pass through (``_run``). Told: the
+dispatcher says the telemetry notice for no ``cad plugin`` command (``cad_server.cli._UNTOLD``: a server runs ``cad
+plugin update`` with its output in a log), so a run says it itself, before its work, where a person reads it
+(``_tell``): one a person typed, or one the hosted install command handed over in a person's terminal; never one a
+server began, one an install command cad itself started reached, nor ``cad plugin update auto``. Counted: as it ends,
+from what the run says it was (``run.Facts``), one ``install`` event and one ``install_app`` for each app it found
+(``_count``, ``cad_server.analytics.install``), under every rule telemetry has -- only once the person was told and
+never after a no, never in CI or from a development build, nothing the run began before it was told, never a failure
+of the run, and nothing of it waits on the network. A crash of the run is the command's, reported as every command's
+is (``cad_server.cli._report``).
+
 Bare ``cad plugin`` prints this help. ``--refresh``, hidden, does nothing: the updater of 0.11.10 runs ``cad plugin
 --refresh`` after it moves a computer.
 """
@@ -36,6 +47,7 @@ Bare ``cad plugin`` prints this help. ``--refresh``, hidden, does nothing: the u
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Sequence
 from typing import Any
@@ -88,11 +100,14 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
 
 
 # What a run uses of cad, beside this module: the apps and the run itself, the lock and the record, the switch and the
-# server asked to keep it, and what those write by.
+# server asked to keep it, what those write by, and what counts the run as it ends (telemetry, the sender it starts,
+# and what they read: whether this is a development build, the app the command runs in, this cad's version).
 _USES = ("cad_server.plugin.run", "cad_server._internal.plugin_catch_up", "cad_server._internal.auto_update",
          "cad_server._internal.auto_update_helper", "cad_server._internal.file_lock", "cad_server._internal.cli_errors",
          "cad_server.cli.auto_update", "cad_server.settings", "cad.engine.client", "cad.engine.places",
-         "cad._internal.atomic_replace")
+         "cad._internal.atomic_replace", "cad_server.analytics", "cad_server._internal.telemetry_send",
+         "cad_server._internal.editable", "cad_server._internal.engine_host", "cad_server._internal.apps",
+         "cad_server._internal.api", "cad.engine.previous")
 
 
 def _load() -> str:
@@ -108,14 +123,61 @@ def _load() -> str:
 
 def _run(prog: str, *, seconds: float | None = None) -> Any:
     """One run of the plugin's install (``cad_server.plugin.run.install``), by ``install`` and ``update`` alike: what
-    it was (``run.Facts``, the one account of a run), its ``code`` the command's exit status."""
+    it was (``run.Facts``, the one account of a run), its ``code`` the command's exit status. Told before it begins
+    (``_tell``) and counted as it ends (``_count``), here and nowhere else."""
     release = _load()
+    from cad_server import analytics
     from cad_server.plugin import run
+
+    _tell(run.began_by(os.environ))
+    under = analytics.in_force()  # the answer the run begins under: one that ends under another is not counted
 
     def switch(well: bool) -> str:
         return _line(_keep(True, note=well, release=release))
 
-    return run.install(switch, prog=prog, seconds=seconds)
+    facts = run.install(switch, prog=prog, seconds=seconds)
+    _count(facts, under)
+    return facts
+
+
+def _tell(by: str) -> None:
+    """The telemetry notice (``cad_server.analytics.notify``: one line on stderr, once, kept as said), before a run
+    whose output a person reads: one a person began, or one the hosted install command handed over (``by``:
+    ``run.PERSON``, ``run.SCRIPT``). Never before a run a server began (``run.SERVER``), nor one reached from an
+    install command cad itself started (``install_script.BY_CAD_ENV``: the bridge's, its output nowhere or in a log,
+    and the one ``cad plugin update`` of 0.11.12 and 0.11.13 runs): a notice kept as said where nobody read it would
+    have everything after it sent with no one told. Such a run is counted only where a person was told before it.
+    Never raises: the notice never fails the run it rides on."""
+    try:
+        from cad_server import analytics
+        from cad_server._internal.install_script import BY_CAD_ENV
+        from cad_server.plugin import run
+
+        if by in (run.PERSON, run.SCRIPT) and os.environ.get(BY_CAD_ENV) != "1":
+            analytics.notify()
+    except Exception:  # noqa: BLE001 - see above
+        pass
+
+
+def _count(facts: Any, under: Any) -> None:
+    """The run counted (``cad_server.analytics.install``), from what it says it was (``run.Facts``) and nothing else:
+    who began it, what its terminal was shown, its seconds, and each app it found with what was done there, the word
+    for why it failed and its seconds. One another run kept from running (``run.BUSY``) names no app. How it ended is
+    not passed on but decided there from those apps, so no run is counted as ended in a way its own apps deny: a run
+    is counted failed exactly where every app it found failed -- the reading the receiver takes, which refuses any
+    other with its whole batch --, so one its deadline stopped (``Facts.stopped``, whose exit status says it failed)
+    is counted failed where every app it had found by then failed, and as any other run where one did not. ``under``:
+    the answer in force as the run began. Never raises: a count never fails the run."""
+    try:
+        from cad_server import analytics
+        from cad_server.plugin import run
+
+        busy = facts.outcome == run.BUSY
+        apps = [] if busy else [(app.app, app.status, app.reason or None, app.seconds) for app in facts.apps]
+        analytics.install(by=facts.by, busy=busy, logo=facts.logo, colour=facts.colour, seconds=facts.seconds,
+                          apps=apps, under=under)
+    except Exception:  # noqa: BLE001 - see above
+        pass
 
 
 def _update(prog: str) -> int:

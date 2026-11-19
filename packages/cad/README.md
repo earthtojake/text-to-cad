@@ -430,7 +430,11 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     in a small file beside the settings (`analytics.spool`), which the CAD app's
     and the viewer's background sends take, and a command or the daemon that finds it has waited more
     than a window, with no other process sending, starts a sender detached that sends it and exits
-    (the server's `_internal/telemetry_send.py`). A process that exits sends nothing either: its last batch is
+    (the server's `_internal/telemetry_send.py`). Three counts start that sender at once, since whatever made
+    them may be the last of cad's processes on the computer for a long while: a step of a computer's arrival at a
+    release, one of cad's own updates, and a run of `cad plugin install` or `cad plugin update`, counted as it
+    ends -- who began it, how it ended, and each agent app it found with what was done there, in words of cad's
+    and whole numbers. A process that exits sends nothing either: its last batch is
     kept beside the settings, and the next process that sends sends it, in the background -- each row saying the
     version and app that counted it, each kept batch under its own id, so a resend of a batch counts once. One
     wait remains, bounded: `cad telemetry off`, which waits for the deletion it asks for.
