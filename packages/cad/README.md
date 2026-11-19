@@ -177,7 +177,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 2. **Only requested files to disk.** *Every document.* The engine writes the files a model declares -- the xbf and the exports
    its decorators name, nothing beside them --, a model's own script where a person or an agent asks it to set a
    parameter the script declares (`cad model set`, law 31: the numbers asked written where its last run recorded
-   them, the file replaced at once and nothing else of it changed), and the operating system's coordination for its
+   them, the file replaced at once while it holds the bytes that run read, and nothing else of it changed), and the operating system's coordination for its
    warm process: a door (a named pipe; on Windows a port file), a lock and its connections' pipes, in
    a folder only the user can make: `cad-engine` in `$XDG_RUNTIME_DIR`, else in the user's own
    temporary folder (on macOS the one the system names, whatever `$TMPDIR` a sandbox sets; else
@@ -656,11 +656,13 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     (law 7). A value changes only in the code: by hand, or by `cad model set ID wall=2.5` (`cad.model.set`, and
     the CAD Viewer's Parameters Save, one path). It writes a parameter of the model's own script whose default
     is a plain number, only once the script's bytes on disk are the ones its last run read, nothing else of the
-    file, and then runs that run again in the model's warm worker; a build that fails at the new values puts the
-    bytes back and builds again, so the document stays the last good one. There is no override, no preview
-    build and no value kept anywhere but the code: a parameter another module declares, or one whose default is
-    an expression, is listed and never written, and a document no live worker built lists its parameters
-    read-only. The mechanism: the engine's **Parameters**.
+    file, and then runs that run again in the model's warm worker; a build at the new values that breaks a model
+    (one that built before, or now fails otherwise than it did) puts the bytes back and builds again, so the
+    document stays the last good one -- never over another writer's change: a file changed meanwhile is left as
+    it is, and said so. There is no override, no preview build and no value kept anywhere but the code: a
+    parameter another module declares, or one whose default is an expression or a literal not its own alone (a
+    loop's call, a file not in UTF-8), is listed and never written, and a document no live worker built lists
+    its parameters read-only. The mechanism: the engine's **Parameters**.
 
 ## Inspection
 

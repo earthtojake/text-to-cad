@@ -13,12 +13,16 @@ document holds).
 (``parameters.changes``), the script's bytes against the digest and the spans its last run recorded
 (``parameters.standing``), and no build of the script running (``busy``); then each number spelled by
 the library (``parameters.spelled``) and put in place of the one there (``parameters.splice``), the file
-replaced at once (``atomic_replace.put``, its mode kept), and the script's last run built again in the
-model's warm worker as that run was asked (``ran``: its script, the models it called, its working
-folder, its environment and its Python). A build that fails puts the previous bytes back the same way and
-builds again, so the document and the rows are the last good ones, and the change is refused
-(``build_failed``) with the build's own words. The engine never reads a script outside a run but here,
-asked by a person or an agent; nothing runs on its own.
+replaced at once (``atomic_replace.put``, its mode kept) only while it still holds the bytes that were
+checked (``_write``), and the script's last run built again in the model's warm worker as that run was
+asked (``ran``: its script, the models it called, its working folder, its environment and its Python).
+The build is judged by what the change can break (``_failure``): a model or child model that failed in
+the last run and fails the same way now is the script's own trouble, not the change's. A build that fails
+otherwise puts the previous bytes back the same way -- only where the file still holds the bytes the engine
+wrote: a file changed meanwhile is left as it is -- and builds again, so the document and the rows are the
+last good ones, and the change is refused (``build_failed``) with the build's own words and what the file
+holds now. The engine never reads a script outside a run but here, asked by a person or an agent; nothing
+runs on its own.
 """
 
 from __future__ import annotations
@@ -28,12 +32,12 @@ import secrets
 import stat
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from cad.engine import parameters as declared
 from cad.engine.parameters import ParameterRefused
 
-__all__ = ["LAST_RUN", "Setting", "ran"]
+__all__ = ["LAST_RUN", "Changed", "Setting", "ran"]
 
 # Where a worker keeps the run its last build was part of (``Process.state``): what ``set`` builds again.
 LAST_RUN = "last_run"
@@ -42,50 +46,81 @@ LAST_RUN = "last_run"
 _KEPT = ("script", "cwd", "env", "interpreter", "program")
 
 
-def ran(worker: Any, request: dict[str, Any]) -> None:
+def _rows(answer: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    """Each model a build's answer reports, then each child model it called."""
+    for report in answer.get("done") or []:
+        if isinstance(report, dict):
+            yield report
+            yield from (row for row in (report.get("child_models") or {}).values() if isinstance(row, dict))
+
+
+def _model(row: dict[str, Any]) -> str:
+    """What a model's report is known by from one build of its script to the next: its id, else its name."""
+    return str(row.get("id") or row.get("model") or "")
+
+
+def _error(row: dict[str, Any]) -> str:
+    """A failed model's error, in its own words."""
+    return str(row.get("error") or f"{row.get('model') or 'a model'} failed")
+
+
+def ran(worker: Any, request: dict[str, Any], answer: dict[str, Any] | None = None) -> None:
     """A build ``worker`` ran for ``request``: kept as the run its parameters are set by building again. A
     run's builds share its token (``api._run``), each naming the models it called (``functions``; none: every
-    model the script defines), so the run kept is the last one, with every model any of its builds named."""
+    model the script defines), so the run kept is the last one, with every model any of its builds named, and
+    how each model of it last ended (``failed``: each model that failed, by ``_model``, the last line of its
+    error), which ``_failure`` judges a set's build against."""
     run = request.get("run")
     last = worker.state.get(LAST_RUN)
     if last is None or run is None or last.get("run") != run:
-        last = {"run": run, "request": {key: request[key] for key in _KEPT if key in request}, "functions": []}
+        last = {"run": run, "request": {key: request[key] for key in _KEPT if key in request}, "functions": [],
+                "failed": {}}
     functions = request.get("functions")
     if functions is None or last["functions"] is None:
         last["functions"] = None
     else:
         last["functions"] += [name for name in functions if isinstance(name, str) and name not in last["functions"]]
+    failed = last.setdefault("failed", {})
+    for row in _rows(answer or {}):
+        if row.get("ok"):
+            failed.pop(_model(row), None)
+        else:
+            failed[_model(row)] = _last_line(_error(row))
     worker.state[LAST_RUN] = last
 
 
-def _failure(answer: dict[str, Any]) -> str | None:
-    """Why a build's answer failed, in its own words (a model's error, the worker's), or None: every model
-    it built, and every child model each called, built."""
+def _failure(answer: dict[str, Any], before: dict[str, str] | None = None) -> str | None:
+    """Why a set's build failed, in its own words (a model's error, the worker's), or None: every model it
+    built, and every child model each called, built -- but one that failed in the run built again
+    (``before``: ``ran``'s ``failed``) and fails the same way now (the last line of its error), which the
+    change did not break. A model that built then and fails now, or fails otherwise, is the change's."""
     if "failed" in answer:
         return str(answer["failed"])
-    for report in answer.get("done") or []:
-        if not isinstance(report, dict):
-            continue
-        for row in [report, *(report.get("child_models") or {}).values()]:
-            if not row.get("ok"):
-                return str(row.get("error") or f"{row.get('model') or 'a model'} failed")
+    before = before or {}
+    for row in _rows(answer):
+        if not row.get("ok") and before.get(_model(row)) != _last_line(_error(row)):
+            return _error(row)
     return None
 
 
 def _rebuilt(answer: dict[str, Any]) -> list[str]:
     """The ids of the documents a build made: each model's, then each child model's, once each."""
     found: list[str] = []
-    for report in answer.get("done") or []:
-        if not isinstance(report, dict):
-            continue
-        for row in [report, *(report.get("child_models") or {}).values()]:
-            if row.get("ok") and row.get("id") and row["id"] not in found:
-                found.append(str(row["id"]))
+    for row in _rows(answer):
+        if row.get("ok") and row.get("id") and row["id"] not in found:
+            found.append(str(row["id"]))
     return found
 
 
-def _write(path: Path, data: bytes) -> None:
-    """``path`` holding ``data``, replaced at once (``atomic_replace.put``) with the mode it had."""
+class Changed(Exception):
+    """The file ``_write`` was to replace no longer holds the bytes it was told it holds: another writer's."""
+
+
+def _write(path: Path, data: bytes, holds: bytes) -> None:
+    """``path`` holding ``data``, replaced at once (``atomic_replace.put``) with the mode it had -- only while it
+    holds ``holds``, read again once the new file is made, just before it is moved over: ``Changed``, and the file
+    left as it is, where another writer changed it since. (Nothing locks a file another program writes: the
+    window is the rename's alone.)"""
     from cad.engine.atomic_replace import put
 
     mode = stat.S_IMODE(os.stat(path).st_mode)
@@ -93,6 +128,12 @@ def _write(path: Path, data: bytes) -> None:
     def write(temporary: Path) -> None:
         temporary.write_bytes(data)
         os.chmod(temporary, mode)
+        try:
+            now = path.read_bytes()
+        except OSError:  # gone, or no longer readable: not the file that was checked
+            now = None
+        if now != holds:
+            raise Changed(str(path))
 
     put(path, write, compare=False)
 
@@ -157,22 +198,41 @@ class Setting:
         declared.standing(data, [row for row, _value in found], script.name)
         made = declared.splice(data, [(row["span"][0], row["span"][1], declared.spelled(value, row["kind"]))
                                       for row, value in found])
-        _write(script, made)
+        try:
+            _write(script, made, data)
+        except Changed:
+            raise ParameterRefused(f"{script.name} changed while its parameters were being set: nothing was written",
+                                   "script_changed", "run the script first, then set the parameters") from None
+        before = dict(last.get("failed") or {})  # how the run built again last ended: what the change cannot break
         answer = self._built(last)
-        failure = _failure(answer)
+        failure = _failure(answer, before)
         if failure is not None:
-            # The bytes the last good run read, put back, and that run built again: its document and its rows.
-            _write(script, data)
-            self._built(last)
-            refused = ParameterRefused(f"{name}: its build at the new values failed, and {script.name} is as it was: "
-                                       f"{_last_line(failure)}", "build_failed",
-                                       "fix the model's code for those values, or set others")
-            refused.detail = failure  # type: ignore[attr-defined]  # the build's whole words
-            raise refused
+            raise self._put_back(name, script, data, made, last, failure)
         return {"id": ident,
                 "written": [{"name": row["name"], "from": row["value"], "to": value, "file": row["file"],
                              "line": row["line"]} for row, value in found],
                 "rebuilt": _rebuilt(answer)}
+
+    def _put_back(self, name: str, script: Path, data: bytes, made: bytes, last: dict[str, Any],
+                  failure: str) -> ParameterRefused:
+        """A build at the new values that failed: the bytes the last good run read put back and that run built
+        again (its document and its rows), where the file still holds the bytes the engine wrote; else the file
+        is left as it is. The refusal (``build_failed``) says the build's last line and what the file holds."""
+        try:
+            _write(script, data, made)
+        except Changed:
+            held = (f"{script} changed while it built, so the engine did not put it back: it holds that change, "
+                    "neither the bytes it had nor only the new values")
+        except OSError as error:
+            held = (f"{script} could not be put back ({error.strerror or error}): it holds the new values, which "
+                    "failed to build")
+        else:
+            self._built(last)
+            held = f"{script.name} is as it was"
+        refused = ParameterRefused(f"{name}: its build at the new values failed, and {held}: {_last_line(failure)}",
+                                   "build_failed", "fix the model's code for those values, or set others")
+        refused.detail = failure  # type: ignore[attr-defined]  # the build's whole words
+        return refused
 
     def _built(self, last: dict[str, Any]) -> dict[str, Any]:
         """The script's last run built again, in its worker, as it was asked: a build order of its own run,

@@ -154,6 +154,52 @@ class RecordingTest(unittest.TestCase):
                          ["2.5", "3.0", "0.0", "0.0", "1e+16"])
         self.assertEqual(parameters.spelled(8.0, "int"), "8")
 
+    def test_a_value_no_float_holds_or_one_that_would_be_written_as_zero_is_refused(self) -> None:
+        rows = self.rows()
+        for values in ({"wall": 10**400}, {"holes": -(10**400)}):  # refused before anything converts it
+            with self.subTest(values=list(values)), self.assertRaises(ParameterRefused) as caught:
+                parameters.changes(rows, values)
+            self.assertEqual(caught.exception.code, "not_a_number")
+        self.assertLess(len(str(caught.exception)), 200, "the number is not said whole")
+        gap = {"name": "gap", "value": 0.5, "kind": "float", "min": None, "max": None, "span": [0, 3], "reason": None}
+        with self.assertRaises(ParameterRefused) as caught:
+            parameters.changes([gap], {"gap": 1e-7})
+        self.assertEqual(caught.exception.code, "not_a_number", "a value that is not zero is never written as 0.0")
+        self.assertEqual(parameters.changes([gap], {"gap": 0})[0][1], 0.0)
+        self.assertEqual(parameters.changes([gap], {"gap": 0.1234564})[0][1], 0.123456, "the value written and answered")
+
+    def test_a_literal_that_is_not_one_declaration_s_alone_has_no_span(self) -> None:
+        cases = {
+            "a loop": "for name in ('a', 'b'):\n    model.param(name, 1)\n",
+            "a comprehension": "X = [model.param(f'x{i}', 1) for i in range(2)]\n",
+            "a coding that is not UTF-8": None,
+        }
+        for what, code in cases.items():
+            with self.subTest(what):
+                if code is None:
+                    self.script.write_bytes("# -*- coding: latin-1 -*-\nfrom cad import model\ns = 'ééé'\n"
+                                            "A = model.param('a', 1)\n".encode("latin-1"))
+                else:
+                    self.script.write_text("from cad import model\n" + code, encoding="utf-8")
+                try:
+                    declared = self.load()
+                except RuntimeError:  # before 3.12 a comprehension is a function of its own: refused
+                    self.assertEqual(what, "a comprehension")
+                    continue
+                self.assertTrue(declared)
+                self.assertEqual({row.span for row in declared}, {None})
+                self.assertEqual({row["reason"] for row in parameters.rows(declared, declared[0].file)}, {"expression"})
+        # Two declarations a load found at one literal: neither keeps it.
+        import sys
+        import types
+
+        held = parameters._Recording(lambda _file: True)
+        held._literal = lambda *_args: ((10, 11), "digest")  # type: ignore[method-assign]
+        for name, line in (("a", 1), ("b", 2)):
+            frame = types.SimpleNamespace(f_code=sys._getframe().f_code, f_lineno=line)
+            held.declare(frame, name, 1, "int", None, None, None, None)
+        self.assertEqual([row.span for row in held.declared], [None, None])
+
 
 if __name__ == "__main__":
     unittest.main()

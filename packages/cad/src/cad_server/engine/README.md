@@ -1233,8 +1233,8 @@ keeps nothing, and only a clean result is kept: never a document that did not re
 measured. A document holds one version's results, so none outlives the document it describes. In memory the store
 holds 128 results and 64 MB at most, least recently used first; each is written beside the engine's cache too
 (`checks.Disk`: `<cache>/documents/<id>/checks/`, a file's under its document id, so deleting a document removes its
-results with it), under the version that outlives the engine -- a model's revision, its build closure's key, the
-key its cache file is kept by (a build with no key keeps nothing on disk), a file's digest -- so a restarted engine
+results with it), under the version that outlives the engine -- a model's revision, its build closure's key (with
+its parameters' record where it has one, **Parameters**), the revision its cache file is kept by (a build with no key keeps nothing on disk), a file's digest -- so a restarted engine
 answers the same check of the same document without measuring, and a model built again from the same code and
 inputs is the same document there. Each is written whole, a document keeps one version's, the store holds 1024
 results and 256 MB at most, least recently used (by its time on disk, set again by a read) first, and an entry that
@@ -1839,10 +1839,11 @@ stderr is no one's); a pass with nothing to do says nothing, and a pass that fai
 engine from starting.
 
 A record's `revision` is its closure's key (the same code, the same revision, after a
-restart too), or a token of the build's own where the closure has none. A served document's
+restart too) -- digested with the document's parameters' record where it records any (`models.revision`,
+**Parameters**) -- or a token of the build's own where the closure has none. A served document's
 generation (its structure's `version`, which a page waits on and the viewer's export compares)
 is a token of its build's own: a rebuild is a new generation, and no generation is a counter that
-a restart starts again. A document is what its last run made: a run of the same closure in the worker
+a restart starts again. A document is what its last run made: a run of the same revision in the worker
 that holds the last build (nothing ran, or it ran to the same bytes) keeps its generation, so a page
 waiting on it is not woken and an export of the revision it shows still writes it. Recents is the registry's view (`cad_server.viewer.recents`): pinned
 first, then by last activity, the later of a row's `opened` (a page opened it) and `updated` (a
@@ -4119,8 +4120,12 @@ call, and where its default is spelled -- the call found by the code position it
 the name), its default argument found in the file's syntax tree (`ast`, columns in UTF-8 bytes), and kept as a
 byte span only when it is a plain numeric literal, with or without a leading minus, whose bytes read back as
 the value; the span comes with the digest of the file's bytes it was found in (`digest`). A default that is
-anything else (a name, an expression) is recorded with no span. A name declared twice in a run is refused,
-naming both `file:line`.
+anything else (a name, an expression) is recorded with no span, and so is one the engine cannot tell is that
+declaration's alone: a call whose name is not a string in the code (`param(n, 1)` in a loop, `param(f"x{i}", 1)`
+in a comprehension: one literal, many names), two declarations at one literal (both lose it), and every call in
+a file whose bytes are not UTF-8 or whose coding cookie names another coding (the parser's columns are bytes of
+the text as UTF-8, the file's own only then). Each is listed `expression`. A name declared twice in a run is
+refused, naming both `file:line`.
 
 **Which a model has.** `BuildContext.parameters(model)` (`parameters.rows`): every declaration of the run,
 the model's own -- declared in its script, writable where it has a span (`expression` where it has none)
@@ -4134,7 +4139,11 @@ step, unit}`, an option not declared `null`, in the order declared; no file, no 
 script declares none writes no attribute, so its bytes are what they were before parameters existed. The
 record is part of the document's signature, and a model taken from its key (the worker's last build, the
 engine's cache) is built again when the record the script declares now differs from the one it holds
-(`build._taken`), so a document never lists values its code no longer has. A declared or exported xbf carries
+(`build._taken`), so a document never lists values its code no longer has. The record is part of its revision
+too (`models.revision`: the closure's key and the record, digested, for a document that records any): a model
+whose body reads no parameter of its script -- a sibling's `wall` -- has the same key after `wall` changes, but
+not the same document, so it is a new generation, its pages fetch it again, its cache file is saved again and
+its rows are served at it, however the record changed (a `set`, an edit and a run). A declared or exported xbf carries
 the same record (`Loaded.parameters`); opening that file shows them, read-only. It is an attribute of its
 own under a GUID of its own, which a reader that does not know it passes over, and a document without it reads
 as one with none: the format stays `xbf/9`, and documents earlier releases wrote read as they did (law 15,
@@ -4151,7 +4160,8 @@ that records others replaces them.
 document that records none, through `parameters.served`: each recorded parameter with `writable`, `reason`
 and `source`. `writable` is true only for a model's document whose live worker recorded a span for the value
 the document holds; else `reason` is one of `file` (a file's document: a declared or exported xbf, a STEP),
-`no_worker` (no live worker recorded where it is: the script must run again), `shared` or `expression`.
+`no_worker` (no live worker recorded where it is: the script must run again), `shared` or `expression` (no
+span: an expression, or a literal not that declaration's alone, above).
 `source` is the declaring file relative to the script's folder where it is under it, else its name, and null
 where nothing live says it. `cad model inspect` and `cad xbf inspect` list the same rows (`api._summary`'s
 `parameters`).
@@ -4168,24 +4178,39 @@ which does in order, and changes nothing on disk before the fifth:
 2. Every name one of the rows, else `unknown_parameter`; every one writable, else `not_writable` with its
    `reason` (`parameters.changes`).
 3. Every value a finite number of its parameter's kind -- an integer parameter takes an integral one -- within
-   its declared range, else `not_a_number` or `out_of_range`. A float is rounded to six decimals; a value equal
-   to the one the code holds is no change, and a request that changes nothing writes and builds nothing.
+   its declared range, else `not_a_number` or `out_of_range`. An integer beyond what a float holds (`10**400`)
+   is `not_a_number` whatever the range, refused before anything converts it. A float parameter's value is
+   rounded to six decimals, and that rounded value is the one checked against the range, written and answered
+   (`written[].to`); a value that is not zero but rounds to zero (`1e-7`) is `not_a_number`, never written as
+   `0.0`. A value equal to the one the code holds is no change, and a request that changes nothing writes and
+   builds nothing.
 4. No build of the script running and no other set of it under way, else `busy`; the script's bytes on disk
    of the digest its last run recorded, and the bytes at each span still spelling the recorded value
    (`parameters.standing`), else `script_changed`: run the script first.
 5. Each number spelled by the library (`parameters.spelled`: an integer as its digits, a float in the
    shortest text that reads back as it, always with a point or an exponent, so its kind is kept), the spans
    replaced from the last to the first (`parameters.splice`: every other byte as it was), and the file
-   replaced at once, its mode kept (`atomic_replace.put`).
+   replaced at once, its mode kept (`atomic_replace.put`), only while it holds the bytes step 4 checked: read
+   again once the new file is made, just before it moves over (`_write`); a file another writer changed since
+   is left as it is, and the set is `script_changed`, nothing written. Nothing locks a file another program
+   writes, so the window that remains is the rename's own.
 6. The script's last run built again (`Setting._built`): the daemon keeps, per worker, the run its last builds
    were part of (`parameters.ran`: the script, the models every build of that run named, its working folder,
    its environment, the Python it ran with and the program that asked), and sends that as one build order of a
    run of its own through the daemon's one build path, so the model's warm worker builds it, its pages see the
    new version as a run's, and every model the run built is built again. The answer: `{"id", "written": [{name,
    from, to, file, line}], "rebuilt": [ids]}`.
-7. A build that fails -- a model's error, the worker's -- puts the previous bytes back the same way and builds
+7. The build is judged by the models the change can break (`parameters._failure`). `ran` keeps, beside the run,
+   how each of its models and child models last ended (`failed`: by id, the last line of its error). A model
+   that failed in that run and fails now with the same last line is the script's own trouble, not the
+   change's: it does not fail the set (the set's answer lists the models that built). A model that built then
+   and fails now, one that fails otherwise than it did, and the worker's own failure do. A build that fails so
+   puts the previous bytes back the same way -- only while the file holds the bytes step 5 wrote -- and builds
    the run again, so the document and the rows are the last good ones, and answers `build_failed` with the
-   build's words: its last line in the refusal, all of it as `detail`.
+   build's words: its last line in the refusal, all of it as `detail`, and what the file holds: as it was; or,
+   where another writer changed it while it built, that change, left as it is and not built; or, where the
+   bytes could not be put back (the folder refused them), the new values, named with the file's path. The
+   document served is the last good build's in every case (a failed run keeps it).
 
 A refusal is `parameters.ParameterRefused`, a `ValueError` with `code` (one of `parameters.CODES`), `hint` and,
 for `not_writable`, `reason`; the daemon answers it with those beside its words, and the library raises it as
@@ -4198,6 +4223,6 @@ every route does (`{"error", "hint"}`) with `code`, `reason` and `detail` likewi
 `unknown_parameter`, `not_a_number` and `out_of_range` and `409` for the rest (`http_app.PARAMETER_STATUS`); a
 body that is not `{"values": {...}}` is a `400` with no `code`. It answers once the build is done.
 
-What it does not do: write a parameter another module declares, one whose default is an expression, or one
-of a document no live worker built; preview a value, hold an override, or build anything but the run that
+What it does not do: write a parameter another module declares, one with no span (`expression`), or one
+of a document no live worker built; overwrite a file another writer changed while it worked; preview a value, hold an override, or build anything but the run that
 last ran; write the record into a STEP, a GLB or any other translation.

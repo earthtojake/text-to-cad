@@ -180,6 +180,31 @@ it('the next Quick Edit carries what was saved, once, by the script\'s name; a l
   expect(copied.join('\n')).not.toContain('/home/someone');
 });
 
+it('what was saved is handed to one message at a time: a second taken before the first has gone carries none of it', async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  const setModelParameters = vi.fn(async () => ({ id: ID, rebuilt: [ID], written: [{ name: 'wall', from: 2, to: 2.5, file: '/parts/bracket.py', line: 7 }] }));
+  let notes: any = null;
+  function Held(props: any) {
+    const parameters = useXbfParameters(props);
+    notes = parameters.notes;
+    return <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
+      sections={<XbfParametersSection parameters={parameters} />} tab="parameters" onTabChange={() => {}} width={240} maxWidth={480}
+      onWidthChange={() => {}} focusSearch={0} />;
+  }
+  render(<Held client={{ setModelParameters }} document={modelDocument(structureOf())} />);
+  await type(user, 'wall', '2.5');
+  await user.click(save());
+  await waitFor(() => expect(status()).toBe('Saved'));
+  const first = notes.take();
+  expect(first?.text).toContain('wall 2 -> 2.5');
+  expect(notes.take()).toBeNull(); // pressed again before the first has gone
+  first.cancel(); // the first did not go: the next message carries it
+  const again = notes.take();
+  expect(again?.text).toBe(first.text);
+  again.done();
+  expect(notes.take()).toBeNull();
+});
+
 it('the panel is there for a single part with parameters, as it is for an assembly or a mechanism', () => {
   expect(xbfPanelSections({ assembly: false, posable: false, parameters: 2 })).toEqual(['parameters']);
   expect(xbfPanelSections({ assembly: false, posable: false, parameters: 0 })).toEqual([]);

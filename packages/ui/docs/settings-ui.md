@@ -1352,7 +1352,9 @@ value set here is a **draft**, the tab's own, until **Save**.
   queued or copied, says them once, after what the person wrote and before the file, as one plain
   line: "Saved from the viewer since your last edit: wall 2 -> 2.5 (bracket.py)", the script by its
   name, never its path; saves of one parameter that follow on from each other read as one change.
-  Once that message has gone the list is forgotten; a message that failed keeps it for the next.
+  Once that message has gone the list is forgotten; a message that failed keeps it for the next. A
+  message sent while another that carries it is still on its way carries none of it, so it is never
+  said twice.
 
 ## Quick Edit
 

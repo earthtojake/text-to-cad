@@ -116,6 +116,7 @@ class SetTest(SetCase):
         for value in ("3", True, 7.5):
             self.refused("not_a_number", holes=value)
         self.refused("out_of_range", wall=5.5)
+        self.refused("not_a_number", wall=10**400)  # beyond any float: refused before anything converts it
         with self.script.open("a", encoding="utf-8") as script:
             script.write("# edited, and not run\n")
         self.refused("script_changed", wall=3.0)
@@ -150,6 +151,8 @@ class SetTest(SetCase):
         self.assertEqual(post("model", {"values": {"wall": 3}}, guard=False)[0], 403)
         status, said = post("model", {"values": {"wall": "3"}})
         self.assertEqual((status, said["code"]), (400, "not_a_number"))
+        status, said = post("model", {"values": {"wall": 10**400}})
+        self.assertEqual((status, said["code"]), (400, "not_a_number"))
         status, said = post("model", {"values": {"pitch": 3}})
         self.assertEqual((status, said["code"], said["reason"]), (409, "not_writable", "shared"))
         self.assertEqual(post("model", {"path": str(self.script)})[0], 400, "a request names values alone")
@@ -170,7 +173,7 @@ class SetTest(SetCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(json.loads(done.stdout)["written"][0]["to"], 2.25)
         for args, status, code in ((["wall=9", "--json"], 2, "out_of_range"), (["pitch=1", "--json"], 1, "not_writable"),
-                                   (["wall", "--json"], 2, None)):
+                                   (["wall=1" + "0" * 400, "--json"], 2, "not_a_number"), (["wall", "--json"], 2, None)):
             with self.subTest(args=args):
                 done = command(*args)
                 self.assertEqual(done.returncode, status, done.stdout + done.stderr)
@@ -179,6 +182,156 @@ class SetTest(SetCase):
         done = command("holes=9")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertRegex(done.stdout, rf"holes  6 -> 9  .*bracket\.py:7\nrebuilt {self.ident}\n")
+
+
+SIBLINGS = """\
+import build123d as bd
+from cad import model
+
+WALL = model.param("wall", 2.0, min=1, max=5)
+
+
+@model
+def a():
+    if WALL > 4.5:
+        raise ValueError("too thick")
+    return bd.Box(10, 10, WALL)
+
+
+@model
+def b():
+    return bd.Box(10, 10, 1)
+
+
+@model
+def bad():
+    raise RuntimeError("always broken")
+"""
+
+
+class SiblingsTest(unittest.TestCase):
+    """One script's three models: ``a`` reads the parameter, ``b`` does not, ``bad`` never builds."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        engine_daemon.isolate(cls.addClassCleanup)
+        cls.folder = Path(tempfile.mkdtemp(prefix="parameters-siblings-")).resolve()
+        cls.addClassCleanup(shutil.rmtree, cls.folder, True)
+        cls.script = cls.folder / "siblings.py"
+        cls.a, cls.b = model_id(cls.script, "a"), model_id(cls.script, "b")
+
+    def setUp(self) -> None:
+        self.script.write_text(SIBLINGS, encoding="utf-8")
+        report = api.build_script(self.script, None, progress=False)
+        self.assertEqual({row["model"].rsplit("::", 1)[-1]: row["ok"] for row in report.models}, {"a": True, "b": True, "bad": False})
+
+    def wall(self, ident: str) -> tuple:
+        row = next(row for row in api.inspect(ident, query="structure", progress=False)["summary"]["parameters"])
+        return row["value"], row["writable"], row["reason"]
+
+    def test_a_model_the_change_does_not_reach_holds_and_serves_the_new_record(self) -> None:
+        self.assertEqual(self.wall(self.b), (2.0, True, None), "b served before the set")
+        # ``bad`` failed in the run and fails the same way now: not the change's, so the set stands.
+        answer = cad.model.set(self.a, wall=3.0)
+        self.assertEqual(answer["rebuilt"], [self.a, self.b])
+        self.assertEqual(self.wall(self.b), (3.0, True, None), "b's document is a new generation, its rows served")
+        self.script.write_text(SIBLINGS.replace('"wall", 2.0', '"wall", 3.5'), encoding="utf-8")  # by hand, and run
+        api.build_script(self.script, None, progress=False)
+        self.assertEqual(self.wall(self.b), (3.5, True, None))
+        self.assertEqual(cad.model.set(self.b, wall=4.0)["written"][0]["to"], 4.0, "set through b")
+
+    def test_a_model_that_built_and_fails_at_the_new_values_fails_the_set(self) -> None:
+        with self.assertRaises(ParameterRefused) as caught:
+            cad.model.set(self.a, wall=4.8)
+        self.assertEqual(caught.exception.code, "build_failed")
+        self.assertIn("ValueError: too thick", str(caught.exception))
+        self.assertEqual(self.script.read_text(encoding="utf-8"), SIBLINGS)
+
+
+class PutBackTest(unittest.TestCase):
+    """``Setting`` on a stand-in daemon whose build is a hook: what another writer does meanwhile, at a known step."""
+
+    def setUp(self) -> None:
+        import types
+
+        from cad.engine import parameters
+        from cad_server.engine.parameters import LAST_RUN
+
+        folder = Path(tempfile.mkdtemp(prefix="parameters-put-back-")).resolve()
+        self.addCleanup(shutil.rmtree, folder, True)
+        self.script = folder / "bracket.py"
+        self.before = b"W = 2.0\n"
+        self.script.write_bytes(self.before)
+        row = {"name": "wall", "value": 2.0, "kind": "float", "min": None, "max": None, "step": None, "unit": None,
+               "file": str(self.script), "line": 1, "span": [4, 7], "digest": parameters.digest(self.before),
+               "reason": None}
+        worker = types.SimpleNamespace(leased=False, op=None, state={LAST_RUN: {
+            "request": {"script": str(self.script)}, "functions": None, "failed": {}}})
+        self.builds: list = []
+        self.during = lambda: None  # what happens while the build at the new values runs
+
+        def handle(order, send):
+            self.builds.append(self.script.read_bytes())
+            if len(self.builds) == 1:
+                self.during()
+                send({"done": [{"model": "bracket", "id": "id", "ok": False, "error": "ValueError: too thick"}]})
+            else:
+                send({"done": [{"model": "bracket", "id": "id", "ok": True}]})
+
+        from cad_server.engine.parameters import Setting
+
+        models = types.SimpleNamespace(live=lambda _ident: {"rows": [row], "worker": worker, "name": "bracket"})
+        self.setting = Setting(types.SimpleNamespace(models=models, handle=handle))
+
+    def refused(self) -> ParameterRefused:
+        with self.assertRaises(ParameterRefused) as caught:
+            self.setting.set("id", {"wall": 4.8})
+        self.assertEqual(caught.exception.code, "build_failed")
+        return caught.exception
+
+    def test_a_file_changed_while_it_built_is_left_as_it_is(self) -> None:
+        edited = b"W = 4.8\n# another writer's line\n"
+        self.during = lambda: self.script.write_bytes(edited)
+        said = str(self.refused())
+        self.assertEqual(self.script.read_bytes(), edited, "the other writer's bytes, never the old ones over them")
+        self.assertIn("changed while it built, so the engine did not put it back", said)
+        self.assertEqual(len(self.builds), 1, "nothing put back, nothing built again")
+
+    def test_a_put_back_that_fails_says_the_new_bytes_are_on_disk(self) -> None:
+        from unittest import mock
+
+        from cad_server.engine import parameters as setting
+
+        real = setting._write
+        calls: list = []
+
+        def write(path, data, holds):
+            calls.append(data)
+            if len(calls) == 2:
+                raise PermissionError(13, "Permission denied", str(path))
+            real(path, data, holds)
+
+        with mock.patch.object(setting, "_write", write):
+            said = str(self.refused())
+        self.assertEqual(self.script.read_bytes(), b"W = 4.8\n")
+        self.assertIn(f"{self.script} could not be put back (Permission denied): it holds the new values", said)
+
+    def test_a_file_changed_before_the_new_bytes_go_in_is_not_written(self) -> None:
+        from unittest import mock
+
+        from cad.engine import parameters
+
+        edited = b"W = 2.0  # another writer's\n"
+        real = parameters.splice
+
+        def splice(data, edits):
+            self.script.write_bytes(edited)  # between the check of its bytes and the write
+            return real(data, edits)
+
+        with mock.patch.object(parameters, "splice", splice), self.assertRaises(ParameterRefused) as caught:
+            self.setting.set("id", {"wall": 4.8})
+        self.assertEqual(caught.exception.code, "script_changed")
+        self.assertEqual((self.script.read_bytes(), self.builds), (edited, []))
 
 
 class BusyTest(unittest.TestCase):

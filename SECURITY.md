@@ -107,8 +107,10 @@ told it:
 - Only after checking the bytes: the worker that recorded those positions must
   still be live, the script's bytes on disk must be the ones that run read, and
   each position must still spell the recorded value; otherwise nothing is written
-  (`script_changed`, `no_worker`). The file is replaced at once, its mode kept, and
-  a build that fails at the new values puts the old bytes back.
+  (`script_changed`, `no_worker`). The file is replaced at once, its mode kept, only
+  while it still holds the bytes that were checked, and a build that fails at the new
+  values puts the old bytes back unless the file was changed meanwhile, which is
+  left as it is.
 
 So whoever holds a credential can change a model's declared numbers within their
 declared ranges and have the script's last run built again, which runs that

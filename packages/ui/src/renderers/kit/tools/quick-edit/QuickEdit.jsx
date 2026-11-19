@@ -76,7 +76,7 @@ export function quickEditReferenceIds(selection) {
  *   prompt?: { views(): { label: string }[], files(views: { label: string }[], references?: object[]): Promise<object> | null,
  *     read(path: string): Promise<Blob>, annotation(): object | null, unavailable?(): string } | null,
  *   nameReference?: ((reference: import("@cad/core/prompt").PromptReference) => string | import("../../inspector/pickGlyph.jsx").CompactName) | null,
- *   notes?: { take(): { text: string, done(): void } | null } | null,
+ *   notes?: { take(): { text: string, done(): void, cancel?(): void } | null } | null,
  *   onCopy?: () => boolean, onEscape?: () => unknown, onClear?: () => void, disabled?: boolean,
  *   hidden?: boolean, className?: string, style?: import("react").CSSProperties }} props
  *   `nameReference`: what the renderer calls a reference into the file on screen, for its chip in
@@ -84,7 +84,8 @@ export function quickEditReferenceIds(selection) {
  *   `notes`: what the renderer has to tell the agent with the next message, asked at the press
  *   (`take()`: its text, or null for nothing): it goes after what the person wrote, however the
  *   message goes (copied, queued or sent), and once it has gone the renderer is told (`done()`), so
- *   it is said once. A message that failed keeps it for the next. It opens no box by itself.
+ *   it is said once. A message that failed hands it back (`cancel()`) for the next; until one of
+ *   the two, `take()` gives it to no other message. It opens no box by itself.
  *   `onCopy`: the viewer's own copy (⌘C / Ctrl+C: the selection's references, or the annotation),
  *   which the key still reaches from the box while none of the note is selected. `onEscape`: the
  *   viewer's own Escape (clearing the selection), which an empty box passes on as it closes; a box
@@ -270,8 +271,11 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
       controls.used(`quick_edit_${action}`);
       if (action === "copy") showCopied();
       else clearAll();
-    }).catch(caught => setError(caught instanceof Error ? caught.message : String(caught)))
-      .finally(() => setPending(""));
+    }).catch(caught => {
+      // The message did not go: what the renderer added to it is the next message's (`cancel`).
+      try { note?.cancel?.(); } catch { /* a note handed back never fails the message's error */ }
+      setError(caught instanceof Error ? caught.message : String(caught));
+    }).finally(() => setPending(""));
   };
   const actions = [
     { id: "copy", label: t("quickEdit.copyPrompt"), hint: t("quickEdit.copyPromptHint"), Icon: Copy },

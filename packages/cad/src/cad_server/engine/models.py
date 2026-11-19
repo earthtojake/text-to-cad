@@ -23,8 +23,10 @@ no more (``identity.released``). A served
 document's generation (``version``, what a page shows and the viewer's export compares) is a token
 of its build's own, never a counter that starts again, so an id and a generation never name two
 documents across a restart; a run of the same closure in the worker holding the last build keeps it
-(nothing ran, nothing changed: no page fetches it again); its record's ``revision`` is its build closure's key (``revision``), the
-same for the same code, so a build that changed nothing rewrites no record.
+(nothing ran, nothing changed: no page fetches it again); its record's ``revision`` is its build closure's key (``revision``),
+with the parameters its document records where it records any, the same for the same code and the same
+record, so a build that changed nothing rewrites no record, and one whose script declares other values --
+which its closure need not reach: a sibling model's parameter -- is a new revision.
 
 What a restart opens at once is the cache's (``cache``): each ``model`` and ``shape`` document's
 bytes, saved in its registry folder once it has been idle (and at its drain, and at shutdown). A
@@ -38,6 +40,7 @@ call.
 from __future__ import annotations
 
 import base64
+import hashlib
 import os
 import secrets
 import threading
@@ -95,11 +98,22 @@ def _given(given: list[str], header: dict[str, Any], script: Any) -> list[str]:
     return list(given) if same(theirs) == same(script) else sorted(set(given) | set(named))
 
 
-def revision(report: dict[str, Any]) -> str:
+def revision(report: dict[str, Any], parameters: Any = None) -> str:
     """A model document's recorded revision: its closure's key (the same code, the same revision, in
-    any process), else a token of this build's own (``durable``: false)."""
+    any process), else a token of this build's own (``durable``: false). A document that records parameters
+    (``parameters``: the report's rows, ``cad.engine.parameters.rows``) is that key with its record
+    (``parameters.record``), digested: a model whose key a parameter does not reach -- one its body never
+    reads -- holds the record all the same, so a record changed is a new revision, a new generation and a
+    cache file saved again. A document with none keeps its key alone, as before parameters were recorded."""
     key = (report.get("closure") or {}).get("key")
-    return str(key) if key else f"{_TOKEN}{secrets.token_hex(8)}"
+    if not key:
+        return f"{_TOKEN}{secrets.token_hex(8)}"
+    from cad.engine.parameters import record
+
+    recorded = record(parameters) if isinstance(parameters, list) else None
+    if recorded is None:
+        return str(key)
+    return hashlib.sha256(f"{key}\n{recorded}".encode()).hexdigest()
 
 
 # What starts a revision that is a build's own token (``revision``), never a closure's key (hexadecimal).
@@ -148,7 +162,7 @@ class Models:
                 rows = report.pop("parameters", None)
                 if not report.get("ok") or not ident or not source:
                     continue
-                recorded = revision(report)
+                recorded = revision(report, rows)
                 facts, before = self.facts(ident, report, recorded)
                 try:
                     if source.get("explicit_name") is not None:
@@ -172,10 +186,10 @@ class Models:
                 with self.lock:
                     old = self.records.get(ident)
                     # This build's generation. A document is what its last run made: a run of the same
-                    # code and inputs (its closure's key) in the worker that holds the last build made
-                    # that document again -- nothing ran, or it ran to the same bytes -- so its generation
-                    # stands, no page fetches it again and an export of it is still the one displayed.
-                    # Anything else is a new generation.
+                    # code and inputs (its closure's key) and the same parameters (``revision``) in the worker
+                    # that holds the last build made that document again -- nothing ran, or it ran to the same
+                    # bytes -- so its generation stands, no page fetches it again and an export of it is still
+                    # the one displayed. Anything else is a new generation.
                     same = (old is not None and old.get("worker") is worker and old.get("revision") == recorded
                             and durable(recorded))
                     version = old["version"] if same else secrets.token_hex(8)

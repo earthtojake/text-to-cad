@@ -56,7 +56,9 @@ function failureOf(error) {
  * message, its hint). `reset()` drops the drafts not yet saved.
  *
  * What was saved is remembered (each value before and after, and its script) until a Quick Edit
- * carries it to the agent (`notes`, the shell's `promptNotes`).
+ * carries it to the agent (`notes`, the shell's `promptNotes`): `take()` hands it to one message at a
+ * time, and it is forgotten once that message has gone (`done()`), or handed out again when it did
+ * not (`cancel()`).
  *
  * @param {{ client: { setModelParameters?: Function } | null, document: { structure?: object, source?: { kind?: string, doc?: string } } | null }} options
  */
@@ -133,12 +135,21 @@ export function useXbfParameters({ client, document }) {
     }
   }, []);
 
+  // What a message on its way carries: handed out once, so a second message pressed before the first has
+  // gone carries none of it; forgotten when that message has gone (`done`), handed out again when it did
+  // not go (`cancel`).
+  const handed = useRef(new Set());
   const notes = useMemo(() => ({
     take() {
-      const taken = saved.current;
+      const taken = saved.current.filter(entry => !handed.current.has(entry));
       const text = savedParametersNote(taken);
+      if (!text) return null;
+      for (const entry of taken) handed.current.add(entry);
+      const release = () => { for (const entry of taken) handed.current.delete(entry); };
       // Told once: what this message carried is forgotten when it has gone, what was saved since is kept.
-      return text ? { text, done: () => { saved.current = saved.current.filter(entry => !taken.includes(entry)); } } : null;
+      return { text,
+        done: () => { saved.current = saved.current.filter(entry => !taken.includes(entry)); release(); },
+        cancel: release };
     }
   }), []);
 

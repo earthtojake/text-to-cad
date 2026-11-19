@@ -80,7 +80,7 @@ const DOUBLE_PRESS_MS = 600;
  *   references?: readonly import("@cad/core/prompt").PromptReference[],
  *   referenceChips?: readonly import("../tools/quick-edit/ReferenceChips.jsx").ReferenceChip[] | null,
  *   nameReference?: ((reference: import("@cad/core/prompt").PromptReference) => string | import("../inspector/pickGlyph.jsx").CompactName) | null,
- *   promptNotes?: { take(): { text: string, done(): void } | null } | null,
+ *   promptNotes?: { take(): { text: string, done(): void, cancel?(): void } | null } | null,
  *   copySelection?: (() => unknown) | null,
  *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null,
  *   onContextMenuOpenChange?: ((open: boolean) => void) | null,

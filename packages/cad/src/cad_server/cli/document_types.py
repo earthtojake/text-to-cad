@@ -933,8 +933,11 @@ def set_values(given: Sequence[str]) -> dict[str, Any]:
         if name in values:
             raise ArgumentRefused(f"{name} is given twice: give each parameter once")
         if re.fullmatch(r"[+-]?\d+", text):
-            values[name] = int(text)
-            continue
+            try:
+                values[name] = int(text)
+                continue
+            except ValueError:  # more digits than the interpreter reads as one integer: as a float, infinite
+                pass
         try:
             values[name] = float(text)
         except ValueError:

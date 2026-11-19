@@ -150,7 +150,8 @@ def bracket():
   parameter belongs to its script: every model the script defines lists it.
 - **Writable is the model's own script and a plain number.** A parameter declared in another
   module (a shared spec), or whose default is an expression, is listed and never written. Declare
-  one the person should tune in the script of the model it tunes, its default a literal.
+  one the person should tune in the script of the model it tunes, one call each, its name a string
+  and its default a literal (a call in a loop or a comprehension is never written).
   `cad model inspect "$ID"` lists them; here the script also imports `CLEARANCE` from a `spec.py`
   that declares it, and declares `BORE = model.param("bore", 3 + CLEARANCE)`:
 
@@ -181,9 +182,10 @@ def bracket():
   refuses with nothing written: exit 2 for a name the model does not declare or a value it does
   not take (`unknown_parameter`, `not_a_number`, `out_of_range`), exit 1 for a parameter that is
   not writable, a script edited since its run (`script_changed`: run it first), a model no live
-  worker built (`no_worker`: run its script), or one building now (`busy`). A build that fails at the
-  new values puts the script back and builds it again (`build_failed`, exit 1), so the document stays
-  the last good one. It prints no build report: check the change as after any run. `--json` answers
+  worker built (`no_worker`: run its script), or one building now (`busy`). A build at the new values
+  that breaks a model (one that built before; a model already failing the same way does not count)
+  puts the script back and builds it again (`build_failed`, exit 1), so the document stays the last
+  good one; a script someone else changed meanwhile is left as it is, and the refusal says so. It prints no build report: check the change as after any run. `--json` answers
   `{"id", "written", "rebuilt"}`; `cad.model.set(handle_or_id, wall=2.5)` is the same from Python.
 
 ## `@memo` marks stages

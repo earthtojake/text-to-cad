@@ -1447,12 +1447,15 @@ class Daemon:
         if op == "set":
             # ``cad model set``, ``cad.model.set``: a model's parameters written into its script, and the script's
             # last run built again (``parameters.Setting``), the page's Save's one path.
+            # Every refusal is answered, by its code where it has one; nothing it raises drops the connection.
             try:
                 send({"done": self.setting.set(str(request.get("id")), request.get("values"))})
             except ValueError as error:
                 send(refused(error))
-            except OSError as error:  # the script's folder refused the write: nothing was written
+            except OSError as error:  # the script's folder refused the new bytes: the script is as it was
                 send({"failed": f"{error.strerror or error}: {getattr(error, 'filename', None) or ''}".rstrip(": ")})
+            except Exception as error:  # noqa: BLE001 - answered in its own words, never a dropped request
+                send({"failed": f"{type(error).__name__}: {error}"})
             return
         if op == "document":
             # What an id names while this engine holds it (``document``), asked without building.
@@ -1603,7 +1606,7 @@ class Daemon:
                         answer = worker.request(order, send)
                         from cad_server.engine.parameters import ran
 
-                        ran(worker, request)  # the run its parameters' ``set`` builds again
+                        ran(worker, request, answer)  # the run its parameters' ``set`` builds again, and how it ended
                         answer["worker"] = {"pid": worker.pid, "fresh": fresh}
                         # This server's release, which a script run in its own Python says once a run
                         # when it is another (``contract.notice``); and how that run was made, which the

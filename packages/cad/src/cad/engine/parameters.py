@@ -13,7 +13,9 @@ script. In the program's own process it checks the declaration and nothing more.
 script that a build makes (``recording``, ``build._build``) each call is also recorded (``Declared``):
 what it declares, the file and line of the call, and, where the default is a plain number in the code
 (``2.0``, ``-3``), the bytes of the file that spell it (``span``) with a digest of the bytes the span
-was found in. A default that is anything else (a name, an expression) is recorded with no span.
+was found in. A default that is anything else (a name, an expression) is recorded with no span, and so
+is one the engine cannot tell is that call's alone: a call whose name is no string in the code (a loop's, a
+comprehension's), two declarations at one literal, a file whose bytes are not UTF-8.
 
 A build writes what a model's script declares into its document (``record``: name, value, kind, min,
 max, step, unit -- never a file, a line or a span) and answers the rest in its report (``rows``): where
@@ -32,13 +34,17 @@ kernel, imports it, and so does a script run where only the library is installed
 from __future__ import annotations
 
 import ast
+import codecs
 import contextlib
+import dataclasses
 import hashlib
+import io
 import json
 import math
 import os
 import re
 import sys
+import tokenize
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator
 
@@ -51,7 +57,8 @@ KEYS = ("min", "max", "step", "unit")
 UNITS = ("mm", "deg")
 #: Why a parameter a document lists cannot be written, a closed set: the document is a file, not a model;
 #: no live worker recorded where it is declared; another file than the model's own declares it; its default
-#: is no plain number in the code.
+#: is no plain number the engine can find alone in the code (an expression, a name, a call whose name is no
+#: string in the code, a file not in UTF-8).
 REASONS = ("file", "no_worker", "shared", "expression")
 #: Why a change of parameters is refused, a closed set (``ParameterRefused.code``).
 CODES = ("no_worker", "unknown_parameter", "not_writable", "not_a_number", "out_of_range", "script_changed", "busy",
@@ -193,14 +200,24 @@ class _Recording:
             self.declared[self.declared.index(other)] = made
         else:
             self.declared.append(made)
+        if span is not None:
+            # Two declarations at one literal (one call run for each): neither is that literal's alone, so
+            # neither keeps it -- writing one would write the other.
+            sharing = [at for at, row in enumerate(self.declared) if row.file == file and row.span == span]
+            if len(sharing) > 1:
+                for at in sharing:
+                    self.declared[at] = dataclasses.replace(self.declared[at], span=None, digest=None)
 
     def _source(self, file: str) -> tuple[bytes, str, dict[tuple, ast.Call], list[int]] | None:
         """``file`` as this load reads it, once: its bytes, their digest, its calls by where each is, and
-        the byte each line begins at; None for a file that does not read or parse."""
+        the byte each line begins at; None for a file that does not read or parse, or is not UTF-8 (``_utf8``:
+        the parser's columns are bytes of the text as UTF-8, which are the file's own only then)."""
         if file not in self._sources:
             try:
                 with open(file, "rb") as handle:
                     data = handle.read()
+                if not _utf8(data):
+                    raise ValueError("not UTF-8")
                 tree = ast.parse(data, filename=file)
             except (OSError, SyntaxError, ValueError):
                 self._sources[file] = None
@@ -232,7 +249,9 @@ class _Recording:
             on_line = [node for node in calls.values() if node.lineno <= frame.f_lineno <= (node.end_lineno or 0)
                        and _names(node) == name]
             call = on_line[0] if len(on_line) == 1 else None
-        if call is None or _names(call) not in (name, None):
+        if call is None or _names(call) != name:
+            # A call whose name is no string in the code (a loop's, a comprehension's) runs for more than one
+            # name: its literal is none of theirs alone.
             return None, None
         default = call.args[1] if len(call.args) > 1 else next(
             (keyword.value for keyword in call.keywords if keyword.arg == "default"), None)
@@ -249,6 +268,20 @@ class _Recording:
         if not _same(_read(data[start:end]), value):
             return None, None
         return (start, end), found
+
+
+def _utf8(data: bytes) -> bool:
+    """Whether a file's bytes are UTF-8 text the parser reads as such: they decode, and the coding they
+    declare (a cookie, a byte order mark), if any, is UTF-8."""
+    try:
+        coding, _lines = tokenize.detect_encoding(io.BytesIO(data).readline)
+        data.decode("utf-8")
+    except (SyntaxError, LookupError, UnicodeDecodeError):
+        return False
+    try:
+        return codecs.lookup(coding).name in ("utf-8", "utf-8-sig")
+    except LookupError:
+        return False
 
 
 def _names(call: ast.Call) -> str | None:
@@ -395,28 +428,45 @@ def served(listed: list[dict[str, Any]] | None, *, model: bool, live: dict[str, 
 def spelled(value: int | float, kind: str) -> str:
     """A number as the engine writes it into a script: an integer as its digits; a float rounded to
     ``DECIMALS`` decimals in the shortest text that reads back as it, always with a decimal point or an
-    exponent, so the parameter stays a float."""
+    exponent, so the parameter stays a float. ``changes`` gives a value already rounded, so what is written
+    reads back as the value its answer reports."""
     if kind == "int":
         return str(int(value))
     return repr(round(float(value), DECIMALS) + 0.0)  # ``+ 0.0``: a negative zero is written as zero
 
 
+def _said(given: Any) -> str:
+    """A value given, in a refusal's words: its ``repr``, shortened where it is long (a number of 400 digits)."""
+    text = repr(given)
+    return text if len(text) <= 40 else f"{text[:20]}...{text[-8:]} ({len(text)} characters)"
+
+
 def _value(row: dict[str, Any], given: Any) -> int | float:
-    """``given`` as a value of parameter ``row``: a finite number of its kind, in its range; else refused."""
+    """``given`` as a value of parameter ``row``: a finite number of its kind, in its range; else refused.
+    An integer beyond what a float holds (``sys.float_info.max``) is ``not_a_number``, whatever the range: no
+    page or document could hold it, and it is refused before anything converts it. A float parameter's value
+    is the one written, rounded to ``DECIMALS`` decimals (what ``written[].to`` reports); a value that is not
+    zero but rounds to zero is ``not_a_number``, never written as ``0.0``."""
     name = row["name"]
+    if type(given) is int and abs(given) > sys.float_info.max:
+        raise ParameterRefused(f"{name} takes a finite number, not {_said(given)}: it is beyond what a float holds",
+                               "not_a_number", f"give {name} a number")
     if type(given) not in (int, float) or not math.isfinite(given):
-        raise ParameterRefused(f"{name} takes a finite number, not {given!r}", "not_a_number",
+        raise ParameterRefused(f"{name} takes a finite number, not {_said(given)}", "not_a_number",
                                f"give {name} a number")
     if row["kind"] == "int":
         if given != int(given):
-            raise ParameterRefused(f"{name} is an integer parameter: it takes a whole number, not {given!r}",
+            raise ParameterRefused(f"{name} is an integer parameter: it takes a whole number, not {_said(given)}",
                                    "not_a_number", f"give {name} a whole number")
         value: int | float = int(given)
     else:
         value = round(float(given), DECIMALS) + 0.0
+        if value == 0 and given != 0:
+            raise ParameterRefused(f"{name} is written with {DECIMALS} decimals: {given!r} would be written as 0.0",
+                                   "not_a_number", f"give {name} 0, or a value of at least {10.0 ** -DECIMALS!r}")
     low, high = row.get("min"), row.get("max")
     if (low is not None and value < low) or (high is not None and value > high):
-        raise ParameterRefused(f"{name} is {_range(low, high)}; {given!r} is outside it", "out_of_range",
+        raise ParameterRefused(f"{name} is {_range(low, high)}; {_said(given)} is outside it", "out_of_range",
                                f"give {name} a value in its range, or change the range in the code")
     return value
 
@@ -439,7 +489,8 @@ def changes(listed: list[dict[str, Any]], values: dict[str, Any]) -> list[tuple[
         if row.get("reason") is not None or not row.get("span"):
             reason = row.get("reason") or "expression"
             why = (f"it is declared in {os.path.basename(str(row.get('file') or ''))}, another file than the model's own"
-                   if reason == "shared" else "its default is not a plain number in the code")
+                   if reason == "shared" else "its default is no plain number the engine can write alone in the code "
+                   "(an expression, a call made for more than one name, or a file not in UTF-8)")
             raise ParameterRefused(f"{name} cannot be set: {why}", "not_writable",
                                    "edit it in the code, then run the script", reason)
     wanted = {name: _value(known[name], given) for name, given in values.items()}

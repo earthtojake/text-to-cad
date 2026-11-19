@@ -588,7 +588,8 @@ def _parts(paths: list[str]) -> str:
 
 # Why a parameter cannot be set, in a line's words (``cad.engine.parameters.REASONS``).
 _NOT_WRITABLE = {"file": "read-only: a file's", "no_worker": "read-only until its script runs again",
-                 "shared": "read-only: declared in another file", "expression": "read-only: not a plain number in the code"}
+                 "shared": "read-only: declared in another file",
+                 "expression": "read-only: no plain number of its own in the code"}
 
 
 def parameter(row: dict[str, Any]) -> str:
