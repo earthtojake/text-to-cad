@@ -78,7 +78,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "update": frozenset({"command", "auto", "major"}),
     # The install command run now (`update`), or (`update auto`) whether cad's automatic update runs it after it; and
     # the hidden --refresh the updater of 0.11.10 runs, which does nothing.
-    "plugin": frozenset({"command", "update", "refresh"}),
+    "plugin": frozenset({"command", "install", "update", "refresh"}),
     # The engine's verbs (cad_server.engine.cli): each type's operations, and its process control.
     # A document's export (a model's, an xbf's, a STEP's) meshes a GLB, an STL or a 3MF to a tolerance and an
     # angle, and takes a robot description's joints from a zero state; a mesh's, to the other mesh kinds, does

@@ -1,11 +1,11 @@
-"""The hosted install command as cad runs it: in the foreground for ``cad plugin update`` (``run``; where a server
-began that run, stopped with what it started at its deadline), and, BRIDGE-ONLY, once by the server for a computer a
-shipped updater brought (install mode).
+"""BRIDGE-ONLY: the hosted install command as cad runs it, once by the server for a computer a shipped updater
+brought (install mode), and by ``cad setup`` (``cad_server.cli.setup``). ``cad plugin`` runs none of it.
 
-cad knows no app, plugin or skill. What it knows is one fixed public command, the hosted install command (``curl -fsSL
-https://texttocad.dev/install.sh | sh``; on Windows PowerShell ``irm https://www.texttocad.dev/install.ps1 | iex``),
-and, for the bridge, the report that command writes where ``CAD_INSTALL_REPORT`` names a file: whether its cad step
-ended 0 (``setup``) and whether any app's step failed (``apps``). Nothing else of the report is read.
+This module names no app, plugin or skill. What it knows is one fixed public command, the hosted install command
+(``curl -fsSL https://texttocad.dev/install.sh | sh``; on Windows PowerShell ``irm
+https://www.texttocad.dev/install.ps1 | iex``), and the report that command writes where ``CAD_INSTALL_REPORT`` names
+a file: whether its cad step ended 0 (``setup``) and whether any app's step failed (``apps``). Nothing else of the
+report is read.
 
 **Install mode** (BRIDGE-ONLY), owed by ``cad setup --engine-update`` (``owe``), which the updaters of 0.10.0 to 0.11.11
 run: the command installs cad as a uv tool and our plugin in every agent app. Done, the server that runs from the
@@ -42,7 +42,8 @@ nothing (``cad_server.cli.setup``): the hosted command of 0.10.0 to 0.11.11 runs
 redeployed.
 
 ``CAD_ENGINE_UPDATE_INSTALLER`` names a command to run instead of the hosted one (a test's stand-in), and empty, none:
-nothing is attempted. ``CAD_ENGINE_UPDATE_FIRST_SECONDS`` sets install mode's wait (a test's computers).
+nothing is attempted, and the server runs no ``cad plugin update`` by itself either (``plugin_catch_up.silenced``).
+``CAD_ENGINE_UPDATE_FIRST_SECONDS`` sets install mode's wait (a test's computers).
 """
 
 from __future__ import annotations
@@ -52,7 +53,6 @@ import os
 import shlex
 import signal
 import subprocess
-import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -92,8 +92,6 @@ DAY_SECONDS = 24 * 60 * 60.0
 # How long the command may run before it is stopped, with what it started: a minute or two, a few more on a slow line;
 # one that hangs (a prompt it should not show) would hold every later attempt.
 RUN_SECONDS = 2 * 60 * 60.0
-# The exit status of a run stopped at its deadline (``run``), as ``timeout(1)`` says one.
-STOPPED = 124
 
 
 # --- the command --------------------------------------------------------------------------------------------------
@@ -126,33 +124,6 @@ def environment(*, report: Path | None) -> dict[str, str]:
     if report is not None:
         found[REPORT_ENV] = str(report)
     return found
-
-
-def run(*, seconds: float | None = None) -> int:
-    """``cad plugin update``: the install command run in the foreground, its output this process's and its exit status
-    returned (a signal's as a shell says it, 128 and its number); 0 where there is none to run. ``OSError`` where it
-    could not start. With ``seconds`` (the run a server began, ``plugin_catch_up``), it is started as an attempt is, in
-    a session or process group of its own (``Carrier.begin``), and stopped with every process it started once
-    ``seconds`` have passed (``_stop``, as ``Carrier.tend`` stops an attempt): then, said in one line on stderr,
-    ``STOPPED``. In a Windows session where ``taskkill`` is refused, only the install command's own process is ended,
-    and what it started may run on; the line says so. A person's own run has no deadline."""
-    command = installer()
-    if not command:
-        return 0
-    if seconds is None:
-        code = subprocess.call(command, env=environment(report=None), stdin=subprocess.DEVNULL)
-    else:
-        from cad.engine.places import detached
-
-        process = subprocess.Popen(command, env=environment(report=None), stdin=subprocess.DEVNULL, **detached())
-        try:
-            code = process.wait(seconds)
-        except subprocess.TimeoutExpired:
-            said = "with everything it started" if _stop(process) else \
-                "but what it started could not be stopped and may run on"
-            print(f"the install command was stopped after {seconds:g} seconds, {said}", file=sys.stderr, flush=True)
-            return STOPPED
-    return code if code >= 0 else 128 - code
 
 
 # --- the record (BRIDGE-ONLY) ---------------------------------------------------------------------------------------

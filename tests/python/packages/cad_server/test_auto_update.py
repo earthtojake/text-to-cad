@@ -216,57 +216,35 @@ class PluginSwitchTest(Case):
 
         self.assertEqual(self.cli("plugin", "--refresh", main=cad), (0, "", ""))
 
-    def test_update_runs_the_install_command_in_the_foreground_its_status_this_command_s(self) -> None:
-        """Its exit status the command's; ended 0, the record names this cad as the one the install command is up to
-        date for; failed, it writes none, so the record keeps the one before."""
-        from cad_server._internal import install_script, plugin_catch_up
-
-        noted = self.tmp / "noted.json"
-        stand_in = self.tmp / "install command.py"
-        stand_in.write_text("import json, os, sys\n"
-                            "json.dump({k: os.environ.get(k) for k in ('CAD_INSTALL_BY_CAD', 'CAD_INSTALL_REPORT', "
-                            "'CAD_INSTALL_UPDATE')}, open(sys.argv[1], 'w'))\n"
-                            "print('the install command ran')\nraise SystemExit(int(sys.argv[2]))\n", encoding="utf-8")
-        plugin_catch_up.noted("0.0.1")
-        for code, kept in ((3, "0.0.1"), (0, version())):
-            with self.subTest(code=code), mock.patch.dict(os.environ, {
-                    install_script.INSTALLER_ENV: f'"{sys.executable}" "{stand_in}" "{noted}" {code}',
-                    "CAD_INSTALL_UPDATE": "1"}):
-                done = subprocess.run([sys.executable, "-c", "from cad_server.cli import main; "
-                                       "raise SystemExit(main(['plugin', 'update']))"], capture_output=True, text=True,
-                                      timeout=120, env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
-                self.assertEqual((done.returncode, done.stdout), (code, "the install command ran\n"), done.stderr)
-                self.assertEqual(json.loads(noted.read_text(encoding="utf-8")),
-                                 {"CAD_INSTALL_BY_CAD": "1", "CAD_INSTALL_REPORT": None, "CAD_INSTALL_UPDATE": None})
-                self.assertEqual(plugin_catch_up.read(), {"for": kept}, "a typed run: no run of the server's to end")
-        with mock.patch.dict(os.environ, {install_script.INSTALLER_ENV: str(self.tmp / "no such program")}):
-            code, _out, err = self.cli("update", main=plugin_command.main)
-        self.assertEqual(code, 1)
-        self.assertIn("cad plugin update: the install command could not start", err)
-
     def test_a_run_a_server_began_has_a_deadline_and_a_person_s_none(self) -> None:
-        """``cad plugin update`` where a server began it (``CAD_INSTALL_ATTEMPT``) lets the install command run
-        ``INSTALL_SECONDS``, stopped at its deadline as failed; typed by a person, it runs as long as it runs."""
-        from cad_server._internal import auto_update_helper, install_script, plugin_catch_up
+        """``cad plugin update`` where a server began it (``CAD_INSTALL_ATTEMPT``) has ``INSTALL_SECONDS``, and keeps
+        how it ended in the server's record; typed by a person, it runs as long as it runs. What it runs, and the
+        deadline's effect, are ``tests/python/packages/cad_server/plugin/test_command.py``'s."""
+        from cad_server._internal import auto_update_helper, plugin_catch_up
+        from cad_server.plugin import run
 
         self.assertIsNone(plugin_catch_up.deadline(), "a person's own run")
         plugin_catch_up.noted("0.0.1")
         plugin_catch_up._change(lambda found: {**found, "release": "0.1.0", "at": 7.0, "tries": 1,
                                                "outcome": "underway"})
+        stopped = run.Facts(by=run.SERVER, outcome=run.FAILED, code=124, stopped=True)
         with mock.patch.dict(os.environ, {plugin_catch_up.ATTEMPT_ENV: "7.0"}), \
-                mock.patch.object(install_script, "run", return_value=install_script.STOPPED) as ran:
+                mock.patch.object(run, "install", return_value=stopped) as ran:
             self.assertEqual(plugin_catch_up.deadline(), auto_update_helper.INSTALL_SECONDS)
-            self.assertEqual(self.cli("update", main=plugin_command.main)[0], install_script.STOPPED)
-        ran.assert_called_once_with(seconds=float(auto_update_helper.INSTALL_SECONDS))
+            self.assertEqual(self.cli("update", main=plugin_command.main)[0], 124)
+        self.assertEqual(ran.call_args.kwargs, {"prog": "cad plugin update",
+                                                "seconds": float(auto_update_helper.INSTALL_SECONDS)})
         found = plugin_catch_up.read()
-        self.assertEqual((found["for"], found["outcome"], found["code"]), ("0.0.1", "failed", install_script.STOPPED))
-        with mock.patch.object(install_script, "run", return_value=0) as ran:
-            self.cli("update", main=plugin_command.main)
-        ran.assert_called_once_with(seconds=None)
+        self.assertEqual((found["for"], found["outcome"], found["code"]), ("0.0.1", "failed", 124))
+        with mock.patch.object(run, "install", return_value=run.Facts(by=run.PERSON)) as ran:
+            self.assertEqual(self.cli("update", main=plugin_command.main)[0], 0)
+        self.assertEqual(ran.call_args.kwargs, {"prog": "cad plugin update", "seconds": None})
+        self.assertEqual(plugin_catch_up.read()["for"], "0.1.0", "ended with exit status 0: this cad's")
 
-    def test_the_install_command_is_stopped_at_its_deadline_with_everything_it_started(self) -> None:
-        """The deadline's mechanism, the bridge's own (``install_script._stop``): the command and what it started gone,
-        and the run said in one line, with a non-zero status."""
+    def test_an_attempt_past_its_time_is_stopped_with_everything_it_started(self) -> None:
+        """BRIDGE-ONLY. How the server stops an attempt of the hosted install command it began
+        (``install_script._stop``): the command and what it started gone."""
+        from cad.engine.places import detached
         from cad_server._internal import install_script
 
         pids = self.tmp / "pids"
@@ -277,20 +255,18 @@ class PluginSwitchTest(Case):
                             "    out.write(f'{os.getpid()} {child.pid}')\n"
                             "os.replace(sys.argv[1] + '.part', sys.argv[1])\n"
                             "time.sleep(600)\n", encoding="utf-8")
-        err = io.StringIO()
-        with mock.patch.dict(os.environ, {install_script.INSTALLER_ENV: f'"{sys.executable}" "{stand_in}" "{pids}"'}), \
-                redirect_stderr(err):
-            code = install_script.run(seconds=5.0)
-        self.assertEqual(code, install_script.STOPPED)
+        process = subprocess.Popen([sys.executable, str(stand_in), str(pids)], stdin=subprocess.DEVNULL, **detached())
+        self.addCleanup(_end, process.pid)
+        deadline = time.monotonic() + 60
+        while not pids.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
         own, child = map(int, pids.read_text(encoding="utf-8").split())
-        self.assertTrue(_gone(own), "the install command itself, always")
-        if "with everything it started" in err.getvalue():
-            self.assertIn("the install command was stopped after 5 seconds, with everything it started", err.getvalue())
+        whole = install_script._stop(process)
+        self.assertTrue(_gone(own), "the command itself, always")
+        if whole:
             self.assertTrue(_gone(child), "and what it started")
         else:  # a Windows session where taskkill is refused (no interactive logon): said, never claimed
             self.addCleanup(_end, child)
-            self.assertIn("the install command was stopped after 5 seconds, but what it started could not be stopped "
-                          "and may run on", err.getvalue())
 
     def test_a_refused_or_hung_taskkill_still_ends_the_process_itself_and_says_so(self) -> None:
         """On Windows, in a session with no interactive logon (SSH, a service), ``taskkill /T`` answers "Access denied"
@@ -2028,8 +2004,12 @@ class PluginCatchUpTest(Case):
         self.assertTrue(self.catch_up.due())
         with mock.patch.object(updates, "checking", return_value=False):  # CAD_UPDATE_CHECK=0, CI
             self.assertFalse(self.catch_up.due())
-        with mock.patch.dict(os.environ, {install_script.INSTALLER_ENV: ""}):  # a test's: none
+        with mock.patch.dict(os.environ, {install_script.INSTALLER_ENV: ""}):  # a test's: the server runs nothing
+            self.assertTrue(self.catch_up.silenced())
             self.assertFalse(self.catch_up.due())
+        with mock.patch.dict(os.environ):  # the variable names the bridge's command: `cad plugin update` needs none
+            del os.environ[install_script.INSTALLER_ENV]
+            self.assertTrue(self.catch_up.due())
         with mock.patch.object(sys, "prefix", str(self.tmp)):  # not a global install
             self.assertFalse(self.catch_up.due())
         with mock.patch.object(cad_server, "__version__", "0.1.0-dev.20261118"):
