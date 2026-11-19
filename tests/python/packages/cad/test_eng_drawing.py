@@ -5973,6 +5973,20 @@ class PartSheetTests(unittest.TestCase):
         self.assertEqual((one_end.csk, one_end.far_csk), ((6.5, 90.0), None))
         self.assertFalse(_looks_into(one_end, one_end.axis), "a chamfer at one end alone is not what the far view shows")
 
+    def test_two_gussets_seen_edge_on_share_one_angle(self) -> None:
+        """An L bracket with two identical gussets: the view that sees them edge-on
+        sees one sloping line, and one 45° states it. Two, on one line, printed
+        over each other, and no sheet was large enough for that."""
+        from build123d import Align, Box, Plane, Polygon, Pos, extrude
+
+        corner = (Align.MIN, Align.MIN, Align.MIN)
+        bracket = Box(80, 60, 6, align=corner) + Box(6, 60, 60, align=corner)
+        web = extrude(Plane.XZ * Polygon((6, 6), (36, 6), (6, 36), align=None), amount=-5)
+        bracket += Pos(0, 10, 0) * web + Pos(0, 45, 0) * web
+        sheet, doc, unstated = self._drawn(bracket)
+        self.assertEqual([text for text in _dim_texts(doc) if "°" in text], ["45°"])
+        self.assertEqual(unstated, [], "one angle states both slopes, and each gusset is placed")
+
 
 class CrowdedSheetTests(unittest.TestCase):
     """Two values in one place on a sheet choosing its size take a larger sheet;

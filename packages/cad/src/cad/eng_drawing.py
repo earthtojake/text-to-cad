@@ -1791,7 +1791,8 @@ def _place_faces(views, shape, features, placed: dict, hexagons=()) -> None:
     the part's edge along that axis, in the first view that shows the axis; and
     each slope (a flat face leaning in one model plane) stated in the view that
     sees it edge-on: by its angle and one end where its angle is a whole or half
-    degree (``_slope_angle``), else by both its ends. The largest faces first, at
+    degree (``_slope_angle``), else by both its ends; slopes the view sees as one
+    line share one angle. The largest faces first, at
     most ``_FEW_STEPS`` places an axis. Faces a hole or slot owns are its
     callout's, a hexagon's its HEX callout's, chamfers their note's; the far end
     along an axis is the overall size's."""
@@ -1807,6 +1808,7 @@ def _place_faces(views, shape, features, placed: dict, hexagons=()) -> None:
     most = dict.fromkeys(range(3), _FEW_STEPS)
     for view in views:
         points = []
+        drawn: set[tuple] = set()  # the slopes this view has an angle on, as it sees them
         for at, face in enumerate(flats):
             normal = tuple(face.normal_at())
             square = next((k for k in range(3) if abs(abs(normal[k]) - 1) < 1e-9), None)
@@ -1820,7 +1822,13 @@ def _place_faces(views, shape, features, placed: dict, hexagons=()) -> None:
                     continue
                 angled.add(at)
                 vertex, other, along = stated
-                view.angle(vertex, other, along)
+                # Slopes one behind another in this view (two gussets seen edge-on) are
+                # one line on the sheet, and one angle states it: a second, on the same
+                # line, would print over the first.
+                seen = tuple(round(q[k], 3) for q in (vertex, other, along) for k in _view_axes(view.name))
+                if seen not in drawn:
+                    drawn.add(seen)
+                    view.angle(vertex, other, along)
                 points.append((face.area, vertex, leans))
         shown = set(_view_axes(view.name))
         points = [(q, stated) for _area, q, stated in sorted(points, key=lambda p: -p[0])
