@@ -29,14 +29,12 @@ class SkillDocs(unittest.TestCase):
         self.assertEqual(re.findall(r"^\| `([a-z_]+)` \|", checks, re.M)[1:], list(CHECK_KEYS))  # past the header
 
     def test_the_setup_names_the_mesher_and_the_solver_the_cad_command_installs(self):
-        from cad.calculix._program import install_hint
+        from cad.calculix._program import CCX, CCX_ENV, install_hint
 
         text = " ".join((SKILL / "SKILL.md").read_text(encoding="utf-8").split())
         setup = text.split("## Setup", 1)[1].split("## Workflow", 1)[0]
-        # The solver is the one cad pins: no page of the skill points cad at another program. A person who wants
-        # their own CalculiX runs it themselves on the deck a solve writes (--deck).
-        for path in _pages():
-            self.assertNotIn("CAD_CCX", path.read_text(encoding="utf-8"), path.name)
+        self.assertIn(f"`{CCX_ENV}`", setup)
+        self.assertIn(f"{CCX.minimum[0]}.{CCX.minimum[1]} or newer", setup)
         self.assertIn("cad[calculix]", install_hint())
         # Both are integrations the cad command installs on first need; nothing is the person's to install.
         self.assertIn("`netgen` integration (`cad[netgen]`", setup)

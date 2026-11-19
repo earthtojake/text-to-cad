@@ -47,7 +47,8 @@ The mesher and the solver are fetched by `cad` the first time a study needs them
 the `netgen` integration (`cad[netgen]`, about 11 MB; macOS, Linux x86_64 and Windows x86_64 only, and
 a solve elsewhere refuses, naming the platform) and the `calculix` integration (`cad[calculix]`,
 CalculiX 2.23, about 13 MB). The solve runs headless on one thread, so the same study gives the same
-numbers on every run. `cad run ccx ARGS` runs the same `ccx` on a deck of your own.
+numbers on every run. `cad run ccx ARGS` runs the same `ccx` on a deck of your own. A `ccx` on PATH is
+never run; where the fetched one does not run on a computer, `CAD_CCX` names another (2.20 or newer).
 
 Units are fixed: mm, N, MPa (pressure, modulus and stress), t/mm³ for density (steel 7.85e-9) and g
 (9.81 m/s²) for gravity and acceleration. Restate every load in them before writing it down.

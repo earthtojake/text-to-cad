@@ -110,7 +110,7 @@ netgen = [
 # The calculix integration's extra: a stress study (`cad <type> solve`) is solved by CalculiX's ccx, which the
 # cad-ccx package carries (CalculiX's own program, unmodified, from conda-forge's build, with the libraries it loads:
 # 8-13 MB a platform, GPL-2.0 like CalculiX, run as a separate program and never linked). Pinned exactly: the
-# release a study's numbers were measured against. A person's own ccx is never run (CAD_CCX, which named one, is deprecated).
+# release a study's numbers were measured against. A person's own ccx is never run unless CAD_CCX names it.
 calculix = [
   "cad-ccx==2.23.0",
 ]

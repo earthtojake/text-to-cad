@@ -74,8 +74,8 @@ class Program:
 
 
 def _named_outright(variable: str) -> str:
-    """The program a variable names outright, "" when it names none. The variables that do (``CAD_KICAD_CLI``,
-    ``CAD_CCX``) are deprecated: a set one is said once a process and still decides which program runs."""
+    """The program a variable names outright (``CAD_KICAD_CLI``, ``CAD_CCX``), "" when it names none. One the
+    registry of variables marks deprecated is said once a process, and still decides which program runs."""
     from cad._internal import environment
 
     row = environment.VARIABLES.get(variable)

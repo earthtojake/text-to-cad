@@ -73,8 +73,8 @@ def solve_for(document_type: str) -> Any:
 
         With no study it lists what a study names, writing nothing: the document's parts, the pairs that touch
         (bonded by default) and one part's faces by ref with area, centre and a hint (`plane, normal -Z,
-        largest`). With a study and --out it meshes (netgen), solves (CalculiX, from
-        cad[calculix]) and writes its results into the folder --out names: result.json (every number, as --json prints
+        largest`). With a study and --out it meshes (netgen), solves (CalculiX, from cad[calculix]; CAD_CCX names
+        another) and writes its results into the folder --out names: result.json (every number, as --json prints
         it), result.glb (the deformed surface coloured by stress, any viewer opens it), result.vtu (the volume's
         fields, for meshio, PyVista or ParaView), stress.png and displacement.png (where a still can be drawn). Each
         part's peak stress and safety factor against its own material's yield are in the result. A part that yields

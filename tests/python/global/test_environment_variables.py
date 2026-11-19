@@ -14,15 +14,19 @@ Standard library alone.
 
 from __future__ import annotations
 
+import contextlib
+import io
+import os
 import re
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tests.python.support.paths import add_sources, repo_path
 
 add_sources()
 
-from cad._internal import environment  # noqa: E402
+from cad._internal import environment, programs  # noqa: E402
 
 SOURCE = Path(repo_path("packages/cad/src"))
 TABLE = SOURCE / "cad" / "_internal" / "environment.py"
@@ -68,6 +72,17 @@ class EnvironmentVariables(unittest.TestCase):
                 self.assertIn(row.tier, environment.TIERS)
                 self.assertTrue(row.summary and not row.summary.endswith("."))
                 self.assertEqual(bool(row.instead), row.tier == environment.DEPRECATED)
+
+    def test_a_deprecated_variable_is_said_once_and_still_read(self) -> None:
+        # No variable is deprecated today; this holds the path one is retired by.
+        row = environment.Variable("CAD_RETIRED_EXAMPLE", environment.DEPRECATED, "an example", instead="use the option")
+        said = io.StringIO()
+        with mock.patch.dict(environment.VARIABLES, {row.name: row}), mock.patch.dict(os.environ, {row.name: "kept"}), \
+                mock.patch.object(environment, "_SAID", set()), contextlib.redirect_stderr(said):
+            self.assertEqual(programs._named_outright(row.name), "kept")  # noqa: SLF001
+            self.assertEqual(environment.deprecated(row.name), "kept")
+        self.assertEqual(said.getvalue().count("CAD_RETIRED_EXAMPLE is deprecated"), 1, said.getvalue())
+        self.assertIn("use the option", said.getvalue())
 
     def test_the_servers_readme_lists_the_public_variables_as_the_table_prints_them(self) -> None:
         text = README.read_text(encoding="utf-8")

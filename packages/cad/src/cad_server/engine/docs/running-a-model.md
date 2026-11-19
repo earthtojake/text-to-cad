@@ -67,7 +67,7 @@ verbosity) key nothing. What it adds is two things:
   (`cad.kicad._program.private_run`, a typed command's, KiCad's library variables naming KiCad's own
   libraries: the first 3D library a board's 3D view reads, the others an installation of KiCad's; none of
   the person's), its arguments, stdio and exit code kicad-cli's, and never the one
-  `CAD_KICAD_CLI` (a deprecated variable) names. The environment of the build123d integration
+  `CAD_KICAD_CLI` names. The environment of the build123d integration
   alone, with nothing else, is the base.
 
 **What an environment holds** (`extras.Spec`): the pin, and beside it the packages the program names.

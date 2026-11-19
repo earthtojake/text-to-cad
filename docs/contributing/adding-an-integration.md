@@ -133,8 +133,9 @@ write code for that tool: OCP is a dependency of `build123d`, not an integration
       program a person installs, `PATH`, then the places the tool installs itself; its minimum
       version checked; run headless with a private home and no display; one missing-tool result
       saying the install hint. Only the program itself is ever run, never a desktop app or a wrapper
-      that starts one; test each rule. No new variable names another copy (laws 27 and 30): the two
-      that do, `CAD_KICAD_CLI` and `CAD_CCX`, are deprecated.
+      that starts one; test each rule. A variable that names another copy (`CAD_KICAD_CLI`, `CAD_CCX`) is
+      the last resort where the pinned copy does not run on a person's computer (law 30): add one only
+      for a program the extra carries, declare it, and name it in the refusal for a missing program.
 - [ ] **The tool's own commands**, when its extra puts a command line in an environment (kicode's
       `kicad-cli`): name each in the registry entry's `commands`, and give the integration a `_command`
       module (`cad/<name>/_command.py`, `main(argv)`, argv the command's name and its arguments) that

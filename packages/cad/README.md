@@ -358,8 +358,10 @@ renumbers the list and every citation in the same change.
     A type has a decorator or an edit, never both.
 30. **A variable is the last resort, and every one is declared.** *The package.* An environment
     variable exists only where nothing else can carry the value: a folder, a port or a limit a process
-    must know before it starts, or a fact one of cad's processes hands the next. A choice a person
-    keeps is a setting, and an input of one call is that call's option. Every variable is declared
+    must know before it starts, a fact one of cad's processes hands the next, or another copy of a
+    program an extra pins, for the computer the pinned one does not run on (`CAD_CCX`,
+    `CAD_KICAD_CLI`). A choice a person keeps is a setting, and an input of one call is that call's
+    option. Every variable is declared
     once with who sets it (`cad._internal.environment`: public, development, internal, deprecated),
     only the public ones are named to a person or in a skill, and a test holds the table to the source.
 

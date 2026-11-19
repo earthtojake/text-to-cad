@@ -80,6 +80,10 @@ VARIABLES: dict[str, Variable] = _table(
     Variable("CAD_UPDATE_CHECK", PUBLIC, "0: this server neither looks for a newer release nor installs one"),
     # --- integrations ----------------------------------------------------------------------------------------
     Variable("CAD_KICAD_3DMODELS", PUBLIC, "more folders a board's 3D models are read from, separated as PATH is"),
+    Variable("CAD_KICAD_CLI", PUBLIC, "another `kicad-cli` to check, export and edit boards with, in place of the "
+                                      "one `cad[kicad]` brings (KiCad 9 or newer; a nightly's to edit)"),
+    Variable("CAD_CCX", PUBLIC, "another CalculiX `ccx` to solve studies with, in place of the one `cad[calculix]` "
+                                "brings (2.20 or newer)"),
 
     # --- development: tests, experiments and a checkout --------------------------------------------------------
     Variable("CAD_ENGINE_DEFAULT_PORT", DEVELOPMENT, "the port a server takes where none is named, in place of 3245"),
@@ -123,13 +127,6 @@ VARIABLES: dict[str, Variable] = _table(
     Variable("CAD_INSTALL_ATTEMPT", INTERNAL, "names the run of the install command a server began"),
     Variable("CAD_INSTALL_FAILED", INTERNAL, "tells cad that the install command it started is ending badly"),
     Variable("CADGEN_TELEMETRY", INTERNAL, "turns telemetry off in a 0.10.0 server cad stops on Windows"),
-
-    # --- deprecated: honoured for now, named nowhere -----------------------------------------------------------
-    Variable("CAD_CCX", DEPRECATED, "another CalculiX `ccx` to solve studies with",
-             instead="cad solves with the CalculiX it pins; solve with another by running it yourself on the deck "
-                     "`--deck` writes"),
-    Variable("CAD_KICAD_CLI", DEPRECATED, "another `kicad-cli` to check, export and edit with",
-             instead="cad runs the KiCad it pins; run another kicad-cli yourself on the board"),
 )
 
 _SAID: set[str] = set()

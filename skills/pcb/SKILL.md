@@ -53,6 +53,8 @@ board (its copper pours are refilled on a copy first) run KiCad's own `kicad-cli
 - **An edit needs a local socket.** A shell sandbox that refuses sockets (an agent app's default) stops
   an edit at once, saying so: run the script outside the sandbox. Inspecting, DRC, exports and
   snapshots run inside it.
+- **A KiCad the person installed is never run.** Where the fetched one does not run on a computer,
+  `CAD_KICAD_CLI` names another `kicad-cli` (KiCad 9 or newer; a nightly's for an edit).
 
 ## Native files are the source
 

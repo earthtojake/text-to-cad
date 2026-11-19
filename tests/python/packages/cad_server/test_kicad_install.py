@@ -78,9 +78,8 @@ class Discovery(unittest.TestCase):
     def test_kicodes_kicad_cli_is_found_and_never_one_on_path(self) -> None:
         packaged = self._executable(self.root / "kicode", "kicad-cli")
         self.assertEqual(self._find(self.stable.parent, kicode=self._kicode(packaged)), packaged)
-        with self.assertRaisesRegex(install.KicadMissingError, "not found.*cad\\[kicad\\]") as refused:
+        with self.assertRaisesRegex(install.KicadMissingError, "not found.*cad\\[kicad\\].*CAD_KICAD_CLI"):
             self._find(self.stable.parent, self.nightly.parent, self.app.parent)
-        self.assertNotIn("CAD_KICAD_CLI", str(refused.exception), "a deprecated variable is not offered")
 
     def test_cad_run_kicad_cli_runs_the_environment_s_console_script_alone(self) -> None:
         from cad.kicad import _command

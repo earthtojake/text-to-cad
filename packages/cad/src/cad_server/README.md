@@ -264,10 +264,13 @@ and the others there are for a contributor's tests or pass between cad's own pro
 | `CAD_TELEMETRY` | 0: no usage counts from this process; 1: on, over the person's saved choice. DO_NOT_TRACK=1 turns it off too |
 | `CAD_UPDATE_CHECK` | 0: this server neither looks for a newer release nor installs one |
 | `CAD_KICAD_3DMODELS` | More folders a board's 3D models are read from, separated as PATH is |
+| `CAD_KICAD_CLI` | Another `kicad-cli` to check, export and edit boards with, in place of the one `cad[kicad]` brings (KiCad 9 or newer; a nightly's to edit) |
+| `CAD_CCX` | Another CalculiX `ccx` to solve studies with, in place of the one `cad[calculix]` brings (2.20 or newer) |
 
 A variable exists only where nothing else can carry the value: a folder, a port or a limit a process must know
-before it starts. A choice kept between runs is a setting (`cad telemetry`, `cad update auto`), and no variable
-says which third-party program an integration runs: cad runs the one its extra pins.
+before it starts. A choice kept between runs is a setting (`cad telemetry`, `cad update auto`). An integration
+runs the program its extra pins: `CAD_KICAD_CLI` and `CAD_CCX` name another only as a last resort, where the pinned
+one does not run on a computer.
 
 ## Telemetry
 
