@@ -1,7 +1,7 @@
 # cad_server
 
 The CAD server and the `cad` command, part of the `cad` distribution: the daemon that builds, keeps and
-serves CAD documents, one per computer; the CAD Viewer and the CAD app's MCP endpoint on its listener; the
+serves CAD documents, one per computer; the viewer and the CAD app's MCP endpoint on its listener; the
 environment the CAD kernel runs in; cad's own update; and the command that runs them all.
 
 Models are written against the library, `cad`, which the server imports without its CAD kernel: the kernel
@@ -35,7 +35,7 @@ cad_server/
                          #   engine sessions (http), tools and launches (server), which apps are
                          #   offered tools and how (host: the Codex app alone), open views (views),
                          #   sidebar views shared in memory (sidebar), the viewer routes in-process
-                         #   (tunnel), the page (ui), and the CAD Viewer link for a call that shows no
+                         #   (tunnel), the page (ui), and the viewer link for a call that shows no
                          #   view (browser)
   robot_payload.py       # a robot description resolved for the viewer's page
   drawing_payload.py     # a DXF flattened by ezdxf for the viewer's pane
@@ -56,7 +56,7 @@ cad_server/
                          #   command fails by (cli_errors); and, kept apart for the bridge from
                          #   0.10.0 to 0.11.11 and deleted with it, what reads that layout
                          #   (installations, releases, proxy, arrival)
-  _runtime/              # BUILT: the CAD Viewer client and the CAD app page -- produced when
+  _runtime/              # BUILT: the viewer client and the CAD app page -- produced when
                          #   the wheel is packaged, never committed, never edited
 ```
 

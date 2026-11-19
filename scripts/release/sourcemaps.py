@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The pages' source maps, gathered for the release to upload to PostHog (`release-publish.yml`).
 
-The CAD Viewer's client and the CAD app's page are built with hidden source maps and a debug id on
+The viewer's client and the CAD app's page are built with hidden source maps and a debug id on
 every chunk with code of its own (apps/web/vite.config.mjs, apps/mcp/vite.config.mjs), and a crash on
 either page names the chunk each of its frames ran in by that id (@cad/core's crash reporter).
 The maps never ship in the wheel. This gathers each such chunk -- the text the page runs -- with its map

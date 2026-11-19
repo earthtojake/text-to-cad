@@ -99,7 +99,7 @@ its operations and what writes it.
 
 **PURPOSE** — the engine and its command surface: models built in a warm worker whose memo
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
-materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
+materials, references to geometry, snapshots drawn by OCCT; the viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a MuJoCo model's
 check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); OrcaSlicer's
@@ -137,7 +137,7 @@ technology, and its extra carries the same name.
 **DEPENDED ON BY** — the server and the `cad` command (`cad_server`), in the same distribution, and
 through them every skill that runs `cad`; the empty aliases `cad-server`, `cad-mcp` and `cadgen`,
 which install it at the same release.
-The CAD Viewer is the server's: it serves `cad_server.viewer`’s client, HTTP application and
+The viewer is the server's: it serves `cad_server.viewer`’s client, HTTP application and
 every STEP and `.xbf` a page opens on one authenticated listener, without a relay.
 
 ## The rest of the package's documentation
@@ -221,7 +221,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    installed; it imports nothing outside itself but its own dependencies, the standard library and
    each integration's extra, that extra only in that integration's environment (law 25; the kernel is
    the `build123d` extra's, which the engine's workers run in). The server -- what runs in the daemon
-   or a `cad` command: the daemon, the registry, the CAD Viewer's and the CAD app's servers, every
+   or a `cad` command: the daemon, the registry, the viewer's and the CAD app's servers, every
    verb, the environment makers, telemetry -- imports the library's kernel-free modules, and never
    the kernel or an integration's code (law 28). The shim (`cad_mcp`), the stdio transport
    an agent app starts, is the standard library, the engine's client, the server's MCP protocol and what cad's own
@@ -1026,7 +1026,7 @@ result.ok, result.findings, result.measurements["safety_factor"], result.written
 
 With no study it is the study's setup: the document's parts, the pairs that touch within the contact
 tolerance a study bonds by (an overlapping pair a warning) and one part's faces, each with the engine's
-ref (`bracket/face 17`, the one the CAD Viewer copies) and a hint (`plane, normal -Z, largest`). With a
+ref (`bracket/face 17`, the one the viewer copies) and a hint (`plane, normal -Z, largest`). With a
 study (a JSON file, inline JSON or a dict) and `out`, a folder anywhere (made when missing), the solve,
 which writes its results there, each a standard file that stands on its own, and touches nothing else in
 the folder:
@@ -1040,7 +1040,7 @@ the folder:
 | `ccx.inp` | with `deck`, the input CalculiX solved |
 
 There is no document type for a result: the answer is the JSON, the pictures are for looking, the GLB
-opens in the CAD Viewer as any GLB does, and the VTU is for a program's own questions. An option of the
+opens in the viewer as any GLB does, and the VTU is for a program's own questions. An option of the
 other use is refused by name before anything is read. The study reads a file in its own process, as the
 engine reads one (`engine.document.load`), with no worker and no build, and resolves faces in the
 document's structure as `cad <type> inspect` does (`engine.refs`); a model is written to an `.xbf` in a

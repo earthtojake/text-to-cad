@@ -1,4 +1,4 @@
-// A meshopt-compressed GLB must survive the loader the CAD Viewer actually uses.
+// A meshopt-compressed GLB must survive the loader the viewer actually uses.
 //
 // `EXT_meshopt_compression` is a REQUIRED extension: without the decoder registered,
 // GLTFLoader rejects the file outright rather than degrading, so a compressed GLB a person
