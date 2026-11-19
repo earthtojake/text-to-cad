@@ -144,7 +144,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-__all__ = ["CLOSED", "GEOMETRY", "RESOLUTION", "Contact", "JointStops", "Near", "Overlap", "Riding", "sweep",
+__all__ = ["CLOSED", "RESOLUTION", "Contact", "JointStops", "Near", "Overlap", "Riding", "sweep",
            "unknown"]
 
 #: Every point of a tested surface is within this many millimetres of one of its samples, at any clearance: a gap

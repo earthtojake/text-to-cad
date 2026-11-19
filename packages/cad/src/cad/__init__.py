@@ -13,9 +13,8 @@ the build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 m
 ``animation``, measurements, flat patterns); those that take trimesh's are the trimesh integration's,
 ``cad.trimesh`` (a mesh's 3D printing measurements: ``printing``, ``orientations``); those that call MuJoCo
 are the mujoco integration's, ``cad.mujoco`` (a document as a ``mujoco.MjSpec``, a part's collision chosen on
-it, the spec saved, and a MuJoCo model checked by MuJoCo's own compiler: ``spec``, ``fit``, ``save``, ``check``); those that take Blender's are the blender integration's, ``cad.blender`` (``load``: a
-GLB in Blender's scene, for a render); and OrcaSlicer's presets, written complete for its command line, are
-the orcaslicer integration's, ``cad.orcaslicer`` (``presets``, ``complete``). Process control (``cad serve``, ``status``, ``stop``,
+it, the spec saved, and a MuJoCo model checked by MuJoCo's own compiler: ``spec``, ``fit``, ``save``, ``check``); and those that take Blender's are the blender integration's, ``cad.blender`` (``load``: a
+GLB in Blender's scene, for a render). Process control (``cad serve``, ``status``, ``stop``,
 ``server``) is the ``cad`` command's alone. Every name loads on first use: ``import cad`` imports no CAD
 kernel, and ``import build123d`` binds a module the kernel loads into on its first attribute
 (``_internal/lazy_kernel.py``). The earlier spellings (``cad.read_step``, ``cad.export``, ``cad.ap242``,

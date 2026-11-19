@@ -121,7 +121,7 @@ def gasket():
     return cut.sketch
 ```
 
-A drawing with more than one CAM operation returns a `Compound` whose children's labels are their layers (`CUT`, `ENGRAVE`). From a 3D part, the drawing script calls the model and uses `flat_pattern(shape, coordinate=, kerf=)`; a vendor STEP is read with `step.read` first. Kerf is added with `offset_profile` or `kerf=`, never by hand-offsetting coordinates.
+A drawing with more than one CAM operation returns a `Compound` whose children's labels are their layers (`CUT`, `ENGRAVE`). From a 3D part, the drawing script calls the model and lays one of its faces on z=0 with build123d's own calls (`Plane(face).to_local_coords(face)`); a bent part is unrolled with `unfold(shape, k_factor=)` from `cad.build123d`, which can put the bend lines on a `BEND` layer; a vendor STEP is read with `step.read` first. Kerf is added with build123d's `offset`, never by hand-offsetting coordinates.
 
 `cad model export "$ID" DXF/gasket.dxf` runs the drawing checks and refuses the file if one fails: units are set, nothing is drawn twice, no entity has zero length, every cut profile closes, and something is drawn. The file is in millimetres, arcs stay arcs and holes stay circles, and an unchanged drawing exports an identical file on any machine. `cad dxf snapshot` draws the file itself, and the viewer opens it as a read-only 2D drawing with its layers.
 
@@ -212,7 +212,7 @@ Each finding carries a rule id, the measured `value`, the `limit`, the `source` 
 - A linkage that closes a loop (a four-bar, a slider-crank) is kept but not posed: there is no solver.
 - `ranges` does not sweep a cylindrical or spherical joint, and interference checks only the poses it is given.
 - This is kinematics, not dynamics. Simulating a robot is the [robot-simulation](/docs/robot-simulation) skill.
-- `flat_pattern` lays out a flat plate, not a folded part.
+- A face laid flat is a flat plate's profile. A folded part is unrolled with `unfold`, by a K-factor: without the shop's, the flat is not a production blank.
 - The drawing checks show a well-formed cut layout, not that a shop can cut it (the [sendcutsend](/docs/sendcutsend) skill).
 
 ## The skill

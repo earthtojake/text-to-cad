@@ -74,7 +74,7 @@ class FindCcx(unittest.TestCase):
                 calculix.find_ccx()
         self.assertIn("ccx was not found", str(caught.exception))
         self.assertIn("cad[calculix]", str(caught.exception))
-        self.assertIn("CAD_CCX", str(caught.exception))
+        self.assertNotIn("CAD_CCX", str(caught.exception), "a deprecated variable is not offered")
 
     @unittest.skipIf(sys.platform == "win32", "a shell script stands in for ccx")
     def test_a_newer_build_can_be_named_and_a_relative_path_is_kept_absolute(self):
