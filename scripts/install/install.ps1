@@ -13,7 +13,8 @@
 #
 # Where it fails before install.py runs, it sends one anonymous report of where (Send-Report): uv could not be
 # installed or is too old (uv), install.py could not be downloaded (fetch), or uv could not run it (python).
-# install.py reports what fails after that, and says what a report holds and when none is sent.
+# install.py reports what fails after that, and says what a report holds and when none is sent. A run cad started
+# says and sends nothing from here (Test-Report).
 
 function Install-TextToCad {
     # 'Continue': a native command's line on stderr is never an error that stops the run (Windows PowerShell 5.1
@@ -26,7 +27,7 @@ function Install-TextToCad {
     $UvMinimum = [Version]'0.9.0'
     # Where a failure's one report goes: cad's own service (CAD_API_URL, cad's own hook, names a stand-in's base).
     $ReportUrl = 'https://api.texttocad.dev/v1/install'
-    # Said once, near the start, by a run that could send a report: install.py's NOTICE, word for word.
+    # Said once, near the start, by a person's run that could send a report: install.py's NOTICE, word for word.
     $Notice = 'If the install fails before cad can run, one anonymous report of where it failed is sent to texttocad.dev (DO_NOT_TRACK=1 turns it off).'
 
     if ($args.Count) {
@@ -88,13 +89,18 @@ function Install-TextToCad {
     # Whether a failure of this run may be reported: not where the environment says no (DO_NOT_TRACK on,
     # CAD_TELEMETRY off: cad's own spellings), in CI, on a checkout's run (CAD_INSTALL_PY), or where cad's kept
     # settings say no ("choice": "off" in the "telemetry" section of settings.json in its state folder:
-    # CAD_STATE_DIR, ~\.local\state\cad, 0.10.0's). A settings file that cannot be read is no yes.
+    # CAD_STATE_DIR, ~\.local\state\cad, 0.10.0's). A settings file that cannot be read is no yes. And never on a
+    # run cad started (CAD_INSTALL_BY_CAD, CAD_INSTALL_ATTEMPT or CAD_INSTALL_REPORT set: its output is a log's, or
+    # nobody's): the line said first would be read by no one, and nothing is sent before a person was told. Whether
+    # cad told them already is in its settings, which install.py reads: it reports such a run's later failures
+    # where they were.
     function Test-Report {
         $word = { param($value) "$value".Trim().ToLowerInvariant() }
         if (@('1', 'on', 'true', 'yes') -contains (& $word $env:DO_NOT_TRACK)) { return $false }
         if (@('0', 'off', 'false', 'no') -contains (& $word $env:CAD_TELEMETRY)) { return $false }
         if (@('', '0', 'off', 'false', 'no') -notcontains (& $word $env:CI)) { return $false }
         if ($env:CAD_INSTALL_PY) { return $false }
+        if ($env:CAD_INSTALL_BY_CAD -or $env:CAD_INSTALL_ATTEMPT -or $env:CAD_INSTALL_REPORT) { return $false }
         $state = if ($env:XDG_STATE_HOME) { $env:XDG_STATE_HOME } else { Join-Path $HOME '.local\state' }
         $local = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path $HOME 'AppData\Local' }
         foreach ($folder in @($env:CAD_STATE_DIR, (Join-Path $state 'cad'), (Join-Path $local 'cad-state'))) {
@@ -117,14 +123,15 @@ function Install-TextToCad {
     }
 
     # One anonymous report that this run failed at $stage (uv, fetch, python) with exit status $code, where one may
-    # be sent ($reports): the body install.py documents, its run id random and kept nowhere. Two seconds at most. It
-    # says nothing, and never changes how the run ends. Each failure returns right after its report: one a run.
+    # be sent ($reports): the body install.py documents, its run id random and kept nowhere, a person's run always
+    # (Test-Report). Two seconds at most. It says nothing, and never changes how the run ends. Each failure returns
+    # right after its report: one a run.
     function Send-Report($stage, $code) {
         if (-not $reports) { return }
         try {
             $status = [int64]$code
             if ($status -lt 0 -or $status -gt 255) { $status = 255 }
-            $by = if ($env:CAD_INSTALL_BY_CAD -or $env:CAD_INSTALL_ATTEMPT -or $env:CAD_INSTALL_REPORT) { 'cad' } else { 'person' }
+            $by = 'person'
             $known = if ($version) { "$version" } else { "$had" }
             $with = if ($known -match '^\d+\.\d+\.\d+$') { $known } else { 'none' }
             $platform = if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) { 'other' } else { 'win32' }

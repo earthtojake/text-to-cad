@@ -45,8 +45,14 @@ status for it, which only a run a cad server began gets); 2 for an option.
 is there): ``{"schema": "text-to-cad install report/1", "release": <the cad this computer has after the run; null
 where it has none>, "setup": <the cad step's exit status: 0 where cad was installed, installed again, or was here
 already and starts>, "apps": {<app>: "installed" | "updated" | "removed" | "skipped" | "failed" | "not found"}}``,
-``apps`` as ``cad plugin install`` said them (``{}`` where it said nothing), written whole (a file beside it, renamed
-into place) as the very last thing the run does. Writing it never fails the run, and nothing is printed about it.
+``apps`` as ``cad plugin install`` said them, written whole (a file beside it, renamed into place) as the very last
+thing the run does. Writing it never fails the run, and nothing is printed about it. Those releases read two things
+of it, and never the run's exit status: that ``setup`` is the integer 0, and that no value of ``apps`` is
+``failed``. So where the plugin's step ended non-zero and named no app as failed (it raised, could not be started,
+was stopped, ran nothing because another run was going, or ended badly after the apps), ``apps`` gains ``"plugin":
+"failed"`` (``UNSAID``), which they read as a failure and run this command again for, later; without it they would
+read the run as done. Where cad itself could not be installed, ``setup`` says so, and ``apps`` is what the newest
+cad's step said, ``{}`` where it said nothing.
 
 **One report of a failure** (``Reports``). A run that ends with a cad that works is counted by that cad. One that
 fails where no cad can count it sends one anonymous report of where: ``{"schema": 1, "run": <a random id made for
@@ -59,8 +65,12 @@ would have. ``install.sh`` and ``install.ps1`` send the stages before this progr
 ``python``), and know it ran by the file it leaves as it starts (``MARK_ENV``). At most one a run, ``REPORT_SECONDS``
 at most, never a line printed, never a change to the exit status. Nothing is sent where ``DO_NOT_TRACK`` is on or
 ``CAD_TELEMETRY`` is off (cad's own spellings), in CI, where cad's kept settings say no (``telemetry`` in the state
-folder's ``settings.json``), or from a checkout (``development``); everywhere else one line says so first
-(``NOTICE``), said by whichever of the shell and this program ran first.
+folder's ``settings.json``), or from a checkout (``development``); everywhere else a person's run says so first, in
+one line (``NOTICE``), said by whichever of the shell and this program ran first. A run cad started (``BY_CAD``) is
+read by nobody, its output a log's or thrown away: it says no such line, and sends its report only where cad's kept
+settings show the person was told already what cad sends, or said yes to it, as cad itself decides (``kept``:
+nothing is sent before a person was told); ``install.sh`` and ``install.ps1``, which read no settings so closely,
+send nothing for such a run.
 
 Test hooks, never documented to people: ``CAD_INSTALL_PATH_ONLY`` (look for uv, pipx and cad on PATH and in
 ``~/.local/bin`` alone: never in Homebrew's or npm's folders, where a test would find a real one); ``CAD_API_URL``,
@@ -131,7 +141,8 @@ REPORT_SECONDS = 2.0
 # The file this program leaves as it starts, where the shell that ran it names one: by it `install.sh` and
 # `install.ps1` tell a run uv could not start (theirs to report) from one that failed here.
 MARK_ENV = "CAD_INSTALL_MARK"
-# Said once, near the start, by a run that could send a report: `install.sh` and `install.ps1` say the same line.
+# Said once, near the start, by a person's run that could send a report: `install.sh` and `install.ps1` say the
+# same line.
 NOTICE = ("If the install fails before cad can run, one anonymous report of where it failed is sent to texttocad.dev "
           "(DO_NOT_TRACK=1 turns it off).")
 
@@ -780,31 +791,51 @@ def development(here: Here) -> bool:
     return bool(here.environ.get("CAD_INSTALL_PY")) or Path(__file__).with_name("dev_install.py").exists()
 
 
-def kept_no(settings: Path) -> bool:
-    """Whether cad's settings file says no to telemetry, as cad decides one (its ``analytics._decide``): the
-    ``telemetry`` section's ``choice`` is ``off``. A file that is there and cannot be read now is no yes."""
+# What cad's kept settings must reach to count as a person told, and as a yes to what is sent now: cad's own numbers
+# (its ``analytics.NOTICE`` and ``analytics.DISCLOSURE``, which a test holds these to).
+TOLD, AGREED = 1, 1
+
+
+def kept(settings: Path) -> Optional[bool]:
+    """What cad's settings file says of telemetry, as cad decides it (its ``analytics._decide``, by the
+    ``telemetry`` section): False where the person said no (``choice`` is ``off``); True where they said yes to what
+    is sent now (``choice`` is ``on``, its ``disclosure`` at ``AGREED``), or were told what is sent by default
+    (``notifiedAt``, its ``notice`` at ``TOLD``); None where nothing is decided and nobody was told. A file that is
+    there and cannot be read now is no yes: False."""
     try:
         text = settings.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return False
+        return None
     except (OSError, ValueError):
-        return True
+        return False
     try:
         found = json.loads(text)
     except ValueError:
-        return False
+        return None
     section = found.get("telemetry") if isinstance(found, dict) else None
-    return isinstance(section, dict) and section.get("choice") == "off"
+    if not isinstance(section, dict):
+        return None
+    if section.get("choice") == "off":
+        return False
+    disclosure, when, notice = section.get("disclosure"), section.get("notifiedAt"), section.get("notice")
+    if section.get("choice") == "on" and isinstance(disclosure, int) and disclosure >= AGREED:
+        return True
+    return True if isinstance(when, (int, float)) and isinstance(notice, int) and notice >= TOLD else None
 
 
 def reporting(here: Here) -> bool:
-    """Whether this run may send its one report (see the module)."""
+    """Whether this run may send its one report (see the module): never against the environment's no, in CI, from
+    a checkout, or against a no cad keeps; and, where cad started the run, only where cad keeps that the person
+    was told or said yes: this run's own line would be read by nobody."""
     def said(name: str) -> str:
         return str(here.environ.get(name) or "").strip().lower()
 
     if said("DO_NOT_TRACK") in _ON or said("CAD_TELEMETRY") in _OFF or said("CI") not in ("", *_OFF):
         return False
-    return not development(here) and not any(kept_no(folder / "settings.json") for folder in here.state_dirs())
+    if development(here):
+        return False
+    answers = [kept(folder / "settings.json") for folder in here.state_dirs()]
+    return False not in answers and (True in answers or not by_cad(here))
 
 
 def exit_status(code: int) -> int:
@@ -883,6 +914,19 @@ class Reports:
 # --- the run ------------------------------------------------------------------------------------------
 
 REPORT_SCHEMA = "text-to-cad install report/1"
+# What the report adds to the apps where the plugin's step ended non-zero and named none of them as failed: no
+# app's name, and the one word the releases that read the report (0.11.12, 0.11.13) take for a failure, in any value.
+UNSAID = {"plugin": "failed"}
+
+
+def reported(cad: Cad, plugin: Plugin) -> Dict[str, str]:
+    """``apps`` of the report cad reads (see the module): what the plugin's step said of each app, and with it
+    ``UNSAID`` where that step ended non-zero and named no app as failed, on a computer whose cad step ended 0 (a
+    reader would take the run for one that ended well). As the step said them where it ended 0, where it named a
+    failure itself, and where cad could not be installed (``setup`` says that)."""
+    if cad.code or not plugin.code or "failed" in plugin.apps.values():
+        return plugin.apps
+    return {**plugin.apps, **UNSAID}
 
 
 def write_report(here: Here, release: Optional[str], setup: int, apps: Dict[str, str]) -> None:
@@ -950,7 +994,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
               "command.", file=sys.stderr)
         return 2
     reports = Reports(here)
-    if reports.on and not by_shell:  # the shell that ran this has said it
+    # Said to a person: the shell that ran this has said it already, and a run cad started has no reader.
+    if reports.on and not by_shell and not by_cad(here):
         print(NOTICE, flush=True)
     try:
         return run(here, reports)
@@ -971,7 +1016,7 @@ def run(here: Here, reports: Reports) -> int:
     if cad.code:
         print("cad itself was not installed (what went wrong is above), and the plugin's skills need it: run this "
               "again.", flush=True)
-    write_report(here, cad.release, cad.code, plugin.apps)
+    write_report(here, cad.release, cad.code, reported(cad, plugin))
     return 1 if cad.code else BUSY if plugin.code == BUSY else 1 if plugin.code else 0
 
 
