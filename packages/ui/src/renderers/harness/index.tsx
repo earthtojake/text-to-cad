@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FileViewer } from '@cad/ui/file-viewer';
 import type { FileSource } from '@cad/ui/file-viewer';
 import { createCadClient, createHttpPromptFiles } from '@cad/core/client';
@@ -14,7 +14,7 @@ import { createRobotRenderer } from '@cad/ui/renderers/robot';
 import { createXbfRenderer } from '@cad/ui/renderers/xbf';
 import { createHarnessRenderer } from '@cad/ui/renderers/shell-harness';
 import type { ViewerHost } from '@cad/ui/host';
-import type { LiveViewController } from '@cad/ui/renderers/xbf';
+import type { LiveViewController, XbfLayer, XbfLayerProps } from '@cad/ui/renderers/xbf';
 import type { ViewerCommands as CadCommands } from '@cad/ui/renderers/workspace';
 // The module the built renderers publish their export view through (the viewer's ExportControls
 // provides it): the same built file, so this harness's provider is the one they reach.
@@ -34,6 +34,18 @@ const opened: string[] = [];
 // What the first pane's renderer handed Export, in order: what a host's Export menu would offer.
 const exportViews: unknown[] = [];
 const publishExportView = (view: unknown) => { exportViews.push(view); };
+// An app's layer over an engine document's view, as an app adds one (`XbfRendererOptions.layers`):
+// it marks the viewport, and while a test turns `claiming` on it takes each click on the model.
+const layer = { claiming: false, claimed: [] as unknown[] };
+function ClaimingLayer({ claimPicks }: XbfLayerProps) {
+  useEffect(() => claimPicks((hit) => {
+    if (!layer.claiming) return false;
+    layer.claimed.push(hit);
+    return true;
+  }), [claimPicks]);
+  return <div data-harness-layer hidden />;
+}
+const layers: XbfLayer[] = [{ id: 'harness', Layer: ClaimingLayer }];
 // The tab store, as a host builds it: over memory by default (a test seeds it through
 // `window.__cadTabRecord`, so "reopen this file" is a real open against a stored record), or over
 // this page's sessionStorage (`?store=session`), so a reload of the page is a reload of the tab
@@ -89,7 +101,7 @@ function workspace(id: string, store: TabStore) {
   let controller: LiveViewController | null = null;
   const live = { bind(next: LiveViewController) { controller = next; return () => { controller = null; }; } };
   // One live binding per pane: whichever renderer the file selects binds the mounted view.
-  const services = { client, preferences: store.settings, commands, live };
+  const services = { client, preferences: store.settings, commands, live, layers };
   // `harness` is test scaffolding for the shell's own tools; it ships nowhere.
   const renderers = [createBoardRenderer(services), createSchematicRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services), createXbfRenderer(services), createHarnessRenderer(services)];
   return { client, source, host, renderers, commands, capture, selectReference, get controller() { return controller; } };
@@ -103,7 +115,7 @@ function App() {
   const { state: otherState, onStateChange: onOtherStateChange } = useTabViewerState(otherTabStore);
   const [second, setSecond] = useState(false);
   const [mounted, setMounted] = useState(true);
-  Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, tabStore, record: tabStore.getSnapshot(), captures, promptMessages, opened, exportViews, capture: a.capture, selectReference: a.selectReference, second: setSecond, mounted: setMounted } });
+  Object.assign(window, { cadHarness: { a, b, layer, state, otherState, preferences, tabStore, record: tabStore.getSnapshot(), captures, promptMessages, opened, exportViews, capture: a.capture, selectReference: a.selectReference, second: setSecond, mounted: setMounted } });
   return <div className="dark" style={{ display: 'flex', width: '1200px', height: '720px' }}>
     <section data-testid="one" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       {mounted && <ExportContext.Provider value={publishExportView}><FileViewer file={file} host={a.host} renderers={a.renderers} state={state} onStateChange={onStateChange} /></ExportContext.Provider>}

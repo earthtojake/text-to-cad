@@ -26,6 +26,7 @@ import { usePointerPick } from "../kit/tools/select/usePointerPick.js";
 import { prefersCoarsePointer } from "../kit/viewport/dom.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import { createClickActivation } from "./clickActivation.js";
+import { createPickClaims } from "./xbfLayers.js";
 import XbfMeasureOverlay from "./XbfMeasure.jsx";
 import XbfModelTree from "./XbfModelTree.jsx";
 import XbfPositionSection, { useXbfPose, writeXbfPosition, xbfPoseGiven, xbfPositionRows } from "./XbfPositionSection.jsx";
@@ -144,6 +145,9 @@ function XbfSurface({ view, data }) {
   const measure = useMeasureSession({ fileKey: document.modelKey, revision: loaded.revision, picking: measuring });
   const requestFrame = useCallback(() => shellRef.current?.requestFrame?.(), []);
   const requestRender = useCallback(() => shellRef.current?.requestRender?.(), []);
+  // An app's own layers over the model (`XbfRendererOptions.layers`, `xbfLayers.js`), and the clicks they claim.
+  const layers = data.services?.layers || EMPTY;
+  const [pickClaims] = useState(createPickClaims);
 
   // ---- Select's Filter: every box ticked as the file opens, or any of them ----------------------
   const [selectFilter, setSelectFilter] = useState(XBF_SELECT_DEFAULT);
@@ -542,6 +546,8 @@ function XbfSurface({ view, data }) {
   const handlePick = useCallback((found, modifiers) => {
     const hit = found?.press || null;
     const multiSelect = Boolean(modifiers?.multiSelect);
+    // A click a layer claims is its own: the selection stays, and a double-click has none to put back.
+    if (pickClaims.offer(hit, { multiSelect })) { lastPick.current = null; return; }
     lastPick.current = { before: selectedRef.current };
     if (shellRef.current?.toolMode !== XBF_TOOL.SELECT) ensureSelect();
     if (!hit) { if (!multiSelect) { setChosen(EMPTY); measureRef.current.select([]); } return; }
@@ -549,7 +555,7 @@ function XbfSurface({ view, data }) {
     if (hit.kind) { setChosen(now => pickElements(now, [hit.id], multiSelect)); return; }
     const node = nodeOf(hit);
     if (node && (!selectableIds || selectableIds.has(node))) setChosen(now => pickNode(now, node, multiSelect));
-  }, [ensureSelect, nodeOf, selectableIds]);
+  }, [ensureSelect, nodeOf, selectableIds, pickClaims]);
   // Box select: what the box takes of the model, by a click's rules (`pickBox`, `pickOptions`): what
   // shows in it, touching it even in part. Under
   // All the faces and edges of the parts that are open and every other part as the node a click
@@ -784,6 +790,8 @@ function XbfSurface({ view, data }) {
         {handles ? <JointHandleOverlay handles={handles} layoutSeamRef={handleLayoutRef} {...viewport} /> : null}
         <XbfPick viewport={viewport} scene={picker} enabled={picking} onPick={handlePick} onHover={handleHover} onDoublePick={handleDoublePick}
           deferRef={deferPickRef} pointerTypeRef={pointerTypeRef} />
+        {layers.map(({ id, Layer }) => <Layer key={id} file={view.file.path} scene={scene} viewport={viewport}
+          selected={selectedElementIds} requestFrame={requestFrame} claimPicks={pickClaims.claim} />)}
       </>;
     }} />;
 }

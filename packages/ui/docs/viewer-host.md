@@ -86,7 +86,7 @@ are for reading and maintaining the contracts.
 | `PromptContextPort` (`deliver`, `send`), bundles, references, delivery receipts and `formatPromptMessage` (the one message a Quick Edit is) | [Prompt types](../../core/src/prompt/types.ts) | `@cad/core/prompt` |
 | `CadWorkspaceService` (the catalog of the files on screen, `folder`, `search`), `createCadClient` (`{ origin, fetch, … }`), `isMissingFileError`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@cad/core/client` |
 | `createHttpPromptFiles` (the viewer server's `PromptFiles`: `POST /api/v1/local/prompt-files`, writes JSON and returns paths) | [Prompt files](../../core/src/client/promptFiles.js) | `@cad/core/client` |
-| `XbfRendererOptions` (an `.xbf` and a STEP), `LiveViewBinding`, `LiveViewController` | [Engine document registration](../src/renderers/xbf/index.ts) | `@cad/ui/renderers/xbf` |
+| `XbfRendererOptions` (an `.xbf` and a STEP), `XbfLayer` and `XbfLayerProps` (an app's own layer over the model, [below](#model-view-layers)), `LiveViewBinding`, `LiveViewController` | [Engine document registration](../src/renderers/xbf/index.ts) | `@cad/ui/renderers/xbf` |
 | `TabStore`, `TabRecordStorage`, `createTabStore`, `useTabViewerState` (the tab's one store: its settings, the view of the file on screen, and `FileViewer`'s state from both) | [Tab store](../src/tab-store/tabStore.ts), [the record](../src/tab-store/tabRecord.ts) | `@cad/ui/tab-store` |
 | `CadPreferenceSource`, `createCadPreferences` (the tab's settings as renderers read them) | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@cad/ui/renderers/workspace` |
 | `DxfRendererOptions` (2D drawings; declines every camera, display and selection command) | [DXF registration](../src/renderers/dxf/index.ts) | `@cad/ui/renderers/dxf` |
@@ -435,6 +435,21 @@ unmounts before completion rejects its late result. On unmount, the controller
 releases its component closure and retains only its final snapshot with
 `active:false`; every subsequent command requires showing the model tab first.
 Hosts may cache that inactive snapshot without retaining a scene or moving focus.
+
+## Model view layers
+
+An app that builds on the viewer adds its own tools to an engine document's view (an `.xbf` or a
+STEP) as layers, never as edits to the renderer: `createXbfRenderer({ client, layers })`, each
+`{ id, Layer }`. Each `Layer` is drawn over the model's canvas, after the view's own overlays,
+and handed the file, its scene (null while it loads), the viewport, the faces and edges
+selected, `requestFrame()` and `claimPicks(handler)` (`XbfLayerProps`). Every click on the model
+is offered to the handlers first, in the order they claimed, before Select takes it: one that
+returns true takes the click, so the selection stays as it was and a double-click puts none
+back (`xbfLayers.js`). A double-click, a box, the hover and the keyboard stay the view's. A
+layer draws what it adds itself, over the viewport's elements or into its scene, and asks for a
+frame when it changes the scene; it holds its own state and removes what it added when it
+unmounts. The view keeps no layer's state and offers none to a view that shows no engine
+document.
 
 ## Files, state and shutdown
 

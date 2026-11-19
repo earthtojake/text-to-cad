@@ -14,6 +14,31 @@ export interface XbfRendererOptions {
   commands?: ViewerCommandSource;
   /** The mounted view's live command surface. */
   live?: LiveViewBinding<any>;
+  /** An app's own layers over the model, drawn in this order (`XbfLayer`). */
+  layers?: readonly XbfLayer[];
+}
+/**
+ * What an app's layer over an engine document's view is handed: the file and its scene (null
+ * while it loads), the viewport (its runtime, the element its pointer events arrive on, the
+ * element the canvas is mounted in, a tick that changes when the runtime is replaced, and
+ * `commitScene()`), the faces and edges selected by their ids, `requestFrame()` to draw again
+ * after the layer changed the scene, and `claimPicks(handler)`: each click on the model is
+ * offered to `handler(hit, modifiers)` first, until the function it returns is called. `hit` is
+ * what the click found (a part, or a face or an edge by its `id` and `kind`), null over empty
+ * space; a handler that returns true takes the click, and the view's selection stays as it was.
+ */
+export interface XbfLayerProps {
+  file: string;
+  scene: unknown;
+  viewport: { runtimeRef: object; hostRef: object; mountRef: object; viewerReadyTick: number; commitScene: () => boolean };
+  selected: readonly string[];
+  requestFrame(): void;
+  claimPicks(handler: (hit: { id: string; kind?: string } | null, modifiers: { multiSelect: boolean }) => boolean): () => void;
+}
+/** One layer: drawn over the model's canvas beside the view's own overlays, keyed by `id`. */
+export interface XbfLayer {
+  id: string;
+  Layer: ComponentType<XbfLayerProps>;
 }
 export interface PreparedXbfDocument extends PreparedWorkspaceEntry {
   services: Omit<XbfRendererOptions, 'client'> & { preferences: CadPreferenceSource };

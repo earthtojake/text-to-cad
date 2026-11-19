@@ -66,3 +66,34 @@ test('an engine document reopens with its tree as it was left, and its selection
   assert.deepEqual([shown.file, shown.name, shown.planar], ['/models/bracket.xbf', 'bracket.xbf', false]);
   assert.deepEqual(errors, []);
 });
+
+// An app's own layer over the model (`XbfRendererOptions.layers`, the harness's) is drawn over the
+// view and offered each click on the model first: a click it takes leaves the selection as it was,
+// and one it leaves is Select's.
+test('an app layer over an engine document takes the clicks it claims, and Select the rest', async (t) => {
+  const harness = await serveXbfHarness(t);
+  const { page, pane, errors } = await harness.open();
+  const controller = 'window.cadHarness.a.controller';
+  await page.waitForFunction(`${controller}?.readState().loading === false`);
+  await pane.locator('[data-harness-layer]').waitFor({ state: 'attached' });
+  // Straight down, orthographic: the plate's top at (5, 6), beside the pegs, as Measure's spec finds it.
+  await page.evaluate(`${controller}.setCamera(${JSON.stringify({ position: [0, 0, 100], target: [0, 0, 0], up: [0, 1, 0], orthographicHalfHeight: 20, projection: 'orthographic' })})`);
+  const box = await pane.locator('canvas').first().boundingBox();
+  const live = await page.evaluate(() => window.__cadCamera());
+  const scale = box.height / (2 * live.halfHeight / live.zoom);
+  const plate = { x: box.x + box.width / 2 + 5 * scale, y: box.y + box.height / 2 - 6 * scale };
+  const selected = () => page.evaluate(`${controller}.readState().selection.length`);
+
+  await page.evaluate(() => { window.cadHarness.layer.claiming = true; });
+  await page.mouse.click(plate.x, plate.y);
+  await page.waitForFunction(() => window.cadHarness.layer.claimed.length === 1);
+  const [hit] = await page.evaluate(() => window.cadHarness.layer.claimed);
+  assert.ok(hit?.id, `the layer was handed what the click found: ${JSON.stringify(hit)}`);
+  assert.equal(await selected(), 0);
+
+  await page.evaluate(() => { window.cadHarness.layer.claiming = false; });
+  await page.mouse.click(plate.x, plate.y);
+  await page.waitForFunction(`${controller}.readState().selection.length === 1`);
+  assert.equal(await page.evaluate(() => window.cadHarness.layer.claimed.length), 1);
+  assert.deepEqual(errors, []);
+});
