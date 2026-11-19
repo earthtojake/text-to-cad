@@ -73,12 +73,14 @@ export function FileSheetSettingRow({ label, children, disabled = false, classNa
 
 // Figma-like property: the icon/unit carries the visible meaning; its accessible
 // name and shared hover hint keep the exact setting discoverable.
-export function FileSheetNumberProperty({ label, Icon, value, onValueCommit }) {
+// `disabled`: shown, not editable (while what it sets is being written).
+export function FileSheetNumberProperty({ label, Icon, value, onValueCommit, disabled = false, className }) {
   const { t } = useI18n();
   return (
-    <TooltipHint content={label}><div  className="flex h-7 min-w-0 items-center gap-1 rounded-md border border-input bg-muted/30 px-2 focus-within:ring-1 focus-within:ring-ring">
+    <TooltipHint content={label}><div className={cn("flex h-7 min-w-0 items-center gap-1 rounded-md border border-input bg-muted/30 px-2 focus-within:ring-1 focus-within:ring-ring",
+      disabled && "opacity-50", className)}>
       {Icon ? <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
-      <FileSheetValueInput ariaLabel={t("field.value", { name: label })} value={value} onValueCommit={onValueCommit}
+      <FileSheetValueInput ariaLabel={t("field.value", { name: label })} value={value} onValueCommit={onValueCommit} disabled={disabled}
         className="h-6 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-left shadow-none focus-visible:ring-0 dark:bg-transparent" />
     </div></TooltipHint>
   );
@@ -303,9 +305,9 @@ export function FileSheetValueInput({
 }
 
 // An empty or info line. The one style for every in-sheet message.
-export function FileSheetStatusText({ children, className }) {
+export function FileSheetStatusText({ children, className, ...props }) {
   return (
-    <p className={cn(FILE_SHEET_STATUS_TEXT_CLASSES, className)}>
+    <p {...props} className={cn(FILE_SHEET_STATUS_TEXT_CLASSES, className)}>
       {children}
     </p>
   );

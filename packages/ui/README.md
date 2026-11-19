@@ -15,11 +15,20 @@ binding [design system](docs/settings-ui.md), the same in both apps. A change to
 that chrome changes the design system first. The CAD app's surrounding host controls
 remain its own.
 
-**The viewer is read-only.** It never changes a design: it writes no document's content and no
-file of one (an export is a download of a new file; the home's Delete removes the engine's record
-and cache of a document, never its file). Changing a design belongs to the agent and the code, and
-every viewer tool (Select, Measure, Annotate, Quick Edit, the filters and displays) exists to show
-the person the design and to give the agent feedback.
+**The viewer is read-only, with one exception.** It writes no document's content and no file of
+one (an export is a download of a new file; the home's Delete removes the engine's record and cache
+of a document, never its file). Changing a design belongs to the agent and the code, and every
+viewer tool (Select, Measure, Annotate, Quick Edit, the filters and displays) exists to show the
+person the design and to give the agent feedback. The exception is a model's **Parameters** tab
+([design system](docs/settings-ui.md#parameters)): its Save asks the engine to set the named numbers
+the model's script declares, through the same path as `cad model set` (`client.setModelParameters`,
+`POST /api/v1/documents/model/<id>/parameters`). The engine, not the page, rewrites each number in
+the script where its last run recorded it, after checking the script is the one that ran, and builds
+the model again; the page then reads the rebuilt document as it reads any new version, and changes
+nothing on screen before it arrives. Nothing else in the viewer changes a design: no other control
+writes a script, a document or a file, and a document read from a file (an `.xbf`) shows its
+parameters read-only. A host whose client cannot make that request leaves the method out, and the tab
+shows the values without Save. What was saved is told to the agent once, with the next Quick Edit.
 
 ## Ownership and dependencies
 

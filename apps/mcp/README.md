@@ -330,7 +330,9 @@ the launch's `_meta` first (`host/capability.ts`).
   over its own model library and analytics. Everything the page asks of the
   server travels this way, as the web page asks its own: the models -- a STEP's
   and an `.xbf`'s reads too, dispatched directly to the engine's document router
-  that serves them (`/api/v1/documents/<kind>/<id>/...`) -- the
+  that serves them (`/api/v1/documents/<kind>/<id>/...`), a model's Parameters
+  Save among them (`POST /api/v1/documents/model/<id>/parameters`, one call held
+  until the rebuild it starts has ended) -- the
   library and its pictures, Reveal, the person's analytics
   answer and language. One route is the server's own, not the
   viewer's: `/api/v1/local/browser/open`, which opens the web viewer's page of what the view shows

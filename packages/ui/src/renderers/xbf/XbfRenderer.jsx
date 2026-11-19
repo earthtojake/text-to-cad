@@ -29,6 +29,7 @@ import { createClickActivation } from "./clickActivation.js";
 import XbfMeasureOverlay from "./XbfMeasure.jsx";
 import XbfModelTree from "./XbfModelTree.jsx";
 import XbfPositionSection, { useXbfPose, writeXbfPosition, xbfPoseGiven, xbfPositionRows } from "./XbfPositionSection.jsx";
+import XbfParametersSection, { useXbfParameters } from "./XbfParametersSection.jsx";
 import { MeasureIcon, SelectIcon, SelectMenu, XBF_SELECT_DEFAULT, xbfSelectBadge } from "./XbfSelectionModes.jsx";
 import { useXbfElementFacts, useXbfSelectionChips, xbfCopyText, xbfDescriber, xbfNodeRefs, xbfTipper } from "./xbfChips.jsx";
 import { xbfJointHandles } from "./xbfJointHandles.js";
@@ -61,7 +62,8 @@ const MENU_CONTROLS = Object.freeze({
 // same menus, the same Quick Edit chips; and, for a document with motions, the playbar under the
 // model, the shell's routine transport playing them (`useXbfMotion.js`). What differs is
 // underneath: the document is read from the engine that serves it, and every face and edge is to
-// hand from the start, so nothing waits on topology.
+// hand from the start, so nothing waits on topology. One tab a STEP never had: a model's Parameters
+// (`XbfParametersSection.jsx`), the named numbers its script declares, saved back into the script.
 
 const NO_REFERENCES = Object.freeze([]);
 const EMPTY = Object.freeze([]);
@@ -89,6 +91,16 @@ function pickElements(current, ids, multiSelect) {
   if (!multiSelect && nodes.length) return [...ids];
   const next = nextSelectionIds(elements, ids, multiSelect);
   return multiSelect ? [...nodes, ...next] : next;
+}
+
+/**
+ * The view's panel's tabs, in their order: the Model tree for an assembly (a part file's would be its
+ * one row), Position for a mechanism, Parameters for a document that records any. None: no panel.
+ * @param {{ assembly: boolean, posable: boolean, parameters: number }} document
+ * @returns {("model" | "position" | "parameters")[]}
+ */
+export function xbfPanelSections({ assembly, posable, parameters }) {
+  return [assembly && "model", posable && "position", parameters > 0 && "parameters"].filter(Boolean);
 }
 
 /** Every selection id at and under `ids` in the tree: what an isolation keeps in reach. */
@@ -216,6 +228,10 @@ function XbfSurface({ view, data }) {
     shellRef.current?.requestRender?.();
   }, []);
   const motion = useXbfMotion(kinematics, poseFrame);
+  // ---- Parameters: the named numbers the model's script declares (`XbfParametersSection.jsx`) ---
+  // Kept here, for as long as the file is on screen: the drafts, and what was saved, which the next
+  // Quick Edit tells the agent (`promptNotes`).
+  const parameters = useXbfParameters({ client: document.client, document: loaded.document });
   const motionOwns = Boolean(motion?.enabled);
   const motionRef = useRef(motion);
   motionRef.current = motion;
@@ -732,7 +748,7 @@ function XbfSurface({ view, data }) {
   [knobsShown, kinematics, positionRows, poseValues, scene, setPoseValues]);
   const handleLayoutRef = useRef(null);
 
-  // ---- the view's panel: the Model tree (an assembly's), then Position -------------------------
+  // ---- the view's panel: the Model tree (an assembly's), then Position, then Parameters ---------
   const partControls = useMemo(() => ({
     isAssemblyView: assembly, hiddenPartIds: hiddenIds, focusedNodeIds: isolatedIds, selectableNodeIds: selectableIds ? [...selectableIds] : null,
     expandedTreeNodeIds: expandedIds, onToggleTreeNode: toggleExpanded, onRevealTreeNodes: revealExpanded, onSelectTreeNode: selectTreeNode,
@@ -742,11 +758,13 @@ function XbfSurface({ view, data }) {
     menuForNode, partMenuActions
   }), [assembly, hiddenIds, isolatedIds, selectableIds, expandedIds, toggleExpanded, revealExpanded, selectTreeNode, ensureSelect, isolate, exitSingleIsolate,
     exitIsolate, toggleVisibility, showAll, tree, menuForNode, partMenuActions]);
-  const sidebar = scene && (assembly || kinematics) ? <>
-    {assembly ? <XbfModelTree key={document.modelKey} tree={tree} active={!previewing} disabled={shell.idle} mode={shape}
+  const sections = xbfPanelSections({ assembly, posable: Boolean(kinematics), parameters: parameters.parameters.length });
+  const sidebar = scene && sections.length ? <>
+    {sections.includes("model") ? <XbfModelTree key={document.modelKey} tree={tree} active={!previewing} disabled={shell.idle} mode={shape}
       selectedIds={selected} onClearSelection={clearSelection} partControls={partControls} /> : null}
-    {kinematics ? <XbfPositionSection kinematics={kinematics} motion={motionOwns ? motion : null} values={poseValues || {}} couplings={poseCouplings} preset={posePreset}
+    {sections.includes("position") ? <XbfPositionSection kinematics={kinematics} motion={motionOwns ? motion : null} values={poseValues || {}} couplings={poseCouplings} preset={posePreset}
       onValues={setPoseValues} onPreset={choosePreset} onReset={resetPose} /> : null}
+    {sections.includes("parameters") ? <XbfParametersSection parameters={parameters} /> : null}
   </> : null;
 
   // What is picked, as the frame reads it: the Selected pane under the Model tree, the hover tip, the rows of
@@ -766,7 +784,7 @@ function XbfSurface({ view, data }) {
     frame: inspectFrame, copyText: singleChip, data: "model" } : null), [scene, previewing, selected, describe, tip, pointed, inspectSelect, inspectHover, inspectFrame, singleChip]);
 
   return <RendererShell shell={shell} tools={strip} subToolbar={measuring ? <MeasurementsBar measure={measure} /> : null} sidebar={sidebar} previewView={previewView}
-    inspect={inspect}
+    inspect={inspect} promptNotes={parameters.notes}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameReference}
     onClearReferences={() => { setChosen(EMPTY); measure.select([]); }} copySelection={copySelection}
     onSelectPress={measureSelect.press} onSelectHover={measureSelect.hover} selectsAnnotations={selects(selectFilter, "annotation")}

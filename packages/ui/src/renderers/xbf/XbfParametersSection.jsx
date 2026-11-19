@@ -24,16 +24,21 @@ const NO_DRAFTS = Object.freeze({});
 const IDLE = Object.freeze({ drafts: NO_DRAFTS, sent: null, saving: false, saved: false, error: null });
 // The refusals whose own sentence names what is wrong (which parameter, what the build said): said under ours.
 const DETAILED = new Set(["unknown_parameter", "not_writable", "not_a_number", "out_of_range", "build_failed"]);
-// A reason that is the whole document's, not one parameter's: said once, over the list.
-const DOCUMENT_REASONS = new Set(["file", "no_worker", "unavailable"]);
+// A reason that is the whole document's, not one parameter's: said once, over the list, in this order
+// (a file's before anything else; a script no worker holds before a view that could not save anyway).
+const DOCUMENT_REASONS = ["file", "no_worker", "unavailable"];
 // A parameter's row: its name takes the room, and its value a column at the right, ending on the panel's line.
 const ROW_COLUMNS = "grid-cols-[minmax(0,1fr)_5.5rem]";
 
-/** A save that failed, as the tab says it: the engine's `code` where it is one of its refusals, and its words. */
+/**
+ * A save that failed, as the tab says it: the engine's `code` where it is one of its refusals, its
+ * message and its hint. A failure with no code of the engine's (a code this page does not know, the
+ * request that never got an answer) is said in its own words.
+ */
 function failureOf(error) {
   const code = typeof error?.code === "string" && PARAMETER_REFUSALS.includes(error.code) ? error.code : "";
   const message = String(error instanceof Error ? error.message : error || "").trim();
-  return { code, message, hint: typeof error?.hint === "string" && !code ? error.hint.trim() : "" };
+  return { code, message, hint: typeof error?.hint === "string" ? error.hint.trim() : "" };
 }
 
 /**
@@ -44,9 +49,10 @@ function failureOf(error) {
  * `setDraft(name, value)` is the write boundary: the value is held as the parameter takes it
  * (`parameterValue`: its range, a whole number for an integer), and a draft equal to the document's
  * value is no draft. `save()` sends the changed values alone, in one request; while it is out the
- * tab is `saving`. A save answered leaves the drafts as they are -- the scene is the rebuilt
- * document's to change, not the tab's -- and the next version of the document takes each draft it
- * now holds. A save refused keeps every draft and says why (`error`: the engine's `code`, its
+ * tab is `saving`. A save answered leaves the values it wrote on their controls -- the scene is the
+ * rebuilt document's to change, not the tab's -- and the next version of the document takes each
+ * draft it now holds; a value it did not write (the script already held it) goes back to the
+ * document's. A save refused keeps every draft and says why (`error`: the engine's `code`, its
  * message, its hint). `reset()` drops the drafts not yet saved.
  *
  * What was saved is remembered (each value before and after, and its script) until a Quick Edit
@@ -59,6 +65,7 @@ export function useXbfParameters({ client, document }) {
   const parameters = useMemo(() => xbfParameters(structure), [structure]);
   // Only a model has a script to write: the engine says so of every parameter of any other document.
   const model = document?.source?.kind === "model" ? String(document.source.doc || "") : "";
+  // A host that cannot make the request leaves the client's method out: its view shows the values alone.
   const savable = Boolean(model) && typeof client?.setModelParameters === "function";
   const [state, setState] = useState(IDLE);
   const live = useRef(null);
@@ -96,24 +103,33 @@ export function useXbfParameters({ client, document }) {
   })), []);
 
   const saved = useRef([]);
+  const inFlight = useRef(false);
   const save = useCallback(async () => {
     const { state: now, parameters: declared, model: id, client: service, savable: able } = live.current;
     const values = changedParameters(declared, now.drafts, now.sent);
-    if (!able || now.saving || !Object.keys(values).length) return;
+    // One save at a time, a second press before the first has re-rendered included.
+    if (!able || now.saving || inFlight.current || !Object.keys(values).length) return;
+    inFlight.current = true;
     setState(current => ({ ...current, saving: true, saved: false, error: null }));
     try {
       const answer = await service.setModelParameters(id, values);
-      for (const entry of Array.isArray(answer?.written) ? answer.written : []) {
-        if (typeof entry?.name === "string") saved.current = [...saved.current, { name: entry.name, from: entry.from, to: entry.to, file: entry.file }];
-      }
+      const written = Array.isArray(answer?.written) ? answer.written.filter(entry => typeof entry?.name === "string" && entry.name) : null;
+      for (const entry of written || []) saved.current = [...saved.current, { name: entry.name, from: entry.from, to: entry.to, file: entry.file }];
       if (!mounted.current) return;
       setState(current => {
-        // Still on its control, and not yet the document's: awaited, not sent again.
-        const sent = Object.fromEntries(Object.entries(values).filter(([name, value]) => current.drafts[name] === value));
-        return { ...current, saving: false, saved: true, error: null, sent: Object.keys(sent).length ? { ...current.sent, ...sent } : current.sent };
+        // A value the engine did not write (its script already held it) brings no new version: its
+        // draft goes, and the control shows the document's value again.
+        const wrote = written ? new Set(written.map(entry => entry.name)) : null;
+        const drafts = !wrote ? current.drafts : Object.fromEntries(Object.entries(current.drafts)
+          .filter(([name, value]) => wrote.has(name) || !Object.hasOwn(values, name) || values[name] !== value));
+        // Written, still on its control and not yet the document's: awaited, not sent again.
+        const sent = Object.fromEntries(Object.entries(values).filter(([name, value]) => drafts[name] === value));
+        return { ...current, drafts, saving: false, saved: true, error: null, sent: Object.keys(sent).length ? { ...current.sent, ...sent } : current.sent };
       });
     } catch (error) {
       if (mounted.current) setState(current => ({ ...current, saving: false, saved: false, error: failureOf(error) }));
+    } finally {
+      inFlight.current = false;
     }
   }, []);
 
@@ -127,8 +143,8 @@ export function useXbfParameters({ client, document }) {
   }), []);
 
   return useMemo(() => ({ parameters, drafts: state.drafts, changed, dirty: Object.keys(changed).length > 0, saving: state.saving, saved: state.saved,
-    error: state.error, savable, setDraft, reset, save, notes }),
-  [parameters, state.drafts, state.saving, state.saved, state.error, changed, savable, setDraft, reset, save, notes]);
+    error: state.error, ofModel: Boolean(model), savable, setDraft, reset, save, notes }),
+  [parameters, state.drafts, state.saving, state.saved, state.error, changed, model, savable, setDraft, reset, save, notes]);
 }
 
 /**
@@ -142,11 +158,13 @@ export default function XbfParametersSection({ parameters: model }) {
   const searching = Boolean(flatPanel?.searching);
   const query = searching ? String(flatPanel.query || "").trim().toLowerCase() : "";
   const shown = query ? parameters.filter(parameter => parameter.name.toLowerCase().includes(query)) : parameters;
-  // Why a parameter is not set here: the engine's reason, or this view's (a host that cannot save).
-  const reasonOf = parameter => (!parameter.writable ? parameter.reason || "unknown" : savable ? "" : "unavailable");
+  // Why a parameter is not set here: the engine's reason; a document that is no model's (a file,
+  // whatever it says); or this view's own (a host that cannot save).
+  const reasonOf = parameter => (!parameter.writable ? parameter.reason || "unknown" : !model.ofModel ? "file" : savable ? "" : "unavailable");
   const reasons = parameters.map(reasonOf);
-  // One reason for all of them that is the document's own (a file, a model whose script is not held): said once.
-  const shared = reasons.length && reasons.every(reason => reason === reasons[0]) && DOCUMENT_REASONS.has(reasons[0]) ? reasons[0] : "";
+  // A reason that is the document's own (a file, a model whose script no worker holds, a view that
+  // cannot save): said once, over the list; a parameter's own (declared elsewhere, computed) on its row.
+  const documentReason = DOCUMENT_REASONS.find(reason => reasons.includes(reason)) || "";
   const why = (parameter, reason) => (reason === "shared" ? (parameter.source ? t("parameters.reason.sharedIn", { source: parameter.source }) : t("parameters.reason.shared"))
     : t(`parameters.reason.${[...PARAMETER_REASONS, "unavailable"].includes(reason) ? reason : "unknown"}`));
   const editable = reasons.some(reason => !reason);
@@ -155,7 +173,7 @@ export default function XbfParametersSection({ parameters: model }) {
   const error = model.error;
   const hit = searching ? "" : undefined;
 
-  const row = (parameter, at) => {
+  const row = (parameter) => {
     const reason = reasons[parameters.indexOf(parameter)];
     const name = parameter.name;
     if (reason) {
@@ -163,7 +181,7 @@ export default function XbfParametersSection({ parameters: model }) {
         <FileSheetSettingRow label={name} className={ROW_COLUMNS}>
           <span className="min-w-0 flex-1 truncate text-right text-tiny tabular-nums text-foreground" data-parameter-value="">{formatParameterValue(parameter, parameter.value)}</span>
         </FileSheetSettingRow>
-        {shared ? null : <FileSheetStatusText data-parameter-reason={reason}>{why(parameter, reason)}</FileSheetStatusText>}
+        {DOCUMENT_REASONS.includes(reason) ? null : <FileSheetStatusText data-parameter-reason={reason}>{why(parameter, reason)}</FileSheetStatusText>}
       </div>;
     }
     const value = Object.hasOwn(drafts, name) ? drafts[name] : parameter.value;
@@ -183,7 +201,7 @@ export default function XbfParametersSection({ parameters: model }) {
     }
     return <div key={name} data-parameter={name} data-parameter-control="number" data-flat-panel-hit={hit}>
       <FileSheetSettingRow label={name} disabled={saving} className={`h-7 ${ROW_COLUMNS}`}>
-        <FileSheetNumberProperty label={name} hint={null} value={text} disabled={saving} onValueCommit={typed} className="w-full" />
+        <FileSheetNumberProperty label={name} value={text} disabled={saving} onValueCommit={typed} className="w-full" />
       </FileSheetSettingRow>
     </div>;
   };
@@ -201,12 +219,15 @@ export default function XbfParametersSection({ parameters: model }) {
           {t(saving ? "parameters.saving" : "parameters.save")}
         </Button>
       </div> : null}
+      {/* A refusal of the engine's in the tab's words for its code, with the engine's own where they name
+          what is wrong; any other failure in its own words (the engine's message, its hint). */}
       {error ? <div role="alert" className="space-y-0.5 px-2 pb-1 text-tiny leading-4 text-destructive" data-parameters-error={error.code || "unknown"}>
-        <p>{t(error.code ? `parameters.error.${error.code}` : "parameters.error.failed")}</p>
-        {error.message && (!error.code || DETAILED.has(error.code)) ? <p className="wrap-anywhere whitespace-pre-wrap text-muted-foreground" data-parameters-error-detail="">
-          {[error.message, error.hint].filter(Boolean).join("\n")}</p> : null}
+        <p className="wrap-anywhere">{error.code ? t(`parameters.error.${error.code}`) : error.message || t("parameters.error.failed")}</p>
+        {error.code ? (DETAILED.has(error.code) && error.message ? <p className="wrap-anywhere whitespace-pre-wrap text-muted-foreground" data-parameters-error-detail="">
+          {[error.message, error.hint].filter(Boolean).join("\n")}</p> : null)
+          : error.message && error.hint ? <p className="wrap-anywhere whitespace-pre-wrap text-muted-foreground" data-parameters-error-detail="">{error.hint}</p> : null}
       </div> : null}
-      {shared && shown.length ? <FileSheetStatusText data-parameter-reason={shared}>{t(`parameters.reason.${shared}`)}</FileSheetStatusText> : null}
+      {documentReason && shown.length ? <FileSheetStatusText data-parameter-reason={documentReason}>{t(`parameters.reason.${documentReason}`)}</FileSheetStatusText> : null}
       {shown.map(row)}
     </div>
   </ToolPanel>;

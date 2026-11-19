@@ -1107,8 +1107,13 @@ order, whatever the tool:
 - **Position** (where the document carries a mechanism): the `Pose` row with its Reset, and
   the joint values (`XbfPositionSection.jsx`); reaching for one of
   its controls puts the other motions at rest.
+- **Parameters** (where the document records any: the structure's `parameters`, read by
+  `@cad/core/lib/xbf/xbfParameters.js`): the named numbers the model's script declares, drafts and
+  Save (`XbfParametersSection.jsx`'s `useXbfParameters`, held by the renderer for as long as the file
+  is on screen, so its drafts and what it saved outlive the tab's mount); see
+  [the design system](settings-ui.md#parameters). The one control of the viewer that changes a design.
 
-A part file with no mechanism has no sidebar. What is selected is Quick Edit's chips
+A part file with no mechanism and no parameters has no sidebar (`xbfPanelSections`). What is selected is Quick Edit's chips
 (`xbf/xbfChips.jsx`'s `useXbfSelectionChips`): a component
 or subassembly a chip of its own, faces and edges a chip for each kind on each part,
 each chip's card the key measurements. A chip shows a part's name cut at sixteen characters

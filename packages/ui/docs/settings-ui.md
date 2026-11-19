@@ -673,7 +673,9 @@ stands over its layers; its reach is written before the frame is painted, so ope
 panel never moves it, `kit/shell/useStageReach.js`. Its tabs: a board's Parts, Nets and Layers, a schematic's Parts, Nets and Hierarchy,
 a drawing's Layers (handed in); a 3D view's its renderer's sections in their order (`ToolPanel`s, each a tab by its
 name: a STEP assembly's **Model** — a part file, whose tree would be its one row, has none —
-then **Position**, where the file has joints to move; a robot's **Links**, an `.sdf`'s **SDF**, then
+then **Position**, where the file has joints to move, then **Parameters**, where a model's document
+records the numbers its script declares ([Parameters](#parameters)): a part file with parameters has a
+panel for them alone; a robot's **Links**, an `.sdf`'s **SDF**, then
 **Position**), Position's Reset on its pose row and the Model's Show all on a line over its rows,
 and the trees searched by the panel's search box. A file's routines are no tab:
 they play from the playbar under the model. A mesh, with no section, has no panel, and nor has a
@@ -1298,6 +1300,60 @@ by the person meanwhile, stays as it is. No bar over the tree says what is isola
 an edge or ink turns the view square to it (CAD's Normal To, `kit/camera/lookAt.js`) and
 selects nothing: the selection is as its first click found it.
 
+## Parameters
+
+**Parameters** is a tab of the [view's panel](#the-views-panel-and-the-tool-stack), an engine
+document's (`xbf/XbfParametersSection.jsx`), after Model and Position, there under every tool while
+the document records parameters: the named numbers a model's script declares, each with the value the
+document was built with (the structure's `parameters`). A part file with parameters has the panel for
+them alone; a phone, with no panel, has none. It is the one control of the viewer that changes a
+design (the [package's one exception](../README.md)), and it changes it only through the engine: a
+value set here is a **draft**, the tab's own, until **Save**.
+
+- **The actions row**, first, as Position's pose row is: 32px, a status on the 16px line at its left
+  (muted `text-tiny`: "2 unsaved" while drafts differ from the document, "Saved" once a save is
+  answered, nothing otherwise), then **Reset** (a ghost button) and **Save** (the primary one), each
+  24px of regular `text-tiny`, Save ending on the 16px line at the right. Both are off while nothing differs.
+  Reset drops the drafts not yet saved. Save sends every changed value, and only those, in one request
+  (`client.setModelParameters`). The row is there only while some parameter can be written from this
+  view.
+- **A parameter**, in the document's order. One with both ends of a range is the
+  [slider control](#the-slider-control): its name and value on the first line, its slider over the
+  range under them, filled from the document's value to the draft (`origin`), the range in its hint.
+  Any other is a settings row: its name in the row's label column, widened to take the room (a
+  parameter's name is an identifier, not a short word), and `FileSheetNumberProperty` in a 5.5rem column
+  ending on the 16px line. An integer parameter steps and is typed in whole numbers; a float by its
+  declared step, else by a power of ten that crosses its range in a hundred to a thousand steps.
+  Values read with their unit ("2.5 mm", "30°"), in tabular figures. Every write crosses one boundary
+  (`parameterValue`: the range, a whole number, six decimals), shared by the slider and the field; a
+  value typed back to the document's is no draft. Nothing is sent while a slider moves.
+- **Saving.** While a save is out every control and both buttons are off and Save is a spinner and
+  "Saving…" (`aria-busy`). The scene is never changed from the tab: the engine rewrites the numbers in
+  the script and builds the model again, and the rebuilt document arrives as any new version does
+  (the view's update line says it is updating). Until it holds them the saved values stay on their
+  controls and are not sent again; a draft the new version holds is gone. A value the engine did not
+  write (the script already held it) goes back to the document's.
+- **A refusal** keeps every draft and says why, under the actions row, in the destructive colour
+  (`role="alert"`): the tab's sentence for the engine's `code` — the script ran with no worker left
+  holding it, it changed since it ran, the model is building, a value out of range or of the wrong
+  kind, a parameter no longer declared or not writable, a build of the new values that failed and was
+  put back — with the engine's own message under it where that names what is wrong; a failure with no
+  code this page knows, the engine's message and its hint. An edit clears it.
+- **What cannot be written** is its value, right-aligned in the value column, no control, and one
+  muted line under it saying why (`reason`): declared in another file (naming it, "Declared in
+  lib/spec.py: change it there."), or set by an expression in the code. A reason that is the
+  document's own is one line over the list instead: a document read from a file ("Recorded in the
+  file: read-only."), a model no worker holds since its script last ran ("Run the model's script again
+  to change these here."), or a host whose client cannot save (the method left out: "This view can't
+  save parameters.").
+- **Search** finds a parameter by its name, as the panel's search finds every tab's rows.
+- **Telling the agent.** Each value saved is remembered by the view (its name, its value before and
+  after, its script) for as long as the file is on screen, and the next Quick Edit message, sent,
+  queued or copied, says them once, after what the person wrote and before the file, as one plain
+  line: "Saved from the viewer since your last edit: wall 2 -> 2.5 (bracket.py)", the script by its
+  name, never its path; saves of one parameter that follow on from each other read as one change.
+  Once that message has gone the list is forgotten; a message that failed keeps it for the next.
+
 ## Quick Edit
 
 Quick Edit is always available in an interactive CAD view. It has no enable/disable
@@ -1395,7 +1451,9 @@ then draws a view with `cad <type> snapshot <document> <out.png> --annotation <f
 Queue and Send clear the note and what it carries, and so close the box, once the
 note has gone. Copy Prompt keeps it all, since nothing has gone yet: its button
 shows a tick for a moment. A failure keeps the note and says why in the box. The message is
-one format, sent, queued or copied: what the person wrote; then `File: <path>`; then
+one format, sent, queued or copied: what the person wrote; then, once, what the view itself has
+to tell the agent (the renderer's `promptNotes`: the [Parameters](#parameters) saved since the last
+message); then `File: <path>`; then
 `References:` and one reference per line; then each file that travels as a file by its
 label and path — `Snapshot (cad <type> snapshot --annotation):` — or the compact object under
 `Snapshot JSON (cad <type> snapshot --annotation):`. An agent draws each view with
