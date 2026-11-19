@@ -407,9 +407,8 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         identity=("kicode", "kicode-pcb", "kicode-sch"), commands=("kicad-cli",),
         holds="KiCad's kicad-cli", download_mb=100),
     "trimesh": Integration(
-        "trimesh", "trimesh, the triangle-mesh library: a 3D document's manufacturing check measures its mesh with "
-                   "it -- injection molding's draft, undercuts and projected area, 3D printing's walls, overhangs "
-                   "and support", extra="trimesh", process="in-process",
+        "trimesh", "trimesh, the triangle-mesh library: a mesh's 3D printing check measures it with it -- its "
+                   "walls, overhangs and support", extra="trimesh", process="in-process",
         modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx"), identity=("trimesh",),
         holds="trimesh", download_mb=40),
     "mujoco": Integration(

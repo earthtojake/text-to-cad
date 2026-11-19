@@ -29,6 +29,8 @@ NAMES = {
             "memo": "cad.build123d.memo", "paint": "cad.build123d.paint", "export": "cad.engine.api.export",
             "snapshot": "cad.engine.api.snapshot", "inspect": "cad.engine.api.inspect"},
     "cad.results": {"ValidationResult": "cad.results._ValidationResult", "ValidationIssue": "cad.results._ValidationIssue"},
+    "cad.mujoco": {"compile_model": "cad.mujoco._compile.compile_model",
+                   "compile_findings": "cad.mujoco._compile.compile_findings"},
 }
 MODULES = {
     "cad.ap242": "cad.build123d", "cad.gltf": "cad.build123d", "cad.geometry": "cad.build123d._geometry",

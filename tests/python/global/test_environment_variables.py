@@ -78,14 +78,15 @@ class EnvironmentVariables(unittest.TestCase):
 
     def test_a_skill_names_only_public_variables(self) -> None:
         public = {row.name for row in environment.named(environment.PUBLIC)}
-        named = 0
-        for path in sorted(SKILLS.rglob("*.md")):
+        pages = sorted(SKILLS.rglob("*.md"))
+        # The sweep is held by the pages it read, never by how many variables they name: a skill that names none
+        # is the better skill.
+        self.assertGreater(len(pages), 40, "the sweep read almost no page")
+        for path in pages:
             for name in sorted(set(ANY.findall(path.read_text(encoding="utf-8")))):
-                named += 1
                 with self.subTest(page=str(path.relative_to(SKILLS)), variable=name):
                     self.assertIn(name, public, f"{name} is not a variable a person sets: a skill names only the "
                                                 "public ones (cad/_internal/environment.py)")
-        self.assertGreater(named, 3, "the sweep matched nothing")
 
 
 if __name__ == "__main__":

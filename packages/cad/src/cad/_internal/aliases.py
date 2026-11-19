@@ -51,6 +51,9 @@ NAME_ALIASES: dict[str, dict[str, str]] = {
     },
     # The 0.10 call shapes, each a CheckResult or a CheckFinding.
     "cad.results": {"ValidationResult": "cad.results._ValidationResult", "ValidationIssue": "cad.results._ValidationIssue"},
+    # MuJoCo's own compile under names of ours: a script compiles with MuJoCo, and ``check`` is the check.
+    "cad.mujoco": {"compile_model": "cad.mujoco._compile.compile_model",
+                   "compile_findings": "cad.mujoco._compile.compile_findings"},
 }
 
 #: What the deprecation says to use instead, where the new path is not one object: the root's
@@ -61,6 +64,8 @@ _ADVICE = {
     "cad.inspect": "cad.<document_type>.inspect (cad.model.inspect, cad.step.inspect, ...)",
     "cad.results.ValidationResult": "cad.results.CheckResult (findings=, each with location=)",
     "cad.results.ValidationIssue": "cad.results.CheckFinding (severity, code, message, location=, hint=)",
+    "cad.mujoco.compile_model": "mujoco.MjModel.from_xml_path, MuJoCo's own",
+    "cad.mujoco.compile_findings": "cad.mujoco.check, whose result holds the compile's findings",
 }
 
 #: ``old module -> new module``: a module the library had, answered by the module that holds its names now.
