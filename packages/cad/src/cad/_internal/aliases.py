@@ -52,8 +52,14 @@ NAME_ALIASES: dict[str, dict[str, str]] = {
     # The 0.10 call shapes, each a CheckResult or a CheckFinding.
     "cad.results": {"ValidationResult": "cad.results._ValidationResult", "ValidationIssue": "cad.results._ValidationIssue"},
     # build123d's own calls under names of ours (``Plane.to_local_coords``, ``offset``, ``fuse``): a drawing calls them.
-    "cad.build123d": {name: f"cad.build123d._flatten.{name}" for name in (
-        "flat_pattern", "planar_faces", "flatten_face", "flatten_faces", "union_faces", "offset_profile")},
+    "cad.build123d": {
+        "flat_pattern": "cad.build123d._flatten.flat_pattern",
+        "planar_faces": "cad.build123d._flatten.planar_faces",
+        "flatten_face": "cad.build123d._flatten.flatten_face",
+        "flatten_faces": "cad.build123d._flatten.flatten_faces",
+        "union_faces": "cad.build123d._flatten.union_faces",
+        "offset_profile": "cad.build123d._flatten.offset_profile",
+    },
     # MuJoCo's own compile under names of ours: a script compiles with MuJoCo, and ``check`` is the check.
     "cad.mujoco": {"compile_model": "cad.mujoco._compile.compile_model",
                    "compile_findings": "cad.mujoco._compile.compile_findings"},

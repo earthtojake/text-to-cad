@@ -152,9 +152,8 @@ sheet's plane, a mesh: `measurement_failed` for `cut_entities`) or with no close
   then measured, with a warning that the shop has to be told too. A unit that makes the part
   implausible is `units_suspect`: compare `cut_file.extents_mm` with the part's expected size, and
   never rescale silently.
-- **Kerf.** Say whether the file is drawn to the finished size or already offset (`offset_profile`,
-  `flat_pattern(..., kerf=)`): offsetting twice takes the kerf off twice. The kerf is the shop's,
-  for the material and thickness.
+- **Kerf.** Say whether the file is drawn to the finished size or already offset (`bd.offset`):
+  offsetting twice takes the kerf off twice. The kerf is the shop's, for the material and thickness.
 - **Bend lines.** Lines on a bend layer are read as the bends' centre lines
   (`sheet.bend_lines_read`). A flat drawing has no bend radius or angle, so a hole within `2t` of a
   bend line (`sheet.hole_to_bend`) and an edge within `t` of one (`sheet.flange_length`) fail
