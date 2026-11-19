@@ -233,14 +233,15 @@ hinge("pin", rocker, coupler, C, connect=False)   # the loop's last joint: the c
 ```
 
 The document keeps every pair, and poses none of a loop's (there is no solver): a
-mechanism state or a configuration sequence that moves one is refused or left out, a
-`--pose` of one is refused, and `cad model ranges` sweeps none of them. A robot
-description follows the pairs from the ground and leaves out the pair that reaches a link
-a second time, the one paired last. The MJCF closes the loop there with an equality
-between two sites, one on each body where the joint stands (a hinge is two `connect`s, a
-ball one), and does not enforce that joint's range; where the last pair is a slide, which
-MuJoCo has no equality for, it closes the loop at the loop's hinge or ball nearest it
-instead. The URDF, a tree, leaves the joint out. The export's log says each.
+configuration sequence that moves one is left out with a warning, a pose that moves one
+(a `--pose`, or a mechanism state where it is drawn or checked) is refused, and
+`cad model ranges` sweeps none of them. A robot description follows the pairs from the
+ground and leaves out the pair that reaches a link a second time, the one paired last.
+The MJCF closes the loop there with an equality between two sites, one on each body where
+the joint stands (a hinge is two `connect`s, a ball one), and does not enforce that
+joint's range; where the last pair is a slide, which MuJoCo has no equality for, it
+closes the loop at the loop's hinge or ball nearest it instead. The URDF, a tree, leaves
+the joint out. The export's log says each.
 
 ## Joint stops
 

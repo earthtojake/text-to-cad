@@ -25,8 +25,9 @@ why a run ran what it ran.
   body reads, every part placed, named, coloured and given its material, without its
   joints. Verbs take the handle (`model.export(handle, ...)`, `posed(handle, state)`).
 - **A file decorator takes `@model`'s place, never beside it**: `@step("part.step")`,
-  `@xbf`, `@glb`, `@stl`, `@threemf` and `@dxf` declare a model whose run also writes
-  those files ([model page or file page](exports.md#model-page-or-file-page)).
+  and `@xbf`, `@glb`, `@stl`, `@threemf` and `@dxf` likewise with a path, declare a model
+  whose run also writes those files
+  ([model page or file page](exports.md#model-page-or-file-page)).
 - **Kernel objects belong in bodies.** `import build123d as bd` loads no kernel until an
   attribute is read from `bd`, which in a body happens in the server. Read at module
   level (`from build123d import Box`, an `Axis`, a `Location`, a colour palette, a
