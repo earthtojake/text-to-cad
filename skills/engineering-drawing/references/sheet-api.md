@@ -351,8 +351,8 @@ scale unless they are given.
 @eng_drawing(out="../PDF/bracket_drawing.pdf")
 def bracket_drawing():
     sheet = part_sheet(step.read(STEP), title="BRACKET", part_number="BR-100")
-    top = next(v for v in sheet.views if v.name == "top")
-    top.dim(...)            # what the first pass left, and the person's requirements
+    views = {view.name: view for view in sheet.views}   # the ones that earned their place: print(list(views))
+    views["front"].dim(...)   # what the first pass left, and the person's requirements
     return sheet
 ```
 
@@ -366,7 +366,10 @@ def bracket_drawing():
   above it, with an isometric. A plate's two edge views show one thing, its
   thickness, and one is drawn, beside the front. A part turned whole is drawn as `assembly_sheets` draws one (its
   diameters, tapers and grooves, every step placed from one end, a long one
-  lying down).
+  lying down). So look a view up by its name, never by its place in
+  `sheet.views`: there is a front (but on a part turned whole whose cross
+  hole only the view above looks down), and a top or a right only where it
+  earned its place.
 - **Holes**: up to six in a view called out once (`5× ⌀5.5 THRU`) and located
   from the part's edge faces; more in a hole table. A hole down a hexagon's
   axis (a nut's bore) is located by the hexagon.
@@ -448,6 +451,12 @@ note giving the size (`CHAMFER 0.5 × 45°`, `4 FILLETS R1`) states either.
 | `incomplete: an inclined face (its normal (...)) has no angle ...` | add `view.angle(...)` in a view that sees it edge-on, or place both its ends; more than three on one part are one line with the count |
 | `incomplete: the taper from ⌀30 to ⌀20 leaves ⌀20, its end at Z = 60 unstated ...` | a cone needs both end diameters, each end placed along its axis |
 | `incomplete: the groove R1.5 at Z = 12 leaves its radius R1.5 unstated ...` | a turned groove needs its radius and its middle placed |
+| `incomplete: the groove R3 at Z = 20 leaves its diameter ⌀51 unstated ... and a diameter across it (text="%%c<>") how deep it is cut.` | a groove whose section is not centred on the turned surface it is cut in: its radius does not say how deep it is |
+| `incomplete: ⌀8 ↧20 ends in a ball R4, 4 past the depth its callout gives ...` | a ball-ended hole: a callout's depth is its full diameter's; `view.note("SPHERICAL R4", point)`, or `radius()` on its arc in a section |
+| `incomplete: ⌀8 ↧20 ends 3 past the depth its callout gives, in a form that is neither a flat floor nor a drill point ...` | section it, dimension its end, and name it in a note |
+| `incomplete: the tapered bore from ⌀12 to ⌀8 along Z through (...) leaves ⌀12, its end at Z = 10 unstated ...` | a hole callout states a straight bore: section it, a diameter across each end, each end placed (a `conical recess ⌀12` reads the same way) |
+| `incomplete: 2× R5 part-round bore along Z through (...) (180° of a ⌀10 circle: a hole breaking out of an edge, a notch ...) is not stated ...` | a hole callout reads whole circles: `radius()` on its arc, its centre located like a hole's |
+| `incomplete: the bore ⌀30 along Z through (...) has material standing in it (a ring groove's outer wall, a pocket round a boss) ...` | no hole callout reads it: `diameter(point, size=30)` in a view that looks down it |
 | `incomplete: the overall size along X (100) is given only as a reference dimension ...` | nothing else fixes the size; dimension it, or the sizes that add up to it |
 | `redundant: along X, the 20 (front dim 0), the 40 (front dim 1) and the 60 (front overall) state one size twice ...` | the loop's dimensions, each named; make one reference or leave it out |
 | `interface: item 7 (PIN) ⌀12 in item 1 (CLEVIS) ⌀12 ...: no clearance at nominal sizes ...` | a joint to settle: whether it turns, slides, locates or is fixed decides the fit on both sizes |

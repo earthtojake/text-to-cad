@@ -1,6 +1,6 @@
 ---
 name: engineering-drawing
-description: Make an engineering drawing of a part or an assembly as a PDF - views, sections and details, measured dimensions with the tolerances, GD&T and datums the person confirms, hole callouts, notes and a title block, and for an assembly balloons, a parts list, flag notes and a sheet per part, all projected from the geometry. Use when the user asks for a drawing, a dimensioned sheet, shop or assembly drawings, a parts list, a print, or "2D views of this part". Not for DXF cut layouts or flat patterns.
+description: Make an engineering drawing of a part or an assembly as a PDF - views, sections and details, measured dimensions with the tolerances, GD&T and datums the person confirms, hole callouts and a title block; for an assembly, balloons, a parts list and a sheet per part. Use when the user asks for a drawing, a dimensioned sheet, shop or assembly drawings, a parts list, a print, or "2D views of this part". Not for DXF cut layouts or flat patterns.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad

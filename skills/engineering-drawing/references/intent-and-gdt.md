@@ -25,7 +25,8 @@ Ask one thing at a time, in plain words with the standard term in brackets.
    - what can be loose (the general tolerance covers it)
 
    Show each one: a picture of the part with that feature marked (below). An
-   assembly's part is shown in place, the rest faded (`--focus`).
+   assembly's part is shown in place and alone, the others left out (`--display`
+   with `isolated`, below).
 3. **The person confirms, changes or removes each item.** They may click the
    face they mean in the CAD viewer and paste its reference instead. A standard
    fit (ISO 286) may be suggested by name; a number is never applied without a
@@ -139,12 +140,15 @@ front.frame((0, -25, 10), Frame("flatness", 0.05)) # a free frame on a surface
   `circularity`, `cylindricity` (form, no datums); `line_profile`,
   `surface_profile`; `angularity`, `perpendicularity`, `parallelism`
   (orientation, datums required); `position`, `concentricity`, `symmetry`
-  (the last two are ISO 1101's; Y14.5-2018 dropped them, so a sheet whose
+  (the last two are ISO 1101's, measured from a datum, so they need one;
+  Y14.5-2018 dropped them, so a sheet whose
   profile follows it refuses them and names what to state instead);
   `circular_runout`,
   `total_runout` (datums required). `diameter=True` (a cylindrical zone) and
-  `modifier="M"` or `"L"` (material condition) only where they apply; anything
-  else is refused, with the rule.
+  `modifier="M"` or `"L"` (material condition: on straightness, orientation,
+  position, concentricity and symmetry) only where they apply; anything
+  else is refused, with the rule. A datum is one letter (`("A", "B")`, never
+  `"AB"`), checked when the frame is made.
 - `view.datum(letter, point, offset=None)` stands a datum feature symbol on the
   face through `point`, out by the nearest side of the view. `datum=` on
   `hole`, `slot`, `dim` or `diameter` makes that feature of size the datum.
