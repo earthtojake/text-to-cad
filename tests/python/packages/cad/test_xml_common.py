@@ -1,6 +1,6 @@
-"""Helpers shared by the URDF, SDF and SRDF readers.
+"""Helpers shared by the URDF and SRDF readers.
 
-These were five, three and three near-copies before they moved here, so the tests worth
+These were near-copies before they moved here, so the tests worth
 having are the ones that pin the behaviour each format was relying on -- and, just as
 importantly, that the deliberate differences were NOT flattened in the process.
 """
@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
-from cad import sdf_validation, srdf_source, urdf_source  # noqa: E402
+from cad import srdf_source  # noqa: E402
 from cad._internal.xml_common import children, display_path, duplicate_values, local_name  # noqa: E402
 
 
@@ -60,8 +60,8 @@ class LocalName(unittest.TestCase):
         self.assertEqual(local_name("link"), "link")
 
     def test_a_colon_prefix_is_NOT_stripped(self):
-        # An unexpanded `ns:tag` means the document declared no such namespace. SDF
-        # reports that rather than accepting it, so this must not be normalised away.
+        # An unexpanded `ns:tag` means the document declared no such namespace, so the tag
+        # is not the one it looks like: this must not be normalised away.
         self.assertEqual(local_name("gazebo:link"), "gazebo:link")
 
     def test_srdf_keeps_its_own_prefix_stripping_variant(self):
@@ -74,13 +74,13 @@ class LocalName(unittest.TestCase):
 class Children(unittest.TestCase):
     def test_selects_by_local_name_across_namespaces(self):
         root = ET.fromstring(
-            '<sdf xmlns:x="http://example.test/x"><model name="a"/><world name="w"/><model name="b"/></sdf>'
+            '<robot xmlns:x="http://example.test/x"><link name="a"/><joint name="j"/><link name="b"/></robot>'
         )
-        self.assertEqual([c.get("name") for c in children(root, "model")], ["a", "b"])
+        self.assertEqual([c.get("name") for c in children(root, "link")], ["a", "b"])
 
     def test_comments_are_never_matched(self):
-        root = ET.fromstring("<sdf><!-- a comment --><model name='a'/></sdf>")
-        self.assertEqual(len(children(root, "model")), 1)
+        root = ET.fromstring("<robot><!-- a comment --><link name='a'/></robot>")
+        self.assertEqual(len(children(root, "link")), 1)
 
 
 class DuplicateValues(unittest.TestCase):
@@ -92,38 +92,12 @@ class DuplicateValues(unittest.TestCase):
         self.assertEqual(duplicate_values([]), [])
 
 
-class DeliberateDifferencesSurvive(unittest.TestCase):
-    """The refactor's real risk was merging things that only looked alike."""
-
-    def test_the_two_unknown_child_checks_are_still_separate(self):
-        # URDF skips a `ns:tag` colon prefix as a namespaced extension; SDF only knows the
-        # {uri}tag form. One shared implementation would change which unknown children get
-        # reported in one of them.
-        self.assertIsNot(
-            urdf_source._warn_unknown_children, sdf_validation._warn_unknown_children
-        )
-
-    def test_the_sdf_reader_and_validator_keep_their_own_required_name(self):
-        # The reader raises; the validator records a finding and continues.
-        from cad import sdf_source
-
-        self.assertIsNot(sdf_source._required_name, sdf_validation._required_name)
-
-    def test_the_inertia_routine_is_now_one_function(self):
-        # 17 statements of eigenvalue math that used to exist twice. A divergent copy
-        # would let one format accept a tensor the other rejects.
-        self.assertIs(
-            sdf_validation.symmetric_inertia_eigenvalues,
-            urdf_source.symmetric_inertia_eigenvalues,
-        )
-
-
 class InvalidRobotFileText(unittest.TestCase):
     def test_invalid_utf8_is_a_validation_result(self):
-        from cad import sdf, srdf, urdf
+        from cad import srdf, urdf
 
         with tempfile.TemporaryDirectory() as tmp:
-            for extension, validate in (("urdf", urdf.validate), ("srdf", srdf.validate), ("sdf", sdf.validate)):
+            for extension, validate in (("urdf", urdf.validate), ("srdf", srdf.validate)):
                 with self.subTest(extension=extension):
                     path = pathlib.Path(tmp) / f"invalid.{extension}"
                     path.write_bytes(b"<robot name='sample'>\xff</robot>")

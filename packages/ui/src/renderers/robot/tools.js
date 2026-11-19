@@ -13,5 +13,5 @@ export const ROBOT_TOOL_MODES = createToolModes({
 
 /** What a host command a robot cannot carry out is told. Its references are its links, picked by a person. */
 export const ROBOT_DECLINED_LIVE_COMMANDS = Object.freeze({
-  select: "A robot description has no faces or edges for a command to select: URDF, SRDF and SDF name links and joints, and a person picks links in the viewport or in the Links panel under Select. Control the camera and display settings instead."
+  select: "A robot description has no faces or edges for a command to select: URDF and SRDF name links and joints, and a person picks links in the viewport or in the Links panel under Select. Control the camera and display settings instead."
 });

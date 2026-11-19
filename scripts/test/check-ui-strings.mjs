@@ -50,7 +50,7 @@ const TOASTS = /^toast(?:\.(?:success|error|warning|info|loading|message))?$/;
 // Not language: what reads the same in every locale.
 export const NON_LANGUAGE = new Set([
   // Formats and file kinds.
-  'STEP', 'STP', 'STL', '3MF', 'GLB', 'glTF', 'DXF', 'XBF', 'SDF', 'URDF', 'SRDF', 'PNG', 'SVG', 'JSON', 'PDF',
+  'STEP', 'STP', 'STL', '3MF', 'GLB', 'glTF', 'DXF', 'XBF', 'URDF', 'SRDF', 'PNG', 'SVG', 'JSON', 'PDF',
   // Brands and products.
   'CAD', 'GitHub', 'Discord', 'text-to-cad', 'cadgen', 'Codex', 'Claude', 'WebGL',
   // Units and symbols.

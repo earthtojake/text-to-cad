@@ -78,7 +78,7 @@ protocol relationship never imports Python or discovers an interpreter.
   of t, so scrub, loop and seek are free. Neither runs model code, resolves names or checks
   anything the server checked, and neither references the articulation player.
 - **One scene builder per file family, two callers**: a GLB, an STL or 3MF, a
-  robot description (URDF, SRDF, SDF) and an engine document (an `.xbf`, or a STEP,
+  robot description (URDF, SRDF) and an engine document (an `.xbf`, or a STEP,
   which opens as one) are each drawn by ONE builder here
   (`lib/render/glbScene.js`, `lib/render/meshScene.js`, `lib/urdf/robotScene.js`, over
   `lib/urdf/loadRobot.js` and `lib/urdf/robotParts.js`, and `lib/xbf/xbfScene.js`, over

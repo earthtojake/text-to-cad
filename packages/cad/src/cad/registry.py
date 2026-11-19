@@ -345,10 +345,6 @@ _TYPES = (
         ("planning groups", "end effectors", "group states", "disabled collision pairs", "virtual joints"),
         (Operation("validate", "check it against its URDF: every name, chain, state and disabled pair"), _SNAPSHOT)),
     DocumentTypeEntry(
-        "sdf", "SDF", "an SDFormat world or model (Gazebo's Simulation Description Format)", (".sdf",),
-        "application/xml; charset=utf-8", "robot", ("worlds", "models", "links", "joints", "mesh references"),
-        (Operation("validate", "check it for conformance, and with gz sdf --check where it is installed"), _SNAPSHOT)),
-    DocumentTypeEntry(
         "kicad_pcb", "KiCad PCB", "a KiCad printed circuit board, read with the .kicad_pro beside it", (".kicad_pcb",),
         "text/plain; charset=utf-8", "plot",
         ("board outline", "layers", "footprints", "pads", "nets", "tracks", "vias", "zones", "design rules"),

@@ -255,8 +255,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   stops 8px above the cube's line (`VIEWPORT_STACK_BOTTOM`), so it never runs past the
   view.
 - **The view's panel**, docked at the left: one search over a tab per section of what there is
-  to read of the file — a STEP assembly's Model, a robot's Links, Position, an SDF's
-  metadata, a drawing's Layers — whatever tool is in hand; collapsed, a pill at the canvas's top-left; a phone has
+  to read of the file — a STEP assembly's Model, a robot's Links, Position, a drawing's
+  Layers — whatever tool is in hand; collapsed, a pill at the canvas's top-left; a phone has
   none (see [The view's panel](#the-views-panel-and-the-tool-stack)). A file with no
   section (a mesh) has none.
 - **Quick Edit** at top-right, 8px in, a STEP's or a robot's: the box of the note a
@@ -328,7 +328,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | File | Tool strip, left to right |
 | --- | --- |
 | STEP | Select, Pencil, Shapes, Measure; Explode (two or more parts), Clip, then Projection, Display and Preview |
-| URDF / SRDF / SDF | Select, Pencil, Shapes, Measure; Clip, then Projection, Display and Preview |
+| URDF / SRDF | Select, Pencil, Shapes, Measure; Clip, then Projection, Display and Preview |
 | GLB | Select, Pencil, Shapes, Measure; Explode (several rigid nodes that draw), Clip, then Projection, Display and Preview |
 | 3MF | Select, Pencil, Shapes, Measure; Clip, then Projection, Display and Preview |
 | STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, then Projection, Display and Preview |
@@ -673,7 +673,7 @@ stands over its layers; its reach is written before the frame is painted, so ope
 panel never moves it, `kit/shell/useStageReach.js`. Its tabs: a board's Parts, Nets and Layers, a schematic's Parts, Nets and Hierarchy,
 a drawing's Layers (handed in); a 3D view's its renderer's sections in their order (`ToolPanel`s, each a tab by its
 name: a STEP assembly's **Model** — a part file, whose tree would be its one row, has none —
-then **Position**, where the file has joints to move; a robot's **Links**, an `.sdf`'s **SDF**, then
+then **Position**, where the file has joints to move; a robot's **Links**, then
 **Position**), Position's Reset on its pose row and the Model's Show all on a line over its rows,
 and the trees searched by the panel's search box. A file's routines are no tab:
 they play from the playbar under the model. A mesh, with no section, has no panel, and nor has a
@@ -1469,7 +1469,7 @@ opened afresh starts untouched. Preview's view, which keeps no camera, re-fits n
 
 **Preview** (`previewing` in code) is available for every 3D file, animated
 or not, and for nothing else: a renderer declares it (`useRendererShell`'s `previewable`: STEP,
-GLB, STL/3MF, URDF/SRDF/SDF), and a view whose renderer does not (a DXF, 2D) has no Preview
+GLB, STL/3MF, URDF/SRDF), and a view whose renderer does not (a DXF, 2D) has no Preview
 button, not a disabled one, and never enters it, whatever asks. It is the shell's own state;
 hosts neither start nor observe it. Its button is a play triangle ("Preview"), the strip's last
 tile, after its rule, in every host. A press covers the view at once

@@ -555,42 +555,6 @@
       "producers": []
     },
     {
-      "id": "sdf",
-      "title": "SDF",
-      "summary": "an SDFormat world or model (Gazebo's Simulation Description Format)",
-      "extensions": [
-        ".sdf"
-      ],
-      "mime": "application/xml; charset=utf-8",
-      "view": "robot",
-      "content": [
-        "worlds",
-        "models",
-        "links",
-        "joints",
-        "mesh references"
-      ],
-      "operations": [
-        {
-          "name": "validate",
-          "summary": "check it for conformance, and with gz sdf --check where it is installed",
-          "integration": null,
-          "engine": false
-        },
-        {
-          "name": "snapshot",
-          "summary": "draw it as the viewer does, into a PNG",
-          "integration": "build123d",
-          "engine": true
-        }
-      ],
-      "decorator": false,
-      "reader": false,
-      "readerIntegration": null,
-      "edit": null,
-      "producers": []
-    },
-    {
       "id": "kicad_pcb",
       "title": "KiCad PCB",
       "summary": "a KiCad printed circuit board, read with the .kicad_pro beside it",

@@ -33,7 +33,6 @@ TYPES = {
     "dxf": ("snapshot", "dfm"),
     "urdf": ("snapshot", "validate"),
     "srdf": ("snapshot", "validate"),
-    "sdf": ("snapshot", "validate"),
     "kicad_pcb": ("export", "snapshot", "inspect", "drc"),
     "kicad_sch": ("export", "snapshot", "inspect", "erc"),
 }

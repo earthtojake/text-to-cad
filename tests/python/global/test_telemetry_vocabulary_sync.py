@@ -4,7 +4,8 @@ The page names what a person used (`@cad/ui`'s `usage/controls.js`), cadgen note
 knows (`cad_server/analytics.py`: `CONTROLS`), and the receiver refuses any other (`apps/api/src/events.mjs`:
 `CONTROLS`). A name one of them lacks is a count lost without a word: the page's never noted, or a whole
 batch refused. The kinds a file is counted as are its document type's (the library's registry,
-`cad.registry`, kernel-free), as the schemas spell them; the causes a crash of no kernel process names are
+`cad.registry`, kernel-free), as the schemas spell them, and the receiver keeps the kinds of the types since
+removed, which released clients still send; the causes a crash of no kernel process names are
 cadgen's and the receiver's alike. Read from source, so this needs nothing installed.
 """
 
@@ -19,6 +20,8 @@ ROOT = Path(__file__).resolve().parents[3]
 PAGE = ROOT / "packages/ui/src/usage/controls.js"
 CADGEN = ROOT / "packages/cad/src/cad_server/analytics.py"
 RECEIVER = ROOT / "apps/api/src/events.mjs"
+# The kinds of document types cad no longer has: released clients count them, so the receiver keeps reading them.
+RETIRED_KINDS = {"sdf"}
 
 
 def names(path: Path, start: str, end: str) -> list[str]:
@@ -61,7 +64,8 @@ class TheKindsAreOneVocabulary(unittest.TestCase):
         receiver = set(names(RECEIVER, "const KINDS = new Set([", "]);")
                        + names(RECEIVER, "const KINDS_6 = new Set([", "]);")
                        + names(RECEIVER, "const KINDS_8 = new Set([", "]);"))
-        self.assertEqual(formats | set(extra), receiver)
+        self.assertEqual(formats | set(extra) | RETIRED_KINDS, receiver)
+        self.assertFalse(RETIRED_KINDS & (formats | set(extra)), "a retired kind is no current sender's")
         self.assertIn("model", extra)
         self.assertIn("xbf", formats)
         schema = ast.literal_eval(assignments["SCHEMA"])

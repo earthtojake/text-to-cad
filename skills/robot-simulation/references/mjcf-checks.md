@@ -21,7 +21,7 @@ A clean run exits 0 and its last line is `OK <file>: MuJoCo model '<model>', N b
 
 It always compiles: there is no mode without MuJoCo. `cad[mujoco]` is MuJoCo's headless core and Studio's web viewer (`mujoco-core` and `mujoco-studio`, about 20 MB, no window system); the `cad` command makes its environment once, the first time the check needs it, and reuses it after. In Python it is `cad.mujoco.check(path, strict=False)`, which answers the same result.
 
-`cad urdf validate` (or `sdf`, `srdf`) given an `.xml` says so: `robot.xml is not a urdf file: cad urdf takes .urdf (cad mujoco check takes .xml and .mjcf)`.
+`cad urdf validate` (or `srdf`) given an `.xml` says so: `robot.xml is not a urdf file: cad urdf takes .urdf (cad mujoco check takes .xml and .mjcf)`.
 
 ## MuJoCo's compile
 

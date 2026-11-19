@@ -198,8 +198,8 @@ The skills ship no launcher scripts: every operational verb is a `cad`
 subcommand (`cad <document_type> <operation>` or `cad <verb>`, or `python -m cad_server.cli ...` when the console
 script is not on PATH), and `python <model>.py` builds the models its Python control flow explicitly calls.
 The robot validators used to be the exception, running on bare `python3` while
-their logic lived under `skills/`; that logic is the library's now (`cad.urdf`, `cad.sdf`, `cad.srdf`), run
-by `cad urdf|sdf|srdf validate`, so they need the server like everything else.
+their logic lived under `skills/`; that logic is the library's now (`cad.urdf`, `cad.srdf`), run
+by `cad urdf|srdf validate`, so they need the server like everything else.
 
 ## Work In A Worktree
 

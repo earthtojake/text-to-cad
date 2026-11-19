@@ -2,9 +2,8 @@
 
 Every description here is written into a fresh temporary workspace: nothing reads the sample
 corpus. Each case holds one contract -- the articulation a URDF's joints become (its rows,
-limits, mimic terms, handles and opening), the rest placements an SDF's frame graph resolves
-to, an SRDF's poses, cadgen's primitive meshes held in memory, the payloads held in memory,
-and every refusal with the sentence it says.
+limits, mimic terms, handles and opening), an SRDF's poses, cadgen's primitive meshes held in
+memory, the payloads held in memory, and every refusal with the sentence it says.
 """
 
 from __future__ import annotations
@@ -71,43 +70,6 @@ ARM_SRDF = """<?xml version="1.0"?>
   <group_state name="raised" group="arm"><joint name="shoulder" value="-1.0"/><joint name="lift" value="0.2"/></group_state>
 </robot>
 """
-# An SDF joint posed relative to a link, its child posed relative to the joint (so the joint frame
-# and the child frame differ), a frame attached to the child, and a sphere posed relative to it.
-SWING_SDF = """<?xml version="1.0"?>
-<sdf version="1.9"><world name="lab"><light name="sun" type="directional"/><model name="swing">
-  <link name="base"><visual name="v"><pose>0 0 0.05 0 0 0</pose><geometry><box><size>0.4 0.4 0.1</size></box></geometry>
-    <material><diffuse>0.1 0.8 0.1 1</diffuse></material></visual></link>
-  <link name="arm"><pose relative_to="hinge">0.05 0 0 0 0 0</pose><visual name="v"><pose>0.25 0 0 0 0 0</pose><geometry><box><size>0.5 0.08 0.06</size></box></geometry></visual></link>
-  <frame name="tip" attached_to="arm"><pose>0.5 0 0 0 0 0</pose></frame>
-  <link name="ball"><pose relative_to="tip">0 0 0.1 0 0 0</pose><visual name="v"><geometry><sphere><radius>0.04</radius></sphere></geometry></visual>
-    <collision name="c"><geometry><plane><size>1 1</size></plane></geometry></collision></link>
-  <joint name="hinge" type="revolute"><pose relative_to="base">0 0 0.2 0 0 0</pose><parent>base</parent><child>arm</child><axis><xyz>0 1 0</xyz><limit><lower>-1.2</lower><upper>1.2</upper></limit></axis></joint>
-  <joint name="mount" type="fixed"><parent>tip</parent><child>ball</child></joint>
-</model></world></sdf>
-"""
-
-# A model nested in the model, and one nested in that: arm stands on the base, its elbow posed on its
-# upper link and its lower link on the elbow, a wrist frame on the lower link, the hand on that frame;
-# the rig's shoulder attaches arm by its scoped link name.
-NESTED_SDF = """<?xml version="1.0"?>
-<sdf version="1.9"><model name="rig">
-  <link name="base"><visual name="v"><geometry><box><size>0.4 0.4 0.02</size></box></geometry></visual></link>
-  <model name="arm">
-    <pose relative_to="base">0.1 0 0.05 0 0 0</pose>
-    <link name="upper"><pose>0 0 0.05 0 0 0</pose><visual name="v"><geometry><box><size>0.02 0.02 0.1</size></box></geometry></visual></link>
-    <link name="lower"><pose relative_to="elbow">0 0 0.05 0 0 0</pose><visual name="v"><geometry><cylinder><radius>0.01</radius><length>0.1</length></cylinder></geometry></visual></link>
-    <frame name="wrist" attached_to="lower"><pose>0 0 0.05 0 0 0</pose></frame>
-    <joint name="elbow" type="revolute"><pose relative_to="upper">0 0 0.05 0 0 0</pose><parent>upper</parent><child>lower</child>
-      <axis><xyz expressed_in="__model__">0 1 0</xyz><limit><lower>-1.6</lower><upper>1.6</upper></limit></axis></joint>
-    <model name="hand">
-      <pose relative_to="wrist">0 0 0.01 0 0 0</pose>
-      <link name="palm"><visual name="v"><geometry><sphere><radius>0.02</radius></sphere></geometry></visual></link>
-    </model>
-    <joint name="wrist_mount" type="fixed"><parent>wrist</parent><child>hand::palm</child></joint>
-  </model>
-  <joint name="shoulder" type="revolute"><parent>base</parent><child>arm::upper</child><axis><xyz>0 0 1</xyz></axis></joint>
-</model></sdf>
-"""
 
 
 # A crank-rocker four-bar (the browser fixture, `packages/ui/src/renderers/robot/__fixtures__/linkage.urdf`):
@@ -172,8 +134,7 @@ class PreparingDescriptions(_Workspace):
     def test_preparation_validates_controls_without_meshing(self) -> None:
         urdf = self.write("arm.urdf", ARM_URDF)
         srdf = self.write("arm.srdf", ARM_SRDF)
-        sdf = self.write("swing.sdf", SWING_SDF)
-        for path in (urdf, srdf, sdf):
+        for path in (urdf, srdf):
             with self.subTest(kind=path.suffix):
                 with mock.patch.dict("sys.modules", {"cad_server._internal.primitive_mesh": None}):
                     prepared = prepare_robot_description(path)
@@ -425,105 +386,6 @@ class FourBar(_Workspace):
             robot_control_values(self.payload, {"output_joint": 40})
 
 
-class SdfArticulation(_Workspace):
-    def setUp(self) -> None:
-        super().setUp()
-        self.payload = read_robot_description(self.write("swing.sdf", SWING_SDF))
-
-    def test_the_frame_graph_places_every_link_and_joint_in_rest_space(self) -> None:
-        links = {link["name"]: link for link in self.payload["links"]}
-        self.assertEqual((self.payload["kind"], self.payload["name"], self.payload["root"]), ("sdf", "swing", "base"))
-        self.assertEqual(links["arm"]["placement"][3::4][:3], [0.05, 0.0, 0.2], "posed relative to the hinge, which is 0.2 above the base")
-        self.assertEqual([round(v, 6) for v in links["ball"]["placement"][3::4][:3]], [0.55, 0.0, 0.3], "through the frame attached to the arm")
-        joints = {joint["id"]: joint for joint in self.payload["articulation"]["joints"]}
-        self.assertEqual(joints["hinge"]["origin"], [0.0, 0.0, 0.2])
-        self.assertEqual(joints["hinge"]["parent"], None, "the base is the root: its joint hangs from nothing")
-        self.assertEqual(joints["mount"], {"id": "mount", "parent": "hinge", "kind": "fixed"}, "a joint whose parent is a frame rides that frame's link")
-        self.assertEqual(self.payload["articulation"]["carries"], {"hinge": ["arm"], "mount": ["ball"]})
-        controls = self.payload["articulation"]["controls"]
-        self.assertEqual([(c["id"], round(c["min"], 4), round(c["max"], 4)) for c in controls], [("hinge", round(math.degrees(-1.2), 4), round(math.degrees(1.2), 4))])
-        # The arm's origin, 0.05 along the hinge's X, dips as the hinge turns 40 degrees about +Y.
-        delta = joint_matrices(self.payload["articulation"], {"hinge": 40})["hinge"]
-        self.assertEqual(transform(delta, (0.05, 0, 0.2)), [round(0.05 * math.cos(math.radians(40)), 6), 0.0, round(0.2 - 0.05 * math.sin(math.radians(40)), 6)])
-
-    def test_visuals_colours_collisions_and_the_document_record(self) -> None:
-        visuals = {visual["id"]: visual for visual in self.payload["visuals"]}
-        self.assertEqual(visuals["base:v1"]["color"], "#1acc1a", "an SDF <diffuse>")
-        self.assertEqual(visuals["arm:v1"]["placement"][3], 0.3, "the visual's pose in the link, the link's in the world")
-        self.assertEqual(visuals["ball:v1"]["label"], "sphere")
-        links = {link["name"]: link for link in self.payload["links"]}
-        self.assertEqual(links["ball"]["collisions"][0]["type"], "plane", "an undrawn collision is described, never refused")
-        self.assertEqual(self.payload["sdf"]["unsupportedCollisionCount"], 1, "and counted")
-        self.assertEqual(self.payload["sdf"]["documentKind"], "world")
-        self.assertEqual((self.payload["sdf"]["worldName"], self.payload["sdf"]["modelName"], self.payload["sdf"]["rootLink"]), ("lab", "swing", "base"))
-        self.assertEqual((self.payload["sdf"]["linkCount"], self.payload["sdf"]["jointCount"], self.payload["sdf"]["frameCount"]), (3, 2, 1))
-        self.assertEqual(self.payload["sdf"]["staticMetadata"]["lights"], [{"id": "light:1", "name": "sun", "type": "directional"}])
-        self.assertEqual(self.payload["srdf"], None)
-
-    def test_a_joint_on_the_world_and_links_that_float_free(self) -> None:
-        sdf = """<sdf version="1.9"><model name="pair">
-          <link name="post"><pose>1 0 0 0 0 0</pose><visual name="v"><geometry><capsule><radius>0.1</radius><length>1</length></capsule></geometry></visual></link>
-          <link name="loose"><pose>0 2 0 0 0 0</pose><visual name="v"><geometry><box><size>1 1 1</size></box></geometry></visual></link>
-          <joint name="turn" type="revolute"><parent>world</parent><child>post</child><axis><xyz>0 0 1</xyz></axis></joint>
-        </model></sdf>"""
-        payload = read_robot_description(self.write("pair.sdf", sdf))
-        self.assertEqual(payload["root"], "loose", "the post hangs from the world through its joint; the loose link is the root")
-        self.assertEqual(payload["sdf"]["rootLinks"], ["loose"])
-        articulation = payload["articulation"]
-        self.assertEqual(articulation["joints"][0]["origin"], [1.0, 0.0, 0.0], "a joint on the world sits at its child's pose")
-        self.assertEqual(articulation["joints"][0]["parent"], None)
-        two_roots = read_robot_description(self.write("free.sdf", sdf.replace("<joint", "<!--").replace("</joint>", "-->")))
-        self.assertEqual((two_roots["root"], two_roots["sdf"]["rootLinks"]), ("", ["post", "loose"]), "two free links: no single root")
-        self.assertEqual(articulation["controls"][0]["min"], None, "an SDF joint with no <limit> is unbounded")
-        self.assertEqual([visual["label"] for visual in payload["visuals"]], ["capsule", "box"])
-
-
-class SdfNestedModels(_Workspace):
-    """A model nested in the model (SDFormat 1.6+) is part of the robot: its links, frames and
-    joints resolve in its own namespace under scoped names (``arm::elbow``), its pose in the model
-    it is nested in, and a joint outside it attaches to its links by scoped name."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.payload = read_robot_description(self.write("rig.sdf", NESTED_SDF))
-
-    def test_every_nested_link_and_joint_is_placed_in_rest_space(self) -> None:
-        placed = {link["name"]: [round(v, 6) + 0.0 for v in link["placement"][3::4][:3]] for link in self.payload["links"]}
-        self.assertEqual(placed, {"base": [0.0, 0.0, 0.0], "arm::upper": [0.1, 0.0, 0.1], "arm::lower": [0.1, 0.0, 0.2],
-                                  "arm::hand::palm": [0.1, 0.0, 0.26]},
-                         "arm sits on the base, its links in arm's frame, hand on arm's wrist frame")
-        self.assertEqual([visual["id"] for visual in self.payload["visuals"]], ["base:v1", "arm::upper:v1", "arm::lower:v1", "arm::hand::palm:v1"])
-        articulation = self.payload["articulation"]
-        joints = {joint["id"]: joint for joint in articulation["joints"]}
-        self.assertEqual(list(joints), ["shoulder", "arm::elbow", "arm::wrist_mount"], "parents first, across the namespaces")
-        self.assertEqual((joints["arm::elbow"]["origin"], joints["arm::elbow"]["axis"], joints["arm::elbow"]["parent"]),
-                         ([0.1, 0.0, 0.15], [0.0, 1.0, 0.0], "shoulder"))
-        self.assertEqual(joints["arm::wrist_mount"]["parent"], "arm::elbow", "a joint on a frame rides the frame's link")
-        self.assertEqual(articulation["carries"], {"shoulder": ["arm::upper"], "arm::elbow": ["arm::lower"], "arm::wrist_mount": ["arm::hand::palm"]})
-        self.assertEqual((self.payload["root"], self.payload["sdf"]["linkCount"], self.payload["sdf"]["jointCount"], self.payload["sdf"]["frameCount"]),
-                         ("base", 4, 3, 1))
-        # A quarter turn of the elbow about +Y swings the hand 0.11 m above it out along +X.
-        delta = joint_matrices(articulation, {"arm::elbow": 90})["arm::wrist_mount"]
-        self.assertEqual(transform(delta, (0.1, 0, 0.26)), [0.21, 0.0, 0.15])
-
-    def test_a_scoped_name_is_what_a_job_sets_and_what_a_refusal_says(self) -> None:
-        self.assertEqual([control["id"] for control in self.payload["articulation"]["controls"]], ["shoulder", "arm::elbow"])
-        self.assertEqual(robot_control_values(self.payload, {"arm::elbow": 30}), {"shoulder": 0.0, "arm::elbow": 30.0})
-        with self.assertRaisesRegex(RobotReadError, "jointValues\\[arm::wrist_mount\\]: joint 'arm::wrist_mount' is fixed"):
-            robot_control_values(self.payload, {"arm::wrist_mount": 1})
-        with self.assertRaisesRegex(RobotReadError, "Unknown joint\\(s\\): elbow. This SDF declares: arm::elbow, shoulder"):
-            robot_control_values(self.payload, {"elbow": 30})
-        with self.assertRaisesRegex(RobotReadError, "SDF model 'rig' refers to frame 'arm::nope', which it does not declare"):
-            read_robot_description(self.write("nope.sdf", NESTED_SDF.replace("<child>arm::upper</child>", "<child>arm::nope</child>")))
-        # A name a model declares is that element, even where it is the model's own name too.
-        named = read_robot_description(self.write("box.sdf", """<sdf version="1.9"><model name="box"><pose>0 0 5 0 0 0</pose>
-          <link name="box"><pose>1 0 0 0 0 0</pose></link><link name="lid"><pose relative_to="box">0 0 1 0 0 0</pose></link></model></sdf>"""))
-        self.assertEqual([(link["name"], link["placement"][3::4][:3]) for link in named["links"]], [("box", [1.0, 0.0, 5.0]), ("lid", [1.0, 0.0, 6.0])])
-        with self.assertRaisesRegex(RobotReadError, "placed.sdf model 'arm' is placed by its placement_frame, which the viewer does not place by; "
-                                                    "drop placement_frame and pose the model's own frame"):
-            read_robot_description(self.write("placed.sdf", NESTED_SDF.replace('<model name="arm">', '<model name="arm" placement_frame="upper">')))
-
-
 class SrdfArticulation(_Workspace):
     def test_group_states_are_poses_and_home_is_the_opening(self) -> None:
         self.write("arm.urdf", ARM_URDF)
@@ -569,15 +431,15 @@ class Refusals(_Workspace):
         self.assertEqual(visual["placement"][0], 0.001, "the mesh scale is in the placement")
         self.assertEqual(payload["links"][0]["visuals"][0]["path"], visual["mesh"]["path"])
 
-    def test_an_sdf_mesh_named_by_its_absolute_path_or_a_file_uri_is_that_file(self) -> None:
+    def test_a_mesh_named_by_its_absolute_path_or_a_file_uri_is_that_file(self) -> None:
         # On Windows these are C:\...\a.stl, C:/.../a.stl and file:///C:/.../a.stl (cad.engine.mesh_uri).
         mesh = (self.root / "meshes" / "a.stl").resolve()
         mesh.parent.mkdir()
         mesh.write_bytes(b"solid a\nendsolid a\n")
         for uri in (str(mesh), mesh.as_posix(), mesh.as_uri(), mesh.as_uri().replace("file://", "file://localhost", 1)):
             with self.subTest(uri=uri):
-                path = self.write("robot.sdf", f'<sdf version="1.9"><model name="arm"><link name="base"><visual name="v">'
-                                               f"<geometry><mesh><uri>{uri}</uri></mesh></geometry></visual></link></model></sdf>")
+                path = self.write("robot.urdf", f'<robot name="arm"><link name="base"><visual><geometry>'
+                                                f'<mesh filename="{uri}"/></geometry></visual></link></robot>')
                 [visual] = read_robot_description(path)["visuals"]
                 self.assertEqual(visual["mesh"]["path"], str(mesh))
 
@@ -591,21 +453,18 @@ class Refusals(_Workspace):
             if manifest:
                 self.write(f"{folder}/package.xml", f"<package format='3'><name>{manifest}</name></package>")
             uri = "package://arm_description/meshes/base.stl"
-            for path in (self.write(f"{folder}/urdf/arm.urdf", f'<robot name="arm"><link name="base"><visual><geometry>'
-                                                                f'<mesh filename="{uri}"/></geometry></visual></link></robot>'),
-                         self.write(f"{folder}/sdf/arm.sdf", f'<sdf version="1.9"><model name="arm"><link name="base">'
-                                                              f'<visual name="v"><geometry><mesh><uri>{uri}</uri></mesh></geometry>'
-                                                              '</visual></link></model></sdf>')):
-                with self.subTest(package=folder, kind=path.suffix):
-                    [visual] = read_robot_description(path)["visuals"]
-                    self.assertEqual((visual["mesh"]["format"], visual["mesh"]["path"]), ("stl", str(mesh.resolve())))
+            path = self.write(f"{folder}/urdf/arm.urdf", f'<robot name="arm"><link name="base"><visual><geometry>'
+                                                         f'<mesh filename="{uri}"/></geometry></visual></link></robot>')
+            with self.subTest(package=folder):
+                [visual] = read_robot_description(path)["visuals"]
+                self.assertEqual((visual["mesh"]["format"], visual["mesh"]["path"]), ("stl", str(mesh.resolve())))
 
     def test_a_mesh_lands_in_metres_as_its_format_defines_it(self) -> None:
         # One 0.05 x 0.22 x 0.05 m box, written as each format holds it: an STL in metres with no
         # scale, an STL and a 3MF in millimetres with scale 0.001, and a GLB, which glTF defines in
         # metres, with none. The page decodes a GLB into millimetres and an STL or a 3MF as written
         # (packages/core glbMeshData), so the placement times what the page decodes is where the
-        # box's corner is drawn: the same point for every one, through either door.
+        # box's corner is drawn: the same point for every one.
         decoded = {"stl": 1.0, "3mf": 1.0, "glb": 1000.0}
         corner = (0.025, 0.11, 0.025)
         cases = [("metres.stl", "", 1.0), ("millimetres.stl", "0.001 0.001 0.001", 1000.0),
@@ -614,41 +473,31 @@ class Refusals(_Workspace):
             (self.root / name).write_bytes(b"solid a\nendsolid a\n")
         for name, scale, unit in cases:
             urdf_scale = f' scale="{scale}"' if scale else ""
-            sdf_scale = f"<scale>{scale}</scale>" if scale else ""
             urdf = (f'<robot name="r"><link name="arm"><visual><origin xyz="0 0 0.11"/><geometry><mesh filename="{name}"{urdf_scale}/>'
                     '</geometry></visual></link></robot>')
-            sdf = (f'<sdf version="1.9"><model name="r"><link name="arm"><visual name="v"><pose>0 0 0.11 0 0 0</pose><geometry><mesh>'
-                   f'<uri>{name}</uri>{sdf_scale}</mesh></geometry></visual></link></model></sdf>')
-            for door, text in (("urdf", urdf), ("sdf", sdf)):
-                with self.subTest(mesh=name, door=door):
-                    visual = read_robot_description(self.write(f"r.{door}", text))["visuals"][0]
-                    placement = [visual["placement"][row * 4:row * 4 + 4] for row in range(4)]
-                    drawn = transform(placement, [decoded[visual["mesh"]["format"]] * unit * value for value in corner])
-                    self.assertEqual(drawn, [0.025, 0.11, 0.135])
+            with self.subTest(mesh=name):
+                visual = read_robot_description(self.write("r.urdf", urdf))["visuals"][0]
+                placement = [visual["placement"][row * 4:row * 4 + 4] for row in range(4)]
+                drawn = transform(placement, [decoded[visual["mesh"]["format"]] * unit * value for value in corner])
+                self.assertEqual(drawn, [0.025, 0.11, 0.135])
 
-    def test_every_undrawable_sdf_visual_is_named_at_once(self) -> None:
-        # A plane is valid SDF the page has no mesh for; a shape the validator does not know is its finding.
-        sdf = """<sdf version="1.9"><model name="rig">
-          <link name="plate"><visual name="v"><geometry><box><size>1 1 1</size></box></geometry></visual></link>
-          <link name="ground"><visual name="v"><geometry><plane><size>10 10</size></plane></geometry></visual></link>
-          <link name="wall"><visual name="v"><geometry><plane><size>10 10</size></plane></geometry></visual></link>
-        </model></sdf>"""
+    def test_every_undrawable_visual_is_named_at_once(self) -> None:
+        urdf = """<robot name="rig"><link name="plate"><visual><geometry><box size="1 1 1"/></geometry></visual></link>
+          <link name="ground"><visual><geometry><mesh filename="ground.dae"/></geometry></visual></link>
+          <link name="wall"><visual><geometry><mesh filename="wall.dae"/></geometry></visual></link>
+          <joint name="j1" type="fixed"><parent link="plate"/><child link="ground"/></joint>
+          <joint name="j2" type="fixed"><parent link="plate"/><child link="wall"/></joint></robot>"""
+        for name in ("ground.dae", "wall.dae"):
+            (self.root / name).write_bytes(b"")
         with self.assertRaises(RobotReadError) as caught:
-            read_robot_description(self.write("rig.sdf", sdf))
+            read_robot_description(self.write("rig.urdf", urdf))
         message = str(caught.exception)
-        self.assertIn("link 'ground' visual 1 uses <plane> geometry, which the viewer cannot draw", message)
-        self.assertIn("link 'wall' visual 1 uses <plane> geometry", message)
-        self.assertIn("Supported: box, capsule, cylinder, sphere, mesh", message)
-        with self.assertRaisesRegex(RobotReadError, r"invalid_geometry_shape at /sdf/model\[@name='rig'\]/link\[@name='dome'\]"):
-            read_robot_description(self.write("dome.sdf", sdf.replace(
-                "<plane><size>10 10</size></plane></geometry></visual></link>\n          <link name=\"wall\">",
-                "<ellipsoid><radii>1 2 3</radii></ellipsoid></geometry></visual></link>\n          <link name=\"wall\">", 1).replace("ground", "dome")))
+        self.assertIn("link 'ground' visual 1 names 'ground.dae', a .dae the viewer cannot draw", message)
+        self.assertIn("link 'wall' visual 1 names 'wall.dae', a .dae the viewer cannot draw", message)
 
     def test_the_validators_errors_are_the_refusal(self) -> None:
         with self.assertRaisesRegex(RobotReadError, "must define at least one link"):
             read_robot_description(self.write("empty.urdf", "<robot name='r'/>"))
-        with self.assertRaisesRegex(RobotReadError, "could not be parsed as SDF XML"):
-            read_robot_description(self.write("broken.sdf", "not xml"))
         with self.assertRaisesRegex(RobotReadError, "is not a robot description"):
             read_robot_description(self.write("part.step", "ISO-10303-21;"))
 

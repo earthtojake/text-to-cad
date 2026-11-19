@@ -77,10 +77,10 @@ class OneRowPerNamedFile(ScannerTestCase):
                 self.assertIsNone(catalog_entry(self.path(rel)))
 
     def test_only_the_cad_extensions_have_rows(self):
-        for name in ("a.step", "b.stp", "c.stl", "d.3mf", "e.glb", "f.dxf", "g.urdf", "h.srdf", "i.sdf", "p.xbf"):
+        for name in ("a.step", "b.stp", "c.stl", "d.3mf", "e.glb", "f.dxf", "g.urdf", "h.srdf", "p.xbf"):
             self.write(name, "x")
             self.assertIsNotNone(catalog_entry(self.path(name)), name)
-        for name in ("j.json", "k.js", "l.txt", "n", "o.stepx"):
+        for name in ("i.sdf", "j.json", "k.js", "l.txt", "n", "o.stepx"):
             self.write(name, "x")
             self.assertIsNone(catalog_entry(self.path(name)), name)
 
@@ -105,7 +105,7 @@ class EntryShape(ScannerTestCase):
         self.assertEqual(query["v"], scanner.file_version(stat_result.st_size, stat_result.st_mtime_ns))
 
     def test_kind_comes_from_the_lowercased_extension(self):
-        for name, kind in (("a.STL", "stl"), ("b.3MF", "3mf"), ("c.GLB", "glb"), ("d.SDF", "sdf")):
+        for name, kind in (("a.STL", "stl"), ("b.3MF", "3mf"), ("c.GLB", "glb"), ("d.URDF", "urdf")):
             self.write(name, "x")
             self.assertEqual(self.entry(name)["kind"], kind)
         self.assertEqual(source_format_for_path("x.STP", ".STP"), "stp")
@@ -236,7 +236,8 @@ class ServedAssetGate(unittest.TestCase):
         self.assertFalse(is_served_cad_asset("/root/.hidden.step.js"))
         self.assertFalse(is_served_cad_asset("/root/secrets.json"))
         self.assertTrue(is_served_cad_asset("/root/part.step"))
-        self.assertTrue(is_served_cad_asset("/root/part.SDF"))
+        self.assertTrue(is_served_cad_asset("/root/part.URDF"))
+        self.assertFalse(is_served_cad_asset("/root/part.sdf"))
         self.assertFalse(is_served_cad_asset("/root/notes.txt"))
 
     def test_the_hidden_check_is_on_the_basename_only(self):
