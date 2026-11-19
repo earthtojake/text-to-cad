@@ -80,6 +80,7 @@ const DOUBLE_PRESS_MS = 600;
  *   references?: readonly import("@cad/core/prompt").PromptReference[],
  *   referenceChips?: readonly import("../tools/quick-edit/ReferenceChips.jsx").ReferenceChip[] | null,
  *   nameReference?: ((reference: import("@cad/core/prompt").PromptReference) => string | import("../inspector/pickGlyph.jsx").CompactName) | null,
+ *   promptNotes?: { take(): { text: string, done(): void } | null } | null,
  *   copySelection?: (() => unknown) | null,
  *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null,
  *   onContextMenuOpenChange?: ((open: boolean) => void) | null,
@@ -106,6 +107,8 @@ const DOUBLE_PRESS_MS = 600;
  *   on one part, its card, its hover and its removal. Without them Quick Edit counts the references.
  *   `nameReference`: what the renderer calls a reference into its file, for a reference pasted
  *   into Quick Edit's note ("cam"); "" for one it cannot name.
+ *   `promptNotes`: what the renderer has to tell the agent with the next Quick Edit, said once
+ *   (`{ take() }`, Quick Edit's `notes`).
  *   `references`: what is selected, in the prompt grammar — the references a Quick Edit attaches
  *   (`kit/tools/quick-edit/QuickEdit.jsx`), counted in its header; the file itself always goes. A
  *   renderer that hands none has no Quick Edit: only a view whose picks and annotations a note can
@@ -165,7 +168,7 @@ const DOUBLE_PRESS_MS = 600;
 export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, references = null, referenceChips = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null, previewView = null,
   frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, boxSelect = null, inkTouches = null,
-  doubleClickFits = true, zoomToSelection = null, inspect = null }) {
+  doubleClickFits = true, zoomToSelection = null, inspect = null, promptNotes = null }) {
   const { t } = useI18n();
   const frame = shell.frame;
   // What a tool's letter takes up (`useRendererShell`'s `onKey`): the strip as drawn now.
@@ -410,7 +413,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     update: frame.loading.updating && !frame.viewUpdate.status.error ? modelUpdateStatus(frame.loading.progress) : frame.viewUpdate.status };
   const quickEdit = references ? <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden} docked={mobile}
     resource={frame.resource} references={references} chips={referenceChips} nameReference={nameReference} annotation={annotation} prompt={frame.quickEditPrompt}
-    onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} /> : null;
+    notes={promptNotes} onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} /> : null;
   // The view's own controls end the strip, after its rule: Projection (the state button), Display (its menu),
   // then Preview. A phone has no room for them on its strip: they are rows of its More, with the zoom.
   const views = shell.previewable && !previewing ? [

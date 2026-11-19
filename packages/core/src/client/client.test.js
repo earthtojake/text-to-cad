@@ -568,3 +568,34 @@ test('an id deleted while it is on screen leaves the catalog: asked again, it is
   assert.deepEqual([isMissingFileError(failure), failure.state], [true, 'unsaved']);
   client.dispose();
 });
+
+test("a model's parameters are saved by one guarded POST of names and numbers, and a refusal carries the engine's code", async (t) => {
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  const calls = [];
+  const saved = { id, written: [{ name: 'wall', from: 2, to: 2.5, file: '/m/bracket.py', line: 7 }], rebuilt: [id] };
+  let refusal = null;
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
+    const parsed = new URL(url);
+    calls.push([parsed.pathname + parsed.search, options.method || 'GET', options.headers?.['x-cad-viewer'] ?? null, options.headers?.['content-type'] ?? null,
+      options.body ? JSON.parse(options.body) : null]);
+    return refusal ? Response.json(refusal, { status: 409 }) : Response.json(saved);
+  } });
+  t.after(() => client.dispose());
+  assert.deepEqual(await client.setModelParameters(id, { wall: 2.5, holes: 8 }), saved);
+  assert.deepEqual(calls, [[`/api/v1/documents/model/${id}/parameters`, 'POST', '1', 'application/json', { values: { wall: 2.5, holes: 8 } }]]);
+  // A refusal is the engine's own sentence, with its code, its hint and (a parameter that cannot be written) its reason.
+  refusal = { error: 'bracket.py changed since it last ran', hint: 'run the script first', code: 'script_changed' };
+  const changed = await client.setModelParameters(id, { wall: 3 }).catch(error => error);
+  assert.deepEqual([changed.message, changed.code, changed.hint, 'reason' in changed], ['bracket.py changed since it last ran', 'script_changed', 'run the script first', false]);
+  refusal = { error: 'pitch is declared in lib/spec.py', hint: 'change it there', code: 'not_writable', reason: 'shared' };
+  assert.equal((await client.setModelParameters(id, { pitch: 45 }).catch(error => error)).reason, 'shared');
+  // A failure that is no refusal of the engine's (no code) is raised as every request's is.
+  refusal = { error: 'Internal server error' };
+  const failed = await client.setModelParameters(id, { wall: 3 }).catch(error => error);
+  assert.deepEqual([failed.name, failed.code, failed.failure.status], ['ViewerRequestError', undefined, 409]);
+  // Never a path, never text, never nothing: refused here, and no request is made.
+  const sent = calls.length;
+  await assert.rejects(client.setModelParameters('/m/bracket.py', { wall: 3 }), /document id/);
+  for (const values of [{ wall: '3' }, { wall: NaN }, { wall: null }, {}, null, [3]]) await assert.rejects(client.setModelParameters(id, values), /finite number/);
+  assert.equal(calls.length, sent);
+});

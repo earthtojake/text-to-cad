@@ -76,17 +76,22 @@ export function quickEditReferenceIds(selection) {
  *   prompt?: { views(): { label: string }[], files(views: { label: string }[], references?: object[]): Promise<object> | null,
  *     read(path: string): Promise<Blob>, annotation(): object | null, unavailable?(): string } | null,
  *   nameReference?: ((reference: import("@cad/core/prompt").PromptReference) => string | import("../../inspector/pickGlyph.jsx").CompactName) | null,
+ *   notes?: { take(): { text: string, done(): void } | null } | null,
  *   onCopy?: () => boolean, onEscape?: () => unknown, onClear?: () => void, disabled?: boolean,
  *   hidden?: boolean, className?: string, style?: import("react").CSSProperties }} props
  *   `nameReference`: what the renderer calls a reference into the file on screen, for its chip in
  *   the note ("cam"); "" where it has no name for it, which then reads as its file and ids.
+ *   `notes`: what the renderer has to tell the agent with the next message, asked at the press
+ *   (`take()`: its text, or null for nothing): it goes after what the person wrote, however the
+ *   message goes (copied, queued or sent), and once it has gone the renderer is told (`done()`), so
+ *   it is said once. A message that failed keeps it for the next. It opens no box by itself.
  *   `onCopy`: the viewer's own copy (⌘C / Ctrl+C: the selection's references, or the annotation),
  *   which the key still reaches from the box while none of the note is selected. `onEscape`: the
  *   viewer's own Escape (clearing the selection), which an empty box passes on as it closes; a box
  *   with a note keeps it, and Escape only hands the keyboard back to the view. `hidden`: out of
  *   sight with all it holds (the view is loading).
  */
-export default function QuickEdit({ resource, references = EMPTY, chips = null, annotation = null, prompt = null, nameReference = null, onCopy, onEscape, onClear, disabled = false,
+export default function QuickEdit({ resource, references = EMPTY, chips = null, annotation = null, prompt = null, nameReference = null, notes = null, onCopy, onEscape, onClear, disabled = false,
   hidden = false, docked = false, className, style }) {
   const { t } = useI18n();
   const host = useViewerHost();
@@ -238,7 +243,10 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
     if (!actionReady(action)) return;
     setError("");
     let outcome;
+    // What the renderer adds to this message (`notes`), told it has gone once the message has.
+    let note = null;
     try {
+      note = notes?.take?.() ?? null;
       const unavailable = prompt?.unavailable?.() || "";
       const views = unavailable ? [] : prompt?.views() ?? [];
       // The selection goes with the views: a board's packet lights what it names when it is drawn again.
@@ -247,7 +255,8 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
       // The folders the message names its files by, asked at the press (a browser's workspace is its last launch's).
       const folders = host.promptFiles?.folders?.() ?? null;
       void folders?.catch(() => {});
-      const context = createQuickEditContext({ resource, references: selection, text, views, files, read: prompt?.read, viewUnavailable: unavailable, folders });
+      const context = createQuickEditContext({ resource, references: selection, text, views, files, read: prompt?.read, viewUnavailable: unavailable, folders,
+        notes: note?.text ? [note.text] : [] });
       if (action === "send") outcome = host.promptContext.send(context);
       else if (action === "queue") outcome = host.promptContext.deliver(context);
       else outcome = host.clipboard.writeText(copiedQuickEdit(context)).then(() => ({ status: "copied" }));
@@ -256,6 +265,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
     Promise.resolve(outcome).then(result => {
       const message = failure(result, t("quickEdit.notSent"));
       if (message) throw new Error(message);
+      note?.done?.();
       try { host.usage?.used("quickEdit"); } catch { /* counting a use never fails it */ }
       controls.used(`quick_edit_${action}`);
       if (action === "copy") showCopied();

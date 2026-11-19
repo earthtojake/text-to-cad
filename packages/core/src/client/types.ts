@@ -158,6 +158,22 @@ export interface CadEngineDocument {
   fetch: typeof fetch;
 }
 /**
+ * What a save of a model's parameters answers (`POST /api/v1/documents/model/<id>/parameters`): each
+ * value the engine wrote into the script (one equal to the script's is not written, and not listed),
+ * with the script's absolute path and the line it is on, and the models it built again.
+ */
+export interface CadParametersSaved {
+  id: string;
+  written: { name: string; from: number; to: number; file: string; line: number }[];
+  rebuilt: string[];
+}
+/**
+ * A save the engine refused, as `setModelParameters` raises it: the engine's message, its `code`
+ * (`no_worker`, `unknown_parameter`, `not_writable`, `not_a_number`, `out_of_range`, `script_changed`,
+ * `busy`, `build_failed`), what to do about it (`hint`), and for `not_writable` the parameter's `reason`.
+ */
+export interface CadParametersRefusal extends Error { code: string; hint: string; reason?: string }
+/**
  * What `GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure` answers: a URDF, SDF or SRDF resolved by the server into the articulation
  * the page plays (`common/articulation.js`), the visuals it draws (each at its rest placement,
  * with its colour and the URL of the mesh it draws), and what the description says about its
@@ -268,6 +284,14 @@ export interface CadWorkspaceService {
   engineDocument?(file: string, options?: CadRequestOptions & { onProgress?(frame: Record<string, unknown>): void }): Promise<CadEngineDocument>;
   /** Whether the engine holds a read of the document now (its envelope's `held`), asked without starting one. */
   engineHolds?(file: string, options?: CadRequestOptions): Promise<boolean>;
+  /**
+   * `POST /api/v1/documents/model/<id>/parameters`: new values for a model's declared parameters, by
+   * name, each a finite number. The engine rewrites them in the model's script and builds it again,
+   * and answers once that build has ended; a refusal rejects with a `CadParametersRefusal`. The one
+   * call of a view that changes a design. A host that cannot make it leaves it out, and its views
+   * show a model's parameters without a way to save them.
+   */
+  setModelParameters?(id: string, values: Record<string, number>, options?: CadRequestOptions): Promise<CadParametersSaved>;
   readonly resources: CadResourceProvider;
   createRenderSession(options?: { file?: string }): CadRenderSession;
   dispose(): void;

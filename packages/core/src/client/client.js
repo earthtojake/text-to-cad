@@ -493,6 +493,29 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         if (disposed) throw abortError();
       }
     },
+    async setModelParameters(id, values, { signal } = {}) {
+      // New values for a model's declared parameters (`POST /api/v1/documents/model/<id>/parameters`):
+      // the ENGINE rewrites those numbers in the model's script, where its last run recorded them, and
+      // builds it again; the page then reads the rebuilt document as it reads any new version. The
+      // request names the model by its id and the parameters by name, each value a number: never a
+      // path, never text. Guarded as every change is. Answered once the build has ended, so nothing
+      // bounds the wait. A refusal carries the engine's `code` (`lib/xbf/xbfParameters.js`'s
+      // `PARAMETER_REFUSALS`) on the error raised, with its `hint`; its message is the engine's own.
+      if (!isDocumentId(id)) throw new TypeError('A model is named by its document id.');
+      const named = values && typeof values === 'object' && !Array.isArray(values) ? Object.entries(values) : [];
+      if (!named.length || !named.every(([, value]) => typeof value === 'number' && Number.isFinite(value))) {
+        throw new TypeError('A parameter takes a finite number.');
+      }
+      try {
+        return await request(`${API}/documents/model/${encodeURIComponent(id)}/parameters`,
+          { method: 'POST', headers: JSON_POST, body: { values: Object.fromEntries(named) }, signal, operation: 'parameters' });
+      } catch (error) {
+        const refusal = error?.failure?.payload;
+        if (typeof refusal?.code !== 'string' || !refusal.code) throw error;
+        throw Object.assign(new Error(error.failure.detail, { cause: error }), { code: refusal.code,
+          hint: typeof refusal.hint === 'string' ? refusal.hint : '', ...(typeof refusal.reason === 'string' ? { reason: refusal.reason } : {}) });
+      }
+    },
     async engineHolds(file, { signal } = {}) {
       // Whether the engine holds a read of the document now (its envelope's `held`), asked without starting one.
       if (!file) throw new Error('Missing file');

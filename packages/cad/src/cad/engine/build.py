@@ -90,6 +90,9 @@ class _Written:
     # (a mesh export leaves the shapes meshed, which a later serialisation would write too): what
     # its declared xbf is written from on every run, and what the engine's cache keeps of it.
     xbf: bytes | None = None
+    # The parameters the document records (``parameters.record``, as text), or None: a model whose script
+    # declares others now is built again, though its key stands (``_taken``).
+    parameters: str | None = None
 
 
 @dataclass
@@ -312,8 +315,9 @@ def load_script(script: Path) -> Any:
 @dataclass
 class _Load:
     """A script's load kept for its run's later calls: the module and the models it defined, the
-    first-party modules it imported, the stat of every file it read, the environment it ran in, and
-    the build's key resolution (``sources.Symbols``), made against that module."""
+    first-party modules it imported, the parameters it declared (``parameters.recording``), the stat of
+    every file it read, the environment it ran in, and the build's key resolution (``sources.Symbols``),
+    made against that module."""
 
     key: tuple
     stats: dict[str, tuple | None]
@@ -321,6 +325,7 @@ class _Load:
     module: Any
     models: dict[str, Any]
     loaded: set[str]
+    declared: list
     symbols: Any = None
     resolved: dict | None = None
     others: dict | None = None
@@ -483,7 +488,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
     instead, and its fresh result is compared with the logged one; the report's
     ``verify`` names each body checked and how it went, and a function whose result
     differs runs on every call for the worker's life (``memo.always``)."""
-    from cad.engine import previous
+    from cad.engine import parameters, previous
     from cad.engine.kernel import determinism, memo
     from cad.engine.model import _FINGERPRINTS, _MODELS, _NAMES, BuildContext, models_in
 
@@ -526,6 +531,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             seat(script, module_of(script)[2])
             context.loaded, context.symbols = kept.loaded, kept.symbols
             context.resolved, context.others = kept.resolved, kept.others
+            context.declared = kept.declared
         else:
             _LOAD.clear()  # this load replaces the modules any kept one held
             made, began, heard = _made(run), time.time_ns(), []
@@ -540,7 +546,13 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
                         # library's it spells (``cad._internal.aliases``): once a run, never again here, where
                         # each still counts as said.
                         warnings.filterwarnings("ignore", message=_DEPRECATED, category=FutureWarning)
-                    module = load_script(script)
+                    from cad.engine.kernel.trace import first_party_file
+
+                    # Each parameter the load declares, recorded with where its default is spelled
+                    # (``parameters.param``): forgotten with the models, declared again by this load.
+                    with parameters.recording(first_party_file) as declared_now:
+                        module = load_script(script)
+                    context.declared = declared_now
             except BuildError:
                 raise
             except Exception as error:  # noqa: BLE001 - the model's own error, reported
@@ -553,7 +565,8 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
                 sources = [stats.get(getattr(sys.modules.get(name), "__file__", None) or "") for name in context.loaded]
                 # A module edited while it loaded: the load may hold either version, so it is not kept.
                 if all(stat is None or max(stat[0], stat[4]) < began for stat in sources):
-                    fresh = _Load(load_key, stats, environment, module, dict(_MODELS), context.loaded)
+                    fresh = _Load(load_key, stats, environment, module, dict(_MODELS), context.loaded,
+                                  context.declared)
         loaded = time.perf_counter()
         context.base = script.parent
         context.script = script
@@ -781,6 +794,12 @@ def _finish(model: Any, result: Any, run: Any, report: dict[str, Any], log: Call
                                  context.named(model))
         tree.closure = previous.text(made)
         report["closure"] = previous.located(made, folder)
+        # The parameters its script declares (``parameters``): the document records what they are, the
+        # report says where each is in the code, which the engine keeps in memory and never writes.
+        from cad.engine import parameters
+
+        report["parameters"] = context.parameters(model)
+        tree.parameters = parameters.record(report["parameters"])
     timings["collect"] = round(time.perf_counter() - clock, 4)
     # What the joints' harvest found inconsistent: said, and the document written all the same.
     if tree.mechanism is not None and tree.mechanism.warnings:
@@ -815,7 +834,7 @@ def _finish(model: Any, result: Any, run: Any, report: dict[str, Any], log: Call
         tokens.append(cached.token)
         built[cached.key] = cached
     document.merge(tree)
-    signature = (_signature(tree), tuple(tokens), tree.closure)
+    signature = (_signature(tree), tuple(tokens), tree.closure, tree.parameters)
     timings["names"] = round(time.perf_counter() - clock, 4)
     report["parts"] = len(tree.parts)
     report["named"] = named
@@ -869,7 +888,7 @@ def _write(model: Any, plan: list, tree: Any, signature: tuple, report: dict[str
         return sources[0]
 
     _outputs(plan, report, log, lambda path: document.write_bytes(path, data or b"", made_from), source, kept=True)
-    _WRITTEN[key] = _Written(signature, xbf, kept, tree.closure, made_from, xbf=data)
+    _WRITTEN[key] = _Written(signature, xbf, kept, tree.closure, made_from, xbf=data, parameters=tree.parameters)
     report["id"] = model.id
     report["source"] = model.source
 
@@ -1135,6 +1154,14 @@ def _taken(model: Any, context: Any, shown: str, cache: str | None, remembered: 
         changes = changes or ["its closure changed"]
         shown_changes = changes[:3] + ([f"{len(changes) - 3} more"] if len(changes) > 3 else [])
         return {"used": False, "reason": ", ".join(shown_changes), "changed": changes}, None
+    # The parameters the script declares now against those the document records: a declaration the
+    # model's key does not reach (another model's, an unused one) changes its document all the same.
+    from cad.engine import parameters
+
+    declared = context.parameters(model)
+    wanted = parameters.record(declared)
+    if cached is None and remembered.parameters != wanted:
+        return {"used": False, "reason": "its parameters changed", "changed": ["its parameters changed"]}, None
     timings = {"key": round(keyed - clock, 4)}
     if cached is not None:
         # Taken read whole, and kept as its bytes: a document read is never written again (the
@@ -1146,12 +1173,16 @@ def _taken(model: Any, context: Any, shown: str, cache: str | None, remembered: 
         except Exception as error:  # noqa: BLE001 - a cache that does not read is built again
             # ``unreadable``: the daemon drops the file, so this build's document is cached again.
             return {"used": False, "reason": f"its cache does not read: {error}", "unreadable": True}, None
+        recorded = document._label_text(doc.Main(), document.PARAMETERS_GUID)
         del doc
         if document.written_format(held[0]) != previous.FORMAT or held[1] != text:
             return {"used": False, "reason": "its cache does not hold the closure its head shows",
                     "unreadable": True}, None
+        if recorded != wanted:
+            return {"used": False, "reason": "its parameters changed", "changed": ["its parameters changed"]}, None
         timings["read"] = round(time.perf_counter() - keyed, 4)
-        _WRITTEN[name] = _Written(("loaded", found["key"]), None, None, text, data=data, relocated=moved)
+        _WRITTEN[name] = _Written(("loaded", found["key"]), None, None, text, data=data, relocated=moved,
+                                  parameters=recorded)
     else:
         # What the bodies made stays the memo's, as a replay would keep it: an edit after
         # any number of these builds replays all it leaves alone.
@@ -1165,7 +1196,7 @@ def _taken(model: Any, context: Any, shown: str, cache: str | None, remembered: 
                                           if key == model.identity},
                             "reads": {}},
               "children": {}, "bodies": {model.identity: "loaded"}, "cache": {"used": True, "from": where},
-              "timings": timings, "files": {}}
+              "timings": timings, "files": {}, "parameters": declared}
     report["closure"] = previous.located(compared, folder)
     return report["cache"], report
 
