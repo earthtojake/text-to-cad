@@ -12,6 +12,7 @@ before a change. Keep it that short. Detail belongs in the document a row below 
 |---|---|
 | `skills/` | The product: eight agent skills, each a `SKILL.md` and its references. They ship in the plugin as they are |
 | `packages/cad/` | The one Python distribution, `cad`: the library (`src/cad`), the server and the `cad` command (`src/cad_server`), and the stdio transport agent apps start (`src/cad_mcp`) |
+| `packages/aliases/` | The distribution's earlier names (`cad-server`, `cad-mcp`, `cadgen`): wheels of metadata that require `cad` |
 | `packages/core/`, `packages/ui/` | Shared JavaScript: `@cad/core` (no React) and `@cad/ui` (the viewer's components) |
 | `apps/web/` | The CAD Viewer's React client, which the server serves |
 | `apps/mcp/` | The CAD app the Codex app shows as tabs |
@@ -88,7 +89,8 @@ Read the one document for what you are changing, then the link it gives you. Not
 **The tree**
 
 - Git holds source only: no CAD or mesh files, no built runtime (`_runtime/` is built by
-  `scripts/bundle/bundle.sh`), no symlinks, no Git LFS, no file over 5 MiB.
+  `scripts/bundle/bundle.sh`), no symlinks, no Git LFS, no file over 5 MiB
+  ([why, and what holds each](CONTRIBUTING.md#git-hygiene)).
 - Installs work from `main`: every manifest and MCP config stays at the repository root, and nothing
   on `main` points an installer at another branch
   ([the install branches](docs/contributing/releases.md#the-install-branches)).

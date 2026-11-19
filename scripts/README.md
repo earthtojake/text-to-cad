@@ -256,7 +256,7 @@ where those files ship, so these scripts are what produces them.
   with its map under its debug id, for the PostHog upload and the GitHub Release. Called by
   `release-publish.yml`.
 - `wheel_contents.py` — `check-wheel-contents.sh`'s Python half: the server wheel's runtime
-  against the bundled source, and its plugin against the repository's files.
+  against the bundled source.
 
 `github-workflows/` — scripts a workflow runs whole.
 

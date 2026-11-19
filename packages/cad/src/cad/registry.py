@@ -88,12 +88,14 @@ class Operation:
 @dataclass(frozen=True)
 class Probe:
     """How an external program an integration runs is found: the program, the oldest version our code
-    supports, what to say when it is missing, and the variable that names it outright."""
+    supports and what to say when it is missing. ``override`` is the deprecated variable that names another
+    copy outright, on the two programs that had one: a new integration gives none (cad runs the program its
+    extra pins)."""
 
     program: str
     minimum: str
     install_hint: str
-    override: str
+    override: str = ""
 
 
 @dataclass(frozen=True)

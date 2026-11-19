@@ -117,7 +117,7 @@ skills/<name>/
   another gets read partially or not at all.
 - **No runtime of its own.** A skill runs plain `cad` commands with no version in them. It installs
   nothing and ships no scripts: what a skill would script is a `cad` command or a few lines of Python
-  in a code block. It never imports another skill.
+  in a code block. It never imports another skill (`test_skill_self_containment.py`).
 
 ## Writing it
 

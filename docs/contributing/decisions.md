@@ -6,22 +6,16 @@ the skills' setup text. How each is carried out is
 [How a release reaches a computer](releases.md#how-a-release-reaches-a-computer) and, by module, the
 server README's [cad's own update](../../packages/cad/src/cad_server/README.md#cads-own-update).
 
-- **The two layers**: [Two layers, one direction of knowledge](#two-layers-one-direction-of-knowledge),
-  [cad says `cad`](#cad-says-cad-the-views-may-say-text-to-cad)
-- **Installing**: [One cad per computer](#one-cad-per-computer), [uv's own commands](#uvs-own-commands),
-  [One line installs cad](#one-line-installs-cad),
-  [The install script](#the-install-script-is-the-one-place-that-knows-every-app),
-  [No Skills CLI route](#no-skills-cli-route),
-  [Inside a Windows app's package](#inside-a-windows-apps-package-say-so)
-- **Updating**: [The feed says when](#the-feed-says-when),
-  [A major version never installs itself](#a-major-version-never-installs-itself),
-  [Who updates which copy](#who-updates-which-copy), [Forward only](#forward-only),
-  [The 30-day rule](#the-30-day-rule)
-- **Past releases**: [The bridge](#the-bridge-for-0100-to-01111),
-  [Old releases are carried through the newest 0.11](#old-releases-are-carried-through-the-newest-011),
-  [No version left behind](#no-version-left-behind)
-- **The plugin**: [Browser first](#browser-first-the-mcp-server-only-where-its-view-is-verified),
-  [No hooks, no pre-approved tools](#no-hooks-no-pre-approved-tools)
+The decisions, by what they govern:
+
+- **The two layers**: two layers, one direction of knowledge; cad says `cad`
+- **Installing**: one cad per computer; uv's own commands; one line installs cad; the install script;
+  no Skills CLI route; inside a Windows app's package
+- **Updating**: the feed says when; a major version never installs itself; who updates which copy;
+  forward only; the 30-day rule
+- **Past releases**: the bridge for 0.10.0 to 0.11.11; old releases are carried through the newest
+  0.11; no version left behind
+- **The plugin**: browser first; no hooks, no pre-approved tools
 
 ## Two layers, one direction of knowledge
 
