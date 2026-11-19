@@ -46,6 +46,14 @@ THEIRS = "---\nname: {name}\ndescription: someone else's\n---\n"
 # metadata of cad (FAKE_PYPI); `gemini extensions uninstall
 # <name>` removes that extension's folder, and, with FAKE_GEMINI_RECORD, `gemini extensions install <url> --ref <ref>`
 # writes its record. Each call notes its folder and Gemini's trust.
+#
+# For the install command: each call also notes the variables FAKE_LOG_ENV names and whether the file FAKE_LOG_EXISTS
+# names is there. `cad update` says a line, waits FAKE_UPDATE_SLEEP seconds, makes the tool FAKE_CAD_UPDATES (uv's
+# record of it, else pipx's) and exits FAKE_UPDATE_EXIT. `cad plugin install`, and `uv tool run ... plugin install`
+# (the newest cad's), says a line on each stream, writes FAKE_PLUGIN_APPS as the report CAD_PLUGIN_REPORT names (no
+# report without it, nor from a cad with no such command: exit 2) and exits FAKE_PLUGIN_EXIT_CAD, or FAKE_PLUGIN_EXIT_UV. With FAKE_UV_RUNS, `uv run <script>` runs
+# the script (this Python, UV naming the stand-in). `curl <url>/install.py -o <file>` writes the file FAKE_INSTALL_PY
+# names, and `curl -d <body> <url>` posts the body to a loopback address, as curl would.
 STAND_IN = textwrap.dedent('''\
     #!{python}
     import json, os, shutil, sys
@@ -54,7 +62,11 @@ STAND_IN = textwrap.dedent('''\
     with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as log:
         log.write(json.dumps({{"name": name, "argv": sys.argv[1:], "cwd": os.getcwd(), "path": sys.argv[0],
                                "trust": os.environ.get("GEMINI_CLI_TRUST_WORKSPACE"),
-                               "failed": os.environ.get("CAD_INSTALL_FAILED")}}) + "\\n")
+                               "failed": os.environ.get("CAD_INSTALL_FAILED"),
+                               "env": {{key: os.environ.get(key) for key in os.environ.get("FAKE_LOG_ENV", "").split(",")
+                                       if key}},
+                               "exists": os.path.exists(os.environ.get("FAKE_LOG_EXISTS") or os.devnull + "/none")}})
+                  + "\\n")
     if any(fail == name or (fail.partition(":")[0] == name and fail.partition(":")[2] in sys.argv[1:])
            for fail in os.environ.get("FAKE_FAIL", "").split(",")):
         print(f"{{name}}: something went wrong")
@@ -66,8 +78,42 @@ STAND_IN = textwrap.dedent('''\
     if name == "uv" and sys.argv[1:] == ["--version"]:
         told = Path(sys.argv[0]).with_name("uv-version")
         print("uv " + (told.read_text().strip() if told.exists() else os.environ.get("FAKE_UV_VERSION", "0.11.0")) + " (stand-in)")
-    if name == "curl" and "-o" in sys.argv:
-        Path(sys.argv[sys.argv.index("-o") + 1]).write_text(os.environ.get("FAKE_UV_INSTALLER", "exit 1\\n"))
+    if name == "curl" and "-d" in sys.argv:
+        if sys.argv[-1].startswith("http://127.0.0.1:"):
+            import urllib.request
+            sent = urllib.request.Request(sys.argv[-1], data=sys.argv[sys.argv.index("-d") + 1].encode(), method="POST",
+                                          headers=dict([sys.argv[sys.argv.index("-H") + 1].split(": ", 1)]))
+            urllib.request.build_opener(urllib.request.ProxyHandler({{}})).open(sent, timeout=10).close()
+    elif name == "curl" and "-o" in sys.argv:
+        hosted = os.environ.get("FAKE_INSTALL_PY") if any(word.endswith("/install.py") for word in sys.argv) else None
+        Path(sys.argv[sys.argv.index("-o") + 1]).write_text(
+            Path(hosted).read_text(encoding="utf-8") if hosted else os.environ.get("FAKE_UV_INSTALLER", "exit 1\\n"),
+            encoding="utf-8")
+    if name == "uv" and sys.argv[1:2] == ["run"] and os.environ.get("FAKE_UV_RUNS"):
+        import subprocess
+        sys.exit(subprocess.call([sys.executable, sys.argv[-1]], env={{**os.environ, "UV": sys.argv[0]}}))
+    if sys.argv[-2:] == ["plugin", "install"] and (name == "cad" or (name == "uv" and sys.argv[1:3] == ["tool", "run"])):
+        print(f"{{name}} (stand-in): the plugin, on stdout", flush=True)
+        print(f"{{name}} (stand-in): the plugin, on stderr", file=sys.stderr, flush=True)
+        code = int(os.environ.get(f"FAKE_PLUGIN_EXIT_{{name.upper()}}", "0"))
+        if os.environ.get("FAKE_PLUGIN_APPS") and os.environ.get("CAD_PLUGIN_REPORT") and code != 2:
+            Path(os.environ["CAD_PLUGIN_REPORT"]).write_text(json.dumps(
+                {{"schema": "cad plugin install/1", "apps": json.loads(os.environ["FAKE_PLUGIN_APPS"])}}), encoding="utf-8")
+        sys.exit(code)
+    if name == "cad" and sys.argv[1:] == ["update"]:
+        import time
+        print("cad (stand-in): update", flush=True)
+        time.sleep(float(os.environ.get("FAKE_UPDATE_SLEEP", "0")))
+        state = Path(os.environ["FAKE_UV_STATE"])
+        tools = json.loads(state.read_text()) if state.exists() else {{}}
+        if os.environ.get("FAKE_CAD_UPDATES") and "cad" in tools:
+            state.write_text(json.dumps({{**tools, "cad": os.environ["FAKE_CAD_UPDATES"]}}))
+        elif os.environ.get("FAKE_CAD_UPDATES"):
+            metadata = Path(os.environ["FAKE_PIPX_VENVS"]) / "cad" / "pipx_metadata.json"
+            found = json.loads(metadata.read_text())
+            found["main_package"]["package_version"] = os.environ["FAKE_CAD_UPDATES"]
+            metadata.write_text(json.dumps(found))
+        sys.exit(int(os.environ.get("FAKE_UPDATE_EXIT", "0")))
     if name == "uv" and sys.argv[1:3] in (["tool", "dir"], ["tool", "list"], ["tool", "install"], ["tool", "uninstall"]):
         state, tools_dir = Path(os.environ["FAKE_UV_STATE"]), Path(os.environ["FAKE_UV_STATE"]).with_suffix(".tools")
         tools = json.loads(state.read_text()) if state.exists() else {{}}

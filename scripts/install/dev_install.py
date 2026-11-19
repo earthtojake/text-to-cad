@@ -19,9 +19,9 @@ the cad step is scripts/install/install.py's, and the apps are cad's own table o
    install from a folder is skipped and says so), and only then removes the published copy of ours there.
 
 ``--release`` uninstalls the editable tool (only where the ``cad`` tool is one), then runs install.py as it is: the
-newest release of cad, every app moved back to the GitHub copy (the development copies, ``text-to-cad@earthtojake-dev``
-and the rest, are among the old copies it removes); then turns cad's automatic updates on again (``cad update
-auto on``), which install.py leaves as they are. Run it again after a change; restart an app's session to load it. Run
+newest release of cad, then that cad's own ``cad plugin install``, which moves every app back to the GitHub copy (the
+development copies, ``text-to-cad@earthtojake-dev`` and the rest, are among the old copies it removes); then turns
+cad's automatic updates on again (``cad update auto on``), which install.py leaves as they are. Run it again after a change; restart an app's session to load it. Run
 ``scripts/bundle/bundle.sh`` once first: the viewer's page comes from the bundle.
 """
 
