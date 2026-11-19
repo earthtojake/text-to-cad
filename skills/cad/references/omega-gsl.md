@@ -7,14 +7,12 @@ smooth blends between any two shapes, gyroid and beam lattices, conformal infill
 forms. Its output is a mesh (STL), never a STEP: a part that has to be machined, toleranced or exported as exact
 geometry is remodelled in build123d once its shape is settled.
 
-Use it for the first stage of a design, while a part's shape is still being settled and the person wants to see
-it and change it quickly: a bracket, an enclosure, a fitting or a knob is a concept in GSL sooner than it is
-exact in build123d, and each change to it is a few edited numbers. Use it too when the request asks for GSL or
-omega, works on an existing `.gsl`, or wants a lattice, an infill or a blended organic shape.
+Use it where the request asks for it: a concept, a rough or quick look at a part whose shape is still being
+settled, GSL or omega by name, work on an existing `.gsl`, or a lattice, an infill or a blended organic shape. A
+concept is quick to change, each change a few edited numbers, which is what it is for.
 
-Use build123d when the request needs exact geometry from the start: a STEP or a drawing, toleranced holes,
-threads and fits, a fillet held to its radius, sheet metal, or a part that goes straight to being made. A
-request for a new part that names none of these is a concept: say that it was taken as one.
+Use build123d for every other part. A request for a new part that names none of these is an exact part: build
+it in build123d, and make no concept of it first.
 
 ## The stage: a concept, quickly
 

@@ -13,12 +13,11 @@ the page the person has open updates. Files are exports, made when asked.
 
 ## Start with the task
 
-A new part is asked for at one of two stages, and the stage picks its row. A **concept** is a shape to see
-and change quickly, while its form is still being settled: rough it out in GSL. An **exact** part is one that
-will be drawn, exported or made as modelled: build it in build123d. Dimensions in a request do not make it
-exact; what the model is for does: a STEP or a drawing, a tolerance or a fit, a process it is made by. Where
-the request names none of these, the part is a concept: say so before anything else, and that an exact model
-follows when its shape is settled. Making a settled concept exact is a bake, checked against the concept's
+A new part is an **exact** part, built in build123d, unless the request asks for a concept. A **concept** is a
+shape to see and change quickly while its form is still being settled, roughed out in GSL. Make one only where
+the request asks for it: a concept, a rough or quick look, GSL, omega or an implicit model, work on an existing
+`.gsl`, or a lattice, an infill or a blended organic shape. A request that names none of these gets build123d,
+and no concept is made first. Making a settled concept exact is a bake, checked against the concept's
 field: [From concept to exact geometry](references/omega-gsl.md#from-concept-to-exact-geometry).
 
 | Task | Start with | Reference |
@@ -35,7 +34,7 @@ field: [From concept to exact geometry](references/omega-gsl.md#from-concept-to-
 | **Find how far each joint can move** | `cad model ranges <id>`, then the ranges in the body. | [Joint stops](#joint-stops) |
 | **Explode, reveal or showcase a model** | `cad.build123d`'s `animation()` in the body. | [Animation](references/animation.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF, GLB or DXF** | Show it to the user. | [Show the model](#show-the-model) |
-| **Rough out a part as a quick concept, before it is exact; or model a lattice, an infill or a blended organic shape (GSL, omega)** | A `.gsl` with `@scene(size)`, its blends the library's at nominal radii; after every edit its picture, `bounds` and a few `eval` points (`cad run gsl render`, `cad run gsl eval`), and `cad gsl mesh part.gsl part.glb` only when a file is wanted. | [GSL](references/omega-gsl.md) |
+| **Rough out a part as a quick concept, where one is asked for; or model a lattice, an infill or a blended organic shape (GSL, omega)** | A `.gsl` with `@scene(size)`, its blends the library's at nominal radii; after every edit its picture, `bounds` and a few `eval` points (`cad run gsl render`, `cad run gsl eval`), and `cad gsl mesh part.gsl part.glb` only when a file is wanted. | [GSL](references/omega-gsl.md) |
 | **Can it be machined, cut and bent, molded or printed?** | The part's model or file, its material and the process the request names or implies; with none, no check. | [Can it be made?](#can-it-be-made) |
 | **Will it hold under a load, how far does it bend?** | The fea skill ($fea), on the model's id or its STEP or xbf. | Its study reference |
 
