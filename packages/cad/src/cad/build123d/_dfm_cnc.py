@@ -127,6 +127,7 @@ from cad._internal.dfm import cnc as rules_side
 from cad._internal.dfm._common import ANGLE_EPS, KNIFE_DEG
 from cad.build123d import _dfm_brep as brep
 from cad.build123d._dfm_cnc_holes import holes as find_holes
+from cad.build123d._dfm_cnc_holes import mouths as find_mouths
 from cad.build123d._dfm_cnc_holes import threads as find_threads
 from cad.build123d._dfm_cnc_model import (LIFT, RUNS_UP, SAME, WORLD, Model, Stations, about, directions_for,
                                           edge_normals, framed, machine_frame, nearest_world, stations, stations_at,
@@ -637,6 +638,7 @@ def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tup
     threads, thread_faces = found_threads if found_threads else ([], set())
     families.setdefault("threads", []).extend(threads)
     state["thread_faces"] = thread_faces
+    run("holes", lambda: find_mouths(model, holes, thread_faces))
     voids = run("voids", lambda: _voids(model)) or []
     # a modelled thread's flanks are a tap's or a thread mill's, not the end mill's: no rule of reach, walls
     # or gaps reads them (the threads family does)
