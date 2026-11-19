@@ -568,7 +568,7 @@ class NoDistConfigured(unittest.TestCase):
             status, _, body = fixture.request("GET", "/")
             self.assertEqual(status, 404)
             # A build's `view:` link leads here: the page says what is missing, and how to get it.
-            self.assertEqual(body, b"CAD Viewer client is not built; build apps/web or install the cad wheel")
+            self.assertEqual(body, b"The viewer client is not built; build apps/web or install the cad wheel")
             status, _, _ = fixture.request("GET", "/api/v1/server")
             self.assertEqual(status, 200)
         finally:

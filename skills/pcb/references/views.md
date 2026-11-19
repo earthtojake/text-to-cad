@@ -1,6 +1,6 @@
 # Board and schematic views
 
-Read this when the person asks how to do something in the CAD Viewer's board or schematic page, when
+Read this when the person asks how to do something in the viewer's board or schematic page, when
 a part's 3D model is missing, or when a snapshot needs a particular layer, side or window.
 
 ## Contents

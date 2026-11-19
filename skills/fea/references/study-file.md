@@ -90,7 +90,7 @@ a pin or bolt load.
 
 ## Faces
 
-A face ref is the one the setup lists, the CAD Viewer copies and `cad <type> inspect` resolves:
+A face ref is the one the setup lists, the viewer copies and `cad <type> inspect` resolves:
 `bracket/face 17` is face 17 of the part `bracket` (`face 17` alone in a one-part document), and a
 face the document names goes by its name (`bracket/f:plate.relief.3`). A ref copied from the
 viewer comes after its document's path (`/work/bracket.step#bracket/face 17`), which must name the

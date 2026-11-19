@@ -10,7 +10,7 @@ The background process is implemented in `daemon.py`; warm workers remain separa
 Every successful build registers its document by id and gives it a URL, `/<id>`; registration does not mesh it.
 A model's worker is a separate process, holding its memo and live kernel objects; the daemon holds
 structures and buffers, never live kernel objects (law 19).
-The daemon takes its HTTP application -- the CAD Viewer's and the CAD app's -- from the server's
+The daemon takes its HTTP application -- the viewer's and the CAD app's -- from the server's
 composition root (`daemon.HTTP_FACTORY`, `cad_server._internal.engine_host`); the library's engine imports
 no application module. Beside the library's own dependencies (numpy) it imports the `build123d`
 extra's -- OCP, build123d, bd_materials, threejs_materials, Pillow (the renderer's rasteriser) and

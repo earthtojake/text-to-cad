@@ -1,6 +1,6 @@
 """Host neutrality, held by test: shared code never knows which app hosts it.
 
-packages/core and packages/ui serve every app -- the web CAD Viewer and the Codex
+packages/core and packages/ui serve every app -- the web viewer and the Codex
 plugin -- through injected host capabilities (packages/ui/docs/viewer-host.md).
 The Python packages are shared the same way: the server's host adapter lives in cad_server/mcp/,
 which may depend on the rest of the server; nothing else in the library or the server may name a

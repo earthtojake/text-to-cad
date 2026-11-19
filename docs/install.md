@@ -131,7 +131,7 @@ codex plugin marketplace upgrade earthtojake
 codex plugin add text-to-cad@earthtojake
 ```
 
-In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar, a **CAD** tab beside
+In the Codex app the plugin also brings the viewer: **CAD** in the sidebar, a **CAD** tab beside
 each thread, and *Open with CAD* for model files. It is the only app that gets it.
 
 ### Cursor

@@ -111,6 +111,6 @@ not take a configuration sequence's name. Each fails the run by name.
 
 A run checks an animation's names, times and overlaps, and nothing draws it but a GLB's
 player: a snapshot shows the model as built. Export the GLB and give the person its
-path; when they ask to see it, open the file in the CAD Viewer
+path; when they ask to see it, open the file in the viewer
 ([Show the model](../SKILL.md#show-the-model)), whose playbar under the model lists the
 motions and the animations.

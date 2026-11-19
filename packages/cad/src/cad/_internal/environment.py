@@ -100,7 +100,7 @@ VARIABLES: dict[str, Variable] = _table(
     Variable("CAD_INSTALLATION_VERSION", DEVELOPMENT, "the name a development build runs as, in place of its "
                                                       "release"),
     Variable("CAD_LAUNCHER_DIR", DEVELOPMENT, "the folder the `cad` command of 0.10.0 to 0.11.11 is looked for in"),
-    Variable("CAD_VIEWER_DIST", DEVELOPMENT, "the folder the CAD Viewer's client is served from (`cad viewer "
+    Variable("CAD_VIEWER_DIST", DEVELOPMENT, "the folder the viewer's client is served from (`cad viewer "
                                              "--dist` says the same)"),
     Variable("CAD_VIEWER_WARM", DEVELOPMENT, "0: `cad viewer` warms no kernel as it launches"),
     Variable("CAD_MCP_APP_DIR", DEVELOPMENT, "the folder the CAD app's page is served from"),

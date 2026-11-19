@@ -205,7 +205,7 @@ def rig():
   (seconds against most of a minute for a large assembly), with the same names. Keep the
   xbf beside the STEP and read the xbf.
 - **A STEP that names other files as its parts** (an external reference, written by a
-  CAD tool's multi-file export) is refused by name, here and in the CAD Viewer and
+  CAD tool's multi-file export) is refused by name, here and in the viewer and
   `cad <type> export`: export it again from its CAD tool as one file.
 - **`stl.read(path)`** reads an `.stl` as data, never a shape: `vertices`, `triangles`,
   `name` and `bounding_box()`. A document holds B-rep alone, so a mesh is measured and

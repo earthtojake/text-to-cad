@@ -2,7 +2,7 @@
 
 A **document type** is a file cad shows: one lowercase underscore id, the same in Python, the CLI, the
 registry, the server, the viewer and the JavaScript, with a view (`document`, `mesh`, `drawing`,
-`robot`, `plot`), a place in the CAD Viewer and a snapshot. The words and the laws are the library's
+`robot`, `plot`), a place in the viewer and a snapshot. The words and the laws are the library's
 README ([`packages/cad/README.md`](../../packages/cad/README.md), **Definitions** and laws 22 to 29);
 how the registry, a type's object and its commands work is the engine's
 [Document types and integrations](../../packages/cad/src/cad_server/engine/docs/document-types-and-integrations.md).
@@ -27,8 +27,9 @@ guide records what the types so far needed, and is no template for the next.
       never both (law 29). `wire` only if a released protocol already spells it otherwise; a new type
       never needs one. `python -m cad.registry <id>` prints the entry's help.
 - [ ] **Regenerate the JavaScript**: `python -m cad.registry --js >
-      packages/core/src/lib/documentTypes.generated.js`. `tests/python/packages/cad/test_registry.py`
-      fails until you do.
+      packages/core/src/lib/documentTypes.generated.js`, and the documentation site's copy,
+      `python -m cad.registry --docs > apps/docs/src/lib/docs/registry.generated.json`.
+      `tests/python/packages/cad/test_registry.py` fails until you do.
 - [ ] **The type's package**, `packages/cad/src/cad/<id>/__init__.py`, ending in `_bind(__name__)`
       (`cad._internal.document_type.bind`), with the id added to `cad._TYPES`
       (`packages/cad/src/cad/__init__.py`). Put here only what takes paths, plain values or our own

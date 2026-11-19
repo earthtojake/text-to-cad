@@ -72,7 +72,7 @@ the person is not the sweep: say which joints were swept and which were not.
   opened, so one in millimetres with no `scale`, or in a format `cad` cannot draw, passes.
 - **An inertial's values**, beyond the warnings above ([inertials.md](inertials.md) has the gates).
 - **That a picture means a valid file.** `cad urdf snapshot` runs no validation and draws files the
-  validator fails (a negative mass, reversed limits). The CAD Viewer does not: its page refuses one,
+  validator fails (a negative mass, reversed limits). The viewer does not: its page refuses one,
   with the validator's errors.
 - **That a consumer loads it.** `package://` resolves differently in every environment. Run
   `check_urdf` (liburdfdom, the parser ROS uses) where it is installed, then the consumer's own load,

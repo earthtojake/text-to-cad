@@ -1,6 +1,6 @@
 # CAD renderer
 
-The CAD viewer is the viewport, the floating tool strip and the tool in hand's
+The viewer is the viewport, the floating tool strip and the tool in hand's
 sub-toolbar under it, the view's panel, reference interactions, measurement and annotation
 tools, animation, loading artwork and alerts, in `@cad/ui`. The rules of its
 chrome — which tools a file has, how they take and give back the pointer, the view's panel,

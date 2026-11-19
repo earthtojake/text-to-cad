@@ -49,9 +49,6 @@ repo-scan*.md
 # Benchmark output is local evidence, not source. Use tmp/ for reports.
 /scripts/bench/**/results/
 /scripts/bench/**/*.json
-# ...but a benchmark's inputs are source: the corpus batch's models and the old engine's numbers.
-!/scripts/bench/corpus.json
-!/scripts/bench/old-engine-numbers.json
 /scripts/bench/**/*.log
 /scripts/bench/**/*.gz
 /scripts/bench/**/*.cpuprofile
@@ -98,7 +95,7 @@ models/*/unported/validation/
 packages/*/build/
 packages/aliases/*/build/
 
-# The server's packaged runtime: the CAD Viewer's built client (viewer/) and the CAD app
+# The server's packaged runtime: the viewer's built client (viewer/) and the CAD app
 # (mcp/). Both are BUILT by `scripts/bundle/bundle.sh` and shipped only inside the server's
 # wheel; neither is committed. A fresh checkout has no _runtime until the bundler runs, and
 # the server says so by name when it needs one that is absent.

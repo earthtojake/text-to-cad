@@ -33,8 +33,9 @@ Python runs it again, and no verb imports, runs or builds a script. An id the en
 holds (unsaved, detached) is refused with its state and the command that builds it again
 (`cad run <the script that defines it>`; **Document lifetime**).
 `--query build` returns saved-file metadata/closure or live-build metadata; `--query closure` and
-`--query geometry` select the other queries explicitly. In the CAD Viewer a model's page is
-`/<id>`; it has no file of its own, so no file menu, and its name menu's Files lists the folder
+`--query geometry` select the other queries explicitly. In the viewer a model's page is
+`/<id>`; it has no file of its own, so its ⋯ menu acts on the document and on the script that builds it
+(Export among them), and its name menu's Files lists the folder
 the explorer was last in, else the person's home folder, never the script's.
 
 A shape with no function -- a REPL's, a notebook cell's -- is handed over instead: `model(shape,

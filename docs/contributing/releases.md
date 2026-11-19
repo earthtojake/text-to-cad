@@ -27,7 +27,7 @@ tests, so those still run when a stamp is wrong.
 
 ## Build artifacts live in the wheel, never in git
 
-`main` is source. What the server serves that is not Python (the CAD Viewer client under
+`main` is source. What the server serves that is not Python (the viewer client under
 `cad_server/_runtime/viewer`, the CAD app page under `_runtime/mcp`) is gitignored and built by
 `scripts/bundle/bundle.sh`: a committed bundle can drift from the source that claims to produce it.
 What a release builds, and where it goes:
@@ -236,7 +236,7 @@ The steps, for whoever ships one:
 2. **Add the What's new entry**, if the release has significant user-facing features: its minor
    version's line in `packages/ui/src/whats-new/notes.js` and its words in all five locale files.
    User-facing features only, at most three items, each a bold title and one or two sentences: it is
-   the dialog the CAD Viewer and the CAD app's tabs show once after an update, and `notes.test.mjs`
+   the dialog the viewer and the CAD app's tabs show once after an update, and `notes.test.mjs`
    holds the shape. A release with nothing a person would notice adds none.
 3. **Make the release pull request**, [one of two ways](#making-the-release-pull-request).
 4. **Wait for its checks.** A `VERSION` change runs every `Test` job
@@ -470,6 +470,14 @@ defaults to `main`:
 ```bash
 gh workflow run deploy-docs.yml -f ref=main
 gh workflow run deploy-docs.yml -f ref=v0.5.0  # a past release: its tag
+```
+
+To look at a branch's site before it merges, deploy it as a preview: a URL of its own behind Vercel
+Authentication, with production untouched. Dispatch from the branch, so the run uses its workflow
+and scripts; the run's summary gives the URL:
+
+```bash
+gh workflow run deploy-docs.yml --ref my-branch -f ref=my-branch -f preview=true
 ```
 
 `Deploy API` (`.github/workflows/deploy-api.yml`) deploys `api.texttocad.dev` on every change to

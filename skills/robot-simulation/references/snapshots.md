@@ -1,6 +1,6 @@
 # Snapshots
 
-`cad urdf snapshot` and `cad srdf snapshot` draw the robot to a PNG still, as the CAD Viewer shows
+`cad urdf snapshot` and `cad srdf snapshot` draw the robot to a PNG still, as the viewer shows
 it. An MJCF has no snapshot: it is MuJoCo's own file, which no `cad` command draws
 ([an MJCF](#an-mjcf), below).
 
@@ -11,7 +11,7 @@ cad srdf snapshot path/to/robot.srdf review.png --pose arm/ready
 
 ## Poses
 
-The robot opens where the CAD Viewer opens it, every joint at zero. `--pose` gives joint values
+The robot opens where the viewer opens it, every joint at zero. `--pose` gives joint values
 over that, in degrees (metres for a prismatic joint), each naming a joint a person can drive and
 within its limits, or the request is refused before anything renders: a fixed joint or a `<mimic>`
 follower is refused by name (a follower follows its leader).

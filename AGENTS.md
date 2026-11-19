@@ -14,9 +14,9 @@ before a change. Keep it that short. Detail belongs in the document a row below 
 | `packages/cad/` | The one Python distribution, `cad`: the library (`src/cad`), the server and the `cad` command (`src/cad_server`), and the stdio transport agent apps start (`src/cad_mcp`) |
 | `packages/aliases/` | The distribution's earlier names (`cad-server`, `cad-mcp`, `cadgen`): wheels of metadata that require `cad` |
 | `packages/core/`, `packages/ui/` | Shared JavaScript: `@cad/core` (no React) and `@cad/ui` (the viewer's components) |
-| `apps/web/` | The CAD Viewer's React client, which the server serves |
+| `apps/web/` | The viewer's React client, which the server serves |
 | `apps/mcp/` | The CAD app the Codex app shows as tabs |
-| `apps/docs/`, `apps/api/` | The docs site, and `api.texttocad.dev` (the version feed and analytics) |
+| `apps/docs/`, `apps/api/` | The site, texttocad.dev (the homepage, and the documentation under `/docs`: a page per skill, the references generated from the code, and `docs/`'s install and migration guides shown as they are), and `api.texttocad.dev` (the version feed and analytics) |
 | `models/` | Sample models, built by hand; no test reads them |
 | `scripts/` | Durable repo commands, by purpose: `test/`, `bundle/`, `release/`, `install/`, `bench/` |
 | `tests/` | Every test suite, grouped by what it tests; `tests/python/global/` holds the policy tests |
@@ -33,7 +33,7 @@ Read the one document for what you are changing, then the link it gives you. Not
 | The library, the server or the `cad` command | [The design laws](packages/cad/README.md#the-design-laws), then the mechanism: the [engine](packages/cad/src/cad_server/engine/README.md) (an index: read the one page it points you to), the [server](packages/cad/src/cad_server/README.md) or the [transport](packages/cad/src/cad_mcp/README.md) |
 | A document type or an integration | [Adding a document type](docs/contributing/adding-a-document-type.md), [adding an integration](docs/contributing/adding-an-integration.md) |
 | An environment variable | Law 30: declare it in `cad._internal.environment` first, and prefer not to add one |
-| The CAD Viewer or shared JS | [apps/web](apps/web/README.md), [packages/ui](packages/ui/README.md) (its `docs/settings-ui.md` binds every settings control), [packages/core](packages/core/README.md) |
+| The viewer or shared JS | [apps/web](apps/web/README.md), [packages/ui](packages/ui/README.md) (its `docs/settings-ui.md` binds every settings control), [packages/core](packages/core/README.md) |
 | The CAD app | [apps/mcp](apps/mcp/README.md) |
 | The docs site or the API | [apps/docs](apps/docs/README.md), [apps/api](apps/api/README.md) |
 | A test or a CI job | [Testing](docs/contributing/testing.md) |
@@ -95,7 +95,8 @@ Read the one document for what you are changing, then the link it gives you. Not
   on `main` points an installer at another branch
   ([the install branches](docs/contributing/releases.md#the-install-branches)).
 - `scripts/` is for durable commands; one-off helpers go in `tmp/`.
-- The README and the docs site's homepage share their structure and copy: change them together.
+- The README and the docs site's homepage share their structure and copy: change them together. The
+  site shows `docs/install.md` and the migration guides as they are and never keeps a copy.
 - Keep documents current in the change that makes them stale, and keep them short.
 
 ## Working here

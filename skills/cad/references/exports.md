@@ -18,7 +18,8 @@ converted for use in a model. A 2D profile's DXF is [2D profiles and DXF](2d-pro
 ## A file is an action
 
 A file is written from the document the server holds, when asked, each destination by its suffix.
-No code changes and nothing rebuilds. The viewer's Export button downloads the same files.
+No code changes and nothing rebuilds. In the viewer, Export in the file menu (the ⋯ beside the
+model's name) downloads the same files.
 
 ```bash
 cad model export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf

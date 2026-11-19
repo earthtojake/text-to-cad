@@ -9,7 +9,7 @@ starts from, the n-th element of its kind a feature made, and a step per feature
 made it out of another (`f:plate.body.3;M:plate.relief`: face 3 of the box, modified
 by the relief cut). A long derivation folds to its last feature and a digest
 (`f:plate.relief~5d1e0c2f9a3b`); the worker that built it spells it out. Every name is a
-reference the CAD Viewer's ref grammar parses (`cadRefs` in the bundled `@cad/core` runtime, mirrored as
+reference the viewer's ref grammar parses (`cadRefs` in the bundled `@cad/core` runtime, mirrored as
 `refs.py`'s `ELEMENT_NAME`, which the naming in `kernel/trace.py` reads and which loads no kernel): a feature name has at most one dot, every segment
 is an identifier, and an atom ends in a number or a digest. A name holds no line or file (law 9): a line is
 what the worker serves, now.

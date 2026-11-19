@@ -81,7 +81,7 @@ solid's and the inertia comes out a little low, which is close enough for a simu
   inertial, and MuJoCo refuses a moving body with no mass. Where a mass is unknown, use an assumed
   density, or an assumed total split by volume, and say so in the ledger
   ([what that split gets wrong](#a-link-drawn-as-one-plain-solid)).
-- **Display or kinematics alone** (RViz, the CAD Viewer, MoveIt's kinematic planning): optional,
+- **Display or kinematics alone** (RViz, the viewer, MoveIt's kinematic planning): optional,
   though a simulator will want them later.
 - **Frame-only links** (`base_footprint`, an optical frame, a tool point): none, and the ledger marks
   the link frame-only.

@@ -1,6 +1,6 @@
 ---
 name: cad
-description: Creates and edits parametric CAD parts, assemblies and 2D profiles as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live. Use for 3D CAD modeling, any edit to a model script, mechanisms and animations, measuring or inspecting geometry, references and Quick Edit prompts copied from the viewer, exporting or converting STEP, STL, 3MF, GLB, DXF and xbf files, flat patterns and laser or waterjet cut layouts, opening existing CAD files, and checking whether a part can be machined, cut and bent, molded or printed. Not for the robot and world descriptions the robot-simulation skill writes.
+description: Creates and edits parametric CAD parts, assemblies and 2D profiles as Python build123d models that text-to-cad's server builds and the viewer shows live. Use for 3D CAD modeling, any edit to a model script, mechanisms and animations, measuring or inspecting geometry, references and Quick Edit prompts copied from the viewer, exporting or converting STEP, STL, 3MF, GLB, DXF and xbf files, flat patterns and laser or waterjet cut layouts, opening existing CAD files, and checking whether a part can be machined, cut and bent, molded or printed. Not for the robot and world descriptions the robot-simulation skill writes.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad

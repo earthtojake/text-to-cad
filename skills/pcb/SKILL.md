@@ -1,6 +1,6 @@
 ---
 name: pcb
-description: Create, edit, lay out and review native KiCad circuit boards (.kicad_pcb) and their schematics (.kicad_sch) - parts and nets, ERC, placement and routing, DRC, and a review before ordering (fab limits, decoupling, track width for current, assembly and BOM sourcing for JLCPCB, PCBWay or another fab); exports fabrication files, the netlist and BOM, or STEP for enclosure design. Shows boards and schematics in the CAD Viewer.
+description: Create, edit, lay out and review native KiCad circuit boards (.kicad_pcb) and their schematics (.kicad_sch) - parts and nets, ERC, placement and routing, DRC, and a review before ordering (fab limits, decoupling, track width for current, assembly and BOM sourcing for JLCPCB, PCBWay or another fab); exports fabrication files, the netlist and BOM, or STEP for enclosure design. Shows boards and schematics in the text-to-cad viewer.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -42,7 +42,7 @@ board (its copper pours are refilled on a copy first) run KiCad's own `kicad-cli
 `cad run` gives a script the same. Things to know about that KiCad:
 
 - **It is a nightly (10.99).** A file it saves is in the nightly's format, which a stable KiCad app
-  refuses to open; viewing and snapshots still work, and the CAD Viewer's Open in says which KiCad on
+  refuses to open; viewing and snapshots still work, and the viewer's Open in says which KiCad on
   this computer can open the file. Say so before the first save of a board the person opens in a
   stable KiCad.
 - **It runs headless with private settings**, never the person's KiCad app or its settings: never open

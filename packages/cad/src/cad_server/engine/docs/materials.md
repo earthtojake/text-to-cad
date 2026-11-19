@@ -92,7 +92,7 @@ MuJoCo has no slide equality. The MJCF writes each closure as a site on each bod
 (`<name>/1`, `<name>/2`) and `connect` equalities of them: one for a ball, two for a hinge (the
 second pair of sites `export.mjcf.AXIS_SPAN` along the axis), so the point and the axis's direction
 are held and the turn is free; its range is not enforced, and said; `contact` excludes its two
-bodies where they touch at rest. The URDF leaves a closure out and says so; the CAD Viewer's
+bodies where they touch at rest. The URDF leaves a closure out and says so; the viewer's
 `<tcad:four_bar>` is never generated. A mechanism state that moves a joint of a loop is left out of
 the description's poses, and `ranges` sweeps no joint of a loop.
 

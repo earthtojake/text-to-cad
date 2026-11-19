@@ -177,13 +177,13 @@ In the table, the packages are `packages/cad`, `packages/aliases` and `scripts/b
 | Tier | Job | Runs on a change to | What it runs |
 | --- | --- | --- | --- |
 | static | `static` | anything | The version check (on a pull request, [what merging it releases](releases.md#shipping-a-release)), the tracked tree's rules, the light contracts (every policy test not in the selector's `HEAVY_POLICY`, and the `render` and `sendcutsend` skill suites) and the API's tests |
-| unit | `packages (Linux I/2)` | the packages; a file under their suites | The library's, the server's (the engine's and the CAD Viewer backend's included) and the transport's suites under Xvfb, or the files of them the change selected |
+| unit | `packages (Linux I/2)` | the packages; a file under their suites | The library's, the server's (the engine's and the viewer backend's included) and the transport's suites under Xvfb, or the files of them the change selected |
 | unit | `skills` | the packages; `skills/fea`; a heavy policy test or skill suite | The policy tests and skill suites that load the CAD kernel or the built runtime |
 | unit | `js-core` | `packages/core`, which starts a full run; `apps/docs` (the dependency check walks it) | `@cad/core`'s units, the dependency and kit-boundary checks |
 | unit | `js-ui (units)`, `js-ui (browser)` | the UI | The checks, the type check, the Node tests and Vitest; the browser specs, one at a time because each renders WebGL in software |
-| unit | `js-web` | the UI; `apps/web` and what its Markdown links to | The CAD Viewer client's type check and units |
+| unit | `js-web` | the UI; `apps/web` and what its Markdown links to | The viewer client's type check and units |
 | unit | `js-mcp` | the UI; `apps/mcp` | The CAD app's type check, units and one-file build |
-| unit | `docs` | `apps/docs`; `scripts/brand`; the one-line installers, which the site serves | Lint, the Next build, icon verification |
+| unit | `docs` | `apps/docs`; `docs/install.md` and `docs/migrations`, which the site shows as they are; `scripts/brand`; the one-line installers, which the site serves | Lint, the Next build, which resolves every link of the documentation, icon verification |
 | platform | `packages (Windows I/3)` | as `packages (Linux)` | The same suites on Windows |
 | platform | `routing (macOS)` | the packages; the router's unit files | Those files on the third C library (the router's copper is held to one digest on all three) |
 | integration | `fea` | the packages; its suite | `test-fea.sh`, with netgen and CalculiX installed (the lock's `fea` group) |
@@ -375,8 +375,9 @@ performance mechanism first lists what it made faster.
 
 The numbers come from one batch, measured once every change that moves them is in the branch: on one
 machine with nothing else building, `main` and the branch side by side on the same models, each on a
-server of its own (`CAD_ENGINE_DIR`), cold and warm. The benchmarks are under `scripts/bench/`
-([its README](../../scripts/bench/README.md)); they are run by hand and write under `tmp/`.
+server of its own (`CAD_ENGINE_DIR`), cold and warm. They are timed by hand: each build's own line
+says its seconds, the bodies it ran and replayed and its memo's hits and misses. Nothing measured is
+committed.
 
 Two mechanisms ask for more:
 

@@ -34,7 +34,7 @@ There are two routes to one:
 | An MJCF by hand | `robot.xml` and a `scene.xml` that includes it, then `cad mujoco check` | [Authoring](references/mjcf-authoring.md), [checks](references/mjcf-checks.md) |
 | Link meshes for a hand-written file | One mesh per link, in the link's frame | [Meshes](references/meshes.md) |
 | Mass, centre of mass, inertia | Materials on the CAD parts; else a formula or a script, never intuition | [Inertials](references/inertials.md) |
-| A four-bar in the CAD Viewer | `<tcad:four_bar>` on the derived URDF joint | [Four-bar](references/urdf-four-bar.md) |
+| A four-bar in the viewer | `<tcad:four_bar>` on the derived URDF joint | [Four-bar](references/urdf-four-bar.md) |
 | See the robot or a pose | `cad urdf snapshot`, `cad srdf snapshot`; an MJCF in MuJoCo Studio | [Snapshots](references/snapshots.md) |
 | Work across formats, or convert a URDF to MJCF | Which file owns what | [Interoperability](references/interoperability.md) |
 
@@ -244,6 +244,6 @@ The page follows every run of the model. A file you export is a download: give i
 for the person: to check your own work, review with `cad <type> snapshot`, never a screenshot
 of the page. If it fails to launch, say so.
 
-An MJCF is the exception: the CAD Viewer and `cad_show` do not open one. Show the person the CAD
+An MJCF is the exception: the viewer and `cad_show` do not open one. Show the person the CAD
 model it was generated from, and for the MJCF itself run `cad run mujoco-studio --model FILE` and
 give them the URL it prints.

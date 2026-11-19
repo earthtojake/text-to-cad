@@ -11,9 +11,9 @@ An SRDF plans for the one `.urdf` in its own folder whose `<robot name>` is its 
 - Nothing inside the SRDF names the URDF, and file names do not pair them: `arm_dual.srdf` and
   `arm_precise.srdf` both plan for the `.urdf` beside them whose robot is `arm`.
 - No such URDF, or more than one, is an error from `cad srdf validate` (`no_paired_urdf`,
-  `ambiguous_paired_urdf`) and a refusal from the CAD Viewer and `cad srdf snapshot`.
+  `ambiguous_paired_urdf`) and a refusal from the viewer and `cad srdf snapshot`.
 - `cad srdf validate robot.srdf --urdf elsewhere/robot.urdf` checks against the URDF it is given,
-  in any folder and under any robot name. That result says nothing of the pairing, which the Viewer
+  in any folder and under any robot name. That result says nothing of the pairing, which the viewer
   and the snapshot still make by folder and name.
 
 ## The URDF's table
@@ -33,7 +33,7 @@ means the URDF or the plan is wrong, and the URDF is settled first.
   A group plans with its moving joints that carry no `<mimic>`: fixed and mimic joints are never
   planning variables.
 - **`<group_state name group>`**: a `<joint name value>` for each of the group's planning joints, in
-  radians or metres, within the URDF's limits. Call the rest pose `home`: the Viewer and
+  radians or metres, within the URDF's limits. Call the rest pose `home`: the viewer and
   `cad srdf snapshot` open there.
 - **`<end_effector name parent_link group parent_group>`**: [End effectors](#end-effectors).
 - **`<virtual_joint name type parent_frame child_link>`** ties the root link to a frame outside the

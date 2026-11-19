@@ -2,7 +2,7 @@
 
 A page of [the engine's documentation](../README.md). A name in bold in parentheses, such as (**Kinematics**), is another page or a named paragraph of one: the index says which.
 
-The CAD Viewer and its document reads share the daemon's HTTP listener. The page
+The viewer and its document reads share the daemon's HTTP listener. The page
 reads its document's kind's routes (`/api/v1/documents/<kind>/<id>/structure`, `parts/<key>`) and
 waits on `/api/v1/documents/<id>/version`; dispatch calls the engine's own reads directly, in process
 (`/api/doc/<id>...`, `serve.py`'s, which binds no listener of its own: the engine's reads are served

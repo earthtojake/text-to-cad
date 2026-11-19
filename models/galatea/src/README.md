@@ -28,7 +28,7 @@ linkages close, and what holding each pose asks of each drive against its datash
 | `review.py` | none | every link alone from four sides, dressed and with its skins off, into `tmp/review/`: what to look at before the whole robot |
 | `sheet.py` | none | the robot, or a region of it by height, from five sides round it in one picture, into `tmp/sheets/`: what a look is judged on |
 | `film.py` | none | the film: a studio, its shots and the cut, rendered with Blender from the robot's GLB into `tmp/film/` (below) |
-| `views.py` | none | the robot as the CAD viewer draws it, as frames for the film: solid on the grid, parts exploded, the walk in x-ray |
+| `views.py` | none | the robot as the viewer draws it, as frames for the film: solid on the grid, parts exploded, the walk in x-ray |
 | `checks/*.py` | none | drives, interference (and `planted`, the test of it), attachment, balance, linkages, loads |
 
 [`../FEEDBACK.md`](../FEEDBACK.md) is what building, filming and simulating it taught
@@ -457,7 +457,7 @@ whole assembly comes apart (the GLB's `explode`: links and skins, a hold, then a
 pieces, a longer hold); then the mechanism with its skins left off, a joint at a time
 as it moves (the knee's linkage, the ankle, the hip, the waist, the arm, the hand, the
 neck and the head's cameras), and all of it crouching; the skins are wiped back on and
-it walks; then the same document with no studio at all, as the CAD viewer draws it
+it walks; then the same document with no studio at all, as the viewer draws it
 (`views.py`: solid on the grid, parts exploded, the walk in x-ray); then the
 simulation (`../sim/`): MuJoCo's own picture of the robot let go over a floor, landing
 and squatting on its own feet, the floor's push drawn at its soles; the title.

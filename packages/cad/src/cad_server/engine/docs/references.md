@@ -38,7 +38,7 @@ never a `FILE`: `<uuid>#face 1` names face 1 of the model whose id it is, read a
 it. A canonical ref -- what `inspect` answers --
 spells the element by its name (its ordinal only where it has none) under its part's label where
 that label names one occurrence, else under the occurrence's path from the root; in a document of
-one part, under the document's name. It is also what the CAD Viewer copies of an `.xbf`'s selection,
+one part, under the document's name. It is also what the viewer copies of an `.xbf`'s selection,
 the file's path first (`/work/XBF/kit.xbf#kit/hand/finger.2/face 7`), or a model's id first for a
 model the engine holds: the viewer's parser and speller
 of this grammar (`cadRefs` in the bundled runtime) are held to this module's, case for case, by a

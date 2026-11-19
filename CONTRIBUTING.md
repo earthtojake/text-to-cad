@@ -44,7 +44,7 @@ uv run cad --version         # `uv run` runs a command in that environment
 
 ### JavaScript
 
-Install Node.js 22, which CI uses, for the CAD Viewer, the CAD app, the shared packages and the docs
+Install Node.js 22, which CI uses, for the viewer, the CAD app, the shared packages and the docs
 site. Python-only work needs none until it opens a model's page or runs a test that reads the bundle.
 
 ```bash
@@ -54,7 +54,7 @@ scripts/bundle/bundle.sh     # the viewer's client and the CAD app's page, as th
 ```
 
 - Nothing built is committed ([Git Hygiene](#git-hygiene)). Until `bundle.sh` has run, a model's
-  page answers 404 (`CAD Viewer client is not built`); building a model needs none of it.
+  page answers 404 (`The viewer client is not built`); building a model needs none of it.
 - `npm ci --workspace @cad/core --workspace @cad/ui --workspace @cad/web` installs only the
   workspaces named, as each CI job does. Never add a nested lockfile, or link `node_modules` from
   another checkout.

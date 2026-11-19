@@ -63,7 +63,7 @@ Units are fixed: mm, N, MPa (pressure, modulus and stress), t/mm³ for density (
    ```
 
    Match the person's words ("the mounting face") to a ref by the hint and the centre; a hole is a
-   `cylinder`. A face they picked in the CAD Viewer arrives as a ref already
+   `cylinder`. A face they picked in the viewer arrives as a ref already
    (`/work/bracket.step#bracket/face 17`). A document of several parts lists faces once one is named
    (`--occurrence post`). A face number is a position in the saved document, so list again after the
    part is edited.

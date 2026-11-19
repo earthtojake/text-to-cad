@@ -173,7 +173,7 @@ overlapping or partly coincident curves, small features, kerf and the shop's rul
 cad dxf snapshot DXF/gasket.dxf tmp/gasket.png
 ```
 
-`cad dxf snapshot` draws a drawing the way the CAD Viewer's drawing pane does: whole, from above,
+`cad dxf snapshot` draws a drawing the way the viewer's drawing pane does: whole, from above,
 fitted with a margin, in the pens the file declares (an entity with no pen of its own takes the
 paper's ink), on white paper. `--size-profile`, `--width` and `--height` size it; `--camera`
 takes a plan view (`{"position": [x, y, d], "target": [x, y, 0], "up": [0, 1, 0],

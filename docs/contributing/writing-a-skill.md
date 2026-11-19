@@ -222,3 +222,7 @@ for word, and tests keep the copies from drifting:
 - [ ] A command the skill stops using still works for 30 days.
 - [ ] A new skill is linked from the README's Features and the docs site's (`features` in
       `apps/docs/src/lib/content.ts`), and named in `.muse-plugin/plugin.json`.
+- [ ] Its page in the docs site's Skills says for a person what the skill is: what it makes, how it
+      works and where it stops (`apps/docs/content/skills/<skill>.md`, at `/docs/<skill>`, in the map
+      `apps/docs/src/lib/docs/nav.ts`; its feature's `page` links it). A change to what the skill
+      does or teaches is made there too.

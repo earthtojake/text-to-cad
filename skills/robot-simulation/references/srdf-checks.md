@@ -45,7 +45,7 @@ OK robot.srdf: robot 'example_arm', urdf example_arm.urdf, 2 groups, 1 end effec
 - **Whether a state is collision-free or useful.** A value typed in degrees is caught only where it
   passes a limit.
 - **That a picture means a valid file.** `cad srdf snapshot` runs no validation and draws SRDFs the
-  validator fails (a chain that is no path, a state past a limit). The CAD Viewer does not: its page
+  validator fails (a chain that is no path, a state past a limit). The viewer does not: its page
   refuses one, with the validator's errors.
 - **That MoveIt plans with it.** Where MoveIt is at hand, load the pair (Setup Assistant, or the
   project's launch), solve IK for the primary group, plan to a pose and to a named state, and run a

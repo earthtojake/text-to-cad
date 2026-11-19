@@ -39,12 +39,12 @@ Before writing the XML, confirm each file holds only its link's geometry (open i
 In a URDF:
 
 - **A relative path** (`3MF/forearm_link.3mf`) resolves from the `.urdf` file's folder, and `cad urdf validate` checks that the file is there. Prefer it for a robot kept in a project tree.
-- **A `package://name/path` URI** is for ROS consumers. The validator checks its syntax and warns that it was not resolved; `--packages NAME=PATH` resolves it for the validator alone. The CAD Viewer and `cad urdf snapshot` take the nearest folder above the `.urdf` named `name`, or holding a `package.xml` that names it, as the package root, so keep the description inside its package folder.
+- **A `package://name/path` URI** is for ROS consumers. The validator checks its syntax and warns that it was not resolved; `--packages NAME=PATH` resolves it for the validator alone. The viewer and `cad urdf snapshot` take the nearest folder above the `.urdf` named `name`, or holding a `package.xml` that names it, as the package root, so keep the description inside its package folder.
 - **A remote URI** passes with a warning and is drawn by nothing here.
 
 In an MJCF, a mesh `file` resolves from `<compiler meshdir>`, itself relative to the main file, and is an STL, an OBJ or an MSH. A 3MF or a GLB is no MuJoCo mesh: export the link as STL. `cad mujoco check` says, in MuJoCo's words, a mesh file it cannot find or read.
 
-Keep meshes under the description's own folder tree, so the file and its assets move together. The CAD Viewer and the snapshots draw fewer formats than the validators accept ([snapshots.md](snapshots.md#urdf-and-srdf)).
+Keep meshes under the description's own folder tree, so the file and its assets move together. The viewer and the snapshots draw fewer formats than the validators accept ([snapshots.md](snapshots.md#urdf-and-srdf)).
 
 ## Visual vs Collision Assets
 

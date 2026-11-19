@@ -11,7 +11,7 @@ snapshot can draw.
 - [Annotations and Quick Edit views](#annotations-and-quick-edit-views)
 - [Mesh files, robots and drawings](#mesh-files-robots-and-drawings)
 
-`cad <type> snapshot SRC OUT.png` draws SRC as the CAD Viewer draws it, rendered by OCCT, into a
+`cad <type> snapshot SRC OUT.png` draws SRC as the viewer draws it, rendered by OCCT, into a
 PNG: one command, one picture. SRC is a model's id (the document the server holds, as it is:
 nothing is built), a document file (`.xbf`, `.step`), a mesh (`.stl`, `.3mf`, `.glb`), a robot
 (`.urdf`, `.srdf`) or a drawing (`.dxf`). A script is never a source, and SRC is a whole document,
