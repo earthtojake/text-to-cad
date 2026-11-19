@@ -36,6 +36,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 HOME = Path(__file__).resolve().parent / "skill_ab"
+#: The checkout's own cad: what this script builds fixtures with and what a run's env.sh puts first on PATH.
+BIN = REPO / ".venv" / "bin"
 BRIEF = """# Brief
 
 You are completing a task for a person, using an installed skill (a folder of instructions for a tool). Work as
@@ -92,14 +94,15 @@ def exported(model: Path, scratch: Path) -> Path:
     out = scratch / (model.stem + ".step")
     if out.exists():
         return out
-    env = {**os.environ, **environment(scratch)}
-    subprocess.run(["cad", "server", "start"], env=env, check=True, capture_output=True)
+    env = {**os.environ, **environment(scratch), "PATH": f"{BIN}{os.pathsep}{os.environ.get('PATH', '')}"}
+    cad = str(BIN / "cad")
+    subprocess.run([cad, "server", "start"], env=env, check=True, capture_output=True)
     try:
-        built = subprocess.run(["cad", "run", str(model)], env=env, check=True, capture_output=True, text=True)
+        built = subprocess.run([cad, "run", str(model)], env=env, check=True, capture_output=True, text=True)
         ids = [line.split("id:", 1)[1].strip() for line in built.stdout.splitlines() if line.strip().startswith("id:")]
-        subprocess.run(["cad", "model", "export", ids[0], str(out)], env=env, check=True, capture_output=True)
+        subprocess.run([cad, "model", "export", ids[0], str(out)], env=env, check=True, capture_output=True)
     finally:
-        subprocess.run(["cad", "server", "stop"], env=env, check=False, capture_output=True)
+        subprocess.run([cad, "server", "stop"], env=env, check=False, capture_output=True)
     return out
 
 
@@ -131,7 +134,7 @@ def prepare(run: Path, task: dict, ref: str | None, scratch: Path) -> None:
     # The checkout's own cad comes first on PATH: an agent's shell has no cad of its own, or another release's.
     # The run's server is its own, so nothing has started it: sourcing this does, as a person's computer has one
     # running already (`cad server start` starts one where none runs, and joins the one that does).
-    (run / "env.sh").write_text(f'export PATH="{REPO / ".venv" / "bin"}:$PATH"\n'
+    (run / "env.sh").write_text(f'export PATH="{BIN}:$PATH"\n'
                                 + "".join(f"export {name}={value}\n" for name, value in variables.items())
                                 + "cad server start >/dev/null 2>&1 || true\n",
                                 encoding="utf-8")

@@ -95,7 +95,7 @@ Units are fixed: mm, N, MPa (pressure, modulus and stress), t/mm³ for density (
    | `stress.png`, `displacement.png` | The deformed part coloured by each field, the deformation exaggerated by `deformation_scale`. They show whether the load points the way you meant and which faces are held |
    | `result.glb` | The same coloured surface, for `cad viewer` or any glTF viewer |
    | `result.vtu` | The volume mesh with `displacement` (mm) and `von_mises` (MPa) at its corner nodes |
-   | `ccx.inp` | With `--deck`: the input CalculiX solved, to run or edit yourself (`cad run ccx -i ccx`) |
+   | `ccx.inp` | With `--deck`: the input CalculiX solved, to run or edit yourself (`cad run ccx -i ccx`, in that folder) |
 
    `result.json` holds `ok`, `findings` and `measurements`: the peak stress and where
    (`max_von_mises_MPa`, `max_von_mises_at_mm`), `yield_MPa`, `safety_factor`,
@@ -183,7 +183,7 @@ the face and the point in mm.
 | `low_margin` | warning | It holds, but under the study's `margin` | As for `yields`, or report the margin it has. Never lower `margin` to clear it |
 | `displacement_over_limit` | error | A `displacement` check is past its `limit_mm` | Stiffen the part, or confirm the limit |
 | `peak_at_fixture` | warning | The peak sits on a fixed face or its edge, and a finer solve did not settle it | Read the stress a little away from the face before redesigning |
-| `peak_concentration` | warning | The integration-point peak is well above the nodal one: a sharp corner or concentrated load | Fillet the corner or spread the load. Under a safety factor of 3 the run already refined once |
+| `peak_concentration` | warning | The integration-point peak is well above the nodal one: a sharp corner or concentrated load | Fillet the corner or spread the load. Under a safety factor of 3 the run already refined once; above it (a high `margin`), refine once yourself and compare |
 | `mesh_not_converged` | warning | The finer solve moved the peak by more than 10 % | A peak that keeps rising is a singularity: fillet it or judge away from it. Otherwise set a smaller `mesh.size_mm` |
 | `large_displacement` | warning | It moves more than 1 % of its size: the small-displacement model is stretched | Check the fit against mating parts; stiffen if the deflection matters |
 | `not_connected` | error | A part has no bonded chain to a fixed part; nothing was solved | Make the parts touch, fix a face on the group, or raise `contact_tolerance_mm` |

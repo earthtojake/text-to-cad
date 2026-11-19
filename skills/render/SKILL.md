@@ -26,7 +26,7 @@ depth of field make it a poor measure.
 | Motion blur, depth of field, a glow | The scene's and the camera's settings; a keyed emission | [Shots](references/shots.md) |
 | Looks and materials | Set in the model, exported again | [Looks](#looks) |
 | A `.blend` for the person | `bpy.ops.wm.save_as_mainfile` at the end of the script | [A .blend](references/shots.md#a-blend-for-a-person) |
-| The GPU, or a machine with no graphics driver | Cycles' device, chosen in the script | [Engines](references/scene-script.md#engines-and-the-gpu) |
+| The GPU, or a machine with no graphics driver | Cycles' device, chosen in the script | [Engines](references/scene-script.md#engines-and-the-gpu), [no driver](references/scene-script.md#no-graphics-driver) |
 
 ## Setup
 
@@ -113,9 +113,9 @@ clip asked for. It opens any GLB, not only cad's.
 
 | Call | Gives |
 | --- | --- |
-| `load(path, clip=None, fps=24)` | Imports into the current scene and returns the model; `clip` plays one, `fps` keys its seconds |
+| `load(path, clip=None, fps=24)` | Imports into the current scene and returns the model; `clip` plays one, `fps` keys its seconds. Give a film's rate here: `render.fps` set after the import plays every clip at the wrong speed, with no error |
 | `model.root` | The document's root empty, at the origin, scale 0.001 (parts are in mm below it); `model.roots` for a file with several |
-| `model.objects["arm/head"]` | A node's object by its path below the root, as the GLB names it |
+| `model.objects["arm/head"]` | A node's object by its path below the root, as the GLB names it; of two nodes with one name it is the last (`model.nodes[i]` reaches each) |
 | `model.nodes[7]` | A node's object by its index in the file, which tells two of one name apart |
 | `model.clips` | Each clip by name: `kind` (`motion` or `animation`) and `duration` in seconds |
 | `model.box`, `model.center`, `model.size` | The world box of the pose cad wrote, in metres, for framing |

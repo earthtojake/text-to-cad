@@ -46,18 +46,28 @@ AppImage or Flatpak). Below, `<orca>` is that command, and `<orca> --help` is it
 
 ## Slice with OrcaSlicer
 
-The command line slices with the settings it is given: a printer, a process and a filament preset,
-each complete. Two things carry complete settings:
+The command line slices with the settings it is given: a printer, a process and a filament preset.
+Two things carry them:
 
 - **A project file** the person saved from the app (File > Save Project, a `.3mf`): it holds its
-  models and every setting, and slices as it is.
-- **Preset files** exported from the app (File > Export > Export Preset Bundle), passed with
-  `--load-settings "process.json;printer.json"` and `--load-filaments filament.json`.
+  models and every setting, and slices as it is. This is the sure route.
+- **Preset files**, passed with `--load-settings "process.json;printer.json"` and
+  `--load-filaments "a.json;b.json"` (one filament per material, in order).
 
-A preset as OrcaSlicer stores it (in its configuration folder, Help > Show Configuration Folder) holds
-only its differences from the preset its `inherits` names, and the command line neither fills in the
-parent's settings nor accepts a process whose `compatible_printers` does not name the printer. So a
-stored preset is completed first: the chain merged, parents first.
+A preset as OrcaSlicer stores it holds only its differences from the preset its `inherits` names, and
+an export from the app (File > Export > Export Preset Bundle) is an archive of those same files. The
+person's own are under `user/` in the configuration folder: `~/Library/Application Support/OrcaSlicer`,
+`~/.config/OrcaSlicer` (a Flatpak's `~/.var/app/com.orcaslicer.OrcaSlicer/config/OrcaSlicer`) or
+`%APPDATA%\OrcaSlicer`. The built-in ones they inherit from are in `system/` beside them and in the
+app's `resources/profiles`: JSON files before OrcaSlicer 2.5, binary caches (`.opc`) from it.
+
+Whether the command line fills in the parents depends on its version, so check what it sliced with:
+the settings are written into the G-code (`grep -m1 "nozzle_temperature =" plate_1.gcode`, and the
+same for the bed size and layer height). Where they are OrcaSlicer's defaults and not the preset's,
+this version wants complete presets: merge the chain, parents first, the child last (skip nothing: a
+parent may inherit in turn; of two presets with one name, take the one whose `compatible_printers`
+lists the printer), and put the printer's name in the process's `compatible_printers`. From 2.5 the
+parents are in the caches and cannot be read: use a project file there.
 
 Use the presets the person prints with, and never invent one: a wrong bed size or temperature can
 damage a printer. Where there are none to slice headless with, open the model in the app instead.

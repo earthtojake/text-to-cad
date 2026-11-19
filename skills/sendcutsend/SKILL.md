@@ -64,7 +64,7 @@ cad dxf dfm part.dxf --material aluminum --thickness 3 --json
 A text-to-cad model's upload is the file `cad model export <id> part.step` (or `part.dxf`) wrote.
 The sheet check gives measurements and general findings (one thickness, bends, the flat pattern, hole
 and feature distances, cut-file defects); give it the SKU's own `--bend-radius` and `--k-factor`
-where the specs list them. Its rules are general practice, not SendCutSend's: use its
+where the specs list them, the radius converted to millimetres (the specs are in inches). Its rules are general practice, not SendCutSend's: use its
 `measurements` as the file facts and compare them with the specs yourself. For a fact no command
 gives, write a small check script and run it with `cad run`, using `step.read` (`from cad import
 step`) for a STEP or `ezdxf` for a DXF. A helper reports measurements and limitations only, never a
@@ -76,7 +76,8 @@ What to measure depends on the service:
   overlapping geometry, zero-area contours, text and annotation, holes and slots, and bend lines with
   what lies near them.
 - **STEP**: that it reads as a solid, bounds, thickness, bend radii, and whether it is really a flat
-  profile better sent as a DXF.
+  profile better sent as a DXF. For CNC routing: sharp inside corners, small holes and slots, thin
+  walls, islands and pockets, each compared only where the specs give a rule.
 
 A bend in a STEP is a pair of cylindrical faces whose radii differ by the stock thickness; the smaller
 is the inside radius. The general design rules for bends, reliefs, flanges and cut files are the cad
@@ -95,8 +96,11 @@ A row compares a measured fact with a cited requirement, and only when both are 
 - **Bends are checked locally.** Measure the flange depth along every bend line, on both sides, to the
   nearest cut or free edge, including notches, slots and cutouts that interrupt it, and compare the
   smallest with the SKU's `bending_specs.min_flange_length_before_bend` and
-  `min_flange_length_after_bend`. An aggregate value hides a local cutout. Measure a hole-to-bend
-  distance in the convention the rule uses (tangent line, centreline or flange edge) and say which.
+  `min_flange_length_after_bend`. An aggregate value hides a local cutout. A flange minimum is no
+  limit on an ordinary enclosed hole or interior cutout: judge those by a cited hole-to-bend or
+  feature-to-bend rule alone, as a row of their own, and call a cut beside a bend corner relief only
+  where the flange left beside it still meets the minimum. Measure a hole-to-bend distance in the
+  convention the rule uses (tangent line, centreline or flange edge) and say which.
 - **Bend radii**: compare a STEP's measured inside radii with the SKU's
   `bending_specs.effective_bend_radius` or `bend_radius`; a different radius is a mismatch.
 - **Keep findings apart by physical cause**: a short flange, a cut crossing a bend line or its die

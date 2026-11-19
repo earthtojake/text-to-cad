@@ -38,8 +38,9 @@ means the URDF or the plan is wrong, and the URDF is settled first.
 - **`<end_effector name parent_link group parent_group>`**: [End effectors](#end-effectors).
 - **`<virtual_joint name type parent_frame child_link>`** ties the root link to a frame outside the
   robot (`world`, `odom`): `fixed` for a bolted arm, `planar` or `floating` only for a base that
-  moves. A wheel's joint is in no group unless the planner drives it. A group that names a virtual
-  joint fails the check ([srdf-checks.md](srdf-checks.md#the-validator)).
+  moves. A wheel's joint is in no group unless the planner drives it. A mobile base's group lists
+  its virtual joint, as MoveIt expects, and `cad srdf validate` then reports that name as missing: a
+  limit of the check, not a fault of the file ([srdf-checks.md](srdf-checks.md#the-validator)).
 - **`<passive_joint name>`**: a URDF joint that nothing drives, which no group state may set.
 - **`<disable_collisions link1 link2 reason>`**: [Disabled collisions](#disabled-collisions).
 

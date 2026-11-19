@@ -99,7 +99,7 @@ every command, and give the person the page once ([Show the model](#show-the-mod
 - **A model takes no parameters.** Dimensions are arguments of a plain helper, and each configuration
   is a `@model` of its own. Calling one returns a handle: `.id`, `.url`, `.shape`, `.export(...)`.
 - **Running the script is the rebuild**, and it writes no file. The server replays whatever an edit
-  did not reach, so reruns are cheap; `@memo` marks a slow stage several models share
+  did not reach, so reruns are cheap; `@memo` marks a stage of seconds of kernel work, or a body several models share
   ([what a run runs](references/model-contract.md#what-a-run-runs)). Keep the calls under
   `if __name__ == "__main__":` so other scripts can import the models.
 - **An assembly calls its parts**: its body takes each part's shape (`plate().shape`), places and
@@ -118,8 +118,8 @@ every command, and give the person the page once ([Show the model](#show-the-mod
 
 ## Commands
 
-Each acts on the document as the last run left it. `$ID` is a model's id; a file takes the same
-operations under its own type (`cad step|xbf|stl|threemf|glb|dxf <operation> FILE`).
+Each acts on the document as the last run left it. `$ID` is a model's id; a file takes the
+operations its own type lists (`cad step|xbf|stl|threemf|glb|dxf --help`).
 
 | Command | Gives |
 | --- | --- |
@@ -182,7 +182,7 @@ first thing to fix. Then check the change the way it can be checked:
 `cad model dfm` says whether a part can be made by a process and what to change where it cannot. Run
 it when the request names or implies a process (machined, sheet metal or laser cut, injection molded,
 3D printed, or a printer, resin, filament or cutting service named), or the person asks. A material
-alone names no process. With none, build what was asked: no check, and no draft, reliefs or tool radii
+alone names no process, but a thickness with a metal ("2 mm steel") is sheet. With none, build what was asked: no check, and no draft, reliefs or tool radii
 added.
 
 | Process | Check | Reference |

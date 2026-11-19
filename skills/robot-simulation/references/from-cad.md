@@ -19,7 +19,9 @@ the [MuJoCo function](mujoco-environment.md#the-mujoco-function)'s.
 
 The links and joints are the model's mechanism: build123d's `RevoluteJoint`, `LinearJoint`,
 `CylindricalJoint` and `BallJoint`, connected with `connect_to`. The as-built pose is every joint's
-zero in the description, and each joint's limits are its range around that zero.
+zero in the description, and each joint's limits are its range less the value it was built at: a
+finger built at 30 degrees in a range of 0 to 40 is written as a hinge of -30 to 10 degrees, with no
+warning. Build open, straight or homed, and the file's values are the CAD's.
 
 Where the robot has a controller, the description's zero should be the controller's zero, so a joint
 value means the same in the simulator and on the hardware. Where there is none yet, build the
@@ -33,9 +35,9 @@ how to tell).
 ## Joint ranges
 
 - **Stops that are the parts meeting**: `cad model ranges <id>` moves each joint alone until its child
-  link meets its parent and prints each stop, in degrees or millimetres around the as-built pose.
-  Write them into the joint's `angular_range` or `linear_range`, rounded towards zero, and run the
-  model again (`cad model ranges --help` has the options).
+  link meets its parent and prints each stop, in degrees or millimetres, in the joint's own values
+  (the ones `angular_range` takes, whatever value it was built at). Write them into the joint's
+  `angular_range` or `linear_range`, rounded towards zero, and run the model again (`cad model ranges --help` has the options).
 - **A servo's own travel**, narrower than that, is its datasheet's.
 - **A joint the parts never stop** (a wrist roll): give it the actuator's travel (a position servo's
   one turn, `angular_range=(-180, 180)` around the pose its encoder centres on), a limited hinge in

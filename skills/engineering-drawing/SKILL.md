@@ -103,8 +103,9 @@ untouched.
 
 - Visible edges heavy, hidden edges dashed, centre marks, dimensions with witness lines and
   arrowheads at true size at any drawing scale, and a title block (title, part number, material,
-  scale, projection, revision, `SHEET n OF m`) with numbered notes above it. Hidden tangent edges
-  (a fillet running into a face) are not drawn.
+  scale, projection, revision, `SHEET n OF m`) with numbered notes above it. Text longer than its
+  title-block cell is set smaller, then cut with an ellipsis, and nothing says so: read the title
+  block in the PDF. Hidden tangent edges (a fillet running into a face) are not drawn.
 - The PDF's bytes are a function of its content, with no creation date: an unchanged drawing rebuilds
   to an identical file.
 - **Tolerances are only the ones written** (`tol=`, `fit=`, `general_tolerance=`), from the design's
