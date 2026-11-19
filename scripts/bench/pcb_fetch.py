@@ -53,10 +53,11 @@ NAME = re.compile(r"[a-z0-9][a-z0-9_.-]*")
 REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 SHA1 = re.compile(r"[0-9a-f]{40}")
 SHA256 = re.compile(r"[0-9a-f]{64}")
-TELEMETRY_OFF = {"DO_NOT_TRACK": "1", "CAD_TELEMETRY": "0"}
-BENCH_INSTALLATION = "0.0.0+bench"
-REGISTER = ("import sys\nfrom cad_server._internal import installations\n"
-            "installations.register(sys.argv[1])\ninstallations.point(sys.argv[1])")
+TELEMETRY_OFF = {"DO_NOT_TRACK": "1", "CAD_TELEMETRY": "0", "CAD_UPDATE_CHECK": "0"}
+# The corpus's own server, started in its own folders as `cad server start` starts one (a model's run
+# starts none), and stopped once the builds are done.
+START = "from cad.engine import client\nclient.start()"
+STOP = "from cad.engine import api\napi.stop()"
 
 
 # --- the manifest -------------------------------------------------------------------------------
@@ -358,9 +359,9 @@ def fetch_build(project: dict[str, Any], out: Path, runtime: Path, python: str) 
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / sample / relative, target)
     env = private_env(runtime, python)
-    registered = subprocess.run([python, "-c", REGISTER, BENCH_INSTALLATION], env=env, capture_output=True, text=True)
-    if registered.returncode:
-        raise SystemExit(f"pcb_fetch: could not register {python} as the corpus's installation: {registered.stderr[-500:]}")
+    started_server = subprocess.run([python, "-c", START], env=env, capture_output=True, text=True)
+    if started_server.returncode:
+        raise SystemExit(f"pcb_fetch: could not start the corpus's server: {started_server.stderr[-500:]}")
     build = inside(folder, project["build"])
     started = time.monotonic()
     done = subprocess.run([python, build.name], cwd=build.parent, env=env)
@@ -377,7 +378,7 @@ def fetch_build(project: dict[str, Any], out: Path, runtime: Path, python: str) 
 
 def stop_engine(runtime: Path, python: str) -> None:
     if (runtime / "state").exists():
-        subprocess.run([python, "-m", "cad_server.cli", "stop"], env=private_env(runtime, python),
+        subprocess.run([python, "-c", STOP], env=private_env(runtime, python),
                        capture_output=True, text=True, timeout=300)
 
 

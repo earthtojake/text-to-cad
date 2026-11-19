@@ -1,84 +1,13 @@
 # Benchmarks
 
-Manual commands that measure the engine and the CAD Viewer. None of them runs in CI:
+Manual commands that measure the CAD Viewer's pictures against OCCT's and the manufacturing
+checks. None of them runs in CI:
 what they write goes under an ignored `tmp/` folder, never into the tree
 (`AGENTS.md`), and only their pure helpers are tested
 (`tests/python/global/test_bench_helpers.py`). Performance numbers come from one
 batch, run once every change it measures is in the branch, on a quiet machine:
 numbers taken under other work's load, or by agents benching beside each other,
 do not compare.
-
-## The corpus batch
-
-`corpus_bench.py` builds each model in `corpus.json` with the xbf engine, cold to
-warm, and times every step:
-
-```sh
-.venv/bin/python scripts/bench/corpus_bench.py --dry-run         # the config and the interpreter, checked
-.venv/bin/python scripts/bench/corpus_bench.py --max-load 16     # every model; each step waits for load <= 16 and no other busy build
-.venv/bin/python scripts/bench/corpus_bench.py --model l_bracket # one; repeat --model for more
-```
-
-A model in `corpus.json` names its project folder (`root`, relative to this repository),
-working folder (`cwd`, within that project), import folders (`pythonpath`, within the
-project), and `targets`: Python scripts relative to `cwd`. Each script runs with its
-own `__main__` control flow in a separate client process. `document` selects a model
-that those calls actually built, as `script.py::function` relative to `cwd`. It does
-not execute that function. The selected report supplies the document's actual id;
-missing, failed or ambiguous selections fail the step. `xbf` names a separate export
-destination, independent of the selected function's name. `edit` is `{file, from, to}`,
-with `from` occurring exactly once; `needs` lists required inputs. `note` describes the
-case. `comparison_note` records a workload difference that prevents a build speedup
-comparison with the recorded baseline.
-
-The models, smallest first, are `l_bracket`, `planetary_gear`, `qdd`, `motorbike`,
-`case`, `juno`, `movement`, `tom`, `hypercar` and `f1`. Tom stays in its own repository:
-its default root is `../tom-cad`. A worktree or isolated clone may have no such sibling;
-give `--config` a copy of `corpus.json` with the relative path to the external checkout
-or copied checkout. `--dry-run` checks configuration, files, edits and the selected
-interpreter's import of the `cad` library (from `--cadgen-src`, default `packages/cad/src`), without building anything. It does not
-infer calls from source or promise that a script calls the selected model.
-
-Each project is copied into a fresh output folder. Source stays unchanged except for
-the configured edit and its revert. Local Git metadata, virtual environments,
-`node_modules`, scratch directories and XBF/DXF outputs are excluded at every level;
-pinned inputs such as `STEP/imported` are retained. A symlink is refused, so a copied
-edit or output cannot write through it into the original checkout. Files use APFS
-clones where available. An existing output folder is refused.
-
-Every model gets private engine, state, cache and launcher directories. The door is
-under a fresh batch folder in `--engine-dir`; the other three directories are under
-`<out>/runtime/<model>`. The engine uses a free port, no standby worker, telemetry off,
-and a browser stub that records any attempted launch in `<out>/browser-requests.log`.
-The batch never stops another batch's engine or clears its cache. Steps are:
-
-- `cold`: a fresh daemon and empty private document cache;
-- `noop`: the unchanged script, on the same daemon;
-- `edit`, `revert`: the configured edit, then the file's original bytes;
-- `restart`: stop successfully, then run with the private document cache retained;
-- `restart-cold`: stop successfully, remove only that private cache's `documents/`,
-  then run again. Bytecode stays warm; declared or exported files are never cache inputs;
-- `export`: explicitly export the selected document id to `xbf`, recording bytes and
-  translation time separately from build walls;
-- `serve`, `mesh-cold`, `mesh-warm`, `structure`: serve that model id, mesh every part
-  (`POST /api/v1/documents/model/<id>/mesh`), mesh again after dropping those meshes on the now-warm
-  pool, then read the page's structure. No file is substituted for the model document;
-- `snapshot-first`, `snapshot`: draw that document id twice with `cad <type> snapshot --json`.
-
-The small measurement driver runs the target with Python's `runpy` and records reports
-returned by `api.build_script` when the script's explicit model calls reach it. It
-introduces no model call, decorator or export. A build wall covers interpreter startup,
-the whole script and report capture; `wall_api` sums its calls' engine round trips.
-Rows include timings, memo counts, bodies run/replayed/loaded, cache source/reason,
-declared files and worker memory. HTTP and command result shapes are checked; a failed
-step records its error and ends that model. Failure to stop preserves its working files.
-
-The batch writes `tmp/bench/corpus-<time>/` (`--out` selects another fresh folder):
-`rows.jsonl`, appended after every step; `table.md`, updated after each model; snapshots;
-and private runtime state. The first row records the commit, interpreter, platform and
-configuration. `--keep` retains source copies with the edit reverted. The normal exit
-stops each private daemon. These are manual measurements, not CI tests; the global
-suite tests the pure configuration, copy, selection, aggregation and comparison helpers.
 
 ## Viewer against OCCT, mode by mode
 
@@ -139,9 +68,9 @@ refused. Beside each project the fetch writes `SOURCE.md` (repository, commit, f
 licence file itself. The manifest takes open licences only, by SPDX id: a non-commercial (NC),
 no-derivatives (ND) or unlicensed design is refused. A `build` project is one of this repository's ECAD
 samples: its tracked files are copied to `tmp/pcb-corpus/<name>/` and its build runs there, never in
-`models/`, with an engine, state and cache of the corpus's own (`tmp/pcb-corpus/.runtime`) and the
-checkout's interpreter registered as that state's installation; it is built again only when its sources
-change. KiCad's stock libraries come from KiCad.app or the samples' variables, as their READMEs say.
+`models/`, with an engine, state and cache of the corpus's own (`tmp/pcb-corpus/.runtime`), whose server
+the fetch starts with the checkout's cad and stops once the builds are done; it is built again only when its
+sources change. KiCad's stock libraries come from KiCad.app or the samples' variables, as their READMEs say.
 
 | Project | Tier | Source | Licence | Format | Copper | Parts | Size |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -199,8 +128,8 @@ fill the pours again, through its IPC API: run it outside a sandbox that refuses
    empty parent such as `/tmp/work/<random>/`, and copy the sidecar beside it only to grade it. Nothing in
    a path or a prompt names the arm, the task or the benchmark.
 3. Give each run a private engine: its own `CAD_ENGINE_DIR`, `CAD_STATE_DIR`, `CAD_CACHE_DIR` and
-   `CAD_LAUNCHER_DIR` outside the run folder, with the arm's own `cad` registered as that state's current
-   installation (as `pcb_fetch.py` registers the checkout's), and telemetry off (`DO_NOT_TRACK=1`,
+   `CAD_LAUNCHER_DIR` outside the run folder, `CAD_UPDATE_CHECK=0`, the arm's own cad's server started
+   there (`cad server start`, as `pcb_fetch.py` starts the checkout's), and telemetry off (`DO_NOT_TRACK=1`,
    `CAD_TELEMETRY=0`).
 4. Launch the two runs of a pair together, on the same machine, with the same model, effort and limits;
    keep the arm-to-folder map in the harness's own file until every verdict is in.
