@@ -228,7 +228,11 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    update knows of the global `cad` (whose server it starts, and which it installs where the computer has none),
    and loads no kernel. The server reaches into the library, never the
    other way: its telemetry is an observer the engine calls with plain facts (`engine.api.observers`),
-   which the server's commands append.
+   which the server's commands append. Inside the server, two things are known in one place each: the
+   app that hosts cad, in its MCP adapter (`cad_server/mcp/`); and the agent apps, the plugin and its
+   skills, in `cad_server/plugin/` (the table of apps, how the plugin is installed and updated in each,
+   which older copies are ours to remove), which only the `cad plugin` command reaches. Nothing else in
+   cad names an app, a plugin or a skill, or imports either place.
 4. **A model's document is XCAF; files are explicit.** *Every document.* A model's document is
    XCAF: a live model holds an XCAF document; `@xbf` or `--xbf` serializes it as native BinXCAF.
    It holds: units in millimetres,
@@ -402,7 +406,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     background and fail silently: no start, command, build, request or tool call waits on them -- but three a
     person or an app asks for by name: `cad update`, typed to get the newest release of its major now (`--major`:
     the newest of all), which waits on PyPI (5 s at most) and the install, and says in one line when either fails;
-    `cad plugin update`, the hosted install command in the foreground; and `cad mcp` run from uv's cache on a
+    `cad plugin install` and `cad plugin update`, which run each agent app's own command and fetch the plugin
+    from GitHub, in the foreground; and `cad mcp` run from uv's cache on a
     computer with no global cad, which installs one first, the newest of its own major (four minutes at most).
     A global install of cad (`uv tool install cad`) updates itself unless the person turned it off (`cad
     update auto off`), and when asked (`cad update`): its server, at its start, after a failed start or once nothing
@@ -411,9 +416,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     bounded to that major (`uv tool install --upgrade "cad>=<installed>,<<next major>"`) and starts it again (where no
     server runs, `cad update` hands it over itself, and the helper starts none); a higher major only by `cad update
     --major` (`uv tool install --upgrade "cad>=<installed>"`). Where `cad plugin update auto` is on and cad is newer than the release
-    the install command last ended well for, however it got newer, its server runs `cad plugin update` once,
-    detached, stopped with all it started after 15 minutes. Nothing waits on the install but a start that would
-    otherwise start the release it replaces.
+    the plugin was last updated well for, however it got newer, its server runs `cad plugin update` once,
+    detached, with 15 minutes at most; cad's own update begins none while such a run is going. Nothing waits on
+    the install but a start that would otherwise start the release it replaces.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
     `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
     it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot
