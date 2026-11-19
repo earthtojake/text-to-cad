@@ -16,9 +16,8 @@
  *
  * Its settings are the host's (api/v1.js): the project's API key, which captures; a personal API key with
  * `person:write`, which deletes, and `project:read`, which checks the project is there; the project's id; and
- * its region, `us` or `eu`. One more is optional: the API key of a project of the same region for the failed
- * installs alone (`INSTALL_SETTING`), which go to the main project where it is not set. `fetch` is handed in, so the
- * tests need no network.
+ * its region, `us` or `eu`. A failed install is captured in that same project, under the same key. `fetch` is
+ * handed in, so the tests need no network.
  */
 
 import { FIELDS, OUR_FRAMES } from './events.mjs';
@@ -46,8 +45,6 @@ const VENDOR = /(?:^|\/)vendor-[^/]*$/;
 const CONTEXT = ['process', 'version', 'channel', 'app', 'legacy_channel', 'source', 'platform', 'arch', 'client', 'client_version',
   'presentation'];
 export const SETTINGS = ['POSTHOG_REGION', 'POSTHOG_PROJECT_KEY', 'POSTHOG_PERSONAL_KEY', 'POSTHOG_PROJECT_ID'];
-// Optional, so never missing: the API key of the project failed installs are captured in, where they have their own.
-export const INSTALL_SETTING = 'POSTHOG_INSTALL_PROJECT_KEY';
 const REGIONS = new Set(['us', 'eu']);
 const TIMEOUT_MS = 8000; // well inside a function's own limit: a PostHog that hangs is a failure, and the batch waits
 // How long an instance keeps health's answer. /v1/health is open to anyone and each check spends the personal
@@ -63,10 +60,10 @@ export function missingSettings(env) {
   return SETTINGS.filter(name => !(env[name] && (valid[name] ?? Boolean)(env[name])));
 }
 
-/** The store's settings, from the host's environment: `installKey` only where the host has one. */
+/** The store's settings, from the host's environment. */
 export function settingsOf(env) {
   return { region: env.POSTHOG_REGION, projectKey: env.POSTHOG_PROJECT_KEY, personalKey: env.POSTHOG_PERSONAL_KEY,
-    projectId: env.POSTHOG_PROJECT_ID, ...(env[INSTALL_SETTING] ? { installKey: env[INSTALL_SETTING] } : {}) };
+    projectId: env.POSTHOG_PROJECT_ID };
 }
 
 /** An exit status as its platform writes it: a Windows exception code in hex (0xC0000005), anything else as is. */
@@ -135,12 +132,10 @@ export function installEventOf(report, country) {
 }
 
 /**
- * @param {{ region: string, projectKey: string, personalKey: string, projectId: string, installKey?: string }} settings
- *   `installKey`: the API key failed installs are captured with; the project's own where there is none.
+ * @param {{ region: string, projectKey: string, personalKey: string, projectId: string }} settings
  * @param {{ fetch?: typeof fetch, now?: () => number }} [options] `now`: the clock health's answer is kept by.
  */
-export function posthogStore({ region, projectKey, personalKey, projectId, installKey = projectKey },
-  { fetch: send = fetch, now = Date.now } = {}) {
+export function posthogStore({ region, projectKey, personalKey, projectId }, { fetch: send = fetch, now = Date.now } = {}) {
   const capture = `https://${region}.i.posthog.com`;
   const api = `https://${region}.posthog.com/api/projects/${projectId}`;
   // Anything but a 2xx is the receiver's failure, never the client's: a 5xx tells it to keep its batch, or
@@ -175,7 +170,7 @@ export function posthogStore({ region, projectKey, personalKey, projectId, insta
     async report(report, { country = null } = {}) {
       await call(`${capture}/batch/`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ api_key: installKey, batch: [installEventOf(report, country)] }),
+        body: JSON.stringify({ api_key: projectKey, batch: [installEventOf(report, country)] }),
       });
     },
     async forget(install) {

@@ -193,20 +193,14 @@ test("a failed install is PostHog's install_failed: under its run's id, no perso
   assert.deepEqual(asked[2].body.batch[0], failed);
 });
 
-test("failed installs go to a project of their own where the host names its key, else to the main project; a batch's rows never do", async () => {
+test("a failed install goes to the one project a batch's rows go to, under the same key", async () => {
   const asked = [];
   const fetch = async (url, init) => { asked.push(JSON.parse(init.body).api_key); return new Response('{}'); };
   const env = { POSTHOG_REGION: 'eu', POSTHOG_PROJECT_KEY: 'phc_project', POSTHOG_PERSONAL_KEY: 'phx_personal', POSTHOG_PROJECT_ID: '1234' };
-  for (const extra of [{}, { POSTHOG_INSTALL_PROJECT_KEY: '' }, { POSTHOG_INSTALL_PROJECT_KEY: 'phc_installs' }]) {
-    // Optional: health never names it missing.
-    assert.deepEqual(missingSettings({ ...env, ...extra }), []);
-    const store = posthogStore(settingsOf({ ...env, ...extra }), { fetch });
-    await store.report(reportOf(REPORT));
-    await store.insert(rowsOf(BATCH));
-  }
-  assert.deepEqual(asked, ['phc_project', 'phc_project', 'phc_project', 'phc_project', 'phc_installs', 'phc_project']);
-  assert.deepEqual(settingsOf({ ...env, POSTHOG_INSTALL_PROJECT_KEY: 'phc_installs' }).installKey, 'phc_installs');
-  assert.ok(!SETTINGS.includes('POSTHOG_INSTALL_PROJECT_KEY'));
+  const store = posthogStore(settingsOf(env), { fetch });
+  await store.report(reportOf(REPORT));
+  await store.insert(rowsOf(BATCH));
+  assert.deepEqual(asked, ['phc_project', 'phc_project']);
 });
 
 test('a batch sent again is the same PostHog events, uuid and time alike, so PostHog counts it once', async () => {
