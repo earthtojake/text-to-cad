@@ -639,7 +639,7 @@ class InstallScriptTests(AgentApps):
         nowhere = self.run_install(CAD_INSTALL_BY_CAD="1", CAD_INSTALL_REPORT=str(self.root / "no folder" / "r.json"))
         self.assertEqual((nowhere.returncode, nowhere.stderr), (0, "cad (stand-in): the plugin, on stderr\n"))
 
-    def test_a_plugin_s_step_that_ended_badly_and_said_nothing_is_a_failure_to_the_releases_that_read_the_report(
+    def test_a_plugin_s_step_that_ended_badly_and_named_no_failure_is_one_to_the_releases_that_read_the_report(
             self) -> None:
         # 0.11.12 and 0.11.13 never read the run's exit status: by the report alone they take the run as done, and
         # stop running it, or as failed, and run it again later. Their rule, which no release can change now
@@ -679,7 +679,11 @@ class InstallScriptTests(AgentApps):
         self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2", FAKE_FAIL="uv:run", FAKE_EXIT="2"), (1, 0, unsaid, "app"))
         # Nothing ran because another run was going: this run did none of the work either.
         self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_EXIT_UV="75"), (75, 0, unsaid, "app"))
-        # Whatever the step said of the apps is passed on as it said it, and a step that ended 0 is never a failure.
+        # It ended badly after the apps, having named none as failed (it raised as it turned the switch on, say):
+        # what it said of them is kept, and the failure added.
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_EXIT_UV="1", FAKE_PLUGIN_APPS='{"codex": "updated"}'),
+                         (1, 0, {"codex": "updated", "plugin": "failed"}, "app"))
+        # A failure the step named itself is passed on as it said it, and a step that ended 0 is never a failure.
         said = {"claude": "failed", "codex": "updated"}
         self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_EXIT_UV="1", FAKE_PLUGIN_APPS=json.dumps(said)),
                          (1, 0, said, "app"))
