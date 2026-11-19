@@ -593,19 +593,21 @@ class InstallScriptTests(AgentApps):
         # CAD_INSTALL_REPORT (0.11.12's and 0.11.13's hand-over sets it, and judges the file the moment it is there):
         # `apps` always a dict, as cad's step said them, `setup` an integer, the file written whole, after
         # everything else. The run ends 0 only where that step did: 1 where every app it found failed, 75 where
-        # another run was going (cad's own status for it), 1 for anything else.
+        # another run was going (cad's own status for it), 1 for anything else. A step that ended non-zero and said
+        # nothing of any app is one failure in `apps`, the one thing its readers take for a run to try again.
         self.tools(cad="0.13.0")
         report = self.root / "report.json"
         failed = {"claude": "failed", "codex": "not found"}
+        unsaid = {"plugin": "failed"}
         for extra, code, apps, line in (
                 ({"FAKE_PLUGIN_APPS": json.dumps({"claude": "updated", "gemini": "skipped"})}, 0,
                  {"claude": "updated", "gemini": "skipped"}, None),
                 ({}, 0, {}, None),
                 ({"FAKE_PLUGIN_EXIT_CAD": "1", "FAKE_PLUGIN_APPS": json.dumps(failed)}, 1, failed, None),
-                ({"FAKE_PLUGIN_EXIT_CAD": "75"}, 75, {}, None),
-                ({"FAKE_PLUGIN_EXIT_CAD": "124"}, 1, {}, "The plugin was not set up in the agent apps (cad plugin "
-                                                         "install exit status 124; what it said is above): run this again.\n"),
-                ({"FAKE_PLUGIN_EXIT_CAD": "2", "FAKE_PLUGIN_EXIT_UV": "75"}, 75, {}, None)):
+                ({"FAKE_PLUGIN_EXIT_CAD": "75"}, 75, unsaid, None),
+                ({"FAKE_PLUGIN_EXIT_CAD": "124"}, 1, unsaid, "The plugin was not set up in the agent apps (cad plugin "
+                                                             "install exit status 124; what it said is above): run this again.\n"),
+                ({"FAKE_PLUGIN_EXIT_CAD": "2", "FAKE_PLUGIN_EXIT_UV": "75"}, 75, unsaid, None)):
             with self.subTest(extra=extra):
                 report.unlink(missing_ok=True)
                 plain = self.run_install(CAD_INSTALL_BY_CAD="1", **extra)
@@ -629,6 +631,60 @@ class InstallScriptTests(AgentApps):
         # A report that cannot be written fails nothing.
         nowhere = self.run_install(CAD_INSTALL_BY_CAD="1", CAD_INSTALL_REPORT=str(self.root / "no folder" / "r.json"))
         self.assertEqual((nowhere.returncode, nowhere.stderr), (0, "cad (stand-in): the plugin, on stderr\n"))
+
+    def test_a_plugin_s_step_that_ended_badly_and_said_nothing_is_a_failure_to_the_releases_that_read_the_report(
+            self) -> None:
+        # 0.11.12 and 0.11.13 never read the run's exit status: by the report alone they take the run as done, and
+        # stop running it, or as failed, and run it again later. Their rule, which no release can change now
+        # (v0.11.13, `cad_server._internal.install_script.judge`).
+        def judged(found: dict) -> str:
+            steps = found.get("apps") if isinstance(found, dict) else None
+            if not isinstance(steps, dict):
+                return "no_report"
+            if found.get("setup") != 0 or isinstance(found.get("setup"), bool):
+                return "setup"
+            return "app" if any(status == "failed" for status in steps.values()) else "done"
+
+        report = self.root / "report.json"
+
+        def ends(**extra: str) -> tuple:
+            report.unlink(missing_ok=True)
+            done = self.run_install(CAD_INSTALL_BY_CAD="1", CAD_INSTALL_REPORT=str(report), **extra)
+            found = json.loads(report.read_text(encoding="utf-8"))
+            return done.returncode, found["setup"], found["apps"], judged(found)
+
+        unsaid = {"plugin": "failed"}
+        self.tools(cad="0.13.0")
+        # It raised (Python's own exit status, 1), or was stopped: no report of its own, so one failure in ours.
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="1"), (1, 0, unsaid, "app"))
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="124"), (1, 0, unsaid, "app"))
+        # Ended by a signal, with whatever it had started: the tool's cad answers `--version`, then kills itself.
+        killed = "#!/bin/sh\n[ \"$1\" = --version ] && exit 0\nkill -KILL $$\n"
+        (self.uv_bin / "cad").write_text(killed, encoding="utf-8")
+        self.assertEqual(ends(), (1, 0, unsaid, "app"))
+        # It could not be started at all: the tool's cad is gone once it has said its version.
+        (self.uv_bin / "cad").write_text("#!/bin/sh\n/bin/rm -- \"$0\"\n", encoding="utf-8")
+        self.assertEqual(ends(), (1, 0, unsaid, "app"))
+        self.assertEqual(self.newest(), [], "a cad that has the command is never passed over for the newest")
+        # A cad with no such command, and the newest cad's step raised, or uv could not run it: the same.
+        self.tools(cad="0.11.13")
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_EXIT_UV="1"), (1, 0, unsaid, "app"))
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2", FAKE_FAIL="uv:run", FAKE_EXIT="2"), (1, 0, unsaid, "app"))
+        # Nothing ran because another run was going: this run did none of the work either.
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_EXIT_UV="75"), (75, 0, unsaid, "app"))
+        # Whatever the step said of the apps is passed on as it said it, and a step that ended 0 is never a failure.
+        said = {"claude": "failed", "codex": "updated"}
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_EXIT_UV="1", FAKE_PLUGIN_APPS=json.dumps(said)),
+                         (1, 0, said, "app"))
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_APPS='{"codex": "updated"}'),
+                         (0, 0, {"codex": "updated"}, "done"))
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2"), (0, 0, {}, "done"))
+        # Where cad itself could not be installed, `setup` is what its readers go by: no failure is made up for
+        # apps no cad reached, and what the newest cad's step said of them is passed on.
+        self.no_tools()
+        self.assertEqual(ends(FAKE_FAIL="uv:cad", FAKE_EXIT="3", FAKE_PLUGIN_EXIT_UV="1"), (1, 3, {}, "setup"))
+        self.assertEqual(ends(FAKE_FAIL="uv:cad", FAKE_EXIT="3", FAKE_PLUGIN_APPS='{"claude": "installed"}'),
+                         (1, 3, {"claude": "installed"}, "setup"))
 
     def test_it_takes_no_options_and_does_nothing_when_given_one(self) -> None:
         # Old releases' docs piped options to install.sh (`sh -s -- --dry-run`, `--uninstall`, `--add X`).

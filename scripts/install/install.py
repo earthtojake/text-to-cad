@@ -45,8 +45,14 @@ status for it, which only a run a cad server began gets); 2 for an option.
 is there): ``{"schema": "text-to-cad install report/1", "release": <the cad this computer has after the run; null
 where it has none>, "setup": <the cad step's exit status: 0 where cad was installed, installed again, or was here
 already and starts>, "apps": {<app>: "installed" | "updated" | "removed" | "skipped" | "failed" | "not found"}}``,
-``apps`` as ``cad plugin install`` said them (``{}`` where it said nothing), written whole (a file beside it, renamed
-into place) as the very last thing the run does. Writing it never fails the run, and nothing is printed about it.
+``apps`` as ``cad plugin install`` said them, written whole (a file beside it, renamed into place) as the very last
+thing the run does. Writing it never fails the run, and nothing is printed about it. Those releases read two things
+of it, and never the run's exit status: that ``setup`` is the integer 0, and that no value of ``apps`` is
+``failed``. So where the plugin's step ended non-zero and said nothing of any app (it raised, could not be started,
+was stopped, or ran nothing because another run was going), ``apps`` is ``{"plugin": "failed"}`` (``UNSAID``), which
+they read as a failure and run this command again for, later; ``{}`` there would read as done. Where cad itself
+could not be installed, ``setup`` says so, and ``apps`` is what the newest cad's step said, ``{}`` where it said
+nothing.
 
 **One report of a failure** (``Reports``). A run that ends with a cad that works is counted by that cad. One that
 fails where no cad can count it sends one anonymous report of where: ``{"schema": 1, "run": <a random id made for
@@ -718,11 +724,12 @@ def update(here: Here, cad: Cad) -> None:
 
 @dataclass
 class Plugin:
-    """What the plugin's step left: its exit status (0: it ended well), and each app's status as ``cad plugin
-    install`` said it (``{}`` where it said nothing)."""
+    """What the plugin's step left: its exit status (0: it ended well), each app's status as ``cad plugin install``
+    said it, and whether it said anything (``said``: its report was there; ``apps`` is ``{}`` where it was not)."""
 
     code: int = 0
     apps: Dict[str, str] = field(default_factory=dict)
+    said: bool = False
 
 
 def hand_over(here: Here, cad: Cad, reports: "Reports") -> Plugin:
@@ -758,7 +765,7 @@ def hand_over(here: Here, cad: Cad, reports: "Reports") -> Plugin:
             print(f"The plugin was not set up in the agent apps ({how}): run this again.", flush=True)
             if newest or code == 127:
                 reports.failed("plugin", code)
-        return Plugin(code, {str(key): str(status) for key, status in apps.items()} if ran else {})
+        return Plugin(code, {str(key): str(status) for key, status in apps.items()} if ran else {}, ran)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 
@@ -883,6 +890,17 @@ class Reports:
 # --- the run ------------------------------------------------------------------------------------------
 
 REPORT_SCHEMA = "text-to-cad install report/1"
+# What the report says of the apps where the plugin's step ended non-zero and said nothing of any: no app's name, and
+# the one word the releases that read the report (0.11.12, 0.11.13) take for a failure, in any value.
+UNSAID = {"plugin": "failed"}
+
+
+def reported(cad: Cad, plugin: Plugin) -> Dict[str, str]:
+    """``apps`` of the report cad reads (see the module): what the plugin's step said of each app; ``UNSAID`` where
+    it ended non-zero and said nothing, on a computer whose cad step ended 0 (a reader would take ``{}`` there for a
+    run that ended well); ``{}`` where it said nothing and ended 0, or cad could not be installed (``setup`` says
+    that)."""
+    return plugin.apps if plugin.said or cad.code or not plugin.code else dict(UNSAID)
 
 
 def write_report(here: Here, release: Optional[str], setup: int, apps: Dict[str, str]) -> None:
@@ -971,7 +989,7 @@ def run(here: Here, reports: Reports) -> int:
     if cad.code:
         print("cad itself was not installed (what went wrong is above), and the plugin's skills need it: run this "
               "again.", flush=True)
-    write_report(here, cad.release, cad.code, plugin.apps)
+    write_report(here, cad.release, cad.code, reported(cad, plugin))
     return 1 if cad.code else BUSY if plugin.code == BUSY else 1 if plugin.code else 0
 
 
