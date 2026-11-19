@@ -461,6 +461,23 @@ def _steps(segments, narrowest: float) -> list[_Segment]:
     return out
 
 
+def _inside(shape):
+    """Whether a point is in the part's material, asked of one part many times:
+    ``Shape.is_inside``, with the one classifier it builds anew for every point.
+    Building it was most of what reading a plate of holes took."""
+    from OCP.BRepClass3d import BRepClass3d_SolidClassifier
+    from OCP.gp import gp_Pnt
+    from OCP.TopAbs import TopAbs_State
+
+    classifier = BRepClass3d_SolidClassifier(shape.wrapped)
+
+    def inside(point) -> bool:
+        classifier.Perform(gp_Pnt(*point), 1e-6)
+        return classifier.State() == TopAbs_State.TopAbs_IN or classifier.IsOnAFace()
+
+    return inside
+
+
 def holes(shape) -> list[Hole]:
     """Every hole in ``shape``, read off its faces, in a deterministic order."""
     from build123d import Vector
@@ -468,6 +485,7 @@ def holes(shape) -> list[Hole]:
     found: list[Hole] = []
     ray = None
     tori = None
+    inside = _inside(shape)
     ends = _Ends(shape)
     surfaces = _surface_segments(shape)
     for key, (d, foot, segments) in surfaces.items():
@@ -481,7 +499,7 @@ def holes(shape) -> list[Hole]:
             is; an O-ring groove or a pocket around a standoff has material inside."""
             samples = [(0.0, 0.0)] + [(radius * f * math.cos(t), radius * f * math.sin(t))
                                       for f in (0.45, 0.85) for t in (0.3, 2.4, 4.5)]
-            return not any(shape.is_inside(at(a, x, y)) for x, y in samples)
+            return not any(inside(at(a, x, y)) for x, y in samples)
 
         bores = [s for s in _merge_split_faces(segments) if s.concave and _full(s)]
         if tori is None:
@@ -494,7 +512,7 @@ def holes(shape) -> list[Hole]:
             # a bore broken through by a cross hole or a slot -- are one hole.
             last = groups[-1][-1] if groups else None
             if (last is not None and abs(last[-1].r_hi - chain[0].r_lo) < _TOUCH
-                    and all(not shape.is_inside(at(last[-1].hi + (chain[0].lo - last[-1].hi) * f))
+                    and all(not inside(at(last[-1].hi + (chain[0].lo - last[-1].hi) * f))
                             for f in (0.1, 0.5, 0.9))):
                 groups[-1].append(chain)
             else:
@@ -1183,9 +1201,8 @@ def ring_walls(shape) -> list[Turned]:
     """The part's bores with material standing in them: the outer wall of a ring
     groove cut in a face, of a pocket round a standoff or a boss. No hole callout
     reads one (a hole's inside is air), and its diameter is a size the part has."""
-    from build123d import Vector
-
     found = []
+    inside = _inside(shape)
     for d, foot, segments in _surface_segments(shape).values():
         u, v = _perpendicular(d)
         bores = [s for s in _merge_split_faces(segments) if s.concave and _full(s)]
@@ -1196,8 +1213,8 @@ def ring_walls(shape) -> list[Turned]:
                 mid = (seg.lo + seg.hi) / 2
                 samples = [(0.0, 0.0)] + [(seg.r_lo * f * math.cos(t), seg.r_lo * f * math.sin(t))
                                           for f in (0.45, 0.85) for t in (0.3, 2.4, 4.5)]
-                if any(shape.is_inside(Vector(*(f + mid * c + x * cu + y * cv
-                                                for f, c, cu, cv in zip(foot, d, u, v)))) for x, y in samples):
+                if any(inside(tuple(f + mid * c + x * cu + y * cv for f, c, cu, cv in zip(foot, d, u, v)))
+                       for x, y in samples):
                     found.append(Turned(round(2 * seg.r_lo, 6), d,
                                         _tidy(tuple(f + mid * c for f, c in zip(foot, d)))))
     found.sort(key=lambda t: (t.diameter, t.axis, t.middle))

@@ -3391,15 +3391,22 @@ class WhiteSpaceTests(unittest.TestCase):
                 raise _OffFrame("no room for the table", None)
             return real(sheet, *args)
 
+        from build123d.topology import three_d
+
         facts = _facts()
         with mock.patch.object(render, "_place_hole_tables", tables), \
                 mock.patch.object(drawing_features, "holes", wraps=drawing_features.holes) as read, \
-                mock.patch.object(render, "_Projection", wraps=render._Projection) as projected:
+                mock.patch.object(render, "_Projection", wraps=render._Projection) as projected, \
+                mock.patch.object(three_d, "BRepClass3d_SolidClassifier",
+                                  wraps=three_d.BRepClass3d_SolidClassifier) as classifiers:
             render._render_sheet(sheet, index=1, count=1, label="once", facts=facts)
             _unstated(facts)
         self.assertGreater(len(drawn), 1, "the sheet was drawn at more than one size or scale")
         self.assertEqual(read.call_count, 1, "its holes are read once, for every attempt and the report")
         self.assertEqual(projected.call_count, 3, "and each of its three views projected once")
+        # Whether a point is in the part's material is asked eight times a hole, of
+        # one classifier a reading: is_inside built one for every point.
+        self.assertEqual(classifiers.call_count, 0)
 
     def test_a_sheet_out_of_scales_takes_a_size_it_would_not_choose_for_the_part(self) -> None:
         """A table of two hundred holes needs more paper than A2 has at any scale."""
