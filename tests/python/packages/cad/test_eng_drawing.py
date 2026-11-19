@@ -5987,6 +5987,21 @@ class PartSheetTests(unittest.TestCase):
         self.assertEqual([text for text in _dim_texts(doc) if "°" in text], ["45°"])
         self.assertEqual(unstated, [], "one angle states both slopes, and each gusset is placed")
 
+    def test_facets_too_close_for_an_angle_each_are_stated_by_their_ends(self) -> None:
+        """A clevis whose two lugs' rounded ends are drawn as twelve flats each, under
+        5 long: an angle on each puts one value on top of the next, and no sheet had
+        room for that. The first pass gives the angles there is room for and places
+        the other flats' ends, and the report names what is left."""
+        from build123d import Align, Box, Plane, Polygon, Pos, extrude
+
+        arc = [(18 * math.cos(math.radians(a)), 34 + 18 * math.sin(math.radians(a))) for a in range(0, 181, 15)]
+        lug = extrude(Plane.XZ * Polygon(*arc, (-18, 10), (18, 10), align=None), amount=-10)
+        clevis = Box(60, 60, 10, align=(Align.CENTER, Align.MIN, Align.MIN)) + Pos(0, 8, 0) * lug + Pos(0, 42, 0) * lug
+        sheet, doc, unstated = self._drawn(clevis)
+        angles = [text for text in _dim_texts(doc) if "°" in text]
+        self.assertTrue(0 < len(angles) < 12, angles)
+        self.assertTrue(all("inclined face" in line or "face at" in line for line in unstated), unstated)
+
     def test_a_round_bar_cut_on_a_slant_is_stated_by_its_angle(self) -> None:
         """The cut face of a mitred rod is bounded by an ellipse, which has one vertex:
         its two ends are where that outline turns back, not its corners."""

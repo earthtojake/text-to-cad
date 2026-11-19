@@ -1670,6 +1670,26 @@ def _slope_angle(view: "View", face, shape) -> tuple | None:
     return vertex, other, along
 
 
+#: Two angles' values nearer than this on the sheet, mm, print over each other.
+_ANGLE_ROOM = 14.0
+
+
+def _angle_value_at(view: "View", vertex, p1, p2, offset: float = 14.0) -> tuple[float, float]:
+    """Where an angle's value stands, in sheet millimetres across and up from the
+    view's own origin: ``offset`` from its vertex, between its legs, as
+    :meth:`View.angle` draws it at the scale the view has now."""
+    across, up = _view_axes(view.name)
+    scale = view.scale or view.sheet._scale()
+    legs = []
+    for point in (p1, p2):
+        leg = (point[across] - vertex[across], point[up] - vertex[up])
+        length = math.hypot(*leg) or 1.0
+        legs.append((leg[0] / length, leg[1] / length))
+    between = (legs[0][0] + legs[1][0], legs[0][1] + legs[1][1])
+    reach = math.hypot(*between) or 1.0
+    return (vertex[across] * scale + offset * between[0] / reach, vertex[up] * scale + offset * between[1] / reach)
+
+
 def _slope_ends(view: "View", face) -> tuple[tuple, tuple]:
     """The two ends of a sloping flat face as a view that sees it edge-on draws it:
     the points of its outline furthest apart along the line it is seen as. They
@@ -1820,8 +1840,9 @@ def _place_faces(views, shape, features, placed: dict, hexagons=()) -> None:
     the part's edge along that axis, in the first view that shows the axis; and
     each slope (a flat face leaning in one model plane) stated in the view that
     sees it edge-on: by its angle and one end where its angle is a whole or half
-    degree (``_slope_angle``), else by both its ends; slopes the view sees as one
-    line share one angle. The largest faces first, at
+    degree (``_slope_angle``), else by both its ends; slopes in one plane share
+    one angle, and one whose angle would print over another's is stated by its
+    ends. The largest faces first, at
     most ``_FEW_STEPS`` places an axis. Faces a hole or slot owns are its
     callout's, a hexagon's its HEX callout's, chamfers their note's; the far end
     along an axis is the overall size's."""
@@ -1837,7 +1858,8 @@ def _place_faces(views, shape, features, placed: dict, hexagons=()) -> None:
     most = dict.fromkeys(range(3), _FEW_STEPS)
     for view in views:
         points = []
-        drawn: set[tuple] = set()  # the slopes this view has an angle on, as it sees them
+        drawn: set[tuple] = set()  # the planes of the slopes this view has an angle on
+        values: list[tuple] = []   # and where on the sheet each angle's value stands
         for at, face in enumerate(flats):
             normal = tuple(face.normal_at())
             square = next((k for k in range(3) if abs(abs(normal[k]) - 1) < 1e-9), None)
@@ -1851,12 +1873,22 @@ def _place_faces(views, shape, features, placed: dict, hexagons=()) -> None:
                     continue
                 angled.add(at)
                 vertex, other, along = stated
-                # Slopes one behind another in this view (two gussets seen edge-on) are
-                # one line on the sheet, and one angle states it: a second, on the same
-                # line, would print over the first.
-                seen = tuple(round(q[k], 3) for q in (vertex, other, along) for k in _view_axes(view.name))
+                # Slopes in one plane (two gussets one behind the other, a slope a slot
+                # cuts in two) are one line in this view, and one angle states it: a
+                # second, on the same line, would print over the first.
+                seen = (*(round(c, 6) + 0.0 for c in normal), round(_dot(normal, tuple(face.center())), 3))
                 if seen not in drawn:
+                    # An angle's value stands off its vertex, between its legs. Where
+                    # that is on top of another angle's (the facets of a rounded lug
+                    # drawn as flats, each a few millimetres long) no sheet has room
+                    # for both: this slope is stated by its two ends instead.
+                    value = _angle_value_at(view, vertex, other, along)
+                    if any(math.dist(value, taken) < _ANGLE_ROOM for taken in values):
+                        angled.discard(at)
+                        points.extend((face.area, end, leans) for end in _slope_ends(view, face))
+                        continue
                     drawn.add(seen)
+                    values.append(value)
                     view.angle(vertex, other, along)
                 points.append((face.area, vertex, leans))
         shown = set(_view_axes(view.name))
