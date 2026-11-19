@@ -100,8 +100,11 @@ cases in full).
 ## Frames, bodies and drive limits
 
 - **`frame(part, name, location)`** names a frame on a part (a tool point, a camera mount, a
-  sensor), in the part's own frame, the one its geometry is in before it is placed. A site in MJCF,
-  an empty link on a fixed joint in URDF.
+  sensor), in the part's own frame, the one its geometry is in before it is placed: for a 100 mm bar
+  built up from its own origin and then placed 140 mm up (`bd.Pos(0, 0, 140) * bar`), the tip is
+  `bd.Pos(0, 0, 100)`, not world z 240.
+  A site in MJCF, an empty link on a fixed joint in URDF. The export's summary lists each frame where
+  it landed: read it.
 - **`body(part, name=None)`** keeps a part a body of its own, fixed to the link it would merge into
   (a camera mount, a fingertip the simulator addresses), with its own mass and geoms.
 - **`limits(assembly, joint, effort=, velocity=)`** is a joint's drive limits from its datasheet, in

@@ -338,6 +338,9 @@ Reading a finding:
 - **Check the pair before adopting the stop**, with a posed snapshot there. A stop made by a pair
   that does not limit the hardware (a vendor's servo cover the jaw clears) is not the joint's range,
   and neither is a stop wider than the actuator's own travel: write the datasheet's travel instead.
+  A stop is where surfaces come near, not where solids overlap: where one looks early (a lid that
+  still has room to fold back), `cad model interference "$ID" --pose '{"hinge": 170}'` at and past it
+  is the exact answer, with the joint's range widened for the test.
 - **No stop.** A turn is swept a full turn each way and a slide the document's extent; a joint clear
   that far has none (`why`: `clear all the way round`). A cylindrical or spherical joint and a joint
   of a closed loop are not swept, and a warning says so. A document with no joint fails with

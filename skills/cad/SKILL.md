@@ -42,9 +42,10 @@ https://github.com/earthtojake/text-to-cad
 A project written for an earlier version may need changes; the migration guides say what:
 https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
-`cad server start` starts the one server every command goes through (`status`, `stop`). `cad run
-script.py` is `uv run` with cad's library and the integrations the script imports added, so a script
-header names only its own extra packages, never cad ([environments](references/environments.md)). A
+Every command goes through one server: start it once with `cad server start` (`status`, `stop`); a
+command that finds none says so. `cad run script.py` is `uv run` with cad's library and the
+integrations the script imports added, so a script header names only its own extra packages, never
+cad ([environments](references/environments.md)). A
 build outlives the shell's time limit: run the same command again and it joins the build in progress.
 `cad <command> --help` is the complete, current interface. Paths are relative to the working
 directory.
@@ -199,8 +200,9 @@ A named process is part of the design, not a review at the end:
 
 1. Read the process reference's *Design it* before modelling, and build its limits in.
 2. Record the process in the model, so every later check is the same one: the material with its
-   process on each part (`part.material = metals.aluminum(process=machined())`), and the shop's flags
-   in the module docstring (`Check: cad model dfm "$ID" --tools 3,6,10`).
+   process on each part (`part.material = metals.aluminum(process=machined())`, with `machined` from
+   `bd_materials.processes`), and the shop's flags in the module docstring
+   (`Check: cad model dfm "$ID" --tools 3,6,10`).
 3. Run that check after every run. The last line and the exit status are the result: `OK` (0, though
    warnings may remain), `FAILED` (1: the part cannot be made as drawn), `NOT CHECKED` (3: something
    was not judged, never a pass) and 2 for a refused command. Fix errors from each finding's `refs`,

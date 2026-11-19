@@ -87,7 +87,8 @@ skill's sheet-metal reference (`references/manufacturing-sheet-metal.md`): check
 A row compares a measured fact with a cited requirement, and only when both are trustworthy:
 
 - **Cite both sides**: the source's URL and JSON field path (or guide section), and the measured
-  value. A row with no external rule says `Direct file inspection`.
+  value. A row with no external rule says `Direct file inspection`. SendCutSend's figures are in
+  inches and `cad` measures millimetres: give both in a row.
 - **Units first.** A DXF whose `$INSUNITS` is missing or not the guide's expected inches (`1`) or
   millimetres (`4`) is a scale error: recommend re-exporting or confirming units, and make no
   size-dependent comparison until it is settled. Never silently rescale.
