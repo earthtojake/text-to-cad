@@ -2,9 +2,12 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/* Dark styles apply under .dark, except inside .theme-light: a page pinned to the light theme. */
+@custom-variant dark (&:is(.dark *):not(:is(.theme-light, .theme-light *)));
 
-:root {
+/* The light theme: the whole site by default, and .theme-light (the Shop) whatever the system says. */
+:root,
+.theme-light {
   color-scheme: light;
   /* Viewer neutral surfaces, with blue for brand emphasis and primary actions. */
   --radius: 0.625rem;
@@ -44,6 +47,12 @@
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: var(--ring);
 
+}
+
+/* A light page under the dark theme keeps the light background past its edges (overscroll). */
+html.dark:has(.theme-light) {
+  color-scheme: light;
+  background-color: oklch(1 0 0);
 }
 
 .dark {

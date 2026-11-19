@@ -13,19 +13,19 @@ import {
 import { formatGitHubStars, GITHUB_REPO_URL } from "@/lib/github";
 import { cn } from "@/lib/utils";
 
-// The documentation, the header's one link into the site: marked while a page of it is open.
-function DocsLink() {
-  const current = usePathname().startsWith("/docs");
+// A tab of the header, Shop or Docs: marked while a page under it is open.
+function NavLink({ href, children }: { href: string; children: string }) {
+  const current = usePathname().startsWith(href);
   return (
     <Link
-      href="/docs"
+      href={href}
       aria-current={current ? "page" : undefined}
       className={cn(
         "rounded-md px-2.5 py-1.5 text-sm font-medium transition hover:bg-secondary hover:text-foreground",
         current ? "text-foreground" : "text-muted-foreground",
       )}
     >
-      Docs
+      {children}
     </Link>
   );
 }
@@ -60,7 +60,8 @@ export function SiteHeaderClient({
         </Link>
 
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          <DocsLink />
+          <NavLink href="/shop">Shop</NavLink>
+          <NavLink href="/docs">Docs</NavLink>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

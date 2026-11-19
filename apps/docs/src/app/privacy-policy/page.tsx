@@ -171,7 +171,8 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <strong>This website:</strong> page views, with the referring page, browser, device type
-            and country, through Vercel Web Analytics, which sets no cookies. Each request also
+            and country, and which product on the Shop page you click through to a store, through
+            Vercel Web Analytics, which sets no cookies. Each request also
             includes standard metadata: your IP address, the time and the user agent.
           </li>
         </ul>
@@ -187,7 +188,7 @@ export default function PrivacyPolicyPage() {
             Request metadata: only to deliver, secure and troubleshoot api.texttocad.dev and this
             website.
           </li>
-          <li>Page-view statistics: only to understand, in aggregate, how this website is used.</li>
+          <li>Page-view and Shop-click statistics: only to understand, in aggregate, how this website is used.</li>
           <li>Version checks: only to answer them; we keep nothing from them beyond our host’s request logs.</li>
           <li>
             Telemetry: only to understand, in aggregate, how many people use text-to-cad and how

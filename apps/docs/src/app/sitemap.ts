@@ -9,6 +9,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly",
       priority: 1,
     },
+    {
+      url: absoluteUrl("/shop"),
+      changeFrequency: "monthly",
+      priority: 0.5,
+    },
     // The documentation, each page of its map.
     ...docPages.map((page) => ({
       url: absoluteUrl(docHref(page.slug)),
