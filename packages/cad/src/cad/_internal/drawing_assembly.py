@@ -6,8 +6,8 @@ A parts list is the assembly's distinct parts, each once, with how many times it
 occurs. Two occurrences are one part when they carry the same name, colour and
 material and the same geometry: one prototype placed several times (the kernel's shape
 shared, as the engine places a part used twice and as ``step.read`` and
-``xbf.read`` hand back a shared product), or an exact translated copy, which a
-boolean check confirms. A name, a colour or a shape alone never merges two
+``xbf.read`` hand back a shared product), or an exact copy of it built where it
+stands, shifted or turned, which a boolean check confirms. A name, a colour or a shape alone never merges two
 parts: two parts that happen to have identical geometry can be different parts
 (a steel spacer and a brass one), a label's detail often names a finish
 (``piston_rod:chrome``), and mirror images have identical volumes. Identical
@@ -195,8 +195,8 @@ class PartsList:
     def merge(self, *keys: int | str, description: str | None = None) -> "PartsList":
         """List several items as one part: the parts the model names differently
         (``mounting_eye:lower``, ``mounting_eye:upper``) that are one part. Their
-        geometry must be the same: a shared prototype, or an exact translated
-        copy, of one material. The first item keeps its place and takes the
+        geometry must be the same: a shared prototype, or an exact copy, shifted
+        or turned, of one material. The first item keeps its place and takes the
         others' quantities and what :meth:`set` stated for any of them; two
         different values of one field are refused, as two parts. The items
         after it are numbered again. ``description`` replaces the one read from
@@ -272,7 +272,8 @@ def parts_list(source) -> PartsList:
     """The parts list of an assembly: a build123d ``Compound`` built with
     ``children=``, as an assembly model's ``.shape``, ``cad.xbf.read`` and
     ``cad.step.read`` hand one back. Occurrences sharing one geometry (one
-    prototype placed several times) are one item."""
+    prototype placed several times, or an exact copy of it built where it
+    stands, shifted or turned) are one item; a mirror image is another part."""
     from build123d import Location
 
     if not getattr(source, "children", None):
@@ -388,24 +389,150 @@ def _describe(labels: Sequence[str]) -> str:
 
 
 def _same_part(a, b) -> bool:
-    """Whether ``b`` is an exact translated copy of ``a``: the same faces, volume
-    and size, and nothing left over when one is moved onto the other."""
-    from build123d import CenterOf, Location
-
+    """Whether ``b`` is ``a`` moved: shifted, or turned and shifted. The same
+    faces, volume and area, and nothing left over when one is laid on the other.
+    A part built once for each place it stands, each at its own angle (four legs
+    round a base, each cut after it was turned), is one part four times. A mirror
+    image is not: no turn lays a handed part on its other hand."""
     if not a.solids() or not b.solids() or len(a.faces()) != len(b.faces()):
         return False
     volume = a.volume
     if abs(volume - b.volume) > 1e-6 * max(volume, 1.0) or abs(a.area - b.area) > 1e-6 * max(a.area, 1.0):
         return False
-    sa, sb = a.bounding_box().size, b.bounding_box().size
-    if any(abs(x - y) > 1e-4 for x, y in zip(sa, sb)):
-        return False
     try:
-        moved = a.moved(Location(b.center(CenterOf.MASS) - a.center(CenterOf.MASS)))
-        left = sum(s.volume for s in (moved - b).solids()) + sum(s.volume for s in (b - moved).solids())
+        for moved in _laid_on(a, b):
+            left = sum(s.volume for s in (moved - b).solids()) + sum(s.volume for s in (b - moved).solids())
+            if left <= 1e-6 * max(volume, 1.0):
+                return True
     except Exception:  # noqa: BLE001 - a boolean the kernel cannot do proves nothing; list them apart
         return False
-    return left <= 1e-6 * max(volume, 1.0)
+    return False
+
+
+#: Lengths this close, mm, are one length when two parts' faces are matched.
+_SAME_FACE = 1e-4
+#: The turns tried, at most, before two parts are listed apart: each costs a boolean.
+_MOST_TURNS = 6
+
+
+def _laid_on(a, b):
+    """``a`` moved every way that could lay it on ``b``: shifted so their centres
+    of mass meet, and, where that leaves their faces apart, turned about that
+    centre so that two faces of ``a`` (the two that pin a turn best: far from the
+    centre, not in line with it, of the rarest kind) land on faces of ``b`` of
+    their kind, with every other face then landing on one too. Each is a proper
+    turn, never a mirror. The caller proves the fit."""
+    from build123d import CenterOf, Location
+    from OCP.gp import gp_Trsf
+
+    ca, cb = a.center(CenterOf.MASS), b.center(CenterOf.MASS)
+    size = max(a.bounding_box().diagonal, 1.0)
+    tol = _SAME_FACE * size
+
+    def faces(shape, centre) -> list[tuple]:
+        return [(str(face.geom_type), face.area, tuple(face.center(CenterOf.MASS) - centre)) for face in shape.faces()]
+
+    fa, fb = faces(a, ca), faces(b, cb)
+
+    def alike(p, q) -> bool:
+        return p[0] == q[0] and abs(p[1] - q[1]) <= 1e-6 * max(p[1], 1.0)
+
+    def lands(turn) -> bool:
+        """Whether every face of ``a``, turned, lies on a face of ``b`` of its kind."""
+        free = list(fb)
+        for face in fa:
+            at = _turned(turn, face[2])
+            hit = next((k for k, other in enumerate(free) if alike(face, other) and math.dist(at, other[2]) <= tol), None)
+            if hit is None:
+                return False
+            free.pop(hit)
+        return True
+
+    def placed(turn):
+        trsf = gp_Trsf()
+        shift = [cb_k - sum(turn[r][c] * ca_c for c, ca_c in enumerate(tuple(ca))) for r, cb_k in enumerate(tuple(cb))]
+        trsf.SetValues(turn[0][0], turn[0][1], turn[0][2], shift[0], turn[1][0], turn[1][1], turn[1][2], shift[1],
+                       turn[2][0], turn[2][1], turn[2][2], shift[2])
+        return a.moved(Location(trsf))
+
+    same = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
+    if lands(same):
+        yield placed(same)
+        return
+
+    def rarity(face) -> int:
+        return sum(1 for other in fa if alike(face, other) and abs(_norm(other[2]) - _norm(face[2])) <= tol)
+
+    off = [face for face in fa if _norm(face[2]) > tol]
+    if not off:
+        return  # every face centred on the part's own centre, and still apart: not the same part
+    first = min(off, key=lambda face: (rarity(face), -_norm(face[2])))
+    aside = [face for face in off if _norm(_cross(first[2], face[2])) > tol * _norm(first[2])]
+    second = min(aside, key=lambda face: (rarity(face), -_norm(_cross(first[2], face[2])))) if aside else None
+    tried = 0
+    for q1 in fb:
+        if not alike(first, q1) or abs(_norm(q1[2]) - _norm(first[2])) > tol:
+            continue
+        if second is None:
+            # Its faces lie along one line through its centre: any turn that takes
+            # the line onto the other's will do, the part being round about it.
+            candidates = [_swing(first[2], q1[2])]
+        else:
+            candidates = [_frame(q1[2], q2[2], first[2], second[2]) for q2 in fb
+                          if alike(second, q2) and abs(_norm(q2[2]) - _norm(second[2])) <= tol
+                          and abs(math.dist(q1[2], q2[2]) - math.dist(first[2], second[2])) <= tol]
+        for turn in candidates:
+            if turn is None or not lands(turn):
+                continue
+            yield placed(turn)
+            tried += 1
+            if tried >= _MOST_TURNS:
+                return
+
+
+def _norm(v) -> float:
+    return math.sqrt(sum(c * c for c in v))
+
+
+def _cross(a, b) -> tuple[float, float, float]:
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def _turned(turn, v) -> tuple[float, float, float]:
+    return tuple(sum(row[k] * v[k] for k in range(3)) for row in turn)
+
+
+def _axes(p, q) -> tuple | None:
+    """A right-handed frame from two directions not in line: along ``p``, square
+    to both, and the third."""
+    n = _norm(p)
+    w = _cross(p, q)
+    m = _norm(w)
+    if n < 1e-12 or m < 1e-12:
+        return None
+    e1 = tuple(c / n for c in p)
+    e3 = tuple(c / m for c in w)
+    return e1, _cross(e3, e1), e3
+
+
+def _frame(q1, q2, p1, p2) -> tuple | None:
+    """The turn that takes the frame of (``p1``, ``p2``) onto that of (``q1``, ``q2``)."""
+    old, new = _axes(p1, p2), _axes(q1, q2)
+    if old is None or new is None:
+        return None
+    return tuple(tuple(sum(new[k][r] * old[k][c] for k in range(3)) for c in range(3)) for r in range(3))
+
+
+def _swing(p, q) -> tuple | None:
+    """A turn that takes direction ``p`` onto ``q``: about the line square to both,
+    or, for opposite directions, half a turn about any line square to them."""
+    aside = next(axis for axis in ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
+                 if _norm(_cross(p, axis)) > 0.5 * _norm(p))
+    if _norm(_cross(p, q)) < 1e-9 * _norm(p) * _norm(q):
+        if sum(x * y for x, y in zip(p, q)) > 0:
+            return ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
+        return _frame(tuple(-c for c in p), _cross(_cross(p, aside), p), p, _cross(p, _cross(p, aside)))
+    return _frame(q, _cross(_cross(p, q), q), p, _cross(_cross(p, q), p))
 
 
 #: How far apart a face's samples are, and how many one occurrence may cost.
