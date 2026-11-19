@@ -21,7 +21,7 @@ from unittest import mock
 
 import cad_server
 from cad_server import analytics
-from cad_server._internal import file_lock, telemetry_send
+from cad_server._internal import auto_update_helper, file_lock, telemetry_send
 from cad_server.cli import plugin as command
 from cad_server.plugin import apps, computer, run, terminal
 from tests.python.support.agent_apps import PluginRuns
@@ -107,17 +107,17 @@ class CountedTest(unittest.TestCase):
 
     def test_runs_alike_and_apps_alike_are_one_row_each_with_a_count(self) -> None:
         self.tell()
-        for _ in range(3):  # a server's run, tried again: the same every time
+        for _ in range(3):  # a server's run, stopped at its deadline and tried again: the same every time
             self.count(facts("server", ("claude", "updated", "", 2.2), ("codex", "failed", "timeout", 900.5),
-                             seconds=903.1))
+                             seconds=903.1, outcome=run.FAILED, code=computer.STOPPED, stopped=True))
         self.count(facts("server", ("claude", "updated", "", 2.9), ("codex", "updated", "", 4.0), seconds=7.5))
         self.assertEqual(len(kept(self.settings)), 4)
         [batch] = sent(self.settings)
         self.assertEqual(batch["events"], [
             {"name": "install", "by": "server", "outcome": "ok", "logo": "none", "colour": "none", "seconds": 7,
              "found": 2, "failed": 0, "count": 1},
-            {"name": "install", "by": "server", "outcome": "ok", "logo": "none", "colour": "none", "seconds": 903,
-             "found": 2, "failed": 1, "count": 3},
+            {"name": "install", "by": "server", "outcome": "stopped", "logo": "none", "colour": "none",
+             "seconds": 903, "found": 2, "failed": 1, "count": 3},
             {"name": "install_app", "app": "claude", "status": "updated", "seconds": 2, "count": 4},
             {"name": "install_app", "app": "codex", "status": "failed", "reason": "timeout", "seconds": 900,
              "count": 3},
@@ -129,9 +129,10 @@ class CountedTest(unittest.TestCase):
         self.assertEqual(len(shapes), len(set(shapes)))
 
     def test_how_a_run_ended_is_read_from_its_apps_and_never_denied_by_them(self) -> None:
-        """``failed`` is every app found failed, and nothing else: the receiver refuses a row that says otherwise,
-        and its whole batch with it. So the row's outcome is decided where its apps are counted, whatever the run's
-        own word for itself was."""
+        """Of a run that ended, ``failed`` is every app found failed, and nothing else: the receiver refuses a row that
+        says otherwise, and its whole batch with it. So whether it ended well is decided where its apps are counted,
+        whatever the run's own word for itself was. A run that ran nothing is ``busy``, and one its deadline stopped
+        ``stopped``, with whatever it had found by then."""
         self.tell()
         down, fine = ("codex", "failed", "command", 1.0), ("claude", "installed", "", 1.0)
 
@@ -147,12 +148,14 @@ class CountedTest(unittest.TestCase):
         # Another run was going: it ran nothing and names no app.
         self.assertEqual(counted(facts("server", outcome=run.BUSY, code=75)), ("busy", 0, 0, 0))
         self.assertEqual(counted(facts("server", fine, outcome=run.BUSY, code=75)), ("busy", 0, 0, 0))
-        # A run its deadline stopped exits as failed; it is counted failed where every app it had found failed, and as
-        # any other run where one did not: the receiver has no other reading of the word.
+        # A run its deadline stopped exits as failed, and is counted as stopped, whatever it had found by then: never
+        # as one that ended well, nor as one in which every app failed.
         stopped = dict(outcome=run.FAILED, code=computer.STOPPED, stopped=True)
-        self.assertEqual(counted(facts("server", down, **stopped)), ("failed", 1, 1, 1))
-        self.assertEqual(counted(facts("server", fine, down, **stopped)), ("ok", 2, 1, 2))
-        self.assertEqual(counted(facts("server", **stopped)), ("ok", 0, 0, 0))
+        self.assertEqual(counted(facts("server", down, **stopped)), ("stopped", 1, 1, 1))
+        self.assertEqual(counted(facts("server", fine, down, **stopped)), ("stopped", 2, 1, 2))
+        self.assertEqual(counted(facts("server", fine, **stopped)), ("stopped", 1, 0, 1))
+        self.assertEqual(counted(facts("server", **stopped)), ("stopped", 0, 0, 0))
+        self.assertEqual(counted(facts("server", stopped=True)), ("stopped", 0, 0, 0), "whatever else it said")
         # A run that named itself wrongly cannot be counted wrongly: its apps say how it ended.
         self.assertEqual(counted(facts("person", down, down[:1] + ("failed", "network", 2.0), outcome=run.OK)),
                          ("failed", 2, 2, 2))
@@ -172,7 +175,8 @@ class CountedTest(unittest.TestCase):
                         dict(by="person", apps=[("claude", "installed", None, None)]),
                         dict(by="person", apps=[("claude", "installed")]), dict(by="person", apps="claude"),
                         dict(by="person", apps=[fine] * (analytics.MAX_INSTALL_APPS + 1)),
-                        dict(by="server", busy=True, apps=[fine])):
+                        dict(by="server", busy=True, apps=[fine]), dict(by="server", busy=True, stopped=True),
+                        dict(by="server", stopped="yes")):
             self.assertFalse(count(**refused), refused)
         self.assertEqual((kept(self.settings), self.started), ([], []))
         # A reason outside the words is ``other``, and one on an app that did not fail goes no further; seconds past
@@ -246,7 +250,8 @@ class CountedTest(unittest.TestCase):
         """What ``run.Facts`` can say and what telemetry counts are one vocabulary: a word of one the other lacks would
         leave a run uncounted."""
         self.assertEqual({run.PERSON, run.SCRIPT, run.SERVER}, analytics.INSTALL_BY)
-        self.assertEqual({run.OK, run.FAILED, run.BUSY}, analytics.INSTALL_OUTCOMES)
+        # A run says its deadline stopped it apart (``Facts.stopped``), its exit status that of one that failed.
+        self.assertEqual({run.OK, run.FAILED, run.BUSY} | {"stopped"}, analytics.INSTALL_OUTCOMES)
         self.assertEqual({terminal.PLAYED, terminal.STILL, terminal.NONE, run.LOGO_FAILED}, analytics.INSTALL_LOGOS)
         self.assertEqual(set(computer.REASONS), analytics.INSTALL_FAILURES)
         self.assertEqual({"installed", "updated", "removed", "skipped", "failed"}, analytics.INSTALL_STATUSES)
@@ -255,7 +260,7 @@ class CountedTest(unittest.TestCase):
             self.assertRegex(app.key, r"\A[a-z0-9][a-z0-9._-]{0,39}\Z")
         # Every status an app's row can have in a run's report, but the one of an app that is not there.
         for status in sorted(analytics.INSTALL_STATUSES):
-            self.assertIsNotNone(analytics._install_run("person", False, "none", "none", 0.0,
+            self.assertIsNotNone(analytics._install_run("person", False, False, "none", "none", 0.0,
                                                         [("claude", status, "", 0.0)]))
         for colour in ("24bit", "256", "none"):  # ``terminal.Screen.colour``'s three
             self.assertIn(colour, analytics.INSTALL_COLOURS)
@@ -370,6 +375,11 @@ class ToldTest(PluginRuns):
             done = self.cad("plugin", "update", CAD_INSTALL_ATTEMPT="7.0")
         self.assertEqual(75, done.returncode)
         self.assertEqual(self.counted(), [("server", "busy", 0)])
+        # Its time up before it was done: stopped, and counted as that.
+        with mock.patch.object(auto_update_helper, "INSTALL_SECONDS", 0):
+            done = self.cad("plugin", "update", CAD_INSTALL_ATTEMPT="7.0")
+        self.assertEqual(computer.STOPPED, done.returncode, done.stdout)
+        self.assertEqual(self.counted(), [("server", "stopped", 0)])
 
     def test_a_run_reached_from_an_install_command_cad_started_is_told_nothing(self) -> None:
         """The bridge's runs of the hosted install command have their output nowhere or in a log, and carry cad's

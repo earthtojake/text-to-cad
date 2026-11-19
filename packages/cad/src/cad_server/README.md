@@ -279,14 +279,16 @@ receiver to delete what was sent under the install id.
 
 **A run of `cad plugin install` or `cad plugin update` is counted as it ends** (`cli/plugin.py`'s `_count`,
 `analytics.install`), where telemetry is on, as every count is. One `install` event: who began the run (a
-person, the hosted install command handing over, cad's server), how it ended (well; every app it found failed;
-another run was going and this one ran nothing), what its terminal showed of the logo and in which colours, its
-whole seconds, how many agent apps it found and how many of those failed. And one `install_app` event for each
+person, the hosted install command handing over, cad's server), how it ended (`ok`: well; `failed`: every app it
+found failed; `stopped`: its deadline stopped it before it was done; `busy`: another run was going and this one
+ran nothing), what its terminal showed of the logo and in which colours, its whole seconds, how many agent apps it
+found and how many of those failed. And one `install_app` event for each
 app found: the app by cad's own key for it in `plugin/apps.py`, what was done there (`installed`, `updated`,
 `removed`, `skipped`, `failed`), for a failure why in one word chosen where it failed (`timeout`, `command`,
 `network`, `exception`, `other`), and its whole seconds. Never a path, a version of an app's, a line an app
-printed or an error's message. How a run ended is read from its apps where they are counted, so the two never
-disagree: it is counted `failed` exactly where every app it found failed, a run its deadline stopped included.
+printed or an error's message. Whether a run that ended ended well is read from its apps where they are counted,
+so the two never disagree: it is `failed` exactly where every app it found failed, and `ok` anywhere else. A run
+its deadline stopped says what it had found by then, whatever that was.
 The run is kept as one line in a file of its own beside the settings (`telemetry-installs.jsonl`, which no
 sender of an earlier release takes) and a sender is started at once, detached, as for a version's arrival and
 for cad's own update: the run may be the last thing cad does on the computer for a long while. Nothing of it

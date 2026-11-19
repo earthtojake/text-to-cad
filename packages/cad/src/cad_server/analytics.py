@@ -81,9 +81,10 @@ exits, each batch under an id of its own and stamped with the time it was made:
   ``UPDATE_PLUGIN``; ``underway`` where a new attempt began before it ended);
 - ``install`` (``install``): one run of ``cad plugin install`` or ``cad plugin update`` that ended, counted by the
   command as it ends -- who began it (``INSTALL_BY``: a person, the hosted install command handing over, or cad's
-  server), how it ended (``INSTALL_OUTCOMES``: well, every app it found failed, or another run was going and this one
-  ran nothing), what its terminal was shown (``INSTALL_LOGOS``, ``INSTALL_COLOURS``), the whole seconds it took, how
-  many agent apps it found on the computer and how many of those failed;
+  server), how it ended (``INSTALL_OUTCOMES``: well, every app it found failed, its deadline stopped it before it was
+  done, or another run was going and this one ran nothing), what its terminal was shown (``INSTALL_LOGOS``,
+  ``INSTALL_COLOURS``), the whole seconds it took, how many agent apps it found on the computer and how many of
+  those failed;
 - ``install_app`` (``install``): each app such a run found -- which (``app``: cad's own key for it in its table of
   apps, a word of ours, never a path or a version of the app's), what was done there (``INSTALL_STATUSES``), for a
   failure why (``INSTALL_FAILURES``: a word chosen where it failed, never its message), and the whole seconds it took.
@@ -557,13 +558,13 @@ UPDATE_PLUGIN = frozenset({"none", "ok", "failed", "underway"})
 # One run of the plugin's install in the agent apps (``install``, schema 12's; ``cad plugin install`` and ``cad plugin
 # update``, which say what a run was: ``cad_server.cli.plugin``). Who began it: a person who typed the command, the
 # hosted install command handing over to it, or cad's server. How it ended: well (``ok``: with no app found, too);
-# every app it found failed (``failed``); or another run was going and this one, a server's, ran nothing (``busy``).
-# ``failed`` says that and nothing else, which is how the receiver reads it (a row it cannot be true of is refused,
-# with its whole batch): a run its deadline stopped is ``failed`` only where every app it had found by then failed,
-# as any other run is. What its terminal was shown of the logo -- built before its eyes, drawn still, none, or one
-# that could not be drawn -- and in which colours.
+# every app it found failed (``failed``); its deadline stopped it before it was done (``stopped``: a run a server
+# began has one), whatever it had found by then; or another run was going and this one, a server's, ran nothing
+# (``busy``). Of a run that ended, ``failed`` says that every app found failed and nothing else, which is how the
+# receiver reads it (a row it cannot be true of is refused, with its whole batch). What its terminal was shown of the
+# logo -- built before its eyes, drawn still, none, or one that could not be drawn -- and in which colours.
 INSTALL_BY = frozenset({"person", "script", "server"})
-INSTALL_OUTCOMES = frozenset({"ok", "failed", "busy"})
+INSTALL_OUTCOMES = frozenset({"ok", "failed", "stopped", "busy"})
 INSTALL_LOGOS = frozenset({"played", "still", "none", "failed"})
 INSTALL_COLOURS = frozenset({"24bit", "256", "none"})
 # Each app a run found (``install_app``): what was done there, and for a failure why, a word chosen where it failed
@@ -1632,22 +1633,23 @@ def in_force() -> Any:
         return _UNREAD
 
 
-def install(*, by: str, busy: bool = False, logo: str = "none", colour: str = "none", seconds: float = 0.0,
-            apps: Any = (), under: Any = None) -> bool:
+def install(*, by: str, busy: bool = False, stopped: bool = False, logo: str = "none", colour: str = "none",
+            seconds: float = 0.0, apps: Any = (), under: Any = None) -> bool:
     """Count one run of the plugin's install in the agent apps that ended (``install``, and an ``install_app`` for
     each app it found; ``cad_server.cli.plugin`` calls it once per run): begun by ``by`` (``INSTALL_BY``), its
     terminal shown ``logo`` in ``colour`` (``INSTALL_LOGOS``, ``INSTALL_COLOURS``), after ``seconds``, with ``apps``
     the apps it found, each ``(app, status, reason, seconds)``: cad's key for the app, what was done there
     (``INSTALL_STATUSES``), and for a failed one why (``INSTALL_FAILURES``: anything else is ``other``). ``busy``:
-    another run was going and this one ran nothing; it names no app. How the run ended is not told but read from
-    those (``_install_run``), so no run is counted as ended in a way its apps deny. A word outside these, an app's
-    key of another shape, or more apps than ``MAX_INSTALL_APPS``, is not counted.
+    another run was going and this one ran nothing; it names no app. ``stopped``: its deadline stopped it before it
+    was done; its apps are those it had found by then. Whether a run that ended ended well is not told but read from
+    its apps (``_install_run``), so no run is counted as ended in a way its apps deny. A word outside these, an app's
+    key of another shape, more apps than ``MAX_INSTALL_APPS``, or a run both busy and stopped, is not counted.
 
     ``under``: the answer in force when the run began (``in_force``); under another now, nothing is kept.
     Kept and sent as an arrival is (``arrival``), in a file of its own (``INSTALLS``): under the answer in force, only
     while sharing is on, a sender started at once. Never the network, never raises. Whether it was kept."""
     try:
-        found = _install_run(by, busy, logo, colour, seconds, apps)
+        found = _install_run(by, busy, stopped, logo, colour, seconds, apps)
         if found is None or refused():
             return False
         path = settings_path()
@@ -1675,14 +1677,18 @@ def _whole_seconds(value: Any) -> int | None:
     return min(int(value), MAX_INSTALL_SECONDS)
 
 
-def _install_run(by: Any, busy: Any, logo: Any, colour: Any, seconds: Any, apps: Any) -> dict[str, Any] | None:
+def _install_run(by: Any, busy: Any, stopped: Any, logo: Any, colour: Any, seconds: Any,
+                 apps: Any) -> dict[str, Any] | None:
     """A run of the plugin's install as it is kept (``INSTALLS``): what its ``install`` event says (``EVENTS``' names)
     and, as ``apps``, what each of its ``install_app`` events says, ``reason`` only with ``failed``; or None for one
-    that is not counted. ``found`` and ``failed`` are counted from ``apps`` and ``outcome`` decided from them, here
-    and nowhere else: ``busy`` (which names no app: one that does is not counted), else ``failed`` exactly where it
-    found an app and every one failed, else ``ok`` -- the one reading the receiver takes."""
+    that is not counted. ``found`` and ``failed`` are counted from ``apps``, and ``outcome`` decided here and nowhere
+    else: ``busy`` (which names no app: one that does is not counted), ``stopped`` (whatever it found), else, for a
+    run that ended, ``failed`` exactly where it found an app and every one failed and ``ok`` anywhere else -- the one
+    reading the receiver takes."""
     took = _whole_seconds(seconds)
-    if by not in INSTALL_BY or type(busy) is not bool or logo not in INSTALL_LOGOS or colour not in INSTALL_COLOURS:
+    if by not in INSTALL_BY or logo not in INSTALL_LOGOS or colour not in INSTALL_COLOURS:
+        return None
+    if type(busy) is not bool or type(stopped) is not bool or (busy and stopped):
         return None
     if took is None or not isinstance(apps, (list, tuple)) or len(apps) > (0 if busy else MAX_INSTALL_APPS):
         return None
@@ -1699,7 +1705,7 @@ def _install_run(by: Any, busy: Any, logo: Any, colour: Any, seconds: Any, apps:
             row["reason"] = reason if isinstance(reason, str) and reason in INSTALL_FAILURES else "other"
         rows.append({**row, "seconds": app_took})
     failed = sum(1 for row in rows if row["status"] == "failed")
-    outcome = "busy" if busy else "failed" if rows and failed == len(rows) else "ok"
+    outcome = "busy" if busy else "stopped" if stopped else "failed" if rows and failed == len(rows) else "ok"
     return {"by": by, "outcome": outcome, "logo": logo, "colour": colour, "seconds": took, "found": len(rows),
             "failed": failed, "apps": rows}
 
@@ -1710,8 +1716,8 @@ def _install_kept(found: Any) -> dict[str, Any] | None:
     if not isinstance(found, dict) or not isinstance(found.get("apps"), list):
         return None
     rows = [row for row in found["apps"] if isinstance(row, dict)]
-    checked = _install_run(found.get("by"), found.get("outcome") == "busy", found.get("logo"), found.get("colour"),
-                           found.get("seconds"),
+    checked = _install_run(found.get("by"), found.get("outcome") == "busy", found.get("outcome") == "stopped",
+                           found.get("logo"), found.get("colour"), found.get("seconds"),
                            [(row.get("app"), row.get("status"), row.get("reason"), row.get("seconds")) for row in rows])
     if checked is None or json.dumps(checked, sort_keys=True) != json.dumps(found, sort_keys=True):
         return None

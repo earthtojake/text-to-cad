@@ -162,20 +162,20 @@ def _tell(by: str) -> None:
 def _count(facts: Any, under: Any) -> None:
     """The run counted (``cad_server.analytics.install``), from what it says it was (``run.Facts``) and nothing else:
     who began it, what its terminal was shown, its seconds, and each app it found with what was done there, the word
-    for why it failed and its seconds. One another run kept from running (``run.BUSY``) names no app. How it ended is
-    not passed on but decided there from those apps, so no run is counted as ended in a way its own apps deny: a run
-    is counted failed exactly where every app it found failed -- the reading the receiver takes, which refuses any
-    other with its whole batch --, so one its deadline stopped (``Facts.stopped``, whose exit status says it failed)
-    is counted failed where every app it had found by then failed, and as any other run where one did not. ``under``:
-    the answer in force as the run began. Never raises: a count never fails the run."""
+    for why it failed and its seconds. One another run kept from running (``run.BUSY``) is counted as that, and names
+    no app; one its deadline stopped (``Facts.stopped``, whose exit status says it failed) as stopped, with the apps
+    it had found by then. Whether any other run ended well is not passed on but decided there from its apps, so no
+    run is counted as ended in a way its own apps deny: failed exactly where every app it found failed -- the reading
+    the receiver takes, which refuses any other with its whole batch. ``under``: the answer in force as the run
+    began. Never raises: a count never fails the run."""
     try:
         from cad_server import analytics
         from cad_server.plugin import run
 
         busy = facts.outcome == run.BUSY
         apps = [] if busy else [(app.app, app.status, app.reason or None, app.seconds) for app in facts.apps]
-        analytics.install(by=facts.by, busy=busy, logo=facts.logo, colour=facts.colour, seconds=facts.seconds,
-                          apps=apps, under=under)
+        analytics.install(by=facts.by, busy=busy, stopped=bool(facts.stopped) and not busy, logo=facts.logo,
+                          colour=facts.colour, seconds=facts.seconds, apps=apps, under=under)
     except Exception:  # noqa: BLE001 - see above
         pass
 

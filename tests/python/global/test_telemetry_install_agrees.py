@@ -82,6 +82,10 @@ class InstallSenderAndReceiverAgree(unittest.TestCase):
             runs.append(dict(said, seconds=0.4, apps=[]))
             runs.append(dict(said, seconds=12.7, apps=[next(done), next(failed), next(done), next(failed), next(done)]))
             runs.append(dict(said, seconds=most + 5.0, apps=[next(failed), next(failed)]))
+            # Its deadline stopped it: with some apps done, with every one found failed, with none found yet.
+            runs.append(dict(said, stopped=True, seconds=900.9, apps=[next(done), next(failed)]))
+            runs.append(dict(said, stopped=True, seconds=901.0, apps=[next(failed)]))
+            runs.append(dict(said, stopped=True, seconds=902.0, apps=[]))
         runs.extend([runs[2]] * 2)  # the same run again, twice: one row, counted
         return runs
 
@@ -98,7 +102,8 @@ class InstallSenderAndReceiverAgree(unittest.TestCase):
         made_apps: collections.Counter = collections.Counter()
         for each in runs:  # what each should be read as, worked out here from the run alone
             broke = [app for app in each["apps"] if app[1] == "failed"]
-            outcome = "busy" if each.get("busy") else "failed" if broke and len(broke) == len(each["apps"]) else "ok"
+            outcome = ("busy" if each.get("busy") else "stopped" if each.get("stopped")
+                       else "failed" if broke and len(broke) == len(each["apps"]) else "ok")
             made_runs[(each["by"], outcome, each["logo"], each["colour"], min(int(each["seconds"]), most),
                        len(each["apps"]), len(broke))] += 1
             for key, status, reason, seconds in each["apps"]:
@@ -138,8 +143,9 @@ class InstallSenderAndReceiverAgree(unittest.TestCase):
         self.assertEqual(stored_runs[("person", "ok", "failed", "24bit", 12, 5, 2)], 3, "runs alike: one row, counted")
 
     def test_the_receiver_refuses_what_the_sender_is_made_never_to_send(self) -> None:
-        """Why the sender decides a run's outcome from its apps, sends whole seconds, leaves a reason out but for a
-        failure and merges rows alike: the receiver refuses each of the others, and a batch refused is dropped whole."""
+        """Why the sender decides from its apps whether a run that ended ended well, sends whole seconds, leaves a
+        reason out but for a failure and merges rows alike: the receiver refuses each of the others, and a batch
+        refused is dropped whole. A run its deadline stopped is read with whatever it had found."""
         from cad_server import analytics
         from cad_server._internal import telemetry_send
 
@@ -166,6 +172,7 @@ class InstallSenderAndReceiverAgree(unittest.TestCase):
             "failed, with no app found": changed(0, outcome="failed", found=0, failed=0),
             "ok, with every app found failed": changed(0, found=1, failed=1),
             "busy, with apps found": changed(0, outcome="busy"),
+            "stopped, with more failed than found": changed(0, outcome="stopped", failed=3),
             "more failed than found": changed(0, failed=3),
             "a fraction of a second": changed(0, seconds=901.5),
             "an app's fraction of a second": changed(1, seconds=3.5),
@@ -174,9 +181,12 @@ class InstallSenderAndReceiverAgree(unittest.TestCase):
             "a failure with no reason": changed(2, reason=...),
             "a row twice": {**batch, "events": [*batch["events"], batch["events"][1]]},
         }
-        read = self.read([batch, *refused.values()])
-        self.assertNotIn("refused", read[0])
-        for why, found in zip(refused, read[1:]):
+        taken = [batch, changed(0, outcome="stopped"), changed(0, outcome="stopped", found=1, failed=1),
+                 changed(0, outcome="stopped", found=0, failed=0)]
+        read = self.read([*taken, *refused.values()])
+        for found in read[:len(taken)]:
+            self.assertNotIn("refused", found)
+        for why, found in zip(refused, read[len(taken):]):
             self.assertIn("refused", found, why)
 
 
