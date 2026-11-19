@@ -31,11 +31,24 @@ CHARACTERISTICS = (*FORM, "line_profile", "surface_profile", *ORIENTATION, "posi
                    "symmetry", *RUNOUT)
 #: Each standard's characteristics it has no symbol for, and what it states in their place.
 _DROPPED = {"ASME Y14.5-2018": {"concentricity": "position, or runout", "symmetry": "position, or surface_profile"}}
+#: The characteristics measured from a datum, which a frame of theirs must name.
+#: Orientation and runout relate a feature to a datum by definition; so do
+#: concentricity (ISO 1101's coaxiality) and symmetry, which place a feature's
+#: axis or median plane on a datum's: without one there is nothing to be coaxial
+#: or symmetric with. Form names none (``FORM``). Profile and position are left
+#: free: a profile with no datum controls form alone, and a position with none
+#: holds the features of a pattern to each other (ISO 5458, Y14.5's pattern
+#: without datum references).
+_NEED_DATUM = (*ORIENTATION, "concentricity", "symmetry", *RUNOUT)
 #: The characteristics whose zone may be a diameter (an axis's).
 _DIAMETER_ZONES = ("straightness", *ORIENTATION, "position", "concentricity")
 #: The characteristics that apply to a feature of size, and so may take a material
-#: condition.
-_MATERIAL_CONDITIONS = ("straightness", *ORIENTATION, "position")
+#: condition: straightness of an axis, orientation and position in both standards,
+#: and concentricity and symmetry, which ISO 2692 gives the maximum and least
+#: material requirement too (Y14.5-2018 has neither characteristic, and a sheet
+#: read by it refuses them whole). Y14.5's flatness of a derived median plane at
+#: MMC is not offered: a flatness frame here is a surface's.
+_MATERIAL_CONDITIONS = ("straightness", *ORIENTATION, "position", "concentricity", "symmetry")
 MODIFIERS = ("M", "L")
 #: A frame's height, in text heights; its symbol and datum cells are square.
 _FRAME_HEIGHT = 1.8
@@ -63,14 +76,24 @@ class Frame:
         _places(self.tolerance)
         if isinstance(self.datums, str):
             raise TypeError(f"datums is a sequence of letters, datums=({self.datums!r},) for one")
-        datums = tuple(str(d).upper() for d in self.datums)
+        try:
+            given = tuple(self.datums)
+        except TypeError:
+            raise TypeError(f"datums is a sequence of letters, datums=(\"A\", \"B\"), got {self.datums!r}") from None
+        # One letter each, and a letter a datum can carry: a test for the letter in
+        # the alphabet's text took "AB" and "" for letters, and the sheet refused
+        # them only when it rendered, as datums nobody had defined.
+        if not all(isinstance(d, str) and len(d) == 1 and d.upper() in _SECTION_LETTERS for d in given):
+            raise ValueError(f"datums are up to three different letters from {_SECTION_LETTERS} (Y14.5 leaves "
+                             f"out I, O and Q), one letter each, got {self.datums!r}")
+        datums = tuple(d.upper() for d in given)
         object.__setattr__(self, "datums", datums)
-        if len(datums) > 3 or len(set(datums)) != len(datums) or any(d not in _SECTION_LETTERS for d in datums):
+        if len(datums) > 3 or len(set(datums)) != len(datums):
             raise ValueError(f"datums are up to three different letters from {_SECTION_LETTERS} (Y14.5 leaves "
                              f"out I, O and Q), got {self.datums!r}")
         if self.characteristic in FORM and datums:
             raise ValueError(f"{self.characteristic} relates a feature to itself and names no datum")
-        if self.characteristic in (*ORIENTATION, *RUNOUT) and not datums:
+        if self.characteristic in _NEED_DATUM and not datums:
             raise ValueError(f"{self.characteristic} is measured from a datum; give datums=")
         if self.diameter and self.characteristic not in _DIAMETER_ZONES:
             raise ValueError(f"{self.characteristic}'s zone is not a diameter; a diameter zone is for "
