@@ -39,7 +39,7 @@ Nothing here imports the kernel at module scope.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 __all__ = ["Hole", "Axis", "Slot", "BoltCircle", "Blend", "Chamfer", "holes", "axes", "slots", "bolt_circles",
            "turned_diameters", "blends", "chamfers", "sharp_edges", "Hex", "hexes"]
@@ -94,6 +94,10 @@ class Hole:
     #: ``beyond`` being how far the end runs past ``depth`` on the centre line. A
     #: callout has no symbol for it, so the report asks for a note.
     end: tuple[str, float, float] | None = None
+    #: The bolt circle the hole is on, as (its diameter, its centre), or None: six
+    #: holes on ⌀60 and eight of the same size on ⌀100 are two patterns, each a
+    #: callout with its own count.
+    circle: tuple[float, tuple[float, float, float]] | None = None
 
     def signature(self) -> tuple:
         """What makes two holes "the same hole" for a ``4×`` count."""
@@ -104,6 +108,8 @@ class Hole:
         unsaid = self.problem or ""
         if self.end is not None:
             unsaid += f"|{self.end[0]} {round(self.end[1], 3)} {round(self.end[2], 3)}"
+        if self.circle is not None:
+            unsaid += f"|on {round(self.circle[0], 3)} at {tuple(round(c, 3) for c in self.circle[1])}"
         return (r(self.diameter), self.thru, r(self.depth), pair(self.cbore), pair(self.csk),
                 pair(self.far_cbore), pair(self.far_csk), unsaid)
 
@@ -462,7 +468,8 @@ def holes(shape) -> list[Hole]:
     ray = None
     tori = None
     ends = _Ends(shape)
-    for key, (d, foot, segments) in _surface_segments(shape).items():
+    surfaces = _surface_segments(shape)
+    for key, (d, foot, segments) in surfaces.items():
         u, v = _perpendicular(d)
 
         def at(a: float, x: float = 0.0, y: float = 0.0):
@@ -504,6 +511,11 @@ def holes(shape) -> list[Hole]:
                         found.append(piece)
             elif isinstance(hole, Hole):
                 found.append(hole)
+    # Which bolt circle each hole is on is part of what it is: holes of one size
+    # on two pitch circles are two kinds, counted apart.
+    on = {mouth: (circle.diameter, circle.centre)
+          for circle in _bolt_circles(found, list(surfaces.values())) for mouth in circle.mouths}
+    found = [replace(hole, circle=on[hole.mouth]) if hole.mouth in on else hole for hole in found]
     found.sort(key=lambda h: (h.signature(), h.axis, h.mouth))
     return found
 
@@ -812,53 +824,83 @@ def bolt_circles(shape, found: list[Hole] | None = None) -> list[BoltCircle]:
     circle whose centre lies on a turned axis of the part (a bore, a boss, the
     part's own outside). The turned axis is what makes it a bolt circle rather than
     a pattern a rectangular plate happens to make: four corner holes on a square
-    are equally spaced too, and are dimensioned as pitches."""
+    are equally spaced too, and are dimensioned as pitches.
+
+    Holes of one size can make more than one circle: six on ⌀60 and eight on ⌀100
+    round one bore are two patterns, each with its own count and pitch circle, and
+    a hole of that size standing elsewhere belongs to neither."""
     found = holes(shape) if found is None else found
-    surfaces = list(_surface_segments(shape).values())
-    lines = [(d, foot) for d, foot, segments in surfaces
-             if any(s.kind == "cyl" and _full(s) for s in _merge_split_faces(segments))]
+    return _bolt_circles(found, list(_surface_segments(shape).values()))
+
+
+def _bolt_circles(found: list[Hole], surfaces: list) -> list[BoltCircle]:
+    merged = [(d, foot, _merge_split_faces(segments)) for d, foot, segments in surfaces]
+    lines = [(d, foot) for d, foot, segments in merged if any(s.kind == "cyl" and _full(s) for s in segments)]
     # The outside radius of every turned surface round each line.
     outside: dict[tuple, float] = {}
-    for d, foot, segments in surfaces:
-        for seg in _merge_split_faces(segments):
+    for d, foot, segments in merged:
+        for seg in segments:
             if seg.kind == "cyl" and _full(seg) and not seg.concave:
                 key = _line_key(d, foot)
                 outside[key] = max(outside.get(key, 0.0), seg.r_lo)
     groups: dict[tuple, list[Hole]] = {}
     for hole in found:
-        groups.setdefault((hole.signature(), hole.axis), []).append(hole)
+        groups.setdefault((replace(hole, circle=None).signature(), hole.axis), []).append(hole)
     circles: list[BoltCircle] = []
     for (_sig, axis), members in groups.items():
         if len(members) < 3:
             continue
         u, v = _perpendicular(axis)
-        centre = tuple(sum(h.mouth[k] for h in members) / len(members) for k in range(3))
-        polar = []
-        for hole in members:
-            rel = tuple(m - c for m, c in zip(hole.mouth, centre))
-            x, y = sum(a * b for a, b in zip(rel, u)), sum(a * b for a, b in zip(rel, v))
-            along = sum(a * b for a, b in zip(rel, axis))
-            polar.append((math.atan2(y, x) % (2 * math.pi), math.hypot(x, y), along))
-        radius = sum(r for _a, r, _z in polar) / len(polar)
-        if radius < _TOUCH or any(abs(r - radius) > 1e-3 or abs(z) > 1e-3 for _a, r, z in polar):
-            continue
-        angles = sorted(a for a, _r, _z in polar)
-        step = 2 * math.pi / len(angles)
-        gaps = [(b - a) for a, b in zip(angles, angles[1:] + [angles[0] + 2 * math.pi])]
-        if any(abs(g - step) > 1e-3 for g in gaps):
-            continue
-        d, foot = _canonical(axis, centre)
-        if not any(all(abs(x - y) < 1e-6 for x, y in zip(d, line_d))
-                   and math.dist(foot, line_foot) < 1e-3 for line_d, line_foot in lines):
-            continue
-        # Four holes equally spaced are also the corners of a square, and on a
-        # square plate (a motor mount round its bore) they are dimensioned as
-        # pitches. Only a round part -- a turned outside enclosing them -- makes
-        # four a bolt circle.
-        if len(members) == 4 and outside.get(_line_key(d, foot), 0.0) < radius:
-            continue
-        circles.append(BoltCircle(centre=_tidy(centre), axis=axis, diameter=2 * radius,
-                                  mouths=tuple(h.mouth for h in members)))
+        along_axis = _canonical(axis, (0.0, 0.0, 0.0))[0]
+        own = {_line_key(*_canonical(axis, hole.mouth)) for hole in members}
+        rings = []
+        for line_d, line_foot in lines:
+            # A circle's centre line is a turned axis along the holes' own, and none
+            # of the holes themselves: in a field of holes (a perforated plate) every
+            # hole has equally spaced neighbours, and none of them is a bolt circle.
+            if any(abs(x - y) > 1e-6 for x, y in zip(along_axis, line_d)) or _line_key(line_d, line_foot) in own:
+                continue
+            polar = []
+            for hole in members:
+                rel = tuple(m - f for m, f in zip(hole.mouth, line_foot))
+                along = sum(a * b for a, b in zip(rel, line_d))
+                radial = tuple(r - along * k for r, k in zip(rel, line_d))
+                x, y = sum(a * b for a, b in zip(radial, u)), sum(a * b for a, b in zip(radial, v))
+                polar.append((math.hypot(x, y), along, math.atan2(y, x) % (2 * math.pi), hole))
+            polar.sort(key=lambda entry: entry[:3])
+            # Each run of one radius is a ring round this line.
+            runs: list[list] = []
+            for entry in polar:
+                if runs and entry[0] - runs[-1][-1][0] <= 1e-3:
+                    runs[-1].append(entry)
+                else:
+                    runs.append([entry])
+            for ring in runs:
+                radius = sum(r for r, _a, _t, _h in ring) / len(ring)
+                level = ring[0][1]
+                if len(ring) < 3 or radius < _TOUCH or any(abs(a - level) > 1e-3 for _r, a, _t, _h in ring):
+                    continue
+                angles = sorted(t for _r, _a, t, _h in ring)
+                step = 2 * math.pi / len(angles)
+                gaps = [(b - a) for a, b in zip(angles, angles[1:] + [angles[0] + 2 * math.pi])]
+                if any(abs(g - step) > 1e-3 for g in gaps):
+                    continue
+                # Four holes equally spaced are also the corners of a square, and on a
+                # square plate (a motor mount round its bore) they are dimensioned as
+                # pitches. Only a round part -- a turned outside enclosing them -- makes
+                # four a bolt circle.
+                if len(ring) == 4 and outside.get(_line_key(line_d, line_foot), 0.0) < radius:
+                    continue
+                centre = _tidy(tuple(f + level * k for f, k in zip(line_foot, line_d)))
+                rings.append((-len(ring), round(radius, 6), centre, [h for _r, _a, _t, h in ring]))
+        # A hole is on one circle: the fullest rings first.
+        used: set[int] = set()
+        for _count, radius, centre, ring in sorted(rings, key=lambda entry: entry[:3]):
+            if any(id(hole) in used for hole in ring):
+                continue
+            used.update(id(hole) for hole in ring)
+            circles.append(BoltCircle(centre=centre, axis=axis, diameter=2 * radius,
+                                      mouths=tuple(h.mouth for h in ring)))
     circles.sort(key=lambda c: (round(c.diameter, 3), c.axis, c.centre))
     return circles
 

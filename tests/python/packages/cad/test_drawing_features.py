@@ -501,3 +501,64 @@ class OpenEndTests(unittest.TestCase):
         self.assertTrue(found[8].thru, "the lid's hole opens into the cavity")
         self.assertFalse(found[6].thru)
         self.assertAlmostEqual(found[6].depth, 4.0, places=6)
+
+
+def _two_circles():
+    """A ⌀120 flange with a ⌀20 bore: six ⌀5 holes on ⌀60, eight more on ⌀100, and
+    one more of the same size standing alone at (0, 18)."""
+    from build123d import Align, Cylinder, Pos
+
+    align = (Align.CENTER, Align.CENTER, Align.MIN)
+    flange = Cylinder(60, 10, align=align) - Cylinder(10, 10, align=align)
+    spots = [(30 * math.cos(math.radians(a)), 30 * math.sin(math.radians(a))) for a in range(0, 360, 60)]
+    spots += [(50 * math.cos(math.radians(a)), 50 * math.sin(math.radians(a))) for a in range(0, 360, 45)]
+    spots.append((0.0, 18.0))
+    return flange - [Pos(x, y, 0) * Cylinder(2.5, 10, align=align) for x, y in spots]
+
+
+class TwoCircleTests(unittest.TestCase):
+    """Holes of one size on two pitch circles are two patterns."""
+
+    def test_each_pattern_has_its_own_count_and_circle(self) -> None:
+        from cad._internal.drawing_features import bolt_circles, holes
+
+        part = _two_circles()
+        found = holes(part)
+        circles = bolt_circles(part, found)
+        self.assertEqual([(round(c.diameter, 6), len(c.mouths)) for c in circles], [(60.0, 6), (100.0, 8)])
+        small = [h for h in found if abs(h.diameter - 5) < 1e-6]
+        kinds: dict[tuple, int] = {}
+        for hole in small:
+            kinds[hole.signature()] = kinds.get(hole.signature(), 0) + 1
+        self.assertEqual(sorted(kinds.values()), [1, 6, 8], "the six, the eight, and the one on no circle")
+        self.assertEqual(sorted(round(h.circle[0]) for h in small if h.circle), [60] * 6 + [100] * 8)
+        self.assertEqual(bolt_circles(part), circles, "read alone, the same circles")
+
+    def test_the_sheet_calls_out_and_draws_both(self) -> None:
+        from cad._internal.drawing_render import _render_sheet
+        from cad.eng_drawing import Sheet
+
+        sheet = Sheet("A3", 1.0)
+        top, _front = sheet.three_views(_two_circles(), views=("top", "front"))
+        top.holes()
+        msp = _render_sheet(sheet, index=1, count=1, label="circles").modelspace()
+        pitch = sorted(round(c.dxf.radius, 6) for c in msp.query("CIRCLE[layer=='CENTER']"))
+        self.assertEqual(pitch, [30.0, 50.0], "a pitch circle each")
+        said = " ".join(t.dxf.text for t in msp.query("TEXT[layer=='DIM']"))
+        for words in ("6× ", "8× ", "EQ SP ON"):
+            self.assertIn(words, said)
+        self.assertNotIn("15× ", said)
+        self.assertNotIn("14× ", said)
+
+    def test_a_field_of_holes_is_no_bolt_circle(self) -> None:
+        """Every hole of a hexagonal field has six equally spaced neighbours."""
+        from build123d import Align, Box, Cylinder, Pos
+        from cad._internal.drawing_features import bolt_circles, holes
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        spots = [(12 * (i + 0.5 * (j % 2)), 12 * math.sin(math.radians(60)) * j) for i in range(-2, 3) for j in range(-2, 3)]
+        plate = Box(90, 80, 4, align=align) - [Pos(x, y, 0) * Cylinder(2, 4, align=align) for x, y in spots]
+        found = holes(plate)
+        self.assertEqual(len(found), 25)
+        self.assertEqual(bolt_circles(plate, found), [])
+        self.assertEqual(len({h.signature() for h in found}), 1, "one kind, one count")
