@@ -209,7 +209,10 @@ def _operation(owner: DocumentType, name: str) -> Any:
         signature = signature.replace(parameters=[parameter for parameter in signature.parameters.values()
                                                   if parameter.name not in ("tolerance", "angle", "zero")])
     operation.__signature__ = signature  # type: ignore[attr-defined]
-    operation.__doc__ = f"cad.{owner.entry.id}.{name}: {owner.entry.operation(name).summary}.\n\n{verb.__doc__ or ''}"
+    # The verb's docstring without its indentation, which Python strips by itself only from 3.13: the same words on
+    # every Python the library runs on.
+    described = inspect.cleandoc(verb.__doc__ or "")
+    operation.__doc__ = f"cad.{owner.entry.id}.{name}: {owner.entry.operation(name).summary}.\n\n{described}"
     return operation
 
 
