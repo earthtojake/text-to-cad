@@ -564,6 +564,13 @@ class InstallScriptTests(AgentApps):
                          {"schema": "text-to-cad install report/1", "release": "0.11.13", "setup": 0,
                           "apps": {"codex": "updated"}})
         self.assertEqual(self.installs(), [])
+        # Before the docs site serves this script, its deploy asks PyPI's newest cad for this command's help
+        # (scripts/release/newest_cad.py, held by test_newest_cad.py): the words uv was given here, and no others.
+        spec = importlib.util.spec_from_file_location("newest_cad", REPO_ROOT / "scripts/release/newest_cad.py")
+        asked = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(asked)
+        self.assertEqual(self.newest(), [list(asked.HAND_OVER)])
+        self.assertEqual(asked.ASKED, (*asked.HAND_OVER, "--help"))
 
     def test_with_no_cad_at_all_the_newest_cad_s_step_is_tried_once_and_then_the_run_has_failed(self) -> None:
         report = self.root / "report.json"
