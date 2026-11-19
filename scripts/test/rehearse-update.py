@@ -20,8 +20,9 @@ the feed names (``latest``, and each major's newest as ``lines``) and the stand-
 yanked). Releases of a higher major (``above``) have a minor and a patch of 9000 and more, past anything PyPI holds of
 that major.
 
-The install command counts the runs cad starts of it on every computer (``Box.runs``): the bridge's alone (install mode,
-a shipped release's own setup, a server's one run on a computer our setup reached). ``cad plugin update``, which this
+The install command counts the runs cad starts of it on every computer (``Box.runs``): the bridge's (install mode,
+a shipped release's own setup, a server's one run on a computer our setup reached), and the one the ``cad plugin
+update`` of 0.11.12 and 0.11.13 makes. ``cad plugin update``, which this
 build's server runs once where cad got newer, installs the plugin with cad's own code and runs no install command: on a
 route of cad updating itself the count stays 0, and the run is read from cad's record of it (``caught_up``). The feed
 keeps which address each cad read it at (``addresses``): this build's the new one, ``/v1/releases``, a shipped
@@ -118,12 +119,24 @@ updater), installed by its own ``cad setup`` through uvx, its server serving pag
 - ``store-uv-line``: the same on a store-only computer: two tendings after the start the install command never ran,
   and there is no plugin switch.
 
+**A release whose own ``cad plugin update`` runs the install command** (0.11.12 and 0.11.13: global installs
+already, with no ``cad plugin install``; ``RUNS_IT``, the newer of the two), installed from PyPI as a uv tool:
+
+- ``plugin-update``: its ``cad plugin update`` typed, with this tree out as the newest release. That command runs the
+  install command, marked as a run of cad's own (``CAD_INSTALL_BY_CAD``): cad, a uv tool that starts, is left as it
+  is; the hand-over to its ``cad plugin install`` is refused (exit status 2: it has no such command, asked of it
+  first on its own), so the newest release's runs instead, outside the tool (``uv tool run ... cad@latest plugin
+  install``: this tree's, from the computer's folder of releases), and turns the plugin's switch on. The end: exit
+  0; the install command ran once, and never again from inside itself; uv's cad is still the shipped release, which
+  says the switch is on and keeps itself as the release the plugin is up to date for; no server was started, and
+  nothing of the computer runs.
+
 Usage::
 
     scripts/test/rehearse-update.py [ROUTE ...] [--old RELEASE] [--wheels DIR] [--uv-cache DIR]
 
 ``all`` (the default) is every route; ``self`` the nine of cad updating itself; ``bridge`` the ten from a shipped
-release. ``--wheels``: this tree's wheels as ``scripts/release/check-wheel-contents.sh`` keeps them; without it they
+release; ``plugin-update`` is of neither group, and runs with ``all`` or by its name. ``--wheels``: this tree's wheels as ``scripts/release/check-wheel-contents.sh`` keeps them; without it they
 are built from the source (``tests/python/support/machine.py``, no packaged runtime: no route opens a page).
 ``--uv-cache``: one folder for uv's cache and Pythons, shared by every computer of the run (default: a new one of the
 run's in the system's temporary folder, removed at its end; never one of the person's own folders of uv, cad or the
@@ -159,6 +172,9 @@ import real_computer as rc  # noqa: E402 - beside it
 REPO_ROOT = rc.REPO_ROOT
 WINDOWS = rc.WINDOWS
 OLD = "0.11.11"
+# The newer of the two releases whose own `cad plugin update` runs the install command (0.11.12, 0.11.13): what
+# ``plugin-update`` starts on.
+RUNS_IT = "0.11.13"
 _BASE = 9000 + os.getpid() % 800
 # This tree as releases no index holds: the one installed first, the next, one whose server cannot start, the one after
 # it, and one uv cannot install as a tool.
@@ -1505,12 +1521,56 @@ def store_uv_line(box: Box, old: str) -> None:
     by_uv_line(box, old, ours=False)
 
 
+# --- a release that runs the install command for `cad plugin update` -------------------------------------------------
+
+
+def plugin_update(box: Box) -> None:
+    """``plugin-update`` (see the module): ``RUNS_IT``'s own ``cad plugin update``, typed, runs the install command,
+    whose hand-over that cad refuses, so the newest release's ``cad plugin install`` does the work."""
+    old = RUNS_IT
+    box.out(old)
+    box.run(["uv", "tool", "install", "--managed-python", "--python", "3.14", f"cad=={old}"], timeout=1500)
+    box.is_tool(old)
+    # What the route stands on: this release has no `cad plugin install`, and says so as a command line it cannot
+    # read, having run nothing.
+    refused = box.run([box.cad(), "plugin", "install"], check=False, timeout=120)
+    if refused.returncode != 2 or "invalid choice: 'install'" not in refused.stderr or box.runs() != 0:
+        raise Failed(f"{box.label}: {old}'s `cad plugin install` exited {refused.returncode}, the install command ran "
+                     f"{box.runs()} times:\n{refused.stdout}\n{refused.stderr}")
+    box.out(NEW)  # this tree, the newest release out: what `cad@latest` names
+    done = box.run([box.cad(), "plugin", "update"], check=False, timeout=SECONDS + 300)
+    said = [f"cad {old} is installed already: it is left as it is, and updates itself.",
+            f"cad {old} has no `cad plugin install`: the newest cad's runs instead (uv tool run cad@latest), which uv "
+            "downloads once.",
+            "Setting up the plugin in each agent app found here:", "plugin update auto: on"]
+    lines = done.stdout.splitlines()
+    if done.returncode != 0 or [line for line in said if line not in lines] or "Installing cad with uv" in done.stdout:
+        raise Failed(f"{box.label}: {old}'s `cad plugin update` exited {done.returncode} (to say, each on a line of "
+                     f"its own: {said}):\n{done.stdout}\n{done.stderr}\n{box.said()}")
+    # cad itself is left as it is, and the install command ran once: nothing it ran came back to it.
+    box.is_tool(old)
+    switch = box.run([box.cad(), "plugin", "update", "auto"]).stdout.strip()
+    held = {"runs": box.runs(), "plugin": (box.read("settings.json").get("plugin") or {}).get("auto_update"),
+            "switch": switch, "for": box.read("install-command.json").get("for")}
+    if held != {"runs": 1, "plugin": True, "switch": "plugin update auto: on", "for": old}:
+        raise Failed(f"{box.label}: after {old}'s `cad plugin update`: {held}\n{box.said()}")
+    # No server was started, and nothing of the run is left running.
+    box.until(lambda: not box.computer.processes(), "nothing of the computer running", seconds=60)
+    if box.ask(rc.interpreter(Path(box.tool()["env"])), "status") is not None:
+        raise Failed(f"{box.label}: a server runs after {old}'s `cad plugin update`:\n{box.said()}")
+    say(f"        {old}'s `cad plugin update` ran the install command once: cad left at {old}, its `cad plugin "
+        f"install` refused (exit 2), so {NEW}'s ran by `uv tool run cad@latest` and turned the plugin's switch on; "
+        f"exit 0, the plugin up to date for {old}, no server started")
+
+
 SELF = {"self-update": self_update, "self-typed": self_typed, "self-typed-stopped": self_typed_stopped,
         "self-at-start": self_at_start, "self-off": self_off, "self-broken": self_broken,
         "self-uninstallable": self_uninstallable, "self-major": self_major, "self-pipx": self_pipx}
 BRIDGE = {"updater": updater, "automatic": automatic, "updater-fallback": updater_fallback, "store-only": store_only,
           "rollback": rollback, "install-command": install_command, "typed": typed, "store-typed": store_typed,
           "uv-line": uv_line, "store-uv-line": store_uv_line}
+# Of neither group: the routes that start on ``RUNS_IT``, each on a computer alone as a route of ``SELF`` is.
+RELEASED = {"plugin-update": plugin_update}
 
 
 def publish_all(source: Path | None, out: Path) -> None:
@@ -1532,7 +1592,7 @@ def publish_all(source: Path | None, out: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    routes = {**SELF, **BRIDGE}
+    routes = {**SELF, **BRIDGE, **RELEASED}
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("routes", nargs="*", default=["all"], choices=("all", "self", "bridge", *routes),
                         metavar="ROUTE", help=f"one or more of: all, self, bridge, {', '.join(routes)}")
@@ -1570,22 +1630,22 @@ def main(argv: list[str] | None = None) -> int:
             feed.reads.clear()
             box = Box(name, feed, wheels, shared, named_state=not alone, pypi=pypi, counted=True)
             say(f"-- {name}: a computer in {box.work}")
+            came = f", from {args.old}" if name in BRIDGE else f", from {RUNS_IT}" if name in RELEASED else ""
             began = time.monotonic()
             try:
                 box.computer.isolation(say)
                 say(f"  CAD_PYPI_URL={box.env['CAD_PYPI_URL']}")
                 if not box.env["CAD_PYPI_URL"].startswith("http://127.0.0.1:"):
                     raise Failed("the computer is not isolated: CAD_PYPI_URL")
-                if name in SELF:
-                    routes[name](box)
-                else:
+                if name in BRIDGE:
                     routes[name](box, args.old)
+                else:
+                    routes[name](box)
                 say(f"        the feed: {addresses(box)}")
-                say(f"ok      {name}{'' if name in SELF else f', from {args.old}'} ({time.monotonic() - began:.0f} s)")
+                say(f"ok      {name}{came} ({time.monotonic() - began:.0f} s)")
             except (rc.Failed, subprocess.TimeoutExpired, OSError, ValueError, KeyError) as failure:
                 failed += 1
-                say(f"FAILED  {name}{'' if name in SELF else f', from {args.old}'} ({time.monotonic() - began:.0f} s): "
-                    f"{failure}")
+                say(f"FAILED  {name}{came} ({time.monotonic() - began:.0f} s): {failure}")
             finally:
                 left = box.stop()
                 if left:
