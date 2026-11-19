@@ -59,6 +59,29 @@ class BlindEndReportTests(unittest.TestCase):
         lines = _report(self._sheet("SPHERICAL R4"))
         self.assertFalse([line for line in lines if "ends in a ball" in line], lines)
 
+    def test_a_hole_ending_inside_a_bore_across_it_is_reported(self) -> None:
+        from build123d import Align, Box, Cylinder, Pos, Rot
+        from cad.eng_drawing import Sheet
+
+        corner = (Align.MIN, Align.MIN, Align.MIN)
+        block = Box(60, 40, 30, align=corner) - Pos(30, 20, 15) * Rot(0, 90, 0) * Cylinder(5, 60)
+        block -= Pos(30, 0, 15) * Rot(-90, 0, 0) * Cylinder(3, 20, align=(Align.CENTER, Align.CENTER, Align.MIN))
+
+        def lines(note: str | None) -> list[str]:
+            sheet = Sheet("A3", 1.0)
+            _top, front, right = sheet.three_views(block)
+            front.holes()
+            right.holes()
+            if note:
+                front.note(note, (30, 0, 15))
+            return [line for line in _report(sheet) if "drilled across it" in line]
+
+        said = lines(None)
+        self.assertEqual(len(said), 1, said)
+        self.assertIn("⌀6 ↧15 ends inside a bore drilled across it", said[0])
+        self.assertNotIn("THRU ends", said[0])
+        self.assertEqual(lines("⌀6 THRU TO ⌀10 BORE"), [], "a note naming the hole states it")
+
 
 def _round_cuts():
     """A 100 x 60 x 12 plate with three round cuts no hole callout reads: a bore
@@ -168,6 +191,31 @@ class OwnFrameTests(unittest.TestCase):
         taper = [line for line in lines if "tapered bore" in line]
         self.assertEqual(len(taper), 1, lines)
         self.assertIn("along Z through (20, -10, 12)", taper[0])
+
+
+class NoHexagonTests(unittest.TestCase):
+    """A twelve-sided bar is not HEX 60 A/F: its first pass prints no HEX, and a
+    sheet that leaves its flats unstated says so."""
+
+    def _bar(self):
+        from build123d import RegularPolygon, Rot, extrude
+
+        return Rot(0, 0, 15) * extrude(RegularPolygon(30, 12, major_radius=False), amount=10)
+
+    def test_a_first_pass_states_no_hex_and_a_bare_sheet_reports_the_flats(self) -> None:
+        from cad._internal.drawing_render import _render_sheet
+        from cad.eng_drawing import Sheet, part_sheet
+
+        first = _render_sheet(part_sheet(self._bar(), title="BAR"), index=1, count=1, label="bar")
+        said = [d.dxf.text for d in first.modelspace().query("DIMENSION")]
+        self.assertFalse([text for text in said if "HEX" in text], said)
+        sheet = Sheet("A3", 1.0)
+        top, front = sheet.three_views(self._bar(), views=("top", "front"))
+        top.overall()
+        front.overall(width=False)
+        lines = [line for line in _report(sheet) if "inclined face" in line]
+        self.assertEqual(len(lines), 1, lines)
+        self.assertIn("8 inclined faces have no angle", lines[0], "the four square to X and Y are overall sizes")
 
 
 if __name__ == "__main__":

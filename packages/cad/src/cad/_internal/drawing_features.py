@@ -58,6 +58,15 @@ _PROBE = 0.05
 _POINT = 0.01
 
 
+def order(feature) -> tuple:
+    """A hole's or a slot's signature as a key that always sorts. A signature
+    says what a feature has, with None for what it lacks (no depth: it is
+    through; no countersink), and two holes of one diameter, one countersunk
+    and one plain, differ first at a None against a pair, which Python will
+    not order. None sorts before any value here."""
+    return tuple((0,) if value is None else (1, value) for value in feature.signature())
+
+
 @dataclass(frozen=True)
 class Hole:
     """One hole, as a callout states it.
@@ -91,9 +100,10 @@ class Hole:
     problem: str | None = None
     #: What a blind hole's depth does not say about its end, when its end is
     #: neither a flat floor nor a drill point: ``("ball", radius, beyond)`` for a
-    #: ball end of that radius, or ``("other", 0.0, beyond)`` for any other form,
-    #: ``beyond`` being how far the end runs past ``depth`` on the centre line. A
-    #: callout has no symbol for it, so the report asks for a note.
+    #: ball end of that radius, ``("cavity", 0.0, beyond)`` for a hole that ends
+    #: inside a bore drilled across it, or ``("other", 0.0, beyond)`` for any
+    #: other form, ``beyond`` being how far the end runs past ``depth`` on the
+    #: centre line. A callout has no symbol for it, so the report asks for a note.
     end: tuple[str, float, float] | None = None
     #: The bolt circle the hole is on, as (its diameter, its centre), or None: six
     #: holes on ⌀60 and eight of the same size on ⌀100 are two patterns, each a
@@ -296,24 +306,39 @@ def _chains(segments: list[_Segment]) -> list[list[_Segment]]:
 
 
 class _Ends:
-    """Whether a hole's or a slot's end is closed, read off the faces its wall
-    runs into there.
+    """What a hole's or a slot's end is, read off the faces its wall runs into
+    there and off what stands past it along its own axis.
 
-    A wall ends at an edge, and the face on the other side of that edge says
-    what the end is. A floor lies inside the feature's own section: a flat
-    bottom, the fillet round it, a ball, a cone are all within the bore's
+    A wall ends at an edge, and the faces on the other side of that edge are
+    of two kinds. A piece of floor lies inside the feature's own section: a
+    flat bottom, the fillet round it, a ball, a cone are all within the bore's
     radius of its axis (within a slot's outline). Anything else reaches out
-    past the wall -- the face the hole breaks out through, a cavity's wall, a
-    cross hole -- and the feature leaves the material there: it is open, and a
-    hole open at both ends is THRU.
+    past the wall: the face the hole breaks out through, the wall of a gap or
+    a cavity, a hole across it. Where an end has only the one kind, that says
+    what it is. Where it has both (a cross hole on the level of a bore's floor,
+    a pocket that takes half the floor away, a rib standing over part of a
+    hole's mouth), or reaches out into something round, lines down the bore
+    say how much of its section is closed past the end, by a piece of floor or
+    by the surface the wall runs into, standing ahead of it:
 
-    How far away the next wall stands does not come into it. It used to: an end
+    - a **floor**, where a floor is joined there and at least half the section
+      is closed: the hole opens sideways at most, and still has its depth;
+    - a way **out**, where more than half the section runs on: the hole leaves
+      the material it is in along its own axis, and one open so at both ends
+      is THRU, however near the next wall stands, and though a rib covers a
+      corner of its mouth;
+    - a **cavity**, where no floor is joined but the surface the wall runs
+      into closes the way ahead: a hole that ends inside a larger bore drilled
+      across it. It has no floor to measure to and does not leave the part
+      along its axis, so it is neither a depth to a floor nor THRU: its depth
+      is where its whole section ends, and what it runs into is said beside it.
+
+    How far away the next wall stands does not come into it. It once did: an end
     was open when the air past it met no face within one bore diameter, a bound
     put there so that a blind hole with a filleted or ball floor, which has air
     just past where its straight wall stops, did not read THRU. That bound made
     a hole through a wall into a gap narrower than itself read blind, as deep
-    as the wall is thick. The floor is told from the far wall by what it is
-    joined to, not by its distance.
+    as the wall is thick.
     """
 
     def __init__(self, shape) -> None:
@@ -333,15 +358,23 @@ class _Ends:
             self._points[beyond] = points
         return self._points[beyond]
 
-    def closed(self, segments, own, d, foot, end: float, far: float, within) -> bool | None:
-        """Whether the end at ``end`` along the line (``d``, ``foot``) of the wall
-        ``segments`` (whose other end is toward ``far``) is closed: every face
-        joined to the wall there lies ``within`` the feature's section. ``own`` are
-        the feature's own faces, which are not what it runs into. None when the
-        wall has no edge of its own at that end (a cone that closes to a point)."""
+    def joined(self, segments, own, d, foot, end: float, far: float, within) -> tuple[list, list, float, bool]:
+        """What the end at ``end`` along the line (``d``, ``foot``) of the wall
+        ``segments`` (whose other end is toward ``far``) runs into: the faces
+        joined to the wall there that lie ``within`` the feature's section
+        (pieces of floor), and those that reach out past it; both empty when the
+        wall has no edge of its own at that end (a cone that closes to a point).
+        With them, where along the line the wall's whole section ends (at
+        ``end`` for a wall cut square, short of it where what it runs into cuts
+        it on a slant: a bore across it), and whether a floor joined there is
+        flat, square to the line. ``own`` are the feature's own faces, which are
+        not what it runs into."""
+        from OCP.BRepAdaptor import BRepAdaptor_Surface
+        from OCP.GeomAbs import GeomAbs_Plane
+
         if self._ancestors is None:
             self._ancestors = _edge_faces(self.shape)
-        seen = False
+        floors, flat, outside, whole = [], False, [], end
         for segment in segments:
             for face in segment.faces:
                 for edge in face.edges():
@@ -355,10 +388,57 @@ class _Ends:
                     for other in _others(self._ancestors, edge, face):
                         if any(other.IsSame(mine.wrapped) for mine in own):
                             continue
-                        seen = True
-                        if not all(within(point) for point in self._reach(other)):
-                            return False
-        return True if seen else None
+                        if all(within(point) for point in self._reach(other)):
+                            if not any(other.IsSame(seen) for seen in floors):
+                                floors.append(other)
+                            surface = BRepAdaptor_Surface(other)
+                            if surface.GetType() == GeomAbs_Plane:
+                                normal = surface.Plane().Axis().Direction()
+                                square = abs(normal.X() * d[0] + normal.Y() * d[1] + normal.Z() * d[2])
+                                flat = flat or abs(square - 1) < 1e-9
+                        elif not any(other.IsSame(seen) for seen in outside):
+                            outside.append(other)
+        if outside and not floors:
+            # Where the whole section ends: the point of the edges shared with what
+            # the wall runs into that lies nearest the wall's other end.
+            for segment in segments:
+                for face in segment.faces:
+                    for edge in face.edges():
+                        if not any(other.IsSame(seen) for other in _others(self._ancestors, edge, face)
+                                   for seen in outside):
+                            continue
+                        near = _nearest_along(edge, d, foot, far)
+                        if abs(near - far) < abs(whole - far):
+                            whole = near
+        return floors, outside, whole, flat
+
+    def closed(self, segments, own, d, foot, end: float, far: float, within) -> bool | None:
+        """Whether everything the wall runs into at that end is floor (see
+        :meth:`joined`): None when the wall has no edge of its own there."""
+        floors, outside, _whole, _flat = self.joined(segments, own, d, foot, end, far, within)
+        return None if not (floors or outside) else not outside
+
+
+def _nearest_along(edge, d, foot, far: float) -> float:
+    """The position along the line (``d``, ``foot``) of the point of ``edge``
+    nearest ``far``: its samples, then the stretch round the nearest of them
+    searched down."""
+    def along(t: float) -> float:
+        return sum((c - f) * k for c, f, k in zip(tuple(edge.position_at(t)), foot, d))
+
+    def gap(t: float) -> float:
+        return abs(along(t) - far)
+
+    steps = 32
+    best = min(range(steps + 1), key=lambda i: gap(i / steps))
+    lo, hi = max(0.0, (best - 1) / steps), min(1.0, (best + 1) / steps)
+    for _round in range(40):
+        a, b = lo + (hi - lo) / 3, hi - (hi - lo) / 3
+        if gap(a) < gap(b):
+            hi = b
+        else:
+            lo = a
+    return along((lo + hi) / 2)
 
 
 class _Ray:
@@ -389,6 +469,14 @@ class _Ray:
         self.cast.Perform(gp_Lin(gp_Pnt(*start), gp_Dir(*direction)), _PROBE, 1e9)
         hits = [self.cast.WParameter(i) for i in range(1, self.cast.NbPnt() + 1)]
         return min(hits) if hits else None
+
+    def first(self, start, direction):
+        """The first face of the part along ``direction`` from ``start``, or None."""
+        from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
+
+        self.cast.Perform(gp_Lin(gp_Pnt(*start), gp_Dir(*direction)), 0.0, 1e9)
+        hits = [(self.cast.WParameter(i), i) for i in range(1, self.cast.NbPnt() + 1)]
+        return self.cast.Face(min(hits)[1]) if hits else None
 
 
 def _perpendicular(d) -> tuple[tuple, tuple]:
@@ -535,7 +623,7 @@ def holes(shape) -> list[Hole]:
     on = {mouth: (circle.diameter, circle.centre)
           for circle in _bolt_circles(found, list(surfaces.values())) for mouth in circle.mouths}
     found = [replace(hole, circle=on[hole.mouth]) if hole.mouth in on else hole for hole in found]
-    found.sort(key=lambda h: (h.signature(), h.axis, h.mouth))
+    found.sort(key=lambda h: (order(h), h.axis, h.mouth))
     return found
 
 
@@ -553,20 +641,49 @@ def _read_chain(chain: list[_Segment], d, foot, at, air, ray: _Ray, fillets, end
     narrowest = min(s.r_lo for s in cylinders)
     own = [face for seg in chain for face in seg.faces]
 
-    def is_open(seg: _Segment, end: float, far: float, radius: float, direction) -> bool:
+    def end_of(seg: _Segment, end: float, far: float, radius: float, direction) -> tuple[str, float, bool]:
+        """What the chain's end is (:class:`_Ends`): ``"floor"``, ``"out"`` or
+        ``"cavity"``; where along the line its whole section ends; and whether
+        its floor is flat."""
+        from OCP.BRepAdaptor import BRepAdaptor_Surface
+        from OCP.GeomAbs import GeomAbs_Plane
+
         def within(point) -> bool:
             rel = tuple(p - f for p, f in zip(point, foot))
             along = sum(a * b for a, b in zip(rel, d))
             return math.sqrt(max(0.0, sum(c * c for c in rel) - along * along)) <= radius + _TOUCH
 
-        closed = ends.closed([seg], own, d, foot, end, far, within)
-        if closed is None:
-            start = at(end + _PROBE * (1 if end > far else -1))
-            return ray.open(tuple(start), direction, 2 * narrowest)
-        return not closed
+        floors, outside, whole, flat = ends.joined([seg], own, d, foot, end, far, within)
+        outward = 1 if end > far else -1
+        if not (floors or outside):
+            past = end + _PROBE * outward
+            return ("out" if ray.open(tuple(at(past)), direction, 2 * narrowest) else "floor"), end, False
+        if not outside:
+            return "floor", end, flat
+        if not floors and all(BRepAdaptor_Surface(face).GetType() == GeomAbs_Plane for face in outside):
+            return "out", end, False  # it breaks out through flat faces: nothing of them stands ahead
+        # Part floor, or out into something round: how much of the section is closed
+        # past the end, asked along lines down the bore from just inside it. A line is
+        # closed where the first thing it meets is a piece of floor (a face within the
+        # section) or the surface the wall runs into, come round ahead of it.
+        before = end - 2 * _PROBE * outward
+        starts = [(0.0, 0.0)] + [(f * radius * math.cos(t), f * radius * math.sin(t))
+                                 for f in (0.45, 0.85) for t in (0.3, 1.35, 2.4, 3.45, 4.5, 5.55)]
+        closed = 0
+        for x, y in starts:
+            face = ray.first(tuple(at(before, x, y)), direction)
+            if face is None:
+                continue
+            if (any(_same_surface(face, seen) for seen in (*floors, *outside))
+                    or all(within(point) for point in ends._reach(face))):
+                closed += 1
+        if 2 * closed < len(starts):
+            return "out", end, False
+        return ("floor", end, flat) if floors else ("cavity", whole, False)
 
-    open_lo = is_open(chain[0], lo, chain[0].hi, chain[0].r_lo, tuple(-c for c in d))
-    open_hi = is_open(chain[-1], hi, chain[-1].lo, chain[-1].r_hi, d)
+    end_lo, whole_lo, flat_lo = end_of(chain[0], lo, chain[0].hi, chain[0].r_lo, tuple(-c for c in d))
+    end_hi, whole_hi, flat_hi = end_of(chain[-1], hi, chain[-1].lo, chain[-1].r_hi, d)
+    open_lo, open_hi = end_lo == "out", end_hi == "out"
     if not (open_lo or open_hi):
         return "sealed"  # a sealed void, not something a drill makes
     thru = open_lo and open_hi
@@ -620,7 +737,19 @@ def _read_chain(chain: list[_Segment], d, foot, at, air, ray: _Ray, fillets, end
         wall = max(from_mouth(deepest.lo), from_mouth(deepest.hi))
         bottom = deepest.lo if from_hi else deepest.hi
         below = ordered[ordered.index(deepest) + 1:]
-        depth, end = _blind_end(wall, narrowest, bottom, below, fillets, mouth, axis, ray)
+        if (end_lo if from_hi else end_hi) == "cavity":
+            # It ends inside a bore drilled across it: no floor to measure to, and
+            # no way out along its axis. Its depth is where its whole section ends,
+            # and the report says what it runs into.
+            depth = from_mouth(whole_lo if from_hi else whole_hi)
+            tip = ray.depth(mouth, axis)
+            end = ("cavity", 0.0, max(0.0, (tip if tip is not None else wall) - depth))
+        elif (flat_lo if from_hi else flat_hi) and not below:
+            # A flat floor joined to the wall is the depth, whatever is cut through
+            # it: a cross hole on its level, a pocket that takes half of it away.
+            depth = wall
+        else:
+            depth, end = _blind_end(wall, narrowest, bottom, below, fillets, mouth, axis, ray)
     return Hole(
         mouth=_tidy(mouth), axis=_tidy(axis), diameter=2 * narrowest, thru=thru, depth=depth,
         cbore=mouth_end[1] if mouth_end and mouth_end[0] == "cbore" else None,
@@ -660,10 +789,10 @@ def _blind_end(wall: float, radius: float, bottom: float, below: list[_Segment],
         if (min(abs(lo - bottom), abs(hi - bottom)) < 1e-6 and abs(r_max - radius) < 1e-6 and r_min > 1e-6
                 and abs((hi - lo) - beyond) < 1e-6 and not below):
             return tip, None  # a flat floor, filleted into the wall
+    u, _v = _perpendicular(axis)
     if not below and abs(beyond - radius) < 1e-6:
         # A hemisphere of the bore's own radius: 0.6 of the way out from the centre
         # line it is 0.8 of its radius deep.
-        u, _v = _perpendicular(axis)
         off = ray.depth(tuple(m + 0.6 * radius * c for m, c in zip(mouth, u)), axis)
         if off is not None and abs(off - wall - 0.8 * radius) < 1e-4:
             return wall, ("ball", radius, beyond)
@@ -835,7 +964,7 @@ def slots(shape) -> list[Slot]:
                 ends=(ends[0], ends[1]), width=2 * narrow["r"], length=narrow["gap"] + 2 * narrow["r"],
                 thru=thru, depth=depth, run=hi - lo, cbore=cbore,
             ))
-    found.sort(key=lambda sl: (sl.signature(), sl.axis, sl.mouth))
+    found.sort(key=lambda sl: (order(sl), sl.axis, sl.mouth))
     return found
 
 
@@ -1311,16 +1440,59 @@ def hexes(shape) -> list[Hex]:
     normals are 60 degrees apart, each the same distance from one centre line, one
     pair square to a model axis (a hexagon turned off every axis has no flat to
     dimension across, and is left to the report). A hex socket faces in, and is
-    not one."""
+    not one.
+
+    The six flats are the section's outline, and all of it: each runs from one
+    corner of the hexagon to the next, and nothing of the part stands outside
+    them where they are. Six planes 60 degrees apart at one distance are not
+    enough: every other flat of a twelve-sided bar is such a set, and so are six
+    tooth roots of a gear. ``HEX 60 A/F`` on either states a shape the part does
+    not have."""
     from build123d import GeomType
 
     planes: dict[tuple, tuple] = {}
-    for face in shape.faces():
+    on: dict[tuple, list] = {}
+    faces = list(shape.faces())
+    for face in faces:
         if face.geom_type != GeomType.PLANE:
             continue
         normal = _tidy(tuple(face.normal_at()))
         offset = sum(a * b for a, b in zip(normal, tuple(face.center())))
         planes.setdefault((normal, round(offset, 4)), (normal, offset))
+        on.setdefault((normal, round(offset, 4)), []).append(face)
+    reach: dict[int, list] = {}
+
+    def points(face) -> list:
+        """Points round a face: its corners, and three along each of its edges."""
+        if id(face) not in reach:
+            reach[id(face)] = [tuple(v) for v in face.vertices()] + [
+                tuple(e.position_at(t)) for e in face.edges() for t in (0.25, 0.5, 0.75)]
+        return reach[id(face)]
+
+    def outline(k: int, flats: tuple, across: float, centre) -> bool:
+        """Whether six flats are a hexagon's whole outline (see above)."""
+        side = across / math.sqrt(3)  # a regular hexagon's side, from its width across flats
+        lo, hi, mine = math.inf, -math.inf, set()
+        for normal, offset in flats:
+            held = on.get((normal, round(offset, 4)), [])
+            if not held:
+                return False
+            mine.update(id(face) for face in held)
+            tangent = _cross3(tuple(float(j == k) for j in range(3)), normal)
+            runs = [sum((p[j] - centre[j]) * tangent[j] for j in range(3) if j != k) for face in held
+                    for p in points(face)]
+            if min(runs) > -side / 2 + 1e-3 or max(runs) < side / 2 - 1e-3:
+                return False  # it stops short of a corner: a flat of some other outline
+            heights = [p[k] for face in held for p in points(face)]
+            lo, hi = min(lo, min(heights)), max(hi, max(heights))
+        for face in faces:
+            if id(face) in mine:
+                continue
+            for p in points(face):
+                if lo + 1e-3 < p[k] < hi - 1e-3 and any(
+                        sum(n[j] * p[j] for j in range(3)) - offset > 1e-3 for n, offset in flats):
+                    return False  # something stands outside the six flats, where they are
+        return True
 
     def facing(side, m) -> list[float]:
         return [q for v, q in side if sum(abs(a - b) for a, b in zip(v, m)) < 1e-6]
@@ -1360,9 +1532,15 @@ def hexes(shape) -> list[Hex]:
                     v[flat], v[corner] = math.cos(math.radians(angle)), math.sin(math.radians(angle))
                     v = _tidy(v)
                     flats.append((v, round(sum(a * b for a, b in zip(v, centre)) + across / 2, 6)))
+                if not outline(k, tuple(flats), across, centre):
+                    continue
                 found.append(Hex(k, _tidy([round(c, 6) for c in centre]), round(across, 6), flat, corner,
                                  tuple(flats)))
     return found
+
+
+def _cross3(a, b) -> tuple[float, float, float]:
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
 
 
 @dataclass(frozen=True)
@@ -1451,6 +1629,15 @@ def _surface_key(face) -> tuple | None:
     d, foot = _canonical((ax.Direction().X(), ax.Direction().Y(), ax.Direction().Z()),
                          (ax.Location().X(), ax.Location().Y(), ax.Location().Z()))
     return ("cyl" if kind == GeomAbs_Cylinder else "torus",) + _line_key(d, foot) + radii
+
+
+def _same_surface(a, b) -> bool:
+    """Whether two faces are one face, or two pieces of one cylinder or torus (a
+    bore's wall, which a kernel may hold as two half faces)."""
+    if a.IsSame(b):
+        return True
+    key = _surface_key(a)
+    return key is not None and key == _surface_key(b)
 
 
 def _blend_faces(shape) -> list[tuple]:

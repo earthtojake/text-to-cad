@@ -270,7 +270,12 @@ sheet millimetres.
   callout, and `hole()`, `holes()` and `hole_table()` refuse it.
   A through hole opened out at both ends reads `BOTH ENDS` or `FAR SIDE ...`.
   Pieces of one bore separated by air (a clevis's arms, a cross hole) are one
-  hole; a groove or a pocket with material inside is not a hole. `frame=`
+  hole; a groove or a pocket with material inside is not a hole. A hole is
+  `THRU` where it leaves the material it is in along its own axis (through one
+  arm into a gap, however near the next arm); one that opens sideways at its
+  floor (a cross hole on the floor's level) keeps its depth, and one that ends
+  inside a larger bore across it reads the depth of its full diameter, with a
+  report line. `frame=`
   hangs a `Frame` (its position, say) under the callout; `datum=` and `key=`
   as `dim` takes them.
   **A callout typed whole.** With `diameter` given
@@ -372,10 +377,14 @@ def bracket_drawing():
   earned its place.
 - **Holes**: up to six in a view called out once (`5× ⌀5.5 THRU`) and located
   from the part's edge faces; more in a hole table. A hole down a hexagon's
-  axis (a nut's bore) is located by the hexagon.
+  axis (a nut's bore) is located by the hexagon. A hole no one callout states
+  (its mouth opens out in steps) is named in the report, and the rest are
+  stated.
 - **Hexagons**: `HEX 19 A/F` across the flats in the view down its axis, which
   states all six sides and their angles; its centre located from the edges
-  unless it spans the part.
+  unless it spans the part. A hexagon is six flats that are the whole outline
+  there: a twelve-sided bar, or a gear's tooth roots, is none, and its flats
+  are stated as flats.
 - **Bosses and shanks**: a round one on a part not turned whole (a bolt's
   shank, a boss on a plate) is given its diameter across its profile
   (`⌀10`), its centre located from the edges.
@@ -386,6 +395,9 @@ def bracket_drawing():
 - **Slopes**: one at a whole or half degree is stated by its angle (`30°`,
   measured from the view axis that gives the rounder number) and its rounder
   end placed; any other by both its ends, as a gusset is given by its legs.
+  Slopes in one plane (two gussets one behind the other) share one angle, and
+  one whose angle would print over another's (the flats of a faceted round) is
+  stated by its ends.
 - **Edges**: `geometry_notes(part)`, then a note for each fillet, round and
   chamfer size it leaves (`5× CHAMFER 0.5 × 45°.`).
 
@@ -454,6 +466,8 @@ note giving the size (`CHAMFER 0.5 × 45°`, `4 FILLETS R1`) states either.
 | `incomplete: the groove R3 at Z = 20 leaves its diameter ⌀51 unstated ... and a diameter across it (text="%%c<>") how deep it is cut.` | a groove whose section is not centred on the turned surface it is cut in: its radius does not say how deep it is |
 | `incomplete: ⌀8 ↧20 ends in a ball R4, 4 past the depth its callout gives ...` | a ball-ended hole: a callout's depth is its full diameter's; `view.note("SPHERICAL R4", point)`, or `radius()` on its arc in a section |
 | `incomplete: ⌀8 ↧20 ends 3 past the depth its callout gives, in a form that is neither a flat floor nor a drill point ...` | section it, dimension its end, and name it in a note |
+| `incomplete: ⌀6 ↧15 ends inside a bore drilled across it: it has no floor to measure to and does not leave the part along its own axis ...` | its depth is where its full diameter ends; a note naming it says what it runs into (`view.note("⌀6 THRU TO ⌀10 BORE", point)`) |
+| `incomplete: the hole at (20, 0, 12) (its mouth opens out in 2 steps ...) is not called out. No one callout states a hole that opens out in steps ...` | a first pass leaves it out and states the rest; section it and dimension each step with `diameter()` and `dim()` |
 | `incomplete: the tapered bore from ⌀12 to ⌀8 along Z through (...) leaves ⌀12, its end at Z = 10 unstated ...` | a hole callout states a straight bore: section it, a diameter across each end, each end placed (a `conical recess ⌀12` reads the same way) |
 | `incomplete: 2× R5 part-round bore along Z through (...) (180° of a ⌀10 circle: a hole breaking out of an edge, a notch ...) is not stated ...` | a hole callout reads whole circles: `radius()` on its arc, its centre located like a hole's |
 | `incomplete: the bore ⌀30 along Z through (...) has material standing in it (a ring groove's outer wall, a pocket round a boss) ...` | no hole callout reads it: `diameter(point, size=30)` in a view that looks down it |

@@ -5973,6 +5973,71 @@ class PartSheetTests(unittest.TestCase):
         self.assertEqual((one_end.csk, one_end.far_csk), ((6.5, 90.0), None))
         self.assertFalse(_looks_into(one_end, one_end.axis), "a chamfer at one end alone is not what the far view shows")
 
+    def test_two_gussets_seen_edge_on_share_one_angle(self) -> None:
+        """An L bracket with two identical gussets: the view that sees them edge-on
+        sees one sloping line, and one 45° states it. Two, on one line, printed
+        over each other, and no sheet was large enough for that."""
+        from build123d import Align, Box, Plane, Polygon, Pos, extrude
+
+        corner = (Align.MIN, Align.MIN, Align.MIN)
+        bracket = Box(80, 60, 6, align=corner) + Box(6, 60, 60, align=corner)
+        web = extrude(Plane.XZ * Polygon((6, 6), (36, 6), (6, 36), align=None), amount=-5)
+        bracket += Pos(0, 10, 0) * web + Pos(0, 45, 0) * web
+        sheet, doc, unstated = self._drawn(bracket)
+        self.assertEqual([text for text in _dim_texts(doc) if "°" in text], ["45°"])
+        self.assertEqual(unstated, [], "one angle states both slopes, and each gusset is placed")
+
+    def test_facets_too_close_for_an_angle_each_are_stated_by_their_ends(self) -> None:
+        """A clevis whose two lugs' rounded ends are drawn as twelve flats each, under
+        5 long: an angle on each puts one value on top of the next, and no sheet had
+        room for that. The first pass gives the angles there is room for and places
+        the other flats' ends, and the report names what is left."""
+        from build123d import Align, Box, Plane, Polygon, Pos, extrude
+
+        arc = [(18 * math.cos(math.radians(a)), 34 + 18 * math.sin(math.radians(a))) for a in range(0, 181, 15)]
+        lug = extrude(Plane.XZ * Polygon(*arc, (-18, 10), (18, 10), align=None), amount=-10)
+        clevis = Box(60, 60, 10, align=(Align.CENTER, Align.MIN, Align.MIN)) + Pos(0, 8, 0) * lug + Pos(0, 42, 0) * lug
+        sheet, doc, unstated = self._drawn(clevis)
+        angles = [text for text in _dim_texts(doc) if "°" in text]
+        self.assertTrue(0 < len(angles) < 12, angles)
+        self.assertTrue(all("inclined face" in line or "face at" in line for line in unstated), unstated)
+
+    def test_a_hole_no_callout_states_is_reported_and_the_rest_is_drawn(self) -> None:
+        """A counterbore with a chamfered mouth opens out in two steps, and no one
+        callout states it. A first pass names it in its report and states the
+        plain hole beside it; holes() called by hand still refuses."""
+        from build123d import Align, Box, Cone, Cylinder, Pos
+        from cad._internal.drawing_render import _render_sheet
+        from cad.eng_drawing import Sheet
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        plate = Box(80, 40, 12, align=align) - Pos(-20, 0, 0) * Cylinder(3, 12, align=align)
+        plate -= Pos(20, 0, 0) * Cylinder(3, 12, align=align) + Pos(20, 0, 6) * Cylinder(5.5, 6, align=align)
+        plate -= Pos(20, 0, 11) * Cone(5.5, 6.5, 1, align=align)
+        sheet, doc, unstated = self._drawn(plate)
+        self.assertEqual(_callouts(doc), ["%%c6 THRU"])
+        named = [line for line in unstated if "opens out in 2 steps" in line]
+        self.assertEqual(len(named), 1, unstated)
+        self.assertIn("the hole at (20, 0, 12)", named[0], "where the part has it, not where the sheet turned it")
+        self.assertIn("cut a section through it", named[0])
+        by_hand = Sheet("A3", 1.0)
+        top, _front = by_hand.three_views(plate, views=("top", "front"))
+        top.holes()
+        with self.assertRaisesRegex(ValueError, "cannot be stated in one callout"):
+            _render_sheet(by_hand, index=1, count=1, label="hand")
+
+    def test_a_round_bar_cut_on_a_slant_is_stated_by_its_angle(self) -> None:
+        """The cut face of a mitred rod is bounded by an ellipse, which has one vertex:
+        its two ends are where that outline turns back, not its corners."""
+        from build123d import Align, Box, Cylinder, Pos, Rot
+
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        rod = Cylinder(10, 60, align=align) - Pos(0, 0, 50) * Rot(0, 30, 0) * Box(80, 80, 40, align=align)
+        sheet, doc, unstated = self._drawn(rod)
+        texts = _dim_texts(doc)
+        self.assertEqual([text for text in texts if "°" in text], ["30°"])
+        self.assertEqual(unstated, [], "its angle, its diameter and the length to the cut's far end")
+
 
 class CrowdedSheetTests(unittest.TestCase):
     """Two values in one place on a sheet choosing its size take a larger sheet;

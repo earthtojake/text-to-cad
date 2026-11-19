@@ -18,7 +18,7 @@ from cad._internal.drawing_base import (
     _SAME_PLACE, _SIDES,
     _dot, _exact, _fmt, _ink_width, _look, _looks_down, _near, _places, _shown, _spans, _text_width, _where,
 )
-from cad._internal.drawing_features import Slot
+from cad._internal.drawing_features import Slot, order as _in_order
 from cad._internal.drawing_gdt import _DATUM_REACH, _datum_toward, _side_of, frame_size, mark_width
 from cad._internal.drawing_sheet import _CAPTION_HEIGHT
 
@@ -392,7 +392,7 @@ def _kinds(features) -> list[list]:
         groups.setdefault((isinstance(feature, Slot), _kind(feature)), []).append(feature)
     return sorted(groups.values(), key=lambda g: (isinstance(g[0], Slot),
                                                   0.0 if isinstance(g[0], Slot) else -g[0].diameter,
-                                                  g[0].signature()))
+                                                  _in_order(g[0])))
 
 
 @dataclass
@@ -900,6 +900,10 @@ def _expand_holes(view: View, proj, bounds, dim: "_Dim", seen, look, warnings: l
         # What a hole() or slot() states is its own; holes() calls out the rest
         # of a kind, a tapped one among identical bores taken out of the count.
         members = [member for member in members if id(member) not in stated]
+        if view._first_pass:
+            # A first pass states what it can: a hole no one callout states is the
+            # report's to name, not a reason to draw no sheet.
+            members = [member for member in members if getattr(member, "problem", None) is None]
         if not members:
             continue
         if isinstance(members[0], Slot):
@@ -1129,6 +1133,8 @@ def _hole_table(view: View, proj, features, cut, items) -> _HoleTable:
     for members in _kinds([*(h for h in features.holes if _looks_into(h, look) and _shows(view, proj, h, h.length, cut)),
                     *(sl for sl in features.slots if _looks_into(sl, look) and _shows(view, proj, sl, sl.run, cut))]):
         plain = [m for m in members if id(m) not in taps]
+        if view._first_pass:
+            plain = [m for m in plain if getattr(m, "problem", None) is None]
         if plain:
             order.append((plain, None))
         for dim in tapped:
