@@ -980,7 +980,7 @@ class PrinterFileTest(unittest.TestCase):
         result = check(long_bar, "bar", printer=path)
         fit = result.measurements["build_volume"]
         self.assertEqual((fit["fits"], fit["volume_mm"]), (False, [256.0, 256.0, 250.0]))
-        self.assertEqual(fit["volume_origin"], f"printer Test X1 0.4 nozzle ({path})")
+        self.assertEqual(fit["volume_origin"], f"bed bounding box of printer Test X1 0.4 nozzle ({path})")
         [found] = [f for f in result.findings if f.code == "printing.build_volume"]
         self.assertEqual(found.severity, "error")
         self.assertIn("256 x 256 x 250 mm volume of printer Test X1 0.4 nozzle", found.message)

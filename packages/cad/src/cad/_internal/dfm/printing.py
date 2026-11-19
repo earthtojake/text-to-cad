@@ -469,7 +469,7 @@ def machine_volume(resolved: dict[str, Any]) -> dict[str, Any]:
     if resolved.get("build_volume") is not None:
         printer = resolved.get("printer")
         origin = "given" if not isinstance(printer, dict) or "build_volume" not in printer["supplied"] else (
-            f"printer {printer['name']} ({printer['file']})")
+            f"bed bounding box of printer {printer['name']} ({printer['file']})")
         return {"volume_mm": list(build_volume(resolved["build_volume"])), "origin": origin}
     volume, source = BUILD_VOLUMES[resolved["technology"]]
     return {"volume_mm": [float(value) for value in volume], "origin": f"assumed ({SOURCES[source].url})",
