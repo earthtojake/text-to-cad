@@ -49,7 +49,7 @@ A project written for an earlier version may need changes; the migration guides 
 https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
 MuJoCo (`cad mujoco check`, `cad run mujoco-studio`, a script that imports `mujoco`) and CoACD
-(`decompose()`) are fetched by `cad` the first time they are needed, a few megabytes each; nothing to
+(`decompose()`) are fetched by `cad` the first time they are needed, about 20 MB and 4 MB; nothing to
 install. `cad <command> --help` is the complete, current interface.
 
 ## Generate from CAD
@@ -123,7 +123,7 @@ def gripper_mujoco() -> mujoco.MjSpec:
         geom.friction = [1.1, 0.005, 0.0001]       # sliding, torsional, rolling
     left = s.joint("left")
     left.armature = 0.002                          # kg*m^2
-    left.damping = [0.1, 0, 0]                     # N*m*s/rad, a 3-vector in MuJoCo 4.0.0
+    left.damping = [0.1, 0, 0]                     # N*m*s/rad, a 3-vector in MuJoCo 4
     grip = s.add_actuator(name="grip", target="left", trntype=mujoco.mjtTrn.mjTRN_JOINT)
     grip.set_to_position(kp=20, dampratio=1, inheritrange=True)
     return s

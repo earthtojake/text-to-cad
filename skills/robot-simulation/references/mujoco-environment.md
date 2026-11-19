@@ -17,21 +17,20 @@ declares and what an export writes is [from-cad.md](from-cad.md), hand-written M
 
 ## What comes from where
 
-Each fact of a simulation has one owner, and is changed there:
+The model holds what is true of the machine and is regenerated on every change
+([from-cad.md](from-cad.md)). What a simulation chooses has two owners, and is changed there:
 
 | Owner | Holds |
 | --- | --- |
-| The model, regenerated on every change ([from-cad.md](from-cad.md)) | Links and their frames, joint axes and ranges, masses and inertias, visual meshes and colours, sites, the drive's force bound, couplings and loop closures as equalities, mechanism states as keys |
 | The robot's MuJoCo function, on its `MjSpec` | Each part's collision shape, or none; friction and the other contact settings of its collision geoms; excluded pairs; joint `armature`, `damping` and `frictionloss`; actuators, their gains and control ranges; sensors; keys with a `ctrl`; an equality's `solref` where a loop must hold stiffer than MuJoCo's default |
 | The scene, a scene function or `scene.xml` | Where each robot stands and what it is attached to; a loose part's free joint; the floor, lights and cameras; robots from elsewhere, and the prefixes that keep names apart; solver settings (timestep, cone, `impratio`) and contact softness (`solref`, `solimp`); its own `home` key over every joint and actuator |
 
-The function's and the scene's numbers come from the robot's data sheet and from [tuning](#tuning),
-not from the CAD.
+Their numbers come from the robot's data sheet and from [tuning](#tuning), not from the CAD.
 
 ## The example model
 
-A two-finger gripper whose fingers turn together, and a block to pick up. The rest of this file runs
-from it:
+The gripper that SKILL.md's MuJoCo function is written for, its fingers turning together, and a block
+to pick up. The rest of this file runs from it:
 
 ```python
 # src/gripper.py
@@ -82,7 +81,7 @@ if __name__ == "__main__":
 
 Declare on finished parts, as a material is set: an operation after a `frame()`, `body()`, `mass()`
 or `point_mass()` makes a new shape that has lost it, with no warning, while a move or a copy keeps
-it. `limits()` comes after the joint it bounds.
+it.
 
 `cad model export "$ID" sim/gripper.xml` writes the file a MuJoCo function starts from (`spec()`
 holds the same), abridged:
@@ -145,61 +144,23 @@ holds the same), abridged:
 
 ## The MuJoCo function
 
-The gripper's, with its collisions, its servo and one exclude of its own:
-
-```python
-# src/gripper_mujoco.py
-import mujoco
-from cad.mujoco import collisions, fit, save, spec
-
-from gripper import gripper
-
-
-def gripper_mujoco() -> mujoco.MjSpec:
-    s = spec(gripper())
-
-    # Collisions: a box fitted to each part's exact solid, and the pads' rubber.
-    for part in ("palm", "left", "right"):
-        fit(s, part, "box")
-    for geom in collisions(s, "left") + collisions(s, "right"):
-        geom.friction = [1.1, 0.005, 0.0001]   # sliding, torsional, rolling
-    s.add_exclude(bodyname1="left", bodyname2="right")   # the fingers touch when closed
-
-    # The servo: reflected inertia, damping and dry friction on the driven joint, then its actuator.
-    left = s.joint("left")
-    left.armature = 0.002          # kg*m^2: tuned, not measured
-    left.damping = [0.1, 0, 0]     # N*m*s/rad
-    left.frictionloss = 0.01       # N*m
-    grip = s.add_actuator(name="grip", target="left", trntype=mujoco.mjtTrn.mjTRN_JOINT)
-    grip.set_to_position(kp=20, dampratio=1, inheritrange=True)
-    return s
-
-
-if __name__ == "__main__":
-    save(gripper_mujoco(), "sim/gripper.xml")
-```
-
-```bash
-cad run src/gripper_mujoco.py
-```
-
-The run ends with what `save` checked of the file:
+SKILL.md has the gripper's function, `src/gripper_mujoco.py`. Its run ends with what `save` checked
+of the file:
 
 ```text
 collisions: 3 collision geoms (box 3) on 3 bodies: palm 1 (box 1); left 1 (box 1); right 1 (box 1)
-excludes: 3 contact excludes, each between two bodies whole: palm and left touching at rest; palm and right touching at rest; left and right 30 mm apart at rest
+excludes: 2 contact excludes, each between two bodies whole: palm and left touching at rest; palm and right touching at rest
 wrote /path/to/sim/gripper.xml
 ```
 
-Read both lines against the function: three boxes, as fitted, and one exclude between bodies that
-stand apart, the one the function added.
+Read both lines against the function: three boxes, as fitted, and no exclude but the export's two.
 
-**`spec(thing, zero=, tolerance=, assets=)`** makes a `mujoco.MjSpec` of a model call's handle (as
-here), a build123d shape, a `.step`, an `.xbf`, or an MJCF path (an export, a robot made elsewhere).
-For a document, `zero=` takes the robot at a mechanism state, as an export's `--zero` does,
-`tolerance=` meshes its parts finer, in millimetres, and `assets=` writes its meshes into a folder
-relative to the working directory instead of the engine's cache. The spec names every mesh and
-texture by absolute path, which is why `save`, not MuJoCo's `to_file`, writes it.
+**`spec(thing, zero=, tolerance=, assets=)`** makes a `mujoco.MjSpec` of a model call's handle, a
+build123d shape, a `.step`, an `.xbf`, or an MJCF path (an export, a robot made elsewhere). For a
+document, `zero=` takes the robot at a mechanism state, as an export's `--zero` does, `tolerance=`
+meshes its parts finer, in millimetres, and `assets=` writes its meshes into a folder relative to
+the working directory instead of the engine's cache. The spec names every mesh and texture by
+absolute path, which is why `save`, not MuJoCo's `to_file`, writes it.
 
 **Choosing a collision.** `parts(s)` lists every part's label path, sorted, for a function that
 chooses by a rule (every fastener of a hundred-part assembly at once). Three helpers each take one
@@ -241,7 +202,9 @@ jointed pair of bodies whose parts touch as built, before the function changes a
 is between two bodies whole, so after collisions are deleted or replaced one can stand between
 bodies that no longer touch, and it then stops every other part of those bodies from colliding (a
 finger in a carriage's body against the palm the carriage runs in). Read `s.excludes`, or the
-`excludes:` line, and `s.delete(exclude)` the leftover.
+`excludes:` line, and `s.delete(exclude)` the leftover. Any other pair is the function's to exclude,
+by body name: `s.add_exclude(bodyname1="left", bodyname2="right")` for fingers that touch when
+closed, which the line then reports as `left and right 30 mm apart at rest`.
 
 **Keys.** The keys made from mechanism states carry no `ctrl`: reset to one and every position
 actuator still commands 0, the zero pose. A key that commands its pose is the function's,
@@ -273,8 +236,8 @@ attaches it.
   name instead.
 - A material's `textures` is one name a role, ten of them. `s.add_material(name=..., textures=["",
   "grid"])` takes the short list unchecked and MuJoCo then reads past it, which can crash the
-  process. Make the material, then set one role: `material.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] =
-  "grid"`.
+  process. Make the material, then set one role:
+  `material.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] = "grid"`.
 - A new `mujoco.MjSpec()` reads angles in degrees: set `compiler.degree = False`, or every `range`
   and `ref` is read 57 times too small (a key's `qpos` is radians either way). A spec from `spec()`
   is in radians already.
