@@ -64,7 +64,6 @@ STAND_IN = textwrap.dedent('''\
     with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as log:
         log.write(json.dumps({{"name": name, "argv": sys.argv[1:], "cwd": os.getcwd(), "path": sys.argv[0],
                                "trust": os.environ.get("GEMINI_CLI_TRUST_WORKSPACE"),
-                               "failed": os.environ.get("CAD_INSTALL_FAILED"),
                                "env": {{key: os.environ.get(key) for key in os.environ.get("FAKE_LOG_ENV", "").split(",")
                                        if key}},
                                "exists": os.path.exists(os.environ.get("FAKE_LOG_EXISTS") or os.devnull + "/none")}})

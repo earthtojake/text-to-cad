@@ -18,10 +18,9 @@ them (``cad_server.plugin``).
   started under the install command an earlier cad's server ran carries that run's name, and must not end its record.
 - ``cad plugin update auto [status|on|off]``: whether the server runs ``cad plugin update`` once where this cad is
   newer than the release the plugin is up to date for, however cad got newer (``plugin_catch_up``), off by default; a
-  run of ``install`` or ``update`` turns it on, and turning it on takes the plugin as up to date for the cad that
-  turned it on -- unless the install command of 0.11.12 or 0.11.13 that runs it says its run is ending badly
-  (``plugin_catch_up.FAILED_ENV``): then nothing is taken as up to date. Kept by the server where one runs, as ``cad
-  update auto`` is, so a shell whose sandbox may not write the state folder needs no permission.
+  run of ``install`` or ``update`` turns it on, and turning it on by hand takes the plugin as up to date for the cad
+  that turned it on. Kept by the server where one runs, as ``cad update auto`` is, so a shell whose sandbox may not
+  write the state folder needs no permission.
 
 One run at a time: ``install`` and ``update`` hold one lock in the state folder for the whole run
 (``plugin_catch_up.run_lock``); a second run waits for it, unless a server began it. Neither runs an install command,
@@ -209,14 +208,14 @@ def _line(on: bool) -> str:
 
 
 def _switch(action: str, prog: str) -> int:
-    from cad_server._internal import auto_update, plugin_catch_up
+    from cad_server._internal import auto_update
     from cad_server._internal.cli_errors import Failure, write
 
     if action == "status":
         print(_line(auto_update.plugin_switch()))
         return 0
-    try:  # an install command's run ending badly (0.11.12, 0.11.13): nothing taken as up to date
-        kept = _keep(action == "on", note=not plugin_catch_up.failing())
+    try:
+        kept = _keep(action == "on", note=True)
     except OSError as error:
         return write(Failure(f"could not save the choice: {error}"), prog=prog, as_json=False)
     print(_line(kept))

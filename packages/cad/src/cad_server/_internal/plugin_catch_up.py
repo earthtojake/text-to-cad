@@ -15,13 +15,11 @@ turns it on as its last step, right after it put the plugin in place: ending wel
 written; ending badly (every app it found failed), the switch is turned on and nothing written, so a computer whose
 runs keep failing still has the plugin kept: where an earlier run ended well (``for`` older than this cad), the server
 runs the command again for this release; where none ever did (no ``for``), the rule below takes this release as up to
-date, and the command runs once cad is newer. The install command of 0.11.12 and 0.11.13 turns it on by running ``cad
-plugin update auto on``, and says its run is ending badly in the environment of that call (``FAILED_ENV``). A person
-who turns it on by hand, with no such variable, means "from this release on". A run that fails writes nothing of
-``for``. Then the last run the server began
-(``begin``): ``release``, ``at``, ``tries`` (of that release), ``outcome`` (``underway``, then ``ok`` or ``failed``),
-``code`` (its exit status, null where it could not start) and ``ended``. It is a state record, not a choice, so it
-lives in the state folder, as the update's own record does, and not in the person's settings. ``cad doctor`` shows it.
+date, and the command runs once cad is newer. A person who turns it on by hand (``cad plugin update auto on``) means
+"from this release on". A run that fails writes nothing of ``for``. Then the last run the server began (``begin``):
+``release``, ``at``, ``tries`` (of that release), ``outcome`` (``underway``, then ``ok`` or ``failed``), ``code`` (its
+exit status, null where it could not start) and ``ended``. It is a state record, not a choice, so it lives in the
+state folder, as the update's own record does, and not in the person's settings. ``cad doctor`` shows it.
 
 **The rule** (``due``), asked by the server at its start and as it tends itself, only once nothing is in flight: the
 switch on; the update check not turned off for this process (``updates.checking``: ``CAD_UPDATE_CHECK=0``, CI, a
@@ -72,20 +70,11 @@ from typing import Any
 RECORD = "install-command.json"
 # The run ``cad plugin update`` is, where the server began it: the ``at`` of the record's run.
 ATTEMPT_ENV = "CAD_INSTALL_ATTEMPT"
-# Set to ``1`` by the install command of 0.11.12 and 0.11.13 for its own ``cad plugin update auto on`` where its run is
-# ending badly: the switch turned on, and nothing taken as up to date (see the module). Empty or absent: the run is
-# ending well, or a person typed it.
-FAILED_ENV = "CAD_INSTALL_FAILED"
 # The lock one run of ``cad plugin install`` or ``cad plugin update`` holds, in the state folder (``run_lock``).
 LOCK = "install-command.lock"
 # The exit status of a run a server began that found another run holding the lock: nothing ran, and it is tried again
 # later (``EX_TEMPFAIL``).
 BUSY = 75
-
-
-def failing() -> bool:
-    """Whether this command was run by an install command whose run is ending badly (``FAILED_ENV``)."""
-    return os.environ.get(FAILED_ENV, "").strip() == "1"
 TRIES = 3  # how many runs one release gets: once, and twice more, each an hour or more after the one before
 RETRY_SECONDS = 60 * 60.0
 UNDERWAY, OK, FAILED = "underway", "ok", "failed"

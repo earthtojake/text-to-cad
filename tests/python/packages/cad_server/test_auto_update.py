@@ -2043,11 +2043,11 @@ class PluginCatchUpTest(Case):
         self.assertFalse(self.catch_up.due(), "no second run after the bridge's")
         self.assertEqual(self.catch_up.read()["for"], "0.1.0")
 
-    def test_turned_on_by_an_install_run_ending_badly_it_is_on_and_nothing_is_taken_as_up_to_date(self) -> None:
-        """The install command turns the switch on wherever cad is there, and says how its run is ending
-        (``FAILED_ENV``): ending badly, the switch is on and ``for`` stays as it was, so the server runs the command
-        again for this release; ending well, or typed by a person, ``for`` is this release. By the command itself and
-        by the server alike."""
+    def test_turned_on_by_a_run_ending_badly_it_is_on_and_nothing_is_taken_as_up_to_date(self) -> None:
+        """A run of ``cad plugin install`` or ``cad plugin update`` turns the switch on as it ends, however it ends
+        (``plugin_command._keep``): ending badly, the switch is on and ``for`` stays as it was, so the server runs the
+        command again for this release; ending well, or turned on by a person, ``for`` is this release. By the command
+        itself and by the server alike."""
         from cad_server.engine.daemon import switch_plugin
 
         self.catch_up.noted("0.0.9")  # an earlier run ended well, for 0.0.9
@@ -2057,31 +2057,29 @@ class PluginCatchUpTest(Case):
                 self.catch_up._change(lambda found: {**found, "for": "0.0.9"})
                 answer = (lambda request: switch_plugin(request)) if by_the_server else (lambda _r: {"failed":
                                                                                                     "unknown request"})
-                with mock.patch.object(client, "request", side_effect=lambda request, **_o: answer(request)) as asked, \
-                        mock.patch.dict(os.environ, {self.catch_up.FAILED_ENV: "1"}):
-                    self.assertEqual(self.cli("update", "auto", "on", main=plugin_command.main),
-                                     (0, "plugin update auto: on\n", ""))
+                with mock.patch.object(client, "request", side_effect=lambda request, **_o: answer(request)) as asked:
+                    self.assertTrue(plugin_command._keep(True, note=False))
                 self.assertEqual(asked.call_args.args[0], {"op": "plugin_auto_update", "on": True, "release": "0.1.0",
                                                            "note": False})
                 self.assertTrue(auto_update.plugin_switch())
                 self.assertEqual(self.catch_up.read()["for"], "0.0.9", "nothing taken as up to date")
                 self.assertTrue(self.catch_up.due(), "so the server runs the command again for this release")
-                for ending in ("", None):  # ending well (the install command says so), or a person typing it
+                for typed in (False, True):  # a run ending well, or a person typing `cad plugin update auto on`
+                    self.catch_up._change(lambda found: {**found, "for": "0.0.9"})
                     with mock.patch.object(client, "request", side_effect=lambda request, **_o: answer(request)) \
-                            as asked, mock.patch.dict(os.environ, {} if ending is None else
-                                                      {self.catch_up.FAILED_ENV: ending}):
-                        if ending is None:
-                            os.environ.pop(self.catch_up.FAILED_ENV, None)
-                        self.catch_up._change(lambda found: {**found, "for": "0.0.9"})
-                        self.cli("update", "auto", "on", main=plugin_command.main)
+                            as asked:
+                        if typed:
+                            self.assertEqual(self.cli("update", "auto", "on", main=plugin_command.main),
+                                             (0, "plugin update auto: on\n", ""))
+                        else:
+                            self.assertTrue(plugin_command._keep(True, note=True))
                     self.assertNotIn("note", asked.call_args.args[0])
                     self.assertEqual(self.catch_up.read()["for"], "0.1.0", "from this release on")
         # No record at all (a computer where no run ever ended well), the run ending badly: nothing written; the rule
         # for no record then takes this release as up to date, and the command runs once cad is newer.
         (self.state / self.catch_up.RECORD).unlink()
-        with mock.patch.object(client, "request", return_value={"failed": "unknown request"}), \
-                mock.patch.dict(os.environ, {self.catch_up.FAILED_ENV: "1"}):
-            self.cli("update", "auto", "on", main=plugin_command.main)
+        with mock.patch.object(client, "request", return_value={"failed": "unknown request"}):
+            self.assertTrue(plugin_command._keep(True, note=False))
         self.assertFalse((self.state / self.catch_up.RECORD).exists())
 
     def test_turning_it_on_takes_the_command_as_up_to_date_for_the_cad_that_asked(self) -> None:

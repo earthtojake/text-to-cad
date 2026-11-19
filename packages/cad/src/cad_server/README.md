@@ -213,9 +213,8 @@ update`, `uv tool upgrade cad` or `pipx upgrade cad` by hand. That release is ke
 in the data folder, beside the update's own record: written when `cad plugin update` ends with exit status 0
 and when the switch is turned on (the last step of `cad plugin install` and `cad plugin update`, right after
 the plugin is in place, but written only where the run ended well: one in which every app it found failed
-turns the switch on and writes none; the install command of 0.11.12 and 0.11.13 turns it on by `cad plugin
-update auto on`, and says a run ending badly with `CAD_INSTALL_FAILED=1`; turned on by hand, it means "from
-this release on"); a run that fails writes none. With no record and the switch on, the record is written for this release and nothing
+turns the switch on and writes none; turned on by hand, `cad plugin update auto on`, it means "from this
+release on"); a run that fails writes none. With no record and the switch on, the record is written for this release and nothing
 runs, so a fresh install runs nothing again. A run underway, of any release, begun less than an hour ago, is
 waited for, and the server that begins a run asks the record again under the state folder's lock as it keeps
 it, so two servers never both begin one. A run that failed, or never said how it ended, is tried again an
