@@ -2556,7 +2556,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not screen.live:
         return run(here)
     plain = sys.stdout
-    play_logo(screen, plain)
+    try:
+        play_logo(screen, plain)
+    except Exception:  # noqa: BLE001 - the logo is only for show: a terminal it fails in still gets the install
+        plain.write("\x1b[0m\n")
     live = Live(screen, plain, str(here.home)).start()
     sys.stdout = live  # every line printed goes over the live one
     here.watch = live.watch
