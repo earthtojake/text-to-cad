@@ -267,12 +267,12 @@ const UPDATE_INSTALLERS = new Set(['uv', 'pipx']);
 const UPDATE_PLUGIN = new Set(['none', 'ok', 'failed', 'underway']);
 // One run of the plugin's install in the agent apps, schema 12's (`cad_server/analytics.py`): who began it -- a person
 // who typed the command, the install command handing over, or cad's server; how it ended -- well, every app found
-// failed, or another run held the lock and this one left at once; what its terminal showed -- the logo built, the
-// logo still, none, or one that failed, in which colours; and each app of it -- what was done there, and for a
-// failure why, a word cad chose where it failed. A run and an app each take whole seconds, and a run finds so many
-// apps at most.
+// failed, its deadline stopped it before it was done (a run the server began has one), or another run held the lock
+// and this one left at once; what its terminal showed -- the logo built, the logo still, none, or one that failed, in
+// which colours; and each app of it -- what was done there, and for a failure why, a word cad chose where it failed.
+// A run and an app each take whole seconds, and a run finds so many apps at most.
 const INSTALL_BY = new Set(['person', 'script', 'server']);
-const INSTALL_OUTCOMES = new Set(['ok', 'failed', 'busy']);
+const INSTALL_OUTCOMES = new Set(['ok', 'failed', 'stopped', 'busy']);
 const INSTALL_LOGOS = new Set(['played', 'still', 'none', 'failed']);
 const INSTALL_COLOURS = new Set(['24bit', '256', 'none']);
 const INSTALL_STATUSES = new Set(['installed', 'updated', 'removed', 'skipped', 'failed']);
@@ -502,7 +502,8 @@ const READERS = {
     return { key: `update ${JSON.stringify([from, outcome, reason, tries, installer, event.asked, plugin])}`,
       fields: { from, outcome, reason, tries, installer, asked: event.asked, plugin, count } };
   },
-  // A run failed where every app it found failed, and nowhere else; one that found the lock held looked for none.
+  // A run that ended failed where every app it found failed, and nowhere else; one that found the lock held looked
+  // for none; one its deadline stopped says what it had found by then, whatever that was.
   install(event, at) {
     exactly(event, FIELDS.install, at);
     const by = oneOf(event.by, INSTALL_BY, `${at}.by`);
@@ -513,7 +514,7 @@ const READERS = {
     const [found, failed] = ['found', 'failed'].map(name => installApps(event[name], `${at}.${name}`));
     if (failed > found) fail(`${at} counts more failures than apps found`);
     if (outcome === 'busy' && found) fail(`${at}.found: a busy run looked for no app`);
-    if (outcome !== 'busy' && (outcome === 'failed') !== (found > 0 && failed === found)) {
+    if ((outcome === 'ok' || outcome === 'failed') && (outcome === 'failed') !== (found > 0 && failed === found)) {
       fail(`${at}.outcome: a run failed where every app found failed, and nowhere else`);
     }
     const count = some(event.count, `${at}.count`);

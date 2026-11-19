@@ -588,6 +588,11 @@ test("schema 12 counts each run of the plugin's install: who began it, how it en
     { outcome: 'failed', found: 2, failed: 2 },
     { outcome: 'failed', found: 1, failed: 1, seconds: 100000 },
     { outcome: 'busy', by: 'server', logo: 'none', colour: 'none', seconds: 0, found: 0, failed: 0 },
+    // Its deadline stopped it: what it had found by then, whatever that was -- some done, every one failed, or none.
+    { outcome: 'stopped', by: 'server', logo: 'none', colour: 'none', seconds: 900 },
+    { outcome: 'stopped', by: 'server', found: 2, failed: 2 },
+    { outcome: 'stopped', by: 'server', found: 4, failed: 0 },
+    { outcome: 'stopped', by: 'server', found: 0, failed: 0 },
     { found: 0, failed: 0 }, // no app here: a run that ended well
     { found: 64, failed: 63 },
     { seconds: 0, count: 2 },
@@ -614,6 +619,7 @@ test("schema 12 counts each run of the plugin's install: who began it, how it en
     install({ outcome: 'failed', found: 0, failed: 0 }), // and at least one was found
     install({ found: 2, failed: 2 }), // every app found failed: never a run that ended well
     install({ outcome: 'busy' }), // a run that found the lock held looked for no app
+    install({ outcome: 'stopped', found: 2, failed: 3 }), // a stopped run too: never more failures than apps found
     { ...install({}), reason: 'network' }, // an app's word, never a run's
     { ...install({}), path: '/Users/someone/.claude' }, // nothing else
     install({ count: 0 }), install({ count: undefined }),
