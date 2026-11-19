@@ -6,9 +6,9 @@ set -euo pipefail
 #   scripts/test/test-python.sh [--keep-going] [--select GROUP] [--print-weights] [PATH...]
 #
 # --select picks one group instead of all of them:
-#   cadgen   the packages' suites: the library's, the server's (the CAD Viewer backend included)
+#   cadgen   the packages' suites: the library's, the server's (the viewer backend included)
 #            and the shim's (92% of the time)
-#   viewer   the CAD Viewer backend alone (tests/python/packages/cad_server/viewer)
+#   viewer   the viewer backend alone (tests/python/packages/cad_server/viewer)
 #   skills   every skill's suite
 #   all      cad + skills (the default)
 #
@@ -85,7 +85,7 @@ fi
 # The backend alone, for a pull request that only moves the Viewer's client: nothing under
 # apps/web is read by any other package test.
 if [ "$SELECT" = "viewer" ]; then
-  run_suite "CAD Viewer backend Python tests" "tests/python/packages/cad_server/viewer" "${PACKAGE_SOURCES[@]}"
+  run_suite "Viewer backend Python tests" "tests/python/packages/cad_server/viewer" "${PACKAGE_SOURCES[@]}"
 fi
 
 if [ "$SELECT" = "all" ] || [ "$SELECT" = "skills" ]; then

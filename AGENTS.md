@@ -121,10 +121,10 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
   [adding a document type](docs/contributing/adding-a-document-type.md) and
   [adding an integration](docs/contributing/adding-an-integration.md);
   `docs/migrations/`: the hand-migration guides between releases
-  ([0.10 to 0.11](docs/migrations/migrating-0.10-to-next.md),
+  ([0.10 to 0.11](docs/migrations/migrating-0.10-to-0.11.md),
   [0.8 to 0.10](docs/migrations/migrating-0.8-to-0.10.md),
   [0.7 to 0.8](docs/migrations/migrating-0.7-to-0.8.md), 0.4 to 0.5).
-- `apps/web/` ([README](apps/web/README.md)): the CAD Viewer's React client (the server
+- `apps/web/` ([README](apps/web/README.md)): the viewer's React client (the server
   hosts `cad_server.viewer`'s HTTP app).
 - `apps/mcp/` ([README](apps/mcp/README.md)): the CAD app the Codex app renders as tabs, the one
   host given it (started by `cad mcp`); its cards are reached only by a development switch.
@@ -139,7 +139,9 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
   `packages/core` ([README](packages/core/README.md)) is `@cad/core`, shared
   CAD/runtime/client code without React; `packages/ui` ([README](packages/ui/README.md))
   is `@cad/ui`, the shared FileViewer, renderers, controls and styles.
-- `apps/docs/` ([README](apps/docs/README.md)): documentation site.
+- `apps/docs/` ([README](apps/docs/README.md)): the site, texttocad.dev: the homepage and the
+  documentation under `/docs`, which shows the install and migration guides of `docs/` as they are
+  and its own pages (`apps/docs/content/`: a page per skill, the `cad` command, contributing).
 - `apps/api/` ([README](apps/api/README.md)): `api.texttocad.dev`, its own Vercel project:
   the version feed (read from PyPI) and the CAD app's consented analytics.
 - `tests/`: root-owned test suites for skills, packages, viewer services, and
@@ -189,7 +191,8 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
 - The README and the docs site's homepage (its copy: `apps/docs/src/lib/content.ts`)
   share their structure, install commands, summary, the apps they name (those `docs/install.md`
   lists), the link to `docs/install.md` and Contributing: change them together. The per-app installs, updates and reinstalls live in
-  `docs/install.md` alone, never in the docs app (`apps/docs/README.md`).
+  `docs/install.md` alone: the docs app shows that file as it is, at `/docs/install`, and never
+  keeps a copy (`apps/docs/README.md`).
 - Keep root guidance short. Put domain workflows, CLI details, and validation
   policy in the relevant `skills/<skill>/SKILL.md` or `references/` file.
 - Keep relevant Markdown docs current when changing behavior, commands, or repo
@@ -215,7 +218,7 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
   directory refuses a program): what a skill would script is a `cad` command whose parser
   and behaviour live in `cad_server.cli` (print3d's presets are `cad orcaslicer`). The
   server draws every snapshot with OCCT, so no skill has a browser step. The server carries
-  the JavaScript it serves too (the CAD Viewer client, the CAD app page), so a skill ships no
+  the JavaScript it serves too (the viewer client, the CAD app page), so a skill ships no
   runtime of its own. Every skill runs `cad` today; one that never invokes it carries no
   setup block.
 - Keep samples and manual CAD/robot-description validation artifacts under
@@ -269,7 +272,7 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
   Code preserves them, and Codex `plugin add` drops them with no error, shipping
   a skill with missing files. The shipping contract (Git, below) enforces this;
   do not relax it.
-- The CAD Viewer is `cad viewer`: the server hosts `cad_server.viewer` (Python, in
+- The viewer is `cad viewer`: the server hosts `cad_server.viewer` (Python, in
   `packages/cad`), the React client's source is `apps/web/` and its build
   ships in the server's wheel at `cad_server/_runtime/viewer` (built, never committed; a
   checkout serves `apps/web/dist`). Every skill that shows a model (CAD, PCB, robot simulation) documents that verb directly.
@@ -335,12 +338,12 @@ when touching shared surfaces or before handoff:
   job is added, renamed or sharded without a branch-protection change.
 - Canonical release version: `scripts/release/check-version.sh`
 - Packaged runtime builds and is complete: `scripts/bundle/bundle.sh --check`
-- CAD Viewer or shared packages: build exports with `npm run build:packages`,
+- Viewer or shared packages: build exports with `npm run build:packages`,
   then `npm --prefix packages/core test`, `npm --prefix packages/ui test`,
   `npm --prefix apps/web run typecheck`, `npm --prefix apps/web run test`,
   `npm --prefix apps/web run build` (`scripts/test/test-js.sh` runs all but the web build,
   which `scripts/bundle/bundle.sh` runs).
-  The Viewer is two languages and `npm run test` covers only the client — the
+  The viewer is two languages and `npm run test` covers only the client — the
   backend's suite is `tests/python/packages/cad_server/viewer`, run by
   `scripts/test/test-python.sh`. Touching `cad_server/viewer/` means running that.
 - Docs site: `npm --prefix apps/docs run check`
@@ -354,14 +357,14 @@ and confirm the change lands in the built runtime. There is nothing to commit:
 `_runtime/` is gitignored end to end, so what a reviewer reads is the source and
 what a user gets is the wheel the release builds from it.
 
-## CAD Viewer
+## Viewer
 
 The app-facing playbook lives in [`apps/web/README.md`](apps/web/README.md): launcher contract
 (reuse, ports, `/<id>` pages), dev vs prod, and the catalog/link-verification
 gotchas. The repo-side half — the lightweight-worktree recipe and
 root workspace dependencies — lives in [CONTRIBUTING.md under "Viewer Development
 In This Repo"](CONTRIBUTING.md#viewer-development-in-this-repo). Read them before starting,
-stopping, or debugging a Viewer. Never stop an instance you did not start;
+stopping, or debugging a viewer. Never stop an instance you did not start;
 packaged-runtime checks go through `scripts/bundle/bundle.sh`.
 
 ## Git

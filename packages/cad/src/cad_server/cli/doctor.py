@@ -51,7 +51,8 @@ LEFTOVER_LINE = ("uv left files in an app's private folder: {path}. Inside that 
                  "to install. Delete that folder in File Explorer; deleting it from inside that app does not work.")
 
 
-def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
+def build_parser(prog: str = "cad doctor"):
+    """The parser of ``cad doctor``: its options, exactly as the command parses them."""
     from cad_server._internal.cli_parser import parser as command_parser
 
     parser = command_parser(prog=prog, description="Report this cad: its release, its data and cache folders and what "
@@ -61,7 +62,11 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
     parser.add_argument("--check", action="store_true", help="the same report")
     parser.add_argument("--json", action="store_true", help="the report as one JSON document: each check's name, "
                                                             "status (ok, info, warning, failed) and detail")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
+    args = build_parser(prog).parse_args(argv)
 
     from cad.engine.previous import version
 

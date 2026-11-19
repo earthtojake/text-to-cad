@@ -43,8 +43,9 @@ def is_shape(value: Any) -> bool:
 
 
 _ACCEPTS = "a build123d Shape a model returns"
-_DOCUMENT = ("geometry", "assembly", "names", "colours", "materials", "element names", "mechanism",
-             "configuration sequences")
+# A STEP is placements only: the mechanism and its configuration sequences stay in the engine's document.
+_STEP = ("geometry", "assembly", "names", "colours", "materials", "element names")
+_DOCUMENT = (*_STEP, "mechanism", "configuration sequences")
 _TRANSLATE = "cad.engine.export.translate"
 
 PRODUCERS: tuple[Producer, ...] = (
@@ -53,7 +54,7 @@ PRODUCERS: tuple[Producer, ...] = (
              (*_DOCUMENT, "animations", "build closure")),
     Producer("xbf", "build123d", _ACCEPTS, is_shape, "cad.engine.document",
              (*_DOCUMENT, "animations", "build closure")),
-    Producer("step", "build123d", _ACCEPTS, is_shape, _TRANSLATE, _DOCUMENT),
+    Producer("step", "build123d", _ACCEPTS, is_shape, _TRANSLATE, _STEP),
     Producer("glb", "build123d", _ACCEPTS, is_shape, _TRANSLATE,
              ("triangles", "assembly", "names", "colours", "materials", "animations")),
     Producer("stl", "build123d", _ACCEPTS, is_shape, _TRANSLATE, ("triangles",)),

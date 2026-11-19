@@ -59,7 +59,7 @@ if [ "$SELECT" = ui-units ]; then
   UI_TEST_PASS=units npm --prefix packages/ui test
 fi
 if [ "$SELECT" = web ] || [ "$SELECT" = all ]; then
-  section "CAD Viewer tests"
+  section "Viewer tests"
   npm --prefix apps/web run typecheck
   npm --prefix apps/web run test
 fi

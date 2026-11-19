@@ -117,16 +117,17 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "cache": frozenset({"command", "dir", "prune", "clean"}),
     # The exact cad requirement for a Python of a program's own: its integrations, and --json.
     "requirement": frozenset({"integrations", "json"}),
+    # One read-only report of this cad.
+    "doctor": frozenset({"check", "json"}),
+    # The viewer launcher: the launch contract (reuse, replace or start on its one port, the --json announce
+    # line) is not a function signature to mirror.
+    "viewer": frozenset({"files", "host", "port", "json", "no_open", "dist", "api_only"}),
 }
 
-# Commands that own their parser outright and mirror no function.
+# Commands that own their command line outright and mirror no function.
 UNCLASSIFIED = {
-    "doctor",
     # uv run's options and a program's arguments, whatever they are: no parser of its own (uv judges them).
     "run",
-    # The viewer launcher owns its parser: the launch contract (reuse, replace or start on its
-    # one port, the --json announce line) is not a function signature to mirror.
-    "viewer",
     # The CAD app an agent app starts: MCP on stdin and stdout, which no function's signature describes.
     "mcp",
 }

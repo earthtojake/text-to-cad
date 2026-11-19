@@ -74,7 +74,7 @@ to `host.presentation`, in one change.
 
 A Codex call made in a turn that shows no app (`x-codex-turn-metadata.turn_trigger: exec`, which the 0.163 app
 server's binary sends) never loads this page: its `cad_show` and `cad_open` open the model's page in this
-machine's CAD Viewer, `/<id>` (the file registered by its id, as a launch registers it), started if none runs
+machine's viewer, `/<id>` (the file registered by its id, as a launch registers it), started if none runs
 (`cad_server/mcp/browser.py`), in the person's browser through an owner-only redirect file
 (`cad_mcp/browser.py`), and answer with the page's URL for the agent to give the person: "opened in your
 browser at <url>". The host's stdio process (`cad mcp`) makes that open, in the agent's own environment (its
@@ -223,7 +223,7 @@ the launch's `_meta` first (`host/capability.ts`).
 - **One page, told what to show.** Every surface loads this one page. The tool
   that opened it returns a *launch* — `page` (`home` or `viewer`) and `model`, a
   file's absolute path, a model's document id, or none — and the page renders it: the shared
-  CAD viewer showing that document, or the home. Agents name a file by its absolute path and a
+  viewer showing that document, or the home. Agents name a file by its absolute path and a
   model by the id its script printed (a script is never a document), and
   nothing here branches on a surface's name but one: `surface: file` (below).
 - **A launch is enough to start.** It also carries what the server is — its
@@ -251,7 +251,7 @@ the launch's `_meta` first (`host/capability.ts`).
   again starts with one step. A file handler's view, which shows its file alone,
   keeps none.
 - **What's new is a tab's.** Once a release with notes is installed, a tab (the sidebar, a
-  thread's CAD tab, *Open with CAD*) shows them once, as the CAD Viewer does (`@cad/ui/whats-new`),
+  thread's CAD tab, *Open with CAD*) shows them once, as the viewer does (`@cad/ui/whats-new`),
   kept seen for every view. A card never does, and reads nothing for it: a few hundred pixels of a
   chat are no room for a dialog, and a chat keeps several cards at once.
 - ***Open with CAD* is the file alone.** `cad_file` (`surface: file`) shows the
@@ -290,7 +290,7 @@ the launch's `_meta` first (`host/capability.ts`).
   module or a chunk is folded into rolldown's map, each import's placeholder is as wide as the
   blob URL that replaces it, and the chunk's debug
   id is the one its edited text and map decide (`@cad/core/chunk-ids`), never the
-  id of the unedited chunk the CAD Viewer may ship. It is on by default once
+  id of the unedited chunk the viewer may ship. It is on by default once
   a `cad` command has said so, once, and nothing asks. The app menu's **Telemetry**
   switch (`appSettings`, through `/api/v1/settings`' `telemetry`) changes the answer, one answer for
   this app and the browser viewer. No tool of the agent's reads or changes it:
@@ -387,7 +387,7 @@ the launch's `_meta` first (`host/capability.ts`).
   viewer, whose own progress takes over.
 - **A card says why it cannot work, in words a person can act on.** Three states, never
   confused, and never a host's or a transport's own error string (`host/channel.ts`,
-  `Connection.tsx`, `tunnel.ts`'s `tunnelFailure`), and names the browser, never the CAD Viewer
+  `Connection.tsx`, `tunnel.ts`'s `tunnelFailure`), and names the browser, never the viewer
   ([Naming the page](../../packages/ui/docs/settings-ui.md#naming-the-page)):
   - **No channel.** A host can draw the card and carry none of its calls back: the Claude
     app's **Code tab** (observed 2026-10-25) frames `cad_show`'s card as "Widget from
@@ -421,7 +421,7 @@ the launch's `_meta` first (`host/capability.ts`).
     connect to CAD's engine.", "The CAD plugin did not answer in time.", "The
     CAD plugin could not be reached.").
 - **No channel, then the engine directly.** Every launch a tool hands an inline card carries,
-  where the engine gives a page, `browser` (the CAD Viewer's page of what it shows, the same
+  where the engine gives a page, `browser` (the viewer's page of what it shows, the same
   link — a page URL's `?token=`, good until the token is rotated ([the web README](../web/README.md#launching))
   — a Codex whose launcher is unknown gives the agent with each show until a view calls back, loopback
   only) and `engine`

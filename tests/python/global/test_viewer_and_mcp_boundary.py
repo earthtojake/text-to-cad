@@ -1,4 +1,4 @@
-"""The CAD Viewer's backend and the CAD app's server are leaves of the server.
+"""The viewer's backend and the CAD app's server are leaves of the server.
 
 Outside `cad_server/viewer/`, `cad_server/mcp/` and the commands that start them (`cli/viewer.py`,
 `cli/mcp.py`, which the CLI registry names by string), no module of the server's

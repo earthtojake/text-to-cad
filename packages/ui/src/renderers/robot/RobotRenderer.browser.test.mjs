@@ -14,7 +14,7 @@ import { PNG } from 'pngjs';
 // primitives, the SRDF paired with it (a "home" state, a named pose, an end effector), a
 // long chain, a four-bar linkage cadgen closes, and the two cadgen refuses (their alerts are
 // `useRobotDocument.test.tsx`'s and `ViewportError.test.tsx`'s, an SDF's own section `SdfSection.test.tsx`'s: no GPU needed). This server answers a robot document's `structure` as the viewer's does, from
-// those files, so the page here is the page a CAD Viewer serves. Scene, pose store and handle adapter
+// those files, so the page here is the page a viewer serves. Scene, pose store and handle adapter
 // have unit tests; these are the flows a person actually uses.
 
 const FIXTURES = new URL('./__fixtures__/', import.meta.url);

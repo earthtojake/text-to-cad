@@ -32,7 +32,7 @@ function formatServerLifetime(ms) {
 
 export function scheduleProcessShutdown({
   lifetimeMs,
-  label = "CAD Viewer server",
+  label = "Viewer server",
   close = async () => {},
 } = {}) {
   const normalizedLifetimeMs = normalizeServerLifetimeMs(lifetimeMs);
