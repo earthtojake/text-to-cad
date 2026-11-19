@@ -44,9 +44,10 @@ where those files ship, so these scripts are what produces them.
 
 `test/` — test runners.
 
-- `test.sh` — `test-js.sh`, `test-api.sh`, `test-python.sh`, then `test-global.sh`: the
-  whole tree on one machine, for a local run; `test.yml` calls the focused
-  runners per job instead.
+- `test.sh` — `test-js.sh`, `test-api.sh`, `test-python.sh`, then `test-global.sh`, on one
+  machine, for a local run. It is not CI's coverage: the fea, KiCad and Blender suites, the docs
+  check, packaging, the browser suite and the release tier are jobs of `test.yml`, which calls the
+  focused runners.
 - `test-js.sh [--select core|ui|ui-units|ui-browser|web|mcp|all]` — builds the required shared exports,
   checks dependency boundaries, type-checks each selected workspace (`npm run
   typecheck`: `tsc`, which neither Vite's builds nor the Node test runners do) and
@@ -85,8 +86,7 @@ where those files ship, so these scripts are what produces them.
   still running.
 - `test-global.sh [PATH...]` — `tests/python/global`, the repo-wide policy
   suite, narrowed to PATHs as `test-python.sh` is.
-- `test-docs.sh` — `npm --prefix apps/docs run check`, then the animated brand
-  marks' tests. Called by `test.yml`.
+- `test-docs.sh` — `npm --prefix apps/docs run check`. Called by `test.yml`.
 - `test-kicad.sh` — native board DRC, every export, a STEP/mesh round trip and the board's and
   schematic's edits (`kicad_pcb.edit`, `kicad_sch.edit`), through kicode's `kicad-cli` and KiPy in the environment of `cad[kicad]`, which it makes once
   as the server does (in `tmp/kicad-suite`, naming its Python to the tests, `CAD_TEST_KICODE_PYTHON`):

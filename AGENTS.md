@@ -127,6 +127,6 @@ Run the smallest check that covers the change, then the broader one before hand-
 | What the bundlers consume | `scripts/bundle/bundle.sh --check` |
 | The docs site, the API | `npm --prefix apps/docs run check`, `npm --prefix apps/api test` |
 | A skill's behaviour | `scripts/bench/skill_ab.py` ([Writing a skill](docs/contributing/writing-a-skill.md#test-a-change-ab)) |
-| Everything | `scripts/test/test.sh` |
+| The JS, API, Python and policy suites in one run | `scripts/test/test.sh` (CI runs more: [Testing](docs/contributing/testing.md#ci)) |
 
 CI runs one job per concern, only where a change reaches it; `main` requires the single check `CI`.
