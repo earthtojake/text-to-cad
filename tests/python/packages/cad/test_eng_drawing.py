@@ -1356,6 +1356,22 @@ class FromThePartTests(unittest.TestCase):
         # Asked for by its point, it is called out where its author says.
         self.assertEqual(sheet(lambda back, front: back.hole((0, -16, 25))), (["%%c8 THRU"], []))
 
+    def test_holes_that_print_the_same_are_one_callout(self) -> None:
+        """⌀6 and ⌀6.004 both print ⌀6: two callouts each reading ``2× ⌀6 THRU``
+        said four holes twice over."""
+        from build123d import Align, Box, Cylinder, Pos
+
+        from cad._internal.drawing_render import _render_sheet
+        from cad.eng_drawing import Sheet
+
+        up = (Align.CENTER, Align.CENTER, Align.MIN)
+        plate = Box(80, 40, 6, align=up) - [Pos(x, 0, 0) * Cylinder(radius, 6, align=up)
+                                            for x, radius in ((-30, 3.0), (-10, 3.0), (10, 3.002), (30, 3.002))]
+        for call in (lambda top: top.holes(), lambda top: top.hole((10, 0, 6))):
+            sheet = Sheet("A4")
+            call(sheet.view(plate, "top", at=(140, 120)))
+            self.assertEqual(_callouts(_render_sheet(sheet, index=1, count=1, label="alike")), ["4× %%c6 THRU"])
+
     def test_diameter_and_radius_are_measured_off_the_view(self) -> None:
         from build123d import Align, Box, fillet, Axis
         from cad._internal.drawing_render import _render_sheet

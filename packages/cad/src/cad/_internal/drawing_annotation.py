@@ -371,12 +371,25 @@ def _looks_into(feature, look) -> bool:
     return _looks_down(feature.axis, look) and _faces_viewer(feature, look)
 
 
+def _kind(feature) -> tuple:
+    """What makes two holes or two slots one kind to a callout: their signature
+    with each size as a callout prints it, to two places. A ⌀6 bore and a
+    ⌀6.004 one both print ⌀6, and read as two kinds they made two callouts
+    saying the same thing, each with half the count."""
+    def printed(value):
+        if isinstance(value, float):
+            return _fmt(value)
+        return tuple(printed(v) for v in value) if isinstance(value, tuple) else value
+
+    return printed(feature.signature())
+
+
 def _kinds(features) -> list[list]:
     """Holes and slots grouped by kind, in the order a drawing lists them: holes,
     largest first, then slots."""
     groups: dict[tuple, list] = {}
     for feature in features:
-        groups.setdefault((isinstance(feature, Slot), feature.signature()), []).append(feature)
+        groups.setdefault((isinstance(feature, Slot), _kind(feature)), []).append(feature)
     return sorted(groups.values(), key=lambda g: (isinstance(g[0], Slot),
                                                   0.0 if isinstance(g[0], Slot) else -g[0].diameter,
                                                   g[0].signature()))
@@ -660,7 +673,7 @@ def _resolve_hole(view: View, proj, dim: "_Dim", seen, look, features: _Features
     given, thread, label = dim.hole["given"], dim.hole["thread"], dim.hole["label"]
     call = f"{view.name}.hole({_where(dim.p1)})"
     hole = _hole_at(view, proj, dim, seen, look, slots, call)
-    same = [h for h in seen if h.signature() == hole.signature() and _faces_viewer(h, look)]
+    same = [h for h in seen if _kind(h) == _kind(hole) and _faces_viewer(h, look)]
     reads = _shown(hole_callout_text(_hole_spec(hole, len(same))))
     if thread is not None:
         return _resolve_tapped(view, call, dim, hole, same, reads, thread, features)
@@ -696,7 +709,7 @@ def _resolve_typed_hole(view: View, proj, dim: "_Dim", seen, look, features: _Fe
     drawn = replace(dim, hole=typed, radius=_outer_radius(typed))
     try:
         hole = _hole_at(view, proj, dim, seen, look, slots, call)
-        same = [h for h in seen if h.signature() == hole.signature() and _faces_viewer(h, look)]
+        same = [h for h in seen if _kind(h) == _kind(hole) and _faces_viewer(h, look)]
         covers = tuple(same) if typed["count"] else (hole,)
         reads = hole_callout_text(_hole_spec(hole, len(covers)))
         thread = dim.hole["thread"]
@@ -813,7 +826,7 @@ def _resolve_slot(view: View, proj, bounds, dim: "_Dim", seen, look) -> "_Dim":
     slot = here[0]
     if not _faces_viewer(slot, look):
         raise _far_side(call, "slot", view)
-    same = [sl for sl in seen if sl.signature() == slot.signature() and _faces_viewer(sl, look)]
+    same = [sl for sl in seen if _kind(sl) == _kind(slot) and _faces_viewer(sl, look)]
     problems = []
     for name, value in (("width", slot.width), ("length", slot.length)):
         if given[name] is not None and abs(given[name] - value) > 0.01:
