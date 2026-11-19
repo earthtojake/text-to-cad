@@ -193,5 +193,30 @@ class OwnFrameTests(unittest.TestCase):
         self.assertIn("along Z through (20, -10, 12)", taper[0])
 
 
+class NoHexagonTests(unittest.TestCase):
+    """A twelve-sided bar is not HEX 60 A/F: its first pass prints no HEX, and a
+    sheet that leaves its flats unstated says so."""
+
+    def _bar(self):
+        from build123d import RegularPolygon, Rot, extrude
+
+        return Rot(0, 0, 15) * extrude(RegularPolygon(30, 12, major_radius=False), amount=10)
+
+    def test_a_first_pass_states_no_hex_and_a_bare_sheet_reports_the_flats(self) -> None:
+        from cad._internal.drawing_render import _render_sheet
+        from cad.eng_drawing import Sheet, part_sheet
+
+        first = _render_sheet(part_sheet(self._bar(), title="BAR"), index=1, count=1, label="bar")
+        said = [d.dxf.text for d in first.modelspace().query("DIMENSION")]
+        self.assertFalse([text for text in said if "HEX" in text], said)
+        sheet = Sheet("A3", 1.0)
+        top, front = sheet.three_views(self._bar(), views=("top", "front"))
+        top.overall()
+        front.overall(width=False)
+        lines = [line for line in _report(sheet) if "inclined face" in line]
+        self.assertEqual(len(lines), 1, lines)
+        self.assertIn("8 inclined faces have no angle", lines[0], "the four square to X and Y are overall sizes")
+
+
 if __name__ == "__main__":
     unittest.main()

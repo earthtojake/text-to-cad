@@ -659,3 +659,26 @@ class UncalledBoreTests(unittest.TestCase):
         plate -= Pos(-30, 0, 0) * extrude(SlotCenterToCenter(10, 6), 10)
         plate -= Pos(40, 0, 0) * extrude(SlotCenterToCenter(12, 8), 10)   # a notch in the edge, its end full round
         self.assertEqual(open_bores(plate), [])
+
+
+class HexagonTests(unittest.TestCase):
+    """A hexagon is six flats that are the section's outline, and all of it."""
+
+    def test_six_flats_of_another_outline_are_no_hexagon(self) -> None:
+        from build123d import Align, Box, Cylinder, Pos, RegularPolygon, Rot, extrude
+        from cad._internal.drawing_features import hexes
+
+        bar = extrude(RegularPolygon(15, 6, major_radius=False), amount=20)
+        (hexagon,) = hexes(bar)
+        self.assertAlmostEqual(hexagon.across, 30.0, places=6)
+        # A hexagon bored through, and one standing on a plate, are hexagons still.
+        self.assertEqual(len(hexes(bar - Cylinder(8, 60))), 1)
+        on_plate = Box(80, 80, 5, align=(Align.CENTER, Align.CENTER, Align.MAX)) + bar
+        self.assertEqual(len(hexes(on_plate)), 1)
+        # Every other flat of a twelve-sided bar is six planes 60 degrees apart, 60 across.
+        twelve = Rot(0, 0, 15) * extrude(RegularPolygon(30, 12, major_radius=False), amount=10)
+        self.assertEqual(hexes(twelve), [], "its flats stop short of a hexagon's corners")
+        self.assertEqual(hexes(extrude(RegularPolygon(30, 12, major_radius=False), amount=10)), [])
+        # A hexagon with a rib standing out of one flat is not a hexagon's outline.
+        ribbed = bar + Pos(18, 0, 0) * Box(10, 4, 20, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        self.assertEqual(hexes(ribbed), [])

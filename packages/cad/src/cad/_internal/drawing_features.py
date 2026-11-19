@@ -1410,16 +1410,59 @@ def hexes(shape) -> list[Hex]:
     normals are 60 degrees apart, each the same distance from one centre line, one
     pair square to a model axis (a hexagon turned off every axis has no flat to
     dimension across, and is left to the report). A hex socket faces in, and is
-    not one."""
+    not one.
+
+    The six flats are the section's outline, and all of it: each runs from one
+    corner of the hexagon to the next, and nothing of the part stands outside
+    them where they are. Six planes 60 degrees apart at one distance are not
+    enough: every other flat of a twelve-sided bar is such a set, and so are six
+    tooth roots of a gear. ``HEX 60 A/F`` on either states a shape the part does
+    not have."""
     from build123d import GeomType
 
     planes: dict[tuple, tuple] = {}
-    for face in shape.faces():
+    on: dict[tuple, list] = {}
+    faces = list(shape.faces())
+    for face in faces:
         if face.geom_type != GeomType.PLANE:
             continue
         normal = _tidy(tuple(face.normal_at()))
         offset = sum(a * b for a, b in zip(normal, tuple(face.center())))
         planes.setdefault((normal, round(offset, 4)), (normal, offset))
+        on.setdefault((normal, round(offset, 4)), []).append(face)
+    reach: dict[int, list] = {}
+
+    def points(face) -> list:
+        """Points round a face: its corners, and three along each of its edges."""
+        if id(face) not in reach:
+            reach[id(face)] = [tuple(v) for v in face.vertices()] + [
+                tuple(e.position_at(t)) for e in face.edges() for t in (0.25, 0.5, 0.75)]
+        return reach[id(face)]
+
+    def outline(k: int, flats: tuple, across: float, centre) -> bool:
+        """Whether six flats are a hexagon's whole outline (see above)."""
+        side = across / math.sqrt(3)  # a regular hexagon's side, from its width across flats
+        lo, hi, mine = math.inf, -math.inf, set()
+        for normal, offset in flats:
+            held = on.get((normal, round(offset, 4)), [])
+            if not held:
+                return False
+            mine.update(id(face) for face in held)
+            tangent = _cross3(tuple(float(j == k) for j in range(3)), normal)
+            runs = [sum((p[j] - centre[j]) * tangent[j] for j in range(3) if j != k) for face in held
+                    for p in points(face)]
+            if min(runs) > -side / 2 + 1e-3 or max(runs) < side / 2 - 1e-3:
+                return False  # it stops short of a corner: a flat of some other outline
+            heights = [p[k] for face in held for p in points(face)]
+            lo, hi = min(lo, min(heights)), max(hi, max(heights))
+        for face in faces:
+            if id(face) in mine:
+                continue
+            for p in points(face):
+                if lo + 1e-3 < p[k] < hi - 1e-3 and any(
+                        sum(n[j] * p[j] for j in range(3)) - offset > 1e-3 for n, offset in flats):
+                    return False  # something stands outside the six flats, where they are
+        return True
 
     def facing(side, m) -> list[float]:
         return [q for v, q in side if sum(abs(a - b) for a, b in zip(v, m)) < 1e-6]
@@ -1459,9 +1502,15 @@ def hexes(shape) -> list[Hex]:
                     v[flat], v[corner] = math.cos(math.radians(angle)), math.sin(math.radians(angle))
                     v = _tidy(v)
                     flats.append((v, round(sum(a * b for a, b in zip(v, centre)) + across / 2, 6)))
+                if not outline(k, tuple(flats), across, centre):
+                    continue
                 found.append(Hex(k, _tidy([round(c, 6) for c in centre]), round(across, 6), flat, corner,
                                  tuple(flats)))
     return found
+
+
+def _cross3(a, b) -> tuple[float, float, float]:
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
 
 
 @dataclass(frozen=True)
