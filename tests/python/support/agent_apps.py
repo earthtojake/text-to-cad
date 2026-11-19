@@ -338,10 +338,14 @@ class PluginRuns(AgentApps):
         self.state.mkdir(parents=True, exist_ok=True)
         (self.state / "install-command.json").write_text(json.dumps(record), encoding="utf-8")
 
+    @contextlib.contextmanager
     def another_run(self):
         """The lock of a run of ``cad plugin install`` or ``cad plugin update``, held for the ``with`` as another run
-        holds it."""
+        holds it. A run in this process takes it as that run's without trying for it a while first
+        (``plugin_catch_up.SETTLE_SECONDS``); one in a process of its own tries as long as any run does."""
         from cad_server._internal import file_lock, plugin_catch_up
 
         self.state.mkdir(parents=True, exist_ok=True)
-        return file_lock.exclusive(self.state / plugin_catch_up.LOCK)
+        with file_lock.exclusive(self.state / plugin_catch_up.LOCK), \
+                mock.patch.object(plugin_catch_up, "SETTLE_SECONDS", 0.0):
+            yield

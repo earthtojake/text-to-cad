@@ -51,10 +51,14 @@ failed, with its exit status (``Catcher``). ``cad update`` never runs it.
 
 **One run at a time** (``run_lock``, ``running``): a run of ``cad plugin install`` or ``cad plugin update`` holds
 ``LOCK``, a file of its own in the state folder, from its start to its end, so it never holds the state folder's one
-lock while it works. A second run waits for it -- but one a server began (``ATTEMPT_ENV``), which ends at once with
-exit status ``BUSY``: after a person's install command updated cad, the server that starts may begin its own run at
-the moment that command goes on to the plugin. cad's own update begins none while the lock is held
-(``auto_update.due``, ``auto_update.asked``): it would replace this environment's files under the run.
+lock while it works. A second run waits for it -- but one a server began (``ATTEMPT_ENV``), which ends with exit
+status ``BUSY`` and runs nothing: after a person's install command updated cad, the server that starts may begin its
+own run at the moment that command goes on to the plugin. cad's own update begins none while the lock is held
+(``auto_update.due``, ``auto_update.asked``): it would replace this environment's files under the run. Whether it is
+held can only be asked by trying for it (``running``: neither ``flock`` nor Windows' ``locking`` says who holds a lock
+without taking it), so a server that asks holds it for an instant. A run therefore tries for ``SETTLE_SECONDS`` before
+it takes the lock as another run's (``run_lock``): only then does a server's run answer ``BUSY``, and a person's say
+that it waits.
 
 Imports the standard library alone; what it asks of cad it imports as it asks.
 """
@@ -79,6 +83,10 @@ LOCK = "install-command.lock"
 # The exit status of a run a server began that found another run holding the lock: nothing ran, and it is tried again
 # later (``EX_TEMPFAIL``).
 BUSY = 75
+# How long a run tries for the lock, every ``SETTLE_STEP``, before it takes it as held by another run: whoever asks
+# whether a run is going (``running``) holds it for an instant, which is no run.
+SETTLE_SECONDS = 2.0
+SETTLE_STEP = 0.25
 TRIES = 3  # how many runs one release gets: once, and twice more, each an hour or more after the one before
 RETRY_SECONDS = 60 * 60.0
 UNDERWAY, OK, FAILED = "underway", "ok", "failed"
@@ -102,10 +110,11 @@ def _folder() -> Path:
 
 @contextlib.contextmanager
 def run_lock(*, wait: bool, waiting: Callable[[], None] | None = None) -> Iterator[bool]:
-    """``LOCK`` held for one run (see the module), from here to the end of the ``with``: yields True. Where another
-    run holds it: with ``wait``, ``waiting`` is called once and that run waited for, however long it takes; without,
-    yields False at once, and the caller runs nothing. Where the lock's file cannot be made or opened (a state folder
-    this process may not write), the run goes on without one: yields True."""
+    """``LOCK`` held for one run (see the module), from here to the end of the ``with``: yields True. Where it is
+    held, it is tried for again, for ``SETTLE_SECONDS``: one who only asked whether a run is going lets it go at once.
+    Where it is held still, another run holds it: with ``wait``, ``waiting`` is called once and that run waited for,
+    however long it takes; without, yields False, and the caller runs nothing. Where the lock's file cannot be made
+    or opened (a state folder this process may not write), the run goes on without one: yields True."""
     from cad_server._internal import file_lock
 
     with contextlib.ExitStack() as held:
@@ -113,18 +122,37 @@ def run_lock(*, wait: bool, waiting: Callable[[], None] | None = None) -> Iterat
         try:
             folder = _folder()
             folder.mkdir(parents=True, exist_ok=True)
-            if wait:
-                held.enter_context(file_lock.exclusive(folder / LOCK, waiting=waiting))
-            else:
-                mine = held.enter_context(file_lock.attempt(folder / LOCK))
+            mine = _settled(held, folder / LOCK)
+            if not mine and wait:
+                if waiting is not None:
+                    waiting()
+                held.enter_context(file_lock.exclusive(folder / LOCK))
+                mine = True
         except OSError:
-            pass
+            mine = True
         yield mine
 
 
+def _settled(held: contextlib.ExitStack, path: Path) -> bool:
+    """``path`` locked and kept in ``held`` where it comes free within ``SETTLE_SECONDS``, tried at once and then
+    every ``SETTLE_STEP``; whether it was."""
+    from cad_server._internal import file_lock
+
+    until = time.monotonic() + SETTLE_SECONDS
+    while True:
+        with contextlib.ExitStack() as trying:
+            if trying.enter_context(file_lock.attempt(path)):
+                held.push(trying.pop_all())
+                return True
+        if time.monotonic() >= until:
+            return False
+        time.sleep(SETTLE_STEP)
+
+
 def running() -> bool:
-    """Whether a run holds ``LOCK`` now, asked without waiting and without making the file. Never raises: where it
-    cannot be asked, none is taken to run."""
+    """Whether a run holds ``LOCK`` now, asked without waiting and without making the file -- by trying for it, the
+    one way there is, so it is held here for an instant, which a run that begins just then waits out (``run_lock``).
+    Never raises: where it cannot be asked, none is taken to run."""
     try:
         from cad_server._internal import file_lock
 

@@ -5,6 +5,7 @@ the apps' CLIs), its exit statuses, the report it writes, the lock that keeps it
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import subprocess
@@ -150,7 +151,8 @@ class InstallTests(PluginRuns):
             self.assertEqual(waiting.stdout.readline(), "Another run is setting up the plugin in the agent apps now: "
                                                         "this one waits for it to end, then runs.\n")
             self.assertEqual((waiting.poll(), self.calls()), (None, []))
-            # One a server began (its run is named) ends at once: the first run is doing the work.
+            # One a server began (its run is named) ends once it has tried for the lock as long as any run does: the
+            # first run is doing the work.
             busy = subprocess.run(line, env={**environ, "CAD_INSTALL_ATTEMPT": "7.0"}, capture_output=True, text=True,
                                   encoding="utf-8", timeout=120)
             self.assertEqual((busy.returncode, busy.stdout, self.calls()), (75, "", []))
@@ -161,9 +163,30 @@ class InstallTests(PluginRuns):
         with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state)}):
             self.assertFalse(plugin_catch_up.running(), "the lock is let go as the run ends")
 
+    def test_a_lock_held_for_an_instant_is_no_run_going(self) -> None:
+        """Whether a run is going can only be asked by trying for its lock (``plugin_catch_up.running``), so a server
+        that asks holds it for the instant it asks. A run that begins just then tries again before it takes the lock
+        as another run's: a server's run does its work, where it would have answered 75 and been kept as failed for an
+        hour, and a person's says nothing of waiting."""
+        from cad_server._internal import file_lock
+
+        self.programs("claude")
+        self.state.mkdir(parents=True)
+        for began_by in ({"CAD_INSTALL_ATTEMPT": "7.0"}, {}):
+            with contextlib.ExitStack() as asking, self.subTest(began_by=began_by):
+                asking.enter_context(file_lock.exclusive(self.state / plugin_catch_up.LOCK))
+                # The one who asked lets go while the run waits its first step.
+                with mock.patch.object(plugin_catch_up.time, "sleep", side_effect=lambda _step: asking.close()) as slept:
+                    done = self.cad_plugin("install", **began_by)
+                slept.assert_called_with(plugin_catch_up.SETTLE_STEP)
+                self.assertEqual((0, ""), (done.returncode, done.stderr), done.stdout)
+                self.assertNotIn("Another run", done.stdout)
+                self.assertEqual(self.calls("claude"), ADD)
+
     def test_a_state_folder_it_may_not_lock_never_stops_the_run(self) -> None:
         self.programs("claude")
-        with mock.patch("cad_server._internal.file_lock.exclusive", side_effect=PermissionError("read-only")):
+        with mock.patch("cad_server._internal.file_lock.attempt", side_effect=PermissionError("read-only")), \
+                mock.patch("cad_server._internal.file_lock.exclusive", side_effect=PermissionError("read-only")):
             done = self.run_install()
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertEqual(self.calls("claude"), ADD)

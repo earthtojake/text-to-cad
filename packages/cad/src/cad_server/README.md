@@ -231,7 +231,9 @@ test's way to say the server runs nothing by itself; `cad plugin update` reads n
 that is no global install, or while the bridge owes its own run of the hosted install command.
 The helper and `cad update` run none. `cad doctor` shows the record. One run at a time: `cad plugin install`
 and `cad plugin update` hold `install-command.lock` in the data folder from start to end; a second run waits
-for it, but one a server began, which exits 75 at once and is tried again an hour later. While it is held,
+for it, but one a server began, which exits 75 and is tried again an hour later. Either tries for the lock for
+two seconds first: whether a run is going can only be asked by trying for the lock, so a server that asks holds
+it for an instant, which is no run. While it is held,
 cad's own update is not due, and a typed `cad update` is refused in one line.
 
 **Each attempt is counted once** (`auto_update.report`), where telemetry is on, as every count is: the server

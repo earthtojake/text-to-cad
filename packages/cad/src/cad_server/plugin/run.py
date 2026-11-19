@@ -1,9 +1,10 @@
 """One run of ``cad plugin install`` or ``cad plugin update`` (``install``), and what it was (``Facts``).
 
 A run holds the one lock of such runs from its start to its end (``plugin_catch_up.run_lock``): where another run
-holds it, a run a server began ends at once with exit status ``plugin_catch_up.BUSY`` and one line, and any other
-(a person's, the hosted install command's) says it waits, waits, then runs. Then, for every app of ``apps.APPS`` found
-here: ours in, then old copies out (``apps.install_apps``), a line said per app. In a person's terminal
+holds it (still, after the moment a run tries for it), a run a server began ends with exit status
+``plugin_catch_up.BUSY`` and one line, and any other (a person's, the hosted install command's) says it waits, waits,
+then runs. Then, for every app of ``apps.APPS`` found here: ours in, then old copies out (``apps.install_apps``), a
+line said per app. In a person's terminal
 (``terminal.Screen``) it first builds the CAD logo, marks each app's line and keeps a live line under them; anywhere
 else the plain lines alone. Then it turns ``cad plugin update auto`` on (``switch``, the command's own code path), and
 keeps this cad's release as the one the plugin is up to date for only where the run ended well: one where every app
