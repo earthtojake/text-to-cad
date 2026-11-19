@@ -1101,7 +1101,11 @@ edge parts the light net from the copper round it in dark. In 3D the step back i
 never on the see-through plane round the slab, and the edge is drawn on the face as in 2D.
 
 A 3D view's Display is a choice of mode and the Grid switch, and nothing else: a mode has no settings
-of its own, and there is no settings page. The modes, in order, are **Solid** (shaded with
+of its own, and there is no settings page. One model adds to it: an assembly with parts baked from a
+GSL concept ends the list, after a rule and under the muted name **Show as**, with **Exact** and
+**Concept**, which show every such part at once as its exact body or as its concept, the one on
+screen ticked and neither while the parts differ. A part's own row still sets that part alone, and is
+where it is shown as both. The modes, in order, are **Solid** (shaded with
 the model's CAD edges, the default), **Shaded** (no edges), **Parts** (Solid with each part
 its own colour), **X-ray**, **Hidden line** and **Wireframe**, filtered by the view's
 injected capabilities (`viewFeaturesForKind`, `@cad/core/common/viewSettings.js`; the

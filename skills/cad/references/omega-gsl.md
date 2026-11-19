@@ -407,7 +407,8 @@ def device():
   (`.moved(bd.Location(...))`); write the concept in that part's own frame. A value is one of the concept's
   **ranged** names (`@range`), this placement's: a name without a range is refused where the concept is drawn.
 - `gsl.baked(part, path, **values)` says an exact part was made from a concept. The Viewer shows it as its exact
-  body, the concept, or both (the part's menu), which is where a bake's departure from its concept is seen.
+  body, the concept, or both (the part's menu), which is where a bake's departure from its concept is seen;
+  Display's **Show as** sets every baked part to Exact or Concept at once.
 - The Viewer draws each concept as its field among the exact parts, at the values its part gives. It has no
   sliders: a ranged name is changed in the `.gsl`, or by the value the script gives.
 - In the Viewer a part that is a concept has its own glyph in the Model tree. Clip cuts the concepts with the

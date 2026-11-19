@@ -663,6 +663,20 @@ function XbfSurface({ view, data }) {
     setShownAs(now => now + 1);
     shellRef.current?.requestFrame?.();
   }, [scene]);
+  // Display's own switch (`DisplayPopover.jsx`): every part baked from a concept at once, as its exact body or
+  // its concept. Neither is ticked while the parts differ or one is shown as both, which is a row's choice.
+  const displayShownAs = useMemo(() => {
+    const baked = concepts.filter(concept => concept.role === "baked");
+    if (!baked.length) return null;
+    const value = ["exact", "concept"].find(way => baked.every(concept => concept.representation === way)) || "";
+    return { value, onChange: way => {
+      let changed = false;
+      for (const concept of baked) changed = scene.setRepresentation(concept.id, way) || changed;
+      if (!changed) return;
+      setShownAs(now => now + 1);
+      shellRef.current?.requestFrame?.();
+    } };
+  }, [scene, concepts]);
   const menuForNode = useCallback(id => xbfPartMenu({ tree, nodeId: id, assembly, hiddenIds, isolatedIds,
     selectedNodeIds, expandedIds, copyText: singleChip([...new Set([...selectedNodeIds, id])]), zoomSelectionAvailable, shape, concepts }),
   [tree, assembly, hiddenIds, isolatedIds, selectedNodeIds, expandedIds, singleChip, zoomSelectionAvailable, shape, concepts]);
@@ -793,7 +807,7 @@ function XbfSurface({ view, data }) {
     frame: inspectFrame, copyText: singleChip, data: "model" } : null), [scene, previewing, selected, describe, tip, pointed, inspectSelect, inspectHover, inspectFrame, singleChip]);
 
   return <RendererShell shell={shell} tools={strip} subToolbar={measuring ? <MeasurementsBar measure={measure} /> : null} sidebar={sidebar} previewView={previewView}
-    inspect={inspect}
+    inspect={inspect} displayShownAs={displayShownAs}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} quickEditDraft={draft} nameReference={nameReference}
     onClearReferences={() => { setChosen(EMPTY); measure.select([]); }} copySelection={copySelection}
     onSelectPress={measureSelect.press} onSelectHover={measureSelect.hover} selectsAnnotations={selects(selectFilter, "annotation")}

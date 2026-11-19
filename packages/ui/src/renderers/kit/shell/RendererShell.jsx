@@ -165,7 +165,7 @@ const DOUBLE_PRESS_MS = 600;
 export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, references = null, referenceChips = null, quickEditDraft = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null, previewView = null,
   frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, boxSelect = null, inkTouches = null,
-  doubleClickFits = true, zoomToSelection = null, inspect = null }) {
+  doubleClickFits = true, zoomToSelection = null, inspect = null, displayShownAs = null }) {
   const { t } = useI18n();
   const frame = shell.frame;
   // What a tool's letter takes up (`useRendererShell`'s `onKey`): the strip as drawn now.
@@ -419,10 +419,10 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
       // In a phone's More, a row that switches it the same way.
       onSelect: () => frame.projection.onChange(otherProjection(frame.projection.value)) },
     { id: "display", label: t("display.label"), icon: DisplayIcon ? <DisplayIcon /> : null, disabled: shell.idle,
-      tile: <DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid} />,
+      tile: <DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid} shownAs={displayShownAs} />,
       // In a phone's More, the same list opened under its row, in More itself (`FloatingToolBar.js`'s TouchStrip):
-      // the modes, then Grid.
-      submenu: () => <DisplayMenuItems mode={frame.displayMode} grid={frame.grid} /> },
+      // the modes, then Grid, then how the parts baked from a concept are shown, where the model has any.
+      submenu: () => <DisplayMenuItems mode={frame.displayMode} grid={frame.grid} shownAs={displayShownAs} /> },
     ...(mobile ? [zoomViewControl(zoom, { t, disabled: shell.idle })] : []),
     { id: "preview", label: t("preview.label"), icon: <Play aria-hidden="true" />, disabled: shell.idle, onSelect: enterPreview,
       tile: <ViewControl label={t("preview.label")} disabled={shell.idle} onClick={enterPreview}><Play aria-hidden="true" /></ViewControl> }
