@@ -74,8 +74,9 @@ These words mean one thing each, in the code, the commands and every document.
   or both. An integration has an operation of its own only on a file of its tool's that is no document type:
   `check`, answering findings as a type's check does (`cad mujoco check robot.xml`, `cad.mujoco.check`).
   The `orcaslicer` integration (`cad orcaslicer presets|complete`, `cad.orcaslicer`) is deprecated: it
-  rebuilt complete presets from OrcaSlicer's own folders, which OrcaSlicer's app exports itself (law 28). It
-  is kept, unlisted, for the 30 days law 14's first tier gives a command the skills used.
+  completed the presets OrcaSlicer stores, from its own folders, for its command line, and cannot from
+  OrcaSlicer 2.5 on, which keeps the built-in ones in binary caches; a project saved from the app slices as
+  it is (law 28). It is kept, unlisted, for the 30 days law 14's first tier gives a command the skills used.
 - **Dependency**: one installable package or binary, named only in the distribution's metadata and lock
   files, never in the API, the CLI or the docs. It becomes an integration only when we write code for that
   tool: OCP is a dependency of `build123d`, not an integration.
@@ -346,8 +347,9 @@ renumbers the list and every citation in the same change.
     tool's function, and no code that rebuilds from a tool's own folders and caches what the tool
     exports: a skill teaches the tool's way instead.
     *Pressure-test*: delete the helper and write what a skill would say in its place. If that is the
-    tool's own command or call and nothing is lost, the helper was a wrapper. `cad orcaslicer` was
-    one: it read OrcaSlicer's preset folders to write the settings files the app exports itself.
+    tool's own command or call and nothing is lost, the helper was a wrapper. `flat_pattern` and the
+    five helpers beside it were: each gave what build123d's own `Plane.to_local_coords`, `offset` and
+    `fuse` give, to the last digit.
 29. **A producer regenerates a file from code; an edit changes a native file in place.** *The
     package.* A producer is the engine's (law 25): a file decorator declares a persistent script's
     output, and the file is written again from the model whenever it runs. An edit is a native file's

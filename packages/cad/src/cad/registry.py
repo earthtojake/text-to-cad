@@ -477,8 +477,8 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         # The person's own OrcaSlicer: our code never runs it (so no probe), and reads and writes its presets, JSON
         # files, with the standard library alone (so no extra), in the process that calls it.
         extra=None, process="in-process",
-        deprecated="OrcaSlicer's own command line slices with a project saved from the app or the presets the "
-                   "app exports (File > Export > Export Preset Bundle): give it those",
+        deprecated="OrcaSlicer's own command line slices a project saved from the app (File > Save Project) as it "
+                   "is, and from OrcaSlicer 2.5 the built-in presets are binary caches this command cannot read",
         operations=(Operation("presets", "list the presets of one kind a person can select (machine, process or "
                                          "filament), from their own OrcaSlicer folders and the app's profiles",
                               "orcaslicer"),
