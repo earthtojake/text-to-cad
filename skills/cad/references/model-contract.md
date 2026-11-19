@@ -1,13 +1,14 @@
 # Models
 
-Read this file when writing or editing a model script, composing models into
-assemblies, choosing what to mark `@memo`, reading files into a model, or working out
-why a run ran what it ran.
+Read this file when writing or editing a model script, declaring or setting its
+parameters, composing models into assemblies, choosing what to mark `@memo`, reading
+files into a model, or working out why a run ran what it ran.
 
 ## Contents
 
 - [A model is a function](#a-model-is-a-function)
 - [Parameters and configurations](#parameters-and-configurations)
+  ([parameters a person tunes](#parameters-a-person-tunes))
 - [`@memo` marks stages](#memo-marks-stages)
 - [Assemblies call their parts](#assemblies-call-their-parts)
 - [What a run runs](#what-a-run-runs)
@@ -52,7 +53,7 @@ if __name__ == "__main__":
   decorators (`@xbf`, `@step`, ...: a document with those files), never both; stacking
   `@model` on a file decorator is refused. The function's name is the model's name:
   rename the function to rename it.
-- **A model takes no parameters and returns a build123d shape**: a part, or a
+- **A model takes no arguments and returns a build123d shape**: a part, or a
   `Compound` of labelled children (an assembly). A 2D drawing returns 2D geometry
   instead.
 - **A script is plain Python, loaded afresh by each run.** Its folder is on the module
@@ -83,9 +84,9 @@ if __name__ == "__main__":
 
 ## Parameters and configurations
 
-A model has no parameters, so a part's dimensions are the arguments of a plain helper
-function, and each set of values is a model of its own: a configuration, with its own
-id and page.
+A model function takes no arguments, so a part's dimensions are the arguments of a plain
+helper function (or module constants), and each set of values is a model of its own: a
+configuration, with its own id and page.
 
 ```python
 # src/standoff.py
@@ -113,6 +114,77 @@ The helper needs no marking: the server keeps every kernel operation a model run
 its inputs, so a run after an edit elsewhere replays it. Operations are kept per body, never
 shared between two models: a builder several models call with the same arguments is
 [marked](#memo-marks-stages), or each runs it whole.
+
+### Parameters a person tunes
+
+The few numbers a person is likely to tune -- a fit, a wall, a clearance, a count -- can also be
+declared as the script's parameters, at the module's top level. The CAD Viewer's Parameters tab
+shows them, and the person can change them there:
+
+```python
+# src/bracket.py
+import build123d as bd
+from cad import model
+
+WALL = model.param("wall", 2.0, min=1, max=5, unit="mm")
+HOLES = model.param("holes", 4, min=2, max=8)
+
+
+def bracket_body(width, wall, holes):
+    ...
+
+
+@model
+def bracket():
+    return bracket_body(40, WALL, HOLES)
+```
+
+- **`model.param(name, default, *, min=None, max=None, step=None, unit=None)` returns its default**,
+  a plain `int` or `float`, so the code goes on with a number like any other and a run replays as
+  before. An `int` default makes a whole-number parameter; `unit` is `"mm"` or `"deg"`. The name is
+  lower case (`[a-z][a-z0-9_]*`), declared once in a run. A call inside a function is refused: a
+  replayed body does not run, so its declaration would be lost.
+- **Declare few, each with its range and unit.** Only what a person would turn, with the range the
+  design holds over (`min`, `max`; `step` where values come in steps). Every other number stays a
+  helper's argument or a module constant, and a configuration stays a `@model` of its own. A
+  parameter belongs to its script: every model the script defines lists it.
+- **Writable is the model's own script and a plain number.** A parameter declared in another
+  module (a shared spec), or whose default is an expression, is listed and never written. Declare
+  one the person should tune in the script of the model it tunes, its default a literal.
+  `cad model inspect "$ID"` lists them; here the script also imports `CLEARANCE` from a `spec.py`
+  that declares it, and declares `BORE = model.param("bore", 3 + CLEARANCE)`:
+
+  ```text
+  parameters
+    clearance  0.2 mm  float, 0 to 1, in spec.py, read-only: declared in another file
+    wall  2.0 mm  float, 1 to 5, in bracket.py
+    holes  4  int, 2 to 8, in bracket.py
+    bore  3.2  float, in bracket.py, read-only: not a plain number in the code
+  ```
+
+- **Setting one** writes the script and runs it again. The Parameters tab's Save and `cad model
+  set` are one path:
+
+  ```bash
+  cad model set "$ID" wall=2.5 holes=6
+  ```
+
+  ```text
+  wall  2.0 -> 2.5  /work/src/bracket.py:5
+  holes  4 -> 6  /work/src/bracket.py:6
+  rebuilt 90cc1b96-273b-568e-ada8-025cb64e6074
+  ```
+
+  It checks each value against its parameter, checks the script's bytes are the ones its last run
+  read, writes each number where that run recorded it (nothing else of the file changes), and runs
+  that run again in the script's warm worker. A value the code already holds writes nothing. It
+  refuses with nothing written: exit 2 for a name the model does not declare or a value it does
+  not take (`unknown_parameter`, `not_a_number`, `out_of_range`), exit 1 for a parameter that is
+  not writable, a script edited since its run (`script_changed`: run it first), a model no live
+  worker built (`no_worker`: run its script), or one building now (`busy`). A build that fails at the
+  new values puts the script back and builds it again (`build_failed`, exit 1), so the document stays
+  the last good one. It prints no build report: check the change as after any run. `--json` answers
+  `{"id", "written", "rebuilt"}`; `cad.model.set(handle_or_id, wall=2.5)` is the same from Python.
 
 ## `@memo` marks stages
 

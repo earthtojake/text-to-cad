@@ -70,7 +70,7 @@ them on `__file__` in code that must run from any folder.
 
 ## Write a model and run it
 
-A part or an assembly is a function with no parameters, decorated `@model` (or with its
+A part or an assembly is a function that takes no arguments, decorated `@model` (or with its
 file decorators, never both), that returns a build123d shape. Its dimensions are the
 arguments of a plain helper function, and each configuration is a `@model` of its own, with
 its own id and page; constants several models share live in a module they import. A call
@@ -137,6 +137,14 @@ is the script's folder; two explicit names in it must differ.
   ([what a run runs](references/model-contract.md#what-a-run-runs)). Decoration only
   declares: keep the calls under `if __name__ == "__main__":` so other scripts can import
   the models.
+- **A number the person will tune is a parameter.** Declare the few they are likely to change
+  (a fit, a wall, a clearance, a count) at the top of the model's own script, a plain number
+  with its range and unit: `WALL = model.param("wall", 2.0, min=1, max=5, unit="mm")`, then use
+  `WALL`. Not every number: the rest stay helper arguments or constants. The person can change
+  a parameter in the viewer's Parameters tab, whose Save rewrites the number in the script and
+  builds it again, so read a script again before you edit it. To change a value yourself, run
+  `cad model set "$ID" wall=2.5` for a writable parameter (it checks, writes and rebuilds), else
+  edit the code and run it ([parameters](references/model-contract.md#parameters-a-person-tunes)).
 - **`@memo` marks stages, never parts.** The server already replays every kernel call, so
   mark only a function holding seconds of kernel work that an edit elsewhere leaves
   alone, such as a whole sub-assembly stage; never a part, never a helper called many
@@ -250,7 +258,10 @@ in [references](references/inspection-and-validation.md#references).
 
 A Quick Edit prompt names its document under `File:` (a model's id, or a file's path:
 relative to your workspace, else from `~/`), selected entities under `References:`, and a
-snapshot packet as inline JSON or a `.snapshot.json` path. Save inline JSON to a temporary `.snapshot.json`, and draw the view the person
+snapshot packet as inline JSON or a `.snapshot.json` path. A line before `File:` such as
+`Saved from the viewer since your last edit: wall 2 -> 2.5 (bracket.py)` names parameters the
+person saved from the page: those values are already in the script and built, so keep them and
+never set them back. Save inline JSON to a temporary `.snapshot.json`, and draw the view the person
 drew their ink in, ink included:
 
 ```bash

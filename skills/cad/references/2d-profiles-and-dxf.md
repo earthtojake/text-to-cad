@@ -16,7 +16,7 @@ existing `.dxf`. Whether a cut file is ready for a shop is the sheet-metal revie
 
 ## A drawing is a model
 
-**A drawing is a `@model` function that takes no parameters and returns build123d 2D geometry on
+**A drawing is a `@model` function that takes no arguments and returns build123d 2D geometry on
 z=0: a sketch, a face, wires or edges. `cad model export <id> drawing.dxf` writes the DXF.** You never
 construct a document, name an entity, or write a file from the model. It builds in the server's warm
 worker like any model, and the DXF is written from its document by build123d's own exporter, once the

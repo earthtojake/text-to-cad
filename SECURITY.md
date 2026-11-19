@@ -86,6 +86,35 @@ files on this computer. Do not bind
 a non-loopback `--host` unless you mean to offer exactly that to everyone who
 can reach the port.
 
+**The one route that writes code.** A model's Parameters Save in the CAD Viewer
+(`POST /api/v1/documents/model/<id>/parameters`) is the one page route that
+writes a file the server later runs as Python: the model's own script, which it
+then builds again. It is behind the same Host check, guard header and
+credentials as every route that changes something. Its body is
+`{"values": {name: number}}` (64 KiB at most) and its path names a document id:
+it never carries a path or text. The server writes only what a run of the script
+told it:
+
+- Only numbers: each a finite number of its parameter's kind (an integer
+  parameter takes an integral one), within the range the script declares for it,
+  and written in the server's own spelling (an integer's digits; a float rounded to
+  six decimals, in the shortest text that reads back as it). A value is never
+  written as the text it was sent as.
+- Only where a run recorded: the bytes of a `model.param` default that is a plain
+  numeric literal, at the position the script's last run recorded, in that model's
+  own script. A parameter declared in another module, or whose default is an
+  expression, is never written, nor is any other byte of the file.
+- Only after checking the bytes: the worker that recorded those positions must
+  still be live, the script's bytes on disk must be the ones that run read, and
+  each position must still spell the recorded value; otherwise nothing is written
+  (`script_changed`, `no_worker`). The file is replaced at once, its mode kept, and
+  a build that fails at the new values puts the old bytes back.
+
+So whoever holds a credential can change a model's declared numbers within their
+declared ranges and have the script's last run built again, which runs that
+script's own code as it ran before. They cannot pick the file, write any other
+file, or add or change code. `cad model set`, through the door, is the same code.
+
 **The CAD app in agent hosts.** The page's own tools (`cad_sync`,
 `cad_capture_reply` and `cad_http`, its requests of the viewer's routes) need a
 capability, one for each host connection. The server delivers it in tool-result metadata, which
@@ -183,6 +212,9 @@ its major before one ships.
 - A file from someone else that reads, writes or runs anything beyond what
   opening, viewing, exporting or snapshotting it should. This includes a file
   that makes the server do unbounded work or hold unbounded memory.
+- A Parameters Save, or `cad model set`, that writes anything but a number at a
+  position a run recorded in a model's own script, or writes when the script's
+  bytes are not the ones that run read.
 - An MCP tool that the model can use to act as the CAD app's page, or a frame
   that can act as its host.
 - A way to publish to PyPI or the install branches (`latest`, `claude-plugin`,
