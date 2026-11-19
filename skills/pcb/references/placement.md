@@ -26,10 +26,10 @@ it is your inference, and go on.
 Rank the connections by how little length each bears, and place in that order, while the space at the
 pins is free:
 
-1. What the mechanics fix (connectors, buttons, LEDs, mounting holes, an antenna and its keep-out, anything
-   the enclosure locates), then locked. A horizontal connector sits at a board edge with its mating face
-   out over it: check it in a GLB export opened in the viewer (`cad kicad_pcb export board.kicad_pcb --to glb
-   -o tmp/glb`).
+1. What the mechanics fix: connectors, buttons, LEDs, mounting holes, an antenna and its keep-out, anything
+   the enclosure locates. These go first and are locked. A horizontal connector sits at a board edge with
+   its mating face out over it: check it in a GLB export opened in the viewer (`cad kicad_pcb export
+   board.kicad_pcb --to glb -o tmp/glb`).
 2. What the vendor fixes, and the high-frequency paths: an RF network, a regulator's hot loop, a ground
    tied to one pin.
 3. Decoupling and filter capacitors, each at its own pin, supply pad toward the pin, even when a
@@ -142,8 +142,7 @@ After each group:
   Unconnected items are expected until routing.
 - **Your own measurements.** A check script reading the saved board measures each pin to its part,
   each ground pad's via site and each crystal's gaps ([layout's list](layout.md#a-property-check)).
-- **The ratsnest.** `cad kicad_pcb snapshot board.kicad_pcb tmp/placement.png --display placement` shows
-  the pads and every unrouted connection. Short, uncrossed lines mean the group sits well. A line that
+- **The ratsnest**, in the placement snapshot ([SKILL.md](../SKILL.md#check-each-change)). A line that
   must cross a pad row, or ends at a pad walled in by parts, is a lane still to open.
 
 Routing shows where lanes run short, so expect to move parts again. A routed part moved leaves its tracks

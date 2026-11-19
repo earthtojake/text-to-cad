@@ -250,8 +250,8 @@ def _wants(entries: Sequence[Mapping[str, Any]], board: Any, rules: Any) -> list
         partner = complement(net)
         if partner is not None and partner in pads_of:
             raise ValueError(f"{where}: {net} and {partner} are a differential pair to KiCad (its diff_pair_gap and any "
-                             "pair rule apply), and route routes no pair: route the pair by hand (layout.md), and leave "
-                             "both out of the plan")
+                             "pair rule apply), and route routes no pair: route the pair by hand, and leave both "
+                             "out of the plan")
         layers = _layers(entry["layers"], copper, where)
         named = {layer for layer, _ in layers}
         off = [pad.ref or f"a pad of {pad.part}" for pad in pads if not named & set(pad.layers)]

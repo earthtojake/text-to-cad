@@ -12,10 +12,9 @@ the last saved.
 
 ## The method
 
-1. **Start from the schematic.** Export its netlist (`cad kicad_sch export board.kicad_sch --to netlist
-   -o tmp`, or `kicad_sch.export("board.kicad_sch", "netlist", "tmp")` in the script), then bring the
-   parts and nets onto the board in an edit: `b.import_netlist("tmp/board.net")` (`dry_run=True` first, to
-   see what it would change). [Schematic](schematic.md#into-the-board-and-back) has the round trip.
+1. **Start from the schematic.** Export its netlist and bring the parts and nets onto the board in an
+   edit ([schematic](schematic.md#into-the-board-and-back)): `b.import_netlist("tmp/board.net")`,
+   `dry_run=True` first to see what it would change.
 2. **Rules before copper.** Set the board's minimums and its netclasses from the fab's limits and each
    net's current ([where each lives](board-api.md#design-rules)). Width for current is IPC-2221's
    `I = k * dT^0.44 * A^0.725` (A in mil², k = 0.048 on outer layers, 0.024 inner): size power nets and
@@ -106,7 +105,8 @@ IPC-2141A, *Design Guide for High-Speed Controlled Impedance Circuit Boards* (20
 - **The plane kept whole.** The anti-pads round a dense row of vias (a BGA's fan-out, a connector's pins)
   can merge into one slot across it: look at that layer's copper snapshot and space the vias so the webs
   between them survive. A pour necked down to a strip between parts, or an island held by one via, is no
-  plane: widen the neck, stitch the island or remove it.
+  plane: widen the neck, stitch the island or remove it. On a two-layer board the plane is the other
+  side's pour: a track cut into it under a fast signal is short and runs along the signal, not across.
 - **Ground pours stitched together** with vias at a pitch well under λ/10 of the highest frequency of
   concern, λ taken in the board's dielectric (λ = c / (f·√εr)): a clock's harmonics, a digital edge's
   bandwidth (about 0.35 / rise time, Bogatin), an RF carrier. At 2.4 GHz on FR-4 (εr about 4.3) λ is some
@@ -182,9 +182,9 @@ the datasheets, never a built-in number:
 
 - each IC pin to the part serving it, pad to pad: a capacitor near another capacitor but far from its pin;
 - a decoupler the wrong way round: its ground pad nearer the pin than its supply pad;
-- a via site beside each small part's ground pad: a via's diameter plus clearance, free of other nets;
+- a via site beside each small part's ground pad, free of other nets, and a lane out of each pin front,
+  straight or at 45°, each sized as [placement](placement.md#keep-every-pad-reachable) says;
 - a crystal's two gaps to its pins, and their difference;
-- a blocked pin front: no lane a track wide plus two clearances straight out of a pin, or at 45°;
 - an RF or filter chain, link by link, with each shunt's branch length from the line;
 - the ground under each fast net: points along its tracks `inside` a fill of the ground zone on the layer
   that references it (the fills are KiCad's, so refill and save first);

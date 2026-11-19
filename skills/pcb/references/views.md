@@ -42,13 +42,14 @@ them, each part standing on its 3D model. A press picks what the 2D view picks w
 ray meets the face, or the part whose body is in front of it; a drag turns the view; **Flip** turns
 the camera over.
 
-A part's model is the STEP its footprint names, looked for only in:
+A part's model is the STEP its footprint names, looked for only in these folders, in this order:
 
-1. the board's folder (`${KIPRJMOD}`),
-2. KiCad's installed 3D library (every `${KICADn_3DMODEL_DIR}`),
-3. the folders `CAD_KICAD_3DMODELS` names (separated as `PATH` is).
+1. the board's folder (`${KIPRJMOD}`, and a relative name),
+2. the folders `CAD_KICAD_3DMODELS` names (separated as `PATH` is),
+3. KiCad's installed 3D library.
 
-A `.wrl` name is read as the `.step` or `.stp` beside it. `CAD_KICAD_3DMODELS` is read from the
+A name under any `${KICADn_3DMODEL_DIR}` is read in 2 and 3, a relative name the board's folder lacks
+too, and a `.wrl` name as the `.step` or `.stp` beside it. `CAD_KICAD_3DMODELS` is read from the
 server's environment, so set it before the server starts (`cad server stop`, then `cad server start`
 with it set); a STEP or GLB export reads it from the command's environment. Where it names a KiCad
 installation's `3dmodels` folder, that installation's stock symbol and footprint libraries are the

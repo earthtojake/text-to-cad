@@ -67,9 +67,10 @@ annular width, the edge to the copper-to-edge clearance.
 
 The STEP's origin is KiCad's page origin unless you choose one (`cad run kicad-cli pcb export step` with
 `--user-origin XxYmm`, `--grid-origin` or `--drill-origin`): record which. Its y is the board's y negated
-(a board drawn from (0, 0) to (40, 30) spans y −30 to 0). Measure the exported outline, holes and thickness
-and a known connector location before designing against it. `--board-only` leaves the parts out: say so
-when you use it.
+(a board drawn from (0, 0) to (40, 30) spans y −30 to 0), and its board body is the substrate without
+copper or mask (1.51 mm for a default 1.6 mm two-layer board). Measure the exported outline, holes and
+thickness and a known connector location before designing against it. `--board-only` leaves the parts
+out: say so when you use it.
 
 The STEP is an ordinary CAD file, not the board's source. Show it as any file
 ([Show the model](../SKILL.md#show-the-model): `cad_show` where your tools include it, else its page
