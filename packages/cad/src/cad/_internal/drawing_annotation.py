@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from cad._internal.drawing_assembly import _BALLOON_AIR, _BALLOON_LEAD, _BALLOON_R, _balloon_axis
@@ -524,12 +524,39 @@ def _holes_hint(seen, look) -> str:
     return f"The holes it looks down open at {listed}{' ...' if len(mine) > 6 else ''}; view.holes() calls out every one."
 
 
-def _resolve_view(view: View, proj, bounds, part_features, warnings: list | None, cut=None) -> list["_Dim"]:
+@dataclass
+class _Stated:
+    """The holes and slots a sheet's views state, as they are resolved in turn:
+    each by the name of the view that states it, and those a view's ``holes()``
+    left out because the view draws them hidden, for the sheet to say of any no
+    other view went on to state."""
+
+    by: dict = field(default_factory=dict)
+    hidden: list = field(default_factory=list)
+
+    def unseen(self) -> list[str]:
+        """What to report of the holes ``holes()`` left to a view that sees them
+        and no view states."""
+        return [f"{name}.holes(): the {name} view draws {len(left)} hole(s) or slot(s) it looks down hidden, behind "
+                f"another part of the part, and calls out none of them: the one at {_where(left[0].mouth)}, say. "
+                "Call them out in the view that sees them."
+                for name, left in ((name, [f for f in features if id(f) not in self.by])
+                                   for name, features in self.hidden) if left]
+
+
+def _resolve_view(view: View, proj, bounds, part_features, warnings: list | None, cut=None,
+                  on_sheet: _Stated | None = None) -> list["_Dim"]:
     """The view's annotation with every size the part decides filled in from the
     part, on copies: a hole callout's diameter, depth, counterbore, countersink and
     count, a diameter or radius callout's value, and ``holes()`` expanded into one
     callout per kind of hole, less the kinds a ``hole()`` or ``slot()`` on the view
-    states. Anything the author typed is checked on the way."""
+    states. Anything the author typed is checked on the way.
+
+    A hole is stated once on a sheet. ``on_sheet`` holds the holes and slots the
+    views before this one state, and this view's are added: ``holes()`` leaves
+    those to the view that has them, as it leaves the ones another part of the
+    part hides from this view, and a ``hole()`` or ``slot()`` that states one
+    again is reported."""
     look = _look(view)
     seen_cache: tuple | None = None
 
@@ -584,14 +611,25 @@ def _resolve_view(view: View, proj, bounds, part_features, warnings: list | None
                         stated[id(other)] = index
                 loser.feature, loser.covers = None, ()
                 break
+    on_sheet = on_sheet or _Stated()
+    elsewhere = dict(on_sheet.by)
+    for index in sorted(resolved):
+        for item in resolved[index]:
+            again = sorted({elsewhere[id(f)] for f in item.covers if id(f) in elsewhere})
+            if again and warnings is not None:
+                warnings.append(f"redundant: {view.name}.{item.kind}({_where(view._dims[index].p1)}) calls out a "
+                                f"{item.kind} the {again[0]} view calls out already, the one at "
+                                f"{_where(item.feature.mouth)}: a feature takes one callout on a sheet. Drop one.")
     for index, dim in enumerate(view._dims):
         if dim.kind == "holes":
             holes, slots, features = seen()
-            resolved[index] = _expand_holes(view, proj, bounds, dim, holes, look, warnings, features, slots, stated)
+            resolved[index] = _expand_holes(view, proj, bounds, dim, holes, look, warnings, features, slots,
+                                            {**elsewhere, **stated}, on_sheet)
     out: list[_Dim] = []
     for index in sorted(resolved):
         for item in resolved[index]:
             item.index = index
+            on_sheet.by.update((id(f), view.name) for f in item.covers)
         out.extend(resolved[index])
     return out
 
@@ -797,9 +835,31 @@ def _resolve_slot(view: View, proj, bounds, dim: "_Dim", seen, look) -> "_Dim":
     return replace(dim, p1=end, hole=spec, radius=_outer_radius(spec), feature=slot, covers=tuple(same))
 
 
+def _hidden_here(proj, feature) -> bool:
+    """Whether a view draws a hole's or a slot's outline hidden and none of it
+    visible: it opens behind another part of the part (a hole through one arm of
+    a clevis, seen past the other arm), and the view that sees it states it."""
+    from build123d import GeomType
+
+    if isinstance(feature, Slot):
+        spots, radius = [proj.point(end) for end in feature.ends], feature.width / 2
+    else:
+        spots, radius = [proj.point(feature.mouth)], feature.diameter / 2
+
+    def drawn(edges) -> bool:
+        return any(edge.geom_type == GeomType.CIRCLE and abs(edge.radius - radius) <= 0.01
+                   and any(_near((edge.arc_center.X, edge.arc_center.Y), spot) for spot in spots) for edge in edges)
+
+    return drawn(proj.hidden) and not drawn(proj.visible)
+
+
 def _expand_holes(view: View, proj, bounds, dim: "_Dim", seen, look, warnings: list | None,
-                  features: _Features, slots, stated: dict) -> list["_Dim"]:
-    kinds = _kinds(f for f in (*seen, *slots) if _faces_viewer(f, look))
+                  features: _Features, slots, stated: dict, on_sheet: _Stated) -> list["_Dim"]:
+    facing = [f for f in (*seen, *slots) if _faces_viewer(f, look)]
+    hidden = [f for f in facing if id(f) not in stated and _hidden_here(proj, f)]
+    if hidden:
+        on_sheet.hidden.append((view.name, hidden))
+    kinds = _kinds(f for f in facing if not any(f is h for h in hidden))
     brk = view._break
     if brk is not None:
         # A hole the break leaves out has no circle to point at, and holes() calls out every hole the
@@ -812,7 +872,7 @@ def _expand_holes(view: View, proj, bounds, dim: "_Dim", seen, look, warnings: l
                              "are inside the break, which the view leaves out; call them out in a view without "
                              f"the break, and the rest here with {view.name}.hole().")
     if not kinds:
-        if warnings is not None:
+        if warnings is not None and not hidden:
             warnings.append(f"{view.name}.holes(): the {view.name} view looks down no hole or slot, so it calls "
                             "nothing out.")
         return []

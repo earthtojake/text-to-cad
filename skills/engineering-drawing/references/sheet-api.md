@@ -228,7 +228,11 @@ sheet millimetres.
   nearest the view's edge. Identical holes equally spaced round a turned axis
   of the part read `6× ⌀6 THRU EQ SP ON ⌀60`, and their pitch circle is drawn.
   A blind or counterbored hole that opens on the far side belongs to the
-  opposite view. A kind that a `hole()` or `slot()` call on the same view
+  opposite view. A hole is stated once on a sheet: a through hole reads the
+  same from both ends, and `holes()` in a second view of the same part leaves
+  it to the view that states it already; one a view draws hidden, behind
+  another part of the part (a hole through one arm of a clevis, seen past the
+  other), is left to the view that sees it. A kind that a `hole()` or `slot()` call on the same view
   states is left to that call, so a first pass's `holes()` and the fit given
   one bore make one callout. An isometric looks down no hole, so callouts on
   one are refused.
@@ -426,6 +430,8 @@ note giving the size (`CHAMFER 0.5 × 45°`, `4 FILLETS R1`) states either.
 | `top.dim(...): fit='H7' and tol= are two tolerances for one size, and both print ...` | give one of them |
 | `units='in': the title block reads IN, and every value on the sheet is measured ... in millimetres` | leave `units` alone; nothing converts the values |
 | `annotation overlaps: '120' is printed over 'TOP' ...` | two pieces of text collide on a sheet whose size you gave; give the view room, or place one with `offset=` (a sheet choosing its size takes a larger one) |
+| `redundant: bottom.hole((0, 0, 0)) calls out a hole the top view calls out already ...` | one callout a hole on a sheet; drop one |
+| `back.holes(): the back view draws 1 hole(s) or slot(s) it looks down hidden, behind another part of the part ...` | no view that sees them calls them out; call `holes()` there |
 | `views crowded: ... Sheet("A2") or Sheet(scale=0.5) gives them room` | the views' annotation needs more paper |
 | `SECTION A-A has no view on this sheet that sees its cutting plane ...` (stops the script) | add the view that shows the plane |
 | `front dim 0: ... so it could measure either; it measures the larger, 12 ...` | pass `orientation=` |

@@ -400,7 +400,10 @@ class View:
         (``4× ⌀5.5 THRU``, ``⌀28 THRU``, ``8 × 30 SLOT THRU``), each read off the
         part and placed on the one nearest the edge of the view so its leader is
         short. Holes on a bolt circle say so (``EQ SP ON ⌀60``). A blind hole that
-        opens on the far side belongs to the opposite view."""
+        opens on the far side belongs to the opposite view. A hole is stated once
+        on a sheet: one an earlier view of the same part states (a through hole
+        reads the same from both ends) is left to that view, and one this view
+        draws hidden, behind another part of the part, to the view that sees it."""
         _refuse_iso(self, "holes()")
         self._dims.append(_Dim("holes", (0.0, 0.0, 0.0), None, 0.0, None, None, angle=float(angle)))
         return self

@@ -1302,6 +1302,60 @@ class FromThePartTests(unittest.TestCase):
         self.assertEqual(sorted(_callouts(_render_sheet(sheet, index=1, count=1, label="all"))),
                          sorted(["4× %%c5.5 THRU", "%%c20 THRU"]))
 
+    def test_a_hole_is_stated_once_on_a_sheet(self) -> None:
+        """A through hole reads the same from either end, and ``holes()`` on the
+        top and the bottom view called it out in both: stated twice, and nothing
+        said. The first view that states it has it."""
+        from cad._internal.drawing_render import _render_sheet
+        from cad.eng_drawing import Sheet
+
+        plate = _plate()
+
+        def sheet(annotate):
+            drawn = Sheet("A3")
+            annotate(drawn.view(plate, "top", at=(110, 200)), drawn.view(plate, "bottom", at=(110, 90)))
+            notices: list[str] = []
+            doc = _render_sheet(drawn, index=1, count=1, label="once", warnings=notices)
+            return sorted(_callouts(doc)), notices
+
+        once = (sorted(["4× %%c5.5 THRU", "%%c20 THRU"]), [])
+        self.assertEqual(sheet(lambda top, bottom: (top.holes(), bottom.holes())), once)
+        self.assertEqual(sheet(lambda top, bottom: bottom.holes()), once, "either view alone states them")
+        # A fit given one bore in the first view, and the rest from the other side: still one callout each.
+        callouts, said = sheet(lambda top, bottom: (top.hole((0, 0, 6), fit="H7"), bottom.holes()))
+        self.assertEqual((callouts, said), (sorted(["4× %%c5.5 THRU", "%%c20 H7 THRU"]), []))
+        # Said twice by name, it is drawn twice and reported.
+        callouts, said = sheet(lambda top, bottom: (top.holes(), bottom.hole((0, 0, 0))))
+        self.assertEqual(callouts.count("%%c20 THRU"), 2)
+        self.assertEqual(said, ["redundant: bottom.hole((0, 0, 0)) calls out a hole the top view calls out already, "
+                                "the one at (0, 0, 6): a feature takes one callout on a sheet. Drop one."])
+
+    def test_holes_leaves_a_hole_hidden_behind_another_arm_to_the_view_that_sees_it(self) -> None:
+        from build123d import Align, Box, Cylinder, Pos, Rot
+
+        from cad._internal.drawing_render import _render_sheet
+        from cad.eng_drawing import Sheet
+
+        up = (Align.CENTER, Align.CENTER, Align.MIN)
+        # Two arms on a base, and a hole through the front arm alone: it opens into the gap.
+        part = (Box(60, 40, 8, align=up) + Pos(0, -16, 8) * Box(60, 8, 30, align=up)
+                + Pos(0, 16, 8) * Box(60, 8, 30, align=up)) - Pos(0, -16, 25) * Rot(90, 0, 0) * Cylinder(4, 8)
+
+        def sheet(annotate):
+            drawn = Sheet("A3")
+            annotate(drawn.view(part, "back", at=(110, 200)), drawn.view(part, "front", at=(110, 90)))
+            notices: list[str] = []
+            doc = _render_sheet(drawn, index=1, count=1, label="arm", warnings=notices)
+            return _callouts(doc), notices
+
+        self.assertEqual(sheet(lambda back, front: (back.holes(), front.holes())), (["%%c8 THRU"], []))
+        callouts, said = sheet(lambda back, front: back.holes())
+        self.assertEqual(callouts, [])
+        self.assertIn("back.holes(): the back view draws 1 hole(s) or slot(s) it looks down hidden, behind another "
+                      "part of the part, and calls out none of them: the one at (0, -12, 25), say.", said[0])
+        # Asked for by its point, it is called out where its author says.
+        self.assertEqual(sheet(lambda back, front: back.hole((0, -16, 25))), (["%%c8 THRU"], []))
+
     def test_diameter_and_radius_are_measured_off_the_view(self) -> None:
         from build123d import Align, Box, fillet, Axis
         from cad._internal.drawing_render import _render_sheet

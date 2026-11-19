@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 
 from cad._internal.drawing_annotation import (
     _CALLOUT_LINE, _Features, _HoleTable, _callout_lines, _callout_value, _draw_hole_table, _draw_hole_tags,
-    _hole_table, _plan_view, _read_features,
+    _hole_table, _plan_view, _read_features, _Stated,
     _resolve_view, _shows, _tol_suffix,
 )
 from cad._internal.drawing_assembly import (
@@ -651,6 +651,8 @@ def _draw_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings: l
     breaks_checked: set = set()
     cuts: dict[int, tuple] = {}
     checked: set[int] = set()
+    #: The holes and slots the sheet's views state, as each view is resolved.
+    stated_on_sheet = _Stated()
     # The assemblies this sheet draws as assemblies: the one its parts list was
     # read from, and any a view balloons. Many solids there are the point.
     assemblies = {id(parts.assembly) for view in sheet.views for parts in view._balloons}
@@ -743,11 +745,14 @@ def _draw_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings: l
             centre = ((corners[0] + corners[1]) / 2, (corners[2] + corners[3]) / 2)
         else:
             centre = ((bounds[0] + bounds[1]) / 2, (bounds[2] + bounds[3]) / 2)
-        items = _resolve_view(view, proj, bounds, part_features, warnings, cut)
+        items = _resolve_view(view, proj, bounds, part_features, warnings, cut, stated_on_sheet)
         if view._table is not None:
             tables[id(view)] = _hole_table(view, proj, part_features(view.shape), cut, items)
+            stated_on_sheet.by.update((id(row.feature), view.name) for row in tables[id(view)].rows)
             items = [dim for dim in items if dim.kind != "hole"]  # a tapped hole's thread is in its row
         work.append((view, proj, bounds, items, _plan_view(view, proj, bounds, items, sheet), centre))
+    if warnings is not None:
+        warnings.extend(stated_on_sheet.unseen())
 
     # A cutting plane runs out past the view it is drawn on, with an arrow and a
     # letter at each end: that view needs room on those two sides, or the letter
