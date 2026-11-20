@@ -184,7 +184,11 @@ renumbers the list and every citation in the same change.
    imports the library's kernel-free modules and never the kernel or an integration's code (law 27).
    The transport (`cad_mcp`) is the standard library, the engine's client and the server's MCP
    protocol, and loads no kernel. The server reaches into the library, never the other way: its
-   telemetry is an observer the engine calls with plain facts.
+   telemetry is an observer the engine calls with plain facts. Inside the server two things are known
+   in one place each: the app that hosts cad, in its MCP adapter (`cad_server/mcp/`); and the agent
+   apps, the plugin and its skills, in `cad_server/plugin/` (the table of apps, how the plugin is
+   installed and updated in each, which older copies are ours to remove), which only the `cad plugin`
+   command reaches. Nothing else in cad names an app, a plugin or a skill, or imports either place.
 4. **A model's document is XCAF; files are explicit.** *Every document.* A live model holds an XCAF
    document: millimetres, prototypes and instances with placements, a name on every part and instance,
    colours and materials per part and per painted face, element names, and an assembly's mechanism.
@@ -267,8 +271,9 @@ renumbers the list and every citation in the same change.
 17. **Nothing waits on the network.** *The package.* Once installed, cad works offline: every command,
     build, snapshot, server and page. Its own requests are telemetry and the hourly version check;
     both run in the background and fail silently, and no start, command, build or tool call waits on
-    them. The waits are the ones a person asks for by name (`cad update`, `cad plugin update`, `cad
-    telemetry off`) and the first fetch of an integration's environment, which says so in a line. The
+    them. The waits are the ones a person asks for by name (`cad update`; `cad plugin install`, which
+    runs each agent app's own command and fetches the plugin from GitHub; `cad telemetry off`) and the
+    first fetch of an integration's environment, which says so in a line. The
     pages load nothing from the internet (the server's **cad's own update** and **Telemetry**).
     *Pressure-test*: with every integration's environment made, and every request refused, then
     hanging, start a server, open a view, call each tool, and run a build, a snapshot and each

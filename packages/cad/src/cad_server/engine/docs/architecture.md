@@ -146,10 +146,11 @@ from) stops the server, runs the installer's upgrade bounded to that major (`uv 
 "cad>=<installed>,<<next major>"`), tried again on failure, and starts the server with whatever cad is there. A server that hands its start over exits
 `UPDATING`, and its starter waits for the next one; a `cad server start` that fails asks for the update before it
 gives up; a start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). With
-`cad plugin update auto` on, the server, at its start and at each quiet tending, runs `cad plugin update` (the
-hosted install command, stopped with all it started after 15 minutes) once where its cad is newer than the release
-that command last ended well for, however it got newer (`_internal/plugin_catch_up.py`), then counts the last update attempt once (`auto_update.report`); the
-helper and `cad update` run no install command. Where no server runs, a typed `cad update` begins the update itself
+`cad plugin update auto` on, the server, at each quiet tending from a minute after its start, runs `cad plugin install` (which
+updates the plugin in each agent app with that app's own command, with 15 minutes at most) once where its cad is
+newer than the release that command last went well in every app for, however it got newer
+(`_internal/plugin_catch_up.py`), then counts the last update attempt once (`auto_update.report`); the helper and
+`cad update` run none, and no update of cad begins while a run of it is going. Where no server runs, a typed `cad update` begins the update itself
 (`cli/update.py`), and its helper starts no server after it.
 
 The updaters of 0.10.0 to 0.11.11 are frozen on computers, though, and update by running a newer release's hidden

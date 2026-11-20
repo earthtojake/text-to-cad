@@ -122,14 +122,21 @@ where those files ship, so these scripts are what produces them.
   start, switched off, past a release
   whose server cannot start, back from one uv cannot install, inside its major with a higher major out and
   across it only by `cad update --major`, by pipx), and the new cad's server running `cad plugin
-  update` once, as its own run under a deadline, where `cad plugin update auto` is on and cad got newer, by
-  itself or by a typed `cad update`, never after a failed update.
+  install` once, as its own run under a deadline, where `cad plugin update auto` is on and cad got newer, by
+  itself or by a typed `cad update`, never after a failed update; that run installs the plugin with cad's own
+  code, so it is read from cad's record of it, and the install command's count stays 0.
   `bridge`: a computer on a shipped release (0.11.11, or `--old`'s) arriving at this build by its updater,
   its automatic update, its typed `cad update`, the install command and the uv line, this build's server
-  running the install command once where the computer had it, installing cad with uv itself where the
+  running the install command once where the computer had it (counted: the command hands the apps to the cad
+  it installed, this build's), installing cad with uv itself where the
   computer had only a store's copy or the install command failed, and handing over to the uv tool's server;
-  this build's servers there tend themselves every two seconds (`CAD_ENGINE_TEND_SECONDS`). It installs the
-  real releases from PyPI and publishes this tree as later releases. Needs uv and the network. Called by
+  this build's servers there tend themselves every two seconds (`CAD_ENGINE_TEND_SECONDS`).
+  `plugin-update`, of neither group: the real 0.11.13 from PyPI, a uv tool, whose own `cad plugin update`,
+  typed, runs this tree's install command; that cad, left as it is, has no `cad plugin install` (exit status
+  2), so the newest release's runs instead (`uv tool run ... cad@latest plugin install`: this tree's); then
+  the install command turns the switch on by 0.11.13's own `cad plugin update auto on`, and 0.11.13 keeps
+  itself as the release the plugin is up to date for. Nothing it runs comes back to the install command. It
+  installs the real releases from PyPI and publishes this tree as later releases. Needs uv and the network. Called by
   `test.yml`'s `update-rehearsal` job on Linux, macOS and Windows.
 - `real-install.py --wheels DIR [--require claude,codex,gemini] [--keep] [--work DIR]` — the install script
   run for real against the real `claude`, `codex` and `gemini` found on PATH, on a private computer
@@ -139,9 +146,11 @@ where those files ship, so these scripts are what produces them.
   wheels in `DIR`, the plugin from this tree's `latest` copy (`plugin_branch.py`) in a local repository the
   computer's git reads for every address of ours on GitHub (Gemini CLI still asks GitHub's API for a release
   first, and finds none). It checks each program's own list (ours, once, this run's copy), `cad` (a uv tool
-  at this run's release, `cad update auto` on, `cad plugin update auto` turned on by the script, no server
-  started), a model built and its page; then the script again (cad installed already and left alone, each
-  copy updated); then each program moved from the state 0.11.10's installer left. It cannot test the desktop
+  at this run's release, `cad update auto` on, `cad plugin update auto` turned on by the script's last step,
+  by the cad it hands the apps to, no server started), a model built and its page; then the script again (cad installed already,
+  nothing newer for its `cad update` to bring, each copy updated); then each program moved from the state
+  0.11.10's installer left. The commands it keeps off the computer's PATH are those of cad's table of apps
+  (`cad_server/plugin`). It cannot test the desktop
   apps, or GitHub's `latest` branch before a release. A program missing is skipped and said, unless
   `--require` names it. Called by `real-install.yml`, which `test.yml`'s `real-install` job calls, on
   Windows, macOS and Linux, with each program pinned there. The few files of the machine's own apps and cad
@@ -198,6 +207,13 @@ where those files ship, so these scripts are what produces them.
   `VERSION`, no skill command names a version, and (with the flag)
   `VERSION` is greater than the one at `REF`. Called by `test.yml` (`static`), `release-publish.yml`,
   `publish-github-release.sh`.
+- `newest_cad.py` — whether PyPI's newest cad has `cad plugin install`, which the install command hands
+  the agent apps to: uv is asked for `cad@latest plugin install --help`, as the install command's fallback
+  resolves it, in a home folder of its own, so nothing of an install runs and nothing of this machine is
+  read. Exit 0 where it has the command; 1, with one line saying why and what to do, where it has none
+  (ship the release that carries it first) or could not be asked (no uv, PyPI not reached, a cad that does
+  not start). Needs uv and the network. Called by `deploy-docs.yml` before a production deploy; held by
+  `tests/python/global/test_newest_cad.py`, with a stand-in uv.
 - `sync-version.mjs [--check]` — stamps the derived versions (package, plugin,
   lockfile and `pyproject.toml` metadata, the aliases' `cad==` pins, Codex's server line
   `cad@<VERSION>`, and the release each skill's Setup block names) from
@@ -299,30 +315,48 @@ where those files ship, so these scripts are what produces them.
 - `install.sh`, `install.ps1` — the one-line installer texttocad.dev serves (`curl -fsSL
   https://texttocad.dev/install.sh | sh`; `irm https://www.texttocad.dev/install.ps1 | iex`), thin and with no
   options (given one, they say so and change nothing): they find uv or install it with uv's own installer,
-  download `install.py` from beside themselves on the site, and run it with uv's Python 3.14.
+  download `install.py` from beside themselves on the site, and run it with uv's Python 3.14. Where one fails
+  before `install.py` runs, it sends one anonymous report of where (`uv`, `fetch`, `python`), under
+  `install.py`'s rules, on a person's run alone: on a run cad started they say and send nothing, so those
+  three stages go unreported there.
 - `install.py` — the installer itself, the standard library alone, carrying no version and taking no
-  options, with one behaviour whether a person or cad (`cad plugin update`) runs it: installs cad as a uv
-  tool, PyPI's newest, only where no cad is installed (a cad that starts is left as it is: it updates
-  itself; one that does not start is installed again; a cad installed with pipx is left as it is, or
-  installed again with pipx where it does not start), puts cad's folder on the PATH with uv's own
-  `uv tool update-shell` (unless `UV_NO_MODIFY_PATH` is set), installs or updates the plugin in each app found
-  with that app's own command from the repository's `latest` branch (or copies the skills into an agent's
-  own skills folder), removes our own older copies there, turns on `cad plugin update auto` where the run
-  ends with exit status 0, and prints a line per app (in a person's terminal also the CAD logo built from the
-  brand's profiles and a live line naming the app and command running). It reads no version feed. `APPS` is the one table of apps; each row says how its commands
-  were verified. The docs site copies the three into its `public/` as it builds
-  (`apps/docs/scripts/install-scripts.mjs`). Tested by `tests/python/global/test_install_script.py` (a
-  temporary home, stand-in CLIs on PATH); `.github/workflows/install-windows.yml` and
+  options, and knowing no agent app: it gets the computer a cad that works and is current, then hands over to
+  it. It installs cad as a uv tool, PyPI's newest, only where no cad is installed (one that does not start is
+  installed again; a cad installed with pipx is a global cad too, installed again with pipx where it does not
+  start), and puts cad's folder on the PATH with uv's own `uv tool update-shell` (unless `UV_NO_MODIFY_PATH`
+  is set). Where a person ran it and cad was here already, that cad's own `cad update` brings it up to date,
+  inside its major, never failing the run, its output captured and said in one line (two on a pipe); where
+  cad ran it (0.11.12 and 0.11.13 do, and the bridge from earlier releases), cad is left as it is. Then `<cad> plugin install` puts the plugin into each agent app
+  (cad's table of apps, `cad_server/plugin`, with the terminal's logo and live line); a cad with no such
+  command, or none at all, gets the newest release's by `uv tool run cad@latest plugin install`. Last, that
+  cad's own `cad plugin update auto on` turns the switch on (`CAD_INSTALL_FAILED=1` where the plugin's step
+  ended non-zero or named an app as failed). It never runs `cad plugin update` alone or `cad setup`, and passes no cad server's name for
+  its run (`CAD_INSTALL_ATTEMPT`, `CAD_PLUGIN_SERVER_RUN`) to anything it starts. It exits 0 only where the run ended well, and writes the report 0.11.12 and
+  0.11.13 read (`CAD_INSTALL_REPORT`) last: `apps` as `cad plugin install` said them, and, since those releases
+  read the report and never the exit status, with `"plugin": "failed"` added wherever the plugin's step ended
+  non-zero and named no app as failed (cad itself installed), so they run the command again later. It reads
+  no version feed. A run that fails where no working cad can
+  count it sends one anonymous report of where (`cad`, `plugin`, or `script` for a crash, to
+  `api.texttocad.dev/v1/install`), said in one line first on a person's run; none where `DO_NOT_TRACK` is on or
+  `CAD_TELEMETRY` off, in CI, where cad's kept settings say no, or from a checkout. A run cad started says no
+  line, and sends its report only where cad's kept settings show the person was told what cad sends, or said
+  yes. The docs site copies the three into its
+  `public/` as it builds (`apps/docs/scripts/install-scripts.mjs`). Tested by
+  `tests/python/global/test_install_script.py` (a temporary home, a stand-in uv, cad, pipx and curl on PATH,
+  a stand-in receiver on loopback); `.github/workflows/install-windows.yml` and
   `install-linux.yml` rehearse the scripts on fresh runners, against this tree's wheel or, dispatched
   with `published`, what people install today.
 
 - `dev_install.py [APP...]` / `dev_install.py --release` — installs this checkout into the agent apps
-  (every app found, or those named by `install.py`'s keys), and goes back to the published release. It
-  installs the checkout as the `cad` uv tool, editable, with automatic updates off, writes the plugin into
+  (every app found, or those named by the keys of cad's table of apps), and goes back to the published
+  release. It installs the checkout as the `cad` uv tool, editable, with automatic updates off (the cad step is
+  `install.py`'s), writes the plugin into
   `tmp/dev-plugin/text-to-cad` (its version `<VERSION>-dev.<time>`, Codex's CAD server `cad mcp`, the
-  catalog `earthtojake-dev`) and hands that folder to `install.py`'s table in place of GitHub, so
+  catalog `earthtojake-dev`) and hands that folder to cad's table (`cad_server/plugin`, loaded from the
+  checkout's files) in place of GitHub, so
   each app's published copy of ours goes and the development copy comes in; `--release` uninstalls the
-  editable tool and runs `install.py` as it is. Developer step in `CONTRIBUTING.md` ("Test In Agent Apps"); tested with
+  editable tool and runs `install.py` as it is, which hands the apps to the published cad. Developer step in
+  `CONTRIBUTING.md` ("Test In Agent Apps"); tested with
   `install.py` by `tests/python/global/test_install_script.py`.
 
 `git-hooks/pre-commit` — the body `.githooks/pre-commit` runs: `bundle.sh --check`
@@ -358,10 +392,10 @@ only their pure helpers are tested (`tests/python/global/test_bench_helpers.py`)
 | `test.yml` | pushes to and PRs against `main` and `build-test`; nightly on `main`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run whole on its one flag, only when the change selects it (`select_checks.py`; `docs/contributing/testing.md#ci` lists the jobs): `static` always (the version check, the tracked tree's rules, the light contracts, the API's tests; on a pull request, what merging it releases); the package suites on Linux and Windows, in shards (`packages (Linux I/2)`, `packages (Windows I/3)`); `routing (macOS)`; `skills`; `js-core`, `js-ui`, `js-web`, `js-mcp`, `docs`; `fea`, `kicad`, `blender`; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheels and runs the installed-mode tests; `viewer-e2e` serves that bundle's viewer through the backend to the launch smoke test and the browser gates. A full run (a `VERSION` change, the nightly, a dispatch, `Publish Release`'s call) adds the release tier: the package suites on Python 3.11, the installer rehearsals and the update rehearsal (`update-rehearsal`, on Linux, macOS and Windows). `CI`, the one required check, fails when any job did. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
 | `release-prepare.yml` (`Prepare Release`) | manual dispatch (`bump` or `set_version`; `target`, `dry_run`) | Opens a release pull request of what the target already has: `bump-version.sh` on `release/X.Y.Z`, pushed and opened with `PREPARE_RELEASE_TOKEN` so its checks run. It never merges: merging the pull request releases it. `target=build-test` rehearses. |
 | `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test` that change `VERSION` (a release pull request's merge); manual dispatch (resume the commit that last moved `VERSION`) | Gate (`VERSION` past the latest tag); the record of a run that tested that tree in full, or else every `test.yml` job on it; the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin trees; bundle, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then — on `main` only — PyPI upload (its own `pypi` job in the `release` environment, the only job that may mint a PyPI token; a file PyPI already holds is taken from PyPI, not uploaded again), a wait until PyPI's index lists the version, the plugin committed onto `latest`, `claude-plugin` and `codex-plugin`, and after them the docs deploy and the `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP. On `build-test` it prints what it would have uploaded, pushed and tagged, and stops. |
-| `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`), or, dispatched with `preview`, that ref as a Vercel preview with production untouched: configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
+| `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`), or, dispatched with `preview`, that ref as a Vercel preview with production untouched: configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. The site serves the install command, so a production deploy first asks PyPI's newest cad whether it has `cad plugin install` (`scripts/release/newest_cad.py`) and deploys nothing where it has not; a preview, and a ref from before that check, are not asked. |
 | `deploy-api.yml` (`Deploy API`) | pushes to `main` that change `apps/api`; manual dispatch | Deploys `api.texttocad.dev` (`apps/api`) to Vercel production after its tests (`test-api.sh`). It follows no release. |
-| `install-linux.yml` (`Linux installer rehearsal`) | called by `test.yml` (a full run; a change under `scripts/install`); manual dispatch | Runs `install.sh`, piped, on `ubuntu-latest` and in `python:3.12-slim-bookworm`, against this tree's wheel or, dispatched with `published`, the site's `install.sh` and PyPI; checks `cad --version`, both switches on, a model and `cad doctor`. |
-| `install-windows.yml` (`Windows installer rehearsal`) | called by `test.yml` (a full run; a change under `scripts/install`); manual dispatch | Runs `install.ps1` on a fresh Windows runner against the wheel the tree builds, or, dispatched with `published`, the site's `install.ps1` and PyPI. |
+| `install-linux.yml` (`Linux installer rehearsal`) | called by `test.yml` (a full run; a change under `scripts/install` or to cad's `cad plugin install`); manual dispatch | Runs `install.sh`, piped, on `ubuntu-latest` and in `python:3.12-slim-bookworm`, against this tree's wheel or, dispatched with `published`, the site's `install.sh` and PyPI; checks `cad --version`, both switches on, a model and `cad doctor`. |
+| `install-windows.yml` (`Windows installer rehearsal`) | called by `test.yml` (a full run; a change under `scripts/install` or to cad's `cad plugin install`); manual dispatch | Runs `install.ps1` on a fresh Windows runner against the wheel the tree builds, or, dispatched with `published`, the site's `install.ps1` and PyPI. |
 
 `Prepare Release` opens a release pull request, or a pull request carries its own
 bump (`release/bump-version.sh`); merging either starts `Publish Release` (PyPI,

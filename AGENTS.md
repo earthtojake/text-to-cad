@@ -11,12 +11,12 @@ before a change. Keep it that short. Detail belongs in the document a row below 
 | Path | What it is |
 |---|---|
 | `skills/` | The product: eight agent skills, each a `SKILL.md` and its references. They ship in the plugin as they are |
-| `packages/cad/` | The one Python distribution, `cad`: the library (`src/cad`), the server and the `cad` command (`src/cad_server`), and the stdio transport agent apps start (`src/cad_mcp`) |
+| `packages/cad/` | The one Python distribution, `cad`: the library (`src/cad`), the server and the `cad` command (`src/cad_server`, with the plugin's install in the agent apps in `plugin/`), and the stdio transport agent apps start (`src/cad_mcp`) |
 | `packages/aliases/` | The distribution's earlier names (`cad-server`, `cad-mcp`, `cadgen`): wheels of metadata that require `cad` |
 | `packages/core/`, `packages/ui/` | Shared JavaScript: `@cad/core` (no React) and `@cad/ui` (the viewer's components) |
 | `apps/web/` | The viewer's React client, which the server serves |
 | `apps/mcp/` | The CAD app the Codex app shows as tabs |
-| `apps/docs/`, `apps/api/` | The site, texttocad.dev (the homepage, and the documentation under `/docs`: a page per skill, the references generated from the code, and `docs/`'s install and migration guides shown as they are), and `api.texttocad.dev` (the version feed and analytics) |
+| `apps/docs/`, `apps/api/` | The site, texttocad.dev (the homepage, and the documentation under `/docs`: a page per skill, the references generated from the code, and `docs/`'s install and migration guides shown as they are), and `api.texttocad.dev` (the version feed, analytics and a failed install's one report) |
 | `models/` | Sample models, built by hand; no test reads them |
 | `scripts/` | Durable repo commands, by purpose: `test/`, `bundle/`, `release/`, `install/`, `bench/` |
 | `tests/` | Every test suite, grouped by what it tests; `tests/python/global/` holds the policy tests |
@@ -37,7 +37,7 @@ Read the one document for what you are changing, then the link it gives you. Not
 | The CAD app | [apps/mcp](apps/mcp/README.md) |
 | The docs site or the API | [apps/docs](apps/docs/README.md), [apps/api](apps/api/README.md) |
 | A test or a CI job | [Testing](docs/contributing/testing.md) |
-| Install, update or plugin distribution | [Decisions](docs/contributing/decisions.md), [docs/install.md](docs/install.md) |
+| Install, update or plugin distribution, an agent app's row | [Decisions](docs/contributing/decisions.md), [docs/install.md](docs/install.md); for an app, [Test In Agent Apps](CONTRIBUTING.md#test-in-agent-apps) |
 | A release, a version, the install branches | [Releases](docs/contributing/releases.md) |
 | A script | [scripts/README.md](scripts/README.md) |
 | A sample model | [models/README.md](models/README.md) |
@@ -70,8 +70,9 @@ Read the one document for what you are changing, then the link it gives you. Not
 
 - No superficial wrappers (law 28): add a helper or a command only where something is missing without
   it. What a tool already does is used as the tool's own.
-- cad knows no app and no skill: knowledge of agent apps lives in the plugin and
-  `scripts/install/install.py`.
+- cad names agent apps, skills and the plugin in one place, `cad_server/plugin/`, reached only by
+  `cad plugin`; nothing else in cad names them or imports it, and cad carries no skill.
+  `scripts/install/install.py` knows no app.
 - Markdown inside `packages/cad` refers to nothing outside that package (law 13).
 - `packages/core` has no React; apps never import each other, and shared packages never import apps.
 - The Python floor is `requires-python` in `packages/cad/pyproject.toml` and nowhere else.

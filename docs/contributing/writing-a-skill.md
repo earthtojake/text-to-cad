@@ -219,6 +219,10 @@ for word, and tests keep the copies from drifting:
 - [ ] A change to what agents are told was run A/B, with the table in the pull request, and a
       rewrite was audited against the text it replaced.
 - [ ] A command the skill stops using still works for 30 days.
+- [ ] Its name is in `SKILLS` in `packages/cad/src/cad_server/plugin/source.py`, in the same release (a
+      skill taken out moves to `RETIRED_SKILLS`): the names `cad plugin install` takes as ours. A copy
+      under a name it does not know is someone else's, never replaced or removed
+      (`tests/python/global/test_plugin_knows_the_skills_shipped.py`).
 - [ ] A new skill is linked from the README's Features and the docs site's (`features` in
       `apps/docs/src/lib/content.ts`), and named in `.muse-plugin/plugin.json`.
 - [ ] Its page in the docs site's Skills says for a person what the skill is: what it makes, how it

@@ -82,6 +82,12 @@ two it leaves out.
    file run directly never builds on your own server. Stop what a test starts and remove what it
    writes.
 
+   A test that runs `cad plugin install` (by either name) or the install script gives it a computer
+   of its own: a temporary home and stand-in programs on PATH for the agent apps' CLIs, git, uv and
+   `cad` (`tests/python/support/agent_apps.py`: `AgentApps`, and `PluginRuns` for the command). The
+   runner's folders are not enough: the command works in the home folder, and in yours it installs
+   the plugin into the real apps on your computer.
+
 4. **Count its cost.** A worker's first build pays about 2.6 s importing the CAD kernel, and every
    subprocess an interpreter's start. Build a fixture the tests only read once for the class and copy
    it in; build in-process (`daemon=False`) where the subject is not the daemon; start a subprocess
@@ -232,26 +238,33 @@ its pull request. The tier holds:
   floor's standard library lacks, which parses there and fails only when it runs. Whole it took 11 to
   17 minutes, so it is always two shards. A change to `test-floor.sh` runs it too.
 - **The installer rehearsals** (`install-linux.yml`, `install-windows.yml`): the one-line installers
-  on a fresh machine, against this tree's wheel. Dispatched with `published`
-  (`gh workflow run install-linux.yml -f published=true`), they run against the release people install
-  today.
-- **The real install** (`real-install.yml`, `scripts/test/real-install.py`): the install script
-  against the real `claude`, `codex` and `gemini` on Windows, macOS and Linux, each on a private
-  computer, with cad from this tree's wheel and the plugin from this tree's `latest` copy: an
-  install, the script again, and a migration from the state 0.11.10's installer left. It is the one
-  test of the half of the script that touches agent apps on Windows, where its unit tests (stand-in
-  programs) are skipped. It cannot test the desktop apps (they need a person) or GitHub's `latest`
+  on a fresh machine, against this tree's wheel, whose `cad plugin install` they hand over to.
+  Dispatched with `published` (`gh workflow run install-linux.yml -f published=true`), they run
+  against the release people install today.
+- **The real install** (`real-install.yml`, `scripts/test/real-install.py`): the install script, and
+  through it this tree's `cad plugin install`, against the real `claude`, `codex` and `gemini` on
+  Windows, macOS and Linux, each on a private computer, with cad from this tree's wheel and the plugin
+  from this tree's `latest` copy: an install, the script again, and a migration from the state
+  0.11.10's installer left. It is the one test of what cad does in agent apps on Windows, where the
+  unit tests of its table of apps (`tests/python/packages/cad_server/plugin/`, stand-in programs) are
+  skipped. It cannot test the desktop apps (they need a person) or GitHub's `latest`
   branch, which before a release is the last release's. About 10 minutes a system.
 - **The update rehearsal** (`scripts/test/rehearse-update.py`): the one test of the move every
   computer makes, unattended or by the install command, on Linux, macOS and Windows. On private
   computers it installs the real releases 0.11.11, 0.11.0 and 0.10.4 from PyPI (and 0.10.0, on
-  Windows) and brings each to this tree's build by the route it takes; then cad's own update,
-  automatic and typed, inside its major and across one only by `cad update --major`. `--help` lists
-  the routes.
+  Windows) and brings each to this tree's build by the route it takes (where the new server runs the
+  install command once, that command hands the apps to the cad it installed); then cad's own update,
+  automatic and typed, inside its major and across one only by `cad update --major`; and after an
+  update, the new server's one `cad plugin install`, read from cad's record of it. One more route
+  starts on the real 0.11.13 (`plugin-update`, on shard 1/2 of each system): its own `cad plugin
+  update` runs this tree's install command, which finds no `cad plugin install` there and has the
+  newest release's do the work (`uv tool run ... cad@latest plugin install`: this tree's), then turns
+  the switch on by 0.11.13's own command. `--help` lists the routes.
 
 The last three start on one selector flag, `installer`: a change under `scripts/install`, to the
 three workflows, to the two scripts or `scripts/test/real_computer.py`, or to a server module the
-update rehearsal runs (the selector's rule lists them).
+update rehearsal runs, among them what the install command hands the apps to (`cli/plugin.py`,
+`_internal/plugin_catch_up.py`, `plugin/`; the selector's rule lists them).
 
 Both scripts run locally, with uv and the network: one route as
 `scripts/test/rehearse-update.py store-only`, and `scripts/test/real-install.py --wheels <dir>`

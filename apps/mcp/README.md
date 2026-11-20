@@ -164,8 +164,8 @@ skills' `cad viewer` link, in the browser pane or the browser.
 
 | Host | CAD's server | Cards |
 | --- | --- | --- |
-| Claude Desktop (Chat and Code tabs) | none: nothing writes an entry in `claude_desktop_config.json`, and the install script (`scripts/install/install.py`'s `claude_desktop`) takes out the `mcpServers.cad` releases 0.7.6 through 0.11.11 wrote there (the rest of the file kept, a copy of the file as it was beside it) | none |
-| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone (the install script removes no `claude mcp add` server). claude.ai's directory's copy (`claude-plugin`) carries the skills alone too; its copies through 0.11.11 name one, which lists no tools when Claude Code starts it | none |
+| Claude Desktop (Chat and Code tabs) | none: nothing writes an entry in `claude_desktop_config.json`, and `cad plugin install` (`cad_server/plugin/apps.py`'s `claude_desktop`) takes out the `mcpServers.cad` releases 0.7.6 through 0.11.11 wrote there (the rest of the file kept, a copy of the file as it was beside it) | none |
+| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone (`cad plugin install` removes no `claude mcp add` server). claude.ai's directory's copy (`claude-plugin`) carries the skills alone too; its copies through 0.11.11 name one, which lists no tools when Claude Code starts it | none |
 | Claude Code in a terminal | none | it draws none |
 
 The server offers no tools to a Claude host that starts it (a config someone wrote by hand, or an
@@ -188,8 +188,8 @@ older entry until Claude Desktop next starts). What was measured of those hosts,
 A server a Claude host starts anyway is offered no tools, as every app's but Codex's. To give Claude Code a
 server again, once flag 1824765482 is on and its view is verified: `.claude-plugin/plugin.json` would name a
 server config of its own (claude.ai's directory's copy stays the skills alone: `scripts/release/plugin_branch.py`
-fails a server in it), and `host.presentation` would name its client. The install script takes Claude Desktop's
-old `cad` entry out (`scripts/install/install.py`'s `claude_desktop`); a server there and in the plugin would
+fails a server in it), and `host.presentation` would name its client. `cad plugin install` takes Claude Desktop's
+old `cad` entry out (`cad_server/plugin/apps.py`'s `claude_desktop`); a server there and in the plugin would
 list CAD twice in the Code tab.
 
 ## Cards: where the page's capability comes from

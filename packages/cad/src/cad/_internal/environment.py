@@ -152,14 +152,17 @@ VARIABLES: dict[str, Variable] = _table(
                                                     "without cad's patches"),
     Variable("CAD_ENGINE_PRESSURE", DEVELOPMENT, "the memory-pressure signal as given (0 or 1), in place of the "
                                                  "system's"),
-    Variable("CAD_ENGINE_UPDATE_INSTALLER", DEVELOPMENT, "a command run in place of the hosted install command "
-                                                         "(empty: none)"),
+    Variable("CAD_ENGINE_UPDATE_INSTALLER", DEVELOPMENT, "a command the bridge runs in place of the hosted install "
+                                                         "command (empty: none, and the server runs nothing by "
+                                                         "itself)"),
     Variable("CAD_ENGINE_UPDATE_FIRST_SECONDS", DEVELOPMENT, "how long install mode waits for its first answer"),
     Variable("CAD_UPDATE_FIND_LINKS", DEVELOPMENT, "a folder of wheels an update installs from, in place of PyPI"),
     Variable("CAD_PYPI_URL", DEVELOPMENT, "another address for PyPI's JSON API"),
     Variable("CAD_API_URL", DEVELOPMENT, "another address for the version feed and the analytics receiver"),
     Variable("CAD_INSTALLATION_VERSION", DEVELOPMENT, "the name a development build runs as, in place of its "
                                                       "release"),
+    Variable("CAD_INSTALL_PATH_ONLY", DEVELOPMENT, "1: the agent apps' commands are looked for on PATH and in "
+                                                   "~/.local/bin alone, never in Homebrew's or npm's folders"),
     Variable("CAD_LAUNCHER_DIR", DEVELOPMENT, "the folder the `cad` command of 0.10.0 to 0.11.11 is looked for in"),
     Variable("CAD_VIEWER_DIST", DEVELOPMENT, "the folder the viewer's client is served from (`cad viewer "
                                              "--dist` says the same)"),
@@ -181,8 +184,14 @@ VARIABLES: dict[str, Variable] = _table(
     Variable("CAD_INSTALL_BY_CAD", INTERNAL, "marks an install command cad itself started"),
     Variable("CAD_INSTALL_REPORT", INTERNAL, "the file an install command cad started writes its outcome to"),
     Variable("CAD_INSTALL_UPDATE", INTERNAL, "tells an install command cad started that it runs as an update"),
-    Variable("CAD_INSTALL_ATTEMPT", INTERNAL, "names the run of the install command a server began"),
-    Variable("CAD_INSTALL_FAILED", INTERNAL, "tells cad that the install command it started is ending badly"),
+    Variable("CAD_INSTALL_ATTEMPT", INTERNAL, "the name 0.11.12 and 0.11.13 give their server's run: never read, "
+                                              "and taken out of every cad command the install command starts"),
+    Variable("CAD_INSTALL_FAILED", INTERNAL, "tells cad, at the install command's last step, that its run in the agent "
+                                             "apps went badly, so no release is kept as done"),
+    Variable("CAD_PLUGIN_SERVER_RUN", INTERNAL, "names the run in the agent apps that this release's server began"),
+    Variable("CAD_PLUGIN_BY", INTERNAL, "who began a run in the agent apps (`script`: the install command)"),
+    Variable("CAD_PLUGIN_REPORT", INTERNAL, "the file a run in the agent apps writes each app's status to, for the "
+                                            "install command"),
     Variable("CADGEN_TELEMETRY", INTERNAL, "turns telemetry off in a 0.10.0 server cad stops on Windows"),
 )
 

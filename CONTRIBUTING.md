@@ -179,7 +179,18 @@ scripts/install/dev_install.py --release       # back to the published release, 
   copies, never a plugin store's (Codex's directory, claude.ai's): remove that one in the app before
   testing there.
 - `--release` uninstalls the editable tool and runs the install script as it is: the newest release
-  of cad, every app back on the GitHub copy, automatic updates on.
+  of cad, then that cad's own `cad plugin install`, which puts every app back on the GitHub copy,
+  then automatic updates on.
+
+**To add an agent app, or correct one**, change its row of `APPS`, cad's one table of apps
+(`packages/cad/src/cad_server/plugin/apps.py`), and say in the row's comment how its commands were
+checked: the vendor's documentation (its address), the CLI's own `--help`, or a run. Change its test
+in `tests/python/packages/cad_server/plugin/test_apps.py`, which runs the command against stand-in
+app commands (`tests/python/support/agent_apps.py`), and its entry in
+[docs/install.md](docs/install.md) (install, update and remove by hand); a new app is also named in
+the README and the homepage's copy. Every test of the command runs it in a temporary home (the
+`PluginRuns` test case gives one): run against your own home, it installs the plugin into your apps.
+The correction ships in the next release of cad and reaches a computer when its cad updates.
 
 In Codex, the one app given the CAD server, the server's output is in Codex's log database,
 `~/.codex/logs_2.sqlite`, in lines starting `MCP server stderr`. What the CAD app is and how each

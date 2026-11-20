@@ -125,12 +125,28 @@ them. The release to 1.0, and every major after it, waits for the person.
   --upgrade "cad>=<installed>"`); the automatic update then goes on inside the new major. What cad
   runs of its own is bounded to a major: its update, and its install of itself where a computer has
   none, by the plugin's server line and by the bridge (`tool_install`: `cad<N>`, never over a `cad`
-  of a higher major). The hosted install command, which cad also runs by itself, is not:
+  of a higher major), and the install command's update of a cad that is there, which is that cad's
+  own `cad update`. Not bounded: the plugin, which `cad plugin install` takes from `latest`, the
+  newest of all; and the hosted install command where it has no working cad to ask, which installs
+  PyPI's newest `cad` of all where cad is missing or does not start, and runs the newest release's
+  `cad plugin install` from uv's cache (`uv tool run ... cad@latest plugin install`) where the cad
+  there has none. 0.11.12 and 0.11.13 run that command by themselves (their `cad plugin update`), and
+  so does the bridge:
   [Before the first release of a higher major](#before-the-first-release-of-a-higher-major).
 - **The plugin follows cad.** Where `cad plugin update auto` is on (the install command turns it on
-  wherever cad is there) and cad is newer than the release the install command last ended well for,
-  cad's server runs `cad plugin update`, the hosted install command, once, under a deadline, however
-  cad got newer. `cad update` itself never runs it.
+  as its last step) and cad is newer than the release the plugin is up to date for (the one a run of
+  the global install keeps where every app it found went well), cad's server runs `cad plugin
+  install` once, a minute or more after it starts, however cad got newer
+  (`cad_server/_internal/plugin_catch_up.py`). It is cad's own code, the table of apps of the release
+  installed, and downloads no script. That run has 15 minutes and a hard stop a minute past them; a
+  failed run, or one where any app failed, is tried again an hour or more later, at most three times
+  for one release. One run goes at a time (a lock in the state folder), and cad's own update begins
+  none while one is going. `cad update` itself never runs it.
+- **A correction to an agent app's row needs a release.** The table of apps ships in cad
+  (`cad_server/plugin/apps.py`), so a fix reaches a computer when its cad updates, and a cad that
+  does not update keeps its table while `latest` moves on. 0.11.12 and 0.11.13 carry no table: their
+  `cad plugin update` downloads the hosted install command, which runs the newest release's `cad
+  plugin install` from uv's cache.
 - **[The version feed](#the-version-feed) says when**: an hour after a release is on PyPI, unless
   the project holds it back.
 - **A plugin store** (Codex's directory, claude.ai's) updates the copy it installed. Its skills may
@@ -148,9 +164,15 @@ Everything else may change in any release. These may not, because past releases,
 the agents running them reach for them, and nothing shipped later can change what they reach for:
 
 1. **`texttocad.dev/install.sh` and `www.texttocad.dev/install.ps1`, run with no options.** Past
-   releases' skills and documents name them, and cad runs them (`cad plugin update`, the plugin's
-   catch-up, the bridge). The Windows line names `www.` because Windows PowerShell 5.1 does not
-   follow the redirect from `texttocad.dev`.
+   releases' skills and documents name them, and released cads download and run them: 0.11.12 and
+   0.11.13 as their `cad plugin update`, typed and after an update, and the bridge. Two things they
+   read of a run stay as they are. Their `cad plugin update` reads its exit status: 0 only where it
+   ended well. The bridge's install mode reads the report it writes where `CAD_INSTALL_REPORT` names
+   a file, never the exit status: `setup` the integer 0 where cad is there and starts, `apps` an
+   object in which any value `failed` is a failure, written whole as the run's last act. So where the
+   plugin's step ended non-zero and named no app as failed, the script adds `"plugin": "failed"` to
+   `apps` itself (`install.py`'s `reported`), or the bridge would take the run as done. The Windows
+   line names `www.` because Windows PowerShell 5.1 does not follow the redirect from `texttocad.dev`.
 2. **The version feed's two addresses, each with its fields**: `api.texttocad.dev/v1/versions` and
    its `latest` alone, frozen, never naming 0.12.0 or later; `api.texttocad.dev/v1/releases`, its
    `latest` and its `lines`. Every release from 0.7.12 on reads one of them
@@ -180,31 +202,37 @@ that the release that changes it brings along every computer an earlier one is o
 by the install script. Two things that look fixed are instances of the rule:
 
 - **The names `text-to-cad` (the plugin) and `earthtojake` (the catalog)** are words in our own
-  manifests, not GitHub's: moving the repository changes neither. A new name is carried by the
-  install script, which removes the copies under the old one, as it does for four older names; a copy
-  the script never runs on stays under the old name.
+  manifests, not GitHub's: moving the repository changes neither. A new name is carried by `cad
+  plugin install`, which removes the copies under the old one, as it does for the older names
+  (`cad_server/plugin/source.py`); a copy it never runs on stays under the old name.
 - **Where cad keeps its data** (one folder per user). A later release may move it, carrying the old
   folder along.
 
 ## No version left behind
 
-As many past releases as reasonable can reach the latest one, by two paths:
+As many past releases as reasonable can reach the latest one:
 
 - **0.10.0 to 0.11.11** update through their own updater, which installs the release `/v1/versions`
   names the old way and runs its hidden `cad setup --engine-update`. The new cad's server then moves
   the computer onto a global cad that updates itself: by the hosted install command, run once, where
-  our install command set that computer up before, and by installing cad with uv itself elsewhere,
-  or where that run installed no cad. This is the bridge (`cad_server/cli/setup.py`, kept apart to
+  our install command set that computer up before (it installs cad as a uv tool and hands the apps
+  to that cad's `cad plugin install`), and by installing cad with uv itself elsewhere, or where that
+  run installed no cad. This is the bridge (`cad_server/cli/setup.py`, kept apart to
   be deleted in one change once those releases are gone;
   [Decisions](decisions.md#the-bridge-for-0100-to-01111)). A known gap: its last step (`setup.once`,
   the install command run once) has no deadline, so a run that hangs lives on, and a later catch-up
-  can run beside it.
+  can begin beside it; the two never work in the agent apps at once (the lock of `cad plugin
+  install`), and the catch-up that finds it held ends and is tried again.
 - **Older releases** reach the latest when a person or an agent runs the install command. The script
-  removes what each past layout left in the agent apps (`scripts/install/install.py`: each app's
-  `handler` in `APPS`, and `remove_loose_skills`).
+  removes the `cad` command 0.10.0 to 0.11.11 wrote (`scripts/install/install.py`, `old_launcher`),
+  and the cad it installs removes what each past layout left in the agent apps
+  (`cad_server/plugin/apps.py`: the `handler` of each row of `APPS` that has old copies, and
+  `remove_loose_skills`).
+- **0.11.12 and 0.11.13** update themselves, and their plugin's catch-up downloads the hosted install
+  command, which finds no `cad plugin install` in them and runs the newest release's from uv's cache.
 
-Check a change to the install script, to cad's update or to the list above against both paths before
-it ships.
+Check a change to the install script, to `cad plugin install`, to cad's update or to the list above
+against these paths before it ships.
 
 ## Before the first release of a higher major
 
@@ -215,10 +243,15 @@ No higher major exists today, and none of this is done. Before the first one shi
   there stay yanked.
 - **The hosted install command keeps an arriving computer inside its major** unless a person asked
   for more. Today it installs PyPI's newest `cad` of all where cad is missing or does not start, and
-  cad runs it by itself (the plugin's catch-up; the bridge). It is fetched at every run, so it can
-  ask the `cad` that is there for its release and bound its install.
-- **The plugin catch-up does not move a plugin across a major.** Today the install command installs
-  the plugin from `latest`, the newest of all, whatever major the `cad` on the computer is.
+  runs the newest of all from uv's cache (`cad@latest`) where the cad there has no `cad plugin
+  install`; 0.11.12, 0.11.13 and the bridge run it by themselves. It is fetched at every run, so it
+  can ask the `cad` that is there for its release and bound both. One part is done: a cad run from
+  uv's cache keeps no release as the one the plugin is up to date for, so a release of a higher major
+  is never kept for a cad that cannot reach it.
+- **The plugin catch-up does not move a plugin across a major.** Today `cad plugin install` takes the
+  plugin from `latest`, the newest of all, whatever major the cad that runs it is. That branch name
+  is in cad (`cad_server/plugin/source.py`), so the last release of a major is where its plugin's
+  source is decided.
 - **The newest release below 0.12.0**, the stepping stone through which 0.10.0 to 0.11.11 computers
   arrive (`/v1/versions`), is checked against the same rule: its bridge runs the install command.
 
@@ -350,7 +383,8 @@ On the merge commit, in this order (the workflow's comments say why each step is
    installer files are kept for the record and install no particular release: wherever they are run
    from, `install.sh` and `install.ps1` download the newest `install.py` from texttocad.dev. Then
    `Deploy Docs`, whose header names the release: it starts once that job ends, and runs where the
-   branches moved though the tag failed. Nothing here touches
+   branches moved though the tag failed; PyPI lists the release by then, so its check of PyPI's newest
+   cad ([Redeploying the docs site](#redeploying-the-docs-site)) passes. Nothing here touches
    [the version feed](#the-version-feed), which reads PyPI itself.
 
 `main` has the new version from the merge on, a few minutes before PyPI has the wheels. Only an
@@ -471,6 +505,14 @@ gh workflow run deploy-docs.yml -f ref=main
 gh workflow run deploy-docs.yml -f ref=v0.5.0  # a past release: its tag
 ```
 
+The site serves the install command, which hands the agent apps to PyPI's newest cad. So a production
+deploy first asks that cad whether it has `cad plugin install` (`scripts/release/newest_cad.py`: uv
+runs `cad@latest plugin install --help` in a home folder of its own, which installs nothing), and
+deploys nothing where it has not or could not be asked. Between the merge of a change to the hand-over
+and the release that carries it, production cannot be redeployed from `main`, for a fix to a page
+either. A release's own deploy passes; a preview is not asked, nor is a ref from before the check (a
+past release's tag).
+
 To look at a branch's site before it merges, deploy it as a preview: a URL of its own behind Vercel
 Authentication, with production untouched. Dispatch from the branch, so the run uses its workflow
 and scripts; the run's summary gives the URL:
@@ -572,7 +614,8 @@ What a release depends on:
 - **It says when, not what.** An automatic update the feed starts installs PyPI's newest of the
   installed major, even where the feed names none of that major and its `latest` is of a higher one.
   The install command, `cad update`, the plugin's server line and the skills' `uv tool install cad`
-  read no feed: they take PyPI's newest (`cad update` and the server line, of the installed major).
+  read no feed: they take PyPI's newest (`cad update`, which the install command runs on a cad that is
+  there when a person ran it, and the server line: of the installed major).
 - **So a hold is a brake, not a wall.** Holding a release back (`CAD_HELD_RELEASES`, an environment
   variable of the Vercel project, then `gh workflow run deploy-api.yml --ref main`:
   [Holding a release](../../apps/api/README.md#holding-a-release)) stops automatic updates only on

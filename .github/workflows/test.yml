@@ -426,8 +426,8 @@ jobs:
       ref: ${{ inputs.ref }}
 
   # The install command against the real programs of Claude Code, Codex and Gemini CLI, on Windows, macOS and Linux,
-  # each on a private computer: install (cad a uv tool, its server, a model, the viewer, the doctor), again (cad left
-  # alone, the plugin updated), and from 0.11.10's installer's state (real-install.yml, scripts/test/real-install.py). Measured on macOS
+  # each on a private computer: install (cad a uv tool, its server, a model, the viewer, the doctor), again (cad
+  # installed already, the plugin updated), and from 0.11.10's installer's state (real-install.yml, scripts/test/real-install.py). Measured on macOS
   # with a warm uv cache: 94 s; on a runner, cad's first download and its kernel's (about 240 MB) add a few minutes,
   # Windows the slowest. With the rehearsals: a full run, nightly, and a change to the installers.
   real-install:
@@ -496,6 +496,11 @@ jobs:
         if: matrix.shard == '2/2'
         timeout-minutes: 35
         run: python scripts/test/rehearse-update.py bridge --uv-cache "${{ runner.temp }}/uv"
+
+      - name: From 0.11.13, whose own `cad plugin update` runs the install command
+        if: matrix.shard == '1/2'
+        timeout-minutes: 15
+        run: python scripts/test/rehearse-update.py plugin-update --uv-cache "${{ runner.temp }}/uv"
 
       - name: From 0.11.0, the first with an automatic update, by itself
         if: matrix.shard == '1/2'

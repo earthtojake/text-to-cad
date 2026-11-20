@@ -219,7 +219,8 @@ RULES: tuple[Rule, ...] = (
     # The update rehearsal (test.yml's update-rehearsal): cad updating itself as a uv tool, and the real shipped
     # releases updating into this tree's build. Beside the packages' suites, the code of this build it runs: cad's own
     # update and its helper, an updater's setup and the install command its server runs, the layout of 0.11.11 and
-    # earlier and the records its clients read, the server's tending.
+    # earlier and the records its clients read, the server's tending; and what the install command hands the apps
+    # to, which every rehearsal and the real install run: `cad plugin install`, its table of apps and its one run.
     Rule(("scripts/test/rehearse-update.py",), select(flags=["installer"]), final=True),
     # The real install (real-install.yml, which test.yml calls): the install script against the real programs of
     # agent apps, on a private computer of its own.
@@ -228,7 +229,7 @@ RULES: tuple[Rule, ...] = (
     Rule(tuple(f"packages/cad/src/cad_server/{path}" for path in (
         "cli/setup.py", "cli/auto_update.py", "_internal/install_script.py", "_internal/arrival.py",
         "_internal/auto_update.py", "_internal/auto_update_helper.py", "_internal/installations.py",
-        "engine/daemon.py")),
+        "engine/daemon.py", "cli/plugin.py", "_internal/plugin_catch_up.py", "plugin/**")),
         select(flags=["installer"])),
     # The one-line installer: the docs site serves copies of install.sh, install.ps1 and install.py. Its own
     # tests (tests/python/global/test_install_script.py) are a light contract: static runs them on every change.
