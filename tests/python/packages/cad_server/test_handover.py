@@ -261,7 +261,6 @@ class Defaults(unittest.TestCase):
                                  ["sh", "-c", "curl -fsSL https://texttocad.dev/install.sh | sh"])
             os.environ[install_script.INSTALLER_ENV] = ""
             self.assertFalse(install_script.installer(), "empty: nothing")
-            self.assertEqual(install_script.run(), 0, "nothing to run")
             found = install_script.environment(report=Path("r.json"))
             self.assertEqual((found["CAD_INSTALL_REPORT"], found["UV_NO_MODIFY_PATH"]), ("r.json", "1"))
             self.assertNotIn("PYTHONPATH", found)

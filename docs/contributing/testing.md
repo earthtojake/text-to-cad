@@ -50,23 +50,33 @@ enough. Every other job runs on the changes that reach it. The two there now:
 - The installer rehearsals install this tree's wheel on a fresh machine. What they exercise changes in
   few pull requests, and before this layout they ran only after a merge (in November 2026 the Linux
   one had passed 7 runs of 7, the Windows one 23 pushes of 25); a release pull request runs every job,
-  so no release ships unrehearsed. They also run on a change to the installers themselves.
+  so no release ships unrehearsed. They also run on a change to the installers themselves, or to what
+  the install command hands the agent apps to: cad's `cad plugin install` (`cli/plugin.py`,
+  `_internal/plugin_catch_up.py`, `plugin/`).
 - The update rehearsal (`update-rehearsal`, `scripts/test/rehearse-update.py`) installs real releases
   from PyPI on private computers and brings each to this tree's build by the route it takes, on Linux,
   macOS and Windows: the updater of 0.11.11, 0.11.0 and 0.10.4 (`cad setup --engine-update`, then the
-  install command the new server runs once; where that run fails, `updater-fallback`, or the computer had
-  only a store's copy, `store-only`, the new server installs cad with uv itself), the shipped release's
+  install command the new server runs once, which hands the apps to the cad it installed; where that run
+  fails, `updater-fallback`, or the computer had only a store's copy, `store-only`, the new server installs
+  cad with uv itself), the shipped release's
   typed `cad update` (`typed`, `store-typed`), the uv line typed on a computer of 0.11.11 (`uv-line`,
   `store-uv-line`), and the install command on a computer of 0.11.11; then cad's own update, automatic
   and typed with and without a server running, inside its major with a higher major out and across it by
-  `cad update --major` (`self-major`), and cad installed by pipx (`self-pipx`). It is the one test
+  `cad update --major` (`self-major`), and cad installed by pipx (`self-pipx`); and after an update, the
+  new server's one `cad plugin install`, which runs cad's own code and no install command, read from
+  cad's record of it. One more route starts on the real 0.11.13 (`plugin-update`, on shard 1/2 of each
+  system): that release's own `cad plugin update` runs this tree's install command, which finds no `cad
+  plugin install` in it and has the newest release's do the work (`uv tool run ... cad@latest plugin
+  install`: this tree's), then turns the switch on by 0.11.13's own `cad plugin update auto on`, 0.11.13
+  left as it is and the install command run once. It is the one test
   of the move every computer makes, unattended or by the install command. It runs with the installer
   rehearsals, and on a change to the rehearsal itself. A route runs alone too, as
   `scripts/test/rehearse-update.py store-only`.
-- The real install (`real install`, `real-install.yml`, `scripts/test/real-install.py`) runs the install script
+- The real install (`real install`, `real-install.yml`, `scripts/test/real-install.py`) runs the install script,
+  and through it this tree's `cad plugin install`,
   against the real `claude`, `codex` and `gemini` on Windows, macOS and Linux, each on a private computer: the
-  one test of the half of the script that touches agent apps on Windows, where its unit tests (stand-in
-  programs) are skipped. It installs, runs the script again, and migrates each program from the state 0.11.10's
+  one test of what cad does in agent apps on Windows, where the unit tests of its table of apps
+  (`tests/python/packages/cad_server/plugin/`, stand-in programs) are skipped. It installs, runs the script again, and migrates each program from the state 0.11.10's
   installer left; cad comes from this tree's wheel, the plugin from this tree's `latest` copy in a local
   repository each program's git reads in GitHub's place. It cannot test the desktop apps (they need a person) or
   GitHub's `latest` branch itself, which before a release is the last release's. About 10 minutes a system.
@@ -120,6 +130,12 @@ python3 scripts/github-workflows/select_checks.py --paths packages/cad/src/cad/r
    document, engine or installation record in your own state folder, or your `cad`
    command. The shared
    temporary-directory helper retains the Windows cleanup retries used by the suite.
+
+   A test that runs `cad plugin install` (by either name) or the install script gives it a
+   computer of its own: a temporary home and stand-in programs on PATH for the agent apps' CLIs, git,
+   uv and `cad` (`tests/python/support/agent_apps.py`: `AgentApps`, and `PluginRuns` for the
+   command). The runner's folders are not enough: the command works in the home folder, and run in
+   yours it installs the plugin into the real apps on your computer.
 
 4. **Count its cost.** A test's cost is part of its design. Model runs go through the engine's daemon,
    as every build does: the runner gives each test file an engine directory of its
@@ -223,8 +239,8 @@ decide which tests reach it. The components:
 | `packaging` | the packages, the UI, `apps/web`, `apps/mcp`: whatever ships in a wheel | Clean bundle, layout, the wheels' contents, the installed commands |
 | `viewer-e2e` | the packages, the UI, `apps/web`, `tests/browser` | The bundle's viewer through the real backend: the launch smoke test and the format and camera gates in Chromium |
 | `packages (Python 3.11 floor)` | a full run | The three suites on the packages' oldest Python (`test-floor.sh`), in two shards |
-| `install (Linux)`, `install (Windows)` | a full run; `scripts/install`, the two workflows | `install-linux.yml` and `install-windows.yml`: the one-line installers on a fresh machine, against this tree's wheel |
-| `real install` | a full run; `scripts/install`, its workflow, its runner | `real-install.yml`: the install script against the real `claude`, `codex` and `gemini` on Windows, macOS and Linux |
+| `install (Linux)`, `install (Windows)` | a full run; `scripts/install`, the two workflows, cad's `cad plugin install` | `install-linux.yml` and `install-windows.yml`: the one-line installers on a fresh machine, against this tree's wheel, whose `cad plugin install` they hand over to |
+| `real install` | a full run; `scripts/install`, its workflow, its runner, cad's `cad plugin install` | `real-install.yml`: the install script and this tree's `cad plugin install` against the real `claude`, `codex` and `gemini` on Windows, macOS and Linux |
 | `CI` | always | The one required check: every job that ran passed (`scripts/github-workflows/ci_gate.py`) |
 
 **A full run** is every job on every suite. `VERSION` (a release is tested
@@ -241,7 +257,8 @@ tests resolve. Root prose, the plugin manifests and configs, the release scripts
 **The release tier** runs on a full run only, so before a release ships and not
 on every push ([its criterion](#what-runs-where)): the packages' suites on Python
 3.11, the installer and update rehearsals and the real install, which also run on a change to the
-installers themselves (`scripts/install`, their workflows) or to the update rehearsal or the real install. The nightly run, on `main`, is
+installers themselves (`scripts/install`, their workflows), to cad's `cad plugin install` and its table of apps
+(`cad_server/plugin/`), or to the update rehearsal or the real install. The nightly run, on `main`, is
 that tier for whatever merged without a release; it runs nothing when a run
 already tested `main`'s tree in full.
 
@@ -395,10 +412,10 @@ keeps them out of `models/`.
 ([Rehearsing on `build-test`](../../CONTRIBUTING.md#rehearsing-on-build-test)), and the installers on
 a fresh machine by `install-linux.yml` and `install-windows.yml`, which `test.yml` calls in the release
 tier and which a dispatch with `published` runs against the release people install today. The arrival
-of a computer on 0.11.11, 0.11.0, 0.10.4 or 0.10.0 at this tree's build is rehearsed by `scripts/test/rehearse-update.py`,
+of a computer on 0.11.11, 0.11.0, 0.10.4 or 0.10.0 at this tree's build, and 0.11.13's own `cad plugin update` running this tree's install command, are rehearsed by `scripts/test/rehearse-update.py`,
 which `test.yml`'s
 `update-rehearsal` job runs in the same tier and which runs locally too (it needs uv and the network).
-The install script against the real programs of Claude Code, Codex and Gemini CLI is `scripts/test/real-install.py`
+The install script, and the `cad plugin install` it hands over to, against the real programs of Claude Code, Codex and Gemini CLI is `scripts/test/real-install.py`
 (`real install`, the same tier), which runs locally too against the programs on your PATH, never your own
 configuration of them: `--wheels` names this tree's wheels (`CAD_KEEP_WHEEL=1 CAD_WHEEL_OUT_DIR=<dir>
 scripts/release/check-wheel-contents.sh` after `scripts/bundle/bundle.sh`).

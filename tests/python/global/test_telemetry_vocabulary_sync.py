@@ -93,5 +93,40 @@ class TheBuildFailuresAreOneVocabulary(unittest.TestCase):
         self.assertIn("buildFailures: BUILD_FAILURES_10", schemas.split("[10, {", 1)[1].split("}],", 1)[0])
 
 
+class TheInstallWordsAreOneVocabulary(unittest.TestCase):
+    def test_cadgen_and_the_receiver_name_the_same_words_and_bounds(self) -> None:
+        # A run of the plugin's install and each app where it failed (schema 12's ``install``, ``install_failure``):
+        # who began it, how it ended, what its terminal showed and why an app failed. A word the receiver does not
+        # read refuses the batch; one cadgen lacks is a run never counted. What was done in an app that did not fail
+        # (``INSTALL_STATUSES``) is cadgen's alone: it is never sent, so the receiver has no such words.
+        for name in ("INSTALL_BY", "INSTALL_OUTCOMES", "INSTALL_LOGOS", "INSTALL_COLOURS", "INSTALL_FAILURES"):
+            cadgen = names(CADGEN, f"{name} = frozenset({{", "})")
+            receiver = names(RECEIVER, f"const {name} = new Set([", "]);")
+            self.assertGreater(len(cadgen), 2, name)
+            self.assertEqual(sorted(cadgen), sorted(receiver), name)
+        sender, receiver = CADGEN.read_text(encoding="utf-8"), RECEIVER.read_text(encoding="utf-8")
+        self.assertNotIn("INSTALL_STATUSES", receiver)
+        for name in ("MAX_INSTALL_SECONDS", "MAX_INSTALL_APPS"):
+            ours = re.search(rf"(?m)^{name} = ([0-9_]+)$", sender)
+            theirs = re.search(rf"(?m)^const {name} = ([0-9_]+);$", receiver)
+            self.assertIsNotNone(ours and theirs, name)
+            self.assertEqual(int(ours.group(1)), int(theirs.group(1)), name)
+        # An app's key is read by one shape at both ends.
+        self.assertIn('_APP = re.compile(r"[a-z0-9][a-z0-9._-]{0,39}")', sender)
+        self.assertIn("const APP = /^[a-z0-9][a-z0-9._-]{0,39}$/;", receiver)
+        # And both name the two events by the same fields, the app's key under its wire name here.
+        tree = ast.parse(sender)
+        table = next(node.value for node in tree.body
+                     if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", "") == "EVENTS")
+        events = {key.value: ast.literal_eval(value) for key, value in zip(table.keys, table.values)
+                  if key.value in ("install", "install_failure")}
+        fields = {name: re.findall(r"'([a-z_]+)'", receiver.split(f"\n  {name}: [", 1)[1].split("]", 1)[0])
+                  for name in ("install", "install_failure")}
+        self.assertEqual([*events["install"][0], *events["install"][1]], fields["install"])
+        self.assertEqual([*events["install_failure"][0], *events["install_failure"][1]],
+                         ["app" if name == "plugin_app" else name for name in fields["install_failure"]])
+        self.assertEqual(fields["install_failure"], ["plugin_app", "reason", "seconds", "count"], "no status")
+
+
 if __name__ == "__main__":
     unittest.main()

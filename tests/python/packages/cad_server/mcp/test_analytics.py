@@ -298,7 +298,7 @@ class ServerCountsTest(_Tmp):
         # Schema 11: the app its client names, a field of the batch; no channel.
         self.assertEqual((payload["schema"], payload["process"], payload["app"], payload["presentation"],
                           payload["client"]["name"], "channel" in payload),
-                         (11, "app", "codex", "tabs", "codex-mcp-client", False))
+                         (12, "app", "codex", "tabs", "codex-mcp-client", False))
         # Under an id of its own, stamped with the time it was made: a random id, and a whole second.
         self.assertEqual(str(uuid.UUID(payload["batch"], version=4)), payload["batch"])
         self.assertIsInstance(payload["at"], int)
@@ -334,7 +334,7 @@ class ServerCountsTest(_Tmp):
         # The agent cannot speak for the person's hands.
         self.assertTrue(self.agent(server, "POST", "/api/v1/local/activity", report)["isError"])
         self.assertTrue(server.analytics.flush())
-        self.assertEqual(sent[-1]["schema"], 11)
+        self.assertEqual(sent[-1]["schema"], 12)
         self.assertEqual([event for event in sent[-1]["events"] if event["name"] == "control"], [
             {"name": "control", "control": "display_xray", "count": 1, "seconds": 0},
             {"name": "control", "control": "pencil", "count": 2, "seconds": 395},
@@ -867,7 +867,7 @@ class WhereFromTest(_Tmp):
         self.assertEqual((by["claude-code"]["presentation"], [event["tool"] for event in by["claude-code"]["events"]]),
                          ("text", ["cad_show", "cad_view"]))
         self.assertEqual(len({batch["batch"] for batch in self.sent}), 2, "each under an id of its own")
-        self.assertEqual({batch["schema"] for batch in self.sent}, {11})
+        self.assertEqual({batch["schema"] for batch in self.sent}, {12})
         self.assertFalse(any("channel" in batch for batch in self.sent), "no channel, nothing derived from one")
 
     def test_a_page_and_a_development_build(self) -> None:
