@@ -20,8 +20,8 @@
  *
  * Every release either address names is the newest that
  *   1. has a file PyPI's simple index lists unyanked (a pre-release is no release here: the server reads only
- *      `X.Y.Z`), read from `cadgen`'s index: a release uploads its projects one at a time, `cad`, `cad-server`,
- *      `cad-mcp`, then `cadgen`, each only once PyPI lists the one before (.github/workflows/release-publish.yml),
+ *      `X.Y.Z`), read from `cadgen`'s index: a release uploads its projects in steps, `cad`, then `cad-server`
+ *      and `cad-mcp` together, then `cadgen`, each only once PyPI lists the step before (.github/workflows/release-publish.yml),
  *      so a release `cadgen` lists can be installed by every name. `cad`'s own index is no use here: it also holds
  *      another owner's yanked 0.8 to 1.1.2 from 2020, and a release half uploaded is listed there first;
  *   2. is at least an hour old by PyPI's own upload time (`upload-time`) of every unyanked file of it: the hour in

@@ -107,10 +107,12 @@ class VersionSyncMirrorTests(unittest.TestCase):
     def test_a_file_with_a_version_and_a_pin_takes_both(self) -> None:
         """A pyproject is a TOML target and a pin target: stamping one must keep the other."""
         targets = json.loads(_node(
-            "const { jsonTargets, pinTargets, tomlTargets } = await import(%s);\n"
-            "console.log(JSON.stringify([...jsonTargets.map((t) => t.path), ...pinTargets, ...tomlTargets]));"
+            "const { jsonTargets, pinTargets, tomlTargets, lockTargets } = await import(%s);\n"
+            "console.log(JSON.stringify([...jsonTargets.map((t) => t.path), ...pinTargets, ...tomlTargets,"
+            " ...lockTargets.map((t) => t.path)]));"
             % json.dumps(SYNC_SCRIPT.as_uri())))
         self.assertIn("codex.mcp.json", targets)
+        self.assertIn("uv.lock", targets)
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch).resolve()  # the script runs main() only when argv[1] is its real path
             for relative in {*targets, "scripts/release/sync-version.mjs"}:
@@ -146,6 +148,10 @@ class VersionSyncMirrorTests(unittest.TestCase):
                     self.assertIn('"cad==9.9.9"', text, project)
                     self.assertNotRegex(text, r"cad==(?!9\.9\.9)", project)
             self.assertEqual(skill.read_text(encoding="utf-8"), stamped)
+            # The development lock records cad's version, and `uv sync --locked` refuses one that is not the
+            # pyproject's: its entry is stamped with the rest.
+            self.assertIn('\nname = "cad"\nversion = "9.9.9"\nsource = { editable = "packages/cad" }\n',
+                          (root / "uv.lock").read_text(encoding="utf-8"))
             # Stamped once, it is stamped: a second run changes nothing.
             again = subprocess.run(["node", str(root / "scripts/release/sync-version.mjs")],
                                    capture_output=True, text=True, timeout=120)

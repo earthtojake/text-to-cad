@@ -10,12 +10,12 @@ HOST="127.0.0.1"
 # (CAD_RUNTIME_CHECK_DIR-style scratch builds). CI uses the default.
 RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cad/src/cad_server/_runtime/viewer}"
 
-echo "==> CAD Viewer launch smoke test (\$PYTHON -m cad_server.viewer)"
+echo "==> viewer launch smoke test (\$PYTHON -m cad_server.viewer)"
 
 # The built client has to be IN the wheel's runtime: its absence is the exact regression
 # this guards, and it surfaces as a served page that is 404 rather than as a bad server.
 if [ ! -f "$RUNTIME/index.html" ]; then
-  echo "FAIL: no bundled CAD Viewer client at $RUNTIME (index.html missing)" >&2
+  echo "FAIL: no bundled viewer client at $RUNTIME (index.html missing)" >&2
   echo "      Run scripts/bundle/bundle.sh first (test.yml bundles before this step)." >&2
   exit 1
 fi
@@ -54,13 +54,13 @@ if ! pick_interpreter; then
     echo "FAIL: VIEWER_PYTHON=$VIEWER_PYTHON cannot run, or cannot import the server (cad_server)." >&2
   elif [ -z "$FOUND_INTERPRETER" ]; then
     echo "FAIL: no Python interpreter found (tried the repo venv, python3, and python)." >&2
-    echo "      Set VIEWER_PYTHON to the one that installed requirements-dev.txt." >&2
+    echo "      Run uv sync, or set VIEWER_PYTHON to an interpreter that imports cad_server." >&2
     exit 1
   else
     echo "FAIL: the server (cad_server) is not importable from $FOUND_INTERPRETER." >&2
   fi
   echo "      This test imports a real STEP end to end, so the launching interpreter" >&2
-  echo "      needs the packages: pip install -r requirements-dev.txt, or set VIEWER_PYTHON." >&2
+  echo "      needs the packages: uv sync, or set VIEWER_PYTHON." >&2
   exit 1
 fi
 export VIEWER_RUNTIME_DIR="$RUNTIME"

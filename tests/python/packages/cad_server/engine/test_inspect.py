@@ -333,6 +333,24 @@ class SummaryTextTest(unittest.TestCase):
                           "  lead  cylindrical  free; free, as built 0 12.3"])
         self.assertEqual(lines[lines.index("states") + 1], "  rest  roll 0, pitch 0.5, lead 180 0")
 
+    def test_a_joint_with_no_limits_or_one_side_open_is_said_not_refused(self) -> None:
+        # A continuous revolute (build123d's angular_range=(-inf, inf)) reaches inspect as [[null, null]]: it
+        # raised a TypeError in said.number. Each side nothing bounds is said open.
+        from cad_server.engine.cli import summary_text
+
+        joints = [{"name": "axle", "type": "revolute", "range": [[None, None]], "units": ["deg"], "asBuilt": 0.0},
+                  {"name": "stop", "type": "prismatic", "range": [[0.0, None]], "units": ["mm"], "asBuilt": 0.0},
+                  {"name": "screw", "type": "cylindrical", "range": [[None, None], [None, 40.0]],
+                   "units": ["deg", "mm"], "asBuilt": [0.0, 0.0]}]
+        summary = {"name": "spin", "id": "x", "state": {"state": "file", "path": "/m/a.xbf"},
+                   "parts": {"occurrences": 2, "distinct": 2, "root": "spin"}, "bounds": None, "volume": 0.0,
+                   "materials": [], "unweighed": [], "joints": joints,
+                   "states": [], "sequences": [], "animations": [], "files": []}
+        lines = summary_text(summary).splitlines()
+        self.assertEqual(lines[lines.index("joints") + 1:lines.index("joints") + 4],
+                         ["  axle  revolute  free, as built 0", "  stop  prismatic  0 to inf mm, as built 0",
+                          "  screw  cylindrical  free; -inf to 40 mm, as built 0 0"])
+
 
 # A base bolted to an arm assembly declared to weigh 120 g, its servo case (no material) carrying a 30 g motor, and
 # a 10 g lump on the base: the description weighs the arm 120 g in all, the base its aluminium plus 10 g.

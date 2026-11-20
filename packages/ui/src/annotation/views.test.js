@@ -69,6 +69,13 @@ test('a camera nudged less than 2°, zoomed or panned less than 5% is the same v
   assert.ok(!sameView(view(), view({ selection: { hide: ['o1.2'] } })));
 });
 
+test("the screen's up is what a view's up says: the world's, or the camera's own square to its view, one picture; upside down, another", () => {
+  const above = camera({ position: [0, -100, 60] });
+  const own = [0, 60, 100].map(value => value / Math.hypot(60, 100));
+  assert.ok(sameView(view({ camera: above }), view({ camera: { ...above, up: own } })));
+  assert.ok(!sameView(view({ camera: above }), view({ camera: { ...above, up: own.map(value => -value) } })));
+});
+
 test('every prompt carries the exact current view, reusing a matching ink view or appending it', () => {
   const drawn = [{ ...view(), label: 'view 1' }, { ...view({ camera: turned(90) }), label: 'view 2' }, { ...view({ camera: turned(180) }), label: 'view 3' }];
   const ink = [{ view: 'view 1' }, { view: 'view 3' }];

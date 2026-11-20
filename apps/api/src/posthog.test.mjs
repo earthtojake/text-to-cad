@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { rowsOf, uuidV5 } from './events.mjs';
+import { reportOf } from './install.mjs';
 import { EVENTS, exceptionOf, missingSettings, posthogStore, READY_TTL_MS, SETTINGS, settingsOf } from './posthog.mjs';
 
 const INSTALL = '8c347ec3-1342-4db5-a19a-491cbc8c59be';
@@ -63,7 +64,7 @@ test("the build daemon's counts are PostHog events of their own, each a window's
   const countsOf = event => Object.fromEntries(Object.entries(event).filter(([key]) => key !== 'name'));
   assert.deepEqual(batch.map(event => event.properties), DAEMON.events.map(event => ({ ...context, ...countsOf(event) })));
   assert.deepEqual(Object.keys(EVENTS).sort(), ['arrival', 'build', 'build_failure', 'control', 'exception', 'feature', 'files',
-    'health', 'snapshot', 'snapshot_failure', 'tool', 'tool_failure', 'update', 'view']);
+    'health', 'install', 'install_failure', 'snapshot', 'snapshot_failure', 'tool', 'tool_failure', 'update', 'view']);
   // Schemas before 5 name no batch: PostHog makes up each event's uuid and stamps it as it arrives, as ever.
   assert.ok(batch.every(event => !('uuid' in event) && !('timestamp' in event)));
 });
@@ -147,6 +148,60 @@ test("each of cad's own updates is PostHog's cad_updated: by version, from, outc
   assert.ok(installed.uuid && installed.timestamp, 'named, so a batch sent again counts once');
 });
 
+test("a run of the plugin's install is PostHog's plugin_installed, and each app where it failed plugin_app_failed, by that app", async () => {
+  const [run, failed] = await at(JSON.parse(JSON.stringify({ ...NAMED, schema: 12, process: 'cli', channel: undefined, app: 'claude-code', events: [
+    { name: 'install', by: 'script', outcome: 'ok', logo: 'played', colour: '24bit', seconds: 42, found: 2, failed: 1, count: 1 },
+    { name: 'install_failure', app: 'codex', reason: 'timeout', seconds: 30, count: 1 },
+  ] })));
+  const context = { distinct_id: INSTALL, session: SESSION, $session_id: SESSION, $geoip_disable: true, process: 'cli', version: '0.8.0',
+    app: 'claude-code', platform: 'linux', arch: 'x86_64' };
+  // Not `install_failed`: that is the install command's own report (`/v1/install`).
+  assert.deepEqual([run.event, failed.event], ['plugin_installed', 'plugin_app_failed']);
+  assert.deepEqual(run.properties, { ...context, by: 'script', outcome: 'ok', logo: 'played', colour: '24bit', seconds: 42, found: 2,
+    failed: 1, count: 1 });
+  // The app where the install failed is `plugin_app`; `app` stays the app running cad, as on every event. No status.
+  assert.deepEqual(failed.properties, { ...context, plugin_app: 'codex', reason: 'timeout', seconds: 30, count: 1 });
+  assert.ok([run, failed].every(event => event.uuid && event.timestamp === '2026-10-09T11:59:00.000Z'),
+    'named, so a batch sent again counts once');
+});
+
+// One report of a failed install (`install.mjs`), as the install command sends it.
+const RUN = '3b1f0c52-7a2e-4d0b-9c1e-5f6a7b8c9d0e';
+const REPORT = { schema: 1, run: RUN, at: NOW / 1000 - 60, stage: 'cad', outcome: 'failed', code: 2, platform: 'linux', arch: 'x86_64',
+  by: 'person', uv: '0.9.7' };
+
+test("a failed install is PostHog's install_failed: under its run's id, no person made of it, the country and no location lookup", async () => {
+  const { asked, store } = posthog();
+  await store.report(reportOf(REPORT), { country: 'DE' });
+  const crash = { ...REPORT, stage: 'script', outcome: 'crashed', code: 1, type: 'KeyError', frames: [{ function: 'main', line: 2560 }, { function: '<module>' }] };
+  await store.report(reportOf(crash));
+  assert.deepEqual(asked.map(({ url, method, body }) => [url, method, body.api_key, body.batch.length]),
+    Array(2).fill(['https://eu.i.posthog.com/batch/', 'POST', 'phc_project', 1]));
+  const [failed, crashed] = asked.map(({ body }) => body.batch[0]);
+  assert.deepEqual(failed, {
+    event: 'install_failed', uuid: uuidV5(`${RUN}/install_failed cad`), timestamp: '2026-10-09T11:59:00.000Z',
+    properties: { distinct_id: RUN, $process_person_profile: false, $geoip_disable: true, stage: 'cad', outcome: 'failed', code: 2,
+      platform: 'linux', arch: 'x86_64', by: 'person', uv: '0.9.7', country: 'DE' },
+  });
+  // A crash's type and frames, as sent; where the host could not tell, no country. Never a session, nor an install id.
+  assert.deepEqual(crashed.properties, { distinct_id: RUN, $process_person_profile: false, $geoip_disable: true, stage: 'script',
+    outcome: 'crashed', code: 1, platform: 'linux', arch: 'x86_64', by: 'person', uv: '0.9.7', type: 'KeyError',
+    frames: [{ function: 'main', line: 2560 }, { function: '<module>' }] });
+  // Sent again, it is the same event again.
+  await store.report(reportOf(REPORT), { country: 'DE' });
+  assert.deepEqual(asked[2].body.batch[0], failed);
+});
+
+test("a failed install goes to the one project a batch's rows go to, under the same key", async () => {
+  const asked = [];
+  const fetch = async (url, init) => { asked.push(JSON.parse(init.body).api_key); return new Response('{}'); };
+  const env = { POSTHOG_REGION: 'eu', POSTHOG_PROJECT_KEY: 'phc_project', POSTHOG_PERSONAL_KEY: 'phx_personal', POSTHOG_PROJECT_ID: '1234' };
+  const store = posthogStore(settingsOf(env), { fetch });
+  await store.report(reportOf(REPORT));
+  await store.insert(rowsOf(BATCH));
+  assert.deepEqual(asked, ['phc_project', 'phc_project']);
+});
+
 test('a batch sent again is the same PostHog events, uuid and time alike, so PostHog counts it once', async () => {
   const first = await at(NAMED);
   const again = await at(NAMED); // its answer was lost; sent again, however long after
@@ -221,7 +276,7 @@ test("a crash of no kernel process carries which failure it was as a property Po
 
 test("a page's frame in a vendor chunk (react, radix, three, lucide) is not in the app: the page's own frame is blamed", async () => {
   const { asked, store } = posthog();
-  // The frames as the CAD Viewer's build names its chunks and the page reports them (`vendor-<package>-<hash>.js`),
+  // The frames as the viewer's build names its chunks and the page reports them (`vendor-<package>-<hash>.js`),
   // one spelled with the folder a build lists them under.
   const frames = [
     { file: 'index-BBBqlHHP.js', function: 'Kt', line: 1, column: 48213, chunk_id: '0de4d024-c159-4f6d-b15a-cc4ef7a6856d' },
@@ -271,6 +326,7 @@ test("PostHog refusing or failing is the receiver's failure, named by its status
   for (const status of [400, 401, 500, 503]) {
     const { store } = posthog(status);
     await assert.rejects(store.insert(rowsOf(BATCH), { country: 'DE' }), { code: `posthog_${status}` });
+    await assert.rejects(store.report(reportOf(REPORT), { country: 'DE' }), { code: `posthog_${status}` });
     await assert.rejects(store.forget(INSTALL), { code: `posthog_${status}` });
     await assert.rejects(store.ready(), { code: `posthog_${status}` });
   }

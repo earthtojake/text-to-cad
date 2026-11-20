@@ -72,6 +72,19 @@ def index(folders: list[Path]) -> tuple[Index, set[tuple[str, str]]]:
     return found, selectable
 
 
+def unread_caches(folders: list[Path]) -> str:
+    """Why a preset can be missing though OrcaSlicer has it: from 2.5, OrcaSlicer ships each vendor's system presets
+    as one binary cache (``<vendor>.opc``) and no preset JSON files, and this reads JSON alone. A sentence naming
+    the caches under ``folders``, or "" where there are none."""
+    caches = [path for root in folders for path in sorted(root.rglob("*.opc")) if path.is_file()]
+    if not caches:
+        return ""
+    more = f" and {len(caches) - 1} more" if len(caches) > 1 else ""
+    return (f" OrcaSlicer 2.5 and later keeps its system presets in binary caches ({caches[0]}{more}), which cad "
+            "does not read: give a folder of complete preset JSON files with --profiles, or open the model in the "
+            "OrcaSlicer app.")
+
+
 def shared_path_depth(a: Path, b: Path) -> int:
     """Compare resolved paths; different Windows drives have no shared parent."""
     try:

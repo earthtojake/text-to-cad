@@ -1,5 +1,6 @@
 // /llms.txt: the homepage for an agent, as markdown (https://llmstxt.org). It says what the page
-// says, from the same copy (src/lib/content.ts), so the two never drift apart.
+// says, from the same copy (src/lib/content.ts), so the two never drift apart, then lists the
+// documentation's pages, each at its Markdown address (/docs/<page>.md).
 import {
   community,
   contributing,
@@ -7,9 +8,11 @@ import {
   featuresIntro,
   installCommands,
   installSummary,
+  manualInstallPage,
   manualInstall,
   pluginDescription,
 } from "@/lib/content";
+import { navigation } from "@/lib/docs/source";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 
 export const dynamic = "force-static";
@@ -27,7 +30,7 @@ export function GET() {
     ...installCommands.flatMap(({ system, language, command }) => [`${system}:`, "", "```" + language, command, "```", ""]),
     installSummary,
     "",
-    `${manualInstall.label}: ${onGitHub(manualInstall.path)}`,
+    `${manualInstall.label}: ${absoluteUrl(`${manualInstallPage}.md`)}`,
     "",
     "## Features",
     "",
@@ -35,6 +38,13 @@ export function GET() {
     "",
     ...features.map((feature) => `- [${feature.name}](${onGitHub(feature.path)}): ${feature.summary.replace(/\]\((skills\/[^)]+)\)/g, (_, path) => `](${onGitHub(path)})`)}`),
     "",
+    // The documentation: every page, as Markdown (`/docs/<page>.md`).
+    ...navigation().flatMap((section) => [
+      `## Docs: ${section.title}`,
+      "",
+      ...section.pages.map((page) => `- [${page.label}](${absoluteUrl(`${page.href}.md`)})`),
+      "",
+    ]),
     "## Community",
     "",
     community.intro,

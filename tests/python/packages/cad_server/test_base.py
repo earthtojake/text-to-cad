@@ -385,10 +385,11 @@ class BaseTest(unittest.TestCase):
 class RunTest(unittest.TestCase):
     """``cad run``: a script whose imports use the build123d integration alone run by the base's Python, in
     the caller's folder, the program's own folder last on its path (the library's runner,
-    ``cad._internal.program``)."""
+    ``cad._internal.program``). Each runs in its own folder: the uv configuration a run's folder reads is part of
+    its environment, and a checkout's root pyproject.toml (a uv workspace) is one."""
 
     def test_the_script_runs_with_the_bases_python(self) -> None:
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, contextlib.chdir(folder):
             script = Path(folder) / "model.py"
             script.write_text("import build123d\n", encoding="utf-8")
             with mock.patch.object(run.os, "execv") as execv, mock.patch("subprocess.call", return_value=0) as call:
@@ -405,7 +406,7 @@ class RunTest(unittest.TestCase):
         with mock.patch.object(base, "ensure", side_effect=base.Refused("the CAD kernel environment needs the network "
                                                                         "once: dns error")), \
                 mock.patch.object(run.os, "execv") as execv, contextlib.redirect_stderr(err), \
-                tempfile.TemporaryDirectory() as folder:
+                tempfile.TemporaryDirectory() as folder, contextlib.chdir(folder):
             (Path(folder) / "model.py").write_text("import build123d\n", encoding="utf-8")
             self.assertEqual(run.main([str(Path(folder) / "model.py")]), 1)
         execv.assert_not_called()
@@ -436,6 +437,31 @@ class SpawnTest(unittest.TestCase):
             self.assertIsNone(serve._venv_interpreter(str(launcher)), "a home with no interpreter")
 
     @unittest.skipIf(os.name == "nt", "Windows starts real processes: test_environments.py measures through the pool")
+    def test_the_spawner_imports_on_a_python_older_than_3_13(self) -> None:
+        """Before 3.13 ``subprocess`` names no ``STARTF_FORCEOFFFEEDBACK``, and cad installs on 3.11: the spawner
+        imports there all the same, with Win32's own value of the flag, the one 3.13 names (#870)."""
+        import importlib
+        import sys
+        import types
+
+        win32 = types.ModuleType("multiprocessing.popen_spawn_win32")
+        win32.Popen = type("Popen", (), {})  # type: ignore[attr-defined]
+        stood_in = {"_winapi": types.SimpleNamespace(), "msvcrt": types.SimpleNamespace(),
+                    "multiprocessing.popen_spawn_win32": win32}
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(mock.patch.dict(sys.modules, stood_in))
+            stack.enter_context(mock.patch.object(subprocess, "STARTUPINFO", lambda **flags: flags, create=True))
+            if hasattr(subprocess, "STARTF_FORCEOFFFEEDBACK"):  # Windows on 3.13 or newer: as before 3.13
+                stack.callback(setattr, subprocess, "STARTF_FORCEOFFFEEDBACK", subprocess.STARTF_FORCEOFFFEEDBACK)
+                del subprocess.STARTF_FORCEOFFFEEDBACK
+            sys.modules.pop("cad.engine.windows_spawn", None)
+            stack.callback(sys.modules.pop, "cad.engine.windows_spawn", None)
+            # Imported afresh, by its name: `from cad.engine import windows_spawn` would hand back the module an
+            # earlier test left as the package's attribute.
+            windows_spawn = importlib.import_module("cad.engine.windows_spawn")
+
+            self.assertEqual(windows_spawn.STARTF_FORCEOFFFEEDBACK, 0x80)
+
     def test_a_pool_process_on_windows_is_the_real_interpreter_told_its_environment(self) -> None:
         """Windows' process start, with Windows' modules stood in: the real interpreter, its command line,
         and ``__PYVENV_LAUNCHER__`` naming the environment's own Python, as CPython starts its own's."""

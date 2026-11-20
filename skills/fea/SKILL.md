@@ -36,7 +36,7 @@ part of an assembly alone, export it as a document of its own.
 
 ## Setup
 
-Written for `cad==0.11.12`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+Written for `cad==0.11.13`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
 0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
 If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
@@ -64,7 +64,7 @@ g (9.81 m/s²) for gravity and acceleration. Restate every load in them before y
 
 ## Workflow
 
-1. **List the faces.** A study names faces by the engine's refs, the ones the CAD Viewer copies; a
+1. **List the faces.** A study names faces by the engine's refs, the ones the viewer copies; a
    face the user picked there arrives as `/work/bracket.step#bracket/face 17` and needs no lookup.
 
    ```bash
@@ -148,7 +148,8 @@ g (9.81 m/s²) for gravity and acceleration. Restate every load in them before y
 
 For anything the summary does not answer (the stress at the mounting holes, the sag along an
 edge, how much of the part is above some stress), read `result.vtu` rather than solving again.
-meshio or PyVista read it as it is (`uv run --with meshio`):
+meshio or PyVista can read the file directly. Save this example as `read-stress.py` and run it
+with `cad run --with meshio read-stress.py`.
 
 ```python
 import meshio, numpy as np

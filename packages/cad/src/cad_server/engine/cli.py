@@ -667,11 +667,18 @@ def summary_text(summary: dict[str, Any]) -> str:
         lines.extend(f"  {row}" for row in rows)
 
     def joint(row: dict[str, Any]) -> str:
+        # A value's limits are [lower, upper], null on a side nothing bounds (``mechanism``): free where
+        # neither is, an open side said as the mechanism's refusals say it (-inf, inf).
         units = row.get("units") or []
         ranges = []
         for at, limits in enumerate(row.get("range") or []):
             unit = units[at] if at < len(units) else ""
-            ranges.append("free" if not limits else f"{_said.number(limits[0])} to {_said.number(limits[1])} {unit}".rstrip())
+            if not limits or all(bound is None for bound in limits):
+                ranges.append("free")
+                continue
+            lower, upper = limits
+            ranges.append(f"{'-inf' if lower is None else _said.number(lower)} to "
+                          f"{'inf' if upper is None else _said.number(upper)} {unit}".rstrip())
         built = row.get("asBuilt")
         as_built = "" if built is None else f", as built {_joint_value(built)}"
         return f"{row['name']}  {row['type']}  {'; '.join(ranges) or 'no range'}{as_built}"
@@ -1023,7 +1030,7 @@ VERBS: dict[str, tuple[str, Callable[..., Any], Callable[[argparse.Namespace, st
                "carries the document's motions as clips, a DXF draws a planar one, an MJCF and a URDF are its robot "
                "description",
                _export_arguments, _export),
-    "snapshot": ("draw a document or a file the viewer opens as the CAD Viewer does, into a PNG", _snapshot_arguments,
+    "snapshot": ("draw a document or a file the viewer opens as the viewer does, into a PNG", _snapshot_arguments,
                  _snapshot),
     "serve": ("serve a document over HTTP and print its URL", _serve_arguments, _serve),
     "inspect": ("what a document holds -- its state, parts, bounds, volume, materials, joints, couplings, states, "

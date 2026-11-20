@@ -158,6 +158,18 @@ class EveryTestRunsInCI(unittest.TestCase):
         self.assertIn("--select ui-${{ matrix.part }}", JOBS["js-ui"])
         for part in parts:
             self.assertIn(f"UI_TEST_PASS={part} npm --prefix packages/ui test", runner)
+        # The floor always runs whole (a full run alone selects it), so its shards are fixed: every
+        # one of them, each passed to the runner.
+        shards = re.search(r"shard: \[([\w/, ]+)\]", JOBS["packages-floor"])[1].split(", ")
+        self.assertEqual(shards, [f"{index}/{len(shards)}" for index in range(1, len(shards) + 1)])
+        self.assertIn("CAD_TEST_SHARD: ${{ matrix.shard }}", JOBS["packages-floor"])
+        # The update rehearsal's shards split its steps by hand: each step runs on a shard the matrix has, and
+        # each shard runs a step.
+        shards = re.search(r"shard: \[([\w/, ]+)\]", JOBS["update-rehearsal"])[1].split(", ")
+        named = re.findall(r"matrix\.shard == '([\w/]+)'", JOBS["update-rehearsal"])
+        self.assertEqual(sorted(set(named)), sorted(shards))
+        self.assertEqual(len(named), len(re.findall(r"(?m)^        run: python scripts/test/rehearse-update\.py",
+                                                    JOBS["update-rehearsal"])))
 
 
 class TheTableHoldsToTheTree(unittest.TestCase):
@@ -451,7 +463,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(route("some/new/kind/of.file")["full"], "true")
         self.assertEqual(jobs_for("some/new/kind/of.file"), GATED)
         # ...and so does what every job shares, and the selection itself.
-        for path in ("VERSION", "package-lock.json", "requirements-dev.txt", ".github/workflows/test.yml",
+        for path in ("VERSION", "package-lock.json", "pyproject.toml", "uv.lock", ".github/workflows/test.yml",
                      ".github/actions/setup-deps/action.yml", "scripts/github-workflows/select_checks.py",
                      "scripts/test/unittest_files.py", "tests/python/support/paths.py", "packages/core/package.json"):
             with self.subTest(path=path):
@@ -459,7 +471,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
 
     def test_prose_and_metadata_select_nothing(self):
         # The light contracts read them, and static runs those on every change.
-        for path in ("README.md", "CONTRIBUTING.md", "AGENTS.md", "docs/install.md", "docs/contributing/testing.md",
+        for path in ("README.md", "CONTRIBUTING.md", "AGENTS.md", "docs/contributing/testing.md",
                      "skills/cad/SKILL.md", ".claude-plugin/plugin.json", "models/README.md",
                      "packages/cad/src/cad_server/engine/README.md", "apps/api/package.json",
                      ".github/workflows/release-publish.yml", "scripts/release/bump-version.sh"):
@@ -525,6 +537,15 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "apps/web/README.md": jobs_on("web_client"),
             "apps/mcp/package.json": jobs_on("mcp", "packaging"),
             "apps/docs/package.json": jobs_on("docs", "core_js"),
+            # The documentation site sets the install guide, the migration guides and its own pages,
+            # and resolves their links: its build is their check. Its copy of the registry runs the
+            # registry's test.
+            "docs/install.md": jobs_on("docs"),
+            "docs/migrations/migrating-0.8-to-0.10.md": jobs_on("docs"),
+            "apps/docs/content/skills/render.md": jobs_on("docs"),
+            "apps/docs/src/lib/docs/registry.generated.json": jobs_on("docs", "core_js", "packages"),
+            "apps/docs/src/lib/docs/cli-reference.generated.json": jobs_on("docs", "core_js", "packages"),
+            "apps/docs/src/lib/docs/library-reference.generated.json": jobs_on("docs", "core_js", "packages"),
             "tests/browser/viewer-e2e.mjs": jobs_on("web_viewer"),
             # The installer rehearsals: the installers, their folder and the workflows; a release.
             "scripts/install/install.sh": jobs_on("installer", "docs"),
@@ -536,7 +557,9 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             **{f"packages/cad/src/cad_server/{path}": packages | jobs_on("installer") for path in (
                 "cli/setup.py", "cli/auto_update.py", "_internal/install_script.py", "_internal/arrival.py",
                 "_internal/auto_update.py", "_internal/auto_update_helper.py", "_internal/installations.py",
-                "engine/daemon.py")},
+                "engine/daemon.py",
+                # ...and what the install command hands the apps to: `cad plugin install`, its table and its run.
+                "cli/plugin.py", "_internal/plugin_catch_up.py", "plugin/apps.py", "plugin/run.py")},
             # A runner runs what it feeds.
             "scripts/test/test-js.sh": jobs_on("core_js", "web_ui", "web_client", "mcp"),
             "scripts/test/test-floor.sh": jobs_on("floor"),
@@ -554,6 +577,11 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         # A fixture one language writes and another asserts is current runs that one test beside its own jobs.
         robot = route("packages/ui/src/renderers/robot/__fixtures__/anything.json")
         self.assertEqual(robot["packages_tests"], f"{PACKAGES}/cad_server/test_robot_payload.py")
+        # The site's copies of the references run the tests that hold each to its generator.
+        for copy, test in (("cli-reference", "cad_server/test_cli_reference.py"),
+                           ("library-reference", "cad/test_library_reference.py")):
+            self.assertEqual(route(f"apps/docs/src/lib/docs/{copy}.generated.json")["packages_tests"],
+                             f"{PACKAGES}/{test}")
         # The floor is the release tier's alone: no change to the packages selects it.
         self.assertFalse(jobs_on("floor") & packages)
 

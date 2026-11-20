@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One self-contained browser gate for the CAD Viewer's format and camera
+# One self-contained browser gate for the viewer's format and camera
 # contracts. It runs exactly what CI runs. The project, the engine daemon, the
 # Viewer, and the browser are all owned by this process.
 set -euo pipefail

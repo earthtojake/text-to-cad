@@ -99,8 +99,8 @@ result says the verdicts are no shop's limits (`rules_general`, info). A shop's 
 the measurements, which every result carries (a skill for a named fabrication service does that, reading
 the measurements against the service's own published specs); what a person knows of their own shop is a plain
 option -- `--tools`, `--axes`, `--stock`, `--thickness`, `--bend-radius`, `--k-factor`, `--kerf`,
-`--sheet-size`, `--cavities`, `--build-volume`, `--layer-height`, `--nozzle`, `--material` -- never a rule
-set. A rule's id (`cnc.internal_corner_radius`) is its finding's code; its severity is `error` where the
+`--sheet-size`, `--cavities`, `--build-volume`, `--layer-height`, `--nozzle`, `--printer`, `--material` -- never
+a rule set. A rule's id (`cnc.internal_corner_radius`) is its finding's code; its severity is `error` where the
 source's number is a feasibility limit (the part cannot be made as drawn under that rule) and `warning`
 where it is a recommendation ("should", "recommend"), a cost or a risk, and its note quotes the source's
 sentence.
@@ -898,11 +898,17 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   measured and the check is `NOT CHECKED`, never an error of the part's. A face touching both faces of a pair
   is a cut edge; a cone between a skin and a coaxial
   hole wall is a countersink. A chamfer or a round of a skin's edge (a slanted plane, a convex cylinder of at
-  most `t` along it, a cone, torus or sphere about its normal, within the sheet) is an `edge_break`, and a
-  face square to the skin that reaches it and its opposite skin through breaks is a cut edge: its rays run
-  across the plate and measure its width, never its thickness. A bend's end is broken by a cone or a torus
+  most `t` along it, a cone, torus or sphere about its normal; along an ellipse or a spline, a face with no
+  axis to read whose sampled normals all face the skin's side, at a slant to it somewhere; within the sheet)
+  is an `edge_break`, and a face square to the skin (a plane across it, a cylinder about its normal, a face
+  with no axis square to it at every sample) that reaches it and its opposite skin through breaks is a cut
+  edge: its rays run across the plate and measure its width, never its thickness. A skin's rays that reach
+  the other skin's break are short by that break, which is its own finding, not the skin's. A bend's end is broken by a cone or a torus
   about the bend's axis, beside one of its cylinders and a cut edge or a flange's break, within the sheet:
-  an `edge_break` too, and the bend's length runs to the cut. A cone, torus, sphere or freeform face whose
+  an `edge_break` too, and the bend's length runs to the cut. A cut edge rounded whole from one skin to the
+  other (a full round, r = t/2: a convex cylinder along the skins, a torus or sphere about their normal, and
+  the face that turns a corner of the outline between two) leaves no face of the cut square to the skins: it
+  is an `edge_break` of both, no cut edge. A cone, torus, sphere or freeform face whose
   rays cross `t` is `formed` (a cone between flanges is not a bend). A face square between two opposite planes that face away from each other,
   nearer each other than its own rays run, is the cut edge of a stretch off the thickness (a 3 mm wall's end
   cap): the stretch is judged on its skins, not on rays that run along it. Everything else, and any stretch
@@ -944,7 +950,10 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   rounds, a conic between a chamfer along a line and one along an arc) is laid as chords within `CHORD_MM`
   of it, as an arc's are, so none is shorter than the tolerance the breaks are fused with. A bend's ends'
   breaks are unrolled with its strip, and every break is laid face up, as the flanges are (the far skin's
-  project face down, and were left beside the flat as pieces of their own).
+  project face down, and were left beside the flat as pieces of their own). A full round is laid in its two
+  halves, split at the sheet's mid-plane where it is widest (laid whole, its outline folds back on itself to
+  a line): an 80 x 40 plate with full-round ends unfolds 80 x 40, not 78 x 40, and a hole with a full-round
+  rim is its narrowest.
   A countersink sunk into the unfolded side is laid in the same way: that skin's hole is the countersink's
   rim, the flat's the hole under it (a plate countersunk from both sides has one whichever side unfolds).
   `cad.build123d.unfold(shape, thickness=, k_factor=, material=, bend_lines=False)` returns it
@@ -952,7 +961,8 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   plate), and raises `ValueError`
   for a part with a corner modelled without a bend or a flat that does not hold all of its material. Holes, notches, tabs, webs, gaps, flange lengths, reliefs and every distance are measured on
   the flat pattern in the plane (`cad._internal.sheet_plane`, numpy), each place mapped back onto the
-  part for its ref. At K = 0.5 the flat area equals volume / t exactly (`neutral_area_ratio`); the flat's area
+  part for its ref. Its curves are sampled within `CHORD_MM` of them, an arc's and an ellipse's or a
+  spline's alike (at most 720 points; 48 to a curve left an 80 x 40 ellipse 79.957 long). At K = 0.5 the flat area equals volume / t exactly (`neutral_area_ratio`); the flat's area
   with each strip widened to K = 0.5, over volume / t, is `flat_material_fraction`: 1 where the flat holds
   all of the part's material. The volume is the sheet's as cut and bent: the part's, and what its
   countersinks and edge breaks cut from it afterwards (under each one's face, up to the skin it faces, or
@@ -1356,7 +1366,7 @@ half of a 107-part check's 1.9 GB.
 technology: `--technology fdm|sls|sla|mjf|pbf` (default `fdm`; `pbf` is metal powder bed fusion, DMLS/SLM).
 Options: `--build-volume XxYxZ` (mm, the printer's; default a typical machine of the technology's, assumed), `--angle-limit` (deg from
 horizontal; default the technology's: FDM 45, SLA 19, metal 45, SLS/MJF 0), `--layer-height` (mm; default FDM 0.2,
-SLA 0.1, SLS 0.1, MJF 0.08, metal 0.03), `--nozzle` (FDM's only), `--samples` (rays, default 2000), `--material`,
+SLA 0.1, SLS 0.1, MJF 0.08, metal 0.03), `--nozzle` and `--printer` (FDM's only), `--samples` (rays, default 2000), `--material`,
 `--candidates`. A material of the other class from the technology's is refused, the command line's mistake (exit 2):
 metal powder bed fusion (`pbf`) prints a metal, the others a plastic (`--material aluminum` with `fdm`, `pla` with
 `pbf`), as molding refuses a metal.
@@ -1425,7 +1435,18 @@ The rules take, per figure and technology, one published design guide's row: Hub
 Protolabs's, else Xometry's (and apply Hubs's SLS escape-hole figure to the other powder beds: every verdict of it
 says "Hubs's SLS figure, applied"), each cited as the evidence for general practice, not as a printer's or a
 shop's limit; the table holds no row that cannot apply (`_general.add` refuses a second source for a figure).
-The build volume is the printer's given (`--build-volume`), else a typical machine of the technology's (Hubs's: a
+`--printer FILE` names the printer's settings: a 3MF a slicer saved (OrcaSlicer, Bambu Studio: its
+`Metadata/project_settings.config`) or a JSON of a complete machine preset (or those project settings). `options`
+reads it once, in the calling process (the path made absolute against the caller's working directory, also where
+the options go on to the engine unresolved), and `resolved` carries plain values: `printable_area`'s bounding box by
+`printable_height` as `build_volume`, the first `nozzle_diameter` as `nozzle` -- each only where its own option is
+not given -- and `printer` as `{name, file, supplied}`, the name `printer_settings_id`, else `name`, else the file's.
+The volume is then the printer's own, judged as `--build-volume` is (`volume_origin` names the printer and the
+file), the nozzle a nozzle given. A file that is no such 3MF or JSON, or has no bed or height, is refused naming
+the file; a preset with `inherits` and no bed holds only its differences, and the refusal says to give a 3MF the
+slicer saved. A technology other than `fdm` refuses it.
+The build volume is the printer's given (`--build-volume` or `--printer`), else a typical machine of the
+technology's (Hubs's: a
 desktop printer for FDM and SLA, `BUILD_VOLUMES`), assumed and said -- and, with none given, the largest machine
 the same page lists (`LARGEST_VOLUMES`): a part that fits it lying no way (`build_volume`) is made by no machine
 of the technology, an error. The `selector` is `technology`: a rule id with no figure for the

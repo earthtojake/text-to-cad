@@ -193,7 +193,7 @@ jobs:
 
   # ---- unit and platform: the packages' suites ---------------------------------------------------
 
-  # The library's, the server's (the engine's and the CAD Viewer backend's included) and the
+  # The library's, the server's (the engine's and the viewer backend's included) and the
   # shim's suites, or the test files of them a change itself edits. Run whole they are split
   # over shards, each taking its share of every suite (CAD_TEST_SHARD); a narrowed selection is
   # one shard. The first shard also checks the types,
@@ -337,35 +337,50 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Set up Python
+        id: python
         timeout-minutes: 5
         uses: actions/setup-python@v7
         with:
           python-version: "3.14"
 
+      - name: Set up uv
+        timeout-minutes: 5
+        uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      # The workspace's members and none of its groups: the library alone, from the lock.
       - name: Install the library alone
         timeout-minutes: 5
-        run: python -m pip install --editable ./packages/cad
+        env:
+          PYTHON_PATH: ${{ steps.python.outputs.python-path }}
+        run: uv sync --locked --no-default-groups --python "$PYTHON_PATH"
 
       - name: Run the router's unit files
-        env:
-          PYTHON_BIN: python
         run: scripts/test/test-routing.sh
 
   # ---- release tier: a full run, or a change to the thing itself ---------------------------------
 
   # The library's, the server's and the shim's suites on Python 3.11, the packages' floor
-  # (test-floor.sh), in an environment made here with requirements-dev.txt: a call the floor's
+  # (test-floor.sh), in the development environment made on it from uv.lock: a call the floor's
   # standard library lacks parses there and fails only when it runs (one reached the server
   # once: argparse's suggest_on_error), so only the suites hold the floor. A third run of
   # suites the packages jobs already run on the Python the server's installations use, for a
   # rare kind of break: so it runs before a release ships (a VERSION change), nightly and on a
-  # manual run, not on every push. Whole, unsharded: the last run measured took 15.7 minutes.
+  # manual run, not on every push. Always whole, so split over two shards, each taking its share
+  # of every suite (CAD_TEST_SHARD) as the Linux packages jobs do: unsharded it took 11.5 to 16.7
+  # minutes, the longest job of a full run once the update rehearsal was split.
   packages-floor:
-    name: packages (Python 3.11 floor)
+    name: packages (Python 3.11 floor ${{ matrix.shard }})
     needs: changes
     if: needs.changes.outputs.floor == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/2, 2/2]
     env:
       CAD_TEST_FILE_BUDGET: "120"
 
@@ -379,19 +394,16 @@ jobs:
         timeout-minutes: 10
         uses: ./.github/actions/setup-deps
         with:
+          # The packages' floor: the environment is made on it, from the same lock.
+          python-version: "3.11"
           playwright: "false"
           npm: none
           apt: xvfb libgl1-mesa-dri fonts-dejavu-core
 
-      - name: Make an environment on Python 3.11, the packages' floor
-        timeout-minutes: 10
-        run: |
-          uv venv --python 3.11 "$RUNNER_TEMP/floor"
-          uv pip install --python "$RUNNER_TEMP/floor/bin/python" -r requirements-dev.txt
-
       - name: Run the library's, the server's and the shim's suites on the floor
         env:
-          PYTHON_BIN: ${{ runner.temp }}/floor/bin/python
+          PYTHON_BIN: python
+          CAD_TEST_SHARD: ${{ matrix.shard }}
         run: xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-floor.sh
 
   # The installer rehearsals: install.sh and install.ps1 on a fresh machine, the way a person
@@ -414,8 +426,8 @@ jobs:
       ref: ${{ inputs.ref }}
 
   # The install command against the real programs of Claude Code, Codex and Gemini CLI, on Windows, macOS and Linux,
-  # each on a private computer: install (cad a uv tool, its server, a model, the viewer, the doctor), again (cad left
-  # alone, the plugin updated), and from 0.11.10's installer's state (real-install.yml, scripts/test/real-install.py). Measured on macOS
+  # each on a private computer: install (cad a uv tool, its server, a model, the viewer, the doctor), again (cad
+  # installed already, the plugin updated), and from 0.11.10's installer's state (real-install.yml, scripts/test/real-install.py). Measured on macOS
   # with a warm uv cache: 94 s; on a runner, cad's first download and its kernel's (about 240 MB) add a few minutes,
   # Windows the slowest. With the rehearsals: a full run, nightly, and a change to the installers.
   real-install:
@@ -443,17 +455,20 @@ jobs:
   # a past release deleted) and that no file of the runner's own home moved. Measured on macOS with uv's cache warm:
   # `self` about 2 minutes, `bridge` about 8; a fresh runner adds 0.11.11's first setup, which downloads its kernel.
   # Before a release ships (a full run), nightly, and on a change to the installers, the rehearsal or the code of this
-  # build it runs.
+  # build it runs. Two shards a system, each on a runner of its own (the routes take the true default port, one at a
+  # time): 1/2 cad updating itself and the oldest releases' bridges, 2/2 the bridge from 0.11.11 and 0.10.4's. Whole,
+  # Windows took 21 to 26 minutes, most of it the shipped releases' own clocks; a shard about 12 to 14.
   update-rehearsal:
-    name: update rehearsal (${{ matrix.os }})
+    name: update rehearsal (${{ matrix.os }} ${{ matrix.shard }})
     needs: changes
     if: needs.changes.outputs.installer == 'true'
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        shard: [1/2, 2/2]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 75
+    timeout-minutes: 40
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -473,24 +488,33 @@ jobs:
       # The rehearsal builds this tree's wheels from the source with the standard library alone
       # (tests/python/support/machine.py): nothing of cad is installed here.
       - name: cad updating itself (idle, typed, typed with no server, at a start, switched off, past a broken server, back from an uninstallable release, inside its major, by pipx)
+        if: matrix.shard == '1/2'
         timeout-minutes: 20
         run: python scripts/test/rehearse-update.py self --uv-cache "${{ runner.temp }}/uv"
 
       - name: From 0.11.11 (button, automatic, a failed install command, store-only, gone back from, the install command, typed, the uv line)
+        if: matrix.shard == '2/2'
         timeout-minutes: 35
         run: python scripts/test/rehearse-update.py bridge --uv-cache "${{ runner.temp }}/uv"
 
+      - name: From 0.11.13, whose own `cad plugin update` runs the install command
+        if: matrix.shard == '1/2'
+        timeout-minutes: 15
+        run: python scripts/test/rehearse-update.py plugin-update --uv-cache "${{ runner.temp }}/uv"
+
       - name: From 0.11.0, the first with an automatic update, by itself
+        if: matrix.shard == '1/2'
         timeout-minutes: 15
         run: python scripts/test/rehearse-update.py automatic --old 0.11.0 --uv-cache "${{ runner.temp }}/uv"
 
       - name: From 0.10.4, the newest 0.10, by its button
+        if: matrix.shard == '2/2'
         timeout-minutes: 15
         run: python scripts/test/rehearse-update.py updater --old 0.10.4 --uv-cache "${{ runner.temp }}/uv"
 
       # 0.10.0 on Windows keeps its state apart from every later release's: this build's setup takes the computer over.
       - name: From 0.10.0 on Windows, by its button
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && matrix.shard == '1/2'
         timeout-minutes: 15
         run: python scripts/test/rehearse-update.py updater --old 0.10.0 --uv-cache "${{ runner.temp }}/uv"
 
@@ -526,15 +550,14 @@ jobs:
           # A solve draws a picture of each field with the engine's stills.
           apt: xvfb libgl1-mesa-dri fonts-dejavu-core
 
-      # The netgen and calculix integrations' extras, with netgen pinned to the version the accuracy tests'
-      # margins were measured with (the round rod's top-fibre stress is +8.6% against 10%); the extra keeps the
+      # The netgen and calculix integrations' extras, the lock's `fea` group (the root pyproject.toml), with
+      # netgen pinned to the version the accuracy tests' margins were measured with; the extra keeps the
       # floor. The calculix extra pins cad-ccx (conda-forge's CalculiX, repackaged: earthtojake/ccx), the wheel
       # PyPI has for this runner. A ccx that does not run fails here by name rather than as every solve failing.
       - name: Install the netgen and calculix integrations
         timeout-minutes: 5
         run: |
-          uv pip install --system --python python --editable "./packages/cad[build123d,trimesh,netgen,calculix]" \
-            "netgen-mesher==6.2.2608"
+          uv sync --locked --inexact --group fea
           python -c "import cad_ccx; print(cad_ccx.executable(), cad_ccx.version())"
 
       - name: Run the fea suite
@@ -714,7 +737,7 @@ jobs:
           UI_BROWSER_TEST_CONCURRENCY: "1"
         run: scripts/test/test-js.sh --select ui-${{ matrix.part }}
 
-  # The CAD Viewer's client: Node only. The bundled viewer, served through the real backend,
+  # The viewer's client: Node only. The bundled viewer, served through the real backend,
   # is driven in `viewer-e2e`.
   js-web:
     name: js-web
@@ -737,7 +760,7 @@ jobs:
           playwright: "false"
           npm: packages/core packages/ui apps/web
 
-      - name: Run the CAD Viewer client tests
+      - name: Run the viewer client tests
         run: scripts/test/test-js.sh --select web
 
   # The CAD app an agent host renders: its host adapter's units in jsdom, and the one-file
@@ -831,9 +854,7 @@ jobs:
         env:
           CAD_KEEP_WHEEL: "1"
           CAD_WHEEL_OUT_DIR: ${{ runner.temp }}/cadgen-wheel-check
-        run: |
-          python -m pip install build
-          scripts/release/check-wheel-contents.sh
+        run: scripts/release/check-wheel-contents.sh
 
       # The CLIs the way a user gets them -- the three wheels pip-installed together, from a
       # directory that is not this repo -- which is the only place a missing package-data glob or
@@ -869,7 +890,7 @@ jobs:
       - name: Bundle production outputs from clean
         run: scripts/bundle/bundle.sh --clean
 
-      - name: Launch the bundled CAD Viewer through the backend
+      - name: Launch the bundled viewer through the backend
         run: scripts/test/test-viewer-launch.sh
 
       - name: Exercise the bundled viewer in Chromium

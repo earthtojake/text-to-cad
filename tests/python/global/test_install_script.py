@@ -1,29 +1,37 @@
 """The install script: scripts/install/install.py, and the two thin scripts that run it.
 
-Each test runs install.py in a fresh temporary home (HOME, XDG_*, APPDATA) with stand-in programs on PATH --
-the agent apps' CLIs, uv, npx, git -- that record how they were called and change nothing else (git clone writes a
-small copy of the plugin; gemini's uninstall removes its extension's folder; uv's tool install records the tool in
-a file of the test's and writes a stand-in `cad` in the home's ~/.local/bin). No real app, network, uv or cad runs:
-PATH holds only the stand-ins, install.py is told not to search Homebrew's or npm's folders or app bundles
-(CAD_INSTALL_PATH_ONLY), and every proxy is a closed port.
+Each test runs install.py in a fresh temporary home with stand-in programs on PATH (``tests/python/support/agent_apps.py``:
+uv, pipx, curl, a ``cad``), which record how they were called and change nothing else. No real app, network, uv or cad
+runs: every proxy is a closed port, and a failure's report goes to a stand-in receiver on loopback (``Receiver``).
+What the plugin's step does in each agent app, and the terminal's logo and live line, are tested where cad's own table
+of apps is (``tests/python/packages/cad_server/plugin``): here that step is the stand-in ``cad``.
+
+``run_install`` runs the checkout's own file, which reports nothing (a development run); ``run_hosted`` a copy alone
+in a folder, as the hosted one is run.
 """
 
 from __future__ import annotations
 
 import contextlib
+import http.server
 import importlib.util
 import io
 import json
 import os
 from pathlib import Path
+import platform
+import re
+import shutil
 import subprocess
 import sys
-import tempfile
-import textwrap
+import threading
+import time
 import unittest
 from unittest import mock
+import uuid
 import zipfile
 
+from tests.python.support.agent_apps import LATEST, STAND_IN, AgentApps
 from tests.python.support.paths import REPO_ROOT
 
 INSTALL = REPO_ROOT / "scripts" / "install"
@@ -32,106 +40,49 @@ install = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = install
 spec.loader.exec_module(install)
 
-LATEST = "a" * 40  # the commit of `latest`, as the stand-in git names it
-OURS = "---\nname: {name}\ndescription: x\nmetadata:\n  repository: earthtojake/text-to-cad\n---\n"
-# A skill of 0.5.0-0.8.4: no metadata, our provenance line in its body.
-OURS_OLD = "---\nname: {name}\ndescription: x\nlicense: MIT\n---\n\n# X\n\n" + install.PROVENANCE_LINE + "\n"
-THEIRS = "---\nname: {name}\ndescription: someone else's\n---\n"
+# The newest release's `cad plugin install`, run outside any installed tool: the words after `uv`.
+NEWEST = ["tool", "run", "--no-config", "--managed-python", "--python", "3.14", "cad@latest", "plugin", "install"]
+HANDED = ["plugin", "install"]
+# Asked first, its answer captured, whether the installed cad has that command: it runs nothing.
+ASKED = ["plugin", "install", "--help"]
+# The switch, turned on last by the installed cad's own command wherever a cad is installed.
+AUTO_ON = ["plugin", "update", "auto", "on"]
+# What a failure's report names this machine: as cad's own counts do.
+PLATFORM = sys.platform if sys.platform in ("darwin", "win32") else "linux" if sys.platform.startswith("linux") else "other"
+ARCH = re.sub(r"[^A-Za-z0-9_.+:-]+", "-", platform.machine().lower())[:16]
+FIELDS = ["schema", "run", "at", "stage", "outcome", "code", "platform", "arch", "by", "uv"]
 
-# A stand-in: records {name, argv} as a JSON line; fails (exit FAKE_EXIT, default 1) where FAKE_FAIL names it
-# (`name`, or `name:word` for a call whose arguments hold that word); `git clone` writes a small plugin folder with our
-# skills, `git ls-remote` names the commit LATEST, `git status` prints FAKE_GIT_STATUS (a clean clone of `latest` by
-# default); `uv --version` says the version in a file `uv-version` beside it, else FAKE_UV_VERSION; `curl -o <file>` writes
-# FAKE_UV_INSTALLER there (a stand-in of uv's own installer); uv's tools are FAKE_UV_STATE's ({name: version}), their commands in
-# FAKE_UV_BIN: `uv tool list` lists them, `uv tool install` records one (`cad`, unversioned: FAKE_PYPI; at
-# FAKE_NO_COMMAND, a release with no command, it fails and takes the tool away, as uv does) and writes its command, a
-# stand-in (its receipt names an `editable` requirement where it was one); `pipx environment --value` says
-# FAKE_PIPX_VENVS (PIPX_LOCAL_VENVS) and FAKE_PIPX_BIN (PIPX_BIN_DIR), or fails as pipx 1.0 does (FAKE_PIPX_1_0), whose
-# `pipx list --json` names cad's command in FAKE_PIPX_VENVS, and `pipx install --force cad` sets the release in pipx's
-# metadata of cad (FAKE_PYPI); `gemini extensions uninstall
-# <name>` removes that extension's folder, and, with FAKE_GEMINI_RECORD, `gemini extensions install <url> --ref <ref>`
-# writes its record. Each call notes its folder and Gemini's trust.
-STAND_IN = textwrap.dedent('''\
-    #!{python}
-    import json, os, shutil, sys
-    from pathlib import Path
-    name = Path(sys.argv[0]).name
-    with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as log:
-        log.write(json.dumps({{"name": name, "argv": sys.argv[1:], "cwd": os.getcwd(), "path": sys.argv[0],
-                               "trust": os.environ.get("GEMINI_CLI_TRUST_WORKSPACE"),
-                               "failed": os.environ.get("CAD_INSTALL_FAILED")}}) + "\\n")
-    if any(fail == name or (fail.partition(":")[0] == name and fail.partition(":")[2] in sys.argv[1:])
-           for fail in os.environ.get("FAKE_FAIL", "").split(",")):
-        print(f"{{name}}: something went wrong")
-        sys.exit(int(os.environ.get("FAKE_EXIT", "1")))
-    if name == "git" and "ls-remote" in sys.argv:
-        print("{latest}\\trefs/heads/latest")
-    if name == "git" and "status" in sys.argv:
-        print(os.environ.get("FAKE_GIT_STATUS", "## latest...origin/latest"))
-    if name == "uv" and sys.argv[1:] == ["--version"]:
-        told = Path(sys.argv[0]).with_name("uv-version")
-        print("uv " + (told.read_text().strip() if told.exists() else os.environ.get("FAKE_UV_VERSION", "0.11.0")) + " (stand-in)")
-    if name == "curl" and "-o" in sys.argv:
-        Path(sys.argv[sys.argv.index("-o") + 1]).write_text(os.environ.get("FAKE_UV_INSTALLER", "exit 1\\n"))
-    if name == "uv" and sys.argv[1:3] in (["tool", "dir"], ["tool", "list"], ["tool", "install"], ["tool", "uninstall"]):
-        state, tools_dir = Path(os.environ["FAKE_UV_STATE"]), Path(os.environ["FAKE_UV_STATE"]).with_suffix(".tools")
-        tools = json.loads(state.read_text()) if state.exists() else {{}}
-        command = Path(os.environ["FAKE_UV_BIN"]) / "cad"
-        if sys.argv[2] == "dir":
-            print(command.parent if "--bin" in sys.argv else tools_dir)
-        elif sys.argv[2] == "list":
-            for tool, version in tools.items():
-                print(f"{{tool}} v{{version}} ({{tools_dir / tool}})")
-                print(f"- cad ({{command}})")
-            print("" if tools else "No tools installed")
-        elif sys.argv[2] == "uninstall":
-            tools.pop(sys.argv[-1], None)
-            command.unlink()
-        elif sys.argv[-1].partition("==")[2] == os.environ.get("FAKE_NO_COMMAND"):  # as uv: the whole tool goes
-            print("No executables are provided by package `cad`; removing tool")
-            tools.pop("cad", None)
-            command.unlink(missing_ok=True)
-            state.write_text(json.dumps(tools))
-            sys.exit(2)
-        else:
-            tools["cad"] = sys.argv[-1].partition("==")[2] or os.environ.get("FAKE_PYPI", "0.13.0")
-            command.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(sys.argv[0], command)
-            (tools_dir / "cad").mkdir(parents=True, exist_ok=True)
-            (tools_dir / "cad" / "uv-receipt.toml").write_text("editable = 1" if "--editable" in sys.argv else "")
-        state.write_text(json.dumps(tools))
-    if name == "cad" and sys.argv[1:] == ["--version"]:
-        print("cad (stand-in)")
-    if name == "pipx" and sys.argv[1] == "environment" and os.environ.get("FAKE_PIPX_1_0"):
-        print("pipx: error: argument command: invalid choice: 'environment'")
-        sys.exit(2)
-    if name == "pipx" and sys.argv[1:3] == ["environment", "--value"]:
-        print(os.environ[{{"PIPX_LOCAL_VENVS": "FAKE_PIPX_VENVS", "PIPX_BIN_DIR": "FAKE_PIPX_BIN"}}[sys.argv[3]]])
-    if name == "pipx" and sys.argv[1:3] == ["install", "--force"]:
-        metadata = Path(os.environ["FAKE_PIPX_VENVS"]) / "cad" / "pipx_metadata.json"
-        found = json.loads(metadata.read_text())
-        found["main_package"]["package_version"] = os.environ.get("FAKE_PYPI", "0.13.0")
-        metadata.write_text(json.dumps(found))
-    if name == "pipx" and sys.argv[1:] == ["list", "--json"]:
-        own = str(Path(os.environ["FAKE_PIPX_VENVS"]) / "cad" / "bin" / "cad")
-        print("nothing to see here")
-        print(json.dumps({{"venvs": {{"cad": {{"metadata": {{"main_package": {{"app_paths": [{{"__Path__": own}}]}}}}}}}}}}))
-    if name == "gemini" and "uninstall" in sys.argv:
-        shutil.rmtree(Path(os.environ["HOME"]) / ".gemini" / "extensions" / sys.argv[-1], ignore_errors=True)
-    if name == "gemini" and sys.argv[1:3] == ["extensions", "install"] and os.environ.get("FAKE_GEMINI_RECORD"):
-        record = Path(os.environ["HOME"]) / ".gemini" / "extensions" / "text-to-cad" / ".gemini-extension-install.json"
-        record.parent.mkdir(parents=True, exist_ok=True)
-        ref = sys.argv[sys.argv.index("--ref") + 1]
-        record.write_text(json.dumps({{"source": sys.argv[3], "type": "git", "ref": ref}}))
-    if name == "git" and "clone" in sys.argv:
-        target = Path(sys.argv[-1])
-        (target / ".git").mkdir(parents=True)
-        (target / ".git" / "config").write_text('[remote "origin"]\\n\\turl = ' + sys.argv[-2] + "\\n")
-        for skill in ("cad", "pcb"):
-            (target / "skills" / skill).mkdir(parents=True)
-            (target / "skills" / skill / "SKILL.md").write_text(
-                f"---\\nname: {{skill}}\\nmetadata:\\n  repository: earthtojake/text-to-cad\\n---\\nnew\\n")
-''')
+
+# A cad of 0.11.13, as far as this command reaches it (v0.11.13's `cad_server/cli/plugin.py`): no `cad plugin install`
+# (argparse's usage error, exit 2, nothing run); `cad plugin update`, which downloads and runs the hosted install command
+# -- here this checkout's, once, with what 0.11.13 sets, so a loop would show as a second run of it --; and `cad plugin
+# update auto on`, the switch, which keeps a setting and runs nothing. Each call is noted in the stand-ins' log, with the
+# variables it was given that the run's edges turn on.
+OLD_CAD = """#!{python}
+import json, os, subprocess, sys
+WATCHED = ("CAD_INSTALL_ATTEMPT", "CAD_PLUGIN_SERVER_RUN", "CAD_INSTALL_FAILED", "CAD_INSTALL_BY_CAD", "CAD_PLUGIN_BY",
+           "OLD_CAD_DEPTH")
+with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as log:
+    log.write(json.dumps({{"name": "cad", "argv": sys.argv[1:], "path": sys.argv[0],
+                           "env": {{name: os.environ.get(name) for name in WATCHED}}}}) + "\\n")
+argv = sys.argv[1:]
+if argv == ["--version"]:
+    print("cad 0.11.13")
+elif argv == ["update"]:
+    print("cad 0.11.13 is the newest release of its major version")
+elif argv == ["plugin", "update", "auto", "on"]:
+    print("plugin update auto: on")
+elif argv == ["plugin", "update"]:
+    if os.environ.get("OLD_CAD_DEPTH"):
+        sys.exit(99)  # never reached but by a loop
+    sys.exit(subprocess.call([sys.executable, {script!r}], stdin=subprocess.DEVNULL,
+                             env={{**os.environ, "OLD_CAD_DEPTH": "1", "CAD_INSTALL_BY_CAD": "1"}}))
+else:
+    print("usage: cad plugin [-h] {{update}} ...", file=sys.stderr)
+    print("cad plugin: error: argument command: invalid choice: " + repr(argv[1] if len(argv) > 1 else "")
+          + " (choose from 'update')", file=sys.stderr)
+    sys.exit(2)
+"""
 
 
 def exe(path: Path, main: str) -> Path:
@@ -144,62 +95,73 @@ def exe(path: Path, main: str) -> Path:
     return path
 
 
+class Receiver:
+    """A stand-in for the service a failure's report goes to, on loopback: it keeps each POST (its path, its headers
+    by lower-case name, its body) and answers 204, as the service does."""
+
+    def __init__(self) -> None:
+        posts = self.posts = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802 - http.server's name
+                body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                posts.append((self.path, {key.lower(): value for key, value in self.headers.items()}, body))
+                self.send_response(204)
+                self.end_headers()
+
+            def log_message(self, *_args) -> None:
+                pass
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        # A short poll: `shutdown` waits one out, at the end of every test.
+        threading.Thread(target=self.server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
+
+    @property
+    def url(self) -> str:
+        """The service's base, as ``CAD_API_URL`` names one."""
+        return f"http://127.0.0.1:{self.server.server_port}/v1"
+
+    def close(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+
+
 @unittest.skipIf(os.name == "nt", "the stand-ins are scripts run by their #! line")
-class InstallScriptTests(unittest.TestCase):
+class InstallScriptTests(AgentApps):
+    PROGRAMS = ("uv",)
+
     def setUp(self) -> None:
-        scratch = tempfile.TemporaryDirectory()
-        self.addCleanup(scratch.cleanup)
-        self.root = Path(scratch.name).resolve()
-        self.home = self.root / "home"
-        self.home.mkdir()
-        self.bin = self.root / "bin"
-        self.bin.mkdir()
-        self.log = self.root / "log.jsonl"
-        self.state = self.home / ".local" / "state" / "cad"
-        self.uv_bin = self.home / ".local" / "bin"
-        self.programs("uv", "git")
+        super().setUp()
+        self.receiver = Receiver()
+        self.addCleanup(self.receiver.close)
 
-    def programs(self, *names: str) -> None:
-        for name in names:
-            path = self.bin / name
-            path.write_text(STAND_IN.format(python=sys.executable, latest=LATEST), encoding="utf-8")
-            path.chmod(0o755)
-
-    def write(self, relative: str, value) -> Path:
-        path = self.home / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(value if isinstance(value, str) else json.dumps(value), encoding="utf-8")
-        return path
-
-    def environ(self, **extra: str) -> dict:
-        closed = "http://127.0.0.1:9"
-        return {"HOME": str(self.home), "PATH": str(self.bin), "FAKE_LOG": str(self.log),
-                "XDG_CONFIG_HOME": str(self.home / ".config"), "XDG_STATE_HOME": str(self.home / ".local" / "state"),
-                "APPDATA": str(self.home / "AppData" / "Roaming"), "CODEX_CLI": "codex", "CAD_INSTALL_PATH_ONLY": "1",
-                "https_proxy": closed, "http_proxy": closed, "HTTPS_PROXY": closed, "HTTP_PROXY": closed, "no_proxy": "",
-                "FAKE_UV_STATE": str(self.root / "uv.json"),
-                "FAKE_UV_BIN": str(self.uv_bin), **extra}
+    # --- running it ---------------------------------------------------------------------------------------------
 
     def run_install(self, *argv: str, **extra: str) -> subprocess.CompletedProcess:
-        if self.log.exists():
-            self.log.unlink()
+        self.forget_calls()
         return subprocess.run([sys.executable, str(INSTALL / "install.py"), *argv], env=self.environ(**extra),
                               capture_output=True, text=True, encoding="utf-8", timeout=120)
 
-    def calls(self, name: str = None) -> list:
-        lines = self.log.read_text(encoding="utf-8").splitlines() if self.log.exists() else []
-        found = [json.loads(line) for line in lines]
-        return [call["argv"] for call in found if name is None or call["name"] == name]
+    def reporting(self, **extra: str) -> dict:
+        """The computer's environment with the stand-in receiver in the service's place, reached past the closed
+        proxies."""
+        return self.environ(**{"CAD_API_URL": self.receiver.url, "no_proxy": "127.0.0.1", "NO_PROXY": "127.0.0.1",
+                               **extra})
 
-    def switched(self) -> list:
-        """What each ``cad plugin update auto on`` was told of how the run is ending (``CAD_INSTALL_FAILED``)."""
-        lines = self.log.read_text(encoding="utf-8").splitlines() if self.log.exists() else []
-        return [call["failed"] for call in map(json.loads, lines)
-                if call["name"] == "cad" and call["argv"] == ["plugin", "update", "auto", "on"]]
+    def run_hosted(self, **extra: str) -> subprocess.CompletedProcess:
+        """install.py as the hosted one is run: a copy alone in a folder, which may report a failure."""
+        hosted = self.root / "hosted" / "install.py"
+        hosted.parent.mkdir(exist_ok=True)
+        shutil.copy(INSTALL / "install.py", hosted)
+        self.forget_calls()
+        del self.receiver.posts[:]
+        return subprocess.run([sys.executable, str(hosted)], env=self.reporting(**extra), capture_output=True,
+                              text=True, encoding="utf-8", timeout=120)
 
-    def desktop(self) -> str:
-        """Claude Desktop's config, where install.py looks for it on this platform, relative to the home."""
-        return str(install.desktop_config(install.Here(self.environ())).relative_to(self.home))
+    def logged(self, name: str) -> list:
+        """Each call of the stand-in ``name``, as it noted it."""
+        lines = self.log.read_text(encoding="utf-8").splitlines() if self.log.exists() else []
+        return [call for call in map(json.loads, lines) if call["name"] == name]
 
     def tools(self, **versions: str) -> None:
         """uv's tools, as the stand-in uv keeps them, each with its command in ~/.local/bin."""
@@ -218,62 +180,57 @@ class InstallScriptTests(unittest.TestCase):
         """The `uv tool install` calls, each without its first two words."""
         return [argv[2:] for argv in self.calls("uv") if argv[:2] == ["tool", "install"]]
 
-    def claude_records(self, plugins: dict, catalogs: dict) -> None:
-        self.write(".claude/plugins/installed_plugins.json",
-                   {"version": 2, "plugins": {key: [{"scope": "user"}] for key in plugins}})
-        self.write(".claude/plugins/known_marketplaces.json", {name: {"source": source} for name, source in catalogs.items()})
+    def newest(self) -> list:
+        """The `uv tool run` calls: the newest release's commands."""
+        return [argv for argv in self.calls("uv") if argv[:2] == ["tool", "run"]]
 
-    def test_a_fresh_computer_gets_cad_and_the_plugin_in_every_app_found(self) -> None:
-        self.programs("claude", "codex", "gemini", "grok", "muse")
-        (self.home / ".cursor").mkdir()
-        (self.home / ".cline").mkdir()
-        # Muse has no copy yet: its update fails, and it installs from the `latest` branch fetched once.
-        done = self.run_install(FAKE_FAIL="muse:update")
+    def report(self, stage: str, code: int, by: str = "person", uv: str = "0.11.0", **crash) -> dict:
+        """The one report the receiver took, checked whole: its address, its headers, and its body, which is exactly
+        the fields the service reads. The body."""
+        self.assertEqual(len(self.receiver.posts), 1, self.receiver.posts)
+        path, headers, raw = self.receiver.posts[0]
+        self.assertEqual((path, headers["content-type"]), ("/v1/install", "application/json"))
+        self.assertNotIn("origin", headers)
+        self.assertLess(len(raw), 4096)
+        body = json.loads(raw)
+        self.assertEqual(list(body), FIELDS + list(crash))
+        self.assertEqual(str(uuid.UUID(body["run"])), body["run"])
+        self.assertIs(type(body["at"]), int)
+        self.assertLess(abs(time.time() - body["at"]), 600)
+        self.assertEqual({key: value for key, value in body.items() if key not in ("run", "at")},
+                         {"schema": 1, "stage": stage, "outcome": "crashed" if crash else "failed", "code": code,
+                          "platform": PLATFORM, "arch": ARCH, "by": by, "uv": uv, **crash})
+        return body
+
+    # --- the cad step -------------------------------------------------------------------------------------------
+
+    def test_a_fresh_computer_gets_cad_and_cad_is_handed_the_plugin(self) -> None:
+        mark = self.root / "started"
+        done = self.run_install(FAKE_LOG_ENV="CAD_PLUGIN_BY,CAD_PLUGIN_REPORT,CAD_INSTALL_MARK",
+                                FAKE_PLUGIN_APPS=json.dumps({"claude": "installed"}), CAD_INSTALL_MARK=str(mark))
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        # cad: PyPI's newest, as a uv tool; then the plugin's automatic updates turned on, by that cad.
+        # cad: PyPI's newest, as a uv tool; then that tool's own `cad plugin install` and its switch, and nothing else
+        # of cad: a cad installed just now is not updated, and the script runs no setup.
         self.assertEqual(self.installs(), [["--managed-python", "--python", "3.14", "cad"]])
         self.assertIn("Installing cad with uv.", done.stdout)
-        self.assertEqual(self.calls("cad"), [["plugin", "update", "auto", "on"]])
-        self.assertEqual(self.switched(), [""], "told the run is ending well: cad keeps this release")
-        self.assertEqual(self.calls("claude"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"],
-                                                ["plugin", "install", "text-to-cad@earthtojake"]])
-        self.assertEqual(self.calls("codex"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad", "--ref", "latest"],
-                                               ["plugin", "add", "text-to-cad@earthtojake"]])
-        self.assertEqual(self.calls("gemini"), [["extensions", "install", install.URL, "--ref", "latest", "--consent"]])
-        # Cursor and Grok Build load Claude Code's plugin: none of their own.
-        self.assertEqual(self.calls("grok"), [])
-        self.assertFalse((self.home / ".cursor/plugins/local/text-to-cad").exists())
-        # An agent with no plugin command gets the skills in its own folder, from `latest`.
-        self.assertIn("new", (self.home / ".cline/skills/cad/SKILL.md").read_text(encoding="utf-8"))
-        self.assertEqual(self.calls("git")[0][:6], ["clone", "--quiet", "--depth", "1", "--branch", "latest"])
-        self.assertEqual(len(self.calls("git")), 1)
-        fetched = self.calls("git")[0][-1]
-        self.assertEqual(self.calls("muse"), [["plugins", "update", "text-to-cad"], ["plugins", "install", fetched],
-                                              ["plugins", "approve", "text-to-cad"]])
-        for line in ("Claude Code: installed", "Codex: installed", "Gemini CLI: installed",
-                     "Grok Build: skipped: it loads Claude Code's plugin", "Cursor: skipped: it loads Claude Code's plugin",
-                     "Cline: installed: 2 skills in ~/.cline/skills", "Muse: installed",
-                     "other supported apps were not found here.", "Start a new session in each app to use it."):
-            self.assertIn(line, done.stdout)
-        self.assertNotIn("removed", done.stdout)
-
-    def test_with_no_cad_the_newest_is_installed_and_a_cad_there_is_left_alone_whatever_its_release(self) -> None:
-        done = self.run_install()
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual(self.installs(), [["--managed-python", "--python", "3.14", "cad"]])
         self.assertEqual(json.loads((self.root / "uv.json").read_text(encoding="utf-8")), {"cad": "0.13.0"})
-        # Nothing found, nothing installed: no word of a new session.
-        self.assertNotIn("Start a new session", done.stdout)
-        # A cad tool here that starts, older or newer than PyPI's newest: left as it is (cad updates itself), and its
-        # plugin switch turned on all the same.
-        for there in ("0.13.0", "0.1.0", "99.0.0"):
-            self.tools(cad=there)
-            done = self.run_install(FAKE_PYPI="5.0.0")
-            self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-            self.assertEqual(self.installs(), [], there)
-            self.assertIn(f"cad {there} is installed already: it is left as it is, and updates itself.", done.stdout)
-            self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "update", "auto", "on"]])
-            self.assertEqual(json.loads((self.root / "uv.json").read_text(encoding="utf-8")), {"cad": there})
+        asked, handed, switched = self.logged("cad")
+        # Asked first, quietly, whether it has `cad plugin install`; then that command, for real.
+        self.assertEqual((asked["argv"], asked["path"]), (ASKED, str(self.uv_bin / "cad")))
+        self.assertEqual((handed["argv"], handed["path"]), (HANDED, str(self.uv_bin / "cad")))
+        self.assertNotIn("usage: cad plugin install", done.stdout + done.stderr)
+        # Then, last, that tool's own `cad plugin update auto on`: the person ran this, and the plugin follows cad.
+        self.assertEqual((switched["argv"], switched["path"]), (AUTO_ON, str(self.uv_bin / "cad")))
+        self.assertEqual(self.newest(), [])
+        # cad is told the script began the run, and where to say what it did: a scratch file, gone with the run.
+        self.assertEqual(handed["env"]["CAD_PLUGIN_BY"], "script")
+        self.assertFalse(Path(handed["env"]["CAD_PLUGIN_REPORT"]).parent.exists())
+        # Its output is this run's own: what cad draws on a person's terminal reaches it.
+        self.assertIn("cad (stand-in): the plugin, on stdout\n", done.stdout)
+        self.assertIn("cad (stand-in): the plugin, on stderr\n", done.stderr)
+        # The shell that ran it finds the file it left as it started; the variable goes no further.
+        self.assertTrue(mark.is_file())
+        self.assertIsNone(handed["env"]["CAD_INSTALL_MARK"])
 
     def test_a_cad_that_does_not_start_is_installed_again(self) -> None:
         # Windows can leave a tool half-replaced: running the install command again is how it is repaired.
@@ -285,9 +242,13 @@ class InstallScriptTests(unittest.TestCase):
         self.assertNotIn("Installing cad with uv.", done.stdout)
         self.assertEqual(self.installs(), [["--reinstall", *install.UV_TOOL_ARGS, "cad"]])
         self.assertEqual(json.loads((self.root / "uv.json").read_text(encoding="utf-8")), {"cad": "5.0.0"})
-        self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "update", "auto", "on"]])
+        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
         found = json.loads(report.read_text(encoding="utf-8"))
         self.assertEqual((found["release"], found["setup"]), ("5.0.0", 0))
+        # A person's run: installed again just now, so there is nothing to bring up to date.
+        self.tools(cad="1.0.0")
+        done = self.run_install(FAKE_PYPI="5.0.0", FAKE_FAIL="cad:--version")
+        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
         # The reinstall fails too: the run fails, and says which cad the computer still has.
         self.tools(cad="1.0.0")
         done = self.run_install(FAKE_FAIL="cad:--version,uv:install", CAD_INSTALL_REPORT=str(report))
@@ -312,7 +273,7 @@ class InstallScriptTests(unittest.TestCase):
             (self.uv_bin / "cad").symlink_to(own)
         return {"FAKE_PIPX_VENVS": str(venvs), "FAKE_PIPX_BIN": str(self.uv_bin)}
 
-    def test_a_cad_pipx_installed_is_left_alone_as_uv_s_is_and_uv_installs_no_second(self) -> None:
+    def test_a_cad_pipx_installed_is_a_global_cad_as_uv_s_is_and_uv_installs_no_second(self) -> None:
         said = self.pipx_cad()
         self.programs("pipx")
         report = self.root / "report.json"
@@ -323,14 +284,20 @@ class InstallScriptTests(unittest.TestCase):
         self.assertNotIn("another program's", done.stdout)
         self.assertEqual(self.calls("pipx"), [["environment", "--value", "PIPX_LOCAL_VENVS"],
                                               ["environment", "--value", "PIPX_BIN_DIR"]])
-        self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "update", "auto", "on"]])
+        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
         self.assertEqual({key: json.loads(report.read_text(encoding="utf-8"))[key] for key in ("release", "setup")},
                          {"release": "0.13.0", "setup": 0})
+        # A person's run brings it up to date by pipx's own cad, and reads pipx's record of it again.
+        done = self.run_install(FAKE_CAD_UPDATES="0.14.0", FAKE_UPDATE_EXIT="1", **said)
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
+        self.assertNotIn("cad was not updated", done.stdout)
+        self.assertEqual(self.installs(), [])
         # pipx 1.0, which has no `pipx environment`, and no link in ~/.local/bin: its list says where its cad is.
         (self.uv_bin / "cad").unlink()
         done = self.run_install(FAKE_PIPX_1_0="1", **said)
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertIn("cad 0.13.0 is installed already: it is left as it is, and updates itself.", done.stdout)
+        self.assertIn("Updating cad 0.14.0 to the newest release...\ncad 0.14.0 is the newest release\n", done.stdout)
         self.assertEqual((self.installs(), self.calls("pipx")[-1]), ([], ["list", "--json"]))
         # pipx not found: its link in ~/.local/bin says whose cad it is.
         (self.uv_bin / "cad").symlink_to(self.home / ".local" / "share" / "pipx" / "venvs" / "cad" / "bin" / "cad")
@@ -338,19 +305,18 @@ class InstallScriptTests(unittest.TestCase):
         done = self.run_install(**said)
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertEqual((self.installs(), self.calls("pipx")), ([], []))
-        self.assertIn("cad 0.13.0 is installed already: it is left as it is, and updates itself.", done.stdout)
-        self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "update", "auto", "on"]])
+        self.assertIn("Updating cad 0.14.0 to the newest release...", done.stdout)
+        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
         # uv's cad is there too: uv's is the one, and pipx is not asked.
         self.programs("pipx")
         (self.root / "uv.json").write_text(json.dumps({"cad": "0.12.0"}), encoding="utf-8")
         done = self.run_install(**said)
-        self.assertIn("cad 0.12.0 is installed already", done.stdout)
+        self.assertIn("Updating cad 0.12.0 to the newest release...", done.stdout)
         self.assertEqual((self.installs(), self.calls("pipx")), ([], []))
 
     def test_a_cad_pipx_installed_that_does_not_start_is_installed_again_by_pipx_never_by_uv(self) -> None:
         said = self.pipx_cad("0.12.0")
         self.programs("pipx")
-        (self.home / ".cline").mkdir()
         report = self.root / "report.json"
         done = self.run_install(FAKE_FAIL="cad:--version", FAKE_PYPI="0.14.0", CAD_INSTALL_REPORT=str(report), **said)
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
@@ -358,10 +324,11 @@ class InstallScriptTests(unittest.TestCase):
                       done.stdout)
         self.assertEqual(self.installs(), [], "never with uv")
         self.assertEqual(self.calls("pipx")[-1], ["install", "--force", "cad"])
-        self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "update", "auto", "on"]])
+        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
         self.assertEqual({key: json.loads(report.read_text(encoding="utf-8"))[key] for key in ("release", "setup")},
                          {"release": "0.14.0", "setup": 0})
-        # pipx's install fails, or pipx is not found: said in one line, and the apps are done all the same.
+        # pipx's install fails, or pipx is not found: said in one line, and the plugin's step runs all the same, by
+        # the newest cad.
         for fail, line in (("cad:--version,pipx:install", "cad: failed (pipx install exit status 1; what pipx said is "
                                                           "above), so cad 0.14.0 could not be installed again."),
                            ("cad:--version", "cad 0.14.0, installed with pipx, does not start, and pipx was not found "
@@ -374,7 +341,7 @@ class InstallScriptTests(unittest.TestCase):
                 self.assertIn(line, done.stdout)
                 self.assertNotIn("run `pipx", done.stdout)
                 self.assertEqual(self.installs(), [])
-                self.assertIn("Cline: updated", done.stdout)
+                self.assertEqual(self.newest(), [NEWEST])
                 self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["setup"], 1)
 
     def test_pipx_without_a_cad_or_a_link_into_another_of_its_environments_is_no_cad(self) -> None:
@@ -408,19 +375,19 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("Removed the cad command of an earlier release (~/.local/bin/cad).", done.stdout)
         self.assertEqual(self.installs(), [["--managed-python", "--python", "3.14", "cad"]])
         self.assertNotIn("cad proxy", old.read_text(encoding="utf-8"))  # uv's command in its place
-        # Someone else's cad there: kept, and cad is not installed; the apps are done all the same.
+        # Someone else's cad there: kept, and cad is not installed; it is never run, and the plugin's step is the
+        # newest cad's.
         (self.root / "uv.json").unlink()
         mine = self.write(".local/bin/cad", "#!/bin/sh\necho my own cad\n")
-        (self.home / ".cline").mkdir()
         done = self.run_install()
         self.assertEqual(1, done.returncode)
         self.assertEqual(mine.read_text(encoding="utf-8"), "#!/bin/sh\necho my own cad\n")
         self.assertEqual(self.installs(), [])
         self.assertIn("cad: not installed: ~/.local/bin/cad is another program's cad command, which uv will not "
                       "replace. Move it away, then run this again.", done.stdout)
-        self.assertIn("Cline: installed", done.stdout)
         self.assertIn("cad itself was not installed", done.stdout)
-        self.assertEqual(self.calls("cad"), [])
+        self.assertNotIn("my own cad", done.stdout)
+        self.assertEqual((self.calls("cad"), self.newest()), ([], [NEWEST]))
 
     def test_the_old_windows_commands_are_known_by_their_mark(self) -> None:
         # 0.11's cad.exe (``exe``); 0.10's cad.cmd. uv's own cad.exe is a launcher and a zip too, with no mark.
@@ -492,7 +459,7 @@ class InstallScriptTests(unittest.TestCase):
                "before this one see it once restarted.\n")
         not_put = ("~/.local/bin is not on this shell's PATH: open a new terminal to use cad (where it is still not "
                    "found, run `uv tool update-shell`).\n")
-        for platform, separator in (("darwin", ":"), ("linux", ":"), ("win32", ";")):
+        for system, separator in (("darwin", ":"), ("linux", ":"), ("win32", ";")):
             for extra, called, line in (({}, True, put), ({"UV_NO_MODIFY_PATH": "1"}, False, not_put),
                                         ({"FAKE_FAIL": "uv:update-shell", "FAKE_EXIT": "2"}, True, not_put),
                                         ({"PATH": f"{self.bin}{separator}{self.uv_bin}"}, False, "")):
@@ -500,9 +467,9 @@ class InstallScriptTests(unittest.TestCase):
                     self.log.unlink()
                 said = io.StringIO()
                 with contextlib.redirect_stdout(said):
-                    install.on_path(install.Here(self.environ(**extra), platform=platform), uv, self.uv_bin)
-                self.assertEqual(self.calls("uv"), [["tool", "update-shell"]] if called else [], (platform, extra))
-                self.assertEqual(said.getvalue(), line, (platform, extra))
+                    install.on_path(install.Here(self.environ(**extra), platform=system), uv, self.uv_bin)
+                self.assertEqual(self.calls("uv"), [["tool", "update-shell"]] if called else [], (system, extra))
+                self.assertEqual(said.getvalue(), line, (system, extra))
         self.assertFalse((self.home / ".zshenv").exists(), "the stand-in uv edits no profile; nor does install.py")
 
     def test_on_windows_a_running_cad_exe_never_stops_the_install_and_a_later_run_removes_what_it_left(self) -> None:
@@ -510,7 +477,7 @@ class InstallScriptTests(unittest.TestCase):
         # launcher) runs the install command. The launcher and its Python go aside, uv's cad goes in, and what was set
         # aside, still running, cannot be deleted (Windows refuses): it stays, and nothing is said of it. The next run
         # deletes it, quietly, and nothing else in uv's bin folder.
-        here = install.Here(self.environ(UV=str(self.bin / "uv")), platform="win32")
+        here = install.Here(self.environ(UV=str(self.bin / "uv"), CAD_INSTALL_BY_CAD="1"), platform="win32")
         exe(self.uv_bin / "cad.exe", "# cad proxy: 11\n# The cad command on Windows (cad.exe)\n")
         self.write(".local/bin/cad-launcher/pyvenv.cfg", "home = C:\\Python314\n")
         discard = install.discard
@@ -527,7 +494,7 @@ class InstallScriptTests(unittest.TestCase):
         with mock.patch.object(install, "discard", running), mock.patch.object(install, "_rmtree", busy), \
                 contextlib.redirect_stdout(said):
             cad = install.install_cad(here)
-        self.assertEqual((cad.code, cad.release), (0, "0.13.0"), said.getvalue())
+        self.assertEqual((cad.code, cad.release, cad.there), (0, "0.13.0", False), said.getvalue())
         self.assertIn("Installing cad with uv.", said.getvalue())
         self.assertNotIn("not installed", said.getvalue())
         self.assertNotIn("Removed the cad command", said.getvalue())
@@ -542,7 +509,7 @@ class InstallScriptTests(unittest.TestCase):
         said = io.StringIO()
         with contextlib.redirect_stdout(said):
             cad = install.install_cad(here)
-        self.assertEqual(cad.code, 0)
+        self.assertEqual((cad.code, cad.there), (0, True))
         self.assertEqual(said.getvalue(), "cad 0.13.0 is installed already: it is left as it is, and updates itself.\n")
         self.assertEqual(sorted(path.name for path in self.uv_bin.iterdir()), [".cad.exe.backup", "cad", "notes.old"])
         # Where a cad command of 0.10.0-0.11.11 is still there (its install did not happen), nothing set aside goes.
@@ -551,279 +518,8 @@ class InstallScriptTests(unittest.TestCase):
         install.tidy(here, self.uv_bin)
         self.assertTrue(kept.is_file())
 
-    def test_the_plugin_switch_is_tolerated_where_cad_does_not_know_it(self) -> None:
-        # A cad with no `cad plugin update auto` (a usage error, exit 2): one line, and the install has not failed.
-        self.tools(cad="0.11.10")
-        done = self.run_install(FAKE_FAIL="cad:plugin", FAKE_EXIT="2")
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual(self.calls("cad"), [["--version"], ["plugin", "update", "auto", "on"]])
-        said = [line for line in done.stdout.splitlines() if "update auto" in line]
-        self.assertEqual(said, ["cad 0.11.10 has no `cad plugin update auto`: the plugin will not follow cad's updates. "
-                                "Run this command again to update the plugin."])
-        # Any other failure: what cad said, in one line.
-        done = self.run_install(FAKE_FAIL="cad:plugin")
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertIn("The plugin's automatic updates were not turned on (cad said: cad: something went wrong). Run "
-                      "this command again to update the plugin.", done.stdout)
-
-    def test_run_again_it_updates_each_app_s_github_copy_with_the_app_s_own_command(self) -> None:
-        self.programs("claude", "codex", "gemini")
-        github = {"source": "github", "repo": "earthtojake/text-to-cad", "ref": "latest"}
-        self.claude_records({"text-to-cad@earthtojake": 1}, {"earthtojake": github})
-        self.write(".codex/config.toml", '[marketplaces.earthtojake]\nsource_type = "git"\n'
-                                         'source = "https://github.com/earthtojake/text-to-cad.git"\nref = "latest"\n'
-                                         '[plugins."text-to-cad@earthtojake"]\nenabled = true\n')
-        self.write(".gemini/extensions/text-to-cad/.gemini-extension-install.json",
-                   {"type": "git", "source": install.URL, "ref": "latest"})
-        done = self.run_install()
-        self.assertEqual(0, done.returncode, done.stderr)
-        self.assertEqual(self.calls("claude"), [["plugin", "marketplace", "update", "earthtojake"],
-                                                ["plugin", "update", "text-to-cad@earthtojake"]])
-        self.assertEqual(self.calls("codex"), [["plugin", "marketplace", "upgrade", "earthtojake"],
-                                               ["plugin", "add", "text-to-cad@earthtojake"]])
-        self.assertEqual(self.calls("gemini"), [["extensions", "uninstall", "text-to-cad"],
-                                                ["extensions", "install", install.URL, "--ref", "latest", "--consent"]])
-        for name in ("Claude Code", "Codex", "Gemini CLI"):
-            self.assertIn(f"{name}: updated\n", done.stdout)
-
-    def test_gemini_s_github_copy_is_installed_again_never_asked_to_update(self) -> None:
-        # `extensions update` asks twice and takes no --consent: with no one to answer, it waits for ever.
-        self.programs("gemini")
-        github = {"type": "git", "source": install.URL, "ref": "latest"}
-        self.write(".gemini/extensions/text-to-cad/.gemini-extension-install.json", github)
-        done = self.run_install(FAKE_GEMINI_RECORD="1")
-        self.assertEqual(0, done.returncode, done.stderr)
-        self.assertNotIn(["extensions", "update", "text-to-cad"], self.calls("gemini"))
-        self.assertEqual(self.calls("gemini"), [["extensions", "uninstall", "text-to-cad"],
-                                                ["extensions", "install", install.URL, "--ref", "latest", "--consent"]])
-        self.assertIn("Gemini CLI: updated\n", done.stdout)
-        self.assertEqual([path.name for path in (self.home / ".gemini/extensions").iterdir()], ["text-to-cad"])
-        record = self.home / ".gemini/extensions/text-to-cad/.gemini-extension-install.json"
-        self.assertEqual(json.loads(record.read_text(encoding="utf-8")), github)
-
-    def test_gemini_s_github_copy_is_put_back_where_installing_it_again_fails(self) -> None:
-        self.programs("gemini")
-        github = {"type": "git", "source": install.URL, "ref": "latest"}
-        record = self.write(".gemini/extensions/text-to-cad/.gemini-extension-install.json", github)
-        skill = self.write(".gemini/extensions/text-to-cad/skills/cad/SKILL.md", OURS.format(name="cad"))
-        enablement = self.write(".gemini/extensions/extension-enablement.json", {"text-to-cad": {"overrides": []}})
-        done = self.run_install(FAKE_FAIL="gemini:install", FAKE_GEMINI_RECORD="1")
-        self.assertEqual(1, done.returncode, done.stdout)
-        self.assertEqual(self.calls("gemini")[0], ["extensions", "uninstall", "text-to-cad"])
-        self.assertIn("Gemini CLI: failed", done.stdout)
-        self.assertIn("the earlier copy was put back", done.stdout)
-        self.assertEqual(json.loads(record.read_text(encoding="utf-8")), github)
-        self.assertEqual(skill.read_text(encoding="utf-8"), OURS.format(name="cad"))
-        self.assertEqual(json.loads(enablement.read_text(encoding="utf-8")), {"text-to-cad": {"overrides": []}})
-
-    def test_gemini_s_commands_run_in_a_folder_of_their_own_never_the_person_s(self) -> None:
-        # Run in the person's folder, `--consent` records it as trusted in Gemini's trustedFolders.json.
-        self.programs("gemini")
-        person = self.home / "projects"
-        person.mkdir()
-        if self.log.exists():
-            self.log.unlink()
-        done = subprocess.run([sys.executable, str(INSTALL / "install.py")], env=self.environ(), cwd=person,
-                              capture_output=True, text=True, encoding="utf-8", timeout=120)
-        self.assertEqual(0, done.returncode, done.stderr)
-        self.write(".gemini/extensions/text-to-cad/.gemini-extension-install.json",
-                   {"type": "git", "source": install.URL, "ref": "latest"})
-        again = subprocess.run([sys.executable, str(INSTALL / "install.py")], env=self.environ(), cwd=person,
-                               capture_output=True, text=True, encoding="utf-8", timeout=120)
-        self.assertEqual(0, again.returncode, again.stderr)
-        found = [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines()]
-        runs = [call for call in found if call["name"] == "gemini"]
-        self.assertEqual(len(runs), 3)  # the install, then the uninstall and the install again
-        for call in runs:
-            with self.subTest(argv=call["argv"]):
-                where = Path(call["cwd"]).resolve()
-                self.assertNotEqual(where, person.resolve())
-                self.assertFalse(where.is_relative_to(self.home.resolve()))
-                self.assertFalse(where.exists())  # made for the command, and removed after it
-                self.assertEqual(call["trust"], "true")
-
-    def test_a_second_run_removes_nothing_it_installed_and_says_nothing_of_removing(self) -> None:
-        (self.home / ".cline").mkdir()
-        (self.home / ".hermes").mkdir()
-        self.write(".agents/skills/fea/SKILL.md", OURS.format(name="fea"))  # a 0.8.4-0.11.4 loose copy
-        first = self.run_install()
-        self.assertIn("Loose skills: removed: 1 old copies of our skills, in ~/.agents/skills", first.stdout)
-        second = self.run_install()
-        self.assertEqual(0, second.returncode, second.stderr)
-        self.assertIn("Cline: updated: 2 skills in ~/.cline/skills\n", second.stdout)
-        self.assertIn("Hermes Agent: updated: 2 skills in ~/.hermes/skills\n", second.stdout)
-        self.assertNotIn("removed", second.stdout)
-        self.assertFalse((self.home / ".agents/skills/fea").exists())
-        self.assertEqual(sorted(path.name for path in (self.home / ".cline/skills").iterdir()), ["cad", "pcb"])
-
-    def test_a_person_s_own_skill_of_our_name_that_mentions_the_repository_stays(self) -> None:
-        mine = ("---\nname: gcode\ndescription: My own G-code notes\n---\n"
-                "For modelling parts I use https://github.com/earthtojake/text-to-cad (earthtojake/text-to-cad).\n")
-        self.write(".claude/skills/gcode/SKILL.md", mine)
-        self.write(".claude/skills/gcode/notes.md", "months of notes\n")
-        (self.home / ".cline").mkdir()
-        self.write(".cline/skills/cad/SKILL.md", mine.replace("gcode", "cad"))
-        done = self.run_install()
-        self.assertEqual(0, done.returncode, done.stderr)
-        self.assertEqual((self.home / ".claude/skills/gcode/SKILL.md").read_text(encoding="utf-8"), mine)
-        self.assertTrue((self.home / ".claude/skills/gcode/notes.md").is_file())
-        self.assertIn("left cad: someone else's skill of that name", done.stdout)
-        self.assertNotIn("new", (self.home / ".cline/skills/cad/SKILL.md").read_text(encoding="utf-8"))
-
-    def test_an_edited_copy_of_ours_is_deleted_and_replaced(self) -> None:
-        (self.home / ".cline").mkdir()
-        self.run_install()
-        # The person edits the copy the first run made (its provenance kept) and adds a file; a 0.8 copy (its
-        # provenance line) sits in a retired name.
-        edited = self.home / ".cline/skills/cad/SKILL.md"
-        edited.write_text(edited.read_text(encoding="utf-8") + "my own change\n", encoding="utf-8")
-        self.write(".cline/skills/cad/extra.md", "added by hand\n")
-        self.write(".cline/skills/dxf/SKILL.md", OURS_OLD.format(name="dxf"))
-        done = self.run_install()
-        self.assertEqual(0, done.returncode, done.stderr)
-        self.assertIn("Cline: updated: 2 skills in ~/.cline/skills\n", done.stdout)
-        self.assertNotIn("my own change", edited.read_text(encoding="utf-8"))
-        self.assertFalse((self.home / ".cline/skills/cad/extra.md").exists())
-        self.assertFalse((self.home / ".cline/skills/dxf").exists())
-        # Nothing of the old copies is kept anywhere: no folder beside the skills, nothing new in the home.
-        self.assertEqual(sorted(path.name for path in (self.home / ".cline/skills").iterdir()), ["cad", "pcb"])
-        self.assertEqual(sorted(path.name for path in self.home.iterdir() if path.name.startswith(".text-to-cad")), [])
-
-    def test_github_failing_leaves_every_app_with_what_it_had(self) -> None:
-        self.programs("claude", "codex", "gemini")
-        folder = str(self.state / "plugin")
-        self.claude_records({"text-to-cad@text-to-cad": 1}, {"text-to-cad": {"source": "directory", "path": folder}})
-        self.write(".codex/config.toml", f'[marketplaces.text-to-cad]\nsource_type = "local"\nsource = "{folder}"\n'
-                                         '[plugins."text-to-cad@text-to-cad"]\nenabled = true\n')
-        record = self.write(".gemini/extensions/text-to-cad/.gemini-extension-install.json", {"type": "link", "source": folder})
-        copy = self.write(".cursor/plugins/local/text-to-cad/.text-to-cad-copy", {"from": folder})
-        self.write(".agents/skills/cad/SKILL.md", OURS.format(name="cad"))
-        (self.home / ".cline").mkdir()
-        old = self.write(".cline/skills/pcb/SKILL.md", OURS.format(name="pcb"))
-        done = self.run_install(FAKE_FAIL="claude:add,codex:add,gemini:install,git:clone")
-        # Every app it found failed: the run says so, and fails; it turns the switch on all the same (cad is here), so
-        # the plugin is kept on a computer whose runs keep failing, and tells cad the run is ending badly, so cad keeps
-        # no release of the install command's for it (``plugin_catch_up``) and its server runs it again.
-        self.assertEqual(1, done.returncode, done.stdout)
-        self.assertIn("No app got the plugin", done.stdout)
-        self.assertEqual(self.switched(), ["1"])
-        self.assertNotIn("Start a new session", done.stdout)
-        self.assertEqual(self.calls("claude"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"]])
-        self.assertEqual(self.calls("codex"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad", "--ref", "latest"]])
-        # Gemini CLI's linked extension had to go for ours to come in: it is put back as it was.
-        self.assertEqual(self.calls("gemini")[-1][:2], ["extensions", "install"])
-        self.assertEqual(json.loads(record.read_text(encoding="utf-8")), {"type": "link", "source": folder})
-        self.assertIn("the earlier copy was put back", done.stdout)
-        self.assertTrue(copy.is_file())
-        self.assertTrue((self.home / ".agents/skills/cad/SKILL.md").is_file())
-        self.assertEqual(old.read_text(encoding="utf-8"), OURS.format(name="pcb"))
-        for name in ("Claude Code", "Codex", "Gemini CLI", "Cursor", "Cline"):
-            self.assertIn(f"{name}: failed", done.stdout)
-        # A same-named catalog of ours from elsewhere is replaced only once GitHub answers; where the new one fails,
-        # the old one is put back.
-        github_main = {"source": "github", "repo": "earthtojake/text-to-cad"}
-        self.claude_records({"text-to-cad@earthtojake": 1}, {"earthtojake": github_main})
-        done = self.run_install(FAKE_FAIL="git:ls-remote")
-        self.assertEqual(self.calls("claude"), [])
-        done = self.run_install(FAKE_FAIL="claude:install")
-        self.assertEqual(self.calls("claude"), [["plugin", "uninstall", "text-to-cad@earthtojake"],
-                                                ["plugin", "marketplace", "remove", "--scope", "user", "earthtojake"],
-                                                ["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"],
-                                                ["plugin", "install", "text-to-cad@earthtojake"],
-                                                ["plugin", "marketplace", "add", "earthtojake/text-to-cad"],
-                                                ["plugin", "install", "text-to-cad@earthtojake"]])
-
-    def test_hermes_gets_the_skills_in_its_own_folder_and_our_old_plugin_goes(self) -> None:
-        # Hermes Agent is a skills-folder agent: our skills in $HERMES_HOME/skills, no plugin command of its own.
-        self.programs("hermes")
-        hermes = self.root / "hermes-home"
-        done = self.run_install(HERMES_HOME=str(hermes))
-        self.assertEqual(0, done.returncode, done.stderr)
-        self.assertIn("new", (hermes / "skills/cad/SKILL.md").read_text(encoding="utf-8"))
-        self.assertEqual(self.calls("hermes"), [])
-        self.assertIn(f"Hermes Agent: installed: 2 skills in {hermes / 'skills'}", done.stdout)
-        # Found by its folder alone too; someone else's plugin of that name stays.
-        (self.bin / "hermes").unlink()
-        self.write(".hermes/plugins/text-to-cad/plugin.json", {"name": "text-to-cad"})
-        self.write(".hermes/plugins/.install-metadata.json", {"text-to-cad": {"source": "someone/text-to-cad"}})
-        done = self.run_install()
-        self.assertIn("Hermes Agent: installed: 2 skills in ~/.hermes/skills\n", done.stdout)
-        self.assertTrue((self.home / ".hermes/skills/pcb/SKILL.md").is_file())
-        # Ours, from 0.11.x: without the hermes command the skills still come in, and the line says how to remove it.
-        self.write(".hermes/plugins/.install-metadata.json",
-                   {"text-to-cad": {"source": "https://github.com/earthtojake/text-to-cad.git", "pinned": True}})
-        done = self.run_install()
-        self.assertIn("Hermes Agent: updated: 2 skills in ~/.hermes/skills; the old text-to-cad plugin in "
-                      "~/.hermes/plugins/text-to-cad stays until the hermes command removes it", done.stdout)
-        self.programs("hermes")
-        done = self.run_install()
-        self.assertEqual(self.calls("hermes"), [["plugins", "remove", "text-to-cad"]])
-        self.assertIn("Hermes Agent: updated: 2 skills in ~/.hermes/skills (removed old copies: the text-to-cad plugin)",
-                      done.stdout)
-
-    def test_without_claude_code_cursor_s_clean_clone_and_grok_s_plugin_are_updated(self) -> None:
-        self.programs("grok")
-        clone = self.home / ".cursor/plugins/local/text-to-cad"
-        self.write(".cursor/plugins/local/text-to-cad/.git/config", f'[remote "origin"]\n\turl = {install.URL}.git\n')
-        self.write(".grok/installed-plugins/registry.json", {"repos": {"x": {
-            "kind": {"type": "Git", "url": install.URL, "git_ref": "latest"}, "path": "/x",
-            "plugins": {"text-to-cad": {"version": "0.11.10"}}}}})
-        done = self.run_install()
-        self.assertEqual(0, done.returncode, done.stderr)
-        self.assertEqual(self.calls("grok"), [["plugin", "update", "text-to-cad"]])
-        self.assertEqual(self.calls("git"), [["-C", str(clone), "status", "--porcelain=v1", "--branch"],
-                                             ["-C", str(clone), "fetch", "--quiet", "--depth", "1", "origin", "latest"],
-                                             ["-C", str(clone), "checkout", "--quiet", "-B", "latest", "FETCH_HEAD"]])
-        self.assertIn("Cursor: updated", done.stdout)
-        self.assertIn("Grok Build: updated", done.stdout)
-
-    def test_a_cursor_clone_with_work_of_its_own_or_a_link_is_left_alone(self) -> None:
-        clone = self.home / ".cursor/plugins/local/text-to-cad"
-        self.write(".cursor/plugins/local/text-to-cad/.git/config", f'[remote "origin"]\n\turl = {install.URL}.git\n')
-        for status, why in (("## latest...origin/latest\n M skills/cad/SKILL.md", "it has changes not committed"),
-                            ("## latest...origin/latest [ahead 1]", "it has commits of its own"),
-                            ("## main...origin/main", "it is on main, not latest")):
-            done = self.run_install(FAKE_GIT_STATUS=status)
-            self.assertEqual(self.calls("git"), [["-C", str(clone), "status", "--porcelain=v1", "--branch"]], status)
-            self.assertIn(f"Cursor: skipped: ~/.cursor/plugins/local/text-to-cad left alone: {why}", done.stdout)
-        # Where Claude Code has our plugin, a clean clone of ours goes; one with work of its own stays.
-        self.programs("claude")
-        done = self.run_install(FAKE_GIT_STATUS="## latest...origin/latest\n?? my-notes.md")
-        self.assertTrue((clone / ".git/config").is_file())
-        self.assertIn("left alone: it has changes not committed", done.stdout)
-        # A link there (a checkout of ours, say) is never followed, changed or removed.
-        checkout = self.root / "checkout"
-        (clone / ".git").rename(self.root / "moved-git")
-        clone.rmdir()
-        (checkout / ".git").mkdir(parents=True)
-        (checkout / ".git/config").write_text(f'[remote "origin"]\n\turl = {install.URL}.git\n', encoding="utf-8")
-        clone.symlink_to(checkout)
-        for claude in (True, False):
-            if not claude:
-                (self.bin / "claude").unlink()
-            done = self.run_install()
-            self.assertTrue(clone.is_symlink())
-            self.assertEqual(self.calls("git"), [])
-            self.assertIn("~/.cursor/plugins/local/text-to-cad is a link: left alone", done.stdout)
-
-    def test_a_character_the_output_cannot_encode_stops_no_app(self) -> None:
-        # An output in a code page that has no ✘ (cp1252, as Python writes a pipe on Windows): the line is printed
-        # with a `?`, and the run goes on to the next app and the loose skills. On Windows itself the pipe is UTF-8
-        # (`install.utf8`), whatever PYTHONIOENCODING says, and the mark goes through.
-        self.programs("claude", "gemini")
-        stand_in = self.bin / "claude"
-        stand_in.write_text(stand_in.read_text(encoding="utf-8").replace(
-            "    sys.exit(int(", "    sys.stdout.flush()\n    sys.stdout.buffer.write('\u2718 Failed to add marketplace\\n'.encode())\n    sys.exit(int(", 1),
-            encoding="utf-8")
-        done = self.run_install(FAKE_FAIL="claude", PYTHONIOENCODING="cp1252")
-        self.assertEqual(0, done.returncode, done.stderr)
-        self.assertNotIn("Traceback", done.stderr)
-        self.assertIn("Claude Code: failed: ", done.stdout)
-        self.assertIn(("\u2718" if os.name == "nt" else "?") + " Failed to add marketplace", done.stdout)
-        self.assertIn("Gemini CLI: installed", done.stdout)
-
     def test_its_output_is_utf_8_on_windows_where_it_is_no_console(self) -> None:
-        # As `cad setup`'s, which it runs on the same streams: a pipe or a file on Windows; never a console, never
+        # As cad's and uv's, which it runs on the same streams: a pipe or a file on Windows; never a console, never
         # another system.
         class Stream:
             def __init__(self, console: bool) -> None:
@@ -836,189 +532,349 @@ class InstallScriptTests(unittest.TestCase):
         self.assertEqual([install.utf8(Stream(True), "nt"), install.utf8(Stream(False), "posix"),
                           install.utf8(Stream(True), "posix"), install.utf8(None, "nt")], [False] * 4)
 
-    def test_what_past_releases_left_is_removed_once_ours_is_in_and_nothing_else(self) -> None:
-        self.programs("claude", "codex", "gemini", "grok", "npx")
-        folder = str(self.state / "plugin")
-        github = {"source": "github", "repo": "earthtojake/text-to-cad", "ref": "latest"}
-        # Claude Code: 0.10-0.11.11's local catalog and its plugin, and 0.7.6's cad@earthtojake; someone else's plugin.
-        self.claude_records({"text-to-cad@text-to-cad": 1, "cad@earthtojake": 1, "other@acme": 1},
-                            {"text-to-cad": {"source": "directory", "path": folder}, "earthtojake": github,
-                             "acme": {"source": "github", "repo": "acme/plugins"}})
-        # Codex: the local catalog's copy, and a copy from OpenAI's directory, which stays.
-        self.write(".codex/config.toml", f'[marketplaces.text-to-cad]\nsource_type = "local"\nsource = "{folder}"\n'
-                                         '[plugins."text-to-cad@text-to-cad"]\nenabled = true\n'
-                                         '[plugins."text-to-cad@openai-curated"]\nenabled = true\n')
-        # Gemini CLI: the extension linked to the plugin folder.
-        self.write(".gemini/extensions/text-to-cad/.gemini-extension-install.json", {"type": "link", "source": folder})
-        # Grok Build: the plugin of 0.5-0.7.6, `cad`, from our repository.
-        self.write(".grok/installed-plugins/registry.json", {"repos": {"x": {
-            "kind": {"type": "Git", "url": install.URL, "git_ref": ""}, "path": "/x", "plugins": {"cad": {}}}}})
-        # Cursor: 0.10-0.11.11's marked plain copy.
-        self.write(".cursor/plugins/local/text-to-cad/.text-to-cad-copy", {"from": folder})
-        # Loose skills: ours (current and retired, one a link to ours), and someone else's of a retired name.
-        self.write(".agents/skills/cad/SKILL.md", OURS.format(name="cad"))
-        self.write(".claude/skills/dxf/SKILL.md", OURS_OLD.format(name="dxf"))
-        (self.home / ".cursor/skills").mkdir(parents=True)
-        (self.home / ".cursor/skills/cad").symlink_to(self.home / ".agents/skills/cad")
-        self.write(".codex/skills/urdf/SKILL.md", THEIRS.format(name="urdf"))
-        self.write(".agents/.skill-lock.json", {"version": 3, "skills": {
-            "cad": {"source": "earthtojake/text-to-cad"}, "urdf": {"source": "someone/robots"},
-            "pcb": {"source": "someone/boards"}}})
+    # --- a cad that is here: brought up to date for a person, never for cad ---------------------------------------
 
-        done = self.run_install()
+    def test_a_person_s_run_brings_a_cad_that_is_here_up_to_date_by_that_cad_s_own_update(self) -> None:
+        # Older or newer than PyPI's newest, uv installs nothing: the tool's own `cad update` is what updates it, and
+        # it stays inside its major (no --major). Never PATH's cad: a shell may find another one first.
+        self.programs("cad")
+        for there in ("0.13.0", "0.1.0", "99.0.0"):
+            self.tools(cad=there)
+            done = self.run_install(FAKE_PYPI="5.0.0")
+            self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+            self.assertEqual(self.installs(), [], there)
+            self.assertEqual([(call["argv"], call["path"]) for call in self.logged("cad")],
+                             [(argv, str(self.uv_bin / "cad")) for argv in (["--version"], ["update"], ASKED, HANDED,
+                                                                                 AUTO_ON)])
+            self.assertIn(f"cad {there} is the newest release\n", done.stdout)
+        # Its exit status says little: 0 with nothing newer (above), non-zero with the update done all the same. What
+        # uv holds afterwards is what counts.
+        done = self.run_install(FAKE_CAD_UPDATES="99.1.0", FAKE_UPDATE_EXIT="1")
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        # Ours in first, then the old ones out.
-        claude = self.calls("claude")
-        self.assertEqual(claude, [["plugin", "marketplace", "update", "earthtojake"],
-                                  ["plugin", "install", "text-to-cad@earthtojake"],
-                                  ["plugin", "uninstall", "text-to-cad@text-to-cad"],
-                                  ["plugin", "marketplace", "remove", "--scope", "user", "text-to-cad"],
-                                  ["plugin", "uninstall", "cad@earthtojake"]])
-        self.assertEqual(self.calls("codex"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad", "--ref", "latest"],
-                                               ["plugin", "add", "text-to-cad@earthtojake"],
-                                               ["plugin", "remove", "text-to-cad@text-to-cad"],
-                                               ["plugin", "marketplace", "remove", "text-to-cad"]])
-        self.assertEqual(self.calls("gemini"), [["extensions", "uninstall", "text-to-cad"],
-                                                ["extensions", "install", install.URL, "--ref", "latest", "--consent"]])
-        self.assertEqual(self.calls("grok"), [["plugin", "uninstall", "cad"]])
-        self.assertFalse((self.home / ".cursor/plugins/local/text-to-cad").exists())
-        # Loose skills: ours deleted (the link unlinked), someone else's kept, the lock likewise; never through
-        # `npx skills remove`, which removes by name alone.
-        self.assertEqual(self.calls("npx"), [])
-        self.assertFalse((self.home / ".agents/skills/cad").exists())
-        self.assertFalse((self.home / ".claude/skills/dxf").exists())
-        self.assertFalse(os.path.lexists(self.home / ".cursor/skills/cad"))
-        self.assertTrue((self.home / ".codex/skills/urdf/SKILL.md").is_file())
-        self.assertEqual(list(json.loads((self.home / ".agents/.skill-lock.json").read_text(encoding="utf-8"))["skills"]),
-                         ["urdf", "pcb"])
-        self.assertFalse(os.path.lexists(self.home / ".cursor/plugins/local/text-to-cad"))
-        self.assertEqual(sorted(path.name for path in self.home.iterdir() if path.name.startswith(".text-to-cad")), [])
-        self.assertIn("Loose skills: removed: 3 old copies of our skills", done.stdout)
-        self.assertIn("removed old copies: text-to-cad@text-to-cad, cad@earthtojake", done.stdout)
+        self.assertIn("cad 99.0.0 updated to 99.1.0\n", done.stdout)
+        self.assertEqual(self.calls("cad")[-2:], [HANDED, AUTO_ON])
 
-    def test_claude_desktop_s_old_server_goes_through_a_link_and_no_earlier_copy_is_overwritten(self) -> None:
-        self.programs("claude")
-        dotfiles = self.root / "dotfiles" / "claude_desktop_config.json"
-        dotfiles.parent.mkdir()
-        dotfiles.write_text('{\n    "mcpServers": {\n        "cad": {"command": "uvx", "args": ["--from", '
-                            '"cad-mcp==0.11.10", "cad-mcp"]},\n        "notes": {"command": "notes-server"}\n    },\n'
-                            '    "theme": "dark"\n}\n', encoding="utf-8")
-        before = dotfiles.read_text(encoding="utf-8")
-        config = self.home / self.desktop()
-        config.parent.mkdir(parents=True)
-        config.symlink_to(dotfiles)
-        earlier = self.write(self.desktop() + ".bak", "an earlier copy\n")
-        done = self.run_install()
-        self.assertEqual(0, done.returncode, done.stderr)
-        # Only our member gone, every other byte as it was, edited where the link points; the link stays a link.
-        self.assertTrue(config.is_symlink())
-        self.assertEqual(dotfiles.read_text(encoding="utf-8"),
-                         '{\n    "mcpServers": {\n        "notes": {"command": "notes-server"}\n    },\n    "theme": "dark"\n}\n')
-        self.assertEqual(earlier.read_text(encoding="utf-8"), "an earlier copy\n")
-        kept = [path for path in dotfiles.parent.iterdir() if path.name.endswith(".bak")]
-        self.assertEqual([path.read_text(encoding="utf-8") for path in kept], [before])
-        self.assertIn(f"Claude Desktop: removed: the old cad server in its settings ({kept[0].name} keeps", done.stdout)
+    def test_before_cad_takes_over_a_person_s_run_says_one_line_of_its_own_and_one_of_the_update(self) -> None:
+        """What a person sees before cad's ``cad plugin install`` takes over (and plays its logo): the line that a
+        failure's report may be sent, then one line as the update begins and one of what came of it -- updated, the
+        newest already, or not updated, with cad's own most telling line as the reason. Nothing ``cad update``
+        printed, on either stream. On a pipe, as here, the second line follows the first."""
+        self.tools(cad="0.11.13")
+        for extra, result in (
+                ({"FAKE_CAD_UPDATES": "0.11.14"}, "cad 0.11.13 updated to 0.11.14"),
+                ({}, "cad 0.11.13 is the newest release"),
+                # cad's own line where it said one: a release of a higher major is out, which it does not install.
+                ({"FAKE_UPDATE_SAID": "cad 0.11.13 is the newest 0.x release|cad 1.0.0, a new major version, is out"},
+                 "cad 0.11.13 is the newest 0.x release"),
+                ({"FAKE_UPDATE_EXIT": "1", "FAKE_UPDATE_SAID": "cad update: asking the cad server|error: the cad server "
+                  "did not answer in 600 seconds|Run `cad update` again later."},
+                 "cad 0.11.13 was not updated now (error: the cad server did not answer in 600 seconds): it updates "
+                 "itself.")):
+            with self.subTest(result=result):
+                self.tools(cad="0.11.13")
+                done = self.run_hosted(**extra)
+                self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+                before = done.stdout.split("cad (stand-in): the plugin, on stdout\n")[0]
+                self.assertEqual(before.splitlines(), [install.NOTICE, "Updating cad 0.11.13 to the newest release...",
+                                                       result])
+                self.assertEqual(done.stderr, "cad (stand-in): the plugin, on stderr\n")
+                self.assertNotIn("stand-in): update", done.stdout + done.stderr)
+                self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
 
-    def test_claude_desktop_without_the_claude_command_says_what_to_do_and_runs_nothing(self) -> None:
-        self.write(self.desktop(), "{}")
-        # The Claude Code Claude Desktop keeps for its Code tab is that app's own: never run.
-        build = (self.home / self.desktop()).parent / "claude-code" / "2.1.325" / "485fdac4332e"
-        executable = build / ("claude.app/Contents/MacOS/claude" if sys.platform == "darwin" else "claude")
-        executable.parent.mkdir(parents=True)
-        executable.write_text(STAND_IN.format(python=sys.executable, latest=LATEST), encoding="utf-8")
-        executable.chmod(0o755)
-        done = self.run_install()
-        self.assertEqual(0, done.returncode, done.stderr)
-        self.assertEqual(self.calls("claude"), [])
-        self.assertIn("Claude Desktop: " + install.DESKTOP_NO_CLAUDE + "\n", done.stdout)
-        self.assertIn("claude plugin marketplace add earthtojake/text-to-cad#latest, then claude plugin install "
-                      "text-to-cad@earthtojake", done.stdout)
-        # With the command, Claude Code gets the plugin, and Claude Desktop needs no line.
-        self.programs("claude")
-        done = self.run_install()
-        self.assertEqual(self.calls("claude"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"],
-                                                ["plugin", "install", "text-to-cad@earthtojake"]])
-        self.assertNotIn("Claude Desktop:", done.stdout)
-
-    def test_someone_else_s_server_and_folder_of_our_names_are_left(self) -> None:
-        desktop = self.write(self.desktop(),
-                             json.dumps({"mcpServers": {"cad": {"command": "freecad-mcp"}}}))
-        before = desktop.read_text(encoding="utf-8")
-        self.write(".cursor/plugins/local/text-to-cad/plugin.json", {"name": "text-to-cad"})
-        done = self.run_install()
-        self.assertEqual(before, desktop.read_text(encoding="utf-8"))
-        self.assertEqual([path.name for path in desktop.parent.iterdir()], [desktop.name])
-        self.assertTrue((self.home / ".cursor/plugins/local/text-to-cad/plugin.json").is_file())
-        self.assertIn("Cursor: failed: ", done.stdout)
-        self.assertIn("holds something else", done.stdout)
-
-    def test_one_app_failing_stops_no_other_and_a_failed_cad_install_fails_the_run(self) -> None:
-        self.programs("codex", "gemini")
-        done = self.run_install(FAKE_FAIL="codex")
-        self.assertEqual(0, done.returncode, done.stderr)
-        self.assertIn("Codex: failed: `plugin marketplace` said: codex: something went wrong", done.stdout)
-        self.assertIn("Gemini CLI: installed", done.stdout)
-        self.no_tools()
-        done = self.run_install(FAKE_FAIL="uv:install")
-        self.assertEqual(1, done.returncode)
-        self.assertIn("cad: failed (uv tool install exit status 1; what uv said is above). Where this ran inside an "
-                      "app or an agent's sandbox, run it again in a terminal of your own.", done.stdout)
-        self.assertIn("Gemini CLI: installed", done.stdout)
-        self.assertIn("cad itself was not installed", done.stdout)
-        self.assertEqual(self.calls("cad"), [], "no cad to switch on")
-
-    def test_the_report_cad_s_hand_over_reads_changes_nothing_the_run_says(self) -> None:
-        # CAD_INSTALL_REPORT (set by cad's own hand-over, cad_server._internal.install_script): what the run did, each
-        # app by its key, written whole; the run's output and exit status as without it, and a report that cannot be
-        # written fails nothing.
-        self.programs("codex", "gemini")
+    def test_in_a_terminal_the_update_s_result_takes_the_place_of_its_first_line(self) -> None:
         self.tools(cad="0.13.0")
-        plain = self.run_install(FAKE_FAIL="codex")
+
+        class Terminal(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        first = "Updating cad 0.13.0 to the newest release..."
+        for columns, said in (("80", f"{first}\r{'cad 0.13.0 updated to 0.13.1'.ljust(len(first))}\n"),
+                              ("40", f"{first}\ncad 0.13.0 updated to 0.13.1\n")):  # too narrow: a line each
+            self.tools(cad="0.13.0")
+            shown = Terminal()
+            here = install.Here(self.environ(FAKE_CAD_UPDATES="0.13.1"))
+            with contextlib.redirect_stdout(shown), mock.patch.dict(os.environ, {"COLUMNS": columns}):
+                install.update(here, install.Cad("0.13.0", 0, str(self.uv_bin / "cad"), there=True))
+            self.assertEqual(shown.getvalue(), said, columns)
+
+    def test_a_cad_that_was_not_updated_never_fails_the_run(self) -> None:
+        self.tools(cad="0.13.0")
+        # Refused, failed, or still queued behind a busy server (exit 1): one line, and the run goes on. Its reason is
+        # cad's own line that says most, as cad chooses one for an app's failure: the first that reads as an error,
+        # else the last.
+        from cad_server.plugin import computer
+
+        self.assertEqual(install.ERROR_SAID.pattern, computer.ERROR_SAID.pattern)
+        self.assertEqual(install.ERROR_SAID.flags, computer.ERROR_SAID.flags)
+        done = self.run_install(FAKE_UPDATE_EXIT="1")
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        self.assertIn("cad 0.13.0 was not updated now (cad (stand-in): update, on stderr): it updates itself.\n",
+                      done.stdout)
+        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
+        # No answer in the time it has: stopped, said, and the run goes on.
+        here = install.Here(self.environ(FAKE_UPDATE_SLEEP="30"))
+        said = io.StringIO()
+        with mock.patch.object(install, "UPDATE_SECONDS", 0.5), contextlib.redirect_stdout(said):
+            install.update(here, install.Cad("0.13.0", 0, str(self.uv_bin / "cad"), there=True))
+        self.assertEqual(said.getvalue(), "Updating cad 0.13.0 to the newest release...\ncad 0.13.0 was not updated "
+                                          "now (no answer in 0 minutes): it updates itself.\n")
+
+    def test_cad_s_own_run_of_it_brings_no_cad_up_to_date(self) -> None:
+        # What the releases that run this command set, each alone: the cad that runs it is left as it is.
+        self.tools(cad="0.11.13")
+        for name, value in (("CAD_INSTALL_BY_CAD", "1"), ("CAD_INSTALL_ATTEMPT", "1763500000.5"),
+                            ("CAD_INSTALL_REPORT", str(self.root / "report.json"))):
+            with self.subTest(name=name):
+                done = self.run_install(**{name: value})
+                self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+                self.assertIn("cad 0.11.13 is installed already: it is left as it is, and updates itself.\n",
+                              done.stdout)
+                self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
+
+    # --- the plugin: cad's own step --------------------------------------------------------------------------------
+
+    def test_a_cad_with_no_plugin_install_is_passed_over_for_the_newest_cad_s(self) -> None:
+        # 0.11.12 and 0.11.13 run this command themselves, and have no `cad plugin install`: asked first, quietly
+        # (`--help`: a usage error, exit 2, which the person never sees), the newest release's runs instead, outside
+        # the installed tool, told what the tool's would have been. Never `cad plugin update`, which on those releases
+        # runs this command, and never `cad setup`.
+        self.tools(cad="0.11.13")
         report = self.root / "report.json"
-        done = self.run_install(FAKE_FAIL="codex", CAD_INSTALL_REPORT=str(report))
-        self.assertEqual((done.returncode, done.stdout, done.stderr), (plain.returncode, plain.stdout, plain.stderr))
-        found = json.loads(report.read_text(encoding="utf-8"))
-        self.assertEqual({key: found[key] for key in ("schema", "release", "setup")},
-                         {"schema": "text-to-cad install report/1", "release": "0.13.0", "setup": 0})
-        self.assertEqual(set(found["apps"]), {app.key for app in install.APPS})
-        self.assertEqual((found["apps"]["codex"], found["apps"]["gemini"], found["apps"]["claude"]),
-                         ("failed", "installed", "not found"))
-        self.assertEqual(sorted(path.name for path in self.root.iterdir() if "report" in path.name), ["report.json"])
+        done = self.run_install(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_APPS=json.dumps({"codex": "updated"}),
+                                FAKE_LOG_ENV="CAD_PLUGIN_BY,CAD_PLUGIN_REPORT", CAD_INSTALL_BY_CAD="1",
+                                CAD_INSTALL_REPORT=str(report))
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        self.assertEqual(self.calls("cad"), [["--version"], ASKED, AUTO_ON])
+        self.assertEqual(self.newest(), [NEWEST])
+        self.assertIn("cad 0.11.13 has no `cad plugin install`: the newest cad's runs instead (uv tool run cad@latest), "
+                      "which uv downloads once.\nuv (stand-in): the plugin, on stdout\n", done.stdout)
+        self.assertNotIn("usage:", done.stdout + done.stderr)
+        self.assertNotIn("invalid choice", done.stdout + done.stderr)
+        newest, = [call for call in self.logged("uv") if call["argv"] == NEWEST]
+        self.assertEqual(newest["env"]["CAD_PLUGIN_BY"], "script")
+        self.assertEqual(Path(newest["env"]["CAD_PLUGIN_REPORT"]).name, "plugin-report.json")
+        self.assertFalse(Path(newest["env"]["CAD_PLUGIN_REPORT"]).parent.exists())
+        self.assertEqual(json.loads(report.read_text(encoding="utf-8")),
+                         {"schema": "text-to-cad install report/1", "release": "0.11.13", "setup": 0,
+                          "apps": {"codex": "updated"}})
+        self.assertEqual(self.installs(), [])
+        # Before the docs site serves this script, its deploy asks PyPI's newest cad for this command's help
+        # (scripts/release/newest_cad.py, held by test_newest_cad.py): the words uv was given here, and no others.
+        spec = importlib.util.spec_from_file_location("newest_cad", REPO_ROOT / "scripts/release/newest_cad.py")
+        asked = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(asked)
+        self.assertEqual(self.newest(), [list(asked.HAND_OVER)])
+        self.assertEqual(asked.ASKED, (*asked.HAND_OVER, "--help"))
+        # A cad that says it has the command, or gives any answer but argparse's usage error, has its command run for
+        # real; where that ends 2 having written no report, it had none either: the newest cad's runs, once.
+        for help_code in ("0", "1"):
+            with self.subTest(help_code=help_code):
+                done = self.run_install(FAKE_PLUGIN_HELP_CAD=help_code, FAKE_PLUGIN_EXIT_CAD="2",
+                                        FAKE_PLUGIN_APPS=json.dumps({"codex": "updated"}), CAD_INSTALL_BY_CAD="1")
+                self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+                self.assertEqual((self.calls("cad"), self.newest()),
+                                 ([["--version"], ASKED, HANDED, AUTO_ON], [NEWEST]))
+                self.assertIn("cad (stand-in): the plugin, on stdout\ncad 0.11.13 has no `cad plugin install`: the "
+                              "newest cad's runs instead (uv tool run cad@latest), which uv downloads once.\n",
+                              done.stdout)
+
+    def test_run_against_0_11_13_nothing_loops(self) -> None:
+        """0.11.13's own ``cad plugin update`` runs this command (by its server too, which names its run
+        ``CAD_INSTALL_ATTEMPT``); it has no ``cad plugin install``. Whoever began the run, this command asks that cad
+        whether it has ``cad plugin install`` (``--help``: exit 2, its answer captured), runs the newest release's in
+        its place, and last turns the switch on by the installed cad's own command, once, telling it the run ended badly
+        exactly where the plugin's step did not end well: never ``cad plugin update`` alone, which would run this
+        command again. Nothing it starts carries a cad server's name for its run, so the newest release's step never
+        takes an older server's run for its own."""
+        self.tools(cad="0.11.13")
+        (self.uv_bin / "cad").write_text(OLD_CAD.format(python=sys.executable, script=str(INSTALL / "install.py")),
+                                         encoding="utf-8")
+        watched = "CAD_INSTALL_ATTEMPT,CAD_PLUGIN_SERVER_RUN,CAD_INSTALL_FAILED,CAD_INSTALL_BY_CAD,CAD_PLUGIN_BY"
+        server = {"CAD_INSTALL_BY_CAD": "1", "CAD_INSTALL_ATTEMPT": "1763500000.5", "CAD_PLUGIN_SERVER_RUN": "7.0"}
+        for began, extra, code, failed in (
+                (server, {"FAKE_PLUGIN_APPS": json.dumps({"claude": "updated"})}, 0, None),
+                (server, {"FAKE_PLUGIN_EXIT_UV": "1"}, 1, "1"),
+                (server, {"FAKE_PLUGIN_EXIT_UV": "75"}, 75, "1"),
+                ({"CAD_INSTALL_BY_CAD": "1"}, {"FAKE_PLUGIN_EXIT_UV": "1", "CAD_INSTALL_FAILED": "1"}, 1, "1"),
+                ({}, {"CAD_INSTALL_FAILED": "1"}, 0, None)):
+            with self.subTest(began=sorted(began), extra=extra):
+                done = self.run_install(FAKE_LOG_ENV=watched, **began, **extra)
+                self.assertEqual(code, done.returncode, done.stdout + done.stderr)
+                steps = [(call["name"], call["argv"]) for call in map(json.loads, self.log.read_text(
+                    encoding="utf-8").splitlines()) if call["name"] == "cad" or call["argv"][:2] == ["tool", "run"]]
+                self.assertEqual(steps, [("cad", ["--version"]), *([] if began else [("cad", ["update"])]),
+                                         ("cad", ASKED), ("uv", NEWEST), ("cad", AUTO_ON)])
+                # Of `cad plugin`, that cad saw the question alone before the newest cad's step, and the person
+                # none of its answer: one line of this command's own.
+                self.assertNotIn("invalid choice", done.stdout + done.stderr)
+                self.assertIn("cad 0.11.13 has no `cad plugin install`: the newest cad's runs instead", done.stdout)
+                calls = self.logged("cad") + self.logged("uv")
+                self.assertEqual([call for call in calls if call["argv"] == ["plugin", "update"]], [], "no loop")
+                self.assertEqual({call["env"].get("OLD_CAD_DEPTH") for call in self.logged("cad")}, {None})
+                for call in calls:
+                    self.assertIsNone(call["env"]["CAD_INSTALL_ATTEMPT"], call["argv"])
+                    self.assertIsNone(call["env"]["CAD_PLUGIN_SERVER_RUN"], call["argv"])
+                newest, = [call for call in self.logged("uv") if call["argv"] == NEWEST]
+                self.assertEqual(newest["env"]["CAD_PLUGIN_BY"], "script")
+                switched, = [call for call in self.logged("cad") if call["argv"] == AUTO_ON]
+                self.assertEqual(switched["env"]["CAD_INSTALL_FAILED"], failed)
+        # No cad could be installed: the newest release's step all the same, and no switch to turn.
         self.no_tools()
-        done = self.run_install(FAKE_FAIL="uv:install", FAKE_EXIT="3", CAD_INSTALL_REPORT=str(report))
-        self.assertEqual((json.loads(report.read_text(encoding="utf-8"))["setup"],
-                          json.loads(report.read_text(encoding="utf-8"))["release"]), (3, None))
+        done = self.run_install(FAKE_FAIL="uv:cad", FAKE_LOG_ENV=watched, **server)
+        self.assertEqual(1, done.returncode)
+        self.assertEqual((self.calls("cad"), self.newest()), ([], [NEWEST]))
+
+    def test_with_no_cad_at_all_the_newest_cad_s_step_is_tried_once_and_then_the_run_has_failed(self) -> None:
+        report = self.root / "report.json"
+        # (The stand-in uv fails the call that names `cad` alone, its install: the newest cad's is `cad@latest`.)
+        done = self.run_install(FAKE_FAIL="uv:cad", FAKE_EXIT="3", FAKE_PLUGIN_EXIT_UV="1",
+                                CAD_INSTALL_REPORT=str(report))
+        self.assertEqual(1, done.returncode)
+        self.assertEqual((self.calls("cad"), self.newest()), ([], [NEWEST]))
+        self.assertIn("cad: failed (uv tool install exit status 3; what uv said is above).", done.stdout)
+        self.assertIn("Setting up the plugin with the newest cad all the same (uv tool run cad@latest), which uv "
+                      "downloads once.\n", done.stdout)
+        self.assertIn("The plugin was not set up in the agent apps (uv tool run exit status 1; what it said is "
+                      "above): run this again.\n", done.stdout)
+        self.assertIn("cad itself was not installed", done.stdout)
+        self.assertEqual(json.loads(report.read_text(encoding="utf-8")),
+                         {"schema": "text-to-cad install report/1", "release": None, "setup": 3, "apps": {}})
+        # Where the newest cad's step runs, the apps are done: the run has failed all the same, for cad is not here.
+        done = self.run_install(FAKE_FAIL="uv:cad", FAKE_PLUGIN_APPS=json.dumps({"claude": "installed"}),
+                                CAD_INSTALL_REPORT=str(report))
+        self.assertEqual(1, done.returncode)
+        self.assertEqual(self.newest(), [NEWEST])
+        self.assertNotIn("The plugin was not set up", done.stdout)
+        found = json.loads(report.read_text(encoding="utf-8"))
+        self.assertEqual((found["setup"], found["apps"]), (1, {"claude": "installed"}))
+
+    def test_the_run_ends_as_the_plugin_s_step_did_and_the_report_cad_reads_is_written_last(self) -> None:
+        # CAD_INSTALL_REPORT (0.11.12's and 0.11.13's hand-over sets it, and judges the file the moment it is there):
+        # `apps` always a dict, as cad's step said them, `setup` an integer, the file written whole, after
+        # everything else. The run ends 0 only where that step did: 1 where every app it found failed, 75 where
+        # another run was going (cad's own status for it), 1 for anything else. A step that ended non-zero and named
+        # no app as failed is one failure more in `apps`, the one thing its readers take for a run to try again.
         self.tools(cad="0.13.0")
-        nowhere = self.run_install(FAKE_FAIL="codex", CAD_INSTALL_REPORT=str(self.root / "no folder" / "report.json"))
-        self.assertEqual((nowhere.returncode, nowhere.stdout, nowhere.stderr),
-                         (plain.returncode, plain.stdout, plain.stderr))
+        report = self.root / "report.json"
+        failed = {"claude": "failed", "codex": "not found"}
+        unsaid = {"plugin": "failed"}
+        for extra, code, apps, line in (
+                ({"FAKE_PLUGIN_APPS": json.dumps({"claude": "updated", "gemini": "skipped"})}, 0,
+                 {"claude": "updated", "gemini": "skipped"}, None),
+                ({}, 0, {}, None),
+                ({"FAKE_PLUGIN_EXIT_CAD": "1", "FAKE_PLUGIN_APPS": json.dumps(failed)}, 1, failed, None),
+                ({"FAKE_PLUGIN_EXIT_CAD": "75"}, 75, unsaid, None),
+                ({"FAKE_PLUGIN_EXIT_CAD": "124"}, 1, unsaid, "The plugin was not set up in the agent apps (cad plugin "
+                                                             "install exit status 124; what it said is above): run this again.\n"),
+                ({"FAKE_PLUGIN_EXIT_CAD": "2", "FAKE_PLUGIN_EXIT_UV": "75"}, 75, unsaid, None)):
+            with self.subTest(extra=extra):
+                report.unlink(missing_ok=True)
+                plain = self.run_install(CAD_INSTALL_BY_CAD="1", **extra)
+                done = self.run_install(CAD_INSTALL_BY_CAD="1", CAD_INSTALL_REPORT=str(report),
+                                        FAKE_LOG_EXISTS=str(report), **extra)
+                # The report changes nothing the run says or how it ends.
+                self.assertEqual((done.returncode, done.stdout, done.stderr),
+                                 (plain.returncode, plain.stdout, plain.stderr))
+                self.assertEqual(code, done.returncode, done.stdout + done.stderr)
+                self.assertEqual("The plugin was not set up" in done.stdout, line is not None)
+                self.assertIn(line or "", done.stdout)
+                found = json.loads(report.read_text(encoding="utf-8"))
+                self.assertEqual(found, {"schema": "text-to-cad install report/1", "release": "0.13.0", "setup": 0,
+                                         "apps": apps})
+                self.assertIs(type(found["setup"]), int)
+                # Not there while anything the run starts still runs; nothing left beside it.
+                self.assertEqual([call["exists"] for call in self.logged("cad") + self.logged("uv")],
+                                 [False] * len(self.calls()))
+                self.assertEqual(sorted(path.name for path in self.root.iterdir() if "report" in path.name),
+                                 ["report.json"])
+        # A report that cannot be written fails nothing.
+        nowhere = self.run_install(CAD_INSTALL_BY_CAD="1", CAD_INSTALL_REPORT=str(self.root / "no folder" / "r.json"))
+        self.assertEqual((nowhere.returncode, nowhere.stderr), (0, "cad (stand-in): the plugin, on stderr\n"))
 
-    def test_an_error_no_row_foresaw_is_that_app_s_failure_and_every_other_app_runs(self) -> None:
-        def broken(app, here, context):
-            raise KeyError("plugins")
+    def test_a_plugin_s_step_where_an_app_failed_keeps_no_release_by_the_switch_and_ends_as_it_did(self) -> None:
+        # The plugin is up to date for a release only where every app found went well: where the step's report names
+        # an app as failed, even with exit status 0, the switch is turned on with CAD_INSTALL_FAILED=1, so the cad
+        # takes nothing as up to date (released 0.11.12 and 0.11.13 read it the same way) and its server tries again.
+        # The run's exit status is the step's, and the report cad reads carries each app as it said it.
+        self.tools(cad="0.13.0")
+        report = self.root / "report.json"
+        for apps, code, failed in (({"claude": "failed", "codex": "updated"}, 0, "1"),
+                                   ({"claude": "failed", "codex": "failed"}, 1, "1"),
+                                   ({"claude": "updated", "codex": "not found"}, 0, None),
+                                   ({}, 0, None)):
+            with self.subTest(apps=apps):
+                done = self.run_install(FAKE_PLUGIN_APPS=json.dumps(apps) if apps else "",
+                                        FAKE_PLUGIN_EXIT_CAD=str(code), FAKE_LOG_ENV="CAD_INSTALL_FAILED",
+                                        CAD_INSTALL_REPORT=str(report))
+                self.assertEqual(code, done.returncode, done.stdout + done.stderr)
+                switched, = [call for call in self.logged("cad") if call["argv"] == AUTO_ON]
+                self.assertEqual(switched["env"]["CAD_INSTALL_FAILED"], failed)
+                self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["apps"], apps)
+                self.assertEqual(self.calls("cad")[-2:], [HANDED, AUTO_ON])
+        # A person's own CAD_INSTALL_FAILED is never passed on: only this run's step says it.
+        done = self.run_install(FAKE_PLUGIN_APPS=json.dumps({"codex": "updated"}), FAKE_LOG_ENV="CAD_INSTALL_FAILED",
+                                CAD_INSTALL_FAILED="1")
+        switched, = [call for call in self.logged("cad") if call["argv"] == AUTO_ON]
+        self.assertEqual((done.returncode, switched["env"]["CAD_INSTALL_FAILED"]), (0, None))
 
-        (self.home / ".cline").mkdir()
-        apps = (install.App("broken", "Broken App", handler=broken),
-                *[app for app in install.APPS if app.key == "cline"])
-        said = []
-        source = install.Source(skills_dir=self.root / "skills")
-        self.write("../skills/cad/SKILL.md", OURS.format(name="cad"))
-        report = install.install_apps(install.Here(self.environ()), source, apps, say=said.append)
-        self.assertEqual(said[:2], ["Broken App: failed: KeyError: 'plugins'",
-                                    "Cline: installed: 1 skills in ~/.cline/skills"])
-        self.assertFalse(report.all_failed)
-        # The spots a person's file broke before: a git config not in UTF-8, a Grok registry that is a list, a Codex
-        # config whose tables are not tables.
-        (self.home / "clone/.git").mkdir(parents=True)
-        (self.home / "clone/.git/config").write_bytes(b'[remote "origin"]\n\turl = https://x/y\n[user]\n\tname = Jos\xe9\n')
-        self.assertEqual(install.git_origin(self.home / "clone"), "https://x/y")
-        self.write(".grok/installed-plugins/registry.json", [1, 2])
-        self.assertEqual(install.grok_plugins(install.Here(self.environ())), [])
-        self.write(".codex/config.toml", 'plugins = "none"\nmarketplaces = 3\n')
-        self.programs("codex")
-        outcome = install.codex(install.APPS[2], install.Here(self.environ()),
-                                install.Context(install.Source()))
-        self.assertEqual(outcome.status, "installed")
+    def test_a_plugin_s_step_that_ended_badly_and_named_no_failure_is_one_to_the_releases_that_read_the_report(
+            self) -> None:
+        # 0.11.12 and 0.11.13 never read the run's exit status: by the report alone they take the run as done, and
+        # stop running it, or as failed, and run it again later. Their rule, which no release can change now
+        # (v0.11.13, `cad_server._internal.install_script.judge`).
+        def judged(found: dict) -> str:
+            steps = found.get("apps") if isinstance(found, dict) else None
+            if not isinstance(steps, dict):
+                return "no_report"
+            if found.get("setup") != 0 or isinstance(found.get("setup"), bool):
+                return "setup"
+            return "app" if any(status == "failed" for status in steps.values()) else "done"
+
+        report = self.root / "report.json"
+
+        def ends(**extra: str) -> tuple:
+            report.unlink(missing_ok=True)
+            done = self.run_install(CAD_INSTALL_BY_CAD="1", CAD_INSTALL_REPORT=str(report), **extra)
+            found = json.loads(report.read_text(encoding="utf-8"))
+            return done.returncode, found["setup"], found["apps"], judged(found)
+
+        unsaid = {"plugin": "failed"}
+        self.tools(cad="0.13.0")
+        # It raised (Python's own exit status, 1), or was stopped: no report of its own, so one failure in ours.
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="1"), (1, 0, unsaid, "app"))
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="124"), (1, 0, unsaid, "app"))
+        # Ended by a signal, with whatever it had started: the tool's cad answers `--version`, then kills itself.
+        killed = "#!/bin/sh\n[ \"$1\" = --version ] && exit 0\nkill -KILL $$\n"
+        (self.uv_bin / "cad").write_text(killed, encoding="utf-8")
+        self.assertEqual(ends(), (1, 0, unsaid, "app"))
+        # It could not be started at all: the tool's cad is gone once it has said its version.
+        (self.uv_bin / "cad").write_text("#!/bin/sh\n/bin/rm -- \"$0\"\n", encoding="utf-8")
+        self.assertEqual(ends(), (1, 0, unsaid, "app"))
+        self.assertEqual(self.newest(), [], "a cad that has the command is never passed over for the newest")
+        # A cad with no such command, and the newest cad's step raised, or uv could not run it: the same.
+        self.tools(cad="0.11.13")
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_EXIT_UV="1"), (1, 0, unsaid, "app"))
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2", FAKE_FAIL="uv:run", FAKE_EXIT="2"), (1, 0, unsaid, "app"))
+        # Nothing ran because another run was going: this run did none of the work either.
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_EXIT_UV="75"), (75, 0, unsaid, "app"))
+        # It ended badly after the apps, having named none as failed (it raised as it turned the switch on, say):
+        # what it said of them is kept, and the failure added.
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_EXIT_UV="1", FAKE_PLUGIN_APPS='{"codex": "updated"}'),
+                         (1, 0, {"codex": "updated", "plugin": "failed"}, "app"))
+        # A failure the step named itself is passed on as it said it, and a step that ended 0 is never a failure.
+        said = {"claude": "failed", "codex": "updated"}
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_EXIT_UV="1", FAKE_PLUGIN_APPS=json.dumps(said)),
+                         (1, 0, said, "app"))
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_APPS='{"codex": "updated"}'),
+                         (0, 0, {"codex": "updated"}, "done"))
+        self.assertEqual(ends(FAKE_PLUGIN_EXIT_CAD="2"), (0, 0, {}, "done"))
+        # Where cad itself could not be installed, `setup` is what its readers go by: no failure is made up for
+        # apps no cad reached, and what the newest cad's step said of them is passed on.
+        self.no_tools()
+        self.assertEqual(ends(FAKE_FAIL="uv:cad", FAKE_EXIT="3", FAKE_PLUGIN_EXIT_UV="1"), (1, 3, {}, "setup"))
+        self.assertEqual(ends(FAKE_FAIL="uv:cad", FAKE_EXIT="3", FAKE_PLUGIN_APPS='{"claude": "installed"}'),
+                         (1, 3, {"claude": "installed"}, "setup"))
 
     def test_it_takes_no_options_and_does_nothing_when_given_one(self) -> None:
         # Old releases' docs piped options to install.sh (`sh -s -- --dry-run`, `--uninstall`, `--add X`).
@@ -1032,20 +888,254 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("takes no options", script.stderr)
         self.assertEqual(self.calls(), [])
 
+    # --- one report of a failure ----------------------------------------------------------------------------------
+
+    def test_a_run_that_fails_with_no_cad_to_count_it_sends_one_report_of_where(self) -> None:
+        # cad could not be installed: said first, in one line, then reported, whatever the plugin's step does after.
+        done = self.run_hosted(FAKE_FAIL="uv:cad", FAKE_EXIT="3", FAKE_PLUGIN_EXIT_UV="1")
+        self.assertEqual(1, done.returncode)
+        self.assertEqual(done.stdout.splitlines()[0], install.NOTICE)
+        self.assertEqual(done.stdout.count(install.NOTICE), 1)
+        self.report("cad", 3)
+        # No cad could run the plugin's step: the one this computer has has none, and the newest could not be run.
+        self.tools(cad="0.11.13")
+        done = self.run_hosted(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_EXIT_UV="1", FAKE_UPDATE_EXIT="1")
+        self.assertEqual(1, done.returncode)
+        self.report("plugin", 1)
+        # uv itself gone since the cad step (`uv` then names nothing a report can ask): the step cannot run at all.
+        cad = install.Cad("0.11.13", 0, str(self.uv_bin / "cad"), there=True)
+        gone = self.reporting(FAKE_PLUGIN_EXIT_CAD="2", PATH=str(self.root / "nowhere"))
+        with mock.patch.object(install, "development", lambda here: False), contextlib.redirect_stdout(io.StringIO()), \
+                mock.patch.dict(os.environ, gone, clear=True):
+            del self.receiver.posts[:]
+            here = install.Here()
+            self.assertEqual(install.hand_over(here, cad, install.Reports(here)).code, 127)
+        self.report("plugin", 127, uv="none")
+
+    def test_a_run_a_working_cad_counts_sends_nothing(self) -> None:
+        # It ended well; every app cad found failed; another run was going; cad's own command failed: cad counts each.
+        self.tools(cad="0.13.0")
+        for extra, code in (({}, 0), ({"FAKE_PLUGIN_EXIT_CAD": "1", "FAKE_PLUGIN_APPS": '{"claude": "failed"}'}, 1),
+                            ({"FAKE_PLUGIN_EXIT_CAD": "75"}, 75), ({"FAKE_PLUGIN_EXIT_CAD": "1"}, 1),
+                            ({"FAKE_PLUGIN_EXIT_CAD": "2", "FAKE_PLUGIN_EXIT_UV": "75"}, 75)):
+            with self.subTest(extra=extra):
+                done = self.run_hosted(**extra)
+                self.assertEqual(code, done.returncode, done.stdout + done.stderr)
+                self.assertEqual(self.receiver.posts, [])
+                self.assertEqual(done.stdout.count(install.NOTICE), 1)
+
+    def test_a_run_cad_started_says_no_line_and_reports_only_where_cad_has_told_the_person(self) -> None:
+        # cad runs this command with its output in a log, or thrown away (0.11.12's and 0.11.13's `cad plugin
+        # update`, the server's run of it, the bridge's install mode): a line said there is read by nobody, and
+        # nothing is sent before a person was told. What cad told them, it keeps in its settings.
+        from cad_server import analytics
+
+        self.assertEqual((install.TOLD, install.AGREED), (analytics.NOTICE, analytics.DISCLOSURE))
+        self.tools(cad="0.11.13")
+        failing = {"FAKE_PLUGIN_EXIT_CAD": "2", "FAKE_PLUGIN_EXIT_UV": "1"}
+        started = ({"CAD_INSTALL_BY_CAD": "1"}, {"CAD_INSTALL_ATTEMPT": "1763500000.5"},
+                   {"CAD_INSTALL_REPORT": str(self.root / "report.json")})
+        settings = self.home / ".local" / "state" / "cad" / "settings.json"
+
+        def keep(telemetry: dict) -> None:
+            """cad's settings, as cad writes them, with ``telemetry`` what it keeps of the person's answer."""
+            self.write(".local/state/cad/settings.json", json.dumps(
+                {"plugin": {"auto_update": True}, "telemetry": telemetry}, indent=2, sort_keys=True))
+
+        told = {"notifiedAt": 1763500000.5, "notice": analytics.NOTICE}
+        # A computer nobody was told on (no settings; settings that say nothing of it): nothing said, nothing sent,
+        # by each of the three variables cad's releases set. The same run, a person's, says its line and reports.
+        for kept in (None, {}):
+            for by in started:
+                with self.subTest(kept=kept, by=by):
+                    settings.unlink(missing_ok=True)
+                    if kept is not None:
+                        keep(kept)
+                    done = self.run_hosted(**failing, **by)
+                    self.assertEqual((1, [], False), (done.returncode, self.receiver.posts, install.NOTICE in done.stdout))
+        done = self.run_hosted(**failing, FAKE_UPDATE_EXIT="1")
+        self.assertEqual(done.stdout.count(install.NOTICE), 1)
+        self.report("plugin", 1)
+        # Told by cad, or having said yes to what is sent now: the report goes, as cad's own counts do, and still no
+        # line is said where nobody reads it.
+        for kept in (told, {"choice": "on", "disclosure": analytics.DISCLOSURE, "by": "cli", "decidedAt": 1.5, "id": "x"}):
+            for by in started:
+                with self.subTest(kept=kept, by=by):
+                    keep(kept)
+                    done = self.run_hosted(**failing, **by)
+                    self.assertEqual((1, False), (done.returncode, install.NOTICE in done.stdout))
+                    self.report("plugin", 1, by="cad")
+        # A no cad keeps is a no, told or not; so is a telling of less than is sent now, a yes to less, and
+        # settings that cannot be read.
+        for kept in ({**told, "choice": "off", "by": "cli", "decidedAt": 1.5}, {"choice": "off"},
+                     {"notifiedAt": 1763500000.5, "notice": analytics.NOTICE - 1}, {"notifiedAt": 1763500000.5},
+                     {"choice": "on", "disclosure": analytics.DISCLOSURE - 1}, {"choice": "on"}):
+            with self.subTest(kept=kept):
+                keep(kept)
+                done = self.run_hosted(**failing, CAD_INSTALL_BY_CAD="1")
+                self.assertEqual((1, [], False), (done.returncode, self.receiver.posts, install.NOTICE in done.stdout))
+        settings.unlink()
+        settings.mkdir()
+        done = self.run_hosted(**failing, CAD_INSTALL_BY_CAD="1")
+        self.assertEqual((1, [], False), (done.returncode, self.receiver.posts, install.NOTICE in done.stdout))
+        settings.rmdir()
+        # Told in one of cad's state folders and refused in another: the no holds.
+        keep(told)
+        elsewhere = self.root / "state"
+        elsewhere.mkdir()
+        (elsewhere / "settings.json").write_text(json.dumps({"telemetry": {"choice": "off"}}), encoding="utf-8")
+        done = self.run_hosted(**failing, CAD_INSTALL_BY_CAD="1", CAD_STATE_DIR=str(elsewhere))
+        self.assertEqual((1, []), (done.returncode, self.receiver.posts))
+        # A crash of the script on a run cad started goes by the same rule.
+        (elsewhere / "settings.json").unlink()
+        with mock.patch.object(install, "development", lambda here: False):
+            for kept, sends in ((told, True), ({}, False)):
+                keep(kept)
+                here = install.Here(self.reporting(CAD_INSTALL_BY_CAD="1"))
+                self.assertEqual(install.Reports(here).on, sends, kept)
+
+    def test_no_report_is_sent_or_spoken_of_where_the_person_the_environment_or_the_place_says_no(self) -> None:
+        failing = {"FAKE_FAIL": "uv:cad", "FAKE_PLUGIN_EXIT_UV": "1"}
+        # cad's kept settings, as cad writes them: the person's no there is a no here, wherever cad's state folder is.
+        settings = self.write(".local/state/cad/settings.json", json.dumps(
+            {"plugin": {"auto_update": True}, "telemetry": {"by": "cli", "choice": "off", "decidedAt": 1.5}}, indent=2,
+            sort_keys=True))
+        elsewhere = self.root / "state" / "settings.json"
+        elsewhere.parent.mkdir()
+        shutil.copy(settings, elsewhere)
+        named = {"CAD_STATE_DIR": str(elsewhere.parent), "XDG_STATE_HOME": str(self.root / "none")}
+        # The environment, in cad's own spellings; CI; a checkout's run (the rehearsals' hook, and the checkout's own
+        # file, which `run_install` runs).
+        for off in ({}, named, {"XDG_STATE_HOME": str(self.root / "none"), "DO_NOT_TRACK": "1"},
+                    {"XDG_STATE_HOME": str(self.root / "none"), "CAD_INSTALL_PY": str(INSTALL / "install.py")}):
+            with self.subTest(off=off):
+                done = self.run_hosted(**failing, **off)
+                self.assertEqual((1, [], False), (done.returncode, self.receiver.posts, install.NOTICE in done.stdout))
+        settings.unlink()
+        done = subprocess.run([sys.executable, str(INSTALL / "install.py")], env=self.reporting(**failing),
+                              capture_output=True, text=True, encoding="utf-8", timeout=120)
+        self.assertEqual((1, [], False), (done.returncode, self.receiver.posts, install.NOTICE in done.stdout))
+        # Every spelling, asked of the rule itself (the hosted copy's: this file is a checkout's).
+        def may(**environ: str) -> bool:
+            with mock.patch.object(install, "development", lambda here: bool(here.environ.get("CAD_INSTALL_PY"))):
+                return install.reporting(install.Here(self.environ(**environ)))
+
+        self.assertTrue(may())
+        self.assertFalse(install.reporting(install.Here(self.environ())), "a checkout's file")
+        for off in ({"DO_NOT_TRACK": "1"}, {"DO_NOT_TRACK": " True "}, {"DO_NOT_TRACK": "yes"}, {"DO_NOT_TRACK": "on"},
+                    {"CAD_TELEMETRY": "0"}, {"CAD_TELEMETRY": "OFF"}, {"CAD_TELEMETRY": "no"},
+                    {"CAD_TELEMETRY": "false"}, {"CI": "true"}, {"CI": "1"}, {"CAD_INSTALL_PY": "x"}, named):
+            self.assertFalse(may(**off), off)
+        for on in ({"DO_NOT_TRACK": "0"}, {"DO_NOT_TRACK": ""}, {"CAD_TELEMETRY": "1"}, {"CI": "false"}, {"CI": ""}):
+            self.assertTrue(may(**on), on)
+        # A yes kept there, settings that say nothing of it, or a file that is no JSON, is no no; one that cannot be
+        # read now is no yes.
+        for text, sent in ((json.dumps({"telemetry": {"choice": "on", "id": "x"}, "other": {"choice": "off"}}), True),
+                           (json.dumps({"plugin": {"auto_update": True}}), True), ("[]", True), ("{", True),
+                           (json.dumps({"telemetry": {"choice": "off"}}), False)):
+            settings.write_text(text, encoding="utf-8")
+            self.assertEqual(may(), sent, text)
+        settings.unlink()
+        settings.mkdir()
+        self.assertFalse(may())
+
+    def test_a_report_never_changes_what_the_run_says_or_how_it_ends(self) -> None:
+        failing = {"FAKE_FAIL": "uv:cad", "FAKE_PLUGIN_EXIT_UV": "1"}
+        taken = self.run_hosted(**failing)
+        self.report("cad", 1)
+        # A service that cannot be reached; and the same run where none may be sent, but for its first line.
+        for extra in ({"CAD_API_URL": "http://127.0.0.1:9/v1"}, {"CAD_API_URL": "http://127.0.0.1:9/v1", "no_proxy": ""}):
+            lost = self.run_hosted(**failing, **extra)
+            self.assertEqual((lost.returncode, lost.stdout, lost.stderr), (taken.returncode, taken.stdout, taken.stderr))
+        quiet = self.run_hosted(**failing, DO_NOT_TRACK="1")
+        self.assertEqual((quiet.returncode, install.NOTICE + "\n" + quiet.stdout, quiet.stderr),
+                         (taken.returncode, taken.stdout, taken.stderr))
+
+    def test_a_crash_of_the_script_is_reported_by_its_type_and_its_frames_and_python_ends_it_as_it_would(self) -> None:
+        hosted = self.root / "hosted" / "install.py"
+        hosted.parent.mkdir()
+        shutil.copy(INSTALL / "install.py", hosted)
+        # The hosted copy, with uv's answer about its tools raising inside the cad step.
+        driver = ("import importlib.util, sys\n"
+                  "spec = importlib.util.spec_from_file_location('hosted_install', sys.argv[1])\n"
+                  "install = importlib.util.module_from_spec(spec)\n"
+                  "sys.modules[spec.name] = install\n"
+                  "spec.loader.exec_module(install)\n"
+                  "def broken(here, uv):\n"
+                  "    raise KeyError('/home/someone/secret.txt')\n"
+                  "install.uv_tools = broken\n"
+                  "sys.exit(install.main([]))\n")
+        done = subprocess.run([sys.executable, "-c", driver, str(hosted)], env=self.reporting(), capture_output=True,
+                              text=True, encoding="utf-8", timeout=120)
+        # Python's own traceback and exit status, after the report.
+        self.assertEqual(1, done.returncode)
+        self.assertIn("Traceback (most recent call last):", done.stderr)
+        self.assertEqual(done.stderr.strip().splitlines()[-1], "KeyError: '/home/someone/secret.txt'")
+        frames = [{"function": name, "line": mock.ANY} for name in ("main", "run", "install_cad")]
+        body = self.report("script", 1, type="KeyError", frames=frames)
+        self.assertTrue(all(type(frame["line"]) is int and frame["line"] > 0 for frame in body["frames"]))
+        # Never a file's name, a path or a message.
+        raw = self.receiver.posts[0][2].decode("utf-8")
+        for private in ("secret", "someone", "install.py", str(self.root)):
+            self.assertNotIn(private, raw)
+        # At most ten frames, the innermost; a name the service would not take is not sent.
+        def deep(n: int) -> None:
+            if n:
+                deep(n - 1)
+            raise type("Ünïcode", (Exception,), {})("x")
+
+        with mock.patch.object(install, "development", lambda here: False), \
+                mock.patch.dict(os.environ, self.reporting(), clear=True):
+            del self.receiver.posts[:]
+            try:
+                deep(14)
+            except Exception as error:  # noqa: BLE001 - the crash under test
+                with mock.patch.object(install, "__file__", __file__):
+                    install.Reports(install.Here()).crashed(error)
+        body = self.report("script", 1, type="<?>", frames=[{"function": "deep", "line": mock.ANY}] * 10)
+
+    # --- install.sh ---------------------------------------------------------------------------------------------
+
     def run_sh(self, **extra: str) -> subprocess.CompletedProcess:
+        """install.sh piped to sh, with the checkout's install.py (``CAD_INSTALL_PY``: a development run)."""
         if self.log.exists():
             self.log.unlink()
         return subprocess.run(["/bin/sh"], input=(INSTALL / "install.sh").read_text(encoding="utf-8"), capture_output=True,
                               text=True, env=self.environ(CAD_INSTALL_PY=str(INSTALL / "install.py"),
                                                           PATH=f"{self.bin}:/usr/bin:/bin", **extra), timeout=60)
 
+    def run_sh_hosted(self, path: str = "", **extra: str) -> subprocess.CompletedProcess:
+        """install.sh piped to sh as a person runs the hosted one: install.py downloaded (the stand-in curl hands over
+        the checkout's), and a failure reported to the stand-in receiver."""
+        self.forget_calls()
+        del self.receiver.posts[:]
+        return subprocess.run(["/bin/sh"], input=(INSTALL / "install.sh").read_text(encoding="utf-8"), capture_output=True,
+                              text=True, timeout=120, env=self.reporting(
+                                  FAKE_INSTALL_PY=str(INSTALL / "install.py"), PATH=path or f"{self.bin}:/usr/bin:/bin",
+                                  **extra))
+
     def test_install_sh_runs_install_py_with_uv_s_python(self) -> None:
         self.programs("uv")
-        script = self.run_sh()
+        script = self.run_sh(FAKE_LOG_ENV="CAD_INSTALL_MARK")
         self.assertEqual(0, script.returncode, script.stderr)
-        run = self.calls("uv")[-1]
-        self.assertEqual(run[:-1], ["run", "--no-config", "--managed-python", "--python", "3.14", "--no-project"])
-        self.assertEqual(Path(run[-1]).name, "install.py")
+        run = self.logged("uv")[-1]
+        self.assertEqual(run["argv"][:-1], ["run", "--no-config", "--managed-python", "--python", "3.14", "--no-project"])
+        self.assertEqual(Path(run["argv"][-1]).name, "install.py")
+        # Beside it, in the scratch folder that goes with the run: where install.py says it started.
+        self.assertEqual(Path(run["env"]["CAD_INSTALL_MARK"]), Path(run["argv"][-1]).with_name("started"))
+        self.assertFalse(Path(run["argv"][-1]).parent.exists())
+        # Its exit status is install.py's.
+        script = self.run_sh(FAKE_FAIL="uv:run", FAKE_EXIT="75")
+        self.assertEqual(75, script.returncode)
+
+    def test_install_sh_cut_short_runs_nothing(self) -> None:
+        # A download that ends early: everything is inside main, called on the last line.
+        lines = (INSTALL / "install.sh").read_text(encoding="utf-8").splitlines(keepends=True)
+        self.assertEqual(lines[-1], 'main "$@"\n')
+        for kept in (len(lines) - 1, len(lines) * 2 // 3, len(lines) // 3):
+            script = subprocess.run(["/bin/sh"], input="".join(lines[:kept]), capture_output=True, text=True,
+                                    env=self.reporting(PATH=f"{self.bin}:/usr/bin:/bin"), timeout=60)
+            self.assertEqual((self.calls(), self.receiver.posts, script.stdout), ([], [], ""), kept)
 
     def uvs(self) -> list:
         """Each uv call: the program that ran (its path) and its first word."""
@@ -1083,7 +1173,113 @@ class InstallScriptTests(unittest.TestCase):
         self.assertEqual(self.uvs(), [(old, "--version"), (old, "self"), (old, "--version"), (new, "--version"),
                                       (new, "run")])
 
+    def test_install_sh_reports_what_fails_before_install_py_runs_and_nothing_install_py_reported(self) -> None:
+        self.programs("uv", "curl")
+        # uv: too old, and its installer could not be downloaded. Said first, once, on the stream its lines go to.
+        script = self.run_sh_hosted(FAKE_UV_VERSION="0.8.24", FAKE_FAIL="curl:https://astral.sh/uv/install.sh")
+        self.assertEqual(1, script.returncode)
+        self.assertEqual((script.stderr.splitlines()[0], script.stderr.count(install.NOTICE)), (install.NOTICE, 1))
+        self.report("uv", 1, uv="0.8.24")
+        # fetch: install.py could not be downloaded.
+        script = self.run_sh_hosted(FAKE_FAIL="curl:https://texttocad.dev/install.py")
+        self.assertEqual(1, script.returncode)
+        self.assertIn("error: could not download https://texttocad.dev/install.py", script.stderr)
+        self.report("fetch", 1)
+        # python: uv could not run install.py, which left no sign that it started. The run ends as uv did.
+        script = self.run_sh_hosted(FAKE_FAIL="uv:run", FAKE_EXIT="2")
+        self.assertEqual(2, script.returncode)
+        self.report("python", 2)
+        # install.py ran, and reported its own failure (cad could not be installed): the script sends no second, and
+        # install.py does not say again what the script said.
+        script = self.run_sh_hosted(FAKE_UV_RUNS="1", FAKE_FAIL="uv:cad", FAKE_EXIT="3", FAKE_PLUGIN_EXIT_UV="1")
+        self.assertEqual(1, script.returncode, script.stdout + script.stderr)
+        self.assertIn("cad: failed (uv tool install exit status 3", script.stdout)
+        self.assertEqual((script.stderr.count(install.NOTICE), script.stdout.count(install.NOTICE)), (1, 0))
+        self.report("cad", 3)
+        # install.py ran and failed where cad counts it (another run was going): nothing is sent.
+        self.tools(cad="0.13.0")
+        script = self.run_sh_hosted(FAKE_UV_RUNS="1", FAKE_PLUGIN_EXIT_CAD="75")
+        self.assertEqual((75, []), (script.returncode, self.receiver.posts), script.stdout + script.stderr)
+
+    def test_install_sh_sends_and_says_nothing_where_the_person_the_environment_or_the_place_says_no(self) -> None:
+        self.programs("uv", "curl")
+        failing = {"FAKE_FAIL": "curl:https://texttocad.dev/install.py"}
+        settings = self.write(".local/state/cad/settings.json", json.dumps(
+            {"plugin": {"auto_update": True}, "telemetry": {"by": "cli", "choice": "off", "decidedAt": 1.5}}, indent=2,
+            sort_keys=True))
+        elsewhere = self.root / "state" / "settings.json"
+        elsewhere.parent.mkdir()
+        shutil.copy(settings, elsewhere)
+        for off in ({}, {"CAD_STATE_DIR": str(elsewhere.parent), "XDG_STATE_HOME": str(self.root / "none")}):
+            with self.subTest(off=off):
+                script = self.run_sh_hosted(**failing, **off)
+                self.assertEqual((1, [], False),
+                                 (script.returncode, self.receiver.posts, install.NOTICE in script.stderr))
+        settings.write_text(json.dumps({"telemetry": {"choice": "on", "id": "x"}, "other": {"choice": "off"}}), encoding="utf-8")
+        self.run_sh_hosted(**failing)
+        self.report("fetch", 1)
+        settings.unlink()
+        for off in ({"DO_NOT_TRACK": "1"}, {"DO_NOT_TRACK": " True "}, {"DO_NOT_TRACK": "yes"}, {"CAD_TELEMETRY": "0"},
+                    {"CAD_TELEMETRY": "OFF"}, {"CAD_TELEMETRY": "no"}, {"CI": "true"}, {"CI": "1"}):
+            with self.subTest(off=off):
+                script = self.run_sh_hosted(**failing, **off)
+                self.assertEqual((1, [], False),
+                                 (script.returncode, self.receiver.posts, install.NOTICE in script.stderr))
+        # A checkout's run (the rehearsals' hook): uv could not run its install.py, and nothing is sent.
+        script = self.run_sh_hosted(FAKE_FAIL="uv:run", CAD_INSTALL_PY=str(INSTALL / "install.py"))
+        self.assertEqual((1, [], False), (script.returncode, self.receiver.posts, install.NOTICE in script.stderr))
+        for on in ({"DO_NOT_TRACK": "0"}, {"CAD_TELEMETRY": "1"}, {"CI": "false"}, {"CI": ""}):
+            with self.subTest(on=on):
+                self.run_sh_hosted(**failing, **on)
+                self.report("fetch", 1)
+
+    def test_install_sh_says_and_sends_nothing_on_a_run_cad_started_and_leaves_its_report_to_install_py(self) -> None:
+        # Its output is a log's or nobody's, and the script cannot tell whether cad told the person: so no line, and
+        # no report of its own stages, whatever cad's settings keep. install.py, which reads them, reports from there.
+        self.programs("uv", "curl")
+        told = {"telemetry": {"notifiedAt": 1763500000.5, "notice": 1}}
+        for kept in (None, told):
+            if kept is not None:
+                self.write(".local/state/cad/settings.json", json.dumps(kept, indent=2, sort_keys=True))
+            for by in ({"CAD_INSTALL_BY_CAD": "1"}, {"CAD_INSTALL_ATTEMPT": "1763500000.5"},
+                       {"CAD_INSTALL_REPORT": str(self.root / "report.json")}):
+                for failing, code in (({"FAKE_UV_VERSION": "0.8.24", "FAKE_FAIL": "curl:https://astral.sh/uv/install.sh"}, 1),
+                                      ({"FAKE_FAIL": "curl:https://texttocad.dev/install.py"}, 1),
+                                      ({"FAKE_FAIL": "uv:run", "FAKE_EXIT": "2"}, 2)):
+                    with self.subTest(kept=kept, by=by, failing=failing):
+                        script = self.run_sh_hosted(**failing, **by)
+                        self.assertEqual((code, [], False), (script.returncode, self.receiver.posts,
+                                                             install.NOTICE in script.stdout + script.stderr))
+        # install.py, run by it on a computer cad told: cad could not be installed, reported once, by cad, unsaid.
+        script = self.run_sh_hosted(FAKE_UV_RUNS="1", FAKE_FAIL="uv:cad", FAKE_EXIT="3", FAKE_PLUGIN_EXIT_UV="1",
+                                    CAD_INSTALL_BY_CAD="1")
+        self.assertEqual((1, False), (script.returncode, install.NOTICE in script.stdout + script.stderr))
+        self.report("cad", 3, by="cad")
+
+    def test_install_sh_s_report_goes_by_the_real_curl_and_the_real_wget(self) -> None:
+        # The command lines themselves, each by the program a person has: install.py cannot be downloaded (every
+        # proxy is a closed port), and the report reaches the stand-in receiver, past the proxies, as written.
+        needs = ("awk", "cut", "date", "grep", "mktemp", "od", "rm", "sed", "tr", "uname")
+        for sender in ("curl", "wget"):
+            tools = self.root / f"tools-{sender}"
+            tools.mkdir()
+            found = {name: shutil.which(name, path="/usr/bin:/bin") for name in (*needs, sender)}
+            if not all(found.values()):
+                continue  # this system has no such program: the other one is the test
+            for name, path in found.items():
+                (tools / name).symlink_to(path)
+            with self.subTest(sender=sender):
+                script = self.run_sh_hosted(path=f"{self.bin}:{tools}")
+                self.assertEqual(1, script.returncode, script.stderr)
+                self.assertIn("error: could not download https://texttocad.dev/install.py", script.stderr)
+                self.report("fetch", 1)
+        self.assertTrue(any((self.root / f"tools-{sender}" / sender).exists() for sender in ("curl", "wget")),
+                        "neither curl nor wget is here: nothing was tested")
+
+    # --- the checkout's own install, and the scripts' text -----------------------------------------------------------
+
     def test_the_development_install_puts_the_checkout_in_place_of_the_published_copy(self) -> None:
+        self.programs("git")
         dev_spec = importlib.util.spec_from_file_location("text_to_cad_dev_install", INSTALL / "dev_install.py")
         dev_install = importlib.util.module_from_spec(dev_spec)
         dev_spec.loader.exec_module(dev_install)
@@ -1102,9 +1298,10 @@ class InstallScriptTests(unittest.TestCase):
         self.programs("claude")
         self.claude_records({"text-to-cad@earthtojake": 1},
                             {"earthtojake": {"source": "github", "repo": "earthtojake/text-to-cad", "ref": "latest"}})
-        source = install.Source(folder=folder, catalog=install.DEV_CATALOG, skills_dir=folder / "skills")
-        claude = [app for app in install.APPS if app.key == "claude"]
-        lines = install.install_apps(install.Here(self.environ()), source, claude, say=lambda line: None)
+        plugin = dev_install.cad_plugin  # cad's own table of apps, loaded from this checkout's files
+        source = plugin.source.Source(folder=folder, catalog=plugin.source.DEV_CATALOG, skills_dir=folder / "skills")
+        claude = [app for app in plugin.apps.APPS if app.key == "claude"]
+        lines = plugin.apps.install_apps(plugin.computer.Here(self.environ()), source, claude, say=lambda line: None)
         self.assertEqual(self.calls("claude"), [["plugin", "marketplace", "add", str(folder)],
                                                 ["plugin", "install", "text-to-cad@earthtojake-dev"],
                                                 ["plugin", "uninstall", "text-to-cad@earthtojake"],
@@ -1123,8 +1320,9 @@ class InstallScriptTests(unittest.TestCase):
                 self.assertEqual(dev_install.main(["--release"]), 0)
             self.assertEqual([argv for argv in self.calls("uv") if argv[1] in ("install", "uninstall")],
                              [["tool", "uninstall", "cad"], ["tool", "install", *install.UV_TOOL_ARGS, "cad"]])
-            # The install command leaves cad's own automatic updates as they are: --release turns them on again.
-            self.assertEqual(self.calls("cad"), [["plugin", "update", "auto", "on"], ["update", "auto", "on"]])
+            # install.py hands the apps to the published cad, and leaves cad's own automatic updates as they are:
+            # --release turns them on again.
+            self.assertEqual(self.calls("cad"), [ASKED, HANDED, AUTO_ON, ["update", "auto", "on"]])
             self.assertFalse(dev_install.editable(str(self.bin / "uv")))
 
     def test_install_ps1_ends_a_failure_in_a_terminating_error(self) -> None:
@@ -1143,16 +1341,55 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("$null = Install-Uv\n            $version = $null\n            $uv = Find-InstalledUv", text)
         self.assertNotIn("winget upgrade", text)
 
-    def test_the_installer_names_no_release(self) -> None:
+    def test_the_three_scripts_say_one_line_and_report_to_one_address_each_its_own_stages(self) -> None:
+        # install.ps1 is not runnable here (the Windows install jobs run it): what it shares with the other two is
+        # held by its text. One line said first, word for word; the service's one address; a stage per failure.
+        address = f"{install.API}/install"
+        self.assertEqual(address, "https://api.texttocad.dev/v1/install")
+        sh, ps1 = ((INSTALL / name).read_text(encoding="utf-8") for name in ("install.sh", "install.ps1"))
+        self.assertIn(f'NOTICE="{install.NOTICE}"\n', sh)
+        self.assertIn(f"$Notice = '{install.NOTICE}'\n", ps1)
+        self.assertIn(f'REPORT_URL="{address}"\n', sh)
+        self.assertIn(f"$ReportUrl = '{address}'\n", ps1)
+        self.assertEqual(re.findall(r"Send-Report '(\w+)' (\S+)", ps1),
+                         [("uv", "1"), ("uv", "1"), ("uv", "1"), ("fetch", "1"), ("python", "$code")])
+        self.assertEqual(re.findall(r"(?m)^\s+(?:stage=(\w+)|report (python) )", sh),
+                         [("uv", ""), ("fetch", ""), ("", "python")])
+        for name in install.BY_CAD + (install.MARK_ENV, install.API_ENV, "DO_NOT_TRACK", "CAD_TELEMETRY", "CAD_INSTALL_PY"):
+            self.assertIn(name, sh, name)
+            self.assertIn(name, ps1, name)
+        # A run cad started (any of its three variables) says and sends nothing from either shell: the rule that
+        # decides both stops there, and what they send is a person's run always.
+        self.assertIn('  [ -z "${CAD_INSTALL_BY_CAD:-}${CAD_INSTALL_ATTEMPT:-}${CAD_INSTALL_REPORT:-}" ] || return 1\n',
+                      sh.split("may_report() {\n", 1)[1].split("\n}\n", 1)[0])
+        self.assertIn("        if ($env:CAD_INSTALL_BY_CAD -or $env:CAD_INSTALL_ATTEMPT -or $env:CAD_INSTALL_REPORT) "
+                      "{ return $false }\n", ps1.split("    function Test-Report {\n", 1)[1].split("\n    }\n", 1)[0])
+        self.assertEqual((sh.count('"by":"person"'), sh.count('"by":"'), ps1.count("$by = 'person'\n"), ps1.count("$by = ")),
+                         (1, 1, 1, 1))
+
+    def test_the_installer_names_no_release_and_no_agent_app(self) -> None:
         # Nothing in the install command changes with a release: no fallback, no pin, nothing a release stamps.
         for name in ("install.sh", "install.ps1", "install.py"):
             text = (INSTALL / name).read_text(encoding="utf-8")
             self.assertNotIn("FALLBACK", text, name)
             self.assertNotRegex(text, r"(cad|cad-server|cad-mcp)==[0-9]", name)
-            self.assertNotIn("api.texttocad.dev", text, f"{name} reads no version feed")
+            self.assertNotRegex(text, r"/(releases|versions)\b", f"{name} reads no version feed")
         for name in ("sync-version.mjs", "check-version.sh"):
             self.assertNotIn("install", (REPO_ROOT / "scripts/release" / name).read_text(encoding="utf-8").replace(
                 "installers clone", ""), name)
+        # cad carries the one table of agent apps, and what the terminal is shown (`cad plugin install`): install.py
+        # has neither, names no plugin's source, and runs neither `cad setup` nor `cad plugin update` (but its switch,
+        # `cad plugin update auto on`), which on 0.11.12 and 0.11.13 would run this command again.
+        text = (INSTALL / "install.py").read_text(encoding="utf-8")
+        self.assertEqual([name for name in ("APPS", "App", "install_apps", "Source", "remove_loose_skills", "Screen",
+                                            "Logo", "Live", "play_logo") if hasattr(install, name)], [])
+        self.assertNotRegex(text, r"(?i)earthtojake|marketplace|\\x1b")
+        self.assertEqual(re.findall(r'\[[^\[\]]*"(?:setup|plugin)"[^\[\]]*\]', text),
+                         ['[cad.command, "plugin", "install", "--help"]',
+                          '[cad.command, "plugin", "install"]',
+                          '[uv, "tool", "run", "--no-config", *UV_TOOL_ARGS, "cad@latest", "plugin", "install"]',
+                          '[cad.command, "plugin", "update", "auto", "on"]'])
+
 
 if __name__ == "__main__":
     unittest.main()

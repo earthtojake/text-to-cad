@@ -5,9 +5,9 @@ build ran in, if one was (``extras.last_with_kernel``) --, where each integratio
 its release, and cad's own update (``cad_server._internal.auto_update``: the switches, whether this cad is a global
 install and by which installer, the newest release of this cad's major the version feed as last read names and,
 where it names a release of a higher major, the one line that says how to get it (``auto_update.MAJOR_LINE``), whether
-that installer is found, and the last attempt) and the install command's
-record (``cad_server._internal.plugin_catch_up``: the release it is up to date for, and the last run the server
-began for a newer cad, and how it went); on Windows, uv's folder in
+that installer is found, and the last attempt) and the plugin's
+record (``cad_server._internal.plugin_catch_up``: the release of cad the plugin in the agent apps is up to date for,
+and the last run of ``cad plugin install`` the server began for a newer cad, and how it went); on Windows, uv's folder in
 an app's private copy of AppData, a copy of cad or uv's leftovers, to delete (``private_folders``). It repairs,
 registers, starts, writes and deletes nothing: ``--check`` prints the same report.
 
@@ -51,7 +51,8 @@ LEFTOVER_LINE = ("uv left files in an app's private folder: {path}. Inside that 
                  "to install. Delete that folder in File Explorer; deleting it from inside that app does not work.")
 
 
-def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
+def build_parser(prog: str = "cad doctor"):
+    """The parser of ``cad doctor``: its options, exactly as the command parses them."""
     from cad_server._internal.cli_parser import parser as command_parser
 
     parser = command_parser(prog=prog, description="Report this cad: its release, its data and cache folders and what "
@@ -61,7 +62,11 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
     parser.add_argument("--check", action="store_true", help="the same report")
     parser.add_argument("--json", action="store_true", help="the report as one JSON document: each check's name, "
                                                             "status (ok, info, warning, failed) and detail")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
+    args = build_parser(prog).parse_args(argv)
 
     from cad.engine.previous import version
 
@@ -138,8 +143,8 @@ def _auto():
 
 def _update() -> tuple[str, str]:
     """cad's own update: whether it updates itself (``cad update auto``), a global install alone (and by which
-    installer), and whether the server runs the install command once where cad is newer than the release it is up to
-    date for (``cad plugin update auto``)."""
+    installer), and whether the server runs ``cad plugin install`` once where cad is newer than the release the plugin
+    is up to date for (``cad plugin update auto``)."""
     auto = _auto()
     found, word = auto.global_install(), {True: "on", False: "off"}
     plugin = f"plugin update auto {word[auto.plugin_switch()]}"
@@ -203,17 +208,21 @@ def _attempt() -> tuple[str, str]:
 
 
 def _catch_up() -> tuple[str, str]:
-    """The install command's record: the release of cad it is up to date for -- the one it last ended with exit status
-    0 for, or the one that turned ``cad plugin update auto`` on --, and the last run the server began for a newer cad --
-    its release, when, how it went and its exit status, the try of how many."""
+    """The plugin's record: the release of cad the plugin in the agent apps is up to date for -- the one ``cad plugin
+    install`` last went well in every app for, or the one that turned ``cad plugin update auto`` on (the hosted
+    install command's last step, its run going well) --, the release a run is owed for where the last did not go
+    well, and the last run of ``cad plugin install`` the server began
+    for a newer cad -- its release, when, how it went and its exit status, the try of how many."""
     import time
 
     from cad_server._internal import plugin_catch_up
 
     found = plugin_catch_up.read()
     named = found.get("for")
-    said = (f"the install command is up to date for cad {named}" if isinstance(named, str)
-            else "no record of the install command being up to date on this computer")
+    said = (f"the plugin is up to date for cad {named}" if isinstance(named, str)
+            else "no record of the plugin being up to date on this computer")
+    if isinstance(found.get("owed"), str):
+        said += f"; a run is owed for cad {found['owed']} (the last did not go well)"
     if not isinstance(found.get("release"), str) or not isinstance(found.get("at"), (int, float)):
         return INFO, said
     when = time.strftime("%Y-%m-%d %H:%M", time.localtime(found["at"]))

@@ -455,8 +455,8 @@ class WindowsTokenFirstTest(unittest.TestCase):
         answering.start()
         with mock.patch.object(places, "WINDOWS", True):
             stream = ours.makefile("rwb")
-            connection = client.Connection(stream, stream, stream, ours)
-            self.assertEqual(client._exchange(connection, {"op": "status"}, address=port_file), {"ok": True})
+            connection = client.Connection(stream, stream, stream, ours, token=token)
+            self.assertEqual(client._exchange(connection, {"op": "status"}), {"ok": True})
         answering.join(timeout=30)
         self.assertTrue(sent[0].startswith(b'{"token": "' + token.encode() + b'", "op": "status"'))
         handled, _token = self.serve(door.hello(token) + sent[0])
@@ -499,9 +499,40 @@ class WindowsTokenFirstTest(unittest.TestCase):
                 connection = client._connect(port_file)
                 self.assertIsNotNone(connection, name)
                 self.assertEqual(connection.protocol, door.DOOR_PROTOCOL, name)
-                self.assertEqual(client._exchange(connection, {"op": "status"}, address=port_file), {"ok": True})
+                self.assertEqual(client._exchange(connection, {"op": "status"}), {"ok": True})
             accepting.join(timeout=30)
             self.assertEqual(spoken.pop(), door.DOOR_PROTOCOL, f"the daemon carries the hello's protocol: {name}")
+
+    def test_a_request_is_answered_whose_port_file_went_after_the_hello(self) -> None:
+        """Two starts at once, each replacing an older server: one connects to it, then the other's stop removes
+        its port file before the request is sent. The request carries its hello's token and is answered, never
+        failing on a port file read again."""
+        import socket
+        import threading
+        import types
+        from unittest import mock
+
+        from cad.engine import client, places
+        from cad_server.engine import daemon
+
+        token = "ab" * 16
+        folder = Path(tempfile.mkdtemp(prefix="eng-port-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        listener = socket.create_server(("127.0.0.1", 0))
+        self.addCleanup(listener.close)
+        engine = types.SimpleNamespace(token=token, refusal=None, unsaid="", ended=lambda request: None,
+                                       handle=lambda request, send: send({"ok": True}))
+        port_file = folder / f"{places.NAME}.port"
+        port_file.write_text(f"{listener.getsockname()[1]} {token}\n", encoding="utf-8")
+        accepting = threading.Thread(target=lambda: daemon._serve_connection(engine, listener.accept()[0]))
+        accepting.start()
+        with mock.patch.object(places, "WINDOWS", True), mock.patch.object(daemon, "WINDOWS", True), \
+                mock.patch.object(places, "port_path", return_value=port_file):
+            connection = client._connect()
+            self.assertIsNotNone(connection)
+            port_file.unlink()  # the other start's stop: the server it told removes its port file as it goes
+            self.assertEqual(client._exchange(connection, {"op": "stop"}), {"ok": True})
+        accepting.join(timeout=30)
 
 
 class NoTimerTest(unittest.TestCase):
@@ -556,6 +587,21 @@ class NoTimerTest(unittest.TestCase):
             for given, seconds in (("2", 2.0), ("0", 1.0), ("soon", 30.0)):
                 os.environ[daemon.TEND_ENV] = given
                 self.assertEqual(daemon.tend_seconds(), seconds, given)
+
+    def test_the_plugin_first_catches_up_a_minute_after_the_start_or_two_tendings_on_a_test_s_computer(self) -> None:
+        """The install command that updated cad restarted the server and goes on to the plugin in that minute
+        (``plugin_catch_up.START_SECONDS``); a test's computer, tending faster, waits as many of its tendings."""
+        from cad_server._internal import plugin_catch_up
+        from cad_server.engine import daemon
+
+        with mock.patch.dict(os.environ):
+            os.environ.pop(daemon.TEND_ENV, None)
+            self.assertEqual(daemon.catch_up_seconds(), plugin_catch_up.START_SECONDS)
+            self.assertEqual(plugin_catch_up.START_SECONDS, 60.0)
+            engine = daemon.Daemon(cap=1)
+            self.assertEqual((engine.catching.started, engine.catching.wait), (engine.began, 60.0))
+            os.environ[daemon.TEND_ENV] = "2"
+            self.assertEqual(daemon.catch_up_seconds(), 4.0)
 
 
 class BusyTest(unittest.TestCase):

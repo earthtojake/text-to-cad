@@ -69,7 +69,6 @@ _DISTRIBUTION_FAMILIES = (
     r"models/",
     r"tests/",
     r"scripts/",
-    r"requirements-dev",
     r"AGENTS\.md",
     r"CONTRIBUTING\.md",
     r"\.github/",
@@ -79,14 +78,13 @@ _ALIASES = tuple(sorted(path.parent for path in repo_path("packages/aliases").gl
 _MD_ISOLATION_ROOTS: dict[str, tuple[str, ...]] = {
     **{project.relative_to(REPO_ROOT).as_posix(): _DISTRIBUTION_FAMILIES for project in (*PROJECTS, *_ALIASES)},
     # Skills own their scripts/<tool> entrypoints; the repo's scripts/
-    # families, its venv and its dev manifests are not theirs to name.
+    # families and its venv are not theirs to name.
     "skills": (
         r"apps/",
         r"packages/",
         r"tests/",
         r"scripts/(?:bundle|dev|test|release|install|github-workflows)/",
         r"\.venv",
-        r"requirements-dev",
         r"AGENTS\.md",
         r"CONTRIBUTING\.md",
         r"\.github/",

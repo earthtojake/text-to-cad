@@ -43,6 +43,7 @@ import re
 import shutil
 import signal
 import socket
+import socketserver
 import subprocess
 import sys
 import tarfile
@@ -140,7 +141,17 @@ def default_free() -> bool:
     return True
 
 
-class Feed(http.server.ThreadingHTTPServer):
+class Loopback(http.server.ThreadingHTTPServer):
+    """A stand-in's server on loopback, bound without ``HTTPServer``'s naming of the host by reverse DNS
+    (``socket.getfqdn``), which waits about 35 s where no resolver answers (GitHub's Macs), as cad's own server
+    does (``cad_server.viewer.handler``). Nothing reads the name."""
+
+    def server_bind(self) -> None:
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
+class Feed(Loopback):
     """The version feed saying ``latest`` at both its addresses: the old one (any path ending ``versions``), ``latest``
     alone, as releases 0.10.0 to 0.11.11 read it, and the new one (any path ending ``releases``), with ``lines``:
     ``lines`` as set (each major's newest release, by its number), else ``latest`` for its own major; anything else

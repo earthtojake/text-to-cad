@@ -103,7 +103,10 @@ def find_ccx() -> Ccx:
     :class:`CalculixMissingError` naming why and how to install it."""
     try:
         path = programs.find(CCX).absolute()  # relative, it would be read in the folder a solve runs in
-        return Ccx(path=str(path), version=programs.check_version(CCX, path, _version(path)))
+        version = _version(path)
+        if version is None:
+            version = _packaged_version(path)
+        return Ccx(path=str(path), version=programs.check_version(CCX, path, version))
     except programs.ProgramMissing as error:
         raise CalculixMissingError(str(error)) from None
 
@@ -119,6 +122,18 @@ def _version(path: Path) -> str | None:
             raise programs.ProgramMissing(f"{path} does not run ({error}): {install_hint()}") from error
     found = re.search(r"Version\s+(\d+\.\d+)", said)
     return found.group(1) if found else None
+
+
+def _packaged_version(path: Path) -> str | None:
+    """The CalculiX version of the ``cad-ccx`` package's own ``ccx``, as the package states it (``cad_ccx.version()``,
+    which runs nothing), where ``path`` is that program and it said none. The Windows build prints its version to a
+    console and nothing into a pipe (it ends through Fortran's ``stop`` with its output unflushed), so ``ccx -v`` says
+    nothing there (#871). ``None`` for any other program: one ``CAD_CCX`` names is asked, never assumed."""
+    if all(Path(found).absolute() != path for found in _installed()):
+        return None
+    import cad_ccx
+
+    return cad_ccx.version()
 
 
 def _on_one_thread(env: dict[str, str]) -> dict[str, str]:

@@ -18,7 +18,7 @@ screenshot the card to confirm your own work ([Check each change](../SKILL.md#ch
 - [Targeted additions](#targeted-additions)
 - [Diagnostic review](#diagnostic-review)
 
-`cad <type> snapshot SRC OUT.png` draws SRC as the CAD Viewer draws it, rendered by OCCT,
+`cad <type> snapshot SRC OUT.png` draws SRC as the viewer draws it, rendered by OCCT,
 into a PNG. SRC is a model's id (the `id:` line its run printed: drawn from the document
 the server holds, as it is, and nothing is built), a document file (`.xbf`, `.step`), a
 mesh (`.stl`, `.3mf`, `.glb`), a robot (`.urdf`, `.srdf`) or a drawing (`.dxf`). A

@@ -68,6 +68,9 @@ def evaluate(expression: str, results: dict[str, str], outputs: dict[str, str], 
     expression = re.sub(r"github\.ref (==|!=) '([^']*)'", lambda m: str((ref == m[2]) == (m[1] == "==")), expression)
     expression = re.sub(r"needs\.gate\.outputs\.(\w+) (==|!=) '(\w*)'",
                         lambda m: str((outputs.get(m[1], "") == m[3]) == (m[2] == "==")), expression)
+    # Another job's output, given as "job.name".
+    expression = re.sub(r"needs\.([\w-]+)\.outputs\.(\w+) (==|!=) '(\w*)'",
+                        lambda m: str((outputs.get(f"{m[1]}.{m[2]}", "") == m[4]) == (m[3] == "==")), expression)
     expression = expression.replace("!cancelled()", "True").replace("&&", " and ").replace("||", " or ")
     if not re.fullmatch(r"(?:True|False|and|or|not|\s|[()])+", expression):
         raise AssertionError(f"unhandled condition: {expression}")
@@ -171,28 +174,44 @@ class PublishGate(unittest.TestCase):
         self.assertIn("find dist -name 'cad-[0-9]*.whl'", publish)
 
     def test_installers_get_the_version_only_once_pypi_serves_it(self):
-        # Each project uploaded, then PyPI's index -- what uv resolves a pin through -- listing it before the
-        # next goes up: the library first, which the others pin at the release. All in the pypi job, which
-        # the branches job needs. The docs deploy and the tag follow the branches.
+        # The library uploaded and listed by PyPI's index -- what uv resolves a pin through -- before the others,
+        # which pin it at the release; cad-server and cad-mcp together, in one upload, both listed before cadgen,
+        # the alias the version feed reads, goes last (apps/api: a release cadgen lists installs by every name).
+        # All in the pypi job, which the install branches, the tag and the docs follow.
         pypi = JOBS["pypi"]
-        self.assertEqual(pypi_release.PROJECTS[0], "cad")
+        self.assertEqual(pypi_release.PROJECTS, ("cad", "cad-server", "cad-mcp", "cadgen"))
+        steps = [
+            'pypi_release.py --project cad --version "$VERSION" --built',
+            "packages-dir: upload-to-pypi/cad\n",
+            'pypi_release.py --project cad --version "$VERSION" --wait',
+            'pypi_release.py --project cad-server --version "$VERSION" --built',
+            'pypi_release.py --project cad-mcp --version "$VERSION" --built',
+            "packages-dir: upload-to-pypi/servers\n",
+            'pypi_release.py --project cad-server --version "$VERSION" --wait',
+            'pypi_release.py --project cad-mcp --version "$VERSION" --wait',
+            'pypi_release.py --project cadgen --version "$VERSION" --built',
+            "packages-dir: upload-to-pypi/cadgen\n",
+            'pypi_release.py --project cadgen --version "$VERSION" --wait',
+        ]
         at = 0
-        for project in pypi_release.PROJECTS:
-            with self.subTest(project=project):
-                compare = pypi.index(f'pypi_release.py --project {project} --version "$VERSION" --built', at)
-                publish = pypi.index(f"packages-dir: upload-to-pypi/{project}\n", compare)
-                at = pypi.index(f'pypi_release.py --project {project} --version "$VERSION" --wait', publish)
-        self.assertEqual(pypi.count("uses: pypa/gh-action-pypi-publish@"), len(pypi_release.PROJECTS))
-        branches = condition("branches")
-        self.assertTrue(evaluate(branches, {"pypi": "success"}, {"is_main": "true"}))
-        self.assertFalse(evaluate(branches, {"pypi": "success"}, {"is_main": "false"}))
+        for step in steps:
+            with self.subTest(step=step):
+                at = pypi.index(step, at)
+        self.assertEqual(pypi.count("uses: pypa/gh-action-pypi-publish@"), 3)
+        self.assertEqual(pypi.count("--upload upload-to-pypi/servers"), 2, "cad-server and cad-mcp share one upload")
+        # The branches and the tag follow PyPI, on main, in one job.
+        tag = condition("tag-release")
+        self.assertTrue(evaluate(tag, {"pypi": "success"}, {"is_main": "true"}))
+        self.assertFalse(evaluate(tag, {"pypi": "success"}, {"is_main": "false"}))
         for result in ("failure", "skipped", "cancelled"):
-            self.assertFalse(evaluate(branches, {"pypi": result}, {"is_main": "true"}))
-        for job in ("deploy-docs", "tag-release"):
-            with self.subTest(job=job):
-                self.assertTrue(evaluate(condition(job), {"branches": "success"}, {}))
-                for result in ("skipped", "failure", "cancelled"):
-                    self.assertFalse(evaluate(condition(job), {"branches": result}, {}))
+            self.assertFalse(evaluate(tag, {"pypi": result}, {"is_main": "true"}))
+        # The docs deploy follows the branches' push, and only it: a tag that fails after the push holds
+        # nothing back, and a job that never pushed deploys nothing.
+        docs = condition("deploy-docs")
+        self.assertTrue(evaluate(docs, {}, {"tag-release.branches": "pushed"}))
+        self.assertFalse(evaluate(docs, {}, {"tag-release.branches": ""}))
+        self.assertIn("branches: ${{ steps.branches.outputs.pushed == 'true' && 'pushed' || '' }}", JOBS["tag-release"])
+        self.assertNotIn("branches", JOBS, "the branches move in the tag's job: one runner, not two")
 
     def test_only_the_pypi_job_on_main_in_its_environment_may_mint_a_pypi_token(self):
         # PyPI's trusted publisher names this workflow and the `release` environment, which deploys from
@@ -214,16 +233,22 @@ class PublishGate(unittest.TestCase):
         self.assertIn("name: dist-${{ needs.gate.outputs.version }}-released", JOBS["tag-release"])
 
     def test_the_branches_get_their_copies_of_the_plugin(self):
-        # latest gets one copy and claude.ai's claude-plugin the other, in one push: both or neither.
-        body = JOBS["branches"]
+        # latest gets one copy and claude.ai's claude-plugin the other, in one push: both or neither. It is the
+        # tag job's first step after the checkout, so the tag follows it.
+        job = JOBS["tag-release"]
+        body = job.split("- name: Commit the plugin onto latest, claude-plugin and codex-plugin and push them\n", 1)[1]
+        body = body.split("\n      - name: ", 1)[0]
+        self.assertLess(job.index("- name: Commit the plugin onto latest"), job.index("- name: Configure tag push credentials"))
+        self.assertLess(job.index("- name: Commit the plugin onto latest"), job.index("- name: Create release tag and GitHub Release"))
         self.assertIn("plugin_branch.py --commit --copy latest", body)
         self.assertIn("plugin_branch.py --commit --copy directory", body)
         self.assertIn('git push --atomic "$remote" "$latest:refs/heads/latest" "$directory:refs/heads/claude-plugin"',
                       body)
+        self.assertIn('echo "pushed=true" >> "$GITHUB_OUTPUT"', body)
         self.assertNotIn("refs/heads/plugin", body)
         # Only a deploy key may update those branches, so the push goes over SSH with the release's own key,
-        # checked against GitHub's host keys, and nothing else; the gate checks for the key on main, before
-        # the PyPI upload.
+        # checked against GitHub's host keys, and nothing else -- not the token the tag's later step uses; the
+        # gate checks for the key on main, before the PyPI upload.
         self.assertIn("INSTALL_BRANCHES_KEY: ${{ secrets.INSTALL_BRANCHES_KEY }}", body)
         self.assertIn('remote="git@github.com:${GITHUB_REPOSITORY}.git"', body)
         self.assertIn("StrictHostKeyChecking=yes", body)
@@ -253,6 +278,24 @@ class PublishGate(unittest.TestCase):
         for name in ("install.sh", "install.ps1", "install.py", "SHA256SUMS"):
             self.assertIn(f'"$RUNNER_TEMP"/installer/{name}', attach)
         self.assertIn('"$RUNNER_TEMP"/installer/*', JOBS["publish"].split("- name: Rehearsal summary (build-test)", 1)[1])
+
+    def test_the_release_carries_cad_s_distributions_not_the_empty_aliases(self):
+        # The aliases (cad-server, cad-mcp, cadgen) are empty and PyPI keeps them: the release page carries cad's
+        # wheel and sdist alone, in a release and a rehearsal alike. `cad-*` names cad's files and none of the
+        # aliases' (cad_server-, cad_mcp-, cadgen-).
+        import fnmatch
+
+        attach = JOBS["tag-release"].split("- name: Create release tag and GitHub Release\n", 1)[1]
+        rehearsal = JOBS["publish"].split("- name: Rehearsal summary (build-test)", 1)[1]
+        for body, folder in ((attach, '"$RUNNER_TEMP"/dist/'), (rehearsal, "dist/")):
+            self.assertIn(f"{folder}cad-*.whl", body)
+            self.assertIn(f"{folder}cad-*.tar.gz", body)
+            self.assertNotIn(f"{folder}*", body.replace(f"{folder}cad-*", ""))
+        built = ["cad-0.11.13-py3-none-any.whl", "cad-0.11.13.tar.gz", "cad_server-0.11.13-py3-none-any.whl",
+                 "cad_server-0.11.13.tar.gz", "cad_mcp-0.11.13-py3-none-any.whl", "cad_mcp-0.11.13.tar.gz",
+                 "cadgen-0.11.13-py3-none-any.whl", "cadgen-0.11.13.tar.gz"]
+        attached = [name for name in built if fnmatch.fnmatch(name, "cad-*.whl") or fnmatch.fnmatch(name, "cad-*.tar.gz")]
+        self.assertEqual(attached, ["cad-0.11.13-py3-none-any.whl", "cad-0.11.13.tar.gz"])
 
 
 pypi_release = load("pypi_release", "scripts/release/pypi_release.py")

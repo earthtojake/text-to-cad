@@ -610,7 +610,7 @@ is supported.
 
 0.7 had a build daemon, a separate viewer process with page sessions, and a store. 0.8
 has one engine per installation: it runs the warm workers that build models, holds
-their documents, and serves the CAD Viewer's one page. The first run, command or
+their documents, and serves the viewer's one page. The first run, command or
 `cadgen viewer` starts it, and no timer stops it.
 
 **Documents and their ids.**
@@ -885,7 +885,7 @@ home's search and filters, and the like), with how many times each was used and,
 that stays on, how many whole seconds it was on -- never what you typed, a value you chose
 (other than a choice that is itself a name on the list, such as a display mode), or a file's
 or a part's name. The CAD app's `cad_telemetry` tool is gone: you answer in the CAD app's
-menu, the CAD Viewer's, or with `cadgen telemetry`.
+menu, the viewer's, or with `cadgen telemetry`.
 
 ## What lands where
 

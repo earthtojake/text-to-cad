@@ -74,6 +74,12 @@ const direction = camera => {
   const length = Math.hypot(...d) || 1;
   return d.map(value => value / length);
 };
+// Which way is up on the screen: the camera's up square to its view. A camera's `up` may be the world's
+// or its screen's own (the orbit leaves its own: `kit/camera/turntable.js`), the same picture either way.
+const screenUp = (camera, look) => {
+  const along = camera.up.reduce((sum, value, index) => sum + value * look[index], 0);
+  return camera.up.map((value, index) => value - along * look[index]);
+};
 const key = value => JSON.stringify(value ?? null);
 
 /**
@@ -88,7 +94,7 @@ export function sameView(a, b) {
   const [da, db] = [direction(a.camera), direction(b.camera)];
   const cos = Math.min(1, Math.max(-1, da.reduce((sum, value, index) => sum + value * db[index], 0)));
   if (Math.acos(cos) * 180 / Math.PI >= SAME_TURN_DEGREES) return false;
-  const [ua, ub] = [a.camera.up, b.camera.up];
+  const [ua, ub] = [screenUp(a.camera, da), screenUp(b.camera, db)];
   const upCos = ua.reduce((sum, value, index) => sum + value * ub[index], 0) / ((Math.hypot(...ua) * Math.hypot(...ub)) || 1);
   if (Math.acos(Math.min(1, Math.max(-1, upCos))) * 180 / Math.PI >= SAME_TURN_DEGREES) return false;
   const [ha, hb] = [a.camera.orthographicHalfHeight, b.camera.orthographicHalfHeight];
