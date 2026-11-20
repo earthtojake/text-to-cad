@@ -39,7 +39,7 @@ function multiply(a, b) {
 }
 
 /** The inverse of a rigid placement: its rotation transposed, its translation turned back. */
-function invert(m) {
+export function invert(m) {
   const out = [m[0], m[4], m[8], 0, m[1], m[5], m[9], 0, m[2], m[6], m[10], 0, 0, 0, 0, 1];
   for (let row = 0; row < 3; row += 1) out[12 + row] = -(out[row] * m[12] + out[4 + row] * m[13] + out[8 + row] * m[14]);
   return out;

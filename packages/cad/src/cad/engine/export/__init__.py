@@ -135,8 +135,9 @@ def described(summary: dict[str, Any]) -> None:
 class Kind:
     """One file kind: its name, the suffixes its files end in (the first is its own), the
     writer (``module:function``, loaded on first use: ``write(view, path)``), whether
-    the kind is written atomically here (an xbf saves itself atomically), and, for a kind that
-    can refuse a document only once it has drawn its file, the drawing (``render``,
+    the kind is written atomically here (an xbf saves itself atomically, and returns the size it
+    wrote, as a drawing does: inside ``atomic_replace.together`` the file lands later), and, for a
+    kind that can refuse a document only once it has drawn its file, the drawing (``render``,
     ``module:function``: ``render(view)``, every check made and the file's bytes held, nothing
     written, answering what writes them at a path)."""
 
@@ -150,11 +151,11 @@ class Kind:
     def suffix(self) -> str:
         return self.suffixes[0]
 
-    def write(self, view: "View", path: Path) -> None:
+    def write(self, view: "View", path: Path) -> Any:
         module, _sep, function = self.writer.partition(":")
-        getattr(importlib.import_module(module), function)(view, path)
+        return getattr(importlib.import_module(module), function)(view, path)
 
-    def rendered(self, view: "View") -> Callable[[Path], None] | None:
+    def rendered(self, view: "View") -> Callable[[Path], Any] | None:
         """The kind's drawing of ``view`` (``render``), or None for a kind that draws as it writes."""
         if self.render is None:
             return None
@@ -304,7 +305,7 @@ class Source:
     def __init__(self, structure: dict[str, Any], shapes: dict[str, Any], *, live: bool, xcaf: Any = None,
                  world: Callable[[tuple[int, ...]], Any] | None = None, mechanism: Any = None,
                  foreign: bool = False, path: Path | None = None, animations: Any = None,
-                 meshes: dict[str, Any] | None = None, mesh: str | None = None,
+                 meshes: dict[str, Any] | None = None, mesh: str | None = None, data: bytes | None = None,
                  local: Callable[[tuple[int, ...]], Any] | None = None,
                  local_placements: dict[tuple[int, ...], Any] | None = None,
                  migration: dict[str, Any] | None = None,
@@ -336,6 +337,9 @@ class Source:
         self.path = path
         self.meshes = meshes
         self.mesh = mesh
+        # The document's own xbf bytes, for one read from them (a retired worker's, the engine's
+        # cache's: ``build.held_source``): what an xbf of it is (``tree.write_xbf``).
+        self.data = data
         self._bytes: dict[str, bytes] = {}
         self._lock = threading.Lock()
 
@@ -664,21 +668,38 @@ class Prepared:
     view: View
     tolerance: float | None
     angle: float | None
-    drawn: Callable[[Path], None] | None
+    drawn: Callable[[Path], Any] | None
     heard: list[str]
     summaries: list[dict[str, Any]]
 
     def land(self, told: Callable[[str], None] | None = None,
-             summary: Callable[[dict[str, Any]], None] | None = None) -> int:
-        """The file written (``translate``'s), and what was said of it handed on; its size."""
+             summary: Callable[[dict[str, Any]], None] | None = None, *,
+             check: Callable[[Path], None] | None = None) -> int:
+        """The file written (``translate``'s), and what was said of it handed on; its size. ``told``
+        hears first what the file leaves out of the PMI of a document another system wrote
+        (``pmi.dropped``). ``check`` reads the file staged before it lands (an atomic kind's, a
+        STEP's): one it refuses (raises) is not written, and the file there keeps its bytes."""
+        from cad.engine import pmi
+
         path, kind, view = self.path, self.kind, self.view
+        for entry, why in pmi.dropped(view, kind) if told is not None else ():
+            told(f"warning: pmi: {path.name}: {entry['id']} is not carried whole: {why}")
         path.parent.mkdir(parents=True, exist_ok=True)
         spec = KINDS[kind]
-        write = self.drawn or (lambda target: spec.write(view, target))
+        drawn = self.drawn or (lambda target: spec.write(view, target))
+
+        def write(temporary: Path) -> None:
+            drawn(temporary)
+            if check is not None:
+                check(temporary)
+
         with _hearing(self.heard, self.summaries):
             if not spec.atomic:
-                write(path)
-                size = path.stat().st_size
+                # A writer that lands its file itself answers its size: inside ``atomic_replace.together``
+                # the file there is still the old one.
+                size = drawn(path)
+                if not isinstance(size, int):
+                    size = path.stat().st_size
             else:
                 _written, size = put(path, write)
         if summary is not None:
@@ -709,7 +730,10 @@ class Prepared:
 def prepare(document: Any, kind: str | None, path: Any, tolerance: float | None = None,
             angle: float | None = None, zero: str | None = None) -> Prepared:
     """``translate``'s first half: ``path`` checked as a destination of ``document`` -- refused by name
-    as ``translate`` refuses it -- and drawn where its kind draws before it writes, nothing written."""
+    as ``translate`` refuses it, and a file that would not carry whole the PMI the code made
+    (``pmi.refuse_dropped``) -- and drawn where its kind draws before it writes, nothing written."""
+    from cad.engine import pmi
+
     path = Path(path)
     kind = kind or kind_of(path)
     if kind not in KINDS:
@@ -736,6 +760,7 @@ def prepare(document: Any, kind: str | None, path: Any, tolerance: float | None 
         raise ExportRefused(f"{source.name} is a mesh: its triangles are the file's, and no tolerance or angle "
                             "meshes it again")
     view = source.view()
+    pmi.refuse_dropped(view, kind)
     view.tolerance, view.angle = tolerance, angle
     view.zero = zero
     heard: list[str] = []
@@ -747,13 +772,18 @@ def prepare(document: Any, kind: str | None, path: Any, tolerance: float | None 
 
 def translate(document: Any, kind: str | None, path: Any, tolerance: float | None = None,
               told: Callable[[str], None] | None = None, angle: float | None = None, zero: str | None = None,
-              summary: Callable[[dict[str, Any]], None] | None = None) -> int:
+              summary: Callable[[dict[str, Any]], None] | None = None, *,
+              check: Callable[[Path], None] | None = None) -> int:
     """Write ``document`` (a ``Source``, or the path of an ``.xbf``/``.step`` or a mesh file) to ``path``
     as ``kind`` (from the suffix when None), a GLB, an STL or a 3MF meshed to within ``tolerance`` (mm)
     and ``angle`` (degrees) when either is given (``told`` hears each part it left faces of without
-    triangles), a robot description taken at the mechanism state ``zero`` when one is given (``summary``
-    hears what it holds, with the notes it was written with: ``described``); returns the file's size. The
+    triangles, and what one of a document another system wrote leaves out of its PMI), a robot
+    description taken at the mechanism state ``zero`` when one is given (``summary`` hears what it
+    holds, with the notes it was written with: ``described``); returns the file's size. The
     translation lands only where the file does not hold its bytes already (``put``): a file written
     again the same is left as it is. Every declared file is written this way too, after the build or
-    the take-up that made its document (``build``). ``prepare`` then ``Prepared.land``."""
-    return prepare(document, kind, path, tolerance, angle, zero).land(told, summary)
+    the take-up that made its document (``build``). A file that would not carry whole the PMI the code
+    made is refused by name (``pmi.refuse_dropped``). ``check`` reads the file staged before it lands
+    (an atomic kind's, a STEP's): one it refuses (raises) is not written, and the file there keeps its
+    bytes. ``prepare`` then ``Prepared.land``."""
+    return prepare(document, kind, path, tolerance, angle, zero).land(told, summary, check=check)

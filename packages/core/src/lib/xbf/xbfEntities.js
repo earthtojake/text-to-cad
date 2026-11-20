@@ -16,13 +16,14 @@
 
 import { xbmEdgeRow, xbmFaceRow, xbmVertexRow } from "./xbm.js";
 
-const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-const scale = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
-const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-const length = a => Math.hypot(a[0], a[1], a[2]);
-const unit = (a) => {
+// Plain-array vectors, the PMI layout's too (`xbfPmiLayout.js`).
+export const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+export const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+export const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+export const scale = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+export const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+export const length = a => Math.hypot(a[0], a[1], a[2]);
+export const unit = (a) => {
   const size = length(a);
   return size > 1e-12 ? scale(a, 1 / size) : null;
 };

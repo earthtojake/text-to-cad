@@ -43,7 +43,7 @@
      "kind": "function",
      "operation": true,
      "summary": "draw it as the viewer does, into a PNG",
-     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]",
+     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, view: str | None = None, progress: Any = None) -> Drawn | list[Drawn]",
      "doc": 6
     },
     {
@@ -119,7 +119,7 @@
      "kind": "function",
      "operation": true,
      "summary": "draw it as the viewer does, into a PNG",
-     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]",
+     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, view: str | None = None, progress: Any = None) -> Drawn | list[Drawn]",
      "doc": 6
     },
     {
@@ -195,7 +195,7 @@
      "kind": "function",
      "operation": true,
      "summary": "draw it as the viewer does, into a PNG",
-     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]",
+     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, view: str | None = None, progress: Any = None) -> Drawn | list[Drawn]",
      "doc": 6
     },
     {
@@ -271,7 +271,7 @@
      "kind": "function",
      "operation": true,
      "summary": "draw it as the viewer does, into a PNG",
-     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]",
+     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, view: str | None = None, progress: Any = None) -> Drawn | list[Drawn]",
      "doc": 6
     },
     {
@@ -309,7 +309,7 @@
      "kind": "function",
      "operation": true,
      "summary": "draw it as the viewer does, into a PNG",
-     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]",
+     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, view: str | None = None, progress: Any = None) -> Drawn | list[Drawn]",
      "doc": 6
     },
     {
@@ -355,7 +355,7 @@
      "kind": "function",
      "operation": true,
      "summary": "draw it as the viewer does, into a PNG",
-     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]",
+     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, view: str | None = None, progress: Any = None) -> Drawn | list[Drawn]",
      "doc": 6
     },
     {
@@ -385,7 +385,7 @@
      "kind": "function",
      "operation": true,
      "summary": "draw it as the viewer does, into a PNG",
-     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]",
+     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, view: str | None = None, progress: Any = None) -> Drawn | list[Drawn]",
      "doc": 6
     },
     {
@@ -409,7 +409,7 @@
      "kind": "function",
      "operation": true,
      "summary": "draw it as the viewer does, into a PNG",
-     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]",
+     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, view: str | None = None, progress: Any = None) -> Drawn | list[Drawn]",
      "doc": 6
     },
     {
@@ -433,7 +433,7 @@
      "kind": "function",
      "operation": true,
      "summary": "draw it as the viewer does, into a PNG",
-     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]",
+     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, view: str | None = None, progress: Any = None) -> Drawn | list[Drawn]",
      "doc": 6
     },
     {
@@ -457,7 +457,7 @@
      "kind": "function",
      "operation": true,
      "summary": "draw it as the viewer does, into a PNG",
-     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]",
+     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, view: str | None = None, progress: Any = None) -> Drawn | list[Drawn]",
      "doc": 6
     },
     {
@@ -495,7 +495,7 @@
      "kind": "function",
      "operation": true,
      "summary": "draw it flat, as the viewer's board view does, into a PNG",
-     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]",
+     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, view: str | None = None, progress: Any = None) -> Drawn | list[Drawn]",
      "doc": 6
     },
     {
@@ -553,7 +553,7 @@
      "kind": "function",
      "operation": true,
      "summary": "draw one sheet flat, as KiCad's schematic editor shows it, into a PNG",
-     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]",
+     "signature": "(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None, measurements: Any = None, view: str | None = None, progress: Any = None) -> Drawn | list[Drawn]",
      "doc": 6
     },
     {
@@ -617,244 +617,292 @@
      "doc": 56
     },
     {
+     "name": "annotate",
+     "kind": "function",
+     "signature": "(shape: Any, *annotations: dict[str, Any]) -> Any",
+     "doc": 57
+    },
+    {
      "name": "body",
      "kind": "function",
      "signature": "(part: Any, name: str | None = None) -> Any",
-     "doc": 57
+     "doc": 58
     },
     {
      "name": "boundary_edges",
      "kind": "function",
      "signature": "(shell: Shell) -> tuple[Edge, ...]",
-     "doc": 58
+     "doc": 59
+    },
+    {
+     "name": "camera",
+     "kind": "function",
+     "signature": "(direction: Iterable[float], up: Iterable[float]) -> dict[str, Any]",
+     "doc": 60
     },
     {
      "name": "closest_points",
      "kind": "function",
      "signature": "(a: Shape, b: Shape) -> ClosestPoints",
-     "doc": 59
+     "doc": 61
     },
     {
      "name": "cnc",
      "kind": "function",
      "signature": "(shape: Any, *, material: str | None = None, axes: int | None = None, turning: bool = False, tools: Any = None, stock: Any = None, strict: bool = False) -> Any",
-     "doc": 60
+     "doc": 62
     },
     {
      "name": "configuration_sequence",
      "kind": "function",
      "signature": "(assembly: Any, name: str, waypoints_or_fn: Any = None, *, sweep: Any = None, duration: Any = None, ease: str = 'cubic', **removed: Any) -> Any",
-     "doc": 61
+     "doc": 63
+    },
+    {
+     "name": "datum",
+     "kind": "function",
+     "signature": "(letter: str, ref: Any, *, label: str | None = None, presentation: dict | None = None) -> dict[str, Any]",
+     "doc": 64
     },
     {
      "name": "dfm",
      "kind": "function",
      "signature": "(shape: Any, *, process: str | None = None, candidates: bool = False, strict: bool = False, **options: Any) -> Any",
-     "doc": 62
+     "doc": 65
+    },
+    {
+     "name": "dimensional_location",
+     "kind": "function",
+     "signature": "(id: str, ref_from: Any, ref_to: Any, *, tolerance: dict | None = None, basic: bool = False, label: str | None = None, presentation: dict | None = None) -> dict[str, Any]",
+     "doc": 66
+    },
+    {
+     "name": "dimensional_size",
+     "kind": "function",
+     "signature": "(id: str, ref: Any, *, tolerance: dict | None = None, label: str | None = None, presentation: dict | None = None) -> dict[str, Any]",
+     "doc": 67
     },
     {
      "name": "flat_pattern",
      "kind": "function",
      "signature": "(shape: build123d.Shape, *, normal_axis: str = 'z', normal_sign: float = 1.0, coordinate_axis: str = 'z', coordinate: float, tolerance: float = 0.02, kerf: float = 0.0) -> build123d.Shape",
-     "doc": 63
+     "doc": 68
+    },
+    {
+     "name": "flatness_tolerance",
+     "kind": "function",
+     "signature": "(id: str, ref: Any, value: float, *, label: str | None = None, presentation: dict | None = None) -> dict[str, Any]",
+     "doc": 69
     },
     {
      "name": "flatten_face",
      "kind": "function",
      "signature": "(face: build123d.Face) -> build123d.Face",
-     "doc": 64
+     "doc": 70
     },
     {
      "name": "flatten_faces",
      "kind": "function",
      "signature": "(faces: Iterable[build123d.Face]) -> tuple[build123d.Face, ...]",
-     "doc": 65
+     "doc": 71
     },
     {
      "name": "frame",
      "kind": "function",
      "signature": "(part: Any, name: str, location: Any) -> Any",
-     "doc": 66
+     "doc": 72
     },
     {
      "name": "free",
      "kind": "function",
      "signature": "(shape: Any) -> Any",
-     "doc": 67
+     "doc": 73
     },
     {
      "name": "gear_pair",
      "kind": "function",
      "signature": "(assembly: Any, name: str, **joints: Any) -> Any",
-     "doc": 68
+     "doc": 74
+    },
+    {
+     "name": "general_profile",
+     "kind": "function",
+     "signature": "(id: str, value: float, *, datums: Iterable[str] = (), label: str | None = None) -> dict[str, Any]",
+     "doc": 75
+    },
+    {
+     "name": "general_tolerance",
+     "kind": "function",
+     "signature": "(id: str, standard: str, *, label: str | None = None) -> dict[str, Any]",
+     "doc": 76
     },
     {
      "name": "is_sound",
      "kind": "function",
      "signature": "(shape: Shape) -> bool",
-     "doc": 69
+     "doc": 77
     },
     {
      "name": "leaves",
      "kind": "function",
      "signature": "(tree: Any, *, paths: bool = False) -> list[Any]",
-     "doc": 70
+     "doc": 78
     },
     {
      "name": "limits",
      "kind": "function",
      "signature": "(assembly: Any, joint: str, *, effort: float | None = None, velocity: float | None = None) -> Any",
-     "doc": 71
+     "doc": 79
     },
     {
      "name": "link",
      "kind": "function",
      "signature": "(shape: Any, name: str) -> Any",
-     "doc": 72
+     "doc": 80
     },
     {
      "name": "mass",
      "kind": "function",
      "signature": "(shape: Any, grams: float) -> Any",
-     "doc": 73
+     "doc": 81
     },
     {
      "name": "mass_properties",
      "kind": "function",
      "signature": "(bodies: Iterable[tuple[Solid, float]]) -> MassProperties",
-     "doc": 74
+     "doc": 82
     },
     {
      "name": "materials",
      "kind": "module",
      "module": "cad.build123d.materials",
-     "doc": 75,
+     "doc": 83,
      "members": [
       {
        "name": "soldermask",
        "kind": "function",
        "signature": "(color: Color = 'green', finish: Finish = 'glossy') -> FinishedMaterial",
-       "doc": 76
+       "doc": 84
       },
       {
        "name": "soldermask_green",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 77
+       "doc": 85
       },
       {
        "name": "soldermask_matte_black",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 78
+       "doc": 86
       },
       {
        "name": "fr4",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 79
+       "doc": 87
       },
       {
        "name": "silkscreen",
        "kind": "function",
        "signature": "(color: Color = 'white') -> FinishedMaterial",
-       "doc": 80
+       "doc": 88
       },
       {
        "name": "bare_copper",
        "kind": "function",
        "signature": "(oxidized: bool = False) -> FinishedMaterial",
-       "doc": 81
+       "doc": 89
       },
       {
        "name": "enig",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 82
+       "doc": 90
       },
       {
        "name": "hasl",
        "kind": "function",
        "signature": "(lead_free: bool = True) -> FinishedMaterial",
-       "doc": 83
+       "doc": 91
       },
       {
        "name": "solder",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 84
+       "doc": 92
       },
       {
        "name": "mold_compound",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 85
+       "doc": 93
       },
       {
        "name": "ceramic",
        "kind": "function",
        "signature": "(color: Color = 'white') -> FinishedMaterial",
-       "doc": 86
+       "doc": 94
       },
       {
        "name": "led_lens",
        "kind": "function",
        "signature": "(color: Color = 'clear', diffused: bool = False) -> FinishedMaterial",
-       "doc": 87
+       "doc": 95
       },
       {
        "name": "connector_housing",
        "kind": "function",
        "signature": "(color: Color = 'black') -> FinishedMaterial",
-       "doc": 88
+       "doc": 96
       },
       {
        "name": "anodized",
        "kind": "function",
        "signature": "(color: Color = 'clear', substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 89
+       "doc": 97
       },
       {
        "name": "anodized_black",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 90
+       "doc": 98
       },
       {
        "name": "powder_coat",
        "kind": "function",
        "signature": "(color: Color = 'black', finish: Sheen = 'satin', substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 91
+       "doc": 99
       },
       {
        "name": "powder_coat_black",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 92
+       "doc": 100
       },
       {
        "name": "bead_blasted",
        "kind": "function",
        "signature": "(substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 93
+       "doc": 101
       },
       {
        "name": "brushed",
        "kind": "function",
        "signature": "(substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 94
+       "doc": 102
       },
       {
        "name": "zinc_plated",
        "kind": "function",
        "signature": "(passivation: str = 'clear', substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 95
+       "doc": 103
       },
       {
        "name": "black_oxide",
        "kind": "function",
        "signature": "(oiled: bool = True, substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 96
+       "doc": 104
       }
      ]
     },
@@ -862,116 +910,164 @@
      "name": "mechanism_state",
      "kind": "function",
      "signature": "(assembly: Any, name: str, **values: Any) -> Any",
-     "doc": 97
+     "doc": 105
     },
     {
      "name": "memo",
      "kind": "function",
      "signature": "(function: Any = None, /, **options: Any) -> Any",
-     "doc": 98
+     "doc": 106
     },
     {
      "name": "molding",
      "kind": "function",
      "signature": "(shape: Any, *, material: str | None = None, pull: Any = None, wall_limit: float | None = None, zero_tol: float | None = None, cavities: int | None = None, candidates: bool = False, strict: bool = False) -> Any",
-     "doc": 99
+     "doc": 107
+    },
+    {
+     "name": "note",
+     "kind": "function",
+     "signature": "(id: str, text: str, *, faces: Any = (), annotations: Iterable[str] = (), label: str | None = None, presentation: dict | None = None) -> dict[str, Any]",
+     "doc": 108
     },
     {
      "name": "offset_profile",
      "kind": "function",
      "signature": "(shape: build123d.Shape, amount: float) -> build123d.Shape",
-     "doc": 100
+     "doc": 109
     },
     {
      "name": "overlap_volume",
      "kind": "function",
      "signature": "(a: Solid | Compound, b: Solid | Compound) -> float",
-     "doc": 101
+     "doc": 110
     },
     {
      "name": "paint",
      "kind": "function",
      "signature": "(shape: Any, faces: Any, color: Any) -> Any",
-     "doc": 102
+     "doc": 111
+    },
+    {
+     "name": "place",
+     "kind": "function",
+     "signature": "(anchor: Iterable[float], offset: Iterable[float] = (0.0, 0.0, 0.0)) -> dict[str, Any]",
+     "doc": 112
     },
     {
      "name": "planar_faces",
      "kind": "function",
      "signature": "(shape: build123d.Shape, *, normal_axis: str, normal_sign: float, coordinate_axis: str, coordinate: float, tolerance: float = 0.02, min_area: float = 1e-05) -> tuple[build123d.Face, ...]",
-     "doc": 103
+     "doc": 113
+    },
+    {
+     "name": "plus_minus_tolerance",
+     "kind": "function",
+     "signature": "(upper: float, lower: float | None = None) -> dict[str, Any]",
+     "doc": 114
     },
     {
      "name": "point_mass",
      "kind": "function",
      "signature": "(part: Any, grams: float, at: Any, *, name: str | None = None, inertia: tuple[float, float, float] | None = None) -> Any",
-     "doc": 104
+     "doc": 115
     },
     {
      "name": "posed",
      "kind": "function",
      "signature": "(assembly: Any, state: Any) -> Any",
-     "doc": 105
+     "doc": 116
+    },
+    {
+     "name": "position_tolerance",
+     "kind": "function",
+     "signature": "(id: str, ref: Any, value: float, *, datums: Iterable[str], diameter_zone: bool = True, label: str | None = None, presentation: dict | None = None) -> dict[str, Any]",
+     "doc": 117
     },
     {
      "name": "printing",
      "kind": "function",
      "signature": "(shape: Any, *, material: str | None = None, technology: str | None = None, build_volume: Any = None, angle_limit: float | None = None, layer_height: float | None = None, nozzle: float | None = None, printer: Any = None, candidates: bool = False, strict: bool = False) -> Any",
-     "doc": 106
+     "doc": 118
     },
     {
      "name": "rack_and_pinion_pair",
      "kind": "function",
      "signature": "(assembly: Any, name: str, **joints: Any) -> Any",
-     "doc": 107
+     "doc": 119
     },
     {
      "name": "screw_pair",
      "kind": "function",
      "signature": "(assembly: Any, name: str, **joints: Any) -> Any",
-     "doc": 108
+     "doc": 120
+    },
+    {
+     "name": "section",
+     "kind": "function",
+     "signature": "(axis: str, at: float, *, invert: bool = False) -> dict[str, Any]",
+     "doc": 121
     },
     {
      "name": "self_intersections",
      "kind": "function",
      "signature": "(shape: Shape) -> tuple[GeometryIssue, ...]",
-     "doc": 109
+     "doc": 122
     },
     {
      "name": "sheet_metal",
      "kind": "function",
      "signature": "(shape: Any, *, material: str | None = None, thickness: float | None = None, k_factor: float | None = None, bend_radius: float | None = None, kerf: float | None = None, sheet_size: Any = None, strict: bool = False) -> Any",
-     "doc": 110
+     "doc": 123
+    },
+    {
+     "name": "size_limits",
+     "kind": "function",
+     "signature": "(lower: float, upper: float) -> dict[str, Any]",
+     "doc": 124
+    },
+    {
+     "name": "surface_profile_tolerance",
+     "kind": "function",
+     "signature": "(id: str, refs: Any, value: float, *, datums: Iterable[str] = (), label: str | None = None, presentation: dict | None = None) -> dict[str, Any]",
+     "doc": 125
     },
     {
      "name": "topology_errors",
      "kind": "function",
      "signature": "(shape: Shape) -> tuple[GeometryIssue, ...]",
-     "doc": 111
+     "doc": 126
     },
     {
      "name": "unfold",
      "kind": "function",
      "signature": "(shape: Any, *, thickness: float | None = None, k_factor: float | None = None, material: str | None = None, bend_lines: bool = False) -> Any",
-     "doc": 112
+     "doc": 127
     },
     {
      "name": "union_faces",
      "kind": "function",
      "signature": "(faces: Sequence[build123d.Shape]) -> build123d.Shape",
-     "doc": 113
+     "doc": 128
+    },
+    {
+     "name": "view",
+     "kind": "function",
+     "signature": "(name: str, *, camera: str | dict, shows: Sequence[str] | None = None, section: dict | None = None, place: Mapping[str, dict] | None = None, label: str | None = None) -> dict[str, Any]",
+     "doc": 129
     }
    ]
   },
   {
    "name": "kicad",
    "module": "cad.kicad",
-   "doc": 114,
+   "doc": 130,
    "members": [
     {
      "name": "Routed",
      "kind": "class",
      "signature": "(connections: tuple[Any, ...], tracks: int, vias: int, length: float, seconds: float, warnings: tuple[str, ...] = ())",
-     "doc": 115,
+     "doc": 131,
      "members": [
       {
        "name": "ok",
@@ -987,7 +1083,7 @@
        "name": "human_lines",
        "kind": "method",
        "signature": "() -> list[str]",
-       "doc": 116
+       "doc": 132
       }
      ]
     },
@@ -995,121 +1091,121 @@
      "name": "route",
      "kind": "function",
      "signature": "(board: Any, connections: Sequence[Any] | None = None, *, layers: Any = None, width: float | None = None, clearance: float | None = None, vias: int | None = None, via_cost: float | None = None) -> Routed",
-     "doc": 117
+     "doc": 133
     }
    ]
   },
   {
    "name": "trimesh",
    "module": "cad.trimesh",
-   "doc": 118,
+   "doc": 134,
    "members": [
     {
      "name": "orientations",
      "kind": "function",
      "signature": "(mesh: Any, *, units: str = 'mm', angle_limit: float = 45.0) -> dict[str, Any]",
-     "doc": 119
+     "doc": 135
     },
     {
      "name": "printing",
      "kind": "function",
      "signature": "(mesh: Any, *, units: str = 'mm', samples: int = 2000, angle_limit: float = 45.0) -> dict[str, Any]",
-     "doc": 120
+     "doc": 136
     }
    ]
   },
   {
    "name": "mujoco",
    "module": "cad.mujoco",
-   "doc": 121,
+   "doc": 137,
    "members": [
     {
      "name": "check",
      "kind": "function",
      "signature": "(path: Path, *, strict: bool = False, verbose: bool = False) -> CheckResult",
-     "doc": 122
+     "doc": 138
     },
     {
      "name": "collisions",
      "kind": "function",
      "signature": "(spec, part)",
-     "doc": 123
+     "doc": 139
     },
     {
      "name": "compile_findings",
      "kind": "function",
      "signature": "(path, *, mode='auto')",
-     "doc": 124
+     "doc": 140
     },
     {
      "name": "compile_model",
      "kind": "function",
      "signature": "(path)",
-     "doc": 125
+     "doc": 141
     },
     {
      "name": "decompose",
      "kind": "function",
      "signature": "(spec, part, *, max_hulls=16, threshold=None)",
-     "doc": 126
+     "doc": 142
     },
     {
      "name": "fit",
      "kind": "function",
      "signature": "(spec, part, kind)",
-     "doc": 127
+     "doc": 143
     },
     {
      "name": "parts",
      "kind": "function",
      "signature": "(spec)",
-     "doc": 128
+     "doc": 144
     },
     {
      "name": "save",
      "kind": "function",
      "signature": "(spec, path)",
-     "doc": 129
+     "doc": 145
     },
     {
      "name": "spec",
      "kind": "function",
      "signature": "(thing, *, assets=None, tolerance=None, zero=None)",
-     "doc": 130
+     "doc": 146
     }
    ]
   },
   {
    "name": "coacd",
    "module": "cad.coacd",
-   "doc": 131
+   "doc": 147
   },
   {
    "name": "netgen",
    "module": "cad.netgen",
-   "doc": 132
+   "doc": 148
   },
   {
    "name": "calculix",
    "module": "cad.calculix",
-   "doc": 133
+   "doc": 149
   },
   {
    "name": "blender",
    "module": "cad.blender",
-   "doc": 134,
+   "doc": 150,
    "members": [
     {
      "name": "Clip",
      "kind": "class",
      "signature": "(name: str, kind: str, duration: float)",
-     "doc": 135
+     "doc": 151
     },
     {
      "name": "Model",
      "kind": "class",
      "signature": "(root: bpy.types.Object, roots: list, objects: dict, nodes: dict, clips: dict, box: tuple, fps: int, clip: str | None = None)",
-     "doc": 136,
+     "doc": 152,
      "members": [
       {
        "name": "center",
@@ -1125,13 +1221,13 @@
        "name": "play",
        "kind": "method",
        "signature": "(name: str | None) -> None",
-       "doc": 137
+       "doc": 153
       },
       {
        "name": "bounds",
        "kind": "method",
        "signature": "() -> tuple",
-       "doc": 138
+       "doc": 154
       }
      ]
     },
@@ -1139,20 +1235,20 @@
      "name": "load",
      "kind": "function",
      "signature": "(path: str | Path, clip: str | None = None, fps: int = 24) -> Model",
-     "doc": 139
+     "doc": 155
     }
    ]
   },
   {
    "name": "orcaslicer",
    "module": "cad.orcaslicer",
-   "doc": 140,
+   "doc": 156,
    "members": [
     {
      "name": "Completed",
      "kind": "class",
      "signature": "(printer: Path, process: Path, filaments: tuple[Path, ...])",
-     "doc": 141,
+     "doc": 157,
      "members": [
       {
        "name": "human_lines",
@@ -1165,7 +1261,7 @@
      "name": "Presets",
      "kind": "class",
      "signature": "(kind: str, names: tuple[str, ...])",
-     "doc": 142,
+     "doc": 158,
      "members": [
       {
        "name": "human_lines",
@@ -1178,13 +1274,13 @@
      "name": "complete",
      "kind": "function",
      "signature": "(*, printer: str, process: str, filament: tuple[str, ...] = (), out: Path = Path('presets'), profiles: tuple[str, ...] = ()) -> Completed",
-     "doc": 143
+     "doc": 159
     },
     {
      "name": "presets",
      "kind": "function",
      "signature": "(kind: Literal['machine', 'process', 'filament'], *, match: str = '', profiles: tuple[str, ...] = ()) -> Presets",
-     "doc": 144
+     "doc": 160
     }
    ]
   }
@@ -1196,7 +1292,7 @@
   "``cad.model``: the model document type, a model built from code and held in the engine's memory\n(``cad.registry``).\n\nA model has no file behind it: it is addressed by its document id (``cad run SCRIPT.py`` prints it) or\nthe handle its call returns. ``@model`` declares one (``@model(name=...)``; ``model(shape, name=...)`` hands\na shape over), with no file of its own; the files it declares are the other types' decorators\n(``@xbf(\"XBF/arm.xbf\")``, ``@step(\"arm.step\")``). Its operations are the ``cad model <operation>`` commands':\n``model.export(handle_or_id, *destinations, tolerance=None, angle=None)``, ``model.snapshot(...)``,\n``model.inspect(...)`` and ``model.dfm(handle_or_id, process=\"cnc\")`` (or ``\"sheet\"``, ``\"molding\"``,\n``\"printing\"``), which checks it for manufacturing on its exact geometry, measured by the engine with the build123d\nintegration (``cad._internal.manufacturing``), and\n``model.solve(handle_or_id, study=..., out=\"results/\")``, a stress study of it (``cad._internal.fea.operation``),\nwhich reads an ``.xbf`` the engine writes of it in a temporary folder. A file is\nrefused by name: ``arm.xbf`` is an xbf's (``cad.xbf``). Everything loads on first use: ``import cad.model``\nimports no CAD kernel (``cad._internal.document_type``).",
   "``@model`` or ``@model(name=...)``: declare a model; ``model(shape, name=...)``: hand a shape over as\na named model (``cad.engine.model.model``).",
   "Write a document to each destination, its kind from its suffix (``.xbf``, ``.step``,\n``.glb``, ``.stl``, ``.3mf``, ``.dxf`` of a planar document, and ``.xml`` or ``.mjcf``: an MJCF, the\ndocument's robot description as MuJoCo reads one, its meshes in an ``assets`` folder beside it,\n``export/mjcf.py``; ``.urdf``: the same description as ROS reads one, its meshes in a ``meshes``\nfolder beside it, ``export/urdf.py``): the document of an\n``.xbf``, of a ``.step`` read into one, of a handle (``Document``) or a document id (the one the\nengine holds, never built), or of a ``Model`` (called first, as this program's own call of it builds it); or a mesh file (``.glb``,\n``.stl``, ``.3mf``) to the other two mesh kinds, each file holding what its format carries,\nwith no CAD kernel loaded (a mesh has no B-rep: no xbf, STEP, DXF, MJCF or URDF is made from one). Several\ndestinations read the document once. The file holds what the code built: no option selects a part or a state\n(``README``, the law of options). ``daemon=False`` does it in this process, cold. A GLB\ncarries every configuration sequence the document defines, as a clip. A GLB, an STL and a 3MF are\nmeshed at the engine's one tolerance, the viewer's (a quarter per cent of each part and 28.5\ndegrees), unless ``tolerance`` gives an absolute ceiling in millimetres (at least\n``export.MIN_TOLERANCE``), for a print whose fits are finer or a picture whose curves are, or\n``angle`` a ceiling in degrees (``export.MIN_ANGLE`` to ``export.MAX_ANGLE``): each part is then\nmeshed again at the finer of each for these files, and each file says it; every destination is\nthen a GLB, an STL or a 3MF. An MJCF and a URDF are the robot description at the as-built state,\nunless ``zero`` names a mechanism state to take every joint's zero at (``describe``'s **The zero**:\nthe bodies posed there, each joint's value there its zero, its limits and the other states around\nit); every destination is then an MJCF or a URDF. Each robot file's ``Written.robot`` says what it\nholds, and the program's own call says it on stderr after the file's line (``said.robot``). A call\nthe program's own\ncode makes (``python exports.py``) says each file, as ``cad <type> export`` does. Where the export is\ngoes, frame by frame, to ``progress`` (``progress.py``: its ``read`` of a file source, each\ndestination's ``write``), as ``_built`` takes it: by default a bar on stderr when it is a\nterminal and nowhere when it is not, ``False`` nowhere, a callable each frame.",
-  "Draw a document (``.xbf``, ``.step``, or a document id: the one the engine holds) or a mesh\nfile (``.glb``, ``.stl``, ``.3mf``) into ``out`` (a ``.png``) as the viewer draws it: one\npicture, a ``Drawn``. A ``Model`` is called first, as the program's own call of it builds it:\nthe document drawn is the one the engine then holds, whether or not an xbf of it is on disk. ``annotation`` (the viewer's\nannotation: its file's path, its object, or the Quick Edit packet that carries it) and\n``measurements`` are drawn over the model; ``camera=\"authored\"`` draws it from the view the\nannotation's ink was drawn in, which the packet holds. ``out`` a folder (a path ending in a\nseparator, or one that is there) is given a name inside it, the source's stem and the time\n(``snapshot.picture_path``). A snapshot refused or failed leaves the file at ``out`` as it\nwas (``snapshot.write_png``). ``preview`` draws the viewer's Preview in place of a display mode: the\nmodel lit in a studio, in its materials, on a floor with its shadow, in perspective.\n\n``job`` in place of ``out`` is every picture a job names (``cad <type> snapshot --job``), a list of\n``Drawn``: a Quick Edit packet (the ``.snapshot.json`` the viewer writes, its path or its\nobject), a job or a list of jobs, each job a view drawn as it was -- its camera, display, hidden\nand isolated parts, pose, the packet's ink and dimensions -- at its output settings, into each\nof its outputs (``snapshot.job_pictures``). ``source`` is then drawn in place of every job's\ninput; a flag given overrides every job. Every request is checked before anything renders, and\na picture that fails writes none of the job's, leaving every output as it was.\n\nWhere each picture is goes, frame by frame, to ``progress`` (``progress.py``: ``scene`` while the\ndocument is served, meshed and its scene made, ``draw`` while the frame is drawn, ``write`` as\nthe picture is written), as ``export`` takes it: by default a bar on stderr when it is a\nterminal and nowhere when it is not, ``False`` nowhere, a callable each frame.",
+  "Draw a document (``.xbf``, ``.step``, or a document id: the one the engine holds) or a mesh\nfile (``.glb``, ``.stl``, ``.3mf``) into ``out`` (a ``.png``) as the viewer draws it: one\npicture, a ``Drawn``. A ``Model`` is called first, as the program's own call of it builds it:\nthe document drawn is the one the engine then holds, whether or not an xbf of it is on disk. ``annotation`` (the viewer's\nannotation: its file's path, its object, or the Quick Edit packet that carries it) and\n``measurements`` are drawn over the model; ``camera=\"authored\"`` draws it from the view the\nannotation's ink was drawn in, which the packet holds. ``view`` draws a part's named view\n(``cad.build123d``'s ``view``: ``NAME``, or ``PART/NAME`` where two parts have one): its camera, its section, its\nPMI (``snapshot.view_of``), refused with ``camera``. ``out`` a folder (a path ending in a\nseparator, or one that is there) is given a name inside it, the source's stem and the time\n(``snapshot.picture_path``). A snapshot refused or failed leaves the file at ``out`` as it\nwas (``snapshot.write_png``). ``preview`` draws the viewer's Preview in place of a display mode: the\nmodel lit in a studio, in its materials, on a floor with its shadow, in perspective.\n\n``job`` in place of ``out`` is every picture a job names (``cad <type> snapshot --job``), a list of\n``Drawn``: a Quick Edit packet (the ``.snapshot.json`` the viewer writes, its path or its\nobject), a job or a list of jobs, each job a view drawn as it was -- its camera, display, hidden\nand isolated parts, pose, the packet's ink and dimensions -- at its output settings, into each\nof its outputs (``snapshot.job_pictures``). ``source`` is then drawn in place of every job's\ninput; a flag given overrides every job (``view``: every job drawn as that view, in place of its\ncamera). Every request is checked before anything renders, and a picture that fails writes none\nof the job's, leaving every output as it was.\n\nWhere each picture is goes, frame by frame, to ``progress`` (``progress.py``: ``scene`` while the\ndocument is served, meshed and its scene made, ``draw`` while the frame is drawn, ``write`` as\nthe picture is written), as ``export`` takes it: by default a bar on stderr when it is a\nterminal and nowhere when it is not, ``False`` nowhere, a callable each frame.",
   "What a ref names in a document (``refs``: ``hand/finger.2/face 7``, ``base/f:...``, a\ncopied ``/abs/kit.xbf#...`` line) and what made it. An element answers what the kernel\nmeasures of it -- its points placed where its occurrence stands, in the document's frame --\nwith its canonical ``ref``, its occurrence's ``path`` and, of a model's document, ``made_by``\n(a file names no model); a part or an assembly\nits volume and its mass: each part's volume times its material's density, summed\n(``cli.weighed``), its world bounds and a part's placement (``_placed``). One answer per selector (a list for several). Without ``ref``, the build\nclosure the xbf holds (``previous``): its engine, libraries, source, modules, inputs and\nkey, read from the file alone. A ref that names nothing, or several things, is refused by\nname (``refs.RefError``). No query builds a missing model or writes its declared\noutputs. ``query=\"build\"`` returns file metadata/closure or live build metadata;\n``query=\"geometry\"`` requires a ref, and ``query=\"closure\"`` accepts none.\n``query=\"summary\"`` (``cad xbf inspect DOC`` with no ref) is ``{\"summary\", \"closure\"}``:\nwhat the document holds at a glance (``_summary``), and its closure, as the engine holds it; of\na GLB, ``{\"mesh\"}``: its nodes, meshes and animations, from its JSON alone (``_mesh``).\n``query=\"structure\"`` is the summary without bounds, volume or mass and requests no measurements.\nNo form meshes anything. A part's volume and box are cached by geometry key and measured in\nbatches. The summary's measurement goes, frame by frame, to ``progress`` (``progress.py``:\n``inspect-measure``, ``measure``, counted as the engine tells each part's facts in), as ``export``\ntakes it -- by default a bar on stderr when it is a terminal and nowhere when it is not,\n``False`` nowhere, a callable each frame.",
   "Check a part for a manufacturing process: CNC machining, sheet metal, injection molding or 3D printing. Exit 0: OK. Exit 1: FAILED, a finding is an error (with --strict, a warning too). Exit 3: NOT CHECKED, something was not judged: never a pass. Exit 2: the command line's mistake.\n\nA STEP, an xbf or a model's document is measured on its exact geometry, each finding at a face ref\n(cad xbf inspect DOC REF resolves it). The measurements are facts; the verdicts are general rules, each\nfrom a published design guide and no shop's limit, each finding coded by its rule, with the limit, the source\nand what to change. A rule's feasibility limit broken is an error; a recommendation is a warning. For a named\nshop, compare the measurements with its own published limits. --json carries every measurement, every rule's\noutcome and each verdict as data (value, limit, unit, refs).\nThe last line and the exit status are the check's state. OK, exit 0: everything was measured and no\nfinding is an error. FAILED, exit 1: a finding is an error (with --strict, a warning too): the part cannot be\nmade by this process as drawn. NOT CHECKED, exit 3: the check did not judge what it was asked to -- a source\nthat does not read or holds no solid, a family that could not be measured, an engine that stopped -- which\nis no verdict and never a pass. Exit 2: the command line's mistake.\n\nsource: a model's document id the engine holds (cad run SCRIPT.py prints it), or the handle its call returns.\nprocess: cnc, sheet, molding or printing; default, for a STEP, an xbf or a model, the process the parts declare (part.material = metals.aluminum(process=machined()): machined is cnc, molded molding, fdm, sls, mjf, slm and vat printing with technology fdm, sls, mjf, pbf and sla), when every part agrees.\nmaterial: the part's material (aluminum, steel, stainless, abs, pc, nylon, ...): picks the material's limits; default the material the part declares (part.material = metals.aluminum()), when every part agrees.\naxes: cnc: the milling machine's axes, 3, 4 or 5; default 3.\nturning: cnc: the part is turned on a lathe (its axis found), not milled.\ntools: cnc: the end mill diameters available, in mm, comma separated (3,6,10); default none: a corner is held to the smallest tool that can exist (0.05 mm across, cad's own floor) and to how deep a tool of its size reaches; a radius of 1.25 mm or more (a 2.5 mm end mill's) is recommended.\nstock: cnc: the stock's size in mm (100x60x25); default the part's box.\nthickness: sheet: the stock's thickness in mm; default measured.\nk_factor: sheet: the neutral axis's place in the thickness, for the flat pattern (the shop's bend table's); default a K-factor chart's, by the material and each bend's radius.\nbend_radius: sheet: the shop's inside bend radius in mm, compared with the part's.\nkerf: sheet: the cutting kerf in mm, for small features.\nsheet_size: sheet: the shop's largest sheet in mm (1219x2438); default a standard 5 x 10 ft sheet (3048x1524), assumed.\npull: molding: the pull direction, an axis (z, -y) or x,y,z components; default z.\nwall_limit: molding: faces at or above this many degrees from the pull are not walls; default 45.\nzero_tol: molding: draft under this many degrees is zero draft; default 0.05.\ncavities: molding: cavities in the mold, for the clamp force; default 1.\ntechnology: printing: fdm, sls, sla, mjf or pbf (metal powder bed); default fdm.\nbuild_volume: printing: the printer's build volume in mm (256x256x256); default a typical machine of the technology's, assumed.\nangle_limit: printing: down-facing faces under this many degrees from horizontal need support; default the technology's.\nsamples: printing: rays cast for the wall-thickness field on a mesh; default 2000.\nlayer_height: printing: the layer height in mm, for stair-stepping; default the technology's.\nnozzle: printing: fdm's nozzle diameter in mm; default 0.4.\nprinter: printing: a file of the printer's settings -- a 3MF OrcaSlicer or Bambu Studio saved, or a complete machine preset JSON -- for its build volume and nozzle; --build-volume and --nozzle win.\ncandidates: rank the candidates instead: molding the pulls (x, y, z and the part's principal axes), printing the orientations.\nstrict: a warning fails the check too (exit 1): a gate that takes no recommendation broken.",
   "cad.model.interference: which parts of the document share volume.\n\nEvery pair of parts whose boxes meet is answered, as built and at each pose asked, in one of the engine's\nchecks processes: a pair whose meshes show air between the two parts shares nothing, and every other is measured\nexactly by the kernel on the parts' own solids. Each answer is kept in the engine's cache by the two parts'\ngeometries and how one stands to the other, so a document edited is measured again only where a part that changed\nis one of the two, and a check stopped by its time goes on from what it had measured. Nothing is built or\nwritten, and the same check of an unchanged document is answered at once from the result the engine keeps: one\nthat answered every pair.\n\n``poses``: the poses to check at beside as built, each a pose as every command takes one: a mechanism state's\nname, a configuration sequence at a time of it (``\"walk@0.6\"``), or a ``{joint or coupling: value}`` table. The\ncheck takes the poses it is given and chooses none: every state, or a sequence every tenth of a second, is the\ncaller's list. ``fits``: the pairs meant to share volume (a press-fit pin, a bearing in its bore), each two refs\nor globs (``(\"pin\", \"base\")``): listed apart, and no overlap. ``min_volume``: a shared volume at or below it\n(mm3) is none; 0.001 by default, the rounding along a face where two parts touch.\n\nReturns a ``cad.results.CheckResult``: ``ok`` when no two parts share volume and every pair was answered;\n``failed`` with an ``overlapping_parts`` finding for each pair that does (``location`` and ``refs`` the two\noccurrences' paths, ``value`` the most volume shared, mm3); ``not_checked`` (``reason``: ``unmeasured``)\nwhen none was found but a pair could not be measured -- past its time, its process gone, the kernel's refusal --\nwhich is never a pass: asked again, the check goes on from what it measured. ``measurements`` holds the poses,\nthe pairs counted (``pairs``: ``apart``, ``kept``, ``measured``) and every row (``overlaps``, ``fits``,\n``unmeasured``: each ``between`` its two parts, with every pose it holds at). An option the document does not\nanswer -- a pose it has no state or sequence for, a fit that names nothing -- is refused by name (a\n``ValueError``); a document that does not read is ``not_checked`` by its reason; a check that did not complete\nraises as ``cad.engine.api.check`` says.",
@@ -1244,21 +1340,29 @@
   "What the schematic at ``path`` holds, as plain data: ``file``, ``root``, ``format``, ``sheets``,\n``parts``, ``nets`` and ``counts``; with ``ref``, ``resolved``: what that reference names\n(``cad kicad_sch inspect``).",
   "Check the KiCad schematic SCHEMATIC with KiCad's electrical rules check.\n\nRuns ``kicad-cli sch erc`` on the saved hierarchy (from its project's root sheet) with every\nseverity reported, and lists each violation with its sheet and where it is (millimetres on that\nsheet's page). Beside KiCad's, a warning for every pin joined some other way besides, and every wire's\nend, that lies on a wire's span with no junction there (``pin_on_wire_span``, ``wire_end_on_wire_span``):\nKiCad joins them and its ERC passes. A pin whose one connection is a wire's span is KiCad's own straight\nrun through a pin (it saves a rail drawn to each pin as one wire across them), not a finding. The schematic fails when any error-severity violation exists; warnings are reported and\ndo not fail it.\n\nschematic: the .kicad_sch to check (any sheet of its project: the check reads the whole hierarchy).",
   "The schematic at ``schematic`` (its project's root sheet, or any sheet) open in KiCad, for a ``with``\nblock: ``with kicad_sch.edit(\"design.kicad_sch\") as s:`` hands the block KiPy's open schematic (kicode's\n``kicode.schematic.Schematic``), through kicode's headless ``kicad-cli api-server``, its project's symbol\nlibraries (its own ``sym-lib-table``) loaded first; a placement from a library the project does not list\nis refused in one line naming it. At the block's end the schematic is saved when it was changed, so a\nblock that changes nothing leaves the file byte for byte; when the block raises, nothing is saved and the\nexception goes on. A schematic not there yet is made by KiCad, with its project, and saved. A\n``kicad_pcb.edit`` of the same project inside the block shares its KiCad. Needs the kicad extra\n(``cad[kicad]``; ``cad run`` gives a script that calls it the extra).",
-  "``cad.build123d``: the build123d integration -- our helpers that take build123d's objects.\n\nbuild123d (and the OCCT kernel under it, OCP) is the integration model code builds with. Its extra\nis ``cad[build123d]``; its code runs in the process that calls it. This namespace holds only what WE\ndefine for it, never build123d itself (``import build123d as bd`` stays build123d's): the producers\nthat make the document types from a build123d shape (``_producers``, registered in ``cad.registry``),\nand the helpers a model calls with build123d objects:\n\n* ``memo``: a function worth replaying on a later build (the engine's **Memo functions**);\n* ``paint(shape, faces, material)``: a material or colour on some faces;\n* what a part declares for a robot description, each a fact of the machine:\n  ``frame(part, name, location)``, a named frame in its own frame (a robot description's sites),\n  ``body(part, name=)``, a body of its own fixed to its link, ``limits(assembly, joint, effort=,\n  velocity=)``, a joint's drive limits, ``mass(shape, grams)``, what a part or an assembly weighs in\n  all, ``point_mass(part, grams, at, name=, inertia=)``, a lump its solids leave out, ``free(shape)``, a\n  base not bolted to the world, and ``link(shape, name)``, the name of the link its parts make;\n* the mechanism, as ISO 10303-242 (AP242) names its entities: ``mechanism_state``\n  (``mechanism_state_representation``), ``configuration_sequence``\n  (``interpolated_configuration_sequence``), ``gear_pair``, ``rack_and_pinion_pair``, ``screw_pair``,\n  and ``posed(assembly, state)``, a copy of the assembly at a state;\n* ``animation(assembly, name, duration=)``: a glTF animation, baked into each GLB the model declares;\n* measurements of native geometry: ``closest_points``, ``overlap_volume``, ``is_sound``,\n  ``topology_errors``, ``boundary_edges``, ``self_intersections``, ``mass_properties`` and their\n  result types;\n* flat patterns, exact 2D geometry from a solid's planar faces: ``flat_pattern``, ``planar_faces``,\n  ``flatten_face``, ``flatten_faces``, ``union_faces``, ``offset_profile``;\n* ``leaves(tree)``: every leaf of a tree (``step.read``'s, ``xbf.read``'s, a model's ``.shape``) placed where\n  it stands, out of the tree, on the same B-rep: what ``located`` gives without copying the tree;\n* the manufacturing check of exact geometry, a ``CheckResult`` with its findings at refs (``plate/face 7``):\n  ``dfm(shape, process=...)`` -- what ``cad.step.dfm`` and ``cad.xbf.dfm`` run on a file's or a document's\n  B-rep (``_dfm_check``; the measurements ``_dfm_brep`` and ``_dfm_<process>``) -- with ``cnc``,\n  ``sheet_metal``, ``molding`` and ``printing`` its four processes by name;\n  and ``unfold(shape, k_factor=)``, a bent sheet's flat pattern, its bends unrolled by their bend allowance;\n* ``materials``, a submodule: named looks for what bd_materials' catalogue lacks (solder mask, ENIG,\n  moulding compound, anodized, powder coat, ...), each a native ``bd_materials.FinishedMaterial``.\n\nEvery name loads on first use: ``import cad.build123d`` imports no CAD kernel.",
+  "``cad.build123d``: the build123d integration -- our helpers that take build123d's objects.\n\nbuild123d (and the OCCT kernel under it, OCP) is the integration model code builds with. Its extra\nis ``cad[build123d]``; its code runs in the process that calls it. This namespace holds only what WE\ndefine for it, never build123d itself (``import build123d as bd`` stays build123d's): the producers\nthat make the document types from a build123d shape (``_producers``, registered in ``cad.registry``),\nand the helpers a model calls with build123d objects:\n\n* ``memo``: a function worth replaying on a later build (the engine's **Memo functions**);\n* ``paint(shape, faces, material)``: a material or colour on some faces;\n* what a part declares for a robot description, each a fact of the machine:\n  ``frame(part, name, location)``, a named frame in its own frame (a robot description's sites),\n  ``body(part, name=)``, a body of its own fixed to its link, ``limits(assembly, joint, effort=,\n  velocity=)``, a joint's drive limits, ``mass(shape, grams)``, what a part or an assembly weighs in\n  all, ``point_mass(part, grams, at, name=, inertia=)``, a lump its solids leave out, ``free(shape)``, a\n  base not bolted to the world, and ``link(shape, name)``, the name of the link its parts make;\n* the mechanism, as ISO 10303-242 (AP242) names its entities: ``mechanism_state``\n  (``mechanism_state_representation``), ``configuration_sequence``\n  (``interpolated_configuration_sequence``), ``gear_pair``, ``rack_and_pinion_pair``, ``screw_pair``,\n  and ``posed(assembly, state)``, a copy of the assembly at a state;\n* ``animation(assembly, name, duration=)``: a glTF animation, baked into each GLB the model declares;\n* measurements of native geometry: ``closest_points``, ``overlap_volume``, ``is_sound``,\n  ``topology_errors``, ``boundary_edges``, ``self_intersections``, ``mass_properties`` and their\n  result types;\n* flat patterns, exact 2D geometry from a solid's planar faces: ``flat_pattern``, ``planar_faces``,\n  ``flatten_face``, ``flatten_faces``, ``union_faces``, ``offset_profile``;\n* semantic PMI on a part's faces, as AP242 names its entities (the engine's **PMI**):\n  ``annotate(part, ...)`` gives it; ``datum``, ``dimensional_size``, ``dimensional_location``,\n  ``plus_minus_tolerance``, ``flatness_tolerance``, ``position_tolerance`` and\n  ``surface_profile_tolerance`` write theirs; ``size_limits``, ``general_profile``, ``general_tolerance`` and\n  ``place`` write none of their own, and ``note`` and ``view`` (with ``camera`` and ``section``) are\n  XCAF's, in the xbf and in no STEP;\n* ``leaves(tree)``: every leaf of a tree (``step.read``'s, ``xbf.read``'s, a model's ``.shape``) placed where\n  it stands, out of the tree, on the same B-rep: what ``located`` gives without copying the tree;\n* the manufacturing check of exact geometry, a ``CheckResult`` with its findings at refs (``plate/face 7``):\n  ``dfm(shape, process=...)`` -- what ``cad.step.dfm`` and ``cad.xbf.dfm`` run on a file's or a document's\n  B-rep (``_dfm_check``; the measurements ``_dfm_brep`` and ``_dfm_<process>``) -- with ``cnc``,\n  ``sheet_metal``, ``molding`` and ``printing`` its four processes by name;\n  and ``unfold(shape, k_factor=)``, a bent sheet's flat pattern, its bends unrolled by their bend allowance;\n* ``materials``, a submodule: named looks for what bd_materials' catalogue lacks (solder mask, ENIG,\n  moulding compound, anodized, powder coat, ...), each a native ``bd_materials.FinishedMaterial``.\n\nEvery name loads on first use: ``import cad.build123d`` imports no CAD kernel.",
   "The kernel could not establish the requested geometric result.",
   "Name an animation of an assembly: a GLB's own choreography, ``duration`` seconds long,\nreturned as a builder of glTF channels; its calls chain::\n\n    show = animation(car, \"showcase\", duration=6)\n    show.channel(\"lid\", path=\"translation\", keys=[(0, (0, 0, 0)), (1, (0, 0, 40))])\n    show.rotation(\"wheel*\", axis=(0, 1, 0), turns=3, start=1, interpolation=\"LINEAR\")\n    show.translation(\"door\", by=(0, 300, 0), start=2, end=4)\n    show.explode(\"body/*\", radial=True, distance=40, end=2)       # helpers, compiled to channels\n    show.hide(\"roof\", at=3)                                       # a STEP scale channel to 0\n    show.pose(at={0: \"shut\", 5: {\"doors\": 1}})                    # the mechanism, by its FK\n\n``.channel(parts, path=, keys=, interpolation=)`` is glTF's channel (``path``\n``translation``, ``rotation`` or ``scale``; ``interpolation`` ``CUBICSPLINE``, ``LINEAR`` or\n``STEP``); ``.translation``, ``.rotation`` and ``.scale`` are channels from a start to an end.\nParts are named as a ref's owner names them (a label, ``hand/finger.2``), or by a glob\n(``wheel*``). A configuration sequence is the mechanism's and the document keeps it; an animation is the GLB's:\nnever written into the xbf, baked into every GLB the model declares when that GLB is written.\nReturns the builder.",
+  "``shape`` given ``annotations`` (replacing any it held): the part a model returns, or\none part of its assembly. A ``Face`` given as a ref is numbered against ``shape`` now (a face of\nanother shape refused, by its annotation's id). Ids are\nunique on a part, a note's with the rest, as are datum letters; a note names annotations of\nthis call; and a datum holds one place in every frame that names it (XCAF holds one position\nper datum). Its views (``view``) are among them, each name unique among its views, each\nshowing and placing ids of this call (a view's placement of an id it does not show is\nrefused). Each is a dict as its function makes it, its keys that function's alone (``_keys``).\nReturns ``shape``.",
   "Keep ``part`` a body of its own, rigidly fixed to the link it would have merged into, named\n``name`` (the part's label where None): its mass, visuals, collision and frames go with it, not\ninto that link's. A part that is all of its link is a body already. A part's, not an\nassembly's. Returns ``part``.",
   "Free edges of a shell; seams are not boundaries.\n\nAn empty result establishes no free edges, not full manifold validity.\nGeometry is neither sewn nor repaired.",
+  "A view's camera of the code's own: ``direction`` from the part toward the eye (as a\npreset's, ``cad <type> snapshot --camera``'s: ``front`` is ``(0, -1, 0)``) and the camera's\n``up``, in the part's frame, each made a unit vector. An ``up`` along the direction is refused.",
   "Minimum set distance and one minimizing pair, in the input frame.\n\nSolid interiors count: contact, overlap and containment have distance\nzero. Witnesses need not be on both boundaries or unique. This is not\npenetration depth. Pass faces/shells to ask about their boundaries.\n\nIts cost grows with both shapes' faces (OCCT's exact extrema): two\nsolids of thousands of faces each (a vendor STEP's printed parts) take\nseconds a pair, so a hundred pairs take minutes. Compounds are measured\nmember by member, a member whose bounding box is farther than the best\ndistance so far skipped. Over many pairs, rule out first those whose\n``bounding_box(optimal=False)`` envelopes do not meet, and measure from a\npoint (``bd.Vertex``) where a point answers the question.",
   "CNC machining's check of ``shape``: ``dfm(shape, process=\"cnc\", ...)``.",
   "Name a configuration sequence of an assembly's mechanism (AP242's\n``interpolated_configuration_sequence``), by joint label: waypoints ``[(t, pose), ...]``\n(``t`` in seconds from 0, ``pose`` a mechanism state's name or ``{joint: value}``, the rest\nas built), ``sweep={joint: (from, to)}`` with ``duration``, or a function ``t -> {joint:\nvalue}`` with ``duration``. ``ease`` is ``cubic`` (eased in and out at every waypoint:\nAP242's synchronous interpolation) or ``linear``. A sequence is a finite clip; a player\nrepeats it::\n\n    configuration_sequence(arm, \"cycle\", [(0, \"folded\"), (2, \"reach\"), (5, \"folded\")])\n    configuration_sequence(arm, \"wave\", [(0, {\"wrist\": -30}), (1, {\"wrist\": 30}), (2, {\"wrist\": -30})])\n    configuration_sequence(arm, \"nod\", lambda t: {\"elbow\": 45 + 20 * math.sin(t)}, duration=6)\n\nThe document keeps the definition, never frames (a function as its samples); a GLB\nexport bakes it into a clip of the same name, and STEP, STL and 3MF ignore it. It never\nmoves the build: the model is as its joints connect it. Returns ``assembly``.",
+  "AP242's ``datum`` ``letter`` (``A``..``Z`` but ``I``, ``O`` and ``Q``: ``DATUM_LETTERS``)\nand its ``datum_feature``, on a planar or cylindrical face. Its id is its letter.",
   "The manufacturing check of a live build123d ``shape`` (a part, or an assembly's every part), as\n``cad.step.dfm`` checks a file: ``process`` is ``cnc``, ``sheet``, ``molding`` or ``printing`` -- with\nnone, the one the parts declare (``part.material = metals.aluminum(process=machined())``) -- and the\noptions are that process's, by the names ``cad.step.dfm`` takes (``tools=[3, 6]``, ``pull=\"z\"``,\n``technology=\"sla\"``); ``candidates`` ranks molding's pulls or printing's orientations instead, and\n``strict`` fails the check on a warning too. A ``CheckResult``: its ``status`` (``ok``, ``failed``,\n``not_checked``), its findings at refs (``plate/face 7``), each rule's verdict with its figure and its\nlimit, and its ``measurements``, the report. ``TypeError`` for an option no process takes.",
+  "AP242's ``dimensional_location``: the distance between two parallel planar faces, measured\nfrom the geometry; ``tolerance`` given explicitly (``plus_minus_tolerance`` or ``size_limits``).\n``basic``: theoretically exact (ASME's basic, ISO's theoretical), with no tolerance -- between\ntwo parallel planes, from a plane to a hole's axis parallel to it, or between two parallel axes:\nwhat a position tolerance's true position is located by.",
+  "AP242's ``dimensional_size`` named 'diameter': the diameter of a cylindrical face (a hole, a\nboss), measured from the geometry; ``tolerance`` given explicitly (``plus_minus_tolerance`` or\n``size_limits``).",
   "Select, flatten, fuse, and optionally kerf-offset — the usual whole job.\n\nThe three steps are separately available above for drawings that need them\napart (a multi-plane bracket flattens each flange with its own selection\nbefore one union).",
+  "AP242's ``flatness_tolerance``: flatness of ``value`` millimetres on a planar face, a form\ntolerance, with no datum.",
   "Lay one planar face into the XY plane, exactly.\n\nThe face is moved by the rigid transform that takes its own plane to XY — no\nsampling, no projection error, and every curve survives as itself. A DXF is\n2D and the engine refuses geometry off the XY plane, so this (or an explicit\n``bd.Location((0, 0, -z)) * face``) is how a derived face becomes drawable.\n\nA face whose normal points away from +Z comes back mirrored, because that is\nwhat looking at it from its own side means. Flip the source face first if you\nwant the other handedness.",
   ":func:`flatten_face` over a selection.",
   "Name a frame on ``part``: ``location`` (a build123d ``Location`` -- ``Pos``, ``Rot`` -- or a\n``Plane``) in the part's own frame, the one its geometry is in before ``part.location``. A\nsecond frame of one name replaces the first. A frame is a part's, not an assembly's: put it\non the part it stands on. Returns ``part``.",
   "Say that ``shape``, a part or an assembly, is not bolted to the world: the link a robot\ndescription hangs from the world that holds a part at or below it floats (MJCF's ``<freejoint>``;\na URDF's root, which floats already). On the top assembly, the robot's base. Returns ``shape``.",
   "A gear train of ``assembly``'s mechanism, ``name``: revolute joints, by label, each turning\nby its ratio (degrees per unit of the coupling's value) and only through it -- written as\nAP242's ``gear_pair`` couplers, from the first-named joint to each other one. At value ``c``\neach joint stands at its as-built angle plus its ratio times ``c``: ``c = 0`` is as built, so\nit never moves the build. Its range is its joints' limits: the tightest interval in which each\nstays within its own. Its name poses wherever a joint's does: ``mechanism_state(..., drive=90)``,\na configuration sequence's waypoints and sweeps, and ``--pose``; its joints alone are not posed.\nA joint that is not revolute is refused when the document is made; a label names the joint\nin each placement of a sub-assembly placed several times. Returns ``assembly``.",
+  "The part's general profile, ``value`` millimetres wide, relative to ``datums`` in order\n(none to three): ASME Y14.5's \"unless otherwise noted, all surfaces\", a surface profile of every\nface of the part that nothing else controls (``otherwise_controlled``), its faces computed by\neach build from that build's annotations and geometry. Not XCAF's ``All_Over`` modifier (every\nsurface, beside any other requirement): it is written as a ``surface_profile_tolerance`` on\nexactly the faces it covers. One per part.",
+  "The part's general tolerances, ``standard`` -- ISO 2768, as a drawing states it:\n``\"ISO 2768-m\"``, or ``\"ISO 2768-mK\"`` with the general geometrical tolerances of its part 2 --\nthe limits of every size and form nothing else tolerances. A general note saying so (numbered\nas any note is) that covers every face nothing else does (``coverage``), and the one note a STEP\ncarries: CAx-IF's 'default tolerances' property of the part, its 'tolerance class' the standard\n(``export.step``). Another standard is refused by name, never approximated. One per part.",
   "The boolean kernel's argument check (``BRepAlgoAPI_Check``) passes the\nshape: BRepCheck-valid, no self-intersections, no too-small edges, and an\nargument type a boolean accepts. This is what a fuse or cut demands of an\noperand, and it can be expensive. A null or empty shape is not sound: the\nkernel rejects it as an argument type (``BOPAlgo_BadType``), a verdict,\nnot an error. A check the kernel could not complete raises\n``GeometryError``. Closure, solid count and signed volume are separate\nquestions; the faulty entities are ``self_intersections``'s.",
   "Every leaf of ``tree`` (a node with no children), in tree order, placed in the tree's frame.\n\nEach is a new shape of the leaf's own class, label, colour and material, detached from the tree (no\nparent), its location the product of its ancestors' and its own: what ``leaf.located(world)`` gives,\nwithout copying the tree. It shares its B-rep with the tree's leaf, so it costs no kernel copy however\nlarge the assembly. ``paths=True`` gives ``(path, leaf)`` pairs instead, ``path`` the labels from the\nroot to the leaf (a label never given is ``\"\"``), so a leaf is found by where it is in the assembly as\nwell as by its name.",
   "Bound the drive of every revolute or linear joint labelled ``joint`` on ``assembly`` or below\nit: ``effort`` in N*m for a revolute joint and N for a linear one, ``velocity`` in rad/s or m/s\n(URDF's ``<limit effort velocity>``, MJCF's ``actuatorfrcrange``; MJCF bounds no speed), each\npositive, each None where the model gives none. A cylindrical or a ball joint, of two and three\nvalues, is refused. A second declaration for one joint replaces the first. Declare it after the\njoint is made: it is kept on the part that holds it. Returns ``assembly``.",
@@ -1290,20 +1394,28 @@
   "Name a state of an assembly's mechanism (AP242's ``mechanism_state_representation``):\n``mechanism_state(arm, \"raised\", elbow=90)`` sets the joint labelled ``elbow`` to 90\ndegrees in the state ``raised`` (a number per joint, or for a joint of several values a\nsequence: a cylindrical joint's angle and position, a ball joint's three angles). The\njoints are build123d's, placed with ``connect_to``; the values they were connected at are\nthe as-built state, and a joint a mechanism state does not name stays as built. The\ndocument keeps every mechanism state; the viewer offers them as presets, ``--pose NAME``\ndraws a snapshot at one, and a configuration sequence's waypoint may name\none. A mechanism state never changes the build: every file shows the model as built. A\nvalue outside its joint's range fails the build, in one line naming the state, the joint,\nthe value and the range; one on a bound is within it. Returns ``assembly``.",
   "Mark a function worth replaying: ``@memo``, bare. Its arguments are keyed by value\n(plain values, build123d's value types, materials, shapes the engine made); it returns\ngeometry (a shape, or a tuple, list or dict of shapes); it writes nothing outside\nitself. A verifying build (``Model.build(verify=True)``)\nruns every call the engine would replay and compares what it makes with what was logged.",
   "Injection molding's check of ``shape``: ``dfm(shape, process=\"molding\", ...)``.",
+  "A note of the part saying ``text``, the code's words: a general note where it names no face\nand no annotation; a flag note on ``faces`` (a face, or a list of faces of any kind) and on the\n``annotations`` of the same ``annotate`` call it names by id. Numbered among its part's notes as\nthe code gives them, after the part's general profile, which is Note 1 where it has one. Its id\nis one of the part's ids. Kept in the xbf, never in a STEP (AP242's writer here writes no\nnotes).",
   "Kerf / tool-radius compensation, exactly.\n\nPositive grows the profile (cut outside the line), negative shrinks it (cut\ninside). The offset is OCC's, so a filleted corner offsets to a concentric\narc rather than to a fan of chords — the single biggest reason this module\nstopped going through shapely.",
   "Intersection volume of two finite, positively oriented solids, or of\ncompounds of them: an assembly's leaf part is often a Compound.\n\nA compound is its solids, each placed as the compound places it, and the\nanswer is the sum of every pair's overlap (one solid of ``a``, one of\n``b``): solids of one compound that overlap each other count their shared\nregion once per solid, and are never fused. Contact has zero volume.\nAssembly pair selection, intentional overlaps and acceptance thresholds\nbelong to the caller. Inputs are never fused or modified; a failed boolean\nis an error, never a zero-volume answer.",
   "Colour faces of a part, or give them a material: ``faces`` (a face, or several) of\n``shape`` take ``color`` -- an sRGB hex string (``\"#e68019\"``, ``\"#e68019cc\"``), 0-255\nintegers (three, or four with alpha), a build123d ``Color``, or a ``bd_materials.FinishedMaterial`` -- in the\ndocument, by their ordinal in the part. The colour is the one ``shape.color`` would give\nthe same value (``colors``). A face holds one paint: a colour\nreplaces its material, a material its colour. Returns ``shape``, whose paints the\nmemo keys like its label.\n\nA part's material is set as its colour is, on the shape: ``part.material =\nbd_materials.metals.mild_steel()``; on an assembly, it is every part's below it that has none. Both\nare attributes of the object, and travel as build123d moves them: a copy, ``moved``\nand ``located`` keep them. Material assignment uses build123d's native property;\nset an explicit colour after assigning a material to override its PBR base colour.\nPaint and materials are for finished parts: set them after the last\noperation, so an edit of one is no kernel call (the memo keys them with the shape,\nand a compound does not hold its children's materials in its key).",
+  "Where a viewer draws an annotation (provisional): ``anchor`` on or near its feature and the\ntext ``offset`` from it, millimetres in the annotated part's frame. Not semantic: a STEP draws\nthe callout there (``_present``), and moving it changes nothing the annotation means.",
   "The planar faces of ``shape`` facing one way at one height.\n\nThis is the selection step of a flat pattern: \"every upward face of the top\nsurface\", \"every outward face of the left flange\". Raises rather than\nreturning nothing — an empty selection means the plane or the sign is wrong,\nand a drawing generated from no faces is an empty file nobody notices.",
+  "A dimension's ``plus_minus_tolerance``: signed deviations from the nominal, ``lower`` below\n``upper`` (``-upper`` when not given: ``plus_minus_tolerance(0.2)`` is ±0.2;\n``plus_minus_tolerance(0.1, 0)`` is +0.1/0).",
   "Add ``grams`` to ``part`` at ``at`` (a build123d ``Location`` or ``Plane``) in its own frame, the\none its geometry is in before ``part.location``, as a frame is: a lump its solids leave out. It has\nno inertia of its own unless ``inertia`` gives its diagonal, ``(ixx, iyy, izz)`` in kg*m^2 about\nthe point in ``at``'s axes. ``name`` tells several apart (``point1``, ``point2`` where None); a\nsecond of one name replaces the first. A part's, not an assembly's. Returns ``part``.",
   "``assembly`` with every part where ``state`` puts it: a mechanism state's name, or\n``{joint label or coupling name: value}`` (the values ``mechanism_state`` takes, the rest as\nbuilt). The parts move by the forward kinematics the viewer and the snapshot use\n(``link_worlds``): each link's placement at the asked values over its placement as built,\napplied to that link's parts. An unknown state, joint or coupling, or a value out of range, is\nrefused by name (``resolve``).\n\n``assembly`` is what the model call returned, its document's handle, or a shape. Inside a body\n(``return posed(arm(), \"folded\")``: a posed file is this) the result is a copy of the shape that\nshares its geometry and keeps the joints, couplings, mechanism states and configuration\nsequences, the asked values its as-built state; a value a state or a sequence gives a coupling\nis said again from that state (``_rebase``), so each names the pose it named. From a plain script (a check) the handle's\ndocument is posed where the engine holds its mechanism (``posed_structure``), and the answer is\nthe tree ``.shape`` is, at that pose: placed parts, no joints. A shape a plain script read\nthrough ``.shape`` has no joints left to pose, and is refused with what to pass instead.",
+  "AP242's ``position_tolerance``: the position of a cylindrical feature (a hole's axis),\n``value`` millimetres, a diametral zone by default, relative to ``datums`` in order.",
   "3D printing's check of ``shape``: ``dfm(shape, process=\"printing\", ...)``.",
   "A rack and pinion of ``assembly``'s mechanism, ``name``: the first-named joint, by label,\non one side -- a revolute joint (the pinion) or a prismatic one (the rack) -- and every other\njoint of the other kind, each moving by its ratio (degrees or millimetres per unit of the\ncoupling's value) and only through it; written as AP242's ``rack_and_pinion_pair`` couplers,\nfrom the first-named joint to each other one. Its value, range and naming are a gear pair's\n(``gear_pair``). A joint of the wrong kind is refused when the document is made.\n\nThe pinion may hold no part: a ``RevoluteJoint`` on the part that carries it, connected to\nnothing, is a **virtual pinion** -- a reference axis where the CAD draws no gear, so two slides\ncouple to each other through it (``rack_and_pinion_pair(gripper, \"grip\", pinion=1, left=0.15,\nright=0.15)``, its ratios the pitch circle's millimetres per degree). The document keeps it as a\nrevolute pair to a link of no part; a robot description writes the racks coupled to the first of\nthem and no pinion. Give it a range at least as wide as the racks' (build123d's default is 0 to\n360): it bounds the coupling. Returns ``assembly``.",
   "A screw of ``assembly``'s mechanism, ``name``: one cylindrical joint, by label, given its\npitch, ``lead=1.5`` (the millimetres it travels per 360 degrees of turn, negative for a left\nhand) -- Part 105's ``SCREW_PAIR``, which holds the pitch and nothing else. The coupling's value\nis the joint's turn from as built, in degrees; its travel follows. Its range and naming are a\ngear pair's (``gear_pair``). A joint that is not cylindrical is refused when the document is\nmade. Returns ``assembly``.",
+  "A view's section: the viewer's Clip, one plane across ``axis`` (``x``, ``y`` or ``z``) at\n``at`` millimetres in the part's frame, keeping the lower side (``invert``: the upper).",
   "Explicit boolean self-intersection check in the supplied placement.\n\nThis can be expensive. Codes are OCCT's ``BOPAlgo_SelfIntersect``; affected\nentities are owned copies. Inconclusive/failed checks raise an exception.",
   "Sheet metal's check of ``shape``: ``dfm(shape, process=\"sheet\", ...)``.",
+  "Limits: the least and the greatest size, absolute millimetres, ``upper`` above ``lower``\n(``size_limits(10.0, 10.05)`` is 10.00–10.05). In place of deviations; the nominal is still\nmeasured. Written as the dimension's ``'lower limit'`` and ``'upper limit'`` values, no entity\nof their own.",
+  "AP242's ``surface_profile_tolerance``: the profile of a surface, ``value`` millimetres wide\nabout its true profile: on a face, or on each of a list of faces of any kind (one requirement on\nall of them), relative to ``datums`` in order (none to three).",
   "BRepCheck topology/geometry faults, with affected owned entities.\n\nCodes are OCCT's ``BRepCheck_*`` status names. Open shells and reversed\nsolids can have valid topology. Closure, signed volume and expensive\nboolean self-intersection testing are separate questions.",
   "The flat pattern of a bent sheet metal part (a build123d ``Shape``): exact 2D geometry in the XY\nplane, ready to return from a ``@dxf`` model.\n\nEach flange is rotated flat about its bend and the bend replaced by a strip as wide as its bend\nallowance, ``BA = angle * (inside radius + K * thickness)``; holes and arcs stay exact. ``thickness``\n(mm) is checked against the part's measured one; ``k_factor`` is the neutral axis's place in the\nthickness (the shop's, from its bend table; default Hubs's air-bending chart by ``material`` and each\nbend's radius). One part gives its flat ``Face`` (or a ``Compound`` of the\npieces that do not join); several parts, a ``Compound`` of each one's. With ``bend_lines`` the result\nis a ``Compound`` of the cut outline labelled ``CUT`` and the bends' centre lines labelled ``BEND`` (an\nempty one for a flat plate, which has none): a DXF writes each label as its own layer. ``ValueError`` for a\nshape that is not one thickness of sheet.",
   "Fuse coplanar XY faces into one profile, exactly.\n\nOCC's boolean is the primary path: overlapping faces merge, shared edges\ndisappear, holes survive as inner wires, and arcs stay arcs. Disjoint faces\ncome back as a multi-face result, which is a perfectly good nested cut\nlayout.\n\nShapely is the fallback, and only that. OCC refuses some genuinely\ndegenerate inputs — faces that touch along a zero-width sliver, self-\nintersecting projections of a fold — where a tolerant polygon union still\ngives a usable contour. Taking that route costs curvature (the rebuilt\nprofile is polygonal), so it is never the default and never silent.",
+  "A named view of the part, given to ``annotate`` among its annotations: seen down ``camera``\n(a preset's name, ``cad <type> snapshot --camera``'s, or ``camera(direction, up)``), orthographic,\ncut by ``section`` (``section``) where it has one, showing the annotations and notes of the\nsame call ``shows`` names by id (None: every one, as an iso view does), each it ``place``-s by\nid drawn there in this view (``place``) and elsewhere as its own presentation says. Its\nname is unique among its part's views. Kept in the xbf as an XCAF view, never in a STEP.",
   "``cad.kicad``: the kicad integration -- our code for KiCad: kicad-cli and its IPC API, both kicode's.\n\nKiCad's command line, ``kicad-cli``, is an external program our code runs (kind C), with a separate\nprocess; its extra, ``cad[kicad]``, is kicode, which carries that program and KiPy, the IPC API's Python\nclient (as ``kicode``), one KiCad nightly's build of both. A person's own KiCad is never run. What is here:\n\n* ``_program``: ``kicad-cli`` found and run, by the library's one helper for external programs\n  (``cad._internal.programs``): ``CAD_KICAD_CLI``, refused unless it names a ``kicad-cli``, then\n  kicode's; only ``kicad-cli`` itself is ever run, headless, in private homes (``kicode.environment``).\n* ``_command``: ``cad run kicad-cli ARGS`` -- KiCad's own command line, the environment's (kicode's console\n  script), headless in a private folder, its exit code kicad-cli's.\n* ``_session``: what ``kicad_pcb.edit`` and ``kicad_sch.edit`` run, a ``with`` block -- a private\n  ``kicad-cli api-server`` on the file (KiCad makes one not there yet), one per project, which the board's\n  and the schematic's edits share; KiPy connected to it, the open document handed over (a schematic's\n  project symbol libraries loaded first), saved at the block's end when it was changed and not when the\n  block raises, the server stopped and its folder removed; ``_drift``, the board's check at the save of the\n  nets KiCad moved onto a pad's.\n* ``_check``: KiCad's design rule check (``cad.kicad_pcb.drc``, ``cad kicad_pcb drc``).\n* ``_export``: the board's fabrication, assembly and 3D outputs by ``kicad-cli`` (``EXPORTS``: gerbers,\n  drill, pos, bom, step, glb, odb, ipc2581, pdf, dxf), which ``cad.kicad_pcb.export`` and the server's ``cad\n  kicad_pcb export`` are written by.\n* ``_schematic``: a schematic's electrical rules check and its outputs (``EXPORTS``: pdf, svg, netlist,\n  bom) by ``kicad-cli``, from its project's root sheet (``cad.kicad_sch.erc`` and ``export``, ``cad\n  kicad_sch erc`` and ``export``).\n* ``route`` (``_route``, its search in ``_routing``): copper for the connections an agent names, in the order\n  it names them, written into the board a ``kicad_pcb.edit`` block has open: KiPy's board in, the copper out\n  through it, every rule the board's own; it answers a ``Routed``.\n\nThe board readers are the document type's (``cad.kicad_pcb``), our own code for the file format: viewing,\nreading and drawing a board need no KiCad. Importing this package starts nothing and imports no kicode.",
   "What a ``route`` call did: every connection it was asked for, in the order routed (``connections``: each\nits net, its two ends, routed or not and why not, the copper it added, the plan entry it came from), and the\ntotals. ``ok`` when every one is routed. ``warnings``: each custom rule the router does not keep (it holds where\na condition only KiCad's DRC evaluates, or is of a kind the router does not route by), and a plan whose region\nwas narrowed to fit the router's memory, said on stderr before routing too: DRC judges the rules after.",
   "One line per warning, one per connection, then the totals.",

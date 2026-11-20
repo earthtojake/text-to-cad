@@ -60,6 +60,8 @@ def refusals(still: Any, name: str) -> None:
     if still.preview or still.pose is not None or still.transparent or still.background:
         raise SnapshotRefused(f"{name} is a flat schematic: Preview, pose and a transparent or coloured backdrop are "
                               "not supported")
+    if still.view is not None:
+        raise SnapshotRefused(f"{name} is a flat schematic: --view is a part's named view, and a schematic has none")
     if still.references:
         raise SnapshotRefused(f"{name} is a schematic: lighting references is a board's for now")
     if still.camera is not None:

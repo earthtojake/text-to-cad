@@ -111,7 +111,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
     compact: Boolean(compact), reach: stripReach });
   if (panelControl) panelControl.current = previewing ? null : flat.control;
   const panelNode = sided && !toolsHidden ? <FlatPanel mode="docked" open={flat.open} hidden={previewing} onClose={() => flat.setOpen(false)}
-    label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null} sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab}
+    label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null} sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab} onShowTab={flat.showTab}
     width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} detail={selectedDetail}
     detailHeight={flat.detailHeight} onDetailHeightChange={flat.changeDetailHeight} /> : null;
 

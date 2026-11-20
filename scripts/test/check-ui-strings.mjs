@@ -53,6 +53,8 @@ export const NON_LANGUAGE = new Set([
   'STEP', 'STP', 'STL', '3MF', 'GLB', 'glTF', 'DXF', 'XBF', 'SDF', 'URDF', 'SRDF', 'PNG', 'SVG', 'JSON', 'PDF',
   // Brands and products.
   'CAD', 'GitHub', 'Discord', 'text-to-cad', 'cadgen', 'Codex', 'Claude', 'WebGL',
+  // A drawing standard's own term, said as the trade says it in every language (ISO 16792, ASME Y14.41).
+  'PMI',
   // Units and symbols.
   'mm', 'mm²', 'mm³', 'kg', 'm', 'rad', 'N', 'N·m', 'm/s', 'rad/s', '°', 'ID',
 ]);

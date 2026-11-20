@@ -1,0 +1,384 @@
+[
+  {
+    "id": "A",
+    "kind": "datum",
+    "label": null,
+    "status": "ok",
+    "problem": null,
+    "part": 0,
+    "refs": [
+      {
+        "role": "feature",
+        "written": "face 5",
+        "status": "ok",
+        "ref": "plate/f:pmi_plate.body_make_box1.5;M:pmi_plate.body",
+        "candidates": null,
+        "problem": null
+      }
+    ],
+    "presentation": {
+      "anchor": [
+        40.0,
+        -20.0,
+        -5.0
+      ],
+      "offset": [
+        0.0,
+        -15.0,
+        -10.0
+      ]
+    },
+    "xcaf_type": null,
+    "datum": {
+      "letter": "A"
+    }
+  },
+  {
+    "id": "B",
+    "kind": "datum",
+    "label": null,
+    "status": "ok",
+    "problem": null,
+    "part": 0,
+    "refs": [
+      {
+        "role": "feature",
+        "written": "face 2",
+        "status": "ok",
+        "ref": "plate/f:pmi_plate.body_make_box1.3",
+        "candidates": null,
+        "problem": null
+      }
+    ],
+    "presentation": {
+      "anchor": [
+        40.0,
+        -30.0,
+        0.0
+      ],
+      "offset": [
+        0.0,
+        -15.0,
+        0.0
+      ]
+    },
+    "xcaf_type": null,
+    "datum": {
+      "letter": "B"
+    }
+  },
+  {
+    "id": "C",
+    "kind": "datum",
+    "label": null,
+    "status": "ok",
+    "problem": null,
+    "part": 0,
+    "refs": [
+      {
+        "role": "feature",
+        "written": "face 1",
+        "status": "ok",
+        "ref": "plate/f:pmi_plate.body_make_box1.1",
+        "candidates": null,
+        "problem": null
+      }
+    ],
+    "presentation": {
+      "anchor": [
+        -50.0,
+        20.0,
+        0.0
+      ],
+      "offset": [
+        -15.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xcaf_type": null,
+    "datum": {
+      "letter": "C"
+    }
+  },
+  {
+    "id": "thickness",
+    "kind": "dimension",
+    "label": null,
+    "status": "ok",
+    "problem": null,
+    "part": 0,
+    "refs": [
+      {
+        "role": "from",
+        "written": "face 5",
+        "status": "ok",
+        "ref": "plate/f:pmi_plate.body_make_box1.5;M:pmi_plate.body",
+        "candidates": null,
+        "problem": null
+      },
+      {
+        "role": "to",
+        "written": "face 3",
+        "status": "ok",
+        "ref": "plate/f:pmi_plate.body_make_box1.6;M:pmi_plate.body",
+        "candidates": null,
+        "problem": null
+      }
+    ],
+    "presentation": {
+      "anchor": [
+        50.0,
+        30.0,
+        0.0
+      ],
+      "offset": [
+        15.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xcaf_type": null,
+    "dimension": {
+      "type": "distance",
+      "basic": false,
+      "nominal": {
+        "value": 10.0,
+        "unit": "mm",
+        "source": "geometry"
+      },
+      "tolerance": {
+        "type": "plus_minus",
+        "upper": 0.2,
+        "lower": -0.2
+      }
+    }
+  },
+  {
+    "id": "hole-diameter",
+    "kind": "dimension",
+    "label": null,
+    "status": "ok",
+    "problem": null,
+    "part": 0,
+    "refs": [
+      {
+        "role": "feature",
+        "written": "face 7",
+        "status": "ok",
+        "ref": "plate/f:pmi_plate.body_make_cylinder1.1;M:pmi_plate.body",
+        "candidates": null,
+        "problem": null
+      }
+    ],
+    "presentation": {
+      "anchor": [
+        5.0,
+        0.0,
+        5.0
+      ],
+      "offset": [
+        15.0,
+        15.0,
+        0.0
+      ]
+    },
+    "xcaf_type": null,
+    "dimension": {
+      "type": "diameter",
+      "basic": false,
+      "nominal": {
+        "value": 10.0,
+        "unit": "mm",
+        "source": "geometry"
+      },
+      "tolerance": {
+        "type": "plus_minus",
+        "upper": 0.1,
+        "lower": 0.0
+      }
+    }
+  },
+  {
+    "id": "hole-from-B",
+    "kind": "dimension",
+    "label": null,
+    "status": "ok",
+    "problem": null,
+    "part": 0,
+    "refs": [
+      {
+        "role": "from",
+        "written": "face 2",
+        "status": "ok",
+        "ref": "plate/f:pmi_plate.body_make_box1.3",
+        "candidates": null,
+        "problem": null
+      },
+      {
+        "role": "to",
+        "written": "face 7",
+        "status": "ok",
+        "ref": "plate/f:pmi_plate.body_make_cylinder1.1;M:pmi_plate.body",
+        "candidates": null,
+        "problem": null
+      }
+    ],
+    "presentation": {
+      "anchor": [
+        0.0,
+        -15.0,
+        5.0
+      ],
+      "offset": [
+        6.0,
+        0.0,
+        0.0
+      ]
+    },
+    "xcaf_type": null,
+    "dimension": {
+      "type": "distance",
+      "basic": true,
+      "nominal": {
+        "value": 30.0,
+        "unit": "mm",
+        "source": "geometry"
+      },
+      "tolerance": null
+    }
+  },
+  {
+    "id": "hole-from-C",
+    "kind": "dimension",
+    "label": null,
+    "status": "ok",
+    "problem": null,
+    "part": 0,
+    "refs": [
+      {
+        "role": "from",
+        "written": "face 1",
+        "status": "ok",
+        "ref": "plate/f:pmi_plate.body_make_box1.1",
+        "candidates": null,
+        "problem": null
+      },
+      {
+        "role": "to",
+        "written": "face 7",
+        "status": "ok",
+        "ref": "plate/f:pmi_plate.body_make_cylinder1.1;M:pmi_plate.body",
+        "candidates": null,
+        "problem": null
+      }
+    ],
+    "presentation": {
+      "anchor": [
+        -25.0,
+        0.0,
+        5.0
+      ],
+      "offset": [
+        0.0,
+        6.0,
+        0.0
+      ]
+    },
+    "xcaf_type": null,
+    "dimension": {
+      "type": "distance",
+      "basic": true,
+      "nominal": {
+        "value": 50.0,
+        "unit": "mm",
+        "source": "geometry"
+      },
+      "tolerance": null
+    }
+  },
+  {
+    "id": "top-flatness",
+    "kind": "geometric_tolerance",
+    "label": null,
+    "status": "ok",
+    "problem": null,
+    "part": 0,
+    "refs": [
+      {
+        "role": "feature",
+        "written": "face 3",
+        "status": "ok",
+        "ref": "plate/f:pmi_plate.body_make_box1.6;M:pmi_plate.body",
+        "candidates": null,
+        "problem": null
+      }
+    ],
+    "presentation": {
+      "anchor": [
+        -30.0,
+        20.0,
+        5.0
+      ],
+      "offset": [
+        0.0,
+        15.0,
+        0.0
+      ]
+    },
+    "xcaf_type": null,
+    "geometric_tolerance": {
+      "characteristic": "flatness",
+      "value": 0.05,
+      "unit": "mm",
+      "zone": null,
+      "modifier": null,
+      "datums": [],
+      "general": false
+    }
+  },
+  {
+    "id": "hole-position",
+    "kind": "geometric_tolerance",
+    "label": null,
+    "status": "ok",
+    "problem": null,
+    "part": 0,
+    "refs": [
+      {
+        "role": "feature",
+        "written": "face 7",
+        "status": "ok",
+        "ref": "plate/f:pmi_plate.body_make_cylinder1.1;M:pmi_plate.body",
+        "candidates": null,
+        "problem": null
+      }
+    ],
+    "presentation": {
+      "anchor": [
+        -5.0,
+        0.0,
+        5.0
+      ],
+      "offset": [
+        -15.0,
+        15.0,
+        0.0
+      ]
+    },
+    "xcaf_type": null,
+    "geometric_tolerance": {
+      "characteristic": "position",
+      "value": 0.1,
+      "unit": "mm",
+      "zone": "diameter",
+      "modifier": null,
+      "datums": [
+        "A",
+        "B",
+        "C"
+      ],
+      "general": false
+    }
+  }
+]

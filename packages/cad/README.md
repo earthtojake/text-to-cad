@@ -111,7 +111,10 @@ pair of parts whose boxes meet answered, as built and posed, by the engine: exac
 two parts' meshes do not show air between them); a
 B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen and solved by
 CalculiX's ccx, its results a folder of standard files); a mechanism's joint stops found from its geometry
-(`cad.<type>.ranges(source)`, each joint swept against its parts); and engineering drawings (`@eng_drawing`).
+(`cad.<type>.ranges(source)`, each joint swept against its parts); engineering drawings (`@eng_drawing`);
+and semantic PMI with the model-based definition around it (`cad.build123d`: datums, dimensions and
+tolerances on a part's faces, kept in its xbf and exported as AP242's; notes, named views and their
+presentation, kept in the xbf alone).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -237,8 +240,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    XCAF: a live model holds an XCAF document; `@xbf` or `--xbf` serializes it as native BinXCAF.
    It holds: units in millimetres,
    prototypes and instances with placements, a name on every part and instance, colours and
-   materials per part and per painted face, element names on face, edge and vertex labels, and
-   an assembly's mechanism. STEP, GLB, STL, 3MF and, of a planar document, DXF are translations
+   materials per part and per painted face, element names on face, edge and vertex labels, an
+   assembly's mechanism, and each part's semantic PMI as XCAF's own GD&T objects, notes and views
+   (the engine's **PMI**). STEP, GLB, STL, 3MF and, of a planar document, DXF are translations
    of it; `cad <type> export` writes any of them from the xbf alone. A file document -- a board, a
    schematic, a robot description, a mesh -- is its file, read by its type (law 24).
 5. **The memo is the only build cache, and it lives in the worker.** *Models.* Every kernel operation a model
@@ -358,7 +362,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     **Tier 3: a person's data** -- documents, the state folder and its records, Recents, settings. A release reads what the previous shipped release wrote, writes the
     current form, and migrates on first touch, once: never the old form written, never a downgrade.
     Opening, viewing, importing and exporting a saved document never requires its source or a rebuild
-    because cad was upgraded: the engine reads `xbf/8` and `xbf/9` and converts `xbf/8` in
+    because cad was upgraded: the engine reads `xbf/8`, `xbf/9` and `xbf/10` and converts `xbf/8` in
     memory, without executing model code or changing source or cache bytes, under a migration record
     that leaves the original build closure and toolchain provenance unchanged; an explicit export to
     another XBF path saves the upgraded document atomically, and opening one does not rewrite it;
@@ -699,8 +703,10 @@ src/cad/
                          #   what and the contact excludes as data (_report, _check)
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
-                         #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
-                         #   measurements of native geometry (_geometry), flat patterns (_flatten),
+                         #   rack_and_pinion_pair, screw_pair, posed), the semantic PMI model
+                         #   code writes on a part's faces (annotate, datum, ...: engine/pmi.py),
+                         #   a GLB's animation, measurements of native geometry (_geometry),
+                         #   flat patterns (_flatten),
                          #   the manufacturing checks of exact geometry (_dfm_brep, the core; _dfm_cnc,
                          #   _dfm_sheet with unfold, _dfm_molding, _dfm_printing; _dfm_dxf, a cut file;
                          #   _dfm_check, the entry), the interference check's measuring
@@ -710,7 +716,8 @@ src/cad/
   engine/                # the engine's library half: models and the worker every build runs
                          #   in, documents, exports, the mesh, references, the OCCT stills, the
                          #   client every command reaches the server by, and where things are
-                         #   on this computer (places)
+                         #   on this computer (places); a STEP's AP242 PMI read back and checked
+                         #   in the file written, with no OCCT (export/ap242.py)
   coacd/                 # the coacd integration, CoACD's convex decomposition: the process of its own
                          #   that cuts a part's mesh into convex hulls for cad.mujoco.decompose
                          #   (_decomposer), which the engine starts and keeps the hulls of (engine/hulls.py)

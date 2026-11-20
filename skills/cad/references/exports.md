@@ -144,7 +144,7 @@ part where it should sit, which the assembly calls and places; export that model
 ## The xbf is Save As
 
 The `.xbf` is text-to-cad's own document: the parts and placements, names, colours,
-materials, element names and mechanism, read back losslessly, and the compiled tracks of
+materials, element names, mechanism and PMI, read back losslessly, and the compiled tracks of
 the model's animations, which only a GLB exported from it reads. Export one only:
 
 - to share a model without its code;
@@ -167,7 +167,10 @@ geometry, names, colours and materials. Keep the xbf beside the STEP, and read t
   and per painted face, materials' names and densities, and the element names on every
   face, edge and vertex, so a STEP read back keeps them. It drops the rest of a
   material's look and physical fields, a face's material (the face keeps its colour),
-  and the mechanism: a STEP is placements only.
+  and the mechanism: a STEP is placements only. A part's PMI is written as AP242
+  semantic PMI on its faces, its general profile on exactly the faces it covers; its
+  notes and named views stay in the document ([PMI](pmi.md#export)). A STEP whose PMI
+  the export cannot verify in the written file is refused.
 - **GLB**: glTF 2.0, Y up, in metres. One mesh per part and the assembly's tree as nodes: a
   node per sub-assembly with its components under it, each placed in its parent's frame and
   named by its path below the root (`arm/head/pin_1`), so Blender and any glTF reader show the
@@ -189,7 +192,8 @@ geometry, names, colours and materials. Keep the xbf beside the STEP, and read t
   material's colour is written at its preview alpha (`transmission=1` gives `0.3`), or at its PBR
   `opacity` below 1, whatever `part.color`'s alpha; the 3MF of the model and the 3MF of its GLB agree.
 - **STL**: binary, every placed triangle, in millimetres.
-- **xbf**: of a model, or of a STEP (converting a vendor file).
+- **xbf**: of a model (its document's own bytes, PMI and all: [PMI](pmi.md#export)),
+  or of a STEP (converting a vendor file, its GD&T kept as read).
 - **DXF**: of a planar document only (a 2D drawing); a solid is refused.
 
 Mesh exports and the viewer draw the same meshes, made at one tolerance

@@ -24,6 +24,12 @@ and the helpers a model calls with build123d objects:
   result types;
 * flat patterns, exact 2D geometry from a solid's planar faces: ``flat_pattern``, ``planar_faces``,
   ``flatten_face``, ``flatten_faces``, ``union_faces``, ``offset_profile``;
+* semantic PMI on a part's faces, as AP242 names its entities (the engine's **PMI**):
+  ``annotate(part, ...)`` gives it; ``datum``, ``dimensional_size``, ``dimensional_location``,
+  ``plus_minus_tolerance``, ``flatness_tolerance``, ``position_tolerance`` and
+  ``surface_profile_tolerance`` write theirs; ``size_limits``, ``general_profile``, ``general_tolerance`` and
+  ``place`` write none of their own, and ``note`` and ``view`` (with ``camera`` and ``section``) are
+  XCAF's, in the xbf and in no STEP;
 * ``leaves(tree)``: every leaf of a tree (``step.read``'s, ``xbf.read``'s, a model's ``.shape``) placed where
   it stands, out of the tree, on the same B-rep: what ``located`` gives without copying the tree;
 * the manufacturing check of exact geometry, a ``CheckResult`` with its findings at refs (``plate/face 7``):
@@ -59,6 +65,10 @@ _NAMES = {
     "rack_and_pinion_pair": "cad.engine.mechanism",
     "screw_pair": "cad.engine.mechanism",
     "posed": "cad.engine.mechanism",
+    **{name: "cad.engine.pmi" for name in (
+        "annotate", "camera", "datum", "dimensional_location", "dimensional_size", "flatness_tolerance",
+        "general_profile", "general_tolerance", "note", "place", "plus_minus_tolerance",
+        "position_tolerance", "section", "size_limits", "surface_profile_tolerance", "view")},
     **{name: "cad.build123d._geometry" for name in (
         "GeometryError", "GeometryIssue", "ClosestPoints", "MassProperties", "closest_points", "overlap_volume",
         "is_sound", "topology_errors", "boundary_edges", "self_intersections", "mass_properties")},
@@ -105,3 +115,6 @@ if TYPE_CHECKING:
     from cad.engine.declarations import body, frame, free, limits, link, mass, point_mass
     from cad.engine.mechanism import gear_pair, posed, rack_and_pinion_pair, screw_pair
     from cad.engine.model import animation, configuration_sequence, mechanism_state, memo, paint
+    from cad.engine.pmi import (annotate, camera, datum, dimensional_location, dimensional_size, flatness_tolerance,
+                                general_profile, general_tolerance, size_limits, note, place, plus_minus_tolerance,
+                                position_tolerance, section, surface_profile_tolerance, view)
