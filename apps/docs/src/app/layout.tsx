@@ -39,6 +39,8 @@ const themeScript = `
 })();
 `;
 
+const IMPACT_SITE_VERIFICATION = "cfb312e3-de63-4bbf-ae4a-5e5b3ed5db85";
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.origin),
   applicationName: siteConfig.name,
@@ -107,6 +109,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Site verification for impact.com, in the form it asks for (`value`), with `content` as well. */}
+        <meta name="impact-site-verification" content={IMPACT_SITE_VERIFICATION} {...{ value: IMPACT_SITE_VERIFICATION }} />
+      </head>
       <body>
         <Script
           id="theme-script"
