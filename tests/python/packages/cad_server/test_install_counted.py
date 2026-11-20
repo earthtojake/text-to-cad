@@ -201,7 +201,7 @@ class CountedTest(unittest.TestCase):
         self.assertEqual((going.outcome, going.stopped, going.code), ("ok", False, 0), "the run's own facts untouched")
         # Ended before it had any facts: counted all the same, as a server's run that found nothing yet.
         with mock.patch.object(sys, "stderr", io.StringIO()), \
-                mock.patch.dict(os.environ, {"CAD_INSTALL_ATTEMPT": "7.0"}):
+                mock.patch.dict(os.environ, {"CAD_PLUGIN_SERVER_RUN": "7.0"}):
             command._cut_off("cad plugin update", 900.0, [], analytics.in_force(), time.monotonic())
         self.assertEqual([(each["by"], each["outcome"], each["found"]) for each in kept(self.settings)][1:],
                          [("server", "stopped", 0)])
@@ -403,31 +403,36 @@ class ToldTest(PluginRuns):
 
     def test_a_run_a_server_began_is_told_nothing_and_counted_only_once_a_person_was_told(self) -> None:
         # Its output is a log's: nothing is said there, so nothing is kept as said, and nothing counted.
-        done = self.cad("plugin", "update", CAD_INSTALL_ATTEMPT="7.0")
+        done = self.cad("plugin", "update", CAD_PLUGIN_SERVER_RUN="7.0")
         self.assertEqual((0, ""), (done.returncode, done.stderr), done.stdout)
         self.assertIn("Claude Code: installed", done.stdout)
         self.assertFalse(self.told())
         self.assertEqual((self.counted(), self.started), ([], []))
-        # The hosted install command of an earlier cad's server run hands over to ``cad plugin install`` with that
-        # run's name: a server's all the same.
-        done = self.cad("plugin", "install", CAD_INSTALL_ATTEMPT="7.0", CAD_PLUGIN_BY="script")
+        # The hosted install command an earlier cad's server ran (0.11.12, 0.11.13) hands over with cad's mark, and
+        # would with that run's name, ``CAD_INSTALL_ATTEMPT``, but for taking it out: no server's run of this
+        # release, the hosted install command's, and told nothing all the same.
+        earlier = {"CAD_INSTALL_ATTEMPT": "7.0", "CAD_PLUGIN_BY": "script", "CAD_INSTALL_BY_CAD": "1"}
+        done = self.cad("plugin", "install", **earlier)
         self.assertEqual((0, ""), (done.returncode, done.stderr), done.stdout)
         self.assertFalse(self.told())
         self.assertEqual(self.counted(), [])
         # Told by a command a person ran, its runs are counted from then on, and still say nothing.
         with self.on_this_computer():
             self.assertTrue(analytics.notify(io.StringIO()))
-        done = self.cad("plugin", "update", CAD_INSTALL_ATTEMPT="7.0")
+        done = self.cad("plugin", "install", CAD_PLUGIN_SERVER_RUN="7.0")
         self.assertEqual((0, ""), (done.returncode, done.stderr), done.stdout)
         self.assertEqual(self.counted(), [("server", "ok", 1)])
+        done = self.cad("plugin", "install", **earlier)
+        self.assertEqual((0, ""), (done.returncode, done.stderr), done.stdout)
+        self.assertEqual(self.counted(), [("script", "ok", 1)], "an earlier server's run is not this one's")
         # Another run going: it ran nothing, and says so in its count.
         with self.another_run():
-            done = self.cad("plugin", "update", CAD_INSTALL_ATTEMPT="7.0")
+            done = self.cad("plugin", "update", CAD_PLUGIN_SERVER_RUN="7.0")
         self.assertEqual(75, done.returncode)
         self.assertEqual(self.counted(), [("server", "busy", 0)])
         # Its time up before it was done: stopped, and counted as that.
         with mock.patch.object(auto_update_helper, "INSTALL_SECONDS", 0):
-            done = self.cad("plugin", "update", CAD_INSTALL_ATTEMPT="7.0")
+            done = self.cad("plugin", "update", CAD_PLUGIN_SERVER_RUN="7.0")
         self.assertEqual(computer.STOPPED, done.returncode, done.stdout)
         self.assertEqual(self.counted(), [("server", "stopped", 0)])
 
@@ -476,7 +481,7 @@ class ToldTest(PluginRuns):
             return found
 
         with mock.patch.object(run, "install", told_meanwhile):
-            done = self.cad("plugin", "update", CAD_INSTALL_ATTEMPT="7.0")
+            done = self.cad("plugin", "update", CAD_PLUGIN_SERVER_RUN="7.0")
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertTrue(self.told())
         self.assertEqual((self.counted(), self.started), ([], []))

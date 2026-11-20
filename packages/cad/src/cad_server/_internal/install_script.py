@@ -42,7 +42,7 @@ nothing (``cad_server.cli.setup``): the hosted command of 0.10.0 to 0.11.11 runs
 redeployed.
 
 ``CAD_ENGINE_UPDATE_INSTALLER`` names a command to run instead of the hosted one (a test's stand-in), and empty, none:
-nothing is attempted, and the server runs no ``cad plugin update`` by itself either (``plugin_catch_up.silenced``).
+nothing is attempted, and the server runs no ``cad plugin install`` by itself either (``plugin_catch_up.silenced``).
 ``CAD_ENGINE_UPDATE_FIRST_SECONDS`` sets install mode's wait (a test's computers).
 """
 

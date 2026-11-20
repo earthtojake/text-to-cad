@@ -1,5 +1,5 @@
 """The plugin catching up with cad: where ``plugin.auto_update`` is on (``auto_update.plugin_switch``) and this cad is
-newer than the release of cad the plugin in the agent apps is up to date for, the server runs ``cad plugin update``
+newer than the release of cad the plugin in the agent apps is up to date for, the server runs ``cad plugin install``
 once.
 
 What cad knows of agent apps, plugins and skills lives in one place, ``cad_server.plugin``, reached only by the ``cad
@@ -9,26 +9,28 @@ gets newer -- its own automatic update, a typed ``cad update``, ``uv tool upgrad
 -- because it is the server of the newer cad that asks, whatever brought it.
 
 **The record** (``RECORD``, in the state folder beside ``auto-update.json``): ``for``, the release of cad the plugin is
-up to date for -- written by ``cad plugin update`` as it ends with exit status 0 (``ended``), and as the switch is
+up to date for -- written by ``cad plugin install`` as it ends with exit status 0 (``ended``), and as the switch is
 turned on (``noted``, from ``auto_update.change_plugin``), and only ever by this computer's global install of cad
 (``tool``): a cad run from anywhere else (the newest release from uv's cache, which the hosted install command runs
 for an installed cad with no ``cad plugin install``) is not the cad whose server asks the rule below, and its release,
-which may be of a higher major than that cad ever reaches, is never kept. A run of ``cad plugin install`` or ``cad
-plugin update`` turns the switch on as its last step, right after it put the plugin in place: ending well, the switch
-is turned on and ``for`` written; ending badly (every app it found failed), the switch is turned on and nothing
-written, so a computer whose runs keep failing still has the plugin kept: where an earlier run ended well (``for``
-older than this cad), the server runs the command again for this release; where none ever did (no ``for``), the rule
-below takes this release as up to date, and the command runs once cad is newer. A person who turns it on by hand
-(``cad plugin update auto on``) means "from this release on". A run that fails writes nothing of ``for``. Then the
-last run the server began (``begin``): ``release``, ``at``, ``tries`` (of that release), ``outcome`` (``underway``,
-then ``ok`` or ``failed``), ``code`` (its exit status, null where it could not start) and ``ended``. It is a state
-record, not a choice, so it lives in the state folder, as the update's own record does, and not in the person's
-settings. ``cad doctor`` shows it.
+which may be of a higher major than that cad ever reaches, is never kept. ``cad plugin install`` installs and leaves
+the switch as it is; the switch is the person's, turned on by the hosted install command they ran, as its last step
+(``cad plugin update auto on``), which says how its run is ending in the environment of that call (``FAILED_ENV``):
+ending well, the switch is turned on and ``for`` written; ending badly (the plugin's step did not end well), the
+switch is turned on and nothing written, so a computer whose runs keep failing still has the plugin kept: where an
+earlier run ended well (``for`` older than this cad), the server runs the command again for this release; where none
+ever did (no ``for``), the rule below takes this release as up to date, and the command runs once cad is newer.
+0.11.12 and 0.11.13 read that variable the same way, so the call means one thing to every cad it reaches. A person
+who turns it on by hand, with no such variable, means "from this release on". A run that fails writes nothing
+of ``for``. Then the last run the server began (``begin``): ``release``, ``at``, ``tries`` (of that release),
+``outcome`` (``underway``, then ``ok`` or ``failed``), ``code`` (its exit status, null where it could not start) and
+``ended``. It is a state record, not a choice, so it lives in the state folder, as the update's own record does, and
+not in the person's settings. ``cad doctor`` shows it.
 
 **The rule** (``due``), asked by the server at its start and as it tends itself, only once nothing is in flight: the
 switch on; the update check not turned off for this process (``updates.checking``: ``CAD_UPDATE_CHECK=0``, CI, a
 development build); no test saying to run nothing (``silenced``: ``CAD_ENGINE_UPDATE_INSTALLER`` set and empty, the
-variable that names the bridge's stand-in for the hosted install command -- ``cad plugin update`` itself runs no
+variable that names the bridge's stand-in for the hosted install command -- ``cad plugin install`` itself runs no
 install command and reads no such variable); this cad a global install (``tool``: an installer of
 ``auto_update.INSTALLERS`` made its environment) of a plain release;
 install mode not owed (BRIDGE-ONLY: a computer the bridge still carries gets that run, ``install_script``, and no
@@ -41,9 +43,15 @@ or more after the one before. Never in a loop. ``begin`` asks the record's half 
 lock, as it keeps its run (``_wanted``), so two servers on one state folder never both begin one.
 
 **A run** (``begin``): the record says ``underway`` first; then this cad's own ``cad`` command
-(``auto_update.tool_command``) runs ``cad plugin update``, detached, with no window, in an environment that points at
-nothing of this one (``auto_update._UNSET``) and names the run (``ATTEMPT_ENV``: its ``at``), its output in
-``install-command.log`` (``auto_update.INSTALL_LOG``). Named so, that command has ``INSTALL_SECONDS`` (``deadline``):
+(``auto_update.tool_command``) runs ``cad plugin install``, detached, with no window, in an environment that points at
+nothing of this one (``auto_update._UNSET``) and names the run (``SERVER_ENV``: its ``at``), its output in
+``install-command.log`` (``auto_update.INSTALL_LOG``). Named so, and only so, that command is a server's run: it has
+``INSTALL_SECONDS`` (``deadline``), its hard stop, a server's place at the lock, and it closes the record's run as it
+ends (``ended``). No released cad sets ``SERVER_ENV``. The name 0.11.12 and 0.11.13 give their server's run,
+``ATTEMPT_ENV``, is no such mark: their run is their own ``cad plugin update``, which runs the hosted install
+command, and everything that command starts inherits the name -- a ``cad plugin install`` it reached that took it for
+its own would close another release's run, under a deadline and a lock role that are not its own. So nothing here
+reads it, and the hosted install command takes it out of every cad command it starts. That command has its deadline:
 each command it runs is given what is left of them and stopped with every process it started, none is started past
 them, and it exits non-zero. That much is the run's own doing, asked between its steps, and a step that never comes
 back (a folder on a disk that stopped answering, a lock, a call of ours with no time of its own) would hold the run's
@@ -54,14 +62,15 @@ deadline, where the command has still not ended, the run's record is closed as a
 which frees the lock. No run a server began outlives its deadline by more than that grace and the moment its last
 words take (``CLOSE_SECONDS``), whichever server began it and whether or not that server still runs -- but for a
 process no thread of which runs at all (one a signal stopped, or one held inside a call that lets no other thread
-run, which no wait of the standard library's is), which no thread of its own can end. A person's own run has no
-deadline and no stop.
+run, which no wait of the standard library's is), which no thread of its own can end. Any other run (a person's,
+the hosted install command's) has no deadline and no stop.
 That command keeps how it ended (``ended``); where it exited without saying so, the server that started it keeps it as
-failed, with its exit status (``Catcher``). ``cad update`` never runs it.
+failed, with its exit status (``Catcher``). ``cad update`` never runs it, and it runs neither ``cad update`` nor any
+install command.
 
-**One run at a time** (``run_lock``, ``running``): a run of ``cad plugin install`` or ``cad plugin update`` holds
-``LOCK``, a file of its own in the state folder, from its start to its end, so it never holds the state folder's one
-lock while it works. A second run waits for it -- but one a server began (``ATTEMPT_ENV``), which ends with exit
+**One run at a time** (``run_lock``, ``running``): a run of ``cad plugin install`` holds ``LOCK``, a file of its own in
+the state folder, from its start to its end, so it never holds the state folder's one lock while it works. A second
+run waits for it -- but one a server began (``SERVER_ENV``), which ends with exit
 status ``BUSY`` and runs nothing: after a person's install command updated cad, the server that starts may begin its
 own run at the moment that command goes on to the plugin. cad's own update begins none while the lock is held
 (``auto_update.due``, ``auto_update.asked``): it would replace this environment's files under the run. Whether it is
@@ -87,11 +96,20 @@ from pathlib import Path
 from typing import Any
 
 RECORD = "install-command.json"
-# The run ``cad plugin update`` is, where the server began it: the ``at`` of the record's run.
+# The run ``cad plugin install`` is, where this release's server began it: the ``at`` of the record's run. No released
+# cad sets it (see the module).
+SERVER_ENV = "CAD_PLUGIN_SERVER_RUN"
+# The name 0.11.12 and 0.11.13 give the run their server began, which everything it starts inherits: never read here,
+# never passed on by a run this server begins, and taken out of every cad command the hosted install command starts
+# (see the module).
 ATTEMPT_ENV = "CAD_INSTALL_ATTEMPT"
+# Set to ``1`` by the hosted install command for its own ``cad plugin update auto on`` where its run is ending badly:
+# the switch turned on, and nothing taken as up to date (see the module). Empty or absent: the run is ending well, or
+# a person typed it. 0.11.12 and 0.11.13 read it the same way.
+FAILED_ENV = "CAD_INSTALL_FAILED"
 # The command the server runs, as a line of its log names it.
-SAID = "`cad plugin update`"
-# The lock one run of ``cad plugin install`` or ``cad plugin update`` holds, in the state folder (``run_lock``).
+SAID = "`cad plugin install`"
+# The lock one run of ``cad plugin install`` holds, in the state folder (``run_lock``).
 LOCK = "install-command.lock"
 # The exit status of a run a server began that found another run holding the lock: nothing ran, and it is tried again
 # later (``EX_TEMPFAIL``).
@@ -115,10 +133,20 @@ RETRY_SECONDS = 60 * 60.0
 UNDERWAY, OK, FAILED = "underway", "ok", "failed"
 
 
+def failing() -> bool:
+    """Whether this command was run by a hosted install command whose run is ending badly (``FAILED_ENV``)."""
+    return os.environ.get(FAILED_ENV, "").strip() == "1"
+
+
+def server_run() -> str | None:
+    """The ``at`` of the record's run where this release's server began this one (``SERVER_ENV``), else None."""
+    return os.environ.get(SERVER_ENV) or None
+
+
 def deadline() -> float | None:
-    """How long ``cad plugin update`` may take: where a server began this run (``ATTEMPT_ENV``), ``INSTALL_SECONDS``,
-    the bound cad's update helper puts on an install; a person's own run, none."""
-    if not os.environ.get(ATTEMPT_ENV):
+    """How long ``cad plugin install`` may take: where this release's server began this run (``server_run``),
+    ``INSTALL_SECONDS``, the bound cad's update helper puts on an install; any other run, none."""
+    if server_run() is None:
         return None
     from cad_server._internal.auto_update_helper import INSTALL_SECONDS
 
@@ -240,12 +268,12 @@ def noted(release: str | None = None) -> None:
 
 
 def ended(code: int | None) -> None:
-    """``cad plugin update`` ended with exit status ``code``: ``for`` this cad where it is 0 and this cad is the
-    computer's global install (``tool``; a run that failed writes none: it turns the switch on as it ends badly too,
-    and takes nothing as up to date; nor does a cad run from anywhere else, see the module), and, where the server
-    began this run (``ATTEMPT_ENV``), the run's outcome. Never raises."""
+    """``cad plugin install`` ended with exit status ``code``: ``for`` this cad where it is 0 and this cad is the
+    computer's global install (``tool``; a run that failed writes none, nor does a cad run from anywhere else, see the
+    module), and, where this release's server began this run (``server_run``), the run's outcome; any other run leaves
+    the record's run as it is. Never raises."""
     try:
-        attempt = os.environ.get(ATTEMPT_ENV)
+        attempt = server_run()
         mine = code == 0 and tool() is not None
 
         def change(found: dict[str, Any]) -> dict[str, Any]:
@@ -329,7 +357,7 @@ def _stale(found: dict[str, Any], now: float) -> bool:
 
 
 def due(*, now: float | None = None) -> bool:
-    """Whether the server runs ``cad plugin update`` now (see the module); a record with no ``for`` is written for
+    """Whether the server runs ``cad plugin install`` now (see the module); a record with no ``for`` is written for
     this release first, and nothing runs. Never raises."""
     try:
         from cad_server import updates
@@ -372,7 +400,7 @@ def _wanted(found: dict[str, Any], version: str, now: float) -> bool:
 
 def begin(told, *, now: float | None = None) -> subprocess.Popen | None:
     """A run begun (see the module): the record's half of the rule asked again under the state folder's lock
-    (``_wanted``) and the run kept as ``underway`` in the same step, then ``cad plugin update`` started. Its process, or
+    (``_wanted``) and the run kept as ``underway`` in the same step, then ``cad plugin install`` started. Its process, or
     None where the record no longer wants one (another server began one, or a run ended with exit status 0 since
     ``due`` was asked) or it could not start (kept as failed). Never raises."""
     return _begin(told, now=now)[0]
@@ -410,11 +438,11 @@ def _begin(told, *, now: float | None = None) -> tuple[subprocess.Popen | None, 
         return None, None
     at = began[-1]
     folder = _folder()
-    env = {**{name: value for name, value in os.environ.items() if name not in auto_update._UNSET},
-           ATTEMPT_ENV: str(at)}
+    env = {**{name: value for name, value in os.environ.items()
+              if name not in (*auto_update._UNSET, ATTEMPT_ENV, FAILED_ENV)}, SERVER_ENV: str(at)}
     try:
         with open(folder / auto_update.INSTALL_LOG, "w", encoding="utf-8") as out:
-            process = subprocess.Popen([str(auto_update.tool_command(prefix)), "plugin", "update"],
+            process = subprocess.Popen([str(auto_update.tool_command(prefix)), "plugin", "install"],
                                        stdin=subprocess.DEVNULL,
                                        stdout=out, stderr=subprocess.STDOUT, env=env, cwd=str(folder), **detached())
     except (OSError, ValueError) as error:

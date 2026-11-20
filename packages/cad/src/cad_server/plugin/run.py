@@ -1,17 +1,16 @@
-"""One run of ``cad plugin install`` or ``cad plugin update`` (``install``), and what it was (``Facts``).
+"""One run of ``cad plugin install`` (``install``), and what it was (``Facts``).
 
 A run holds the one lock of such runs from its start to its end (``plugin_catch_up.run_lock``): where another run
 holds it (still, after the moment a run tries for it), a run a server began ends with exit status
 ``plugin_catch_up.BUSY`` and one line, and any other (a person's, the hosted install command's) says it waits, waits,
 then runs. Then, for every app of ``apps.APPS`` found here: ours in, then old copies out (``apps.install_apps``), a
-line said per app. In a person's terminal
-(``terminal.Screen``) it first builds the CAD logo, marks each app's line and keeps a live line under them; anywhere
-else the plain lines alone. Then it turns ``cad plugin update auto`` on (``switch``, the command's own code path), and
-keeps this cad's release as the one the plugin is up to date for only where the run ended well: one where every app
-found failed turns the switch on and keeps none, so the server runs the command again.
+line said per app. In a person's terminal (``terminal.Screen``) it first builds the CAD logo, marks each app's line
+and keeps a live line under them; anywhere else the plain lines alone. That is all it does: it never changes ``cad
+plugin update auto`` (the hosted install command a person ran turns it on) and keeps nothing of how it ended, which
+is the command's to keep (``cad_server.cli.plugin``).
 
 It ends with exit status 0 where it ended well, 1 where every app it found failed, ``computer.STOPPED`` where its
-deadline passed before it was done (a run a server began: ``seconds``; then the switch is left as it is), and
+deadline passed before it was done (a run a server began: ``seconds``), and
 ``plugin_catch_up.BUSY`` where it ran nothing. Where ``CAD_PLUGIN_REPORT`` names a file (``REPORT_ENV``), what it did
 is written there as it ends, whole (a file beside it, renamed into place): ``{"schema": "cad plugin install/1",
 "apps": {<APPS key>: "installed" | "updated" | "removed" | "skipped" | "failed" | "not found"}}``; nothing is written
@@ -47,8 +46,8 @@ computer.rename = replace_atomic
 # Where the run says what it did, for the program that started it (the hosted install command).
 REPORT_ENV = "CAD_PLUGIN_REPORT"
 REPORT_SCHEMA = "cad plugin install/1"
-# Who began the run: the hosted install command says so (``BY_ENV``: ``script``), a server's run is named
-# (``plugin_catch_up.ATTEMPT_ENV``), and anything else is a person's own.
+# Who began the run: the hosted install command says so (``BY_ENV``: ``script``), this release's server names its run
+# (``plugin_catch_up.SERVER_ENV``), and anything else is a person's own.
 BY_ENV = "CAD_PLUGIN_BY"
 PERSON, SCRIPT, SERVER = "person", "script", "server"
 # How the run ended: well; every app it found failed (or its deadline stopped it); or another run held the lock.
@@ -97,19 +96,17 @@ class Facts:
 
 
 def began_by(environ: Dict[str, str]) -> str:
-    """Who began a run in ``environ``: a server (its run is named), the hosted install command (it says so), else a
-    person."""
-    if environ.get(plugin_catch_up.ATTEMPT_ENV):
+    """Who began a run in ``environ``: this release's server (its run is named), the hosted install command (it says
+    so), else a person. The name an earlier release gives its server's run (``plugin_catch_up.ATTEMPT_ENV``) is no
+    server's run of this command."""
+    if environ.get(plugin_catch_up.SERVER_ENV):
         return SERVER
     return SCRIPT if environ.get(BY_ENV) == SCRIPT else PERSON
 
 
-def install(switch: Callable[[bool], str], *, prog: str, seconds: Optional[float] = None,
-            going: Optional[Callable[[Facts], None]] = None) -> Facts:
+def install(*, prog: str, seconds: Optional[float] = None, going: Optional[Callable[[Facts], None]] = None) -> Facts:
     """One run (see the module), said as it goes on this process's output: what it was, ``Facts.code`` the exit status
-    of the command that ran it. ``switch(well)`` turns ``cad plugin update auto`` on, keeping this release as up to
-    date only with ``well``, and gives the line that says so (``OSError`` where it could not be kept). ``prog``: the
-    command's name, for a line on stderr. ``seconds``: the run's deadline, counted from here. ``going``: given the
+    of the command that ran it. ``prog``: the command's name, for a line on stderr. ``seconds``: the run's deadline, counted from here. ``going``: given the
     run's ``Facts`` as it begins, the ones it fills as it goes and returns."""
     began = time.monotonic()
     here = Here()
@@ -124,7 +121,7 @@ def install(switch: Callable[[bool], str], *, prog: str, seconds: Optional[float
 
     with plugin_catch_up.run_lock(wait=facts.by != SERVER, waiting=waiting) as mine:
         if mine:
-            _run(here, facts, switch, prog, seconds)
+            _run(here, facts, prog, seconds)
         else:
             facts.outcome, facts.code = BUSY, plugin_catch_up.BUSY
             print(f"{prog}: another run is setting up the plugin in the agent apps now, so this one ran nothing",
@@ -133,13 +130,13 @@ def install(switch: Callable[[bool], str], *, prog: str, seconds: Optional[float
     return facts
 
 
-def _run(here: Here, facts: Facts, switch: Callable[[bool], str], prog: str, seconds: Optional[float]) -> None:
+def _run(here: Here, facts: Facts, prog: str, seconds: Optional[float]) -> None:
     """The run itself, the lock held: on a person's terminal, the logo first and every line printed over the live
     one."""
     screen = terminal.Screen(here, sys.stdout)
     facts.colour = screen.colour
     if not screen.live:
-        _steps(here, facts, switch, prog, seconds, None)
+        _steps(here, facts, prog, seconds, None)
         return
     plain = sys.stdout
     try:
@@ -151,15 +148,14 @@ def _run(here: Here, facts: Facts, switch: Callable[[bool], str], prog: str, sec
     sys.stdout = live  # every line printed goes over the live one
     here.watch = live.watch
     try:
-        _steps(here, facts, switch, prog, seconds, live)
+        _steps(here, facts, prog, seconds, live)
     finally:
         sys.stdout = plain
         live.close()
 
 
-def _steps(here: Here, facts: Facts, switch: Callable[[bool], str], prog: str, seconds: Optional[float],
-           live: Optional[terminal.Live]) -> None:
-    """The apps, then the switch, then what to do next, said as they go; the report written as it ends."""
+def _steps(here: Here, facts: Facts, prog: str, seconds: Optional[float], live: Optional[terminal.Live]) -> None:
+    """The apps, then what to do next, said as they go; the report written as it ends."""
     print("Setting up the plugin in each agent app found here:", flush=True)
     source = Source()
     try:
@@ -177,19 +173,8 @@ def _steps(here: Here, facts: Facts, switch: Callable[[bool], str], prog: str, s
             print(f"{prog}: stopped after {seconds:g} seconds, all a run the cad server began may take; the apps it "
                   "had not reached were left as they were", file=sys.stderr, flush=True)
             return
-        failed = report.all_failed
-        if failed:
+        if report.all_failed:
             facts.outcome, facts.code = FAILED, 1
-        if live is not None:
-            live.begin("Turning on the plugin's automatic updates")
-        try:  # on, whatever the run did; only one that ends well keeps its release (``plugin_catch_up``)
-            print(switch(not failed), flush=True)
-        except OSError as error:
-            print(f"The plugin's automatic updates were not turned on ({error}). Run this command again to update "
-                  "the plugin.", flush=True)
-        if live is not None:
-            live.end()
-        if failed:
             print("No app got the plugin: see each app's line above, then run this again.", flush=True)
         if report.changed:
             print("Start a new session in each app to use it.", flush=True)

@@ -1,48 +1,54 @@
 """``cad plugin`` -- the plugin in the agent apps on this computer, and the one command that reaches what cad knows of
 them (``cad_server.plugin``).
 
-- ``cad plugin install``: for every agent app found here, the plugin installed or updated with that app's own
-  command, then our older copies there removed (``cad_server.plugin.run``); then ``cad plugin update auto`` turned on,
-  and this cad kept as the release the plugin is up to date for only where the run ended well and this cad is the
-  computer's global install -- what ``cad plugin update auto on`` does, done in this process by the same code
-  (``_keep``, which says why a cad run from anywhere else keeps none). It takes no options. In a person's
-  terminal it builds the CAD logo first and keeps a live line under the apps' lines; anywhere else, the plain lines.
-  Its exit status: 0 where it ended well; 1 where every app it found failed; 2 for a command line it does not take;
-  ``plugin_catch_up.BUSY`` (75) where another run was going and a server began this one. Where ``CAD_PLUGIN_REPORT``
-  names a file, what it did is written there as it ends. The hosted install command hands over to it.
-- ``cad plugin update``: the same run, and what the server runs once where this cad is newer than the release the
-  plugin is up to date for (``plugin_catch_up``). Where it ends with exit status 0, this cad is kept as that release
-  (``plugin_catch_up.ended``, a global install's alone); a run that fails writes none. Where a server began this run
-  (``plugin_catch_up.ATTEMPT_ENV``), it has ``INSTALL_SECONDS`` (``plugin_catch_up.deadline``): each command it runs is
-  stopped, with every process it started, when they are up, no further app is begun, and it exits non-zero
-  (``computer.STOPPED``). And where the run has not ended by itself a short while past them, because a step of it
-  never came back, it is ended all the same (``plugin_catch_up.HardStop``, ``_cut_off``): its record closed and the
-  run counted as stopped, and the process gone with that exit status, so the lock it held is free. A person's own
-  run has no deadline, and no such stop. ``cad plugin install`` keeps nothing of a server's run and has neither: one
-  started under the install command an earlier cad's server ran carries that run's name, and must not end its record.
-- ``cad plugin update auto [status|on|off]``: whether the server runs ``cad plugin update`` once where this cad is
-  newer than the release the plugin is up to date for, however cad got newer (``plugin_catch_up``), off by default; a
-  run of ``install`` or ``update`` turns it on, and turning it on by hand takes the plugin as up to date for the cad
-  that turned it on. Kept by the server where one runs, as ``cad update auto`` is, so a shell whose sandbox may not
-  write the state folder needs no permission.
+- ``cad plugin install``: the one command that installs the plugin. For every agent app found here, the plugin
+  installed or updated with that app's own command, then our older copies there removed (``cad_server.plugin.run``);
+  then, where the run ended well and this cad is the computer's global install, this cad kept as the release the
+  plugin is up to date for (``plugin_catch_up.ended``: a fact about the computer, which a run that failed, or a cad run
+  from anywhere else, never writes). That is all: it never changes ``cad plugin update auto``. It takes no options.
+  In a person's terminal it builds the CAD logo first and keeps a live line under the apps' lines; anywhere else, the
+  plain lines. Its exit status: 0 where it ended well; 1 where every app it found failed; 2 for a command line it
+  does not take; ``plugin_catch_up.BUSY`` (75) where another run was going and a server began this one;
+  ``plugin_catch_up.STOPPED`` (124) where a server's run was stopped at its deadline. Where ``CAD_PLUGIN_REPORT``
+  names a file, what it did is written there as it ends. The hosted install command hands over to it, and this
+  release's server runs it (``plugin_catch_up``).
+- ``cad plugin update``: the same command under the name 0.11.12 and 0.11.13 gave it, run exactly as ``install`` is,
+  and hidden: no help lists it. Released skills and scripts may run it.
+- ``cad plugin update auto [status|on|off]``: whether the server runs ``cad plugin install`` once where this cad is
+  newer than the release the plugin is up to date for, however cad got newer (``plugin_catch_up``), off by default.
+  The hosted install command turns it on as its last step, and says there whether its run is ending badly
+  (``plugin_catch_up.FAILED_ENV``): then nothing is taken as up to date; otherwise, and turned on by hand, the plugin
+  is taken as up to date for the cad that turned it on, where that cad is the global install (``_keep``). Kept by the
+  server where one runs, as ``cad update auto`` is, so a shell whose sandbox may not write the state folder needs no
+  permission. It installs nothing, on this release and on every release before it.
 
-One run at a time: ``install`` and ``update`` hold one lock in the state folder for the whole run
-(``plugin_catch_up.run_lock``); a second run waits for it, unless a server began it. Neither runs an install command,
-hosted or other, nor cad's own update, which begins none while a run is going. Everything a run uses is imported
-before it begins (``_load``): an update of cad by hand may replace this environment's files under it, and a module
-imported later would be another release's.
+A server's run: only one this release's server began (``plugin_catch_up.SERVER_ENV``, which no released cad sets) has
+``INSTALL_SECONDS`` (``plugin_catch_up.deadline``): each command it runs is stopped, with every process it started,
+when they are up, no further app is begun, and it exits ``STOPPED``. And where the run has not ended by itself a short
+while past them, because a step of it never came back, it is ended all the same (``plugin_catch_up.HardStop``,
+``_cut_off``): its record closed and the run counted as stopped, and the process gone with that exit status, so the
+lock it held is free. It closes the record's run as it ends (``plugin_catch_up.ended``). Any other run has no
+deadline, no such stop, and leaves the record's run as it is -- one the hosted install command started under an
+earlier cad's server run above all: 0.11.12 and 0.11.13 name their server's run ``CAD_INSTALL_ATTEMPT``, which
+everything it starts inherits, and which is not this command's to read (the hosted install command takes it out of
+every cad command it starts, too).
 
-Each run of ``install`` or ``update`` is told and counted in the one place both pass through (``_run``). Told: the
-dispatcher says the telemetry notice for no ``cad plugin`` command (``cad_server.cli._UNTOLD``: a server runs ``cad
-plugin update`` with its output in a log), so a run says it itself, before its work, where a person reads it
-(``_tell``): one a person typed, or one the hosted install command handed over in a person's terminal; never one a
-server began, one an install command cad itself started reached, nor ``cad plugin update auto``. Counted: as it ends,
-from what the run says it was (``run.Facts``), one ``install`` event, counting the apps it found and those that
-failed, and one ``install_failure`` for each app where it failed, no other app named (``_count``,
-``cad_server.analytics.install``), under every rule telemetry has -- only once the person was told and
-never after a no, never in CI or from a development build, nothing the run began before it was told, never a failure
-of the run, and nothing of it waits on the network. A crash of the run is the command's, reported as every command's
-is (``cad_server.cli._report``).
+One run at a time: a run holds one lock in the state folder for the whole run (``plugin_catch_up.run_lock``); a
+second run waits for it, unless a server began it. No run starts an install command, hosted or other, ``cad update``,
+or ``cad plugin update``: nothing reachable from here comes back to it. cad's own update begins none while a run is
+going. Everything a run uses is imported before it begins (``_load``): an update of cad by hand may replace this
+environment's files under it, and a module imported later would be another release's.
+
+Each run is told and counted in the one place every run passes through (``_run``). Told: the dispatcher says the
+telemetry notice for no ``cad plugin`` command (``cad_server.cli._UNTOLD``: a server runs ``cad plugin install`` with
+its output in a log), so a run says it itself, before its work, where a person reads it (``_tell``): one a person
+typed, or one the hosted install command handed over in a person's terminal; never one a server began, one an install
+command cad itself started reached, nor ``cad plugin update auto``. Counted: as it ends, from what the run says it was
+(``run.Facts``), one ``install`` event, counting the apps it found and those that failed, and one ``install_failure``
+for each app where it failed, no other app named (``_count``, ``cad_server.analytics.install``), under every rule
+telemetry has -- only once the person was told and never after a no, never in CI or from a development build,
+nothing the run began before it was told, never a failure of the run, and nothing of it waits on the network. A crash
+of the run is the command's, reported as every command's is (``cad_server.cli._report``).
 
 Bare ``cad plugin`` prints this help. ``--refresh``, hidden, does nothing: the updater of 0.11.10 runs ``cad plugin
 --refresh`` after it moves a computer.
@@ -67,26 +73,25 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     parser = command_parser(prog, description="The plugin in your agent apps: install or update it in every app found "
                                               "on this computer, or say whether cad's own updates update it too.")
     parser.add_argument("--refresh", action="store_true", help=argparse.SUPPRESS)
-    commands = parser.add_subparsers(dest="command", metavar="{install,update}")
+    commands = parser.add_subparsers(dest="command", metavar="{install}")
     commands.add_parser("install", help="install the plugin in every agent app found on this computer, or update it "
                                         "there",
                         description="Install the plugin in every agent app found on this computer, each with that "
                                     "app's own command, or update it where it is installed; then remove the older "
-                                    "copies of it there, and turn on `cad plugin update auto`. One line is printed "
-                                    "per app. It exits 1 where every app it found failed.")
+                                    "copies of it there. One line is printed per app. It exits 1 where every app it "
+                                    "found failed.")
+    # The name 0.11.12 and 0.11.13 gave the same run, and the switch under it: parsed, and listed by no help (a parser
+    # added with no ``help`` is left out of its parent's list, and the metavar above names ``install`` alone).
     update = commands.add_parser("update", usage="%(prog)s [-h] [auto [{status,on,off}]]",
-                                 help="update the plugin in every agent app found on this computer, as `install` "
-                                      "does; `update auto` shows or changes whether cad's updates do",
-                                 description="Update the plugin in every agent app found on this computer, or install "
-                                             "it where it is not: what `cad plugin install` does, and what cad runs "
-                                             "by itself after its own update where `cad plugin update auto` is on.")
+                                 description="The same as `cad plugin install`. `cad plugin update auto` shows or "
+                                             "changes whether cad's updates update the plugin too.")
     automatic = update.add_subparsers(dest="what", metavar="{auto}")
     switch = automatic.add_parser("auto", prog=f"{update.prog} auto",
                                   help="show or change whether cad's updates update the plugin too",
-                                  description="Show or change whether cad runs `cad plugin update` once each time it "
+                                  description="Show or change whether cad runs `cad plugin install` once each time it "
                                               "is newer than the release the plugin is up to date for, however it "
-                                              "was updated, so the plugin stays as new as cad. Off by default; "
-                                              "`cad plugin install` and `cad plugin update` turn it on.")
+                                              "was updated, so the plugin stays as new as cad. Off by default; the "
+                                              "install command turns it on.")
     switch.add_argument("action", nargs="?", choices=("status", "on", "off"), default="status")
     return parser
 
@@ -96,44 +101,38 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     args = parser.parse_args(list(sys.argv[1:] if argv is None else argv))
     if args.command == "update" and args.what == "auto":
         return _switch(args.action, f"{prog} update auto")
-    if args.command == "update":
-        return _update(f"{prog} update")
-    if args.command == "install":
-        return _run(f"{prog} install").code
+    if args.command in ("install", "update"):  # one command, by either name
+        return _install(f"{prog} {args.command}")
     if not args.refresh:
         parser.print_help()
     return 0
 
 
-# What a run uses of cad, beside this module: the apps and the run itself, the lock and the record, the switch and the
-# server asked to keep it, what those write by, and what counts the run as it ends (telemetry, the sender it starts,
-# and what they read: whether this is a development build, the app the command runs in, this cad's version).
+# What a run uses of cad, beside this module: the apps and the run itself, the lock and the record (and what tells a
+# global install, and the deadline it takes), what those write by, and what counts the run as it ends (telemetry, the
+# sender it starts, and what they read: whether this is a development build, the app the command runs in, this cad's
+# version).
 _USES = ("cad_server.plugin.run", "cad_server._internal.plugin_catch_up", "cad_server._internal.auto_update",
          "cad_server._internal.auto_update_helper", "cad_server._internal.file_lock", "cad_server._internal.cli_errors",
-         "cad_server.cli.auto_update", "cad_server.settings", "cad.engine.client", "cad.engine.places",
-         "cad._internal.atomic_replace", "cad_server.analytics", "cad_server._internal.telemetry_send",
-         "cad_server._internal.editable", "cad_server._internal.engine_host", "cad_server._internal.apps",
-         "cad_server._internal.api", "cad.engine.previous")
+         "cad_server.settings", "cad.engine.places", "cad._internal.atomic_replace", "cad_server.analytics",
+         "cad_server._internal.telemetry_send", "cad_server._internal.editable", "cad_server._internal.engine_host",
+         "cad_server._internal.apps", "cad_server._internal.api", "cad.engine.previous")
 
 
-def _load() -> str:
-    """Everything a run uses, imported before it begins (see the module), and this cad's release read: the release."""
+def _load() -> None:
+    """Everything a run uses, imported before it begins (see the module)."""
     import importlib
 
     for name in _USES:
         importlib.import_module(name)
-    from cad_server._internal import auto_update
-
-    return auto_update._version()
 
 
 def _run(prog: str, *, seconds: float | None = None, stop: Any = None) -> Any:
-    """One run of the plugin's install (``cad_server.plugin.run.install``), by ``install`` and ``update`` alike: what
-    it was (``run.Facts``, the one account of a run), its ``code`` the command's exit status. Told before it begins
-    (``_tell``) and counted as it ends (``_count``), here and nowhere else -- but a run a server began that never
-    ends by itself, which its hard stop (``stop``: ``plugin_catch_up.HardStop``) counts in its place (``_cut_off``),
-    never both."""
-    release = _load()
+    """One run of the plugin's install (``cad_server.plugin.run.install``): what it was (``run.Facts``, the one
+    account of a run), its ``code`` the command's exit status. Told before it begins (``_tell``) and counted as it
+    ends (``_count``), here and nowhere else -- but a run a server began that never ends by itself, which its hard
+    stop (``stop``: ``plugin_catch_up.HardStop``) counts in its place (``_cut_off``), never both."""
+    _load()
     from cad_server import analytics
     from cad_server.plugin import run
 
@@ -144,10 +143,7 @@ def _run(prog: str, *, seconds: float | None = None, stop: Any = None) -> Any:
     if stop is not None:
         stop.last = lambda: _cut_off(prog, seconds, going, under, began)
 
-    def switch(well: bool) -> str:
-        return _line(_keep(True, note=well, release=release))
-
-    facts = run.install(switch, prog=prog, seconds=seconds, going=going.append)
+    facts = run.install(prog=prog, seconds=seconds, going=going.append)
     if stop is not None:
         stop.over()  # ended by itself: its own to count, and where the stop has begun this does not return
     _count(facts, under)
@@ -215,7 +211,11 @@ def _count(facts: Any, under: Any) -> None:
         pass
 
 
-def _update(prog: str) -> int:
+def _install(prog: str) -> int:
+    """``cad plugin install``, by either name: one run (``_run``), then how it ended kept (``plugin_catch_up.ended``:
+    this cad as the release the plugin is up to date for where it ended well on the global install; the record's run
+    closed where this release's server began it). A server's run (``plugin_catch_up.deadline``) has its deadline and
+    its hard stop; any other has neither."""
     _load()  # before the hard stop is armed: what it says and counts by is this release's, as the run's is
     from cad_server._internal import plugin_catch_up
 
@@ -234,24 +234,23 @@ def _update(prog: str) -> int:
             stop.cancel()
 
 
-def _keep(on: bool, *, note: bool, release: str | None = None) -> bool:
-    """The switch kept as ``on`` -- by the server where one runs (``_by_the_server``), else here -- and, turned on with
-    ``note`` by this computer's global install of cad (``plugin_catch_up.tool``), ``release`` (this cad's by default)
-    kept as the one the plugin is up to date for: the switch as it is now. ``OSError`` where it could not be kept.
+def _keep(on: bool, *, note: bool) -> bool:
+    """``cad plugin update auto on|off``: the switch kept as ``on`` -- by the server where one runs (``_by_the_server``),
+    else here -- and, turned on with ``note`` by this computer's global install of cad (``plugin_catch_up.tool``), this
+    cad's release kept as the one the plugin is up to date for: the switch as it is now. ``OSError`` where it could
+    not be kept.
 
     A cad that is no global install keeps no release, as a run that ended badly keeps none: the newest release run
-    from uv's cache (what the hosted install command runs for an installed cad that has no ``cad plugin install``), a
-    project's, a checkout's. Its release is not the installed cad's, and may be one that cad never reaches by itself
-    (a higher major): kept, the server of the installed cad, which runs ``cad plugin update`` only where it is newer
-    than the release kept, would never run it again. What is kept instead is the installed cad's to say: the ``cad
-    plugin update`` of 0.11.12 and 0.11.13 that ran the install command keeps its own release as it ends well, and
-    where nothing is kept the next server keeps its own (``plugin_catch_up.due``)."""
+    from uv's cache, a project's, a checkout's. Its release is not the installed cad's, and may be one that cad never
+    reaches by itself (a higher major): kept, the server of the installed cad, which runs ``cad plugin install`` only
+    where it is newer than the release kept, would never run it again. Where nothing is kept, the next server keeps
+    its own (``plugin_catch_up.due``)."""
     from cad_server._internal import auto_update, plugin_catch_up
     from cad_server.cli.auto_update import _by_the_server
 
     if on and note and plugin_catch_up.tool() is None:
         note = False
-    release = release or auto_update._version()
+    release = auto_update._version()
     found = _by_the_server("plugin_auto_update", on, release=release, **({} if note else {"note": False}))
     return auto_update.change_plugin(on, release, note=note) if found is None else found
 
@@ -261,14 +260,15 @@ def _line(on: bool) -> str:
 
 
 def _switch(action: str, prog: str) -> int:
-    from cad_server._internal import auto_update
+    """``cad plugin update auto``: the switch said, or changed and said. It installs nothing (see the module)."""
+    from cad_server._internal import auto_update, plugin_catch_up
     from cad_server._internal.cli_errors import Failure, write
 
     if action == "status":
         print(_line(auto_update.plugin_switch()))
         return 0
-    try:
-        kept = _keep(action == "on", note=True)
+    try:  # the hosted install command's run ending badly: nothing taken as up to date
+        kept = _keep(action == "on", note=not plugin_catch_up.failing())
     except OSError as error:
         return write(Failure(f"could not save the choice: {error}"), prog=prog, as_json=False)
     print(_line(kept))

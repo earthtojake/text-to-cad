@@ -154,12 +154,12 @@ class AppTableTests(PluginRuns):
         (self.home / ".cline").mkdir()
         old = self.write(".cline/skills/pcb/SKILL.md", OURS.format(name="pcb"))
         done = self.run_install(FAKE_FAIL="claude:add,codex:add,gemini:install,git:clone")
-        # Every app it found failed: the run says so, and fails; it turns the switch on all the same, so the plugin is
-        # kept on a computer whose runs keep failing, and keeps no release as the one the plugin is up to date for
-        # (``plugin_catch_up``), so cad's server runs it again.
+        # Every app it found failed: the run says so, and fails, and keeps no release as the one the plugin is up to
+        # date for (``plugin_catch_up``), so cad's server runs it again where the switch is on. The switch it leaves
+        # as it is.
         self.assertEqual(1, done.returncode, done.stdout)
         self.assertIn("No app got the plugin", done.stdout)
-        self.assertEqual(self.kept(), {"switch": True, "record": {}})
+        self.assertEqual(self.kept(), {"switch": False, "record": {}})
         self.assertNotIn("Start a new session", done.stdout)
         self.assertEqual(self.calls("claude"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"]])
         self.assertEqual(self.calls("codex"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad", "--ref", "latest"]])
