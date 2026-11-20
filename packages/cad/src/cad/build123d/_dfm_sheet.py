@@ -9,7 +9,8 @@ nothing turns with its placement. A planar face whose rays mostly reach an antip
 away is a *skin*. A pair of coaxial cylinders, one concave and one convex, whose rays cross ``t`` is a
 *bend* (with no flat skin beside them: a tube, or a rolled sheet -- ``rolled``). A face
 touching both faces of a pair (a skin and its opposite, a bend's inside and outside) is a cut *edge*; a cone
-between a skin and a hole's wall is a countersink. A chamfer or a round of a skin's edge is an *edge break*,
+between a skin and a hole's wall is a countersink, and so is the cone of a hole sunk through the full thickness,
+between a skin and its opposite. A chamfer or a round of a skin's edge is an *edge break*,
 and a face square to the skin it joins to both skins through breaks is a cut edge too (its rays run across
 the plate: its width, never its thickness); a bend's end is broken by a cone or a torus about its axis; a cone, torus or freeform face a thickness across is *formed*
 sheet, not a bend. Every other face, and every stretch of a skin whose rays
@@ -778,6 +779,13 @@ class _Analysis:
                 self.countersinks[a] = 2.0 * self._largest_circle(a)
                 self.wall_of[a] = walls[0]
                 stands_for[a] = skins[0]
+            elif surface.concave and any(c in self.partners.get(b, ()) for b in skins for c in skins) \
+                    and self._through_circle(a) is not None:
+                # a hole sunk through the full thickness, to a knife edge at the far skin or past it: no wall is
+                # left, the hole is the cone's small end, and the skin it is sunk into the one it faces
+                self.countersinks[a] = 2.0 * self._largest_circle(a)
+                stands_for[a] = max(skins, key=lambda b: float(
+                    (self.normals[a] @ np.array(self.surfaces[b - 1].normal)).mean()))
         for a in self.hits:
             if a in paired or a in self.countersinks:
                 continue
@@ -1099,6 +1107,18 @@ class _Analysis:
             curve = BRepAdaptor_Curve(edge.wrapped)
             if curve.GetType() == GeomAbs_Circle:
                 best = max(best, curve.Circle().Radius())
+        return best
+
+    def _through_circle(self, cone: int) -> tuple[Any, np.ndarray, tuple[np.ndarray, np.ndarray, float]] | None:
+        """A countersink's hole: its cone's smallest whole circle (where it meets the wall, or the far skin of
+        one sunk through the full thickness): the edge, its points and its circle; None where the cone has no
+        whole circle (a hole the outline cuts)."""
+        best = None
+        for edge in self.faces[cone - 1].edges():
+            points, _, circle = _edge_points(edge.wrapped, False)
+            if circle is not None and float(np.linalg.norm(points[0] - points[-1])) < 1e-9 \
+                    and (best is None or circle[2] < best[2][2]):
+                best = (edge.wrapped, points, circle)
         return best
 
     def _not_sheet(self, ordinal: int, kind: str, local: float | None, deviation: float, point: Any,
@@ -1690,12 +1710,30 @@ class _Analysis:
                     outer, _, _ = _wire_loop(face.outer_wire().wrapped, face.wrapped, mapping)
                     return polygon_face(outer.points)
             # a whole turn about an axis (a cone, a torus round a hole or a disc): its closed edges, the largest
-            # less the rest
-            rings = []
-            for edge in edges:
-                if not any(edge.wrapped.IsSame(seam.wrapped) for seam in seams):
-                    points, _, circle = _edge_points(edge.wrapped, False)
-                    rings.append(exact([(points, circle)]) if circle is not None else polygon_face(mapping(points)))
+            # less the rest; and where the outline cuts it (a countersink whose rim runs off the plate: a whole
+            # turn at its hole, none at its rim), the edges between two passes of the seam, one outline
+            rings, runs = [], [[]]
+            explorer = BRepTools_WireExplorer(face.outer_wire().wrapped, face.wrapped)
+            while explorer.More():
+                edge = explorer.Current()
+                if any(edge.IsSame(seam.wrapped) for seam in seams):
+                    runs.append([])
+                else:
+                    points, _, circle = _edge_points(edge, explorer.Orientation() == TopAbs_REVERSED)
+                    if float(np.linalg.norm(points[0] - points[-1])) < 1e-9:
+                        rings.append(exact([(points, circle)]) if circle is not None else polygon_face(mapping(points)))
+                    else:
+                        runs[-1].append((points, circle))
+                explorer.Next()
+            for run in ([[*runs[-1], *runs[0]], *runs[1:-1]] if len(runs) > 1 else runs):
+                if not run:
+                    continue
+                if float(np.linalg.norm(run[0][0][0] - run[-1][0][-1])) > 1e-6:
+                    return None  # no outline of its own: the skin's stands there
+                try:
+                    rings.append(exact(run))
+                except Exception:  # noqa: BLE001 - edges that do not close exactly: their sampled outline
+                    rings.append(polygon_face(mapping(np.vstack([points for points, _ in run]))))
             rings = sorted((ring for ring in rings if ring is not None), key=lambda ring: -ring.area)
             if not rings:
                 return None
@@ -1714,12 +1752,31 @@ class _Analysis:
         self.regions.append(_Region(outer, lambda points: _apply(
             inverse, np.column_stack([np.asarray(points).reshape(-1, 2), np.zeros(len(np.asarray(points).reshape(-1, 2)))])),
             sorted(near)))
+        rims: set[int] = set()
         for wire in face.inner_wires():
             touched = {f for edge in wire.edges() for f in self.edge_faces.get(self.part.edge_ordinal(edge), ())}
             if touched & set(self.breaks):
                 continue  # a hole with a broken edge: read back from the flat, at its cut size
+            sunk = sorted(touched & set(self.countersinks))
+            if sunk and (touched - {ordinal} - set(sunk) or not all(
+                    self._coaxial(self.surfaces[sunk[0] - 1], self.surfaces[c - 1], 1e-3) for c in sunk)):
+                continue  # a cutout a countersink's rim runs into, two rims that overlap: read back from the flat
+            rims |= set(sunk)
             loop, points3, _ = _wire_loop(wire.wrapped, face.wrapped, mapping)
             self._hole(wire, face, loop, points3)
+        # a countersink whose rim is no whole circle of the skin's (it runs off the outline, into a cutout or
+        # into another rim) is part of a wire that is no hole of its own: its hole is the cone's small end,
+        # which the flat has once the cone is laid into it
+        for cone in sorted((self.neighbors[ordinal] & set(self.countersinks)) - rims):
+            small = self._through_circle(cone)
+            if small is None:
+                continue
+            edge, points3, (centre, _, radius) = small
+            flat = mapping(points3[:-1])
+            loop = plane.Loop(flat[:, :2], np.zeros(len(flat), dtype=bool), [edge] * len(flat))
+            at = mapping(centre[None])[0]
+            loop.circle = (float(at[0]), float(at[1]), float(radius))
+            self.holes.append(_HoleLoop(loop, [self.wall_of.get(cone, cone)], centre, False, self.countersinks[cone]))
 
     def _hole(self, wire: Any, face: Any, loop: plane.Loop, points3: np.ndarray, in_bend: bool = False) -> None:
         skin = self.part.face_ordinal(face)
@@ -1739,6 +1796,11 @@ class _Analysis:
                     walls = [through] + [w for w in walls if w != through]
         if through is not None:
             loop.through_diameter = 2.0 * float(self.surfaces[through - 1].radius)
+        elif countersink is not None:
+            # sunk through the full thickness: no wall, the hole its cone's small end
+            small = next((self._through_circle(wall) for wall in walls if wall in self.countersinks), None)
+            if small is not None:
+                loop.through_diameter = 2.0 * float(small[2][2])
         elif countersink is None:
             for cone, wall in self.wall_of.items():
                 if wall in walls:

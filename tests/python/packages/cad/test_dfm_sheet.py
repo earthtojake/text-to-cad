@@ -938,14 +938,16 @@ class ModellingMistakeTest(unittest.TestCase):
 
     @staticmethod
     def _sunk(size: tuple[float, float, float], top: list[tuple[float, float]], bottom: list[tuple[float, float]],
-              hole: float, rim: float) -> bd.Part:
-        """A plate with ``hole`` mm holes countersunk to ``rim`` mm from its top (at ``top``) and from below."""
+              hole: float, rim: float, angle: float = 82.0, plate: bd.Part | None = None) -> bd.Part:
+        """A plate (``plate``, or a box) with ``hole`` mm holes countersunk to ``rim`` mm at ``angle`` degrees
+        from its top (at ``top``) and from below."""
         with bd.BuildPart() as built:
-            bd.Box(*size)
+            bd.Box(*size) if plate is None else bd.add(plate)
             for side, places in ((1, top), (-1, bottom)):
                 for x, y in places:
                     with bd.Locations(bd.Pos(x, y, side * size[2] / 2) * bd.Rot(0 if side > 0 else 180, 0, 0)):
-                        bd.CounterSinkHole(radius=hole / 2, counter_sink_radius=rim / 2, depth=size[2])
+                        bd.CounterSinkHole(radius=hole / 2, counter_sink_radius=rim / 2, depth=size[2],
+                                           counter_sink_angle=angle)
         return built.part
 
     def test_a_countersink_in_the_unfolded_side_leaves_the_flat_its_through_hole(self) -> None:
@@ -963,6 +965,51 @@ class ModellingMistakeTest(unittest.TestCase):
                 part = result.measurements["parts"]["items"][0]
                 self.assertAlmostEqual(part["flat_area_mm2"], 3200 - len(holes) * math.pi * 2.5 ** 2, delta=0.1)
                 self.assertAlmostEqual(part["flat_material_fraction"], 1.0, places=2)
+
+    def test_a_countersink_through_the_sheet_or_with_a_cut_rim_leaves_the_flat_its_hole(self) -> None:
+        # a countersink was a cone between a skin and a hole's wall, its rim a whole circle in that skin. Sunk
+        # through the full thickness there is no wall: the cone was a cut edge, the flat's hole the rim where
+        # that skin unfolded (11 mm for 5) and the cone's cut missing from the material. With its rim off the
+        # outline, in a cutout or in another rim, the cone is no whole turn there: laid into the flat edge by
+        # edge it left the hole out (47.7 mm2 of a plate, a false sheet.web_width; two rims that overlap,
+        # sheet.flat_incomplete), and the wire its rim is part of was read as the hole
+        slot = bd.Box(80, 40, 3) - bd.Box(30, 6, 10)
+        under = [(-25, 10), (25, 10), (0, -12), (25, -10)]  # four rims below: the top is the larger skin
+        for name, part, holes, cut in (
+                ("to a knife edge", self._sunk((80, 40, 3), [(-20, 0)], [(20, 0)], 5.0, 11.0, 90.0), [(5.0, 11.0)] * 2, 0.0),
+                ("past the far skin", self._sunk((80, 40, 3), [(-20, 0)], [(20, 0)], 5.0, 13.0, 90.0), [(7.0, 13.0)] * 2, 0.0),
+                ("its rim off the outline", self._sunk((80, 40, 3), [(37, 0)], [(-37, 0)], 5.0, 10.0), [(5.0, 10.0)] * 2, 0.0),
+                ("its rim off a corner", self._sunk((80, 40, 3), [(37, 17)], [(-37, -17)], 5.0, 10.0), [(5.0, 10.0)] * 2, 0.0),
+                ("its rim in a slot", self._sunk((80, 40, 3), [(18.5, 0)], [(-18.5, 0)], 5.0, 10.0, plate=slot),
+                 [(5.0, 10.0), (5.0, 10.0), (6.0, None)], 180.0),
+                ("two rims that overlap", self._sunk((80, 40, 3), [(-4.5, 0), (4.5, 0)], under, 5.0, 10.0), [(5.0, 10.0)] * 6, 0.0),
+                ("to a knife edge and off the outline", self._sunk((80, 40, 3), [(36.5, 0)], [(-36.5, 0)], 5.0, 11.0, 90.0),
+                 [(5.0, 11.0)] * 2, 0.0)):
+            with self.subTest(part=name):
+                result = checked(part)
+                self.assertTrue(result.ok, [f.message for f in result.findings if f.severity == "error"])
+                self.assertFalse({code for _, code in verdicts(result)} - {"sheet.hole_to_edge", "sheet.hole_spacing"})
+                found = sorted(((hole["size_mm"], hole["countersink_diameter_mm"]) for hole in
+                                result.measurements["holes"]["items"]), key=lambda hole: (hole[0], hole[1] or 0.0))
+                self.assertEqual(found, holes)
+                area = 3200 - cut - sum(math.pi * (size / 2) ** 2 for size, rim in holes if rim)
+                item = result.measurements["parts"]["items"][0]
+                self.assertAlmostEqual(item["flat_area_mm2"], area, delta=0.05 * len(holes))  # each rim's chords
+                self.assertAlmostEqual(item["flat_material_fraction"], 1.0, places=2)
+                self.assertAlmostEqual(sheet.unfold(part).area, area, delta=0.02)
+        # on a bracket's flange, from each of its skins
+        bracket = bent([("line", 30), ("bend", 90, 2), ("line", 40)], 2.0, 60.0)
+        with bd.BuildPart() as built:
+            bd.add(bracket)
+            for z, turn, y in ((2.0, 0, 15), (0.0, 180, 45)):
+                with bd.Locations(bd.Pos(15, y, z) * bd.Rot(turn, 0, 0)):
+                    bd.CounterSinkHole(radius=1.6, counter_sink_radius=3.6, depth=2.0, counter_sink_angle=90.0)
+        result, plain = checked(built.part, k_factor=0.4), checked(bracket, k_factor=0.4)
+        self.assertTrue(result.ok, [f.message for f in result.findings if f.severity == "error"])
+        self.assertEqual([(hole["size_mm"], hole["countersink_diameter_mm"]) for hole in result.measurements["holes"]["items"]],
+                         [(3.2, 7.2)] * 2)
+        self.assertAlmostEqual(result.measurements["parts"]["items"][0]["flat_area_mm2"],
+                               plain.measurements["parts"]["items"][0]["flat_area_mm2"] - 2 * math.pi * 1.6 ** 2, delta=0.1)
 
     def test_what_countersinks_and_edge_breaks_cut_is_not_missing_from_the_flat(self) -> None:
         # the flat's area was held against the part's volume, which countersinks and edge breaks cut after the
