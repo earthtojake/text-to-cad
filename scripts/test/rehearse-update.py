@@ -1560,7 +1560,7 @@ def plugin_update(box: Box) -> None:
     if box.ask(rc.interpreter(Path(box.tool()["env"])), "status") is not None:
         raise Failed(f"{box.label}: a server runs after {old}'s `cad plugin update`:\n{box.said()}")
     say(f"        {old}'s `cad plugin update` ran the install command once: cad left at {old}, its `cad plugin "
-        f"install` refused (exit 2), so {NEW}'s ran by `uv tool run cad@latest`, then its own switch turned on; "
+        f"install` refused (exit 2), so {NEW}'s ran by `uv tool run cad@latest`, then {old}'s own switch went on; "
         f"exit 0, the plugin up to date for {old}, no server started")
 
 
