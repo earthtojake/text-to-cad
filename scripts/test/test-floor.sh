@@ -2,17 +2,17 @@
 set -euo pipefail
 
 # The packages' floor: the library's suite, the server's and the shim's, on the oldest Python the packages declare
-# (requires-python in packages/cad/pyproject.toml). The server's installations run on a newer one
-# (cad_server._internal.launch.PYTHON), and so does every other job; the library runs on the floor wherever a
-# render script does (bpy has builds for that Python alone: cad[blender]), in the script's process and in the
-# worker that builds its models, and the server and the shim declare the same floor, so a pip install puts them
-# on it too. A call the floor's standard library lacks parses there and fails only when it runs (one already
-# slipped into the server: argparse's suggest_on_error), so nothing but running the suites on it holds the floor.
+# (requires-python in packages/cad/pyproject.toml). Our own installs run cad on a newer one
+# (cad_server._internal.launch.PYTHON), and so does every other job. But pip, pipx or a plain `uv tool install cad`
+# on a system Python puts cad on whatever Python meets the floor. A call the floor's standard library lacks parses
+# there and fails only when it runs (one already slipped into the server: argparse's suggest_on_error), so nothing
+# but running the suites on it holds the floor.
 #
-#   PYTHON_BIN=<a Python of the floor, requirements-dev.txt installed> scripts/test/test-floor.sh
+#   uv sync --python 3.11 && uv run scripts/test/test-floor.sh
 #
-# Called by test.yml's packages-floor job, on a full run (before a release ships, and nightly), which makes the
-# environment first. On Linux it draws stills: run it under xvfb-run, as the package suites are.
+# (or PYTHON_BIN naming another Python of the floor with the development environment installed). Called by
+# test.yml's packages-floor job, on a full run (before a release ships, and nightly), which makes the environment
+# on the floor first. A checkout's .venv stays on 3.11 until `uv sync --python 3.14` puts it back. On Linux it draws stills: run it under xvfb-run, as the package suites are.
 
 # shellcheck source=scripts/test/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
@@ -23,7 +23,7 @@ floor="$(sed -n 's/^requires-python = ">=\([0-9][0-9.]*\)"$/\1/p' packages/cad/p
 have="$("$PYTHON_BIN" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
 if [ -z "$floor" ] || [ "$have" != "$floor" ]; then
   echo "test-floor.sh: $PYTHON_BIN is Python $have, and the packages' floor is ${floor:-unread}: set PYTHON_BIN to" \
-    "a Python $floor with requirements-dev.txt installed" >&2
+    "a Python $floor with the development environment installed (uv sync --python $floor)" >&2
   exit 1
 fi
 

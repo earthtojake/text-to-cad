@@ -1,0 +1,51 @@
+# The repository's development environment: `uv sync` makes `.venv` from `uv.lock`, and `uv run ...` runs in it.
+# Contributors and CI install from the same lock. Nothing here is released or installed by a person who installs
+# cad, and no copy of the plugin carries this file or the lock (scripts/release/plugin_branch.py and plugin_zip.py
+# copy an allowlist).
+#
+# A workspace root with no [project] table, on purpose: it is no package, its Python floor is its member's
+# `requires-python` (packages/cad/pyproject.toml, the one place it is written), and `cad run` inside the checkout
+# (a model under models/) finds no uv project here, as before, since it looks for a [project] table.
+[tool.uv.workspace]
+# cad, the one distribution. Its aliases (packages/aliases) are not members: each pins cad at its own release,
+# cad-server carries a second `cad` command, nothing in development imports them, and the release builds each
+# alone with `python -m build`.
+members = ["packages/cad"]
+exclude = ["packages/aliases/*"]
+
+[tool.uv.sources]
+cad = { workspace = true }
+
+[dependency-groups]
+# What `uv sync` installs by default.
+dev = [
+  # The library editable, with its build123d extra: this environment runs models itself, so it is its own base
+  # environment and the server makes none (cad_server/_internal/base.py). With its trimesh extra, so
+  # `cad <type> dfm` measures a mesh here and the server makes no cad[trimesh] environment for it
+  # (cad_server/_internal/integration_env.py); its mujoco extra (mujoco-core and mujoco-studio, about 20 MB), so
+  # `cad mujoco check` compiles here and `cad run mujoco-studio` serves Studio's web viewer from here; and its
+  # coacd extra (one wheel, about 3 MB), so a MuJoCo function's `decompose` cuts a part into convex hulls here.
+  # Not the netgen and calculix extras: a stress study is the fea job's (the `fea` group below). Nor the blender
+  # extra: bpy has builds for Python 3.13 alone, and `cad run` makes the environment of a script that imports it
+  # on that Python (scripts/test/test-blender.sh). The group installs on Python 3.11 too, the packages' floor,
+  # for the suites there (scripts/test/test-floor.sh).
+  "cad[build123d,trimesh,mujoco,coacd]",
+  # The viewer's launch smoke test drives a headless Chromium through Python Playwright
+  # (scripts/test/test-viewer-launch.sh), as does the manual parity bench (scripts/bench/occt_parity.py). Pinned
+  # exactly: each Playwright release fetches its own browser build.
+  "playwright==1.63.0",
+  # The wheels and sdists the packaging checks and the release build (scripts/release/check-wheel-contents.sh,
+  # scripts/test/test-installed.sh).
+  "build",
+  # The server's Windows dependency (cad.exe's launcher stub), which the tests of the cad command read on every
+  # system.
+  "distlib",
+  "pyrefly==1.3.2",
+]
+# The fea job's (`uv sync --group fea`): the netgen and calculix integrations a stress study runs on, with netgen
+# at the version the accuracy tests' margins were measured with (the round rod's top-fibre stress is +8.6%
+# against 10%); the extra itself keeps the floor.
+fea = [
+  "cad[build123d,trimesh,netgen,calculix]",
+  "netgen-mesher==6.2.2608",
+]

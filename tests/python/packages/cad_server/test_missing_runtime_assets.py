@@ -1,6 +1,6 @@
 """A missing packaged runtime must say how to get one, and assets resolve explicitly.
 
-``packages/cad-server/src/cad_server/_runtime`` is built, never committed, so the ordinary state
+``packages/cad/src/cad_server/_runtime`` is built, never committed, so the ordinary state
 of a fresh clone is that it does not exist. Every failure downstream of that is opaque --
 a page 404ing on its own script -- so what reaches for it answers with the fix instead,
 and the fix differs by where cadgen is running from: a checkout builds, an installation
@@ -39,10 +39,12 @@ class MissingRuntimeNamesTheBundler(unittest.TestCase):
         with mock.patch.object(assets, "_in_source_checkout", return_value=False):
             hint = assets.runtime_build_hint(Path("_runtime") / "mcp" / "index.html")
         self.assertNotIn(BUNDLER, hint)
-        from cad_server.updates import command
+        from cad_server import __version__
 
-        self.assertIn("This installation of cad-server is incomplete: ", hint)
-        self.assertIn(f"Install cad-server again: run `{command()}`, or point the matching CAD_*_DIR", hint)
+        # uv's own reinstall of this version, which installs cad alone, never the install script.
+        self.assertIn("This installation of cad is incomplete: ", hint)
+        self.assertIn("Install cad again: run `uv tool install --reinstall --managed-python --python 3.14 "
+                      f"cad=={__version__}`, or point the matching CAD_*_DIR", hint)
 
 
 class ExplicitRuntimeAssets(unittest.TestCase):

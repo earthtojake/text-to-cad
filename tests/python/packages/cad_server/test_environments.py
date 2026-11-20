@@ -6,7 +6,7 @@ engine's daemon runs the core.
 
 uv is reached through a wrapper first on PATH that logs what it is asked. The engine is this file's
 own (the runner's ``CAD_ENGINE_DIR``), the core registered as its state folder's current installation,
-started by ``cad run`` with the core's Python and stopped by the core's ``cad stop``. The fake-uv
+started by the core's ``cad server start`` -- with the core's Python -- and stopped by its ``cad stop``. The fake-uv
 contracts (keys, commands, refusals) are test_base.py's.
 """
 
@@ -21,8 +21,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.python.support import engine_daemon
-from tests.python.support.paths import LIBRARY, SERVER, add_sources
+from tests.python.support import engine_daemon, uv_cache
+from tests.python.support.paths import LIBRARY, add_sources
 
 add_sources()
 
@@ -73,9 +73,12 @@ class CoreAndBaseTest(unittest.TestCase):
         subprocess.run([real, "venv", "--no-project", "--python", sys.executable, str(cls.core)], check=True,
                        capture_output=True)
         subprocess.run([real, "pip", "install", "--python", str(base.interpreter(cls.core)), "--link-mode",
-                        "hardlink", "-e", str(LIBRARY), "-e", str(SERVER)], check=True, capture_output=True)
+                        "hardlink", "-e", str(LIBRARY)], check=True, capture_output=True)
         # The device's current installation, as setup registers it: the engine every client starts.
         assert engine_daemon.register(os.environ["CAD_STATE_DIR"], str(base.interpreter(cls.core)), str(cls.core))
+        # uv's cache holding what the base's offline install reads, warmed before uv is counted: an environment
+        # synced from a lock leaves it without, and the base would then ask uv a second time, from the network.
+        uv_cache.warm(cls.root)
         # A uv first on PATH that writes a line of what it is asked, then runs the real one.
         folder, cls.log = cls.root / "bin", cls.root / "uv.log"
         folder.mkdir()
@@ -88,8 +91,13 @@ class CoreAndBaseTest(unittest.TestCase):
             wrapper.chmod(0o755)
         environ = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
         cls.env = engine_daemon.watched({**environ, "PATH": os.pathsep.join((str(folder), os.environ["PATH"])),
-                                         "CAD_VIEWER_WARM": "0"}, cls.addClassCleanup)
+                                         "CAD_VIEWER_WARM": "0"}, cls.addClassCleanup, started=False)
         cls.cadgen = str(cls.core / ("Scripts/cad.exe" if os.name == "nt" else "bin/cad"))
+        # The core's server in place of the file's, which this interpreter's start started.
+        from cad.engine import api
+
+        api.stop()
+        subprocess.run([cls.cadgen, "server", "start"], env=cls.env, check=True, capture_output=True)
         cls.addClassCleanup(lambda: subprocess.run([cls.cadgen, "stop"], env=cls.env, capture_output=True))
 
     def run_cadgen(self, *args: str, cwd: Path) -> subprocess.CompletedProcess:

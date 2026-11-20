@@ -228,14 +228,13 @@ class ServerInfo(HttpLayerTestCase):
         # The release the engine runs: a page that reconnects to another reloads into it.
         self.assertEqual(info["release"], cad_server.__version__)
         self.assertEqual(list(info), ["app", "release", "identityToken", "platform", "user", "home",
-                                      "start", "pick", "port", "pid", "notice", "instance", "update", "kinds"])
+                                      "start", "pick", "port", "pid", "instance", "kinds"])
         self.assertEqual(headers["cache-control"], "no-store")
         # This start of the engine: a page that sees another one reloads. One per process, so it is
         # the same at every ask.
         self.assertRegex(info["instance"], r"^[0-9a-f]{16}$")
         self.assertEqual(json.loads(self.fixture.request("GET", "/api/v1/server")[2])["instance"], info["instance"])
-        # Where an update a click started is, and the kinds of documents it reads with what each exports.
-        self.assertIn(info["update"]["state"], ("idle", "working", "restarting", "failed"))
+        # The kinds of documents it reads, with what each exports.
         self.assertEqual(info["kinds"]["reads"], ["model", "xbf", "step", "stl", "glb", "3mf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch"])
         self.assertEqual(info["kinds"]["exports"]["xbf"], ["step", "stl", "threemf", "glb", "dxf", "original"])
         self.assertEqual(info["kinds"]["exports"]["dxf"], [])
@@ -569,7 +568,7 @@ class NoDistConfigured(unittest.TestCase):
             status, _, body = fixture.request("GET", "/")
             self.assertEqual(status, 404)
             # A build's `view:` link leads here: the page says what is missing, and how to get it.
-            self.assertEqual(body, b"CAD Viewer client is not built; build apps/web or install the cad-server wheel")
+            self.assertEqual(body, b"The viewer client is not built; build apps/web or install the cad wheel")
             status, _, _ = fixture.request("GET", "/api/v1/server")
             self.assertEqual(status, 200)
         finally:
@@ -866,39 +865,6 @@ class RequestBodies(HttpLayerTestCase):
         )
         self.assertIn(b"400", raw.split(b"\r\n")[0])
         self.assertIn(b"request body too large", raw)
-
-
-class EngineClientFollowsARestartedEngine(unittest.TestCase):
-    """A long-lived client (the MCP stdio peer) holds the engine's endpoint; an engine restarted on
-    the same --port has a new token, and the client's next call asks the engine for it."""
-
-    def test_a_refused_token_is_asked_again_once(self):
-        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
-        from cad_mcp import engine as engine_client
-
-        class Engine(BaseHTTPRequestHandler):
-            def do_GET(self):
-                ok = self.headers.get("Authorization") == "Bearer new"
-                body = b"{}" if ok else b'{"error":"engine token required"}'
-                self.send_response(200 if ok else 403)
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
-            def log_message(self, *args):
-                pass
-
-        server = ThreadingHTTPServer(("127.0.0.1", 0), Engine)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        self.addCleanup(server.server_close)
-        self.addCleanup(server.shutdown)
-        url = f"http://127.0.0.1:{server.server_address[1]}"
-        answers = [{"url": url, "token": "old"}, {"url": url, "token": "new"}]
-        with mock.patch.object(engine_client, "request", side_effect=lambda _message, start=True: answers.pop(0)):
-            client = engine_client.EngineClient()
-            self.assertEqual(client.call("GET", "/api/v1/server")[0], 200)
-            self.assertEqual(client.endpoint["token"], "new")
 
 
 if __name__ == "__main__":

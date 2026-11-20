@@ -489,10 +489,10 @@ class DaemonWorkerTest(daemon_fixtures.DaemonCase):
         build(12)
         self.assertTrue(build(10)["files"][str(xbf)]["written"], "the edit's file is replaced")
         self.assertEqual(xbf.read_bytes(), cold, "the warm worker wrote the cold one's bytes")
-        self._stop_daemon()
+        self._restart_daemon()
         self.assertTrue(build(10)["cache"]["used"], "a fresh worker takes the file its key is in")
         xbf.unlink()
-        self._stop_daemon()
+        self._restart_daemon()
         self.assertTrue(build(10)["files"][str(xbf)]["written"])
         self.assertEqual(xbf.read_bytes(), cold, "a fresh worker writes the same bytes")
 

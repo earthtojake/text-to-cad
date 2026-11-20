@@ -4,7 +4,9 @@
 The portal (https://platform.openai.com/plugins) is a web page with no API, so a
 release cannot submit the plugin itself. It can hand the person who does a file
 that uploads cleanly. Publish Release builds that file from the release commit,
-before any irreversible step, and attaches it to the GitHub Release.
+before any irreversible step, and attaches it to the GitHub Release; the same files,
+from the same `build`, are committed to the `codex-plugin` branch (plugin_branch.py's
+`codex` copy), one commit per release.
 
 The plugin is at the archive's root, where the portal looks for it: the Codex
 manifest and the rest of `.codex-plugin/`, `skills/`, `LICENSE`, and every file
@@ -14,6 +16,11 @@ directory entry of its own -- as having no plugin at all.) One thing differs fro
 that `mcpServers` "must resolve to the root `.mcp.json`". A server config kept
 under another name (a root `.mcp.json` is one Claude Code would load too) goes
 into the archive as `.mcp.json`, and the archived manifest points there.
+
+The package is a store's copy: OpenAI's directory delivers it and updates it, later than our releases. Its skills
+are the repository's as they are: each setup block installs cad by uv's one line, `uv tool install cad`, the same
+in every copy, and no file names our install script (`text_errors`, which plugin_branch.py runs on every copy).
+Its server line is the repository's, as every copy's.
 
 The checks are the package rules the portal documents, named by its error codes
 (https://developers.openai.com/plugins/deploy/submission-errors). Listing limits
@@ -41,6 +48,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ".codex-plugin/plugin.json"
 ROOTS = (".codex-plugin", "skills", "LICENSE")
 MCP_CONFIG = ".mcp.json"
+# Our install script, which a person runs to install the plugins. No published copy names it: every skill installs
+# cad by uv's line (tests/python/global/test_skill_requirements.py holds the block), the same in each copy.
+INSTALL_SCRIPT = "texttocad.dev/install"
+IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico")
 ICONS = ("logo", "logoDark", "composerIcon", "composerIconDark")
 SEMVER = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?")
 # A clone without git-lfs (CI's included) checks LFS-tracked files out as pointers.
@@ -149,31 +160,29 @@ def collect(root: Path) -> Package:
         if data.startswith(LFS_POINTER):
             package.errors.append(f"{source} is a Git LFS pointer, not the file; keep plugin files out of LFS")
             continue
-        if archived == MCP_CONFIG:
-            data = with_channel(package, data)
         package.files[archived] = (data, mode == "100755")
     if sources:
         package.files[MANIFEST] = (json.dumps(manifest, indent=2, ensure_ascii=False).encode("utf-8") + b"\n",
                                    False)
+    package.errors.extend(text_errors({path: data for path, (data, _) in package.files.items()}))
     return package
 
 
-def with_channel(package: Package, data: bytes) -> bytes:
-    """The server config naming OpenAI's directory as the install's channel, in its server's
-    environment (the server's `_internal/channel.py`): this package goes only there. Analytics report
-    it, and `CAD_AUTO_UPDATED` leaves the copy to the directory, which updates it."""
-    try:
-        config = json.loads(data)
-        servers = [server for server in config["mcpServers"].values() if server["args"][-1:] == ["cad-mcp"]]
-    except (ValueError, KeyError, TypeError, AttributeError):
-        package.errors.append(f"{MCP_CONFIG} is not an mcpServers config this script can read")
-        return data
-    if len(servers) != 1:
-        package.errors.append(f"{MCP_CONFIG} must start exactly one `cad-mcp` server (found {len(servers)})")
-        return data
-    servers[0]["env"] = {**servers[0].get("env", {}), "CAD_INSTALL_CHANNEL": "openai-directory",
-                         "CAD_AUTO_UPDATED": "1"}
-    return json.dumps(config, indent=2).encode("utf-8") + b"\n"
+def text_errors(files: dict[str, bytes]) -> list[str]:
+    """What in a published copy's `files` (path -> bytes) fails the build: a text file that is not UTF-8, or one that
+    names our install script. Images pass as they are."""
+    errors = []
+    for path, data in files.items():
+        if path.lower().endswith(IMAGE_SUFFIXES):
+            continue
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            errors.append(f"{path}: not UTF-8 text")
+            continue
+        if INSTALL_SCRIPT in text:
+            errors.append(f"{path}: names our install script ({INSTALL_SCRIPT}); a skill installs cad by uv's line")
+    return errors
 
 
 def check_manifest(package: Package) -> None:

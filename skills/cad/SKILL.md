@@ -1,6 +1,6 @@
 ---
 name: cad
-description: Creates and edits parametric CAD parts, assemblies and 2D profiles as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB, DXF and xbf files on request; resolves prompt references, measures geometry, checks whether a part can be machined, cut and bent, molded or printed, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, DXF files, flat patterns, gaskets and laser or waterjet cut layouts, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF, GLB and DXF files in the CAD Viewer. Not for the robot and world descriptions the robot-simulation skill writes.
+description: Creates and edits parametric CAD parts, assemblies and 2D profiles as Python build123d models that text-to-cad's server builds and the viewer shows live; exports STEP, STL, 3MF, GLB, DXF and xbf files on request; resolves prompt references, measures geometry, checks whether a part can be machined, cut and bent, molded or printed, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, DXF files, flat patterns, gaskets and laser or waterjet cut layouts, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF, GLB and DXF files in the viewer. Not for the robot and world descriptions the robot-simulation skill writes.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -32,28 +32,24 @@ the page the person has open updates. Files are exports, made when asked.
 
 ## Setup and paths
 
-Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.exe` on Windows). If
-it is missing, install text-to-cad, outside a sandbox or with its permission:
+Written for `cad==0.11.13`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+0.11.12, run `uv tool install cad`, adding `--force` if uv says `cad` already exists.
 
-```bash
-curl -fsSL https://texttocad.dev/install.sh | sh
-```
+If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
+https://github.com/earthtojake/text-to-cad
+A project written for an earlier version may need changes; the migration guides say what:
+https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
-On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
-only just added, its server may still be starting: try again for up to a minute first. `cad doctor
---check` explains any other failure, changing nothing; `cad doctor` repairs what it reports. Tell the
-person any next step `cad setup` prints.
-
-One server runs for the installation: the first run starts it, every run and every
-command goes through it, and it serves the viewer. `cad status` lists its workers
-and the documents it holds; `cad stop` stops it.
+One server runs: `cad server start` starts it, every run and every
+command goes through it, and it serves the viewer. `cad server status` lists its workers
+and the documents it holds; `cad server stop` stops it.
 A build cut off by the shell's time limit keeps running in the server; run the same
-command again and it waits for that build and replays it (`cad status` shows it).
+command again and it waits for that build and replays it (`cad server status` shows it).
 Give a cold build of a large model the shell tool's longest timeout, or run it in the
 background.
 
 Build every model with `cad run`, exactly like `uv run`: the same options and the same script
-header, with nothing to set up. cad is pinned to this computer's release and its integrations come
+header, with nothing to set up. cad pins the library at its own release and its integrations come
 from the script's imports (`import build123d` is the build123d integration), so a header names only
 the script's own packages, never a version of cad:
 
@@ -118,18 +114,18 @@ cad run src/bracket.py
 built src/bracket.py::bracket cold in 2.61s: bodies 1 run; 6 misses, 0 hits; body 0.01s, names 0.00s, document 0.00s
   parts 1 · bounds 40 × 20 × 6 mm · joints 0 · sequences 0
   id: 0dc50a92-a21f-5895-a245-ebdeb5352f3b
-  view: http://127.0.0.1:54360/0dc50a92-a21f-5895-a245-ebdeb5352f3b?token=...
+  view: http://127.0.0.1:<port>/<id>?token=<token>
 built src/bracket.py::bracket_wide warm in 0.01s: bodies 1 run; 6 misses, 0 hits; body 0.01s, names 0.00s, document 0.00s
   parts 1 · bounds 60 × 20 × 6 mm · joints 0 · sequences 0
   id: 966d03a5-7b43-5bed-b75c-eb67d56c72d2
-  view: http://127.0.0.1:54360/966d03a5-7b43-5bed-b75c-eb67d56c72d2?token=...
+  view: http://127.0.0.1:<port>/<id>?token=<token>
 ```
 
 Each call the script's `__main__` makes prints how its model built, the delta under it
 (parts, bounds, joints and sequences), its document's `id:` and its page, `view:` (the
 handle's `.id` and `.url`). An unchanged rerun prints `took ... nothing ran` instead. Give the
-user the page once ([Show the model](#show-the-model)) and use the id for every command
-after it. The id comes from the
+user the page your run's `view:` line printed, once ([Show the model](#show-the-model)), and use
+the id for every command after it. The id comes from the
 script's path and the function's name, or the script's folder and an explicit `@model(name="...")`,
 so it is the same run after run, and the open page follows every run. A model's name is its identity
 within its namespace, the function's name by default, `name=` gives it another. The namespace
@@ -553,13 +549,21 @@ and every assumption or departure from the request.
 
 ### Show the model
 
-Show the person each model you create or change, and any model or file they ask to see. If your
-tools include `cad_show` (your host may prefix it), call it with the model's id or the file's
-absolute path; its description says the rest. Otherwise give the person the page's link once, to
-open in the app's browser pane where it has one, or their browser: a model's page is the `view:` line its run prints, and a file's is the `url` that
-`cad viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
-download: give its path. Never screenshot the viewer to check your own work; review with
-`cad <type> snapshot`. If it fails to launch, say so.
+Show the person each model you create or change as soon as its first run succeeds, and any model
+or file they ask to see. A model's page is the `view:` line its run prints, and a file's is the `url`
+that `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). Show it with
+the first of these you have:
+
+1. `cad_show` among your tools (your host may prefix it): call it with the model's id or the file's
+   absolute path; its description says the rest.
+2. A tool that opens a page in the app's own browser pane, not in the person's own browser (in the
+   Claude desktop app, the Browser pane's `preview_start` with the page's `url`, or its `navigate`):
+   open the page there yourself, and give the person the link as well.
+3. Neither: give the person the link, to open in their browser.
+
+The page follows every run of the model. A file you export is a download: give its path. Showing is
+for the person: to check your own work, review with `cad <type> snapshot`, never a screenshot
+of the page. If it fails to launch, say so.
 
 Exact selection and measurement need a model's document, an `.xbf` or a STEP; mesh viewers
 measure approximately, on triangles.

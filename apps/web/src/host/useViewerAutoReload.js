@@ -15,11 +15,10 @@ const INSTALLED_CADENCE = Object.freeze({ watchMs: VIEWER_INSTALL_POLL_MS, reloa
  * timer, the fetch and the reload.
  *
  * @param {{identityToken?: string}|null} serverInfo
- * @param {{ fetchServerInfo: () => Promise<{ ok: boolean, identityToken?: string, release?: string }>, follow?: boolean,
+ * @param {{ fetchServerInfo: () => Promise<{ ok: boolean, identityToken?: string }>, follow?: boolean,
  *   onForeign?: () => void, reload?: () => void }} options  `fetchServerInfo` asks the backend who it is now; a closed port
  *   mid-restart answers `{ ok: false }`, not a throw. `follow` reloads into a new identity (a dev
- *   server), and a new identity of another release than the page's (`serverInfo.release`: an update)
- *   is reloaded into too; otherwise a new identity is a process this page cannot authenticate, so
+ *   server); otherwise a new identity is a process this page cannot authenticate, so
  *   polling stops and `onForeign` says so.
  */
 export function useViewerAutoReload(serverInfo, {
@@ -34,7 +33,6 @@ export function useViewerAutoReload(serverInfo, {
   const optionsRef = useRef(null);
   optionsRef.current = { fetchServerInfo, follow, onForeign, reload, now, schedule, cancel };
   const baseline = String(serverInfo?.identityToken || "");
-  const release = String(serverInfo?.release || "");
 
   useEffect(() => {
     if (!baseline) {
@@ -63,7 +61,7 @@ export function useViewerAutoReload(serverInfo, {
       if (!active) {
         return;
       }
-      const next = nextAutoReloadState(state, poll, { baseline, release, now: optionsRef.current.now(), ...cadence,
+      const next = nextAutoReloadState(state, poll, { baseline, now: optionsRef.current.now(), ...cadence,
         follow: optionsRef.current.follow });
       state = { phase: next.phase, since: next.since };
       if (next.phase === AUTO_RELOAD_PHASE.FOREIGN) {
@@ -91,7 +89,7 @@ export function useViewerAutoReload(serverInfo, {
         optionsRef.current.cancel(timer);
       }
     };
-  }, [baseline, release]);
+  }, [baseline]);
 }
 
 function defaultReload() {

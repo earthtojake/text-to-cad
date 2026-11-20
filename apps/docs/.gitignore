@@ -19,3 +19,4 @@ coverage/
 # The one-line installer, copied from scripts/install/ before dev/build
 /public/install.sh
 /public/install.ps1
+/public/install.py

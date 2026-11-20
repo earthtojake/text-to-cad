@@ -1,6 +1,6 @@
 # How URDF, SRDF and MJCF fit together
 
-Use this reference when work touches more than one description of the same robot, or upstream geometry, model packages, or the CAD Viewer.
+Use this reference when work touches more than one description of the same robot, or upstream geometry, model packages, or the viewer.
 
 ## Format boundary
 
@@ -86,9 +86,9 @@ A converted MJCF is a draft. Fix, then check with `cad mujoco check` ([mjcf-chec
 
 The joint names carry over; keep them, so the URDF, the SRDF and the MJCF name one joint one way.
 
-## CAD Viewer
+## The viewer
 
-CAD Viewer can review `.urdf` and `.srdf` files visually and help catch gross placement or resource issues. It does not open an MJCF: that is MuJoCo's own file, which the person opens in MuJoCo Studio (`cad run mujoco-studio --model scene.xml`). It cannot prove simulator dynamics, inertial validity, joint-axis semantics, or planning correctness.
+The viewer can review `.urdf` and `.srdf` files visually and help catch gross placement or resource issues. It does not open an MJCF: that is MuJoCo's own file, which the person opens in MuJoCo Studio (`cad run mujoco-studio --model scene.xml`). It cannot prove simulator dynamics, inertial validity, joint-axis semantics, or planning correctness.
 
 After creating or modifying a file, show it ([Show the model](../SKILL.md#show-the-model)). Report any failure explicitly.
 

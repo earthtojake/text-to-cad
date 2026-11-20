@@ -25,8 +25,6 @@
   "release_marker": "cad-release.json",
   "release_schema": "cad release/1",
   "releases": "releases",
-  "switch_log": "update.log",
-  "switch_record": "update.json",
   "token": "engines/token"
  },
  "http": {
@@ -36,9 +34,7 @@
    "type": "application/json; charset=utf-8",
    "keys": [
     "instance",
-    "notice",
-    "release",
-    "update"
+    "release"
    ]
   },
   "page": {
@@ -71,64 +67,13 @@
    "ok": true
   }
  },
- "progress": {
-  "frame": [
-   "detail",
-   "done",
-   "elapsedMs",
-   "job",
-   "kind",
-   "outputs",
-   "stage",
-   "total"
-  ],
-  "kind": "update",
-  "line": [
-   "progress"
-  ],
-  "stages": [
-   "install",
-   "build123d",
-   "apps",
-   "restart"
-  ]
- },
  "setup": {
   "command": "setup",
   "engine_update_flag": "--engine-update",
+  "prepare_env": "CAD_UPDATE_PREPARE",
   "flags": [
-   "--dry-run",
    "--engine-update",
    "--help",
-   "--json",
-   "--no-telemetry",
-   "--only",
-   "-h"
-  ]
- },
- "plugin": {
-  "arguments": [
-   "plugin",
-   "--refresh"
-  ],
-  "flags": [
-   "--help",
-   "--json",
-   "--refresh",
-   "-h"
-  ]
- },
- "update": {
-  "command": "update",
-  "flags": [
-   "--dry-run",
-   "--help",
-   "--json",
-   "--no-telemetry",
-   "--only",
-   "--port",
-   "--previous",
-   "--switch",
    "-h"
   ]
  }

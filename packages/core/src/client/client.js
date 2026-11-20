@@ -85,7 +85,7 @@ export const libraryRow = (row) => ({ ...row, kind: row.record, documentKind: ro
 const libraryRows = (reply) => (Array.isArray(reply?.documents) ? reply.documents.map(libraryRow) : []);
 
 /**
- * An explicit connection to a CAD Viewer, which serves files by absolute path. Its catalog holds
+ * An explicit connection to a viewer, which serves files by absolute path. Its catalog holds
  * the files on screen, each read as it is asked for. Construction never starts requests.
  * @param {import("./types.js").CadClientOptions} options
  * @returns {import("./types.js").CadClient}
@@ -124,8 +124,8 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     for (const listener of listeners) listener();
   }
 
-  // One read of the person's settings, shared by all that read them (the language, the consent, What's new,
-  // automatic updates): kept until one of them changes or the person comes back to the page, when each reader
+  // One read of the person's settings, shared by all that read them (the language, the consent, What's
+  // new): kept until one of them changes or the person comes back to the page, when each reader
   // reads again -- this forgets it first, having listened first -- and they share the next. A read that fails
   // is not kept.
   let settingsRead = null;
@@ -405,21 +405,6 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     whatsNew(seen) {
       return (seen === undefined ? readSettings() : changeSettings({ whats_new: { seen } }, 'whats-new'))
         .then((settings) => settings.whats_new ?? null);
-    },
-    // Whether the engine updates by itself (`/api/v1/settings`' `updates`); with `automatic`, the
-    // person's answer (the app menu's Automatic updates).
-    automaticUpdates(automatic) {
-      return (automatic === undefined ? readSettings() : changeSettings({ updates: { automatic } }, 'updates'))
-        .then((settings) => settings.updates);
-    },
-    // Who the engine is, this start of it (`instance`), whether a newer text-to-cad is out and where
-    // an update is (`GET /api/v1/server`); and the update button's click (`POST /api/v1/local/update`),
-    // which answers the notice, the release, the instance and the update.
-    version() {
-      return request(`${API}/server`, { operation: 'version' });
-    },
-    startUpdate() {
-      return request(`${API}/local/update`, { method: 'POST', headers: { 'x-cad-viewer': '1' }, operation: 'update' });
     },
     // A fresh link for the page's own address (`GET /api/v1/local/link`): `{ link, expires }`.
     link() {

@@ -77,18 +77,13 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   /** The host's notice: a file's viewport, top-right, once the file is on screen; never the home. */
   notice?: ReactNode;
   /**
-   * The host's update button (`@cad/ui/update`'s `UpdateButton`), while its install is behind:
-   * last among the navbar's controls (outermost, after Full size), over every file and on the home.
-   */
-  update?: ReactNode;
-  /**
    * The view's own history, where the host keeps one rather than a browser (the CAD app's views):
    * Back and Forward in the navbar after its logo, over every file and on the home.
    */
   history?: ViewerHistory;
   /**
    * The host's Full size button, where it shows the view small (inline in a conversation) and can
-   * show it full size: the navbar's host action, at its right end just before the update, over every file
+   * show it full size: the navbar's host action, at its right end, over every file
    * and on the home. Nothing where there is no navbar (`chrome: "bare"`). (A host's way to open what
    * is shown in a page of its own, the CAD app's browser page, is a file action, `fileActions.perform.browser`:
    * the file menu's Open in › Browser.)
@@ -108,7 +103,7 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
 const reportError = (error: Error) => console.error(error);
 
 /**
- * The CAD viewer every app shows: the shared FileViewer over one file at a time, by absolute path,
+ * The viewer every app shows: the shared FileViewer over one file at a time, by absolute path,
  * with its five renderers (an engine document, which a STEP opens as; DXF; GLB; STL/3MF; URDF/SRDF/SDF), the host's home (the model
  * library) wherever no file is open, and the standard loading and "File does not exist" pages. It
  * follows the catalog of the file on screen and refreshes it when the page is focused or shown
@@ -118,7 +113,7 @@ const reportError = (error: Error) => console.error(error);
  * navigates: showing a file, or the home, is the host's `onShow`.
  */
 export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, onShow, onShown,
-  library, onThumbnail, colorScheme, language, appSettings, notice, update, fullSize, history, chrome, whatsNew, onError = reportError }: CadViewerProps<Model>) {
+  library, onThumbnail, colorScheme, language, appSettings, notice, fullSize, history, chrome, whatsNew, onError = reportError }: CadViewerProps<Model>) {
   // The language the host names: the pages drawn here (the home, a file that will not open) read in it.
   const locale = host.environment.locale;
   const t = translator(locale);
@@ -256,7 +251,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   return <I18nProvider locale={locale}>
     <ControlUsageProvider report={host.usage?.controls}>
     <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} fileMenuItems={menu} overlay={overlay} file={path || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
-      colorScheme={colorScheme} language={language} appSettings={appSettings} update={update} history={history} recent={recent} explorerFolder={explorerFolder} onExplorerFolderChange={homed ? keepExplorerFolder : undefined} notice={notice} chrome={chrome} onError={onError} presentation={presentation} />}</ExportControls>
+      colorScheme={colorScheme} language={language} appSettings={appSettings} history={history} recent={recent} explorerFolder={explorerFolder} onExplorerFolderChange={homed ? keepExplorerFolder : undefined} notice={notice} chrome={chrome} onError={onError} presentation={presentation} />}</ExportControls>
     </ControlUsageProvider>
     {whatsNew && onScreen ? <WhatsNewDialog entry={whatsNew.entry} onDismiss={whatsNew.onDismiss} /> : null}
     {drawing && !path ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}

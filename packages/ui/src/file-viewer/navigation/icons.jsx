@@ -6,7 +6,7 @@
  * config file from a script from a picture — not name the language, which the
  * filename beside it already does.
  *
- * The nine formats the CAD Viewer renders are the exception, and they are not
+ * The nine formats the viewer renders are the exception, and they are not
  * an exception to that rule: they go through the viewer's own `EntryIcon`, one
  * plain lucide `File` for every one of them (the name says which kind),
  * everywhere either app lists files. `@cad/core`'s `fileFormats` decides
@@ -138,7 +138,7 @@ export function FileIcon({ path, className, strokeWidth = 1.75 }) {
   // is a CAD file all the same: a solid in a file, as a STEP is.
   const renderFormat = renderFormatFromPath(path) || (fileExtensionFromPath(path) === ".xbf" ? RENDER_FORMAT.XBF : "");
   if (renderFormat) {
-    // A file the CAD Viewer renders: its own per-format glyph, from the one
+    // A file the viewer renders: its own per-format glyph, from the one
     // table every surface that lists files already reads.
     return (
       <EntryIcon

@@ -3,8 +3,8 @@
 A check's measurements are facts (``cad.build123d``'s and ``cad.trimesh``'s reports). A process's **rules**
 turn them into verdicts: one table per process (``RuleSet``), versioned, each rule a limit on one measured
 field, the general practice a published design guide states -- the guide cited as the rule's evidence, never
-as a shop's limit -- or, where no guide states a limit, text-to-cad's own floor, its source text-to-cad and
-never a publisher (``_origin``): text-to-cad's checks are no shop's, and a shop's own limits are read against the
+as a shop's limit -- or, where no guide states a limit, cad's own floor, its source cad and
+never a publisher (``_origin``): cad's checks are no shop's, and a shop's own limits are read against the
 measurements, which every result carries. A rule never changes a measurement and a verdict never replaces
 one: the report carries both.
 
@@ -73,10 +73,10 @@ class Source:
                 "accessed": self.accessed}
 
 
-#: The source of every limit that is text-to-cad's own, in every process's table: a feasibility floor or a
+#: The source of every limit that is cad's own, in every process's table: a feasibility floor or a
 #: rule of thumb no published guide states. A rule that cites it says in its ``note`` what the figure rests on,
-#: and its finding's ``source`` reads ``text-to-cad, ...``, never a publisher's name.
-OWN = Source("text-to-cad", "text-to-cad", "its own figure: no published guide states one",
+#: and its finding's ``source`` reads ``cad, ...``, never a publisher's name.
+OWN = Source("cad", "cad", "its own figure: no published guide states one",
              "https://github.com/earthtojake/text-to-cad", "")
 
 
@@ -137,7 +137,7 @@ class RuleSet:
     """One process's versioned table of rules, and the sources they cite."""
 
     process: str
-    title: str                  # "text-to-cad general rules"
+    title: str                  # "cad general rules"
     version: str                # the table's own version: "2026-11-08"
     rules: tuple[Rule, ...]
     sources: tuple[Source, ...]
@@ -280,7 +280,7 @@ def _message(rule: Rule, value: float, limit: float, severity: str | None = None
 
 def _origin(rule: Rule, rule_set: RuleSet) -> str:
     """Where the rule's limit comes from, for a finding's ``source``: the guide's publisher and its title (a
-    limit of text-to-cad's own names text-to-cad, never a publisher): the evidence of general practice, or
+    limit of cad's own names cad, never a publisher): the evidence of general practice, or
     whose floor it is, never a shop's limit."""
     source = rule_set.source(rule.source)
     return f"{source.publisher}, {source.title}"

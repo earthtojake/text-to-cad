@@ -254,13 +254,13 @@ class RulesTest(unittest.TestCase):
 
     def test_a_part_past_a_large_press_is_warned_and_one_past_any_press_built_fails(self) -> None:
         # The clamp force is an estimate of the part's projected area; the press that gives it is a shop's. Two
-        # floors of text-to-cad's own stand on it all the same: a 12 m x 3 m panel takes 56 000 tons at a ton per
+        # floors of cad's own stand on it all the same: a 12 m x 3 m panel takes 56 000 tons at a ton per
         # square inch, half the lowest factor published and five times what any press built gives -- it does not
         # read OK; a 2 m2 one is molded, on a press few shops run.
         def clamp(shape: Any) -> tuple[bool, dict[str, str], float]:
             result = _check(shape)
             press = {f.code: f.severity for f in result.findings if f.code.startswith("molding.clamp")}
-            self.assertTrue(all(f.source.startswith("text-to-cad, ") for f in result.findings if f.code in press))
+            self.assertTrue(all(f.source.startswith("cad, ") for f in result.findings if f.code in press))
             return result.ok, press, result.measurements["clamp"]["tons"]
 
         ok, press, tons = clamp(bd.extrude(bd.Rectangle(12000, 3000), 30, taper=3))
@@ -356,7 +356,7 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(codes(30.0, None, "warning"), {"molding.wall_too_thick"})   # over every resin's 25.4 mm
         thin = checked[0.4, "abs"]
         floor = next(f for f in thin.findings if f.code == "molding.wall_too_thin")
-        self.assertTrue(floor.source.startswith("text-to-cad, "))   # ours: half of Protolabs' recommendation, said as that
+        self.assertTrue(floor.source.startswith("cad, "))   # ours: half of Protolabs' recommendation, said as that
         self.assertIn("0.5 of Protolabs' recommended minimum for abs", floor.message)
         # the recommendation is left to the record beside the floor: one finding a face
         self.assertFalse({f.location for f in thin.findings if f.code == "molding.wall_min"}

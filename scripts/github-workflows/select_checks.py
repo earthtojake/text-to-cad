@@ -97,14 +97,12 @@ HEAVY_POLICY = {
 }
 # Skill suites that need nothing installed: they read their skill's files.
 LIGHT_SKILL_TESTS = (
-    f"{SKILL_SUITES}/print3d",
     f"{SKILL_SUITES}/render",
     f"{SKILL_SUITES}/sendcutsend",
 )
 
-# The three distributions, the deprecated alias, and the bundle the server's wheel carries.
-PACKAGE_PROJECTS = ("packages/cad", "packages/cad-server", "packages/cad-mcp")
-PACKAGES = (*(f"{project}/**" for project in PACKAGE_PROJECTS), "packages/aliases/**", "scripts/bundle/**")
+# The one distribution, its aliases, and the bundle its wheel carries.
+PACKAGES = ("packages/cad/**", "packages/aliases/**", "scripts/bundle/**")
 # Whatever runs the packages: their suites on both platforms, the policy tests and skill suites
 # that load them, the wheels, the bundled viewer served through them, and the jobs that run them
 # with a tool installed as a person has it (netgen and CalculiX, KiCad, Blender) or on the third
@@ -167,15 +165,18 @@ RULES: tuple[Rule, ...] = (
     # Prose inside a code tree is read by the light contracts alone, never by a build or a test
     # of the code beside it. The exceptions: each distribution's README and LICENSE ship in its
     # wheel, and apps/web's Markdown links are resolved by its client tests.
-    Rule((*(f"{project}/{name}" for project in PACKAGE_PROJECTS for name in ("README.md", "LICENSE")),
-          "packages/aliases/*/README.md"), select(flags=["packaging"]), final=True),
+    Rule(("packages/cad/README.md", "packages/cad/LICENSE", "packages/aliases/*/README.md"),
+         select(flags=["packaging"]), final=True),
     Rule(("apps/web/**/*.md",), select(flags=["web_client"]), final=True),
+    # The documentation site's own pages are its build's: it sets them and resolves their links.
+    Rule(("apps/docs/content/**",), select(flags=["docs"]), final=True),
     Rule(("packages/**/*.md", "apps/**/*.md"), NOTHING, final=True),
 
     # Shared by every job, or the selection itself: everything runs.
     Rule((
         "VERSION",                       # a release is tested whole
-        "package.json", "package-lock.json", "requirements-dev.txt",
+        "package.json", "package-lock.json",
+        "pyproject.toml", "uv.lock",     # the development environment every Python job makes
         ".github/workflows/test.yml", ".github/actions/**",
         "scripts/github-workflows/select_checks.py", "scripts/github-workflows/tested_tree.py",
         "scripts/github-workflows/ci_gate.py",
@@ -196,6 +197,18 @@ RULES: tuple[Rule, ...] = (
     # js-core, beside docs: check-dependencies.mjs walks every app's source, and the web and mcp
     # jobs run it for theirs.
     Rule(("apps/docs/**",), select(flags=["docs", "core_js"])),
+    # The site's copy of the registry, held to the library's by the registry's own test.
+    Rule(("apps/docs/src/lib/docs/registry.generated.json",),
+         select(packages=[f"{PACKAGES_SUITE}/cad/test_registry.py"])),
+    # Its references, the command's read off its parsers and the library's off its declarations, each held to
+    # its generator by its own test (the code they describe is a package's, which runs the packages' suites).
+    Rule(("apps/docs/src/lib/docs/cli-reference.generated.json",),
+         select(packages=[f"{PACKAGES_SUITE}/cad_server/test_cli_reference.py"])),
+    Rule(("apps/docs/src/lib/docs/library-reference.generated.json",),
+         select(packages=[f"{PACKAGES_SUITE}/cad/test_library_reference.py"])),
+    # The install guide and the migration guides are pages of the documentation site, which its
+    # build sets as they are and whose links and anchors it resolves (apps/docs/src/lib/docs/nav.ts).
+    Rule(("docs/install.md", "docs/migrations/**"), select(flags=["docs"])),
     Rule(("skills/**",), NOTHING),  # prose and scripts the light contracts and light suites read
     Rule(("skills/fea/**",), select(skills=[f"{SKILL_SUITES}/fea"])),
     # The installer rehearsals (install-linux.yml, install-windows.yml, which test.yml calls): the
@@ -203,9 +216,25 @@ RULES: tuple[Rule, ...] = (
     # release, a full run.
     Rule((".github/workflows/install-linux.yml", ".github/workflows/install-windows.yml", "scripts/install/**"),
          select(flags=["installer"])),
-    # The one-line installers: the docs site serves copies of them, and the setup suite reads both.
-    Rule(("scripts/install/install.sh", "scripts/install/install.ps1"),
-         select(flags=["docs"], packages=[f"{PACKAGES_SUITE}/cad_server/test_setup.py"])),
+    # The update rehearsal (test.yml's update-rehearsal): cad updating itself as a uv tool, and the real shipped
+    # releases updating into this tree's build. Beside the packages' suites, the code of this build it runs: cad's own
+    # update and its helper, an updater's setup and the install command its server runs, the layout of 0.11.11 and
+    # earlier and the records its clients read, the server's tending; and what the install command hands the apps
+    # to, which every rehearsal and the real install run: `cad plugin install`, its table of apps and its one run.
+    Rule(("scripts/test/rehearse-update.py",), select(flags=["installer"]), final=True),
+    # The real install (real-install.yml, which test.yml calls): the install script against the real programs of
+    # agent apps, on a private computer of its own.
+    Rule((".github/workflows/real-install.yml", "scripts/test/real-install.py", "scripts/test/real_computer.py"),
+         select(flags=["installer"]), final=True),
+    Rule(tuple(f"packages/cad/src/cad_server/{path}" for path in (
+        "cli/setup.py", "cli/auto_update.py", "_internal/install_script.py", "_internal/arrival.py",
+        "_internal/auto_update.py", "_internal/auto_update_helper.py", "_internal/installations.py",
+        "engine/daemon.py", "cli/plugin.py", "_internal/plugin_catch_up.py", "plugin/**")),
+        select(flags=["installer"])),
+    # The one-line installer: the docs site serves copies of install.sh, install.ps1 and install.py. Its own
+    # tests (tests/python/global/test_install_script.py) are a light contract: static runs them on every change.
+    Rule(("scripts/install/install.sh", "scripts/install/install.ps1", "scripts/install/install.py"),
+         select(flags=["docs"])),
 
     # A fixture one language writes and another asserts is current: the robot renderer's browser
     # fixtures are the payloads the server resolves, the board renderer's the test board's plot.
@@ -253,8 +282,9 @@ RULES: tuple[Rule, ...] = (
         ".github/workflows/deploy-docs.yml", ".github/workflows/deploy-api.yml",
         ".github/dependabot.yml", ".github/release.yml", ".github/FUNDING.yml", ".githooks/**",
         ".claude-plugin/**", ".codex-plugin/**", ".cursor-plugin/**", ".grok-plugin/**", "gemini-extension.json",
-        "*.mcp.json", "plugin.json", "mcp.json", "skills.sh.json",
-        "README.md", "AGENTS.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE", "docs/**",
+        ".antigravity-plugin/**", ".kimi-plugin/**", ".devin-plugin/**", ".muse-plugin/**",
+        "*.mcp.json",
+        "README.md", "AGENTS.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE", "docs/contributing/**",
         ".gitignore",
         "models/**",
     ), NOTHING),

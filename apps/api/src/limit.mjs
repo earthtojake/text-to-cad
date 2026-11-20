@@ -3,6 +3,7 @@
  * host reuses a warm one, and each instance keeps its own). /v1/forget is open to anyone and each deletion
  * spends PostHog's personal key, so it is limited per client address and per install id: a real client asks
  * once, when `cad telemetry off` (`cadgen telemetry off` before 0.9) runs, and again only while the deletion it owes has not been taken.
+ * /v1/install is limited per client address alone (`INSTALL_LIMIT`), by a limiter of its own.
  * Beyond the limit, a refusal and the time to wait: nothing is queued. The host's firewall is the second
  * layer (README.md).
  *
@@ -12,6 +13,9 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 export const FORGET_LIMIT = { limit: 5, windowMs: 10 * 60_000, size: 1000 };
+// /v1/install is open to anyone too, and spends nothing but a capture: one run of the install command reports at
+// most once, so the limit is looser, and room for the computers that share an address (an office, a classroom).
+export const INSTALL_LIMIT = { limit: 30, windowMs: 10 * 60_000, size: 1000 };
 
 /**
  * @param {{ limit?: number, windowMs?: number, size?: number, now?: () => number }} [options]

@@ -3,8 +3,6 @@ import { useEffect, useRef, useState } from "react";
 /** The first wait before a page whose engine is gone asks again, and the longest it backs off to. */
 export const RECONNECT_FIRST_MS = 1000;
 export const RECONNECT_LONGEST_MS = 5000;
-/** How often a page asks while its engine restarts for an update it started: the gap is under a second. */
-export const RECONNECT_UPDATE_MS = 250;
 
 /**
  * A page whose engine is gone (`gone`) asks the same address again -- with its token, the cookie its
@@ -13,10 +11,9 @@ export const RECONNECT_UPDATE_MS = 250;
  * `bind`), so a restart, a stop or a reboot costs an open tab nothing: once another start of the
  * engine than the one the page loaded from (`instance`, `/api/v1/server`'s token of each start)
  * answers, the page reloads itself into the same document
- * (its URL, `/<id>`), whatever the page's reads said meanwhile -- and so does one of another release
- * (`release`: an update), once the page has nothing unsaved (`reload`). The same engine answering was a
- * blip: nothing is reloaded. While the engine restarts for an update this page started (`fast`), it
- * asks every `RECONNECT_UPDATE_MS`. An engine that answers without knowing the token -- another
+ * (its URL, `/<id>`), whatever the page's reads said meanwhile, once the page has nothing unsaved
+ * (`reload`). The same engine answering was a blip: nothing is reloaded. An engine that answers
+ * without knowing the token -- another
  * installation's, or one whose token was rotated -- is not back: the page keeps asking, and is never
  * reloaded for it (under the dev server's proxy a reload would be refused again, and again), so the
  * page's new link, opened beside it, heals it: its cookie is the tab's too.
@@ -25,8 +22,8 @@ export const RECONNECT_UPDATE_MS = 250;
  * the page's token, `false` when nothing answered, `null` before the first ask.
  *
  * @param {boolean} gone
- * @param {{ instance: unknown, release?: string, fast?: boolean,
- *   ask: () => Promise<{ instance?: unknown, release?: string } | { refused: true } | null>, reload?: () => void,
+ * @param {{ instance: unknown,
+ *   ask: () => Promise<{ instance?: unknown } | { refused: true } | null>, reload?: () => void,
  *   schedule?: (run: () => void, delayMs: number) => unknown, cancel?: (handle: unknown) => void }} options
  *   `ask` answers the engine's description (`/api/v1/server`) when one answered this page, `{ refused:
  *   true }` when one answered and refused its token, else null.
@@ -34,15 +31,13 @@ export const RECONNECT_UPDATE_MS = 250;
  */
 export function useEngineReconnect(gone, {
   instance,
-  release = "",
-  fast = false,
   ask,
   reload = defaultReload,
   schedule = (run, delayMs) => setTimeout(run, delayMs),
   cancel = (handle) => clearTimeout(handle)
 }) {
   const optionsRef = useRef(null);
-  optionsRef.current = { instance, release, fast, ask, reload, schedule, cancel };
+  optionsRef.current = { instance, ask, reload, schedule, cancel };
   const asking = useRef(null);
   const [refused, setRefused] = useState(null);
 
@@ -54,7 +49,7 @@ export function useEngineReconnect(gone, {
     asking.current = loop;
     let delayMs = RECONNECT_FIRST_MS;
     const wait = () => {
-      loop.timer = optionsRef.current.schedule(attempt, optionsRef.current.fast ? RECONNECT_UPDATE_MS : delayMs);
+      loop.timer = optionsRef.current.schedule(attempt, delayMs);
       delayMs = Math.min(delayMs * 2, RECONNECT_LONGEST_MS);
     };
     const attempt = async () => {
@@ -71,8 +66,7 @@ export function useEngineReconnect(gone, {
       loop.active = false;
       asking.current = null;
       setRefused(null);
-      const released = optionsRef.current.release && answer.release && answer.release !== optionsRef.current.release;
-      if (answer.instance !== optionsRef.current.instance || released) {
+      if (answer.instance !== optionsRef.current.instance) {
         optionsRef.current.reload();
       }
     };

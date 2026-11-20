@@ -14,12 +14,15 @@ trapped powder is. The verdicts are the rules' (``RULES``): general practice, pe
 the first published design guide that gives one (Protolabs Network's -- it publishes guides for all five --
 then Protolabs's, then Xometry's), each rule citing its page as the evidence, not as a printer's or a shop's
 limit; each limit is keyed by the technology (a rule gives no limit for a technology no guide covers, and
-says so: never a pass). The build volume is the printer's given (``--build-volume``), else a typical
-machine of the technology's, assumed and said.
+says so: never a pass). The build volume is the printer's given (``--build-volume``, or the file of its
+settings: ``--printer``), else a typical machine of the technology's, assumed and said.
 """
 
 from __future__ import annotations
 
+import json
+import zipfile
+from pathlib import Path
 from typing import Any
 
 from cad._internal.refused import ArgumentRefused
@@ -29,8 +32,8 @@ from cad._internal.dfm.rules import OWN, Rule, RuleSet, Source
 from cad.results import CheckFinding
 
 __all__ = ["BUILD_VOLUMES", "DEFAULT_ANGLE", "DEFAULT_LAYER", "MEASURED_FROM", "OPTIONS", "RULES", "TECHNOLOGIES",
-           "angle_limit", "build_volume", "context", "findings", "layer_height", "machine_volume", "summary",
-           "validate", "wall_minimum"]
+           "angle_limit", "build_volume", "context", "findings", "layer_height", "machine_volume",
+           "printer_settings", "summary", "validate", "wall_minimum"]
 
 #: The printing technologies: fused filament, selective laser sintering, stereolithography and DLP,
 #: multi jet fusion, metal powder bed fusion (DMLS, SLM).
@@ -38,7 +41,7 @@ TECHNOLOGIES = ("fdm", "sls", "sla", "mjf", "pbf")
 #: The technologies whose loose powder holds the part as it builds: no support, but powder to get out.
 POWDER = ("sls", "mjf")
 OPTIONS: dict[str, Any] = {"technology": "fdm", "build_volume": None, "angle_limit": None, "samples": 2000,
-                           "layer_height": None, "nozzle": None}
+                           "layer_height": None, "nozzle": None, "printer": None}
 MEASURED_FROM = ("brep", "mesh")
 #: The overhang angle (from horizontal) each technology counts as needing support when none is given: the
 #: rules' (Hubs FDM 45, Hubs SLA 19 from level, Protolabs metal 45 to the plate; powder none).
@@ -101,7 +104,7 @@ SOURCES = {source.id: source for source in (
          "FDM 3D printing design tips: best practices and techniques for stronger prints",
          "https://xometry.pro/en/articles/fdm-design-tips/"),
     # a rule no fetched guide states (``printing.knife_edge``, ``printing.horizontal_hole``, a wall by the nozzle
-    # given): text-to-cad's own figure, said as such in every verdict of it
+    # given): cad's own figure, said as such in every verdict of it
     OWN,
 )}
 
@@ -120,13 +123,13 @@ LARGEST_VOLUMES: dict[str, tuple[float, float, float]] = {
     "fdm": (900, 600, 900), "sla": (1500, 750, 500), "sls": (750, 550, 550), "mjf": (380, 285, 380),
     "pbf": (500, 280, 360)}
 #: The nozzle Hubs's FDM wall minimum (0.8 mm) is two beads of: the common one. With ``--nozzle`` given the
-#: minimum is two beads of that nozzle (``NOZZLE_BEADS``), text-to-cad's own scaling of the cited figure (Hubs:
+#: minimum is two beads of that nozzle (``NOZZLE_BEADS``), cad's own scaling of the cited figure (Hubs:
 #: "wall thickness depends on nozzle diameter and how well passes fuse together").
 COMMON_NOZZLE_MM = 0.4
 NOZZLE_BEADS = 2.0
 #: FDM's skins lying in the layer plane (a wall whose faces lie within 45 deg of it: ``lying``) are laid layer on
 #: layer: under ``SKIN_LAYERS_MIN`` layers one is not laid at all (the floor, an error), under ``SKIN_LAYERS``
-#: it is one layer alone (a recommendation). text-to-cad's own: no guide states a figure for them.
+#: it is one layer alone (a recommendation). cad's own: no guide states a figure for them.
 SKIN_LAYERS_MIN = 1.0
 SKIN_LAYERS = 2.0
 
@@ -230,7 +233,7 @@ def _walls(supported: list[Row], free: list[Row]) -> list[Rule]:
                 rid, "wall_thickness", "thickness_mm", "min", {"fdm": NOZZLE_BEADS}, "mm", what, OWN.id,
                 severity="warning" if near else "error", by="technology", scale_by="nozzle",
                 when={"technology": "fdm", "nozzle_given": True}, item_when={**item_when, **standing}, fix=mended,
-                note=f"{NOZZLE_BEADS:g} beads of the nozzle given (--nozzle): text-to-cad's own scaling of Hubs's 0.8 "
+                note=f"{NOZZLE_BEADS:g} beads of the nozzle given (--nozzle): cad's own scaling of Hubs's 0.8 "
                      f"mm, two beads of the common {COMMON_NOZZLE_MM:g} mm nozzle",
                 detail=(_AT_LIMIT + "; " if near else "") + f"{NOZZLE_BEADS:g} beads of the {{nozzle:g}} mm nozzle given"))
     # a wall whose support could not be read, between the two minima: it passes if it is supported and fails
@@ -242,7 +245,7 @@ def _walls(supported: list[Row], free: list[Row]) -> list[Rule]:
                     "tells whether the wall is joined on two sides", {"supported": None, "between_minima": True},
                     when={"technology": tuple(row[0] for row in free), "nozzle_given": False})
     # FDM lays a skin that lies in the layer plane layer on layer: one thinner than a layer is not laid at all
-    # (the floor), one of a single layer has no second to tie its beads (the recommendation). text-to-cad's
+    # (the floor), one of a single layer has no second to tie its beads (the recommendation). cad's
     # own figures: the guides' wall minimum is of standing walls ("depends on nozzle diameter").
     for rid, layers, severity, said in (
             ("printing.skin_layer", SKIN_LAYERS_MIN, "error", "a skin thinner than one layer is not laid at all"),
@@ -252,7 +255,7 @@ def _walls(supported: list[Row], free: list[Row]) -> list[Rule]:
             "thickness of a skin lying in the layer plane", OWN.id, severity=severity, by="technology",
             scale_by="layer_height", when={"technology": "fdm"}, item_when={"lying": True},
             fix="thicken it to at least {limit:g} mm, or print finer layers (--layer-height)",
-            note=f"text-to-cad's own: {said}; FDM's two-bead wall minimum is a standing wall's",
+            note=f"cad's own: {said}; FDM's two-bead wall minimum is a standing wall's",
             detail=f"{layers:g} layer(s) of {{layer_height:g}} mm"))
     return found
 
@@ -336,7 +339,7 @@ def _general() -> tuple[Rule, ...]:
     for tech in ("sls", "mjf"):
         add("warp", tech, 177.8, "protolabs-7mistakes", "warning")
     add("section", "pbf", 10.0, "hubs-metal", "warning")
-    # text-to-cad's own threshold for FDM's horizontal holes (HORIZONTAL_HOLE_MM): no guide gives one
+    # cad's own threshold for FDM's horizontal holes (HORIZONTAL_HOLE_MM): no guide gives one
     add("hround", "fdm", HORIZONTAL_HOLE_MM, OWN.id, "warning")
     found: list[Rule] = _walls(rows["wall_s"], rows["wall_u"])
     found += _rules("printing.hole_diameter", "holes", "diameter_mm", "min", "mm", "hole diameter", rows["hole"],
@@ -357,7 +360,7 @@ def _general() -> tuple[Rule, ...]:
     found += _rules("printing.horizontal_hole", "holes", "diameter_mm", "max", "mm", "horizontal round hole diameter",
                     rows["hround"], "give it a teardrop or flat top, or turn the part so the hole stands vertical: "
                     "above {limit:g} mm its crown sags", {"orientation": "horizontal", "teardrop": False},
-                    "text-to-cad's own threshold: Hubs FDM gives no diameter, only that a horizontal hole's support "
+                    "cad's own threshold: Hubs FDM gives no diameter, only that a horizontal hole's support "
                     "is hard to remove and turning the part 90 deg removes it")
     # the rule judges a gap or a contact; bodies that pass through each other are their own finding
     found += _rules("printing.clearance", "clearances", "distance_mm", "min", "mm", "clearance between parts",
@@ -380,13 +383,14 @@ def _general() -> tuple[Rule, ...]:
     found += _rules("printing.hollow_wall", "trapped_volumes", "min_wall_mm", "min", "mm",
                     "wall around a hollow", rows["hollow"], "thicken the hollow's wall to at least {limit:g} mm",
                     {"wall_at_limit": (False, None)})
-    # The machine given (--build-volume) is the printer's: a part over it is not made, an error. With none
-    # given: over the typical machine assumed (no printer of the user's) is a warning that names it; over the
-    # largest machine the same page lists, in every orientation, no machine of the technology makes it: an error.
+    # The machine given (--build-volume, or the volume of the printer's file, --printer) is the printer's: a
+    # part over it is not made, an error. With none given: over the typical machine assumed (no printer of the
+    # user's) is a warning that names it; over the largest machine the same page lists, in every orientation,
+    # no machine of the technology makes it: an error.
     found += _rules("printing.build_volume", "build_volume", "fill_ratio", "max", "ratio",
                     "part size over the build volume (lying the best way in it)", rows["fit"],
                     "split the part, or print it on a larger machine", when={"machine_given": True},
-                    detail="against the {machine} mm machine given")
+                    detail="against {machine_said}")
     found += _rules("printing.build_volume", "build_volume", "fill_ratio", "max", "ratio",
                     "part size over the build volume (lying the best way in it)",
                     [(*row[:3], "warning", row[4]) for row in rows["fit"]],
@@ -406,7 +410,7 @@ def _general() -> tuple[Rule, ...]:
                     rows["engrave_w"], "widen it to at least {limit:g} mm", {"kind": "engrave"})
     found += _rules("printing.warp_length", "build_volume", "max_dimension_mm", "max", "mm", "part length",
                     rows["warp"], "keep walls near a uniform 3.2 mm and hollow thick sections; parts this long warp")
-    # text-to-cad's own rule (no guide defines a knife edge), a warning: the tip prints rounded (Hubs SLS: "a
+    # cad's own rule (no guide defines a knife edge), a warning: the tip prints rounded (Hubs SLS: "a
     # radius of less than 0.4mm on a design is printed as 0.4mm") and the part is still made
     found += _rules("printing.knife_edge", "knife_edges", "thickness_mm", "min", "mm",
                     "material at a knife edge (a convex edge under 45 deg)",
@@ -423,7 +427,7 @@ def _general() -> tuple[Rule, ...]:
 def _ruled() -> RuleSet:
     rules = _general()
     cited = sorted({rule.source for rule in rules} | {source for _, source in BUILD_VOLUMES.values()})
-    return RuleSet("printing", "text-to-cad general rules", _VERSION, rules, tuple(SOURCES[ident] for ident in cited),
+    return RuleSet("printing", "cad general rules", _VERSION, rules, tuple(SOURCES[ident] for ident in cited),
                    note="general practice: per technology the first published design guide's figure (Hubs, then "
                         "Protolabs, then Xometry); the build volume the printer's given, else a typical machine "
                         "(Hubs's: a desktop FDM or SLA printer), assumed; no printer's or shop's own limits",
@@ -459,10 +463,14 @@ def layer_height(resolved: dict[str, Any]) -> float:
 
 
 def machine_volume(resolved: dict[str, Any]) -> dict[str, Any]:
-    """The build volume the fit is measured against: ``build_volume`` given, else a typical machine of the
-    technology's (``BUILD_VOLUMES``), assumed -- with the largest the same page lists (``LARGEST_VOLUMES``)."""
+    """The build volume the fit is measured against: ``build_volume`` given (or a ``printer``'s, which names
+    itself the origin), else a typical machine of the technology's (``BUILD_VOLUMES``), assumed -- with the
+    largest the same page lists (``LARGEST_VOLUMES``)."""
     if resolved.get("build_volume") is not None:
-        return {"volume_mm": list(build_volume(resolved["build_volume"])), "origin": "given"}
+        printer = resolved.get("printer")
+        origin = "given" if not isinstance(printer, dict) or "build_volume" not in printer["supplied"] else (
+            f"printer {printer['name']} ({printer['file']})")
+        return {"volume_mm": list(build_volume(resolved["build_volume"])), "origin": origin}
     volume, source = BUILD_VOLUMES[resolved["technology"]]
     return {"volume_mm": [float(value) for value in volume], "origin": f"assumed ({SOURCES[source].url})",
             "largest_mm": [float(value) for value in LARGEST_VOLUMES[resolved["technology"]]]}
@@ -487,6 +495,10 @@ def validate(resolved: dict[str, Any], document_type: str) -> None:
         raise ArgumentRefused(f"--angle-limit is an angle in degrees from 0 to 90, not {given}")
     if int(resolved["samples"]) < 1:
         raise ArgumentRefused(f"--samples is a count of at least 1, not {resolved['samples']}")
+    if resolved.get("printer") is not None:
+        if technology != "fdm":
+            raise ArgumentRefused(f"--printer is FDM's (a filament printer's settings file), not {technology}'s")
+        _take_printer(resolved)
     for name in ("layer_height", "nozzle"):
         if resolved.get(name) is not None and not float(resolved[name]) > 0:
             raise ArgumentRefused(f"--{name.replace('_', '-')} is a length in millimetres above 0, not {resolved[name]}")
@@ -494,6 +506,99 @@ def validate(resolved: dict[str, Any], document_type: str) -> None:
         raise ArgumentRefused(f"--nozzle is FDM's (a filament printer's nozzle), not {resolved['technology']}'s")
     if resolved.get("build_volume") is not None:
         build_volume(resolved["build_volume"])
+
+
+#: Where a slicer's 3MF keeps the settings of the printer, filament and process a project was saved with (JSON).
+PROJECT_SETTINGS = "Metadata/project_settings.config"
+
+
+def printer_settings(path: str | Path) -> dict[str, Any]:
+    """What ``--printer`` names of a printer, read once: ``name``, ``file``, ``volume_mm`` (the bed polygon's
+    bounding box by ``printable_height``) and ``nozzle`` (the first extruder's, or None where the file gives
+    none). The file is a 3MF a slicer saved (OrcaSlicer, Bambu Studio: ``PROJECT_SETTINGS``) or a JSON of a
+    printer's complete settings (an exported machine preset, or the project settings themselves).
+    ``ArgumentRefused`` naming the file for one that is none of these or lacks the bed or the height."""
+    file = Path(path)
+    settings = _printer_file(file)
+    missing = [key for key in ("printable_area", "printable_height") if settings.get(key) in (None, "", [])]
+    if missing:
+        inherits = settings.get("inherits")
+        why = (f"is a preset holding only its differences from {inherits!r}, not the printer's settings: give a 3MF "
+               "the slicer saved (it holds them whole), or --build-volume and --nozzle"
+               if inherits else f"holds no {', '.join(missing)}: give a 3MF the slicer saved, or a complete machine "
+                                "preset")
+        raise ArgumentRefused(f"--printer {file} {why}")
+    try:
+        points = [tuple(float(part) for part in point.strip().lower().split("x"))
+                  for point in _listed(settings["printable_area"])]
+        height = float(settings["printable_height"])
+        if not points or any(len(point) != 2 for point in points):
+            raise ValueError("a point is XxY")
+    except ValueError:
+        raise ArgumentRefused(f"--printer {file}: printable_area is points written 0x0, 256x0, ... and "
+                              f"printable_height a number, not {settings['printable_area']!r} and "
+                              f"{settings['printable_height']!r}") from None
+    xs, ys = [point[0] for point in points], [point[1] for point in points]
+    volume = (max(xs) - min(xs), max(ys) - min(ys), height)
+    if not all(value > 0 for value in volume):
+        raise ArgumentRefused(f"--printer {file}: its bed and height make a volume of "
+                              f"{' x '.join(f'{value:g}' for value in volume)} mm, not three lengths above 0")
+    nozzles = _listed(settings.get("nozzle_diameter"))
+    try:
+        nozzle = float(nozzles[0]) if nozzles else None
+    except ValueError:
+        raise ArgumentRefused(f"--printer {file}: nozzle_diameter is a length in millimetres, not "
+                              f"{settings['nozzle_diameter']!r}") from None
+    name = next((str(settings[key]) for key in ("printer_settings_id", "name") if settings.get(key)), file.name)
+    return {"name": name, "file": str(file), "volume_mm": list(volume), "nozzle": nozzle}
+
+
+def _printer_file(file: Path) -> dict[str, Any]:
+    if not file.is_file():
+        raise ArgumentRefused(f"--printer {file} is not a file: give a 3MF a slicer saved or a machine preset JSON")
+    try:
+        if zipfile.is_zipfile(file):
+            with zipfile.ZipFile(file) as archive:
+                if PROJECT_SETTINGS not in archive.namelist():
+                    raise ArgumentRefused(f"--printer {file} holds no {PROJECT_SETTINGS}: give a 3MF a slicer saved "
+                                          "(OrcaSlicer, Bambu Studio), not one made another way")
+                text = archive.read(PROJECT_SETTINGS)
+        else:
+            text = file.read_bytes()
+        settings = json.loads(text)
+    except ArgumentRefused:
+        raise
+    except (OSError, ValueError, zipfile.BadZipFile) as error:
+        raise ArgumentRefused(f"--printer {file} is neither a 3MF a slicer saved nor a JSON of printer settings "
+                              f"({type(error).__name__}: {error})") from None
+    if not isinstance(settings, dict):
+        raise ArgumentRefused(f"--printer {file} is JSON but not an object of settings")
+    return settings
+
+
+def _listed(value: Any) -> list[str]:
+    """A slicer's setting as its strings: a list, one comma-joined string, or a scalar."""
+    if value is None:
+        return []
+    parts = value if isinstance(value, (list, tuple)) else str(value).split(",")
+    return [str(part).strip() for part in parts if str(part).strip()]
+
+
+def _take_printer(resolved: dict[str, Any]) -> None:
+    """``printer`` (a path) read once into ``resolved``: its volume and nozzle where none is given -- they are
+    then the printer's, judged as ``--build-volume`` and ``--nozzle`` are -- and ``printer`` the plain facts
+    (name, file, what it supplied) for the report to name it by."""
+    if isinstance(resolved["printer"], dict):
+        return
+    printer = printer_settings(resolved["printer"])
+    supplied = []
+    if resolved.get("build_volume") is None:
+        resolved["build_volume"] = "x".join(f"{value:g}" for value in printer["volume_mm"])
+        supplied.append("build_volume")
+    if resolved.get("nozzle") is None and printer["nozzle"] is not None:
+        resolved["nozzle"] = printer["nozzle"]
+        supplied.append("nozzle")
+    resolved["printer"] = {"name": printer["name"], "file": printer["file"], "supplied": supplied}
 
 
 def build_volume(text: str) -> tuple[float, float, float]:
@@ -520,8 +625,12 @@ def context(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
             "angle_given": resolved.get("angle_limit") is not None,
             "layer_height": layer_height(resolved),
             # the build volume's: given (an error to pass it) or a typical machine assumed (a warning naming it)
-            "machine_given": machine["origin"] == "given",
-            "machine": " x ".join(f"{value:g}" for value in machine["volume_mm"])}
+            "machine_given": not machine["origin"].startswith("assumed"),
+            "machine": " x ".join(f"{value:g}" for value in machine["volume_mm"]),
+            "machine_said": (f"the {' x '.join(f'{value:g}' for value in machine['volume_mm'])} mm machine given"
+                             if machine["origin"] == "given" else
+                             f"the {' x '.join(f'{value:g}' for value in machine['volume_mm'])} mm volume of "
+                             f"{machine['origin']}")}
 
 
 # --- findings and summary -------------------------------------------------------------------------------------

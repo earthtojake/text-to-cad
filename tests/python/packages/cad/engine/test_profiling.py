@@ -28,6 +28,9 @@ class ProfilingTest(unittest.TestCase):
         # A warm worker keeps its cwd open on Windows. Stop this class's own engine
         # before removing any fixture directory; all cases still share its warm daemon.
         cls.addClassCleanup(stop)
+        from tests.python.support import engine_daemon
+
+        engine_daemon.start()
 
     def setUp(self) -> None:
         self.folder = self.root / self._testMethodName

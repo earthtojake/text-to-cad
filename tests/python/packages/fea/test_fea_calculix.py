@@ -29,6 +29,14 @@ def _program(folder: Path, said: str) -> str:
     return str(path)
 
 
+def _silent(folder: Path) -> str:
+    """A ``ccx`` as the Windows build answers ``-v`` into a pipe: nothing printed, exit 201."""
+    path = folder / "ccx"
+    path.write_text("#!/bin/sh\nexit 201\n", encoding="utf-8")
+    path.chmod(path.stat().st_mode | stat.S_IEXEC)
+    return str(path)
+
+
 class FindCcx(unittest.TestCase):
     def test_a_setting_naming_no_file_says_so_and_how_to_install(self):
         with mock.patch.dict(os.environ, {calculix.CCX_ENV: "/no/such/ccx"}):
@@ -94,6 +102,23 @@ class FindCcx(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             program = _program(Path(name), "hello")
             with mock.patch.dict(os.environ, {calculix.CCX_ENV: program}):
+                with self.assertRaisesRegex(calculix.CalculixMissingError, "reports no version"):
+                    calculix.find_ccx()
+
+    @unittest.skipIf(sys.platform == "win32", "a shell script stands in for ccx")
+    def test_the_package_s_ccx_that_says_no_version_into_a_pipe_has_the_package_s(self):
+        # Windows' cad-ccx build prints its version to a console and nothing into a pipe (#871): its own ccx takes the
+        # CalculiX version the package carries; a silent program CAD_CCX names is still refused.
+        with tempfile.TemporaryDirectory() as name:
+            packaged = _silent(Path(name))
+            ccx = mock.Mock(executable=mock.Mock(return_value=Path(packaged)), version=mock.Mock(return_value="2.23"))
+            with mock.patch.dict(os.environ, {calculix.CCX_ENV: ""}), mock.patch.dict(sys.modules, {"cad_ccx": ccx}):
+                found = calculix.find_ccx()
+            self.assertEqual((found.path, found.version), (packaged, "2.23"))
+            other = Path(name) / "other"
+            other.mkdir()
+            named = _silent(other)
+            with mock.patch.dict(os.environ, {calculix.CCX_ENV: named}), mock.patch.dict(sys.modules, {"cad_ccx": ccx}):
                 with self.assertRaisesRegex(calculix.CalculixMissingError, "reports no version"):
                     calculix.find_ccx()
 

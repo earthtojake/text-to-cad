@@ -108,6 +108,18 @@ test("Flip turns the camera over the board's left-to-right axis, up kept: the ba
   close(flat.up, [0, 1, 0], "head on up");
 });
 
+test("Flip of a camera the orbit turned keeps it level, the world's up as it was on screen, up or down", () => {
+  // The 3D views' orbit leaves the camera its screen's own up, square to its view: kept, it would roll the
+  // turned camera, so the turned one has the world's up, or its opposite for a camera turned upside down.
+  const away = [3, -4, 2].map(value => value / Math.hypot(3, -4, 2));
+  const level = [-away[0] * away[2], -away[1] * away[2], 1 - away[2] * away[2]];
+  const screenUp = level.map(value => value / Math.hypot(...level));
+  const upright = cameraTurnedOver({ position: away, target: [0, 0, 0], up: screenUp });
+  close(upright.position, [away[0], -away[1], -away[2]], "eye");
+  close(upright.up, [0, 0, 1], "upright: the world's up");
+  close(cameraTurnedOver({ position: away, target: [0, 0, 0], up: screenUp.map(value => -value) }).up, [0, 0, -1], "upside down: still down");
+});
+
 test("entering 3D eases to a camera on the side the 2D view showed: Home's tilt from below for the bottom, a camera on the other side turned over as Flip turns it", () => {
   // The 3D views' Home, its direction a camera on the origin: from the top it is Home itself.
   const home = { position: [2.1, -1.65, 1.08], target: [0, 0, 0], up: [0, 0, 1] };

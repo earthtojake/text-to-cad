@@ -78,7 +78,7 @@ copying it elsewhere, counts the collision geoms and holds the commanded pose un
 
 An MJCF is MuJoCo's own file: cad writes it and checks it (`cad mujoco check out/so101/so101.xml`: what
 MuJoCo refuses or warns of, what collides as what, the contact excludes) and MuJoCo Studio shows it.
-The CAD Viewer shows the model and the plain URDF.
+The viewer shows the model and the plain URDF.
 
 Everything fetched or written lands in folders Git ignores (`upstream/`, `menagerie/`, `out/`,
 `reports/`): the repository holds the scripts alone, and every source is pinned by commit or by

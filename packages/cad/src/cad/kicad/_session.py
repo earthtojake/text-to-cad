@@ -352,6 +352,28 @@ def _no_library(nickname: str, table: Path, have: list[str]) -> str:
             "library's .kicad_sym file, and run the script again")
 
 
+def _unsettled() -> str:
+    """What a library that never settled says: one still loading, or not begun, when ``LIBRARY_SECONDS`` ran out."""
+    return f"it had not loaded after {LIBRARY_SECONDS:g} s"
+
+
+def _settled(kicad: Any, kind: Any) -> list:
+    """Each library's status once every one has settled, loaded or failed (``LLS_LOADED``, ``LLS_ERROR``), or
+    as they stand when ``LIBRARY_SECONDS`` runs out. KiPy's ``wait_for_libraries`` stops once none is
+    ``LLS_LOADING``, and the load ``load_all_libraries`` asks for runs in the background: asked before it
+    begins, KiCad answers ``LLS_INVALID``, with no message, for a library it then loads a moment later. A
+    library that cannot load says ``LLS_ERROR``, with KiCad's reason, at once."""
+    from kicode.proto.common.types.library_types_pb2 import LibraryLoadStatus  # pyrefly: ignore[missing-import]
+
+    final = {LibraryLoadStatus.LLS_LOADED, LibraryLoadStatus.LLS_ERROR}
+    deadline = time.monotonic() + LIBRARY_SECONDS
+    while True:
+        statuses = list(kicad.get_library_statuses(kind))
+        if all(status.status in final for status in statuses) or time.monotonic() >= deadline:
+            return statuses
+        time.sleep(_POLL)
+
+
 def _with_libraries(kicad: Any, schematic: Any, path: Path) -> Any:
     """The open schematic, its project's symbol libraries loaded first (headless, KiCad loads none until it is
     asked; its ``place_symbol_from_library`` says "symbol not found" until then), and a placement from a
@@ -362,12 +384,11 @@ def _with_libraries(kicad: Any, schematic: Any, path: Path) -> Any:
     from kicode.schematic import Schematic  # pyrefly: ignore[missing-import] - the kicad extra
 
     kicad.load_all_libraries(LibraryType.LT_SYMBOL)
-    statuses = kicad.wait_for_libraries(LibraryType.LT_SYMBOL, timeout_s=LIBRARY_SECONDS)
-    libraries = {status.nickname: status for status in statuses}
+    libraries = {status.nickname: status for status in _settled(kicad, LibraryType.LT_SYMBOL)}
     loaded = LibraryLoadStatus.LLS_LOADED
     for nickname, status in libraries.items():
         if status.status != loaded:
-            message = getattr(status, "error_message", "") or "it did not load"
+            message = getattr(status, "error_message", "") or _unsettled()
             print(f"warning: symbol library {nickname} did not load: {message}", file=sys.stderr)
     table = path.parent / "sym-lib-table"  # KiCad reads the project's own, in its folder
 
@@ -381,7 +402,7 @@ def _with_libraries(kicad: Any, schematic: Any, path: Path) -> Any:
                 raise LookupError(_no_library(nickname, table, sorted(libraries)))
             if status.status != loaded:
                 raise LookupError(f"symbol library {nickname!r} did not load: "
-                                  f"{getattr(status, 'error_message', '') or 'KiCad gave no reason'}")
+                                  f"{getattr(status, 'error_message', '') or _unsettled()}")
             return super().place_symbol_from_library(lib_id, *args, **options)
 
         def for_sheet(self, sheet: Any) -> Any:

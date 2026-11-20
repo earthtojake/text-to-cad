@@ -597,7 +597,7 @@ it: change it in the MuJoCo function where contact is wrong, never to steady the
 ## What is not supported
 
 - Compiled models (`.mjb`) and packages (`.mjz`): the check reads the XML, as MuJoCo compiles it.
-- An MJCF in the CAD Viewer or the CAD app, or a still of one: it is MuJoCo's own file. `cad mujoco
+- An MJCF in the viewer or the CAD app, or a still of one: it is MuJoCo's own file. `cad mujoco
   check` checks it, and MuJoCo Studio is where it is seen and where a simulation runs.
 - Converting between URDF and MJCF beyond what MuJoCo's own loader does with a URDF
   ([interoperability.md](interoperability.md#mjcf)). A robot with a CAD model is generated in each

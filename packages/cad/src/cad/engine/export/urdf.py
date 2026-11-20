@@ -66,7 +66,7 @@ A coupling is a ``<mimic>`` on the follower (``multiplier`` its ratio, ``offset`
 leader a joint that moves. URDF has no named states: the description's poses are not written (an
 SRDF's group states are where ROS keeps them). URDF is a tree and cannot close a loop: a joint
 that closes one (``description``'s **Loops**) is left out and said (``export.note``), and the loop's links
-hang open from the tree (the MJCF closes it). The CAD Viewer's ``<tcad:four_bar>`` extension is not
+hang open from the tree (the MJCF closes it). The viewer's ``<tcad:four_bar>`` extension is not
 written: it derives one rocker's angle from its driver and places no coupler link, and a generated loop
 has its coupler as a link of its own.
 

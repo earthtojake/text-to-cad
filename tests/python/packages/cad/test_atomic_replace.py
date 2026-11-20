@@ -309,6 +309,25 @@ class WriteBytesAtomicTest(unittest.TestCase):
             )
 
 
+# The one module allowed a bare ``os.replace``, by its path from the repository's root, and why.
+EXEMPT = {
+    # cad's update helper runs from the standard library alone (``python -I -S -c``) while uv replaces cad's
+    # files, so it cannot import the helper. Its rename writes no file: it moves a running cad.exe aside, under a
+    # name of its own, before uv runs. A rename that fails is skipped on purpose, and the helper's own tries of
+    # the install (``WAITS``) are its retry.
+    "packages/cad/src/cad_server/_internal/auto_update_helper.py",
+    # BRIDGE-ONLY: the global install moves the cad command of 0.10.0 to 0.11.11 aside before uv runs, and back where
+    # uv failed. Its rename writes no file either. The helper's fallback would copy the command and leave it where it
+    # was, so uv would refuse; a rename that fails is skipped, and uv then says why it refused.
+    "packages/cad/src/cad_server/_internal/tool_install.py",
+}
+RENAMES = re.compile(r"\bos\.replace\(|\.replace\(\s*target")
+
+
+def renames_directly(path: Path) -> bool:
+    return bool(RENAMES.search(re.sub(r"#[^\n]*", "", path.read_text(encoding="utf-8"))))
+
+
 class EveryRenameGoesThroughTheHelperTest(unittest.TestCase):
     """The point of the helper: one policy, not one per writer.
 
@@ -321,8 +340,9 @@ class EveryRenameGoesThroughTheHelperTest(unittest.TestCase):
         for path in sorted(path for source in SOURCES for path in source.rglob("*.py")):
             if path.name == "atomic_replace.py" or "__pycache__" in path.parts:
                 continue
-            source = re.sub(r"#[^\n]*", "", path.read_text(encoding="utf-8"))
-            if re.search(r"\bos\.replace\(|\.replace\(\s*target", source):
+            if path.relative_to(REPO_ROOT).as_posix() in EXEMPT:
+                continue
+            if renames_directly(path):
                 offenders.append(str(path.relative_to(REPO_ROOT)))
         self.assertEqual(
             [],
@@ -330,6 +350,13 @@ class EveryRenameGoesThroughTheHelperTest(unittest.TestCase):
             "use cad._internal.atomic_replace.replace_atomic: a bare os.replace loses to "
             "WinError 32 on an SMB share (issue #241)",
         )
+
+    def test_each_exemption_still_holds_a_direct_rename(self) -> None:
+        for name in sorted(EXEMPT):
+            with self.subTest(name=name):
+                path = REPO_ROOT / name
+                self.assertTrue(path.is_file(), f"{name} is gone: drop its exemption")
+                self.assertTrue(renames_directly(path), f"{name} no longer renames directly: drop its exemption")
 
 
 if __name__ == "__main__":

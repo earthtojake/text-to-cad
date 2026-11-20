@@ -19,6 +19,15 @@ import { agents } from "@/lib/content";
  */
 const DRIFT_SECONDS = 110;
 
+// An app with no logo in public/agents/: the first letter of each word of its name ("Qwen Code": QC).
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .map((word) => word[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
 export function AgentCarousel() {
   const strip = useRef<HTMLDivElement>(null);
 
@@ -121,17 +130,34 @@ export function AgentCarousel() {
   const logos = (copy: number) => (
     <ul className={copy ? "flex shrink-0 motion-reduce:hidden" : "flex shrink-0"} aria-hidden={copy ? true : undefined}>
       {agents.map((agent) => (
-        <li key={agent.logo} title={agent.name} className="flex select-none flex-col items-center gap-1 px-1">
+        <li key={agent.name} title={agent.name} className="flex select-none flex-col items-center gap-1 px-1">
           {/* Mask ids are per copy, so the second copy never points at the first's. */}
           <svg
             viewBox="0 0 100 100"
             aria-hidden="true"
             className="size-[72px] text-foreground [@media(min-width:64rem)_and_(min-height:44rem)]:size-[88px]"
           >
-            <mask id={`agent-logo-${copy}-${agent.logo}`}>
-              <image href={`/agents/${agent.logo}.svg`} width="100" height="100" />
-            </mask>
-            <rect width="100" height="100" fill="currentColor" mask={`url(#agent-logo-${copy}-${agent.logo})`} />
+            {agent.logo ? (
+              <>
+                <mask id={`agent-logo-${copy}-${agent.logo}`}>
+                  <image href={`/agents/${agent.logo}.svg`} width="100" height="100" />
+                </mask>
+                <rect width="100" height="100" fill="currentColor" mask={`url(#agent-logo-${copy}-${agent.logo})`} />
+              </>
+            ) : (
+              // No logo of its own: its initials, in the text colour, where a glyph would be.
+              <text
+                x="50"
+                y="50"
+                textAnchor="middle"
+                dominantBaseline="central"
+                fill="currentColor"
+                fontSize="30"
+                fontWeight="600"
+              >
+                {initials(agent.name)}
+              </text>
+            )}
           </svg>
           <span className="whitespace-nowrap text-center text-xs leading-4 text-muted-foreground">{agent.name}</span>
         </li>

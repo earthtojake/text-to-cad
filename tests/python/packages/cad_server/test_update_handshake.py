@@ -1,18 +1,19 @@
 """The update's handshake between releases, frozen (``update_handshake.json``).
 
-Nothing on a device compares versions any more: an update is release A's engine running release B's
-code, and B's reading what A wrote. A's engine runs B's ``setup --engine-update`` and reads its
-progress frames; A's helper starts B's engine with B's Python by the daemon module's name, asks it
-``status`` and ``http``, stops it with ``stop`` (``drain``), and runs the release it leaves current's
-``plugin --refresh`` (the plugin folder following it); B reads the ``current`` file, the installation
-records, the release folders, the token and the switch's record that A wrote. And across the
-update, what A's pages and a host's kept card shell read of B's engine over HTTP (``http``): the
-page a tab is at (``/<id>``), the CAD app's module a kept shell imports (``/app``), and
-``GET /api/v1/server``'s ``release`` and ``instance`` (with ``notice`` and ``update``), which a page
-reloads on and a card follows its update by. So all of
-it must stay as it is across releases, and this test fails when any of it changes: a change here is
-one made on purpose, for every release still installed, never one made in passing. Change the golden
-file with it, and say in the change why releases before it still update.
+cad updates itself as a global install from 0.11.12 on, but the updaters of 0.10.0 to 0.11.11 are frozen on devices:
+an update is release A's code running release B's, and B's reading what A wrote. Such an updater runs B's ``setup
+--engine-update`` from the flat release folder it made (with ``CAD_UPDATE_PREPARE=1`` first, for an automatic
+update) and reads its exit status (progress frames on its standard output are optional: it skips any line that is
+none); its helper starts B's engine with the Python the ``current`` mirror's record names, by the daemon module's
+name, asks it ``status`` and ``http``, stops it with ``stop`` (``drain``), and runs B's ``plugin --refresh``, whose
+failure it only logs (B has no ``cad plugin``); B reads the ``current`` file, the installation records, the flat
+release folders and the token those releases wrote. And across the update, what A's pages and a host's kept card
+shell read of B's engine over HTTP (``http``): the page a tab is at (``/<id>``), the CAD app's module a kept shell
+imports (``/app``), and ``GET /api/v1/server``'s ``release`` and ``instance``, which a page reloads on (A's pages
+read its ``notice`` and ``update`` with optional chaining: B sends neither). So all of it must stay as it is across
+releases, and this test fails when any of it changes: a change here is one made on purpose, for every release still
+installed, never one made in passing. Change the golden file with it, and say in the change why releases before it
+still update.
 """
 
 from __future__ import annotations
@@ -79,20 +80,16 @@ def http_surface() -> dict:
 
 def surface() -> dict:
     """The handshake as this source tree has it."""
-    from cad_server._internal import installations, releases, switch, update
-    from cad_server.cli import plugin as plugin_cli
+    from cad_server._internal import installations, releases
     from cad_server.cli import setup as setup_cli
-    from cad_server.cli import update as update_cli
-    from cad.engine import client, places, progress
+    from cad.engine import client
     from cad_server.engine import daemon, registry
     from cad_server.viewer.engine_app import EngineApp
 
-    # A client of one release starting the current installation's engine: its Python, these arguments.
-    current = {"python": "PYTHON", "prefix": os.path.abspath("elsewhere"), "version": "9.9.9"}
-    with mock.patch.object(places, "engine", lambda: current), \
-            mock.patch.object(subprocess, "Popen", side_effect=Started) as popen:
+    # A server started by this release (``client.start``): its Python, these arguments, as the helper starts one.
+    with mock.patch.object(subprocess, "Popen", side_effect=Started) as popen:
         try:
-            client._start()
+            client._spawn(None)
         except Started:
             pass
     started = popen.call_args.args[0]
@@ -111,7 +108,7 @@ def surface() -> dict:
     # What A writes and B reads.
     state = installations.state()
     root = Path(state.path(installations.FOLDER)).parent
-    folder = releases.where("9.9.9")
+    folder = releases.root() / "9.9.9"
     python, console = releases.base.interpreter(folder), releases.console(folder)
     python.parent.mkdir(parents=True, exist_ok=True)
     for path in (python, console):
@@ -119,20 +116,9 @@ def surface() -> dict:
     installations.register("9.9.9", (str(console), str(python), str(folder)))
     installations.point("9.9.9")
     record = json.loads((root / installations.FOLDER / "9.9.9.json").read_text(encoding="utf-8"))
-    frame = progress.event("update", "build123d", job="9.9.9", detail="d", done=1, total=4)
-    # What the helper runs of the release it leaves current: its own plugin folder's refresh.
-    with mock.patch.object(subprocess, "run", side_effect=Started) as run:
-        try:
-            switch.follow(told=lambda _line: None)
-        except Started:
-            pass
     return {
-        "setup": {"command": "setup", "engine_update_flag": "--engine-update",
+        "setup": {"command": "setup", "engine_update_flag": "--engine-update", "prepare_env": setup_cli.PREPARE_ENV,
                   "flags": _flags(setup_cli.build_parser())},
-        "update": {"command": "update", "flags": _flags(update_cli.build_parser())},
-        "plugin": {"arguments": run.call_args.args[0][1:], "flags": _flags(plugin_cli.build_parser())},
-        "progress": {"line": sorted({"progress": frame}), "frame": sorted(frame), "kind": frame["kind"],
-                     "stages": list(update.STAGES)},
         "daemon": {"arguments": started[1:], "module": client.DAEMON_MODULE},
         "http": http_surface(),
         "ops": {"status": sorted(key for key in ("ok", "pid", "prefix", "serving", "installation", "version")
@@ -148,8 +134,6 @@ def surface() -> dict:
             "release_marker": releases.MARKER,
             "release_schema": releases.SCHEMA,
             "release_command": console.relative_to(folder).as_posix(),
-            "switch_record": switch.RESULT,
-            "switch_log": switch.LOG,
         },
     }
 

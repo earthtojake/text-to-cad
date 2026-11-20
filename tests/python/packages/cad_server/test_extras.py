@@ -24,7 +24,7 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
-from tests.python.support import engine_daemon
+from tests.python.support import engine_daemon, uv_cache
 from tests.python.support.paths import add_sources
 
 add_sources()
@@ -174,7 +174,7 @@ class NamingTest(unittest.TestCase):
         sent: list = []
         with mock.patch.object(integration_env, "carries", return_value=False), \
                 mock.patch.object(extras, "making", lambda spec: (sent.append(spec.integrations), Making())[1]), \
-                mock.patch.object(integration_env, "environment", return_value="/env/bin/python"):
+                mock.patch.object(extras, "ensure", return_value=base.Environment("/env/bin/python", "/env", False)):
             Daemon.integration({"op": "integration", "integration": "coacd"}, sent.append)
             self.assertEqual(sent, [("coacd",), {"log": "making the coacd integration's environment, once"},
                                     {"ok": True, "python": "/env/bin/python"}])
@@ -212,6 +212,25 @@ class NamingTest(unittest.TestCase):
         for recipe in (kicad, both, bare, packages):
             self.assertNotIn("nothing more", recipe.making + recipe.downloading + (recipe.unsatisfiable or ""))
 
+    def test_an_environment_that_names_no_python_is_made_on_the_bases(self) -> None:
+        """No ``--python``: the base's Python (``base.kernel_python``), so on a server newer than cad's line a
+        program's environment is made on cad's line, a Python uv manages, as the base is; a ``--python`` and uv's
+        own Python options stand as given."""
+        from cad_server._internal.launch import PYTHON
+
+        here = base.dataclasses.replace(base.Installation.here(), python=PYTHON + ".0")
+        newer = base.dataclasses.replace(here, python="3.15.0")
+        spec = extras.Spec(requirements=("pandas",))
+        self.assertEqual((extras.recipe(here, spec).python, extras.recipe(here, spec).venv_options),
+                         (here.executable, ()))
+        self.assertEqual((extras.recipe(newer, spec).python, extras.recipe(newer, spec).venv_options),
+                         (PYTHON, ("--managed-python",)))
+        system = dataclasses.replace(spec, python_options=("--no-managed-python",))
+        self.assertEqual((extras.recipe(newer, system).python, extras.recipe(newer, system).venv_options),
+                         (PYTHON, ("--no-managed-python",)))
+        asked = dataclasses.replace(spec, python="3.12")
+        self.assertEqual((extras.recipe(newer, asked).python, extras.recipe(newer, asked).venv_options), ("3.12", ()))
+
     def test_uv_s_refusals_are_one_line_with_its_reason_or_the_package_its_cache_lacks(self) -> None:
         recipe = extras.recipe(base.Installation.here(), ["build123d<0.1"])
         conflict = ("error: No solution found when resolving dependencies\n"
@@ -247,7 +266,9 @@ class NamingTest(unittest.TestCase):
                          "uv could not make the environment of the model's packages, from its cache, then from the "
                          "network: Downloaded numpy (the last of what uv said; the rest is kept nowhere)")
 
-    def test_making_one_removes_releases_older_than_the_one_before_but_the_bases_and_one_a_process_runs_from(self) -> None:
+    def test_making_one_removes_only_the_one_an_edit_superseded_never_another_release_s(self) -> None:
+        # cad removes nothing of a past release by itself: what goes is its own environment an edit to a local
+        # package made again, unless a process runs from it.
         folder = Path(tempfile.mkdtemp(prefix="extras-collect-"))
         self.addCleanup(shutil.rmtree, folder, True)
 
@@ -262,27 +283,18 @@ class NamingTest(unittest.TestCase):
             (env / base.MARKER).write_text(json.dumps(marker), encoding="utf-8")
             return env
 
-        old = made("old", "0.8.0", ["pandas"])
-        dead = made("dead", "0.10.0", ["bpy"])
-        base.interpreter(dead).unlink()  # its Python, one uv managed, since uninstalled: no run can use it again
         superseded = made("edited", "0.10.0", ["/w/gears"], {"/w/gears": "before"})
+        made("held", "0.10.0", ["/w/gears"], {"/w/gears": "older"})
         now = made("now", "0.10.0", ["/w/gears"], {"/w/gears": "after"})
-        for name, release, given in (("held", "0.8.0", ["scipy"]), ("same", "0.10.0", ["pandas"]),
-                                     ("before", "0.9.0", ["pandas"]), ("base", "0.8.0", None)):
+        for name, release, given in (("old", "0.8.0", ["/w/gears"]), ("other", "0.10.0", ["pandas"]),
+                                     ("base", "0.8.0", None)):
             made(name, release, given)
-        with mock.patch("cad_server._internal.switch.last", return_value=None):
-            keep = extras.kept(folder, "0.10.0")
-        self.assertEqual(keep, {"0.10.0", "0.9.0"}, "the current release and the one before it: the way back")
-        with mock.patch("cad_server._internal.switch.last", return_value={"from": "0.8.0", "to": "0.10.0", "ok": True}):
-            self.assertEqual(extras.kept(folder, "0.10.0"), {"0.10.0", "0.8.0"}, "the release the update came from")
         with mock.patch("cad_server._internal.releases.running", side_effect=lambda env: Path(env).name == "held"):
-            self.assertEqual(sorted(extras._collect(folder, keep, made=now, spec=extras.Spec(requirements=("/w/gears",)),
-                                                    inputs={"release": "0.10.0"})),
-                             sorted([str(superseded), str(old), str(dead)]))
-        self.assertEqual(sorted(path.name for path in folder.iterdir()), ["base", "before", "held", "now", "same"],
-                         "the release before's stay; a base is its release's to remove; one a process runs from "
-                         "goes at a later making; the environments of other packages stay; one whose Python is "
-                         "gone goes, of whatever release")
+            self.assertEqual(extras._collect(folder, now, extras.Spec(requirements=("/w/gears",)), {"release": "0.10.0"}),
+                             [str(superseded)])
+        self.assertEqual(sorted(path.name for path in folder.iterdir()), ["base", "held", "now", "old", "other"],
+                         "another release's stays; one a process runs from goes at a later making; the "
+                         "environments of other packages stay")
         self.assertEqual(extras._changed(folder, {"release": "0.10.0"}, extras.Spec(requirements=("/w/gears",)),
                                          {"/w/gears": "later"}),
                          ["/w/gears"], "the line that makes it again names the local package edited")
@@ -593,13 +605,14 @@ if __name__ == "__main__":
 
 
 class RunWithTest(unittest.TestCase):
-    """The real uv, offline: nothing here reaches the network."""
+    """The real uv, offline: nothing here reaches the network, but for the cache's warming before (``uv_cache.warm``)."""
 
     @classmethod
     def setUpClass(cls) -> None:
-        engine_daemon.isolate(cls.addClassCleanup)
+        engine_daemon.isolate(cls.addClassCleanup, started=False)  # its server is the one offline, below
         cls.project = Path(tempfile.mkdtemp(prefix="run-with-")).resolve()
         cls.addClassCleanup(shutil.rmtree, cls.project, True)
+        uv_cache.warm(cls.project)
         cls.wheel = _wheel(cls.project)
         cls.env = engine_daemon.watched({**os.environ, "UV_OFFLINE": "1", "CAD_ENGINE_MESH": "inline"},
                                         cls.addClassCleanup)

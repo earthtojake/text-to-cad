@@ -96,7 +96,8 @@ KINDS: dict[str, type] = {
     "material": str, "units": str, "axes": int, "turning": bool, "tools": str, "stock": str,
     "thickness": float, "k_factor": float, "bend_radius": float, "kerf": float, "sheet_size": str, "pull": str,
     "wall_limit": float, "zero_tol": float, "cavities": int, "technology": str, "build_volume": str,
-    "angle_limit": float, "samples": int, "layer_height": float, "nozzle": float}
+    "angle_limit": float, "samples": int, "layer_height": float, "nozzle": float,
+    "printer": str}
 # Raised, not asserted: the signature and the command's choices are these, under ``python -O`` too.
 if get_args(Process) != PROCESSES:
     raise RuntimeError(f"manufacturing.Process {get_args(Process)} is not dfm.PROCESSES {PROCESSES}")
@@ -157,6 +158,11 @@ def _spelled(given: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value, (list, tuple)) and value and all(
                 isinstance(part, (int, float)) and not isinstance(part, bool) for part in value):
             spelled[name] = joint.join(repr(part) for part in value)
+    if isinstance(spelled.get("printer"), os.PathLike):
+        spelled["printer"] = os.fspath(spelled["printer"])
+    if isinstance(spelled.get("printer"), str):
+        # a file is read where it is named from: the caller's working directory, not an engine's it is sent to
+        spelled["printer"] = os.path.abspath(spelled["printer"])
     if isinstance(spelled.get("material"), str):
         spelled["material"] = _material(spelled["material"])
     return spelled
@@ -182,9 +188,9 @@ def _material(name: str) -> str:
 
 
 #: An end mill over this across (mm) is none a mill holds: a value above it is a mistake of units or a typo
-#: (text-to-cad's own bound: standard end mills end near 50 mm, the widest indexable ones under 100).
+#: (cad's own bound: standard end mills end near 50 mm, the widest indexable ones under 100).
 TOOL_MAX_MM = 100.0
-#: A powder or resin machine lays no layer over this (mm; text-to-cad's own bound: SLA, SLS, MJF and metal
+#: A powder or resin machine lays no layer over this (mm; cad's own bound: SLA, SLS, MJF and metal
 #: powder bed fusion layers are 0.02 to 0.3 mm). FDM's is its nozzle's diameter.
 LAYER_MAX_MM = 0.5
 FDM_NOZZLE_MM = 0.4
@@ -439,9 +445,9 @@ def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str
         found.append(CheckFinding(
             "info", "rules_general",
             f"the verdicts are {rule_set.title} (version {rule_set.version}): general practice drawn from "
-            f"published design guides, and text-to-cad's own floors where no guide states a limit (each "
+            f"published design guides, and cad's own floors where no guide states a limit (each "
             f"labelled by its source), no shop's limits", "rules",
-            "for a named shop, compare the measurements with its own published limits, or use its skill"))
+            "for a named shop, compare the measurements with its own published limits"))
     try:
         # allow_nan=False: a NaN is not JSON, and a report a parser rejects is worse than one that says it failed.
         json.dumps(report, allow_nan=False)
@@ -768,6 +774,7 @@ def through_engine(document_type: str, source: Any, process: str | None, given: 
     label = _label(source)
     if isinstance(source, (str, os.PathLike)) and label.is_absolute() and not label.is_file():
         return _failed(label, "file not found", "invalid_target")
+    given = _spelled(given)
     resolved = options(document_type, process, given, candidates=candidates)
     return _held(document_type, source, process, resolved, candidates, given, label, local=False, strict=strict)
 
@@ -837,7 +844,7 @@ _HELP = {
     "axes": "cnc: the milling machine's axes, 3, 4 or 5; default 3.",
     "turning": "cnc: the part is turned on a lathe (its axis found), not milled.",
     "tools": "cnc: the end mill diameters available, in mm, comma separated (3,6,10); default none: a corner "
-             "is held to the smallest tool that can exist (0.05 mm across, text-to-cad's own floor) and to how "
+             "is held to the smallest tool that can exist (0.05 mm across, cad's own floor) and to how "
              "deep a tool of its size reaches; a radius of 1.25 mm or more (a 2.5 mm end mill's) is recommended.",
     "stock": "cnc: the stock's size in mm (100x60x25); default the part's box.",
     "thickness": "sheet: the stock's thickness in mm; default measured.",
@@ -859,6 +866,8 @@ _HELP = {
     "samples": "printing: rays cast for the wall-thickness field on a mesh; default 2000.",
     "layer_height": "printing: the layer height in mm, for stair-stepping; default the technology's.",
     "nozzle": "printing: fdm's nozzle diameter in mm; default 0.4.",
+    "printer": "printing: a file of the printer's settings -- a 3MF OrcaSlicer or Bambu Studio saved, or a complete "
+               "machine preset JSON -- for its build volume and nozzle; --build-volume and --nozzle win.",
 }
 # The enumerations among the options: the command's choices.
 _ENUMS: dict[str, Any] = {"units": Unit, "technology": Technology}
@@ -996,6 +1005,7 @@ def called(document_type: str, signature: inspect.Signature, args: tuple[Any, ..
     from cad._internal.dfm import _common
 
     _common.require_bool("strict", strict)
+    given = _spelled(given)
     resolved = options(document_type, process, given, candidates=candidates)
     if process is None and resolved is not None:
         process = processes_for(document_type)[0]

@@ -56,14 +56,14 @@ When a description references exported mesh assets, record in its ledger:
 In URDF:
 
 - **Local relative paths** (`3MF/forearm_link.3mf`) resolve from the `.urdf` file's directory. Preferred for a robot kept in a project tree — the bundled validator verifies these files exist.
-- **`package://name/path` URIs** are for ROS-package consumers. The validator checks syntax only and warns that resolution is consumer-specific (`--packages NAME=PATH` resolves them for the validator alone); confirm the consuming environment resolves the package root as expected. The CAD Viewer and `cad urdf snapshot` take the nearest folder above the `.urdf` named `name`, or holding a `package.xml` that names it, as the package root, so keep the description inside its package folder.
+- **`package://name/path` URIs** are for ROS-package consumers. The validator checks syntax only and warns that resolution is consumer-specific (`--packages NAME=PATH` resolves them for the validator alone); confirm the consuming environment resolves the package root as expected. The viewer and `cad urdf snapshot` take the nearest folder above the `.urdf` named `name`, or holding a `package.xml` that names it, as the package root, so keep the description inside its package folder.
 - Remote URIs are accepted with warnings; avoid them for durable fixtures.
 
 In MJCF, a mesh `file` resolves from the `<compiler meshdir>`, itself relative to the model file: keep the meshes in that folder, beside the model ([mjcf-authoring.md](mjcf-authoring.md)).
 
 Keep mesh files under the same model directory tree as the description, so the file and its assets move together.
 
-What the CAD Viewer and the snapshots draw is narrower than what the validators accept: a local STL, 3MF or GLB file, beside the description or in its package (`package://`, above), and the `box`, `cylinder` and `sphere` primitives, which the server meshes itself. A `.dae`, `.obj` or `.ply` mesh, a remote URI, a package no folder above the description is, or a missing file is refused by name before anything renders — convert the mesh, or keep a rendering copy of the robot whose meshes sit beside it. Each format's full list is in [snapshots.md](snapshots.md).
+What the viewer and the snapshots draw is narrower than what the validators accept: a local STL, 3MF or GLB file, beside the description or in its package (`package://`, above), and the `box`, `cylinder` and `sphere` primitives, which the server meshes itself. A `.dae`, `.obj` or `.ply` mesh, a remote URI, a package no folder above the description is, or a missing file is refused by name before anything renders — convert the mesh, or keep a rendering copy of the robot whose meshes sit beside it. Each format's full list is in [snapshots.md](snapshots.md).
 
 An MJCF's meshes are MuJoCo's to read: STL, OBJ or MSH files, found under the compiler's `meshdir` (or `assetdir`) beside the main file. A 3MF or GLB is no MuJoCo mesh at all: export the link as STL (`cad model export <id> link.stl`). No `cad` view draws an MJCF; `cad mujoco check` says a mesh file MuJoCo cannot find or read. MuJoCo hulls every mesh it collides, so an MJCF's collision mesh is its convex hull whatever its shape ([mjcf-authoring.md](mjcf-authoring.md#visual-and-collision-geoms)).
 

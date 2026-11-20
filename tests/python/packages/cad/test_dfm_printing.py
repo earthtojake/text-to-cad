@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import re
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 import build123d as bd
@@ -107,7 +110,7 @@ class OverhangTest(unittest.TestCase):
         knife = next(f for f in result.findings if f.code == "printing.knife_edge")
         self.assertEqual(knife.severity, "warning", "the 30 deg tip is a knife, reported once: it prints rounded")
         self.assertIn("the tip prints rounded", knife.message)
-        self.assertTrue(knife.source.startswith("text-to-cad, its own figure"), knife.source)  # no publisher's
+        self.assertTrue(knife.source.startswith("cad, its own figure"), knife.source)  # no publisher's
 
     def test_the_overhang_rule_follows_the_angle_limit_given(self) -> None:
         # a 50 deg underside: over FDM's cited 45, under a printer's 55 given; a 30 deg one passes a 25 given
@@ -880,7 +883,7 @@ class RulesTest(unittest.TestCase):
                     self.assertEqual((walls[0].value, walls[0].limit, walls[0].unit, walls[0].op), (0.6, 0.8, "mm", "min"))
                 elif walls:
                     self.assertIn("2 beads of the 0.6 mm nozzle given", walls[0].message)
-                    self.assertTrue(walls[0].source.startswith("text-to-cad, its own figure"), walls[0].source)
+                    self.assertTrue(walls[0].source.startswith("cad, its own figure"), walls[0].source)
                     self.assertEqual((walls[0].value, walls[0].limit), (0.6, 1.2))
 
     def test_rules_with_no_figure_for_the_technology_judge_nothing_and_say_so(self) -> None:
@@ -920,6 +923,137 @@ class RulesTest(unittest.TestCase):
         assumed = rules.machine_volume({"technology": "pbf"})
         self.assertEqual(assumed["volume_mm"], [250.0, 150.0, 150.0])
         self.assertTrue(assumed["origin"].startswith("assumed"))
+
+
+class PrinterFileTest(unittest.TestCase):
+    """``--printer FILE``: the printer's volume and nozzle read from a slicer's 3MF or a machine preset JSON."""
+
+    SETTINGS = {"printable_area": ["0x0", "256x0", "256x256", "0x256"], "printable_height": "250",
+                "nozzle_diameter": ["0.4"], "printer_settings_id": "Test X1 0.4 nozzle"}
+
+    def setUp(self) -> None:
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.root = Path(self.folder.name)
+
+    def threemf(self, settings: dict, name: str = "job.gcode.3mf") -> Path:
+        path = self.root / name
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("3D/3dmodel.model", "<model/>")
+            archive.writestr("Metadata/project_settings.config", json.dumps(settings))
+        return path
+
+    def preset(self, settings: dict, name: str = "machine.json") -> Path:
+        path = self.root / name
+        path.write_text(json.dumps(settings), encoding="utf-8")
+        return path
+
+    def test_a_3mf_and_a_json_give_the_volume_and_the_nozzle(self) -> None:
+        preset = {"name": "Test preset", **{k: v for k, v in self.SETTINGS.items() if k != "printer_settings_id"}}
+        for path, name in ((self.threemf(self.SETTINGS), "Test X1 0.4 nozzle"),
+                           (self.preset(self.SETTINGS), "Test X1 0.4 nozzle"),
+                           (self.preset(preset, "named.json"), "Test preset")):
+            resolved = manufacturing.options("stl", "printing", {"printer": path})
+            with self.subTest(path=path.name):
+                self.assertEqual((resolved["build_volume"], resolved["nozzle"]), ("256x256x250", 0.4))
+                self.assertEqual(resolved["printer"], {"name": name, "file": str(path),
+                                                       "supplied": ["build_volume", "nozzle"]})
+                machine = rules.machine_volume(resolved)
+                self.assertEqual(machine["volume_mm"], [256.0, 256.0, 250.0])
+                self.assertEqual(machine["origin"], f"printer {name} ({path})")
+        self.assertEqual(rules.printer_settings(self.preset({**self.SETTINGS, "name": "", "printer_settings_id": ""},
+                                                            "bare.json"))["name"], "bare.json")
+
+    def test_the_bed_polygon_and_the_comma_joined_forms(self) -> None:
+        settings = {"printable_area": "10x5,266x5,266x261,10x261", "printable_height": 300,
+                    "nozzle_diameter": "0.6,0.4"}
+        printer = rules.printer_settings(self.preset(settings))
+        self.assertEqual((printer["volume_mm"], printer["nozzle"]), ([256.0, 256.0, 300.0], 0.6))
+        no_nozzle = rules.printer_settings(self.preset({k: v for k, v in settings.items() if k != "nozzle_diameter"}))
+        self.assertIsNone(no_nozzle["nozzle"])
+        resolved = manufacturing.options("stl", "printing", {"printer": self.preset(settings, "b.json")})
+        self.assertEqual(resolved["nozzle"], 0.6)
+
+    def test_over_the_printer_s_volume_is_an_error_naming_the_printer(self) -> None:
+        path = self.threemf(self.SETTINGS)
+        long_bar = bd.Box(500, 20, 10, align=A)
+        result = check(long_bar, "bar", printer=path)
+        fit = result.measurements["build_volume"]
+        self.assertEqual((fit["fits"], fit["volume_mm"]), (False, [256.0, 256.0, 250.0]))
+        self.assertEqual(fit["volume_origin"], f"printer Test X1 0.4 nozzle ({path})")
+        [found] = [f for f in result.findings if f.code == "printing.build_volume"]
+        self.assertEqual(found.severity, "error")
+        self.assertIn("256 x 256 x 250 mm volume of printer Test X1 0.4 nozzle", found.message)
+        self.assertNotIn("machine given", found.message)
+        self.assertFalse(result.ok)
+        self.assertTrue(check(bd.Box(240, 20, 10, align=A), "bar", printer=str(path)).ok)
+
+    def test_build_volume_and_nozzle_given_win(self) -> None:
+        path = self.threemf({**self.SETTINGS, "nozzle_diameter": ["0.6"]})
+        resolved = manufacturing.options("stl", "printing", {"printer": path, "build_volume": "100x100x100",
+                                                              "nozzle": 0.25})
+        self.assertEqual((resolved["build_volume"], resolved["nozzle"], resolved["printer"]["supplied"]),
+                         ("100x100x100", 0.25, []))
+        bar = bd.Box(150, 20, 10, align=A)
+        result = check(bar, "bar", printer=path, build_volume="100x100x100")
+        self.assertEqual(result.measurements["build_volume"]["volume_origin"], "given")
+        self.assertIn("machine given", next(f for f in result.findings if f.code == "printing.build_volume").message)
+        self.assertTrue(check(bar, "bar", printer=path).ok, "150 mm fits the printer's 256")
+
+    def test_the_printer_s_nozzle_is_a_nozzle_given(self) -> None:
+        fin = bd.Box(20, 20, 2, align=A) + bd.Pos(0, 0, 2) * bd.Box(0.6, 15, 10, align=A)
+        result = check(fin, "fin", printer=self.threemf({**self.SETTINGS, "nozzle_diameter": ["0.6"]}))
+        self.assertEqual(result.measurements["knife_edges"]["min_wall_mm"], 1.2)
+        [wall] = [f for f in result.findings if f.code == "printing.wall_unsupported"]
+        self.assertIn("2 beads of the 0.6 mm nozzle given", wall.message)
+
+    def test_a_file_that_is_no_printer_is_refused_naming_it(self) -> None:
+        plain = self.root / "plain.3mf"
+        with zipfile.ZipFile(plain, "w") as archive:
+            archive.writestr("3D/3dmodel.model", "<model/>")
+        text = self.root / "notes.txt"
+        text.write_text("not json", encoding="utf-8")
+        listed = self.root / "list.json"
+        listed.write_text("[1]", encoding="utf-8")
+        child = self.preset({"name": "child", "inherits": "Parent 0.4", "nozzle_diameter": ["0.4"]}, "child.json")
+        for path, said in ((self.root / "gone.3mf", "gone.3mf is not a file"),
+                           (plain, "plain.3mf holds no Metadata/project_settings.config"),
+                           (text, "notes.txt is neither a 3MF"), (listed, "list.json is JSON but not an object"),
+                           (self.preset({"nozzle_diameter": ["0.4"]}, "bare.json"),
+                            "bare.json holds no printable_area, printable_height"),
+                           (self.preset({"printable_area": ["0x0", "9"], "printable_height": "5"}, "points.json"),
+                            "points.json: printable_area is points"),
+                           (self.preset({**self.SETTINGS, "nozzle_diameter": ["wide"]}, "nozzle.json"),
+                            "nozzle.json: nozzle_diameter is a length"),
+                           (self.preset({**self.SETTINGS, "printable_height": "0"}, "flat.json"),
+                            "not three lengths above 0")):
+            with self.subTest(path=path.name), self.assertRaisesRegex(ValueError, said):
+                manufacturing.options("stl", "printing", {"printer": path})
+            with self.subTest(path=path.name), self.assertRaisesRegex(ValueError, re.escape(str(path))):
+                manufacturing.options("stl", "printing", {"printer": path})
+        with self.assertRaisesRegex(ValueError, r"a preset holding only its differences from 'Parent 0\.4'.*give a 3MF "
+                                                r"the slicer saved.*--build-volume and --nozzle"):
+            manufacturing.options("stl", "printing", {"printer": child})
+
+    def test_only_fdm_takes_a_printer(self) -> None:
+        with self.assertRaisesRegex(ValueError, "--printer is FDM's"):
+            manufacturing.options("step", "printing", {"printer": self.threemf(self.SETTINGS), "technology": "sla"})
+        with self.assertRaisesRegex(ValueError, "printer is FDM's"):
+            check(bd.Box(10, 10, 10), "box", printer=self.threemf(self.SETTINGS), technology="mjf")
+        with self.assertRaisesRegex(ValueError, "--printer is not cnc's"):
+            manufacturing.options("step", "cnc", {"printer": self.threemf(self.SETTINGS)})
+
+    def test_a_relative_path_is_made_absolute_where_it_is_given(self) -> None:
+        path = self.threemf(self.SETTINGS)
+        before = os.getcwd()
+        os.chdir(self.root)
+        self.addCleanup(os.chdir, before)
+        resolved = manufacturing.options("stl", "printing", {"printer": path.name})
+        self.assertEqual(resolved["printer"]["file"], os.path.abspath(path.name))
+        spelled = manufacturing._spelled({"printer": Path(path.name)})
+        self.assertEqual(spelled["printer"], os.path.abspath(path.name), "an unresolved option sent on")
+        with self.assertRaisesRegex(ValueError, "--printer is text, not 3"):
+            manufacturing.options("stl", "printing", {"printer": 3})
 
 
 class SeamTest(unittest.TestCase):

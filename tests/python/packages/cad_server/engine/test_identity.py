@@ -224,7 +224,8 @@ class ReattachmentDaemonTest(unittest.TestCase):
         self.env = {**os.environ, "CAD_ENGINE_DIR": engine, "CAD_STATE_DIR": str(self.folder / "state"),
                     "CAD_CACHE_DIR": str(self.folder / "cache"), "CAD_LAUNCHER_DIR": str(self.folder / "bin"),
                     "CAD_ENGINE_PORT": "0", "CAD_ENGINE_STANDBY": "0", "DO_NOT_TRACK": "1"}
-        engine_daemon.register(self.env["CAD_STATE_DIR"])  # the installation whose engine its runs start
+        engine_daemon.register(self.env["CAD_STATE_DIR"])
+        engine_daemon.start(self.env)
         self.addCleanup(self.stop)
         self.registry = Registry(self.env["CAD_STATE_DIR"], self.env["CAD_CACHE_DIR"])
 
@@ -232,6 +233,7 @@ class ReattachmentDaemonTest(unittest.TestCase):
         engine_daemon.run([sys.executable, "-m", "cad_server.engine", "stop"], env=self.env)
 
     def run_script(self, script, warm=False):
+        engine_daemon.start(self.env)  # again after a stop: a restart
         done = engine_daemon.run([sys.executable, str(script)], env=self.env)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         if warm:

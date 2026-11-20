@@ -1,0 +1,25 @@
+# The distribution named cad-mcp, an alias of cad, still published at every release: it is cad at this very release,
+# which carries the stdio transport (`cad_mcp`), and keeps the one command it always had, `cad-mcp`, so whatever starts
+# the CAD app by that name still finds it. No module of its own.
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cad-mcp"
+version = "0.11.13"
+description = "Alias of cad, still published: installs cad at the same release and keeps the cad-mcp command."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "earthtojake" }]
+dependencies = ["cad==0.11.13"]
+
+[project.urls]
+Homepage = "https://github.com/earthtojake/text-to-cad"
+
+[project.scripts]
+cad-mcp = "cad_mcp.shim:main"
+
+[tool.setuptools]
+packages = []

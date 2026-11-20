@@ -33,7 +33,7 @@ add_repo_path("packages/cad/src")
 from cad import kicad_pcb, kicad_sch  # noqa: E402
 from cad.kicad import _program, _session  # noqa: E402
 
-LOADED, ERROR, SYMBOL = "loaded", "error", "symbol"
+LOADED, ERROR, INVALID, SYMBOL = "loaded", "error", "invalid", "symbol"
 CLI = Path("kicad-cli")
 
 
@@ -71,6 +71,7 @@ class _KiCad:
         self.loading = 2  # the getter's "not ready" answers, while the server loads the file
         self.dialing = 3  # ping's connection errors, before the server listens
         self.libraries = {"test": LOADED}
+        self.unsettled = 0  # status answers before the background load begins: every library LLS_INVALID, no reason
 
 
 def _kicode(state: _KiCad) -> dict[str, types.ModuleType]:
@@ -150,8 +151,11 @@ def _kicode(state: _KiCad) -> dict[str, types.ModuleType]:
         def load_all_libraries(self, types=None):
             state.calls.append(("load", types))
 
-        def wait_for_libraries(self, types=None, timeout_s=60.0):
-            state.calls.append(("wait", types))
+        def get_library_statuses(self, types=None, scope=None):
+            state.calls.append(("statuses", types))
+            if state.unsettled:
+                state.unsettled -= 1
+                return [Status(nickname, INVALID) for nickname in state.libraries]
             return [Status(nickname, status) for nickname, status in state.libraries.items()]
 
         def check_version(self):  # never asked: a CAD_KICAD_CLI nightly may be another build
@@ -167,7 +171,7 @@ def _kicode(state: _KiCad) -> dict[str, types.ModuleType]:
     kinds.DocumentType = types.SimpleNamespace(DOCTYPE_PCB="pcb", DOCTYPE_SCHEMATIC="schematic")
     libraries = types.ModuleType("kicode.proto.common.types.library_types_pb2")
     libraries.LibraryType = types.SimpleNamespace(LT_SYMBOL=SYMBOL)
-    libraries.LibraryLoadStatus = types.SimpleNamespace(LLS_LOADED=LOADED)
+    libraries.LibraryLoadStatus = types.SimpleNamespace(LLS_LOADED=LOADED, LLS_ERROR=ERROR, LLS_INVALID=INVALID)
     return {"kicode": root, "kicode.schematic": schematic, "kicode.board": board, "kicode.proto.common.types": kinds,
             "kicode.proto.common.types.library_types_pb2": libraries}
 
@@ -430,7 +434,7 @@ class TheLibraries(EditTest):
     def test_the_project_libraries_load_before_the_block_runs(self) -> None:
         seen = []
         self.edit(self.schematic, lambda schematic: seen.append(list(self.kicad.calls)))
-        self.assertEqual([[("load", SYMBOL), ("wait", SYMBOL)]], seen, "the symbol libraries alone, loaded first")
+        self.assertEqual([[("load", SYMBOL), ("statuses", SYMBOL)]], seen, "the symbol libraries alone, loaded first")
 
     def test_a_placement_from_a_library_the_project_lacks_is_one_line_naming_it_and_the_fix(self) -> None:
         def places(schematic):
@@ -453,6 +457,23 @@ class TheLibraries(EditTest):
         self.kicad.libraries = {}
         with self.assertRaisesRegex(LookupError, r"this project has no sym-lib-table .*\(sym_lib_table \(version 7\)"):
             self.edit(self.schematic, lambda schematic: schematic.place_symbol_from_library("test:R", (0, 0)))
+
+    def test_a_library_kicad_has_not_begun_to_load_is_waited_for_not_called_missing(self) -> None:
+        # Asked at once, KiCad answers LLS_INVALID, with no reason, for a library its background load has not begun
+        # and then loads (the KiCad suite failed on it now and then): only loaded or failed is an answer.
+        self.kicad.unsettled = 2
+        said = self.edit(self.schematic, lambda schematic: schematic.place_symbol_from_library("test:R", (0, 0)))
+        self.assertNotIn("did not load", said)
+        self.assertEqual(3, self.kicad.calls.count(("statuses", SYMBOL)))
+        self.assertIn(("place", "test:R", "root"), self.kicad.calls)
+
+    def test_a_library_that_never_settles_is_said_with_how_long_it_was_given(self) -> None:
+        self.kicad.unsettled = 10**6
+        with mock.patch.object(_session, "LIBRARY_SECONDS", 0.0):
+            said = self.edit(self.schematic)
+            self.assertIn("warning: symbol library test did not load: it had not loaded after 0 s", said)
+            with self.assertRaisesRegex(LookupError, "symbol library 'test' did not load: it had not loaded after 0 s"):
+                self.edit(self.schematic, lambda schematic: schematic.place_symbol_from_library("test:R", (0, 0)))
 
     def test_a_library_that_did_not_load_is_said_and_named_by_a_placement_from_it(self) -> None:
         self.kicad.libraries = {"test": LOADED, "broken": ERROR}

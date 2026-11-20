@@ -32,7 +32,7 @@ evidence, not as a shop's limit): recommendations, warnings. Beside them stand t
 general molder sends back, measured as the quantity the rule names and the same however the part is placed: a
 feature nothing releases, a broad shell wall with too little draft for its depth, a broad wall too thin to
 fill, a part past any press built. A false error on an ordinary part teaches the designer to ignore the check,
-so a floor judges a wall and never a feature (``BROAD_WALLS``). A floor no guide states is text-to-cad's own and
+so a floor judges a wall and never a feature (``BROAD_WALLS``). A floor no guide states is cad's own and
 says so (``_OWN``). A mold's own limits and a press's short of the largest -- its projected area, its part size,
 its side actions' travel -- are no rule here: the measurements (``projection``, ``envelope``, ``undercuts``)
 are compared with them.
@@ -109,14 +109,14 @@ _KN_PER_TON = 8.896443  # a US (short) ton-force in kilonewtons
 _MOLDED = ("+pull", "-pull", "none")
 _RELEASED = ("side_action", "lifter", "collapsible_core", "unknown")
 #: The deepest lip (mm) taken as stripped off as the part ejects (a bump-off) -- against the straight pull, or
-#: against the slide of a feature no slide frees cleanly: text-to-cad's own figure, no guide's. Protolabs gives
+#: against the slide of a feature no slide frees cleanly: cad's own figure, no guide's. Protolabs gives
 #: none; it says a bump-off works on a flexible resin over a ramped or rounded leading edge (``BUMP_OFFS``).
 BUMP_OFF_MM = 0.1
 
 
-#: How the note of a floor of text-to-cad's own begins: no publisher's number (it cites ``rules.OWN``, so no
-#: finding puts text-to-cad's number in a publisher's mouth). Each rule's note says what the floor rests on.
-_OWN = "text-to-cad's own floor, no guide's: "
+#: How the note of a floor of cad's own begins: no publisher's number (it cites ``rules.OWN``, so no
+#: finding puts cad's number in a publisher's mouth). Each rule's note says what the floor rests on.
+_OWN = "cad's own floor, no guide's: "
 #: What the two floors of the walls judge is a wall of the part's shell, not a feature: a face this many wall
 #: thicknesses wide or wider (the draft floor: across the pull, against the part's nominal wall; the thin-wall
 #: floor: the face and the face across it, against the wall between them). Ours: under ten thicknesses across, the
@@ -206,7 +206,7 @@ def _undercut_rules(source: str) -> tuple[Rule, ...]:
         Rule("molding.undercut_bump_off", "undercuts", "trapped_area_mm2", "max", 0.0, "mm2", "undercut area",
              "protolabs-bumpoff", severity="warning", item_when={"release": "bump_off"},
              detail="{depth_said}: a {interference_mm:.3g} mm lip over {bump_off_over}, stripped off "
-                    f"as the part ejects (a bump-off: {BUMP_OFF_MM:g} mm at most, text-to-cad's own figure); a "
+                    f"as the part ejects (a bump-off: {BUMP_OFF_MM:g} mm at most, cad's own figure); a "
                     "bump-off depends on the resin's flexibility",
              note="a bump-off depends on the resin's flexibility: TPE, unfilled PE or PP, not glass-filled nylon or PC",
              fix="round or ramp the lip's leading edge and mold it in a flexible resin, or open the lip"),
@@ -216,7 +216,7 @@ def _undercut_rules(source: str) -> tuple[Rule, ...]:
         # the check is not checked.
         Rule("molding.undercut_unreleasable", "undercuts", "unreleasable_area_mm2", "max", 0.0, "mm2", "trapped area",
              source, item_when={"release": ("none", "unknown")},
-             detail=f"{{depth_said}}: over the {BUMP_OFF_MM:g} mm a bump-off takes (text-to-cad's own figure)",
+             detail=f"{{depth_said}}: over the {BUMP_OFF_MM:g} mm a bump-off takes (cad's own figure)",
              fix="no slide, lifter or core frees this feature: open it to one side or split the part"),
     )
 
@@ -361,7 +361,7 @@ _TRANSITION = Rule("molding.wall_transition", "transitions", "transition_ratio",
                    fix="taper the change in thickness over at least {limit:g} times the change (a chamfer or fillet)")
 
 RULES = RuleSet(
-    "molding", "text-to-cad general rules", _VERSION,
+    "molding", "cad general rules", _VERSION,
     (*_draft_rules("protolabs-im", 0.5, "warning", (2.0, "hubs-im"), note=_DRAFT_NOTE, least_note=_DRAFT_MIN_NOTE),
      *_undercut_rules("hubs-im"),
      *_wall_rules(), *_press_rules(), *_uniform_rules(), _TRANSITION,
@@ -372,7 +372,7 @@ RULES = RuleSet(
     note="general practice from published design guides, no shop's limits: draft (0.5 deg on vertical faces, 2 "
          "deg recommended), a wall table per resin, corner, transition, undercut, snap-fit and root guidance, rib "
          "and boss proportions -- recommendations, warnings. The errors are floors, what a general molder sends "
-         "back: a feature nothing releases; and text-to-cad's own, each rule's note says so -- a broad shell wall "
+         "back: a feature nothing releases; and cad's own, each rule's note says so -- a broad shell wall "
          f"with under {DRAFT_FLOOR_DEG_PER_MM:g} deg of draft for each millimetre it runs past "
          f"{DRAFT_FLOOR_DEPTH_MM:g} in one mold half ({DRAFT_FLOOR_MOST_DEG:g} deg at most), a broad wall under {WALL_FLOOR_SHARE:g} of the resin's "
          f"recommended minimum, a projected area no press built clamps (over {CLAMP_LARGEST_TONS:g} US tons at "
