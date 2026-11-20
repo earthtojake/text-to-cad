@@ -26,11 +26,13 @@ plugin install``, which carries the one table of them. It does these things alon
    cad ran this (``BY_CAD``), and never for a cad this run installed;
 4. hands over (``hand_over``): ``<cad> plugin install`` by that tool's own command, on this process's own output, so a
    person's terminal shows what cad draws there. cad is told who began the run (``CAD_PLUGIN_BY=script``) and where
-   to say what it did (``CAD_PLUGIN_REPORT``, a scratch file). Where that cad has no such command (exit status 2:
-   0.11.12 and 0.11.13, which run this command themselves), and where cad could not be installed, the newest
-   release's runs instead, outside any installed tool, once: ``uv tool run --no-config --managed-python --python 3.14
-   cad@latest plugin install``. Never ``cad plugin update`` (on those releases it runs this command) and never ``cad
-   setup``;
+   to say what it did (``CAD_PLUGIN_REPORT``, a scratch file). That cad is asked first, its answer captured, whether
+   it has the command (``<cad> plugin install --help``, which runs nothing: exit status 0 where it has it). Where it
+   has none (0.11.12 and 0.11.13, which run this command themselves: argparse's usage error, exit status 2, which the
+   person never sees), and where cad could not be installed, the newest release's runs instead, outside any
+   installed tool, once: ``uv tool run --no-config --managed-python --python 3.14 cad@latest plugin install``, after
+   one line of this command's own. Never ``cad plugin update`` (on those releases it runs this command) and never
+   ``cad setup``;
 5. turns on ``cad plugin update auto`` (``switch_on``), last, wherever a cad is installed: that tool's own ``cad plugin
    update auto on`` (never PATH's), with ``CAD_INSTALL_FAILED=1`` in that one call's environment where the plugin's
    step did not end well (then cad turns the switch on and takes nothing as up to date). The person ran this command,
@@ -92,10 +94,16 @@ first (``update``), so the plugin comes from a current cad; a run cad started ne
 is the one being carried, and a ``cad update`` there could replace the very cad that is waiting on this run.
 
 The newest release's ``cad plugin install``, by ``uv tool run ... cad@latest`` outside the installed tool, runs only
-where the installed cad has no ``cad plugin install`` (argparse's exit status 2, no report written: 0.11.12, 0.11.13),
-or where no cad could be installed. It is there for those two releases alone: once no computer is left on them, it
-can go, and an installed cad that cannot run the step is a failure like any other. Its release is not kept as the one
-the plugin is up to date for (it is no global install); the installed cad keeps its own, by the switch's call.
+where the installed cad has no ``cad plugin install`` (0.11.12, 0.11.13), or where no cad could be installed. Which cad
+has it is asked first, quietly: ``<cad> plugin install --help``, its output captured, exit status 0 where it has it. On
+those two releases, as on every earlier one, argparse refuses ``install`` before it reads ``--help`` (its usage error,
+exit status 2): then the newest release's runs straight away, after one line of this command's own and nothing of that
+cad's. Any other answer is no answer, and the installed cad's command runs for real, as it did before anything was
+asked; where it ends 2 with no report written, that is taken as the same answer, once more. Nothing runs twice: the
+installed cad's step and the newest's, at most one each, in that order. It is there for those two releases alone: once
+no computer is left on them, it can go, and an installed cad that cannot run the step is a failure like any other. Its
+release is not kept as the one the plugin is up to date for (it is no global install); the installed cad keeps its own,
+by the switch's call.
 
 What each caller reads back: a person and their shell, the exit status. Of 0.11.12 and 0.11.13, the typed ``cad plugin
 update`` gives the exit status as its own and, on 0, keeps its release as the one the plugin is up to date for; the
@@ -105,20 +113,21 @@ its own; ``once`` reads nothing. Install mode reads the report alone (``CAD_INST
 (``UNSAID``) is written wherever the plugin's step ended non-zero and named no app as failed, or that reader would take
 the run as done and never run it again.
 
-No loops. The edges: this command starts uv and pipx (installs only), the installed ``cad --version``, ``cad update``
-(a person's run alone), ``cad plugin install`` (the installed cad's, then the newest's) and ``cad plugin update auto
-on``; never ``cad plugin update`` alone, ``cad setup`` or a server, and it takes ``CAD_INSTALL_ATTEMPT`` and
-``CAD_PLUGIN_SERVER_RUN`` out of what each of them inherits (``RUN_NAMES``), so no ``cad plugin install`` takes a run
-an older cad's server began for its own. ``cad plugin install`` (this release's, under either name) starts each agent
-app's own commands and git: no install command, no ``cad update``, no ``cad plugin``. ``cad plugin update auto on``
-keeps a setting, by the running server or by itself, and starts nothing, on every release (0.11.13's included).
-``cad update`` asks the server, whose helper upgrades cad with uv or pipx and starts the server again; on no release
-does it run this command or ``cad plugin``. The one way back here is a server: an older one runs its ``cad plugin
-update``, so this command, at most three times for a release, an hour or more apart, and only once cad is newer than
-the release the plugin is up to date for; a newer one runs its ``cad plugin install``, which never comes here. Such a
-run is cad's, so it runs no ``cad update``, and whatever it reaches ends in ``cad plugin install`` and the switch,
-neither of which starts anything that comes back. The bridge's runs (install mode, ``cad setup``, ``once``) come here
-too, bounded by their own record, and this command never runs ``cad setup``: nothing goes back to them.
+No loops. The edges: this command starts uv and pipx (installs only), the installed ``cad --version``, ``cad update`` (a
+person's run alone), ``cad plugin install --help`` (the installed cad's, which runs nothing on any release), ``cad
+plugin install`` (the installed cad's, then the newest's) and ``cad plugin update auto on``; never ``cad plugin update``
+alone, ``cad setup`` or a server, and it takes ``CAD_INSTALL_ATTEMPT`` and ``CAD_PLUGIN_SERVER_RUN`` out of what each of
+them inherits (``RUN_NAMES``), so no ``cad plugin install`` takes a run an older cad's server began for its own. ``cad
+plugin install`` (this release's, under either name) starts each agent app's own commands and git: no install command,
+no ``cad update``, no ``cad plugin``. ``cad plugin update auto on`` keeps a setting, by the running server or by itself,
+and starts nothing, on every release (0.11.13's included). ``cad update`` asks the server, whose helper upgrades cad
+with uv or pipx and starts the server again; on no release does it run this command or ``cad plugin``. The one way back
+here is a server: an older one runs its ``cad plugin update``, so this command, at most three times for a release, an
+hour or more apart, and only once cad is newer than the release the plugin is up to date for; a newer one runs its ``cad
+plugin install``, which never comes here. Such a run is cad's, so it runs no ``cad update``, and whatever it reaches
+ends in ``cad plugin install`` and the switch, neither of which starts anything that comes back. The bridge's runs
+(install mode, ``cad setup``, ``once``) come here too, bounded by their own record, and this command never runs ``cad
+setup``: nothing goes back to them.
 
 Test hooks, never documented to people: ``CAD_INSTALL_PATH_ONLY`` (look for uv, pipx and cad on PATH and in
 ``~/.local/bin`` alone: never in Homebrew's or npm's folders, where a test would find a real one); ``CAD_API_URL``,
@@ -800,16 +809,24 @@ class Plugin:
 
 def hand_over(here: Here, cad: Cad, reports: "Reports") -> Plugin:
     """Step 4 (see the module): ``cad plugin install`` by the cad this computer has, else, where that cad has no such
-    command or there is none, by the newest release's (``uv tool run ... cad@latest``, once). Where no cad ran it, one
-    line says the apps were not done, and one report (``plugin``)."""
+    command or there is none, by the newest release's (``uv tool run ... cad@latest``, once). That cad is asked first,
+    its answer captured, whether it has the command (``cad plugin install --help``, which runs nothing: 0 where it
+    has it, argparse's usage error ``NO_COMMAND`` where it has none), so a cad without it puts no usage error on the
+    terminal. Any other answer is no answer: the command runs for real, and its own exit status 2 with no report
+    written still means it had none. Where no cad ran it, one line says the apps were not done, and one report
+    (``plugin``)."""
     scratch = tempfile.mkdtemp(prefix="text-to-cad-")
     try:
         said = Path(scratch) / "plugin-report.json"
         environ = {**here.environ, PLUGIN_BY_ENV: "script", PLUGIN_REPORT_ENV: str(said)}
         code, newest = NO_COMMAND, not cad.command
         if cad.command:
-            code = here.show([cad.command, "plugin", "install"], environ)
-            newest = code == NO_COMMAND and not said.exists()
+            # Asked first, quietly: a cad with no such command, run for real, would put argparse's complaint on the
+            # terminal before this command's own line.
+            missing = here.run([cad.command, "plugin", "install", "--help"]).code == NO_COMMAND
+            if not missing:
+                code = here.show([cad.command, "plugin", "install"], environ)
+            newest = missing or (code == NO_COMMAND and not said.exists())
             if newest:
                 print(f"{f'cad {cad.release}' if cad.release else 'This cad'} has no `cad plugin install`: the newest "
                       "cad's runs instead (uv tool run cad@latest), which uv downloads once.", flush=True)

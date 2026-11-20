@@ -53,7 +53,9 @@ THEIRS = "---\nname: {name}\ndescription: someone else's\n---\n"
 # names is there. `cad update` says a line, waits FAKE_UPDATE_SLEEP seconds, makes the tool FAKE_CAD_UPDATES (uv's
 # record of it, else pipx's) and exits FAKE_UPDATE_EXIT. `cad plugin install`, and `uv tool run ... plugin install`
 # (the newest cad's), says a line on each stream, writes FAKE_PLUGIN_APPS as the report CAD_PLUGIN_REPORT names (no
-# report without it, nor from a cad with no such command: exit 2) and exits FAKE_PLUGIN_EXIT_CAD, or FAKE_PLUGIN_EXIT_UV. With FAKE_UV_RUNS, `uv run <script>` runs
+# report without it, nor from a cad with no such command: exit 2) and exits FAKE_PLUGIN_EXIT_CAD, or
+# FAKE_PLUGIN_EXIT_UV. `cad plugin install --help` exits FAKE_PLUGIN_HELP_CAD, else 2 (argparse's usage error, on
+# stderr) where FAKE_PLUGIN_EXIT_CAD is 2, a cad with no such command, else 0. With FAKE_UV_RUNS, `uv run <script>` runs
 # the script (this Python, UV naming the stand-in). `curl <url>/install.py -o <file>` writes the file FAKE_INSTALL_PY
 # names, and `curl -d <body> <url>` posts the body to a loopback address, as curl would.
 STAND_IN = textwrap.dedent('''\
@@ -93,6 +95,16 @@ STAND_IN = textwrap.dedent('''\
     if name == "uv" and sys.argv[1:2] == ["run"] and os.environ.get("FAKE_UV_RUNS"):
         import subprocess
         sys.exit(subprocess.call([sys.executable, sys.argv[-1]], env={{**os.environ, "UV": sys.argv[0]}}))
+    if name == "cad" and sys.argv[1:] == ["plugin", "install", "--help"]:
+        missing = os.environ.get("FAKE_PLUGIN_EXIT_CAD") == "2"
+        code = int(os.environ.get("FAKE_PLUGIN_HELP_CAD") or (2 if missing else 0))
+        if code == 2:
+            print("usage: cad plugin [-h] {{update}} ...", file=sys.stderr)
+            print("cad plugin: error: argument {{update}}: invalid choice: 'install' (choose from 'update')",
+                  file=sys.stderr)
+        else:
+            print("usage: cad plugin install [-h]")
+        sys.exit(code)
     if sys.argv[-2:] == ["plugin", "install"] and (name == "cad" or (name == "uv" and sys.argv[1:3] == ["tool", "run"])):
         print(f"{{name}} (stand-in): the plugin, on stdout", flush=True)
         print(f"{{name}} (stand-in): the plugin, on stderr", file=sys.stderr, flush=True)

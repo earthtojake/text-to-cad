@@ -43,6 +43,8 @@ spec.loader.exec_module(install)
 # The newest release's `cad plugin install`, run outside any installed tool: the words after `uv`.
 NEWEST = ["tool", "run", "--no-config", "--managed-python", "--python", "3.14", "cad@latest", "plugin", "install"]
 HANDED = ["plugin", "install"]
+# Asked first, its answer captured, whether the installed cad has that command: it runs nothing.
+ASKED = ["plugin", "install", "--help"]
 # The switch, turned on last by the installed cad's own command wherever a cad is installed.
 AUTO_ON = ["plugin", "update", "auto", "on"]
 # What a failure's report names this machine: as cad's own counts do.
@@ -212,8 +214,11 @@ class InstallScriptTests(AgentApps):
         self.assertEqual(self.installs(), [["--managed-python", "--python", "3.14", "cad"]])
         self.assertIn("Installing cad with uv.", done.stdout)
         self.assertEqual(json.loads((self.root / "uv.json").read_text(encoding="utf-8")), {"cad": "0.13.0"})
-        handed, switched = self.logged("cad")
+        asked, handed, switched = self.logged("cad")
+        # Asked first, quietly, whether it has `cad plugin install`; then that command, for real.
+        self.assertEqual((asked["argv"], asked["path"]), (ASKED, str(self.uv_bin / "cad")))
         self.assertEqual((handed["argv"], handed["path"]), (HANDED, str(self.uv_bin / "cad")))
+        self.assertNotIn("usage: cad plugin install", done.stdout + done.stderr)
         # Then, last, that tool's own `cad plugin update auto on`: the person ran this, and the plugin follows cad.
         self.assertEqual((switched["argv"], switched["path"]), (AUTO_ON, str(self.uv_bin / "cad")))
         self.assertEqual(self.newest(), [])
@@ -237,13 +242,13 @@ class InstallScriptTests(AgentApps):
         self.assertNotIn("Installing cad with uv.", done.stdout)
         self.assertEqual(self.installs(), [["--reinstall", *install.UV_TOOL_ARGS, "cad"]])
         self.assertEqual(json.loads((self.root / "uv.json").read_text(encoding="utf-8")), {"cad": "5.0.0"})
-        self.assertEqual(self.calls("cad"), [["--version"], HANDED, AUTO_ON])
+        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
         found = json.loads(report.read_text(encoding="utf-8"))
         self.assertEqual((found["release"], found["setup"]), ("5.0.0", 0))
         # A person's run: installed again just now, so there is nothing to bring up to date.
         self.tools(cad="1.0.0")
         done = self.run_install(FAKE_PYPI="5.0.0", FAKE_FAIL="cad:--version")
-        self.assertEqual(self.calls("cad"), [["--version"], HANDED, AUTO_ON])
+        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
         # The reinstall fails too: the run fails, and says which cad the computer still has.
         self.tools(cad="1.0.0")
         done = self.run_install(FAKE_FAIL="cad:--version,uv:install", CAD_INSTALL_REPORT=str(report))
@@ -279,13 +284,13 @@ class InstallScriptTests(AgentApps):
         self.assertNotIn("another program's", done.stdout)
         self.assertEqual(self.calls("pipx"), [["environment", "--value", "PIPX_LOCAL_VENVS"],
                                               ["environment", "--value", "PIPX_BIN_DIR"]])
-        self.assertEqual(self.calls("cad"), [["--version"], HANDED, AUTO_ON])
+        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
         self.assertEqual({key: json.loads(report.read_text(encoding="utf-8"))[key] for key in ("release", "setup")},
                          {"release": "0.13.0", "setup": 0})
         # A person's run brings it up to date by pipx's own cad, and reads pipx's record of it again.
         done = self.run_install(FAKE_CAD_UPDATES="0.14.0", FAKE_UPDATE_EXIT="1", **said)
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual(self.calls("cad"), [["--version"], ["update"], HANDED, AUTO_ON])
+        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
         self.assertNotIn("cad was not updated", done.stdout)
         self.assertEqual(self.installs(), [])
         # pipx 1.0, which has no `pipx environment`, and no link in ~/.local/bin: its list says where its cad is.
@@ -301,7 +306,7 @@ class InstallScriptTests(AgentApps):
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertEqual((self.installs(), self.calls("pipx")), ([], []))
         self.assertIn("cad 0.14.0 is installed already", done.stdout)
-        self.assertEqual(self.calls("cad"), [["--version"], ["update"], HANDED, AUTO_ON])
+        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
         # uv's cad is there too: uv's is the one, and pipx is not asked.
         self.programs("pipx")
         (self.root / "uv.json").write_text(json.dumps({"cad": "0.12.0"}), encoding="utf-8")
@@ -319,7 +324,7 @@ class InstallScriptTests(AgentApps):
                       done.stdout)
         self.assertEqual(self.installs(), [], "never with uv")
         self.assertEqual(self.calls("pipx")[-1], ["install", "--force", "cad"])
-        self.assertEqual(self.calls("cad"), [["--version"], HANDED, AUTO_ON])
+        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
         self.assertEqual({key: json.loads(report.read_text(encoding="utf-8"))[key] for key in ("release", "setup")},
                          {"release": "0.14.0", "setup": 0})
         # pipx's install fails, or pipx is not found: said in one line, and the plugin's step runs all the same, by
@@ -541,7 +546,8 @@ class InstallScriptTests(AgentApps):
             self.assertIn(f"cad {there} is installed already: looking for a newer one with its own `cad update`, "
                           "which waits while cad's server is busy.\ncad (stand-in): update\n", done.stdout)
             self.assertEqual([(call["argv"], call["path"]) for call in self.logged("cad")],
-                             [(argv, str(self.uv_bin / "cad")) for argv in (["--version"], ["update"], HANDED, AUTO_ON)])
+                             [(argv, str(self.uv_bin / "cad")) for argv in (["--version"], ["update"], ASKED, HANDED,
+                                                                                 AUTO_ON)])
             self.assertNotIn("cad was not updated", done.stdout)
         # Its exit status says little: 0 with nothing newer (above), non-zero with the update done all the same. What
         # uv holds afterwards is what counts.
@@ -557,7 +563,7 @@ class InstallScriptTests(AgentApps):
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertIn("cad was not updated now (`cad update` exit status 1; what it said is above): it updates "
                       "itself.\n", done.stdout)
-        self.assertEqual(self.calls("cad"), [["--version"], ["update"], HANDED, AUTO_ON])
+        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
         # No answer in the time it has: stopped, said, and the run goes on.
         here = install.Here(self.environ(FAKE_UPDATE_SLEEP="30"))
         said = io.StringIO()
@@ -575,27 +581,31 @@ class InstallScriptTests(AgentApps):
                 self.assertEqual(0, done.returncode, done.stdout + done.stderr)
                 self.assertIn("cad 0.11.13 is installed already: it is left as it is, and updates itself.\n",
                               done.stdout)
-                self.assertEqual(self.calls("cad"), [["--version"], HANDED, AUTO_ON])
+                self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
 
     # --- the plugin: cad's own step --------------------------------------------------------------------------------
 
     def test_a_cad_with_no_plugin_install_is_passed_over_for_the_newest_cad_s(self) -> None:
-        # 0.11.12 and 0.11.13 run this command themselves, and have no `cad plugin install` (a usage error, exit 2):
-        # the newest release's runs instead, outside the installed tool, told what the tool's was told. Never `cad
-        # plugin update`, which on those releases runs this command, and never `cad setup`.
+        # 0.11.12 and 0.11.13 run this command themselves, and have no `cad plugin install`: asked first, quietly
+        # (`--help`: a usage error, exit 2, which the person never sees), the newest release's runs instead, outside
+        # the installed tool, told what the tool's would have been. Never `cad plugin update`, which on those releases
+        # runs this command, and never `cad setup`.
         self.tools(cad="0.11.13")
         report = self.root / "report.json"
         done = self.run_install(FAKE_PLUGIN_EXIT_CAD="2", FAKE_PLUGIN_APPS=json.dumps({"codex": "updated"}),
                                 FAKE_LOG_ENV="CAD_PLUGIN_BY,CAD_PLUGIN_REPORT", CAD_INSTALL_BY_CAD="1",
                                 CAD_INSTALL_REPORT=str(report))
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual(self.calls("cad"), [["--version"], HANDED, AUTO_ON])
+        self.assertEqual(self.calls("cad"), [["--version"], ASKED, AUTO_ON])
         self.assertEqual(self.newest(), [NEWEST])
         self.assertIn("cad 0.11.13 has no `cad plugin install`: the newest cad's runs instead (uv tool run cad@latest), "
                       "which uv downloads once.\nuv (stand-in): the plugin, on stdout\n", done.stdout)
-        tool, newest = self.logged("cad")[-2], [call for call in self.logged("uv") if call["argv"] == NEWEST][0]
-        self.assertEqual(newest["env"], tool["env"])
+        self.assertNotIn("usage:", done.stdout + done.stderr)
+        self.assertNotIn("invalid choice", done.stdout + done.stderr)
+        newest, = [call for call in self.logged("uv") if call["argv"] == NEWEST]
         self.assertEqual(newest["env"]["CAD_PLUGIN_BY"], "script")
+        self.assertEqual(Path(newest["env"]["CAD_PLUGIN_REPORT"]).name, "plugin-report.json")
+        self.assertFalse(Path(newest["env"]["CAD_PLUGIN_REPORT"]).parent.exists())
         self.assertEqual(json.loads(report.read_text(encoding="utf-8")),
                          {"schema": "text-to-cad install report/1", "release": "0.11.13", "setup": 0,
                           "apps": {"codex": "updated"}})
@@ -607,14 +617,27 @@ class InstallScriptTests(AgentApps):
         spec.loader.exec_module(asked)
         self.assertEqual(self.newest(), [list(asked.HAND_OVER)])
         self.assertEqual(asked.ASKED, (*asked.HAND_OVER, "--help"))
+        # A cad that says it has the command, or gives any answer but argparse's usage error, has its command run for
+        # real; where that ends 2 having written no report, it had none either: the newest cad's runs, once.
+        for help_code in ("0", "1"):
+            with self.subTest(help_code=help_code):
+                done = self.run_install(FAKE_PLUGIN_HELP_CAD=help_code, FAKE_PLUGIN_EXIT_CAD="2",
+                                        FAKE_PLUGIN_APPS=json.dumps({"codex": "updated"}), CAD_INSTALL_BY_CAD="1")
+                self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+                self.assertEqual((self.calls("cad"), self.newest()),
+                                 ([["--version"], ASKED, HANDED, AUTO_ON], [NEWEST]))
+                self.assertIn("cad (stand-in): the plugin, on stdout\ncad 0.11.13 has no `cad plugin install`: the "
+                              "newest cad's runs instead (uv tool run cad@latest), which uv downloads once.\n",
+                              done.stdout)
 
     def test_run_against_0_11_13_nothing_loops(self) -> None:
         """0.11.13's own ``cad plugin update`` runs this command (by its server too, which names its run
         ``CAD_INSTALL_ATTEMPT``); it has no ``cad plugin install``. Whoever began the run, this command asks that cad
-        for ``cad plugin install`` (exit 2), runs the newest release's in its place, and last turns the switch on by the
-        installed cad's own command, once, telling it the run ended badly exactly where the plugin's step did not end
-        well: never ``cad plugin update`` alone, which would run this command again. Nothing it starts carries a cad
-        server's name for its run, so the newest release's step never takes an older server's run for its own."""
+        whether it has ``cad plugin install`` (``--help``: exit 2, its answer captured), runs the newest release's in
+        its place, and last turns the switch on by the installed cad's own command, once, telling it the run ended badly
+        exactly where the plugin's step did not end well: never ``cad plugin update`` alone, which would run this
+        command again. Nothing it starts carries a cad server's name for its run, so the newest release's step never
+        takes an older server's run for its own."""
         self.tools(cad="0.11.13")
         (self.uv_bin / "cad").write_text(OLD_CAD.format(python=sys.executable, script=str(INSTALL / "install.py")),
                                          encoding="utf-8")
@@ -632,7 +655,11 @@ class InstallScriptTests(AgentApps):
                 steps = [(call["name"], call["argv"]) for call in map(json.loads, self.log.read_text(
                     encoding="utf-8").splitlines()) if call["name"] == "cad" or call["argv"][:2] == ["tool", "run"]]
                 self.assertEqual(steps, [("cad", ["--version"]), *([] if began else [("cad", ["update"])]),
-                                         ("cad", HANDED), ("uv", NEWEST), ("cad", AUTO_ON)])
+                                         ("cad", ASKED), ("uv", NEWEST), ("cad", AUTO_ON)])
+                # Of `cad plugin`, that cad saw the question alone before the newest cad's step, and the person
+                # none of its answer: one line of this command's own.
+                self.assertNotIn("invalid choice", done.stdout + done.stderr)
+                self.assertIn("cad 0.11.13 has no `cad plugin install`: the newest cad's runs instead", done.stdout)
                 calls = self.logged("cad") + self.logged("uv")
                 self.assertEqual([call for call in calls if call["argv"] == ["plugin", "update"]], [], "no loop")
                 self.assertEqual({call["env"].get("OLD_CAD_DEPTH") for call in self.logged("cad")}, {None})
@@ -1220,7 +1247,7 @@ class InstallScriptTests(AgentApps):
                              [["tool", "uninstall", "cad"], ["tool", "install", *install.UV_TOOL_ARGS, "cad"]])
             # install.py hands the apps to the published cad, and leaves cad's own automatic updates as they are:
             # --release turns them on again.
-            self.assertEqual(self.calls("cad"), [HANDED, AUTO_ON, ["update", "auto", "on"]])
+            self.assertEqual(self.calls("cad"), [ASKED, HANDED, AUTO_ON, ["update", "auto", "on"]])
             self.assertFalse(dev_install.editable(str(self.bin / "uv")))
 
     def test_install_ps1_ends_a_failure_in_a_terminating_error(self) -> None:
@@ -1283,7 +1310,8 @@ class InstallScriptTests(AgentApps):
                                             "Logo", "Live", "play_logo") if hasattr(install, name)], [])
         self.assertNotRegex(text, r"(?i)earthtojake|marketplace|\\x1b")
         self.assertEqual(re.findall(r'\[[^\[\]]*"(?:setup|plugin)"[^\[\]]*\]', text),
-                         ['[cad.command, "plugin", "install"]',
+                         ['[cad.command, "plugin", "install", "--help"]',
+                          '[cad.command, "plugin", "install"]',
                           '[uv, "tool", "run", "--no-config", *UV_TOOL_ARGS, "cad@latest", "plugin", "install"]',
                           '[cad.command, "plugin", "update", "auto", "on"]'])
 

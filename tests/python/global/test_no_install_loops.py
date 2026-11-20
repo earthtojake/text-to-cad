@@ -3,11 +3,13 @@
 The one way to a loop is a command that starts what started it. On 0.11.12 and 0.11.13, ``cad plugin update`` downloads
 and runs the hosted install command (``scripts/install/install.py``), and their server runs that command by itself. So
 the hosted command never starts ``cad plugin update`` but as the switch (``cad plugin update auto on``, which keeps a
-setting and starts nothing on any release) and never ``cad setup`` (the bridge's, which runs it); and what cad runs
-for the plugin (``cad_server/plugin/``, ``cad_server/cli/plugin.py``, ``_internal/plugin_catch_up.py``) never reaches
-the hosted command, nor cad's own update, and starts cad itself in one place alone: the server's ``cad plugin install``.
-Read off the sources, so a change that opens an edge fails here before any run of it. That the hosted command run
-against a cad of 0.11.13 never loops is ``test_install_script.py``'s (``test_run_against_0_11_13_nothing_loops``).
+setting and starts nothing on any release) and never ``cad setup`` (the bridge's, which runs it); else of ``cad plugin``
+it starts ``install`` alone, and ``install --help`` before it, which argparse answers on every release, running nothing;
+and what cad runs for the plugin (``cad_server/plugin/``, ``cad_server/cli/plugin.py``,
+``_internal/plugin_catch_up.py``) never reaches the hosted command, nor cad's own update, and starts cad itself in one
+place alone: the server's ``cad plugin install``. Read off the sources, so a change that opens an edge fails here before
+any run of it. That the hosted command run against a cad of 0.11.13 never loops is ``test_install_script.py``'s
+(``test_run_against_0_11_13_nothing_loops``).
 """
 
 from __future__ import annotations
@@ -92,7 +94,8 @@ class TheHostedCommandNeverStartsWhatRunsIt(unittest.TestCase):
         self.assertTrue(plugin, "the hand-over is there to check")
         for words in plugin:
             after = words[words.index("plugin") + 1:]
-            self.assertIn(after, (["install"], ["update", "auto", "on"]), words)
+            # `install --help` is the question asked before the hand-over: argparse answers it, and nothing runs.
+            self.assertIn(after, (["install"], ["install", "--help"], ["update", "auto", "on"]), words)
         self.assertEqual([words for words in commands if "setup" in words], [])
         self.assertEqual(sum(words[words.index("plugin") + 1:] == ["update", "auto", "on"] for words in plugin), 1)
 

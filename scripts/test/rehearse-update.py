@@ -125,10 +125,11 @@ already, with no ``cad plugin install``; ``RUNS_IT``, the newer of the two), ins
 
 - ``plugin-update``: its ``cad plugin update`` typed, with this tree out as the newest release. That command runs the
   install command, marked as a run of cad's own (``CAD_INSTALL_BY_CAD``): cad, a uv tool that starts, is left as it
-  is; the hand-over to its ``cad plugin install`` is refused (exit status 2: it has no such command, asked of it
-  first on its own), so the newest release's runs instead, outside the tool (``uv tool run ... cad@latest plugin
-  install``: this tree's, from the computer's folder of releases); then the install command turns the plugin's
-  switch on by the shipped release's own ``cad plugin update auto on``. The end: exit
+  is; asked first, quietly, whether it has ``cad plugin install`` (``--help``), it refuses (exit status 2: it has no
+  such command, asked of it first on its own too), so the newest release's runs instead, outside the tool (``uv tool
+  run ... cad@latest plugin install``: this tree's, from the computer's folder of releases), and nothing of that
+  refusal reaches the output; then the install command turns the plugin's switch on by the shipped release's own
+  ``cad plugin update auto on``. The end: exit
   0; the install command ran once, and never again from inside itself; uv's cad is still the shipped release, which
   says the switch is on and keeps itself as the release the plugin is up to date for; no server was started, and
   nothing of the computer runs.
@@ -1534,11 +1535,12 @@ def plugin_update(box: Box) -> None:
     box.run(["uv", "tool", "install", "--managed-python", "--python", "3.14", f"cad=={old}"], timeout=1500)
     box.is_tool(old)
     # What the route stands on: this release has no `cad plugin install`, and says so as a command line it cannot
-    # read, having run nothing.
-    refused = box.run([box.cad(), "plugin", "install"], check=False, timeout=120)
-    if refused.returncode != 2 or "invalid choice: 'install'" not in refused.stderr or box.runs() != 0:
-        raise Failed(f"{box.label}: {old}'s `cad plugin install` exited {refused.returncode}, the install command ran "
-                     f"{box.runs()} times:\n{refused.stdout}\n{refused.stderr}")
+    # read, having run nothing, asked for its help (as the install command asks it) or not.
+    for asked in (["plugin", "install", "--help"], ["plugin", "install"]):
+        refused = box.run([box.cad(), *asked], check=False, timeout=120)
+        if refused.returncode != 2 or "invalid choice: 'install'" not in refused.stderr or box.runs() != 0:
+            raise Failed(f"{box.label}: {old}'s `cad {' '.join(asked)}` exited {refused.returncode}, the install "
+                         f"command ran {box.runs()} times:\n{refused.stdout}\n{refused.stderr}")
     box.out(NEW)  # this tree, the newest release out: what `cad@latest` names
     done = box.run([box.cad(), "plugin", "update"], check=False, timeout=SECONDS + 300)
     said = [f"cad {old} is installed already: it is left as it is, and updates itself.",
@@ -1546,7 +1548,9 @@ def plugin_update(box: Box) -> None:
             "downloads once.",
             "Setting up the plugin in each agent app found here:", "plugin update auto: on"]
     lines = done.stdout.splitlines()
-    if done.returncode != 0 or [line for line in said if line not in lines] or "Installing cad with uv" in done.stdout:
+    # That cad's refusal was asked for quietly: none of it is shown, only the install command's own line.
+    if (done.returncode != 0 or [line for line in said if line not in lines] or "Installing cad with uv" in done.stdout
+            or "invalid choice" in done.stdout + done.stderr):
         raise Failed(f"{box.label}: {old}'s `cad plugin update` exited {done.returncode} (to say, each on a line of "
                      f"its own: {said}):\n{done.stdout}\n{done.stderr}\n{box.said()}")
     # cad itself is left as it is, and the install command ran once: nothing it ran came back to it.
