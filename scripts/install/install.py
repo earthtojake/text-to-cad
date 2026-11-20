@@ -30,11 +30,16 @@ plugin install``, which carries the one table of them. It does these things alon
    0.11.12 and 0.11.13, which run this command themselves), and where cad could not be installed, the newest
    release's runs instead, outside any installed tool, once: ``uv tool run --no-config --managed-python --python 3.14
    cad@latest plugin install``. Never ``cad plugin update`` (on those releases it runs this command) and never ``cad
-   setup``.
+   setup``;
+5. turns on ``cad plugin update auto`` (``switch_on``), last, wherever a cad is installed: that tool's own ``cad plugin
+   update auto on`` (never PATH's), with ``CAD_INSTALL_FAILED=1`` in that one call's environment where the plugin's
+   step did not end well (then cad turns the switch on and takes nothing as up to date). The person ran this command,
+   and the plugin following cad's updates is what they asked for by it; ``cad plugin install`` itself never changes
+   the switch. Whatever that call answers, the run ends as it would have: a failure is one line.
 
-``cad plugin install`` installs or updates the plugin in each agent app it finds, removes our older copies, and turns
-``cad plugin update auto`` on, keeping its release as the one the plugin is up to date for only where it ended well:
-nothing of that is here. This command never starts cad's server.
+``cad plugin install`` installs or updates the plugin in each agent app it finds and removes our older copies: nothing
+of that is here. This command never starts cad's server. Nothing it starts carries the name a cad server gives its own
+run (``RUN_NAMES``): see below.
 
 It exits 0 only where the run ended well: 1 where cad was needed and could not be installed, or the plugin's step
 ended non-zero or could not run at all; 75 where that step ran nothing because another run of it was going (cad's own
@@ -71,6 +76,49 @@ read by nobody, its output a log's or thrown away: it says no such line, and sen
 settings show the person was told already what cad sends, or said yes to it, as cad itself decides (``kept``:
 nothing is sent before a person was told); ``install.sh`` and ``install.ps1``, which read no settings so closely,
 send nothing for such a run.
+
+**Older releases, and why nothing loops.** Who runs this command: a person, the one it is made for; and, unattended,
+cad itself. 0.11.12 and 0.11.13 run it for their own ``cad plugin update``, typed, or begun by their server once cad
+got newer (named ``CAD_INSTALL_ATTEMPT``; stopped, with what it started, after 900 seconds: 124), for plain ``cad
+setup``, and once from their server's tending where our setup ran before (``once``). Any release that carries the
+bridge runs it in install mode for a computer coming from 0.10.0-0.11.11 (output thrown away, ``CAD_INSTALL_REPORT``
+set, two hours at most), as by ``cad setup`` and ``once``; 0.10.0-0.11.11 never run it themselves. Every cad sets
+``CAD_INSTALL_BY_CAD=1`` and ``UV_NO_MODIFY_PATH=1`` for it, with no input. Releases after 0.11.13 run it for the
+bridge alone: their ``cad plugin install`` is their own code.
+
+Never ``cad plugin update`` (but ``cad plugin update auto on``, the switch): on 0.11.12 and 0.11.13 that command
+downloads and runs this one, which would run it again, without end. A person's run brings the cad it finds up to date
+first (``update``), so the plugin comes from a current cad; a run cad started never does: cad is updating itself, or
+is the one being carried, and a ``cad update`` there could replace the very cad that is waiting on this run.
+
+The newest release's ``cad plugin install``, by ``uv tool run ... cad@latest`` outside the installed tool, runs only
+where the installed cad has no ``cad plugin install`` (argparse's exit status 2, no report written: 0.11.12, 0.11.13),
+or where no cad could be installed. It is there for those two releases alone: once no computer is left on them, it
+can go, and an installed cad that cannot run the step is a failure like any other. Its release is not kept as the one
+the plugin is up to date for (it is no global install); the installed cad keeps its own, by the switch's call.
+
+What each caller reads back: a person and their shell, the exit status. Of 0.11.12 and 0.11.13, the typed ``cad plugin
+update`` gives the exit status as its own and, on 0, keeps its release as the one the plugin is up to date for; the
+one their server began keeps it in its record (``ok``, or ``failed`` with the status); plain ``cad setup`` gives it as
+its own; ``once`` reads nothing. Install mode reads the report alone (``CAD_INSTALL_REPORT``, above): two fields of it,
+``setup`` the integer 0 and no value of ``apps`` ``failed``, and never the exit status -- so ``"plugin": "failed"``
+(``UNSAID``) is written wherever the plugin's step ended non-zero and named no app as failed, or that reader would take
+the run as done and never run it again.
+
+No loops. The edges: this command starts uv and pipx (installs only), the installed ``cad --version``, ``cad update``
+(a person's run alone), ``cad plugin install`` (the installed cad's, then the newest's) and ``cad plugin update auto
+on``; never ``cad plugin update`` alone, ``cad setup`` or a server, and it takes ``CAD_INSTALL_ATTEMPT`` and
+``CAD_PLUGIN_SERVER_RUN`` out of what each of them inherits (``RUN_NAMES``), so no ``cad plugin install`` takes a run
+an older cad's server began for its own. ``cad plugin install`` (this release's, under either name) starts each agent
+app's own commands and git: no install command, no ``cad update``, no ``cad plugin``. ``cad plugin update auto on``
+keeps a setting, by the running server or by itself, and starts nothing, on every release (0.11.13's included).
+``cad update`` asks the server, whose helper upgrades cad with uv or pipx and starts the server again; on no release
+does it run this command or ``cad plugin``. The one way back here is a server: an older one runs its ``cad plugin
+update``, so this command, at most three times for a release, an hour or more apart, and only once cad is newer than
+the release the plugin is up to date for; a newer one runs its ``cad plugin install``, which never comes here. Such a
+run is cad's, so it runs no ``cad update``, and whatever it reaches ends in ``cad plugin install`` and the switch,
+neither of which starts anything that comes back. The bridge's runs (install mode, ``cad setup``, ``once``) come here
+too, bounded by their own record, and this command never runs ``cad setup``: nothing goes back to them.
 
 Test hooks, never documented to people: ``CAD_INSTALL_PATH_ONLY`` (look for uv, pipx and cad on PATH and in
 ``~/.local/bin`` alone: never in Homebrew's or npm's folders, where a test would find a real one); ``CAD_API_URL``,
@@ -124,6 +172,14 @@ HOMEBREW = ("/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/b
 # (``CAD_INSTALL_BY_CAD``), the run a cad server began (``CAD_INSTALL_ATTEMPT``), and where it reads what the run did
 # (``CAD_INSTALL_REPORT``). With one set, cad ran this: it brings no cad up to date (``update``), and a report says so.
 BY_CAD = ("CAD_INSTALL_BY_CAD", "CAD_INSTALL_ATTEMPT", "CAD_INSTALL_REPORT")
+# The names a cad server gives the run it began (0.11.12 and 0.11.13: ``CAD_INSTALL_ATTEMPT``; later releases:
+# ``CAD_PLUGIN_SERVER_RUN``), which a command it started inherits: read once, as this program starts (``Here.by_cad``),
+# and taken out of the environment of everything it starts. Each names that server's run alone; a ``cad plugin
+# install`` reached from here that took it for its own would close that run's record, under its deadline and lock.
+RUN_NAMES = ("CAD_INSTALL_ATTEMPT", "CAD_PLUGIN_SERVER_RUN")
+# Set to ``1`` for ``cad plugin update auto on`` where this run is ending badly (``switch_on``): cad then turns the
+# switch on and takes nothing as up to date. Never the caller's.
+FAILED_ENV = "CAD_INSTALL_FAILED"
 # How long ``cad update`` may take: cad's own command waits ten minutes for a busy server, then says the update is
 # still underway.
 UPDATE_SECONDS = 11 * 60
@@ -166,10 +222,15 @@ class Ran:
 
 
 class Here:
-    """This computer: its home folder, its environment, its platform, and how a command runs."""
+    """This computer: its home folder, its environment, its platform, and how a command runs. ``by_cad``: cad ran
+    this command (``BY_CAD``), read as it starts; ``environ`` is then what everything this program starts inherits,
+    without ``RUN_NAMES``."""
 
     def __init__(self, environ: Optional[Dict[str, str]] = None, platform: str = sys.platform) -> None:
         self.environ = dict(os.environ if environ is None else environ)
+        self.by_cad = any(self.environ.get(name) for name in BY_CAD)
+        for name in RUN_NAMES:
+            self.environ.pop(name, None)
         self.platform = platform
         self.home = Path(self.environ.get("USERPROFILE") if self.windows and self.environ.get("USERPROFILE")
                          else self.environ.get("HOME") or Path.home())
@@ -206,13 +267,14 @@ class Here:
         text, home = str(path), str(self.home).rstrip("/\\")
         return "~" + text[len(home):] if home and (text == home or text.startswith(home + os.sep)) else text
 
-    def run(self, argv: Sequence[Any], timeout: float = ASK_SECONDS) -> Ran:
-        """``argv`` run with nothing to read, what it printed captured; stopped, with every process it started,
-        after ``timeout`` seconds."""
+    def run(self, argv: Sequence[Any], timeout: float = ASK_SECONDS, environ: Optional[Dict[str, str]] = None) -> Ran:
+        """``argv`` run with nothing to read (in ``environ``, else this run's), what it printed captured; stopped,
+        with every process it started, after ``timeout`` seconds."""
         group = ({"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)} if os.name == "nt"
                  else {"start_new_session": True})
         try:
-            process = subprocess.Popen([str(part) for part in argv], env=self.environ, stdin=subprocess.DEVNULL,
+            process = subprocess.Popen([str(part) for part in argv], env=self.environ if environ is None else environ,
+                                       stdin=subprocess.DEVNULL,
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **group)
         except OSError as error:
             return Ran(127, f"{type(error).__name__}: {error}")
@@ -533,7 +595,7 @@ class Cad:
 
 def by_cad(here: Here) -> bool:
     """Whether cad ran this command (``BY_CAD``), not a person."""
-    return any(here.environ.get(name) for name in BY_CAD)
+    return here.by_cad
 
 
 def find_uv(here: Here) -> Optional[str]:
@@ -774,6 +836,28 @@ def hand_over(here: Here, cad: Cad, reports: "Reports") -> Plugin:
         shutil.rmtree(scratch, ignore_errors=True)
 
 
+def switch_on(here: Here, cad: Cad, failed: bool) -> None:
+    """Step 5 (see the module): ``cad plugin update auto on`` by the cad this computer has, the tool's own command;
+    ``failed``, the plugin's step did not end well, which cad is told (``FAILED_ENV``: ``1``, else not there, never the
+    caller's). That command keeps a setting and starts nothing, on every release that has it: it never runs this
+    command, an install or ``cad update`` (0.11.13's ``_switch`` keeps the switch by the running server, else by
+    itself, and that is all). Whatever it answers, the run ends as it would have: a failure is one line."""
+    environ = {key: value for key, value in here.environ.items() if key != FAILED_ENV}
+    if failed:
+        environ[FAILED_ENV] = "1"
+    ran = here.run([cad.command, "plugin", "update", "auto", "on"], timeout=120, environ=environ)
+    if ran.ok:
+        for line in ran.out.splitlines():
+            if line.strip():
+                print(line, flush=True)
+    elif ran.code == NO_COMMAND:  # a usage error: a cad that has no such command
+        print(f"{f'cad {cad.release}' if cad.release else 'This cad'} has no `cad plugin update auto`: the plugin will "
+              "not follow cad's updates. Run this command again to update the plugin.", flush=True)
+    else:
+        print(f"The plugin's automatic updates were not turned on (cad said: {ran.last()}). Run this command again to "
+              "update the plugin.", flush=True)
+
+
 # --- one report of a failure ----------------------------------------------------------------------------
 
 # How the environment spells an off and an on, as cad reads them (its ``analytics._environment``).
@@ -1005,7 +1089,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 
 def run(here: Here, reports: Reports) -> int:
-    """Steps 2-4, said as they go; then the report cad reads, last."""
+    """Steps 2-5, said as they go; then the report cad reads, last."""
     cad = install_cad(here)
     if cad.code:
         reports.failed("cad", cad.code)
@@ -1013,6 +1097,8 @@ def run(here: Here, reports: Reports) -> int:
         update(here, cad)
     print("", flush=True)
     plugin = hand_over(here, cad, reports)
+    if cad.command:
+        switch_on(here, cad, bool(plugin.code))
     if cad.code:
         print("cad itself was not installed (what went wrong is above), and the plugin's skills need it: run this "
               "again.", flush=True)
