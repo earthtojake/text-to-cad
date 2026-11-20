@@ -41,12 +41,22 @@ COMMAND_SECONDS = 180
 # shell an app opened, so earlier releases looked there too.
 HOMEBREW = ("/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin")
 # How a step failed, in a word chosen where it failed: a command did not answer in time and was stopped; a command
-# ended with a non-zero exit status (or could not start); GitHub could not be reached; an error no row foresaw; or
-# anything else (a copy that is not ours in the way, a file that cannot be edited safely).
+# ended with a non-zero exit status (or could not start); GitHub could not be reached (by us, or by a command that
+# said so: ``NETWORK_SAID``); an error no row foresaw; or anything else (a copy that is not ours in the way, a file
+# that cannot be edited safely).
 TIMEOUT, COMMAND, NETWORK, EXCEPTION, OTHER = "timeout", "command", "network", "exception", "other"
 REASONS = (TIMEOUT, COMMAND, NETWORK, EXCEPTION, OTHER)
 # The exit status of a command stopped because it did not answer in time, as ``timeout(1)`` says one.
 STOPPED = 124
+# What git, curl and Node say where the network failed them (``Ran.reason``): a command that said one of these failed
+# for want of the network (``NETWORK``), not by itself (``COMMAND``).
+NETWORK_SAID = re.compile(r"could not resolve host|failed to connect|unable to access|connection refused"
+                          r"|connection timed out|network is unreachable|\bssl|econnrefused|enotfound|etimedout"
+                          r"|getaddrinfo", re.IGNORECASE)
+# The words of a line that says what went wrong (``Ran.last``): an app's command often ends with advice after it.
+ERROR_SAID = re.compile(r"\b(?:error|failed|fatal|unable|could not|denied|not found)", re.IGNORECASE)
+# How much of that line a reason keeps.
+LAST_CHARACTERS = 200
 # How a file or a folder is renamed into place (``discard``, ``swap``, an app's config written): the standard
 # library's, unless what runs these modules gives a more patient one -- ``cad plugin`` gives cad's own (``run``), which
 # waits out a file another program holds for a moment on Windows.
@@ -68,13 +78,19 @@ class Ran:
 
     @property
     def reason(self) -> str:
-        """Why it failed, in a word (``REASONS``)."""
-        return TIMEOUT if self.stopped else COMMAND
+        """Why it failed, in a word (``REASONS``): ``timeout`` where it was stopped for not answering in time,
+        ``network`` where what it printed says the network failed it (``NETWORK_SAID``), else ``command``."""
+        if self.stopped:
+            return TIMEOUT
+        return NETWORK if NETWORK_SAID.search(self.out) else COMMAND
 
     def last(self) -> str:
-        """The last line it printed, as a reason."""
+        """The line it printed that says most, as a reason: the first that reads as an error (``ERROR_SAID``), else
+        its last, ``LAST_CHARACTERS`` of it at most. A command's error often runs over several lines and ends in
+        advice ("... and the repository exists."), which alone says nothing."""
         lines = [line.strip() for line in self.out.splitlines() if line.strip()]
-        return lines[-1][:200] if lines else f"exit status {self.code}"
+        line = next((line for line in lines if ERROR_SAID.search(line)), lines[-1] if lines else "")
+        return line[:LAST_CHARACTERS] if line else f"exit status {self.code}"
 
 
 class Failed(Exception):

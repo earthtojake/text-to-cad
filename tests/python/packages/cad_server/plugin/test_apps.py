@@ -449,6 +449,60 @@ class AppTableTests(PluginRuns):
             self.assertIn(outcome.reason, ("", *computer.REASONS))
         self.assertFalse(report.stopped)
 
+    def test_a_command_s_reason_is_its_most_telling_line(self) -> None:
+        """``Ran.last``: the first line that reads as an error, not the advice a command's error ends with; else its
+        last line; trimmed; and the exit status where it said nothing."""
+        claude = ("Updating marketplace: earthtojake...\n"
+                  "Failed to update marketplace(s): Failed to update marketplace 'earthtojake': Failed to clone "
+                  "repository: Cloning into '/home/x/.claude/plugins/marketplaces/earthtojake'...  fatal: unable "
+                  "to access 'https://github.com/earthtojake/text-to-cad.git/': Failed to connect to github.com "
+                  "port 443 after 21040 ms: Could not connect to server\n"
+                  "  Check your network connection and that you have access to the repository, and that the URL is "
+                  "correct\n"
+                  "and the repository exists.\n")
+        reason = computer.Ran(1, claude).last()
+        self.assertEqual(reason, claude.splitlines()[1][:computer.LAST_CHARACTERS])
+        self.assertEqual(len(reason), computer.LAST_CHARACTERS)
+        self.assertEqual(computer.Ran(1, "Cloning into 'x'...\n\nfatal: repository 'x' not found\nbye\n").last(),
+                         "fatal: repository 'x' not found")
+        for said in ("ERROR: no such marketplace", "Permission denied (publickey).", "Could not read from remote",
+                     "codex: unable to write config", "npm error code E404", "plugin not found"):
+            self.assertEqual(computer.Ran(1, f"working...\n{said}\nsee the docs\n").last(), said)
+        self.assertEqual(computer.Ran(1, "one\n  two  \n\n").last(), "two")
+        self.assertEqual(computer.Ran(1, "x" * 500).last(), "x" * computer.LAST_CHARACTERS)
+        self.assertEqual(computer.Ran(3, " \n").last(), "exit status 3")
+        # Every caller has it: a failed command's line, by ``Here.must``.
+        here = computer.Here(self.environ())
+        with self.assertRaises(computer.Failed) as caught:
+            here.must([sys.executable, "-c", f"import sys; sys.stdout.write({claude!r}); sys.exit(1)"])
+        self.assertIn("said: Failed to update marketplace(s): ", str(caught.exception))
+        self.assertEqual(caught.exception.reason, "network")
+
+    def test_a_command_the_network_failed_is_counted_as_network(self) -> None:
+        """``Ran.reason``: ``network`` where what a command printed says the network failed it (git's, curl's and
+        Node's words, in any case), ``timeout`` where cad stopped it, else ``command``; always one of ``REASONS``."""
+        for said in ("fatal: unable to access 'https://github.com/x/y.git/': Could not resolve host: github.com",
+                     "curl: (7) Failed to connect to github.com port 443: Connection refused",
+                     "fatal: unable to access 'https://github.com/x/': Recv failure: connection refused",
+                     "ssh: connect to host github.com port 22: Connection timed out",
+                     "connect: Network is unreachable",
+                     "fatal: unable to access 'https://github.com/x/': SSL certificate problem: unable to get issuer",
+                     "schannel: failed to receive handshake, SSL/TLS connection failed",
+                     "Error: connect ECONNREFUSED 140.82.112.3:443",
+                     "npm error getaddrinfo ENOTFOUND registry.npmjs.org",
+                     "Error: request to https://github.com failed, reason: ETIMEDOUT",
+                     "could not resolve host: GITHUB.COM"):
+            ran = computer.Ran(1, f"Installing...\n{said}\n")
+            self.assertEqual(ran.reason, "network", said)
+        for said in ("codex: something went wrong", "error: unknown option '--scope'", "Permission denied",
+                     "plugin text-to-cad not found", "wrote /home/x/openssl.cnf", ""):
+            self.assertEqual(computer.Ran(1, said).reason, "command", said)
+        stopped = computer.Ran(computer.STOPPED, "Could not resolve host: github.com", stopped=True)
+        self.assertEqual(stopped.reason, "timeout")
+        self.assertEqual(computer.Ran(computer.STOPPED, "no answer in 3 s: stopped", stopped=True).reason, "timeout")
+        for ran in (stopped, computer.Ran(1, "Connection refused"), computer.Ran(2, "usage")):
+            self.assertIn(ran.reason, computer.REASONS)
+
     def test_past_its_deadline_a_run_starts_no_command_and_no_further_app(self) -> None:
         """A run with a deadline (the one a server began) gives each command what is left of it and stops it with
         what it started; past it, no command is started, no further app begun, and nothing more removed."""
