@@ -15,7 +15,7 @@ named ``latest`` before it clones (there is none: it clones); that one request r
 
 1. install: exit 0 and every line the app phase prints; cad installed as a uv tool at this run's release, its command
    in uv's bin folder; ``cad --version``; cad's automatic updates on (``cad update auto``) and the plugin's turned on
-   by the install (``cad plugin update auto``); no server started by the install; each program holds our plugin (``text-to-cad@earthtojake``; Gemini CLI: the extension ``text-to-cad`` from
+   by the install command's last step (``cad plugin update auto``); no server started by the install; each program holds our plugin (``text-to-cad@earthtojake``; Gemini CLI: the extension ``text-to-cad`` from
    GitHub at ``latest``) exactly once, copied from the local repository.
 2. cad: ``cad server start``; a box built by ``cad run`` and its page link answering with its token, refused without;
    a file shown by ``cad viewer`` the same way; ``cad doctor`` exit 0.
@@ -73,7 +73,8 @@ PLUGIN_VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 OLD = "v0.11.10"
 CATALOG, OLD_CATALOG, PLUGIN = "earthtojake", "text-to-cad", "text-to-cad"
 OURS, OLD_OURS = f"{PLUGIN}@{CATALOG}", f"{PLUGIN}@{OLD_CATALOG}"
-# What `cad plugin install` prints as it turns the switch on, and `cad plugin update auto status` after it.
+# What the install command's `cad plugin update auto on` prints as it turns the switch on, and `cad plugin update auto
+# status` after it.
 PLUGIN_SWITCH = "plugin update auto: on"
 GITHUB = f"https://github.com/{rc.REPOSITORY}"
 CI = rc.CI
@@ -173,7 +174,8 @@ class Run:
                       or line == "Start a new session in each app to use it."):
                 unexpected.append(line)
         missing = sorted(set(expected) - seen)
-        if unexpected or missing or phase[-1:] != ["Start a new session in each app to use it."]:
+        # cad's step ends in its last line; then the install command's own last step, the switch turned on.
+        if unexpected or missing or phase[-2:] != ["Start a new session in each app to use it.", PLUGIN_SWITCH]:
             raise rc.Failed(f"the install script ({label}) said what it should not: unexpected {unexpected}, "
                             f"no line for {missing}")
         say(f"ok    the install script ({label}): exit 0, " + "; ".join(line for line in phase
