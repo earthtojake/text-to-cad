@@ -473,7 +473,7 @@ def steps(run: Run, migrate: bool = True) -> None:
     c.advance(PLUGIN_VERSION, f"{major}.{minor}.{int(patch) + 1}")
     ran = run.script("again")
     # A person's run: cad is asked for a newer one (its own `cad update`), and no release is newer than this run's.
-    if not any(line.startswith(f"cad {VERSION} is installed already: ") for line in ran.lines()):
+    if f"Updating cad {VERSION} to the newest release..." not in ran.lines():
         raise rc.Failed(f"the install command again did not find cad {VERSION} installed already")
     if any(line.startswith("Installing cad") for line in ran.lines()) or run.tool()["version"] != VERSION:
         raise rc.Failed(f"the install command again changed cad: {run.tool()}")

@@ -1080,8 +1080,9 @@ def self_pipx(box: Box) -> None:
     box.run(["pipx", "install", "cad"])
     pipx_is(box, env, NEW)
     said = box.install_command().stdout
-    # A person's run: pipx's own cad is asked for a newer one (`cad update`), and says there is none.
-    if f"cad {NEW} is installed already: " not in said or f"cad {NEW} is the newest release" not in said \
+    # A person's run: pipx's own cad is asked for a newer one (`cad update`), and says there is none, in the install
+    # command's one line.
+    if f"Updating cad {NEW} to the newest release..." not in said or f"cad {NEW} is the newest " not in said \
             or "another program's" in said:
         raise Failed(f"{box.label}: the install command with pipx's cad said:\n{said}\n{pipx_said(box)}")
     pipx_is(box, env, NEW)
@@ -1383,10 +1384,10 @@ def typed_on_windows(box: Box, old: str) -> None:
     is."""
     left = leftovers(box)
     said = box.install_command().stdout
-    if f"cad {NEW} is installed already" not in said or leftovers(box):
+    if f"Updating cad {NEW} to the newest release..." not in said or leftovers(box):
         raise Failed(f"{box.label}: the install command run again said:\n{said}\nand left {leftovers(box)} in {box.bin}")
     box.is_tool(NEW)
-    say(f"        the install command run again: cad {NEW} is installed already and nothing is newer, and what the "
+    say(f"        the install command run again: cad {NEW} is here already and nothing is newer, and what the "
         f"typed update set aside ({', '.join(left) or 'nothing'}) gone")
 
 

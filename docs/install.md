@@ -23,8 +23,9 @@ It does five things, and nothing else:
    Setting `UV_NO_MODIFY_PATH` stops that.
 3. Where cad was installed already, brings it up to date with its own `cad update`: the newest
    release of its major version ([Updating](#updating)). While cad's server is busy the update
-   waits for it, 11 minutes at most. Where cad was not updated, one line says so and the run goes
-   on: cad updates itself.
+   waits for it, 11 minutes at most. It says one line as it begins, and in its place one line of what
+   came of it: the release cad was updated to, that it is the newest already, or why cad was not
+   updated now, which never stops the run: cad updates itself.
 4. Hands the agent apps to cad, by running `cad plugin install`. That installs or updates the
    plugin in each agent app it finds, with that app's own command (below), all but Kimi Code, which
    you install by hand; and removes what earlier releases of text-to-cad left in those apps. It

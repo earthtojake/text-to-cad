@@ -279,7 +279,9 @@ carries no cad version and knows no agent app. It makes sure uv is there (an old
 update itself gets a newer one beside it), installs cad only where none is installed or the one
 there does not start, and puts the folder of a cad it installed on the PATH with uv's own `uv tool
 update-shell`. Where a person ran it and a cad that starts was there already, it runs that cad's own
-`cad update`, which stays inside its major; run by cad, it updates no cad. Then it hands over: that
+`cad update`, which stays inside its major, and says what came of it in one line of its own, so what
+a person sees before cad takes over is that line and the line about a failure's report; run by cad,
+it updates no cad. Then it hands over: that
 cad's `cad plugin install` does everything in the agent apps. Where the cad there has no such
 command (0.11.12 and 0.11.13), or cad could not be installed, the newest release's runs instead,
 once, from uv's cache (`uv tool run ... cad@latest plugin install`), which keeps no release as the

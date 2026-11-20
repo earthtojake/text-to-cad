@@ -297,7 +297,7 @@ class InstallScriptTests(AgentApps):
         (self.uv_bin / "cad").unlink()
         done = self.run_install(FAKE_PIPX_1_0="1", **said)
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertIn("cad 0.14.0 is installed already", done.stdout)
+        self.assertIn("Updating cad 0.14.0 to the newest release...\ncad 0.14.0 is the newest release\n", done.stdout)
         self.assertEqual((self.installs(), self.calls("pipx")[-1]), ([], ["list", "--json"]))
         # pipx not found: its link in ~/.local/bin says whose cad it is.
         (self.uv_bin / "cad").symlink_to(self.home / ".local" / "share" / "pipx" / "venvs" / "cad" / "bin" / "cad")
@@ -305,13 +305,13 @@ class InstallScriptTests(AgentApps):
         done = self.run_install(**said)
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertEqual((self.installs(), self.calls("pipx")), ([], []))
-        self.assertIn("cad 0.14.0 is installed already", done.stdout)
+        self.assertIn("Updating cad 0.14.0 to the newest release...", done.stdout)
         self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
         # uv's cad is there too: uv's is the one, and pipx is not asked.
         self.programs("pipx")
         (self.root / "uv.json").write_text(json.dumps({"cad": "0.12.0"}), encoding="utf-8")
         done = self.run_install(**said)
-        self.assertIn("cad 0.12.0 is installed already", done.stdout)
+        self.assertIn("Updating cad 0.12.0 to the newest release...", done.stdout)
         self.assertEqual((self.installs(), self.calls("pipx")), ([], []))
 
     def test_a_cad_pipx_installed_that_does_not_start_is_installed_again_by_pipx_never_by_uv(self) -> None:
@@ -543,33 +543,82 @@ class InstallScriptTests(AgentApps):
             done = self.run_install(FAKE_PYPI="5.0.0")
             self.assertEqual(0, done.returncode, done.stdout + done.stderr)
             self.assertEqual(self.installs(), [], there)
-            self.assertIn(f"cad {there} is installed already: looking for a newer one with its own `cad update`, "
-                          "which waits while cad's server is busy.\ncad (stand-in): update\n", done.stdout)
             self.assertEqual([(call["argv"], call["path"]) for call in self.logged("cad")],
                              [(argv, str(self.uv_bin / "cad")) for argv in (["--version"], ["update"], ASKED, HANDED,
                                                                                  AUTO_ON)])
-            self.assertNotIn("cad was not updated", done.stdout)
+            self.assertIn(f"cad {there} is the newest release\n", done.stdout)
         # Its exit status says little: 0 with nothing newer (above), non-zero with the update done all the same. What
         # uv holds afterwards is what counts.
         done = self.run_install(FAKE_CAD_UPDATES="99.1.0", FAKE_UPDATE_EXIT="1")
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertNotIn("cad was not updated", done.stdout)
+        self.assertIn("cad 99.0.0 updated to 99.1.0\n", done.stdout)
         self.assertEqual(self.calls("cad")[-2:], [HANDED, AUTO_ON])
+
+    def test_before_cad_takes_over_a_person_s_run_says_one_line_of_its_own_and_one_of_the_update(self) -> None:
+        """What a person sees before cad's ``cad plugin install`` takes over (and plays its logo): the line that a
+        failure's report may be sent, then one line as the update begins and one of what came of it -- updated, the
+        newest already, or not updated, with cad's own most telling line as the reason. Nothing ``cad update``
+        printed, on either stream. On a pipe, as here, the second line follows the first."""
+        self.tools(cad="0.11.13")
+        for extra, result in (
+                ({"FAKE_CAD_UPDATES": "0.11.14"}, "cad 0.11.13 updated to 0.11.14"),
+                ({}, "cad 0.11.13 is the newest release"),
+                # cad's own line where it said one: a release of a higher major is out, which it does not install.
+                ({"FAKE_UPDATE_SAID": "cad 0.11.13 is the newest 0.x release|cad 1.0.0, a new major version, is out"},
+                 "cad 0.11.13 is the newest 0.x release"),
+                ({"FAKE_UPDATE_EXIT": "1", "FAKE_UPDATE_SAID": "cad update: asking the cad server|error: the cad server "
+                  "did not answer in 600 seconds|Run `cad update` again later."},
+                 "cad 0.11.13 was not updated now (error: the cad server did not answer in 600 seconds): it updates "
+                 "itself.")):
+            with self.subTest(result=result):
+                self.tools(cad="0.11.13")
+                done = self.run_hosted(**extra)
+                self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+                before = done.stdout.split("cad (stand-in): the plugin, on stdout\n")[0]
+                self.assertEqual(before.splitlines(), [install.NOTICE, "Updating cad 0.11.13 to the newest release...",
+                                                       result])
+                self.assertEqual(done.stderr, "cad (stand-in): the plugin, on stderr\n")
+                self.assertNotIn("stand-in): update", done.stdout + done.stderr)
+                self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
+
+    def test_in_a_terminal_the_update_s_result_takes_the_place_of_its_first_line(self) -> None:
+        self.tools(cad="0.13.0")
+
+        class Terminal(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        first = "Updating cad 0.13.0 to the newest release..."
+        for columns, said in (("80", f"{first}\r{'cad 0.13.0 updated to 0.13.1'.ljust(len(first))}\n"),
+                              ("40", f"{first}\ncad 0.13.0 updated to 0.13.1\n")):  # too narrow: a line each
+            self.tools(cad="0.13.0")
+            shown = Terminal()
+            here = install.Here(self.environ(FAKE_CAD_UPDATES="0.13.1"))
+            with contextlib.redirect_stdout(shown), mock.patch.dict(os.environ, {"COLUMNS": columns}):
+                install.update(here, install.Cad("0.13.0", 0, str(self.uv_bin / "cad"), there=True))
+            self.assertEqual(shown.getvalue(), said, columns)
 
     def test_a_cad_that_was_not_updated_never_fails_the_run(self) -> None:
         self.tools(cad="0.13.0")
-        # Refused, failed, or still queued behind a busy server (exit 1): one line, and the run goes on.
+        # Refused, failed, or still queued behind a busy server (exit 1): one line, and the run goes on. Its reason is
+        # cad's own line that says most, as cad chooses one for an app's failure: the first that reads as an error,
+        # else the last.
+        from cad_server.plugin import computer
+
+        self.assertEqual(install.ERROR_SAID.pattern, computer.ERROR_SAID.pattern)
+        self.assertEqual(install.ERROR_SAID.flags, computer.ERROR_SAID.flags)
         done = self.run_install(FAKE_UPDATE_EXIT="1")
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertIn("cad was not updated now (`cad update` exit status 1; what it said is above): it updates "
-                      "itself.\n", done.stdout)
+        self.assertIn("cad 0.13.0 was not updated now (cad (stand-in): update, on stderr): it updates itself.\n",
+                      done.stdout)
         self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
         # No answer in the time it has: stopped, said, and the run goes on.
         here = install.Here(self.environ(FAKE_UPDATE_SLEEP="30"))
         said = io.StringIO()
         with mock.patch.object(install, "UPDATE_SECONDS", 0.5), contextlib.redirect_stdout(said):
             install.update(here, install.Cad("0.13.0", 0, str(self.uv_bin / "cad"), there=True))
-        self.assertEqual(said.getvalue(), "cad was not updated now (no answer in 0.0 minutes): it updates itself.\n")
+        self.assertEqual(said.getvalue(), "Updating cad 0.13.0 to the newest release...\ncad 0.13.0 was not updated "
+                                          "now (no answer in 0 minutes): it updates itself.\n")
 
     def test_cad_s_own_run_of_it_brings_no_cad_up_to_date(self) -> None:
         # What the releases that run this command set, each alone: the cad that runs it is left as it is.

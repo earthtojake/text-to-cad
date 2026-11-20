@@ -18,12 +18,14 @@ plugin install``, which carries the one table of them. It does these things alon
    ``cad.exe`` that runs is renamed out of uv's way (``set_aside``), never a reason to stop; what a run set aside and
    could not delete, a later run deletes (``tidy``);
 3. brings a ``cad`` that was here already, and starts, up to date, only where a person ran this (``update``): that
-   tool's own ``cad update`` (never PATH's), its lines shown, ``UPDATE_SECONDS`` at most (cad's server begins an
-   update only once nothing is in flight, and the command waits for it). It stays inside cad's major version, as
-   ``cad update`` does: a higher major is the person's to ask for. Its exit status says little (0 where it updated
-   and where nothing is newer, non-zero where the update may still be queued), so the tool's release is read again
-   from uv or pipx; where cad was not updated, one line says so and the run goes on: cad updates itself. Never where
-   cad ran this (``BY_CAD``), and never for a cad this run installed;
+   tool's own ``cad update`` (never PATH's), ``UPDATE_SECONDS`` at most (cad's server begins an update only once
+   nothing is in flight, and the command waits for it). It stays inside cad's major version, as ``cad update`` does:
+   a higher major is the person's to ask for. What it prints is captured, never shown: one line says the update
+   begins, and one line what came of it, over the first in a terminal (after it on a pipe or in a file). Its exit
+   status says little (0 where it updated and where nothing is newer, non-zero where the update may still be
+   queued), so the tool's release is read again from uv or pipx; where cad was not updated, that line gives cad's
+   own most telling line as the reason, and the run goes on: cad updates itself. Never where cad ran this
+   (``BY_CAD``), and never for a cad this run installed;
 4. hands over (``hand_over``): ``<cad> plugin install`` by that tool's own command, on this process's own output, so a
    person's terminal shows what cad draws there. cad is told who began the run (``CAD_PLUGIN_BY=script``) and where
    to say what it did (``CAD_PLUGIN_REPORT``, a scratch file). That cad is asked first, its answer captured, whether
@@ -215,6 +217,11 @@ NOTICE = ("If the install fails before cad can run, one anonymous report of wher
 # --- the computer ---------------------------------------------------------------------------------
 
 
+# The words of a line that says what went wrong (``Ran.last``): cad's own choice of line (its ``plugin.computer``'s
+# ``ERROR_SAID``, which a test holds this to).
+ERROR_SAID = re.compile(r"\b(?:error|failed|fatal|unable|could not|denied|not found)", re.IGNORECASE)
+
+
 @dataclass
 class Ran:
     code: int
@@ -225,9 +232,11 @@ class Ran:
         return self.code == 0
 
     def last(self) -> str:
-        """The last line it printed, as a reason."""
+        """The line it printed that says most, as a reason: the first that reads as an error (``ERROR_SAID``), else
+        its last, 200 characters of it at most, as cad chooses one."""
         lines = [line.strip() for line in self.out.splitlines() if line.strip()]
-        return lines[-1][:200] if lines else f"exit status {self.code}"
+        line = next((line for line in lines if ERROR_SAID.search(line)), lines[-1] if lines else "")
+        return line[:200] if line else f"exit status {self.code}"
 
 
 class Here:
@@ -276,11 +285,13 @@ class Here:
         text, home = str(path), str(self.home).rstrip("/\\")
         return "~" + text[len(home):] if home and (text == home or text.startswith(home + os.sep)) else text
 
-    def run(self, argv: Sequence[Any], timeout: float = ASK_SECONDS, environ: Optional[Dict[str, str]] = None) -> Ran:
+    def run(self, argv: Sequence[Any], timeout: float = ASK_SECONDS, environ: Optional[Dict[str, str]] = None,
+            apart: bool = True) -> Ran:
         """``argv`` run with nothing to read (in ``environ``, else this run's), what it printed captured; stopped,
-        with every process it started, after ``timeout`` seconds."""
-        group = ({"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)} if os.name == "nt"
-                 else {"start_new_session": True})
+        with every process it started, after ``timeout`` seconds. ``apart`` false: it stays in this process's group,
+        as ``show``'s command does (a terminal's Ctrl-C reaches it), and only it is stopped."""
+        group = ({} if not apart else {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
+                 if os.name == "nt" else {"start_new_session": True})
         try:
             process = subprocess.Popen([str(part) for part in argv], env=self.environ if environ is None else environ,
                                        stdin=subprocess.DEVNULL,
@@ -290,7 +301,7 @@ class Here:
         try:
             out, _ = process.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
-            _stop(process)
+            _stop(process, group=apart)
             return Ran(124, f"no answer in {int(timeout)} s: stopped")
         return Ran(process.returncode, (out or b"").decode("utf-8", "replace"))
 
@@ -320,13 +331,14 @@ class Here:
         return found
 
 
-def _stop(process: "subprocess.Popen[bytes]") -> None:
-    """A command that did not answer stopped, with what it started (its process group; on Windows its tree)."""
+def _stop(process: "subprocess.Popen[bytes]", group: bool = True) -> None:
+    """A command that did not answer stopped, with what it started (its process group; on Windows its tree); not
+    ``group``, one in this process's own group: elsewhere than Windows, it alone."""
     try:
         if os.name == "nt":
             subprocess.run(["taskkill", "/T", "/F", "/PID", str(process.pid)], stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL, timeout=30)
-        else:
+        elif group:
             os.killpg(process.pid, signal.SIGKILL)
     except (OSError, subprocess.SubprocessError):
         pass
@@ -612,13 +624,11 @@ def find_uv(here: Here) -> Optional[str]:
     return here.environ.get("UV") or here.which("uv")
 
 
-def already(here: Here, release: str) -> str:
-    """The line for a cad that is here and starts: left as it is where cad ran this, and brought up to date next
-    where a person did (``update``)."""
+def already(here: Here, release: str) -> None:
+    """The line for a cad that is here and starts, where cad ran this: it is left as it is. Where a person did, the
+    update's own line says it (``update``), and none here."""
     if by_cad(here):
-        return f"cad {release} is installed already: it is left as it is, and updates itself."
-    return (f"cad {release} is installed already: looking for a newer one with its own `cad update`, which waits "
-            "while cad's server is busy.")
+        print(f"cad {release} is installed already: it is left as it is, and updates itself.", flush=True)
 
 
 def find_pipx(here: Here) -> Optional[str]:
@@ -737,7 +747,7 @@ def install_cad(here: Here) -> Cad:
     piped = pipx_cad(here, folder) if tool is None else None
     if piped is not None:
         if here.run([piped.commands["cad"], "--version"], timeout=60).ok:
-            print(already(here, piped.version), flush=True)
+            already(here, piped.version)
             return Cad(piped.version, 0, piped.commands["cad"], there=True, pipx=True, env=piped.env)
         return repair_pipx(here, piped)
     problem, moved = make_room(here, folder, tools)
@@ -749,7 +759,7 @@ def install_cad(here: Here) -> Cad:
         tool_command = tool.commands.get("cad") or command
         if here.run([tool_command, "--version"], timeout=60).ok:
             settle(here, moved, True)
-            print(already(here, tool.version), flush=True)
+            already(here, tool.version)
             return Cad(tool.version, 0, tool_command, there=True, env=tool.env)
         # There, but it does not start (a tool Windows left half-replaced, say): installed again.
         print(f"cad {tool.version} is installed but does not start: installing it again with uv.", flush=True)
@@ -776,11 +786,25 @@ def install_cad(here: Here) -> Cad:
     return Cad(tool.version if tool else None, 0, (tool.commands.get("cad") if tool else None) or command)
 
 
+def over_line(stream: Any, line: str) -> bool:
+    """Whether a line written to ``stream`` after ``line`` can take its place, by a carriage return: a terminal, as
+    wide as the line at least. A pipe or a file keeps every line."""
+    try:
+        return stream.isatty() and len(line) < shutil.get_terminal_size().columns
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
 def update(here: Here, cad: Cad) -> None:
-    """Step 3 (see the module): the cad that was here already brought up to date by its own ``cad update``, its lines
-    shown, ``UPDATE_SECONDS`` at most; then its release read again from uv or pipx, whatever the command's exit
-    status. Where it is the release it was and the command did not end 0, one line; never a failure of the run."""
-    code = here.show([cad.command, "update"], timeout=UPDATE_SECONDS)
+    """Step 3 (see the module): the cad that was here already brought up to date by its own ``cad update``,
+    ``UPDATE_SECONDS`` at most, what it prints captured; then its release read again from uv or pipx, whatever the
+    command's exit status. Said in one line as it begins, then one line of what came of it, over the first where the
+    terminal allows (``over_line``): updated, the newest already, or not updated now, with cad's own most telling
+    line (``Ran.last``) as the reason. Never a failure of the run."""
+    first = f"Updating cad {cad.release} to the newest release..."
+    over = over_line(sys.stdout, first)
+    print(first, end="" if over else "\n", flush=True)
+    ran = here.run([cad.command, "update"], timeout=UPDATE_SECONDS, apart=False)
     if cad.pipx:
         release = pipx_release(Path(cad.env))
     else:
@@ -788,11 +812,19 @@ def update(here: Here, cad: Cad) -> None:
         tool = uv_tools(here, uv).get("cad") if uv else None
         release = tool.version if tool else None
     if release and release != cad.release:
+        said = f"cad {cad.release} updated to {release}"
         cad.release = release
-    elif code:
-        why = (f"no answer in {UPDATE_SECONDS // 60} minutes" if code == 124 else "its `cad update` could not be run"
-               if code == 127 else f"`cad update` exit status {code}; what it said is above")
-        print(f"cad was not updated now ({why}): it updates itself.", flush=True)
+    elif ran.ok and release:
+        # cad's own words where it said them: of its major alone, where a release of a higher major is out.
+        newest = f"cad {cad.release} is the newest "
+        said = next((line.strip() for line in ran.out.splitlines() if line.strip().startswith(newest)),
+                    f"{newest}release")
+    elif ran.ok:
+        said = f"cad {cad.release} is up to date"
+    else:
+        why = f"no answer in {UPDATE_SECONDS // 60:.0f} minutes" if ran.code == 124 else ran.last()
+        said = f"cad {cad.release} was not updated now ({why}): it updates itself."
+    print("\r" + said.ljust(len(first)) if over else said, flush=True)
 
 
 # --- the plugin, by cad ---------------------------------------------------------------------------------
@@ -1112,7 +1144,6 @@ def run(here: Here, reports: Reports) -> int:
         reports.failed("cad", cad.code)
     elif cad.there and not by_cad(here):
         update(here, cad)
-    print("", flush=True)
     plugin = hand_over(here, cad, reports)
     if cad.command:
         switch_on(here, cad, bool(plugin.code))

@@ -50,8 +50,9 @@ THEIRS = "---\nname: {name}\ndescription: someone else's\n---\n"
 # writes its record. Each call notes its folder and Gemini's trust.
 #
 # For the install command: each call also notes the variables FAKE_LOG_ENV names and whether the file FAKE_LOG_EXISTS
-# names is there. `cad update` says a line, waits FAKE_UPDATE_SLEEP seconds, makes the tool FAKE_CAD_UPDATES (uv's
-# record of it, else pipx's) and exits FAKE_UPDATE_EXIT. `cad plugin install`, and `uv tool run ... plugin install`
+# names is there. `cad update` says a line on each stream and the lines FAKE_UPDATE_SAID names (split at `|`), waits
+# FAKE_UPDATE_SLEEP seconds, makes the tool FAKE_CAD_UPDATES (uv's record of it, else pipx's) and exits
+# FAKE_UPDATE_EXIT. `cad plugin install`, and `uv tool run ... plugin install`
 # (the newest cad's), says a line on each stream, writes FAKE_PLUGIN_APPS as the report CAD_PLUGIN_REPORT names (no
 # report without it, nor from a cad with no such command: exit 2) and exits FAKE_PLUGIN_EXIT_CAD, or
 # FAKE_PLUGIN_EXIT_UV. `cad plugin install --help` exits FAKE_PLUGIN_HELP_CAD, else 2 (argparse's usage error, on
@@ -116,6 +117,9 @@ STAND_IN = textwrap.dedent('''\
     if name == "cad" and sys.argv[1:] == ["update"]:
         import time
         print("cad (stand-in): update", flush=True)
+        print("cad (stand-in): update, on stderr", file=sys.stderr, flush=True)
+        for said in filter(None, os.environ.get("FAKE_UPDATE_SAID", "").split("|")):
+            print(said, flush=True)
         time.sleep(float(os.environ.get("FAKE_UPDATE_SLEEP", "0")))
         state = Path(os.environ["FAKE_UV_STATE"])
         tools = json.loads(state.read_text()) if state.exists() else {{}}

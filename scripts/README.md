@@ -325,8 +325,8 @@ where those files ship, so these scripts are what produces them.
   installed again; a cad installed with pipx is a global cad too, installed again with pipx where it does not
   start), and puts cad's folder on the PATH with uv's own `uv tool update-shell` (unless `UV_NO_MODIFY_PATH`
   is set). Where a person ran it and cad was here already, that cad's own `cad update` brings it up to date,
-  inside its major, never failing the run; where cad ran it (0.11.12 and 0.11.13 do, and the bridge from
-  earlier releases), cad is left as it is. Then `<cad> plugin install` puts the plugin into each agent app
+  inside its major, never failing the run, its output captured and said in one line (two on a pipe); where
+  cad ran it (0.11.12 and 0.11.13 do, and the bridge from earlier releases), cad is left as it is. Then `<cad> plugin install` puts the plugin into each agent app
   (cad's table of apps, `cad_server/plugin`, with the terminal's logo and live line); a cad with no such
   command, or none at all, gets the newest release's by `uv tool run cad@latest plugin install`. Last, that
   cad's own `cad plugin update auto on` turns the switch on (`CAD_INSTALL_FAILED=1` where the plugin's step did
