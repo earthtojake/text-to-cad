@@ -898,7 +898,10 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   measured and the check is `NOT CHECKED`, never an error of the part's. A face touching both faces of a pair
   is a cut edge; a cone between a skin and a coaxial
   hole wall is a countersink, and so is the cone of a hole sunk through the full thickness (to a knife edge at
-  the far skin, or past it): it touches both skins, no wall is left, and its hole is its small end. A chamfer or a round of a skin's edge (a slanted plane, a convex cylinder of at
+  the far skin, or past it): it touches both skins, no wall is left, and its hole is its small end. A cone in
+  several faces (two half faces, as some systems write a hole) is one: its small end is the circle its faces'
+  arcs close together, and a hole a skin split through it holds no wire of, read back from the flat, is
+  countersunk where a countersink's axis runs through it and that countersink's hole is its size. A chamfer or a round of a skin's edge (a slanted plane, a convex cylinder of at
   most `t` along it, a cone, torus or sphere about its normal; along an ellipse or a spline, a face with no
   axis to read whose sampled normals all face the skin's side, at a slant to it somewhere; within the sheet)
   is an `edge_break`, and a face square to the skin (a plane across it, a cylinder about its normal, a face
@@ -918,7 +921,8 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   thickness that touch are one feature: they share the ref of the one furthest off it (`location`; each
   keeps its own in `face`), so a pocket's floor and walls are one finding.
 - **Bends.** The skins and bend cylinders joined by tangent edges are the sheet's two sides; the side with
-  the largest skin is unfolded, its coplanar skins the flanges. A bend's angle is its cylinder's angular
+  the largest skin is unfolded (a skin in several faces, split through a hole, read whole: its coplanar faces
+  joined), its coplanar skins the flanges. A bend's angle is its cylinder's angular
   span (checked against the flanges' normals), its length the extent along the axis, its tangent lines
   where the cylinders meet the flanges. A corner joined without a bend is a `sharp_bends` item: two skins at
   an angle meeting at an edge (`Box + Box`, a shelled box), a round on one side of a corner with no
@@ -960,7 +964,11 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   A rim that runs off the outline, into a cutout or into another rim is no whole circle of the skin's, and
   the cone no whole turn there: the edges between two passes of its seam are laid as one outline, less the
   hole, which is read from the cone's small end; the wire that rim is part of is no hole of its own and is
-  read back from the flat.
+  read back from the flat. A cone in several faces is laid face by face, and where a corner of the outline
+  leaves one of them touching no skin, it is laid with the rest of its cone; a round hole of the flat whose
+  rim such pieces drew in chords (its points on one circle within their sag) is round, no cutout. What a
+  countersink or a break cuts is counted up to the plane of the skin it faces once, however many faces that
+  skin is in.
   `cad.build123d.unfold(shape, thickness=, k_factor=, material=, bend_lines=False)` returns it
   (`bend_lines=True`: a Compound of `CUT` and `BEND` children, one DXF layer each, `BEND` empty for a flat
   plate), and raises `ValueError`
