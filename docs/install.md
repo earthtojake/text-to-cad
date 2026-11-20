@@ -70,10 +70,11 @@ PowerShell 5.1 does not follow the redirect from `texttocad.dev`.
 
 `cad plugin install` and `cad plugin update` count each run in cad's telemetry: who started it (you,
 the install command or cad's server), how it ended, how many seconds it took, what the terminal was
-shown (the logo, and in which colours), and each agent app it found on your computer, by cad's own
-short name for it (`claude`, `codex`, `cursor`, ...), with what was done there, its seconds and, where
-it failed, one word for why (a command that did not answer in time, a command that failed, no
-network, a mistake of cad's own, or anything else). Never a path, a message, or a version of an app.
+shown (the logo, and in which colours), and how many agent apps it found on your computer and how many
+of those failed, as numbers. cad names an agent app only where its install failed: by cad's own short
+name for it (`claude`, `codex`, `cursor`, ...), with its seconds and one word for why (a command that
+did not answer in time, a command that failed, no network, a mistake of cad's own, or anything else).
+Which agent apps you have is never sent. Never a path, a message, or a version of an app.
 It goes out as the rest of cad's telemetry does: under your random install ID, only after cad has
 said in one line that it sends usage stats and crash reports, and never in CI.
 

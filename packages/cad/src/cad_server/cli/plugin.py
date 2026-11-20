@@ -37,8 +37,9 @@ dispatcher says the telemetry notice for no ``cad plugin`` command (``cad_server
 plugin update`` with its output in a log), so a run says it itself, before its work, where a person reads it
 (``_tell``): one a person typed, or one the hosted install command handed over in a person's terminal; never one a
 server began, one an install command cad itself started reached, nor ``cad plugin update auto``. Counted: as it ends,
-from what the run says it was (``run.Facts``), one ``install`` event and one ``install_app`` for each app it found
-(``_count``, ``cad_server.analytics.install``), under every rule telemetry has -- only once the person was told and
+from what the run says it was (``run.Facts``), one ``install`` event, counting the apps it found and those that
+failed, and one ``install_failure`` for each app where it failed, no other app named (``_count``,
+``cad_server.analytics.install``), under every rule telemetry has -- only once the person was told and
 never after a no, never in CI or from a development build, nothing the run began before it was told, never a failure
 of the run, and nothing of it waits on the network. A crash of the run is the command's, reported as every command's
 is (``cad_server.cli._report``).
@@ -194,14 +195,14 @@ def _tell(by: str) -> None:
 
 
 def _count(facts: Any, under: Any) -> None:
-    """The run counted (``cad_server.analytics.install``), from what it says it was (``run.Facts``) and nothing else:
-    who began it, what its terminal was shown, its seconds, and each app it found with what was done there, the word
-    for why it failed and its seconds. One another run kept from running (``run.BUSY``) is counted as that, and names
-    no app; one its deadline stopped (``Facts.stopped``, whose exit status says it failed) as stopped, with the apps
-    it had found by then. Whether any other run ended well is not passed on but decided there from its apps, so no
-    run is counted as ended in a way its own apps deny: failed exactly where every app it found failed -- the reading
-    the receiver takes, which refuses any other with its whole batch. ``under``: the answer in force as the run
-    began. Never raises: a count never fails the run."""
+    """The run counted (``cad_server.analytics.install``), from what it says it was (``run.Facts``) and nothing else: who
+    began it, what its terminal was shown, its seconds, and each app it found with what was done there, the word for why
+    it failed and its seconds -- of which only the failed ones are kept by name, the rest counted. One another run kept
+    from running (``run.BUSY``) is counted as that, and names no app; one its deadline stopped (``Facts.stopped``, whose
+    exit status says it failed) as stopped, with the apps it had found by then. Whether any other run ended well is not
+    passed on but decided there from its apps, so no run is counted as ended in a way its own apps deny: failed exactly
+    where every app it found failed -- the reading the receiver takes, which refuses any other with its whole batch.
+    ``under``: the answer in force as the run began. Never raises: a count never fails the run."""
     try:
         from cad_server import analytics
         from cad_server.plugin import run

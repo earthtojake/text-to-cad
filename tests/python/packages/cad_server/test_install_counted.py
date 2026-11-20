@@ -1,10 +1,10 @@
 """A run of ``cad plugin install`` or ``cad plugin update``, counted (``cad_server.cli.plugin``: ``_tell``, ``_count``;
 ``cad_server.analytics.install``): from what the run says it was (``run.Facts``) to the batch the sender would post --
-one ``install`` event and one ``install_app`` for each app found, words of cad's and whole numbers, runs alike one row
-with a count --, kept in a file of its own with a sender started at once, under every rule a count goes by; who is
-told what is sent, and who is not; and a crash of the command, which is reported as every command's is. Every run here
-is on a computer of its own (``tests/python/support/agent_apps.py``): a temporary home and state folder, stand-in
-programs for the apps."""
+one ``install`` event, counting the apps found and failed, and one ``install_failure`` for each app where it failed and
+for no other, words of cad's and whole numbers, runs alike one row with a count --, kept in a file of its own with a
+sender started at once, under every rule a count goes by; who is told what is sent, and who is not; and a crash of the
+command, which is reported as every command's is. Every run here is on a computer of its own
+(``tests/python/support/agent_apps.py``): a temporary home and state folder, stand-in programs for the apps."""
 
 from __future__ import annotations
 
@@ -71,21 +71,23 @@ class CountedTest(unittest.TestCase):
     def count(self, found: run.Facts) -> None:
         command._count(found, analytics.in_force())
 
-    def test_a_run_and_each_app_it_found_are_kept_in_one_line_and_sent_as_words_and_whole_numbers(self) -> None:
+    def test_a_run_and_each_app_where_it_failed_are_kept_in_one_line_and_sent_as_words_and_whole_numbers(self) -> None:
         self.tell()
         self.count(facts("script", ("claude", "installed", "", 3.2), ("codex", "failed", "command", 0.4),
                          ("cline", "failed", "", 61.9), ("gemini", "skipped", "", 0.0),
                          logo="played", colour="24bit", seconds=72.9,
                          statuses={"claude": "installed", "pi": "not found"}))
-        # One line for the run with its apps, in a file of its own: never the spool or the arrivals, which a sender
-        # of an earlier release takes whole and keeps only what it knows of.
+        # One line for the run with the apps where it failed, in a file of its own: never the spool or the arrivals,
+        # which a sender of an earlier release takes whole and keeps only what it knows of. The apps done well are in
+        # its count alone: no line names them.
         self.assertEqual(kept(self.settings), [
             {"by": "script", "outcome": "ok", "logo": "played", "colour": "24bit", "seconds": 72, "found": 4,
              "failed": 2,
-             "apps": [{"app": "claude", "status": "installed", "seconds": 3},
-                      {"app": "codex", "status": "failed", "reason": "command", "seconds": 0},
-                      {"app": "cline", "status": "failed", "reason": "other", "seconds": 61},
-                      {"app": "gemini", "status": "skipped", "seconds": 0}]}])
+             "failures": [{"app": "codex", "reason": "command", "seconds": 0},
+                          {"app": "cline", "reason": "other", "seconds": 61}]}])
+        line = self.settings.with_name(analytics.INSTALLS).read_text(encoding="utf-8")
+        self.assertNotIn('"claude"', line)  # the source's ``app`` is the app running cad: another word
+        self.assertNotIn('"gemini"', line)
         self.assertEqual(sorted(path.name for path in self.settings.parent.iterdir()),
                          ["settings.json", "settings.lock", analytics.INSTALLS])
         self.assertEqual(self.started, [self.settings], "a sender at once: the run may be cad's last for a long while")
@@ -95,15 +97,38 @@ class CountedTest(unittest.TestCase):
         self.assertEqual(batch["events"], [
             {"name": "install", "by": "script", "outcome": "ok", "logo": "played", "colour": "24bit", "seconds": 72,
              "found": 4, "failed": 2, "count": 1},
-            {"name": "install_app", "app": "claude", "status": "installed", "seconds": 3, "count": 1},
-            {"name": "install_app", "app": "cline", "status": "failed", "reason": "other", "seconds": 61, "count": 1},
-            {"name": "install_app", "app": "codex", "status": "failed", "reason": "command", "seconds": 0, "count": 1},
-            {"name": "install_app", "app": "gemini", "status": "skipped", "seconds": 0, "count": 1},
+            {"name": "install_failure", "app": "cline", "reason": "other", "seconds": 61, "count": 1},
+            {"name": "install_failure", "app": "codex", "reason": "command", "seconds": 0, "count": 1},
         ])
         for event in batch["events"]:  # whole numbers: the receiver refuses a fraction, and a null reason
             self.assertTrue(all(type(event[name]) is int for name in ("seconds", "count")), event)
             self.assertNotIn(None, event.values())
         self.assertFalse(self.settings.with_name(analytics.INSTALLS).exists(), "taken by the sender")
+
+    def test_a_run_in_which_every_app_went_well_names_no_app(self) -> None:
+        """Which agent apps a computer has is never sent: a run that went well everywhere is its counts alone."""
+        self.tell()
+        self.count(facts("person", ("claude", "installed", "", 3.0), ("codex", "updated", "", 1.0),
+                         ("cursor", "removed", "", 0.0), ("gemini", "skipped", "", 0.0), seconds=5.0))
+        [batch] = sent(self.settings)
+        self.assertEqual(batch["events"], [
+            {"name": "install", "by": "person", "outcome": "ok", "logo": "none", "colour": "none", "seconds": 5,
+             "found": 4, "failed": 0, "count": 1}])
+        for app in ("claude", "codex", "cursor", "gemini"):
+            self.assertNotIn(f'"{app}"', json.dumps(batch))
+
+    def test_a_run_in_which_some_apps_failed_names_exactly_those(self) -> None:
+        self.tell()
+        self.count(facts("person", ("claude", "installed", "", 3.0), ("codex", "failed", "network", 9.0),
+                         ("cursor", "updated", "", 1.0), ("gemini", "failed", "timeout", 120.0), seconds=140.0))
+        [batch] = sent(self.settings)
+        [run_row] = [event for event in batch["events"] if event["name"] == "install"]
+        self.assertEqual((run_row["outcome"], run_row["found"], run_row["failed"]), ("ok", 4, 2))
+        self.assertEqual(sorted((event["name"], event["app"], event["reason"]) for event in batch["events"]
+                                if event["name"] != "install"),
+                         [("install_failure", "codex", "network"), ("install_failure", "gemini", "timeout")])
+        self.assertNotIn('"claude"', json.dumps(batch))
+        self.assertNotIn('"cursor"', json.dumps(batch))
 
     def test_runs_alike_and_apps_alike_are_one_row_each_with_a_count(self) -> None:
         self.tell()
@@ -118,10 +143,7 @@ class CountedTest(unittest.TestCase):
              "found": 2, "failed": 0, "count": 1},
             {"name": "install", "by": "server", "outcome": "stopped", "logo": "none", "colour": "none",
              "seconds": 903, "found": 2, "failed": 1, "count": 3},
-            {"name": "install_app", "app": "claude", "status": "updated", "seconds": 2, "count": 4},
-            {"name": "install_app", "app": "codex", "status": "failed", "reason": "timeout", "seconds": 900,
-             "count": 3},
-            {"name": "install_app", "app": "codex", "status": "updated", "seconds": 4, "count": 1},
+            {"name": "install_failure", "app": "codex", "reason": "timeout", "seconds": 900, "count": 3},
         ])
         # A batch holds each shape once (everything but its count): what the receiver refuses a batch for.
         shapes = [json.dumps({name: value for name, value in event.items() if name != "count"}, sort_keys=True)
@@ -140,10 +162,10 @@ class CountedTest(unittest.TestCase):
             self.count(found)
             [row] = kept(self.settings)
             self.settings.with_name(analytics.INSTALLS).unlink()
-            return row["outcome"], row["found"], row["failed"], len(row["apps"])
+            return row["outcome"], row["found"], row["failed"], len(row["failures"])
 
         self.assertEqual(counted(facts("person")), ("ok", 0, 0, 0), "no app found: it ended well")
-        self.assertEqual(counted(facts("person", fine, down)), ("ok", 2, 1, 2))
+        self.assertEqual(counted(facts("person", fine, down)), ("ok", 2, 1, 1))
         self.assertEqual(counted(facts("person", down, outcome=run.FAILED, code=1)), ("failed", 1, 1, 1))
         # Another run was going: it ran nothing and names no app.
         self.assertEqual(counted(facts("server", outcome=run.BUSY, code=75)), ("busy", 0, 0, 0))
@@ -152,14 +174,14 @@ class CountedTest(unittest.TestCase):
         # as one that ended well, nor as one in which every app failed.
         stopped = dict(outcome=run.FAILED, code=computer.STOPPED, stopped=True)
         self.assertEqual(counted(facts("server", down, **stopped)), ("stopped", 1, 1, 1))
-        self.assertEqual(counted(facts("server", fine, down, **stopped)), ("stopped", 2, 1, 2))
-        self.assertEqual(counted(facts("server", fine, **stopped)), ("stopped", 1, 0, 1))
+        self.assertEqual(counted(facts("server", fine, down, **stopped)), ("stopped", 2, 1, 1))
+        self.assertEqual(counted(facts("server", fine, **stopped)), ("stopped", 1, 0, 0))
         self.assertEqual(counted(facts("server", **stopped)), ("stopped", 0, 0, 0))
         self.assertEqual(counted(facts("server", stopped=True)), ("stopped", 0, 0, 0), "whatever else it said")
         # A run that named itself wrongly cannot be counted wrongly: its apps say how it ended.
         self.assertEqual(counted(facts("person", down, down[:1] + ("failed", "network", 2.0), outcome=run.OK)),
                          ("failed", 2, 2, 2))
-        self.assertEqual(counted(facts("person", fine, outcome=run.FAILED, code=1)), ("ok", 1, 0, 1))
+        self.assertEqual(counted(facts("person", fine, outcome=run.FAILED, code=1)), ("ok", 1, 0, 0))
 
     def test_a_run_its_hard_stop_ends_is_counted_as_stopped_with_the_apps_it_had_done(self) -> None:
         """A run a server began that never came back says nothing itself: what ends it (``command._cut_off``, the last
@@ -202,8 +224,8 @@ class CountedTest(unittest.TestCase):
                         dict(by="server", stopped="yes")):
             self.assertFalse(count(**refused), refused)
         self.assertEqual((kept(self.settings), self.started), ([], []))
-        # A reason outside the words is ``other``, and one on an app that did not fail goes no further; seconds past
-        # the most are the most; a run may find as many apps as the receiver reads.
+        # A reason outside the words is ``other``, and an app that did not fail goes no further than the count; seconds
+        # past the most are the most; a run may find as many apps as the receiver reads.
         self.assertTrue(count(by="person", logo="failed", colour="256", seconds=10.0 ** 9, apps=[
             ("codex", "failed", "codex: something went wrong", 10 ** 7), ("claude", "removed", "network", 0.999)]))
         self.assertTrue(count(by="script", logo="still", apps=[fine] * analytics.MAX_INSTALL_APPS))
@@ -211,15 +233,19 @@ class CountedTest(unittest.TestCase):
         self.assertEqual(first, {
             "by": "person", "outcome": "ok", "logo": "failed", "colour": "256",
             "seconds": analytics.MAX_INSTALL_SECONDS, "found": 2, "failed": 1,
-            "apps": [{"app": "codex", "status": "failed", "reason": "other", "seconds": analytics.MAX_INSTALL_SECONDS},
-                     {"app": "claude", "status": "removed", "seconds": 0}]})
-        self.assertEqual((second["found"], second["failed"], second["outcome"]), (analytics.MAX_INSTALL_APPS, 0, "ok"))
+            "failures": [{"app": "codex", "reason": "other", "seconds": analytics.MAX_INSTALL_SECONDS}]})
+        self.assertEqual((second["found"], second["failed"], second["outcome"], second["failures"]),
+                         (analytics.MAX_INSTALL_APPS, 0, "ok", []))
         # A line changed on disk is checked again as it is taken: one no run would keep is not sent, no part of it.
         answer = list(analytics._answer(analytics._read(self.settings)))
-        changed = [dict(first, outcome="failed"), dict(first, found=3), dict(first, seconds=1.5),
-                   dict(first, apps=first["apps"] + [{"app": "/home/someone", "status": "installed", "seconds": 1}]),
-                   dict(first, apps=[dict(first["apps"][1], reason=None)], found=1, failed=0),
-                   dict(first, apps="claude")]
+        failure = first["failures"][0]
+        changed = [dict(first, outcome="failed"), dict(first, found=65), dict(first, seconds=1.5),
+                   dict(first, failed=2), dict(first, found=0), dict(first, outcome="busy"),
+                   dict(first, failures=[failure, {"app": "/home/someone", "reason": "other", "seconds": 1}], failed=2),
+                   dict(first, failures=[dict(failure, status="failed")]),  # never a status
+                   dict(first, failures=[dict(failure, reason=None)]),
+                   dict(first, failures=[], failed=0, apps=[{"app": "claude", "status": "installed", "seconds": 1}]),
+                   dict(first, failures="codex")]
         with open(self.settings.with_name(analytics.INSTALLS), "a", encoding="utf-8") as handle:
             for row in changed:
                 handle.write(json.dumps({"answer": answer, "at": time.time(), "source": {}, "install": row}) + "\n")
@@ -281,10 +307,11 @@ class CountedTest(unittest.TestCase):
         self.assertLessEqual(len(apps.APPS), analytics.MAX_INSTALL_APPS)
         for app in apps.APPS:
             self.assertRegex(app.key, r"\A[a-z0-9][a-z0-9._-]{0,39}\Z")
-        # Every status an app's row can have in a run's report, but the one of an app that is not there.
+        # Every status an app's row can have in a run's report, but the one of an app that is not there, is counted;
+        # only ``failed`` names the app.
         for status in sorted(analytics.INSTALL_STATUSES):
-            self.assertIsNotNone(analytics._install_run("person", False, False, "none", "none", 0.0,
-                                                        [("claude", status, "", 0.0)]))
+            found = analytics._install_run("person", False, False, "none", "none", 0.0, [("claude", status, "", 0.0)])
+            self.assertEqual((found["found"], found["failures"] != []), (1, status == "failed"), status)
         for colour in ("24bit", "256", "none"):  # ``terminal.Screen.colour``'s three
             self.assertIn(colour, analytics.INSTALL_COLOURS)
         self.assertEqual(len(analytics.INSTALL_COLOURS), 3)

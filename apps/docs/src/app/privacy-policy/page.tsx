@@ -92,12 +92,12 @@ export default function PrivacyPolicyPage() {
                 (well, with every app failed, stopped at its time limit, or not run because another run
                 was going), how many whole seconds it took, what your terminal was shown (whether the logo
                 was drawn, built up or still, and in full colour, 256 colours or none), how many agent apps it found on your
-                computer and how many of those failed; and for each agent app it found, which one, by
-                text-to-cad’s own short name for it (such as “claude” or “codex”), what was done there
-                (installed, updated, removed, skipped or failed), how many whole seconds that took and, for
-                a failure, why, as one of a few fixed words (a command that did not answer in time, a
-                command that failed, no network, a mistake of text-to-cad’s own, or anything else) -- never
-                the error’s message, a path, or the app’s version or settings;
+                computer and how many of those failed, as numbers alone. It names an agent app only where
+                installing or updating the plugin there failed: which one, by text-to-cad’s own short name for
+                it (such as “claude” or “codex”), how many whole seconds it took, and why, as one of a few
+                fixed words (a command that did not answer in time, a command that failed, no network, a
+                mistake of text-to-cad’s own, or anything else) -- never the error’s message, a path, or the
+                app’s version or settings. Which agent apps you have installed is never sent;
               </li>
               <li>
                 crash reports, when text-to-cad’s own code fails unexpectedly: the error’s type (such as
@@ -196,8 +196,8 @@ export default function PrivacyPolicyPage() {
             takes, where in the world it is used, which features are used, which of the CAD views’ tools
             and settings are used and for how long (so we know which to improve and which matter
             less), which agent apps and
-            operating systems to support, how often tools, builds and snapshots fail, and how installing
-            the plugin goes in each agent app; and, from
+            operating systems to support, how often tools, builds and snapshots fail, and how often
+            installing the plugin fails and in which agent app; and, from
             crash reports, to find and fix the bugs behind them.
           </li>
           <li>

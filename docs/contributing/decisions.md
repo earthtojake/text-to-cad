@@ -23,7 +23,8 @@ release of cad, so it cannot be tested against the release that runs it. Its run
 cad learned only whether the run after one of its own updates ended with exit status 0, so a row
 that failed on every computer failed unseen. And cad ran it unattended, so whatever the website
 served at that moment ran as the person, with nobody watching. In cad the table has a version, is
-tested with the release it ships in, each run is counted app by app, and what runs unattended is
+tested with the release it ships in, each run is counted (how many apps it found and how many failed,
+naming an app only where it failed: which apps a computer has is never sent), and what runs unattended is
 code the computer already installed. One package behind one command keeps the rest of cad free of
 the apps: an app change is still one row.
 

@@ -434,8 +434,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     (the server's `_internal/telemetry_send.py`). Three counts start that sender at once, since whatever made
     them may be the last of cad's processes on the computer for a long while: a step of a computer's arrival at a
     release, one of cad's own updates, and a run of `cad plugin install` or `cad plugin update`, counted as it
-    ends -- who began it, how it ended, and each agent app it found with what was done there, in words of cad's
-    and whole numbers. A process that exits sends nothing either: its last batch is
+    ends -- who began it, how it ended, how many agent apps it found and how many failed, and each app where it
+    failed, in words of cad's and whole numbers (an app is named only where its install failed). A process that exits sends nothing either: its last batch is
     kept beside the settings, and the next process that sends sends it, in the background -- each row saying the
     version and app that counted it, each kept batch under its own id, so a resend of a batch counts once. One
     wait remains, bounded: `cad telemetry off`, which waits for the deletion it asks for.

@@ -83,11 +83,12 @@ exits, each batch under an id of its own and stamped with the time it was made:
   command as it ends -- who began it (``INSTALL_BY``: a person, the hosted install command handing over, or cad's
   server), how it ended (``INSTALL_OUTCOMES``: well, every app it found failed, its deadline stopped it before it was
   done, or another run was going and this one ran nothing), what its terminal was shown (``INSTALL_LOGOS``,
-  ``INSTALL_COLOURS``), the whole seconds it took, how many agent apps it found on the computer and how many of
-  those failed;
-- ``install_app`` (``install``): each app such a run found -- which (``app``: cad's own key for it in its table of
-  apps, a word of ours, never a path or a version of the app's), what was done there (``INSTALL_STATUSES``), for a
-  failure why (``INSTALL_FAILURES``: a word chosen where it failed, never its message), and the whole seconds it took.
+  ``INSTALL_COLOURS``), the whole seconds it took, and how many agent apps it found on the computer and how many of
+  those failed: counts, never which apps;
+- ``install_failure`` (``install``): each app where such a run failed, and only those -- which (``app``: cad's own key
+  for it in its table of apps, a word of ours, never a path or a version of the app's), why (``INSTALL_FAILURES``: a
+  word chosen where it failed, never its message), and the whole seconds it took. An app installed, updated, cleaned
+  up or skipped is never named: cad does not say which agent apps a computer has.
 
 A command sends nothing itself. What it counts -- a build, a snapshot, a drawing, a crash -- is kept beside
 the settings for the next process that sends (``spool``): only while sharing is on, under the answer in
@@ -200,8 +201,8 @@ LOG = logging.getLogger("cad_server.analytics")
 OWN = frozenset({"cad", "cadgen", "cad_server"})
 
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
-# 12: each run of the plugin's install in the agent apps, which cad runs itself (``install``), and each app of one
-# (``install_app``);
+# 12: each run of the plugin's install in the agent apps, which cad runs itself (``install``), and each app where one
+# failed (``install_failure``);
 # 11: where a batch comes from is one field, ``app`` (the agent app, detected), one batch per app; the channel of 10
 # and earlier (an app's name joined to where its copy came from) is no longer sent; how a computer got to a
 # version (``arrival``); and how each of cad's own updates ended (``update``);
@@ -239,11 +240,11 @@ SCHEMA = 12
 # schema 11's ``update``: whether cad's own update of itself went, and where it did not, which step, in a word of ours,
 # with the version before it (as ``arrival`` says it), the installer, a count of tries and whether it was typed --
 # cad failing or working, never a message, a path or anything of the person's, under the same ids. Nor schema 12's
-# ``install`` and ``install_app``: whether a command of cad's went, as ``update`` says of cad's own update, and where
-# it did not, in which of the agent apps cad puts the plugin in and why, in a word of ours -- with which of those apps
-# it found, each by cad's own key for it (the app running cad was named already, ``app``), a count of them, the run's
-# seconds and what its terminal drew. Never a path, a version of an app's, a message or anything typed, under the same
-# ids.
+# ``install`` and ``install_failure``: whether a command of cad's went, as ``update`` says of cad's own update, and
+# where it did not, in which of the agent apps cad puts the plugin in and why, in a word of ours -- an app named only
+# where its install failed, by cad's own key for it (the app running cad was named already, ``app``), never which
+# apps a computer has -- with a count of the apps found and failed, the run's seconds and what its terminal drew.
+# Never a path, a version of an app's, a message or anything typed, under the same ids.
 DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.
@@ -354,9 +355,9 @@ KEPT = "telemetry-batches.jsonl"
 # Where a process keeps an arrival it counted (``arrival``), beside the settings, for the sender it starts: a file of
 # its own, which no earlier release's sender takes from the folder 0.11.11 and earlier share, capped as the spool is.
 ARRIVALS = "telemetry-arrivals.jsonl"
-# Where a run of the plugin's install is kept (``install``), each run one line with its apps, for the sender it starts:
-# a file of its own again, since a sender of 0.11.12 or 0.11.13 takes ``ARRIVALS`` whole and keeps of it only what it
-# knows, an arrival or an update; capped as the spool is.
+# Where a run of the plugin's install is kept (``install``), each run one line with its failed apps alone, for the
+# sender it starts: a file of its own again, since a sender of 0.11.12 or 0.11.13 takes ``ARRIVALS`` whole and keeps
+# of it only what it knows, an arrival or an update; capped as the spool is.
 INSTALLS = "telemetry-installs.jsonl"
 HANDED = 16  # the most of each kind one command's counts carry (``Recorder.take``)
 # The page's plumbing: a view's once-a-second sync, its viewer requests (the home's re-reads of its
@@ -567,9 +568,9 @@ INSTALL_BY = frozenset({"person", "script", "server"})
 INSTALL_OUTCOMES = frozenset({"ok", "failed", "stopped", "busy"})
 INSTALL_LOGOS = frozenset({"played", "still", "none", "failed"})
 INSTALL_COLOURS = frozenset({"24bit", "256", "none"})
-# Each app a run found (``install_app``): what was done there, and for a failure why, a word chosen where it failed
-# -- a command that did not answer in time, one that failed, no network, a mistake of cad's own, anything else --
-# never its message.
+# What was done in each app a run found (``run.Facts``): only the failures are named (``install_failure``), each with
+# why, a word chosen where it failed -- a command that did not answer in time, one that failed, no network, a mistake
+# of cad's own, anything else -- never its message. The rest are counted in the run's ``found``, never named.
 INSTALL_STATUSES = frozenset({"installed", "updated", "removed", "skipped", "failed"})
 INSTALL_FAILURES = frozenset({"timeout", "command", "network", "exception", "other"})
 # A run's seconds and an app's, whole, past this many counted as this many; and the most apps a run finds: cad's table
@@ -599,8 +600,8 @@ EVENTS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "update": (("from", "outcome", "reason", "tries", "installer", "asked", "plugin"), ("count",)),
     # Whole seconds and numbers of apps are names here, not counts: runs alike in each are one row, counted.
     "install": (("by", "outcome", "logo", "colour", "seconds", "found", "failed"), ("count",)),
-    # ``reason`` only with ``failed``.
-    "install_app": (("app", "status", "reason", "seconds"), ("count",)),
+    # Only an app whose install failed: an app done well is counted in its run's ``found``, never named.
+    "install_failure": (("app", "reason", "seconds"), ("count",)),
 }
 MAX_EVENTS = 256  # a batch's most (the receiver's too, from schema 7): any more wait for the next batch
 # A crash (``signature``): where it happened -- a CAD tool's call, a viewer's route, another request a
@@ -1635,15 +1636,17 @@ def in_force() -> Any:
 
 def install(*, by: str, busy: bool = False, stopped: bool = False, logo: str = "none", colour: str = "none",
             seconds: float = 0.0, apps: Any = (), under: Any = None) -> bool:
-    """Count one run of the plugin's install in the agent apps that ended (``install``, and an ``install_app`` for
-    each app it found; ``cad_server.cli.plugin`` calls it once per run): begun by ``by`` (``INSTALL_BY``), its
-    terminal shown ``logo`` in ``colour`` (``INSTALL_LOGOS``, ``INSTALL_COLOURS``), after ``seconds``, with ``apps``
-    the apps it found, each ``(app, status, reason, seconds)``: cad's key for the app, what was done there
-    (``INSTALL_STATUSES``), and for a failed one why (``INSTALL_FAILURES``: anything else is ``other``). ``busy``:
-    another run was going and this one ran nothing; it names no app. ``stopped``: its deadline stopped it before it
-    was done; its apps are those it had found by then. Whether a run that ended ended well is not told but read from
-    its apps (``_install_run``), so no run is counted as ended in a way its apps deny. A word outside these, an app's
-    key of another shape, more apps than ``MAX_INSTALL_APPS``, or a run both busy and stopped, is not counted.
+    """Count one run of the plugin's install in the agent apps that ended (``install``, and an ``install_failure``
+    for each app where it failed; ``cad_server.cli.plugin`` calls it once per run): begun by ``by`` (``INSTALL_BY``),
+    its terminal shown ``logo`` in ``colour`` (``INSTALL_LOGOS``, ``INSTALL_COLOURS``), after ``seconds``, with
+    ``apps`` the apps it found, each ``(app, status, reason, seconds)``: cad's key for the app, what was done there
+    (``INSTALL_STATUSES``), and for a failed one why (``INSTALL_FAILURES``: anything else is ``other``). Every app
+    found is counted (``found``, ``failed``); only a failed one is kept by name: which agent apps a computer has is
+    never sent. ``busy``: another run was going and this one ran nothing; it names no app. ``stopped``: its deadline
+    stopped it before it was done; its apps are those it had found by then. Whether a run that ended ended well is not
+    told but read from its apps (``_install_run``), so no run is counted as ended in a way its apps deny. A word
+    outside these, an app's key of another shape, more apps than ``MAX_INSTALL_APPS``, or a run both busy and stopped,
+    is not counted.
 
     ``under``: the answer in force when the run began (``in_force``); under another now, nothing is kept.
     Kept and sent as an arrival is (``arrival``), in a file of its own (``INSTALLS``): under the answer in force, only
@@ -1679,20 +1682,18 @@ def _whole_seconds(value: Any) -> int | None:
 
 def _install_run(by: Any, busy: Any, stopped: Any, logo: Any, colour: Any, seconds: Any,
                  apps: Any) -> dict[str, Any] | None:
-    """A run of the plugin's install as it is kept (``INSTALLS``): what its ``install`` event says (``EVENTS``' names)
-    and, as ``apps``, what each of its ``install_app`` events says, ``reason`` only with ``failed``; or None for one
-    that is not counted. ``found`` and ``failed`` are counted from ``apps``, and ``outcome`` decided here and nowhere
-    else: ``busy`` (which names no app: one that does is not counted), ``stopped`` (whatever it found), else, for a
-    run that ended, ``failed`` exactly where it found an app and every one failed and ``ok`` anywhere else -- the one
-    reading the receiver takes."""
+    """A run of the plugin's install as it is kept (``INSTALLS``, ``_install_event``): what its ``install`` event says
+    (``EVENTS``' names) and, as ``failures``, what each of its ``install_failure`` events says -- the failed apps
+    alone, so no app done well is ever named --; or None for one that is not counted. ``found`` and ``failed`` are
+    counted from every app in ``apps``, and ``outcome`` decided here and nowhere else: ``busy`` (which names no app:
+    one that does is not counted), ``stopped`` (whatever it found), else, for a run that ended, ``failed`` exactly
+    where it found an app and every one failed and ``ok`` anywhere else -- the one reading the receiver takes."""
     took = _whole_seconds(seconds)
-    if by not in INSTALL_BY or logo not in INSTALL_LOGOS or colour not in INSTALL_COLOURS:
-        return None
     if type(busy) is not bool or type(stopped) is not bool or (busy and stopped):
         return None
     if took is None or not isinstance(apps, (list, tuple)) or len(apps) > (0 if busy else MAX_INSTALL_APPS):
         return None
-    rows = []
+    found, failures = 0, []
     for each in apps:
         if not isinstance(each, (list, tuple)) or len(each) != 4:
             return None
@@ -1700,25 +1701,53 @@ def _install_run(by: Any, busy: Any, stopped: Any, logo: Any, colour: Any, secon
         app_took = _whole_seconds(app_took)
         if not (isinstance(app, str) and _APP.fullmatch(app)) or did not in INSTALL_STATUSES or app_took is None:
             return None
-        row: dict[str, Any] = {"app": app, "status": did}
+        found += 1
         if did == "failed":
-            row["reason"] = reason if isinstance(reason, str) and reason in INSTALL_FAILURES else "other"
-        rows.append({**row, "seconds": app_took})
-    failed = sum(1 for row in rows if row["status"] == "failed")
-    outcome = "busy" if busy else "stopped" if stopped else "failed" if rows and failed == len(rows) else "ok"
-    return {"by": by, "outcome": outcome, "logo": logo, "colour": colour, "seconds": took, "found": len(rows),
-            "failed": failed, "apps": rows}
+            failures.append({"app": app, "reason": reason if isinstance(reason, str) and reason in INSTALL_FAILURES
+                             else "other", "seconds": app_took})
+    outcome = "busy" if busy else "stopped" if stopped else "failed" if found and len(failures) == found else "ok"
+    return _install_event({"by": by, "outcome": outcome, "logo": logo, "colour": colour, "seconds": took,
+                           "found": found, "failed": len(failures), "failures": failures})
+
+
+def _count_of(value: Any, most: int) -> bool:
+    """Whether ``value`` is a whole number, not a bool, from 0 to ``most``."""
+    return type(value) is int and 0 <= value <= most
+
+
+def _install_event(found: Any) -> dict[str, Any] | None:
+    """A run as it is kept (``_install_run``) where it is exactly one: ``by``, ``outcome``, ``logo``, ``colour``,
+    ``seconds``, ``found``, ``failed`` and ``failures`` (each ``{app, reason, seconds}``, one per failed app, so as many
+    as ``failed``), every word of its vocabulary and every number in range, and its outcome the one its counts allow
+    (the receiver's cross rules: ``busy`` found none; ``stopped`` any; else ``failed`` exactly where it found one and
+    every one failed); else None. A line changed on disk says nothing."""
+    names = ("by", "outcome", "logo", "colour", "seconds", "found", "failed", "failures")
+    if not isinstance(found, dict) or set(found) != set(names) or not isinstance(found["failures"], list):
+        return None
+    words = ((found["by"], INSTALL_BY), (found["outcome"], INSTALL_OUTCOMES), (found["logo"], INSTALL_LOGOS),
+             (found["colour"], INSTALL_COLOURS))
+    if not all(isinstance(word, str) and word in among for word, among in words):
+        return None
+    apps, failed, outcome = found["found"], found["failed"], found["outcome"]
+    if not (_count_of(found["seconds"], MAX_INSTALL_SECONDS) and _count_of(apps, MAX_INSTALL_APPS)
+            and _count_of(failed, apps) and len(found["failures"]) == failed):
+        return None
+    if outcome == "busy" and apps:
+        return None
+    if outcome in ("ok", "failed") and (outcome == "failed") != (apps >= 1 and failed == apps):
+        return None
+    for row in found["failures"]:
+        if not (isinstance(row, dict) and set(row) == {"app", "reason", "seconds"} and isinstance(row["app"], str)
+                and _APP.fullmatch(row["app"]) and isinstance(row["reason"], str) and row["reason"] in INSTALL_FAILURES
+                and _count_of(row["seconds"], MAX_INSTALL_SECONDS)):
+            return None
+    return {name: found[name] for name in names[:-1]} | {"failures": [dict(row) for row in found["failures"]]}
 
 
 def _install_kept(found: Any) -> dict[str, Any] | None:
     """A kept run (``_install_run``) as it is taken to be sent: itself where it is exactly one ``install`` would
-    keep, else None -- a line changed on disk says nothing."""
-    if not isinstance(found, dict) or not isinstance(found.get("apps"), list):
-        return None
-    rows = [row for row in found["apps"] if isinstance(row, dict)]
-    checked = _install_run(found.get("by"), found.get("outcome") == "busy", found.get("outcome") == "stopped",
-                           found.get("logo"), found.get("colour"), found.get("seconds"),
-                           [(row.get("app"), row.get("status"), row.get("reason"), row.get("seconds")) for row in rows])
+    keep (``_install_event``), else None -- a line changed on disk says nothing."""
+    checked = _install_event(found)
     if checked is None or json.dumps(checked, sort_keys=True) != json.dumps(found, sort_keys=True):
         return None
     return checked
@@ -2204,14 +2233,14 @@ class Recorder:
 
     @_guarded(lambda: None)
     def installed(self, found: Any) -> None:
-        """One run of the plugin's install (``install``), as it was kept: noted, with each app it found
-        (``install_app``), only if it is one ``install`` would keep."""
+        """One run of the plugin's install (``install``), as it was kept: noted, with each app where it failed
+        (``install_failure``; no other app is ever named), only if it is one ``install`` would keep."""
         checked = _install_kept(found)
         if checked is None:
             return
         self._note("install", tuple(checked[name] for name in EVENTS["install"][0]), {"count": 1})
-        for row in checked["apps"]:
-            self._note("install_app", tuple(row.get(name) for name in EVENTS["install_app"][0]), {"count": 1})
+        for row in checked["failures"]:
+            self._note("install_failure", tuple(row[name] for name in EVENTS["install_failure"][0]), {"count": 1})
 
     def _arrived_or_updated(self, entry: dict[str, Any]) -> None:
         """A line of ``ARRIVALS``: an arrival's step, or an update."""

@@ -393,9 +393,9 @@ class UpdateTests(PluginRuns):
             self.assertFalse(plugin_catch_up.running(), "the lock went with the process")
         [counted] = [json.loads(row)["install"] for row in
                      (self.state / analytics.INSTALLS).read_text(encoding="utf-8").splitlines()]
-        self.assertEqual({name: counted[name] for name in ("by", "outcome", "found", "failed", "apps")},
-                         {"by": "server", "outcome": "stopped", "found": 1, "failed": 0,
-                          "apps": [{"app": "claude", "status": "updated", "seconds": 2}]})
+        self.assertEqual({name: counted[name] for name in ("by", "outcome", "found", "failed", "failures")},
+                         {"by": "server", "outcome": "stopped", "found": 1, "failed": 0, "failures": []},
+                         "the app it had updated is counted, never named")
 
     def test_a_crash_is_kept_as_the_run_s_failure(self) -> None:
         self.keep(**{"for": "0.0.1", "release": cad_server.__version__, "at": 7.0, "tries": 1, "outcome": "underway"})

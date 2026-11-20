@@ -64,7 +64,7 @@ test("the build daemon's counts are PostHog events of their own, each a window's
   const countsOf = event => Object.fromEntries(Object.entries(event).filter(([key]) => key !== 'name'));
   assert.deepEqual(batch.map(event => event.properties), DAEMON.events.map(event => ({ ...context, ...countsOf(event) })));
   assert.deepEqual(Object.keys(EVENTS).sort(), ['arrival', 'build', 'build_failure', 'control', 'exception', 'feature', 'files',
-    'health', 'install', 'install_app', 'snapshot', 'snapshot_failure', 'tool', 'tool_failure', 'update', 'view']);
+    'health', 'install', 'install_failure', 'snapshot', 'snapshot_failure', 'tool', 'tool_failure', 'update', 'view']);
   // Schemas before 5 name no batch: PostHog makes up each event's uuid and stamps it as it arrives, as ever.
   assert.ok(batch.every(event => !('uuid' in event) && !('timestamp' in event)));
 });
@@ -148,21 +148,20 @@ test("each of cad's own updates is PostHog's cad_updated: by version, from, outc
   assert.ok(installed.uuid && installed.timestamp, 'named, so a batch sent again counts once');
 });
 
-test("a run of the plugin's install is PostHog's plugin_installed, and each app of it plugin_app_installed, by the app it was installed in", async () => {
-  const [run, installed, failed] = await at(JSON.parse(JSON.stringify({ ...NAMED, schema: 12, process: 'cli', channel: undefined, app: 'claude-code', events: [
+test("a run of the plugin's install is PostHog's plugin_installed, and each app where it failed plugin_app_failed, by that app", async () => {
+  const [run, failed] = await at(JSON.parse(JSON.stringify({ ...NAMED, schema: 12, process: 'cli', channel: undefined, app: 'claude-code', events: [
     { name: 'install', by: 'script', outcome: 'ok', logo: 'played', colour: '24bit', seconds: 42, found: 2, failed: 1, count: 1 },
-    { name: 'install_app', app: 'claude', status: 'installed', seconds: 7, count: 1 },
-    { name: 'install_app', app: 'codex', status: 'failed', reason: 'timeout', seconds: 30, count: 1 },
+    { name: 'install_failure', app: 'codex', reason: 'timeout', seconds: 30, count: 1 },
   ] })));
   const context = { distinct_id: INSTALL, session: SESSION, $session_id: SESSION, $geoip_disable: true, process: 'cli', version: '0.8.0',
     app: 'claude-code', platform: 'linux', arch: 'x86_64' };
-  assert.deepEqual([run.event, installed.event, failed.event], ['plugin_installed', 'plugin_app_installed', 'plugin_app_installed']);
+  // Not `install_failed`: that is the install command's own report (`/v1/install`).
+  assert.deepEqual([run.event, failed.event], ['plugin_installed', 'plugin_app_failed']);
   assert.deepEqual(run.properties, { ...context, by: 'script', outcome: 'ok', logo: 'played', colour: '24bit', seconds: 42, found: 2,
     failed: 1, count: 1 });
-  // The app the plugin was installed in is `plugin_app`; `app` stays the app running cad, as on every event.
-  assert.deepEqual(installed.properties, { ...context, plugin_app: 'claude', status: 'installed', seconds: 7, count: 1 });
-  assert.deepEqual(failed.properties, { ...context, plugin_app: 'codex', status: 'failed', reason: 'timeout', seconds: 30, count: 1 });
-  assert.ok([run, installed, failed].every(event => event.uuid && event.timestamp === '2026-10-09T11:59:00.000Z'),
+  // The app where the install failed is `plugin_app`; `app` stays the app running cad, as on every event. No status.
+  assert.deepEqual(failed.properties, { ...context, plugin_app: 'codex', reason: 'timeout', seconds: 30, count: 1 });
+  assert.ok([run, failed].every(event => event.uuid && event.timestamp === '2026-10-09T11:59:00.000Z'),
     'named, so a batch sent again counts once');
 });
 

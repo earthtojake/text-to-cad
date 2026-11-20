@@ -47,12 +47,12 @@
  *   install   one run of the plugin's install in the agent apps (schema 12's; `cad plugin install`, `cad plugin
  *             update`): who began it (`INSTALL_BY`), how it ended (`INSTALL_OUTCOMES`), what its terminal showed
  *             (`INSTALL_LOGOS`, `INSTALL_COLOURS`), the whole seconds it took, how many apps it found and how many
- *             of those failed.
- *   install_app
- *             one app of such a run (schema 12's): which (`app`, the install's own key for it, checked by its shape),
- *             what was done there (`INSTALL_STATUSES`), for a failure why (`INSTALL_FAILURES`), a word cad chose, and
- *             the whole seconds it took. Its row names the app `plugin_app`: a row's `app` is the batch's, the agent
- *             app running cad.
+ *             of those failed: counts, never which apps.
+ *   install_failure
+ *             one app where such a run failed (schema 12's), and only such an app: cad names no app it installed in,
+ *             updated or skipped, so which agent apps a computer has is never sent. Which (`app`, the install's own
+ *             key for it, checked by its shape), why (`INSTALL_FAILURES`), a word cad chose, and the whole seconds it
+ *             took. Its row names the app `plugin_app`: a row's `app` is the batch's, the agent app running cad.
  *
  * cadgen 0.7.7 to 0.7.15 (schemas 1 and 2) send `tool`, `view` and `file`: one distinct file, once a day,
  * by a salted code. Its code goes no further: a batch's are read as `files`, one of each format they name.
@@ -89,9 +89,9 @@
  * version, step by step, so a computer stuck on its way to one is counted; and `update`, which no schema before it
  * sends either: whether each of cad's own updates of itself went, and where one did not, which step failed.
  *
- * Schema 12 is schema 11 with `install` and `install_app`, which no schema before it sends: cad installs the plugin
- * in the agent apps itself (`cad plugin install`), so it counts each run and each app of it, where before the install
- * command did that work and counted nothing.
+ * Schema 12 is schema 11 with `install` and `install_failure`, which no schema before it sends: cad installs the
+ * plugin in the agent apps itself (`cad plugin install`), so it counts each run and names each app where one failed,
+ * where before the install command did that work and counted nothing.
  */
 
 import { createHash } from 'node:crypto';
@@ -269,13 +269,12 @@ const UPDATE_PLUGIN = new Set(['none', 'ok', 'failed', 'underway']);
 // who typed the command, the install command handing over, or cad's server; how it ended -- well, every app found
 // failed, its deadline stopped it before it was done (a run the server began has one), or another run held the lock
 // and this one left at once; what its terminal showed -- the logo built, the logo still, none, or one that failed, in
-// which colours; and each app of it -- what was done there, and for a failure why, a word cad chose where it failed.
-// A run and an app each take whole seconds, and a run finds so many apps at most.
+// which colours; and each app where it failed -- why, a word cad chose where it failed (an app done well is counted,
+// never named). A run and a failed app each take whole seconds, and a run finds so many apps at most.
 const INSTALL_BY = new Set(['person', 'script', 'server']);
 const INSTALL_OUTCOMES = new Set(['ok', 'failed', 'stopped', 'busy']);
 const INSTALL_LOGOS = new Set(['played', 'still', 'none', 'failed']);
 const INSTALL_COLOURS = new Set(['24bit', '256', 'none']);
-const INSTALL_STATUSES = new Set(['installed', 'updated', 'removed', 'skipped', 'failed']);
 const INSTALL_FAILURES = new Set(['timeout', 'command', 'network', 'exception', 'other']);
 const MAX_INSTALL_SECONDS = 100_000;
 const MAX_INSTALL_APPS = 64;
@@ -301,8 +300,8 @@ export const FIELDS = {
   arrival: ['step', 'route', 'from', 'outcome', 'reason', 'attempts', 'count'], // `reason`, `attempts` where they apply
   update: ['from', 'outcome', 'reason', 'tries', 'installer', 'asked', 'plugin', 'count'], // `reason` for a failure
   install: ['by', 'outcome', 'logo', 'colour', 'seconds', 'found', 'failed', 'count'],
-  // `plugin_app`: the event's `app`, the app the plugin was installed in (a row's `app` is the batch's); `reason` for a failure
-  install_app: ['plugin_app', 'status', 'reason', 'seconds', 'count'],
+  // `plugin_app`: the event's `app`, the app where the plugin's install failed (a row's `app` is the batch's)
+  install_failure: ['plugin_app', 'reason', 'seconds', 'count'],
 };
 
 export class Invalid extends Error {}
@@ -338,7 +337,7 @@ const frameOf = (frame, name) => {
 };
 const seconds = (value, name) =>
   (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= MAX_SECONDS ? value : fail(`${name} is not seconds`));
-// How long a run of the plugin's install, or one app of it, took (whole seconds), and how many apps a run found.
+// How long a run of the plugin's install, or one failed app of it, took (whole seconds), and how many apps a run found.
 const installSeconds = (value, name) =>
   (Number.isInteger(value) && value >= 0 && value <= MAX_INSTALL_SECONDS ? value : fail(`${name} is not whole seconds`));
 const installApps = (value, name) =>
@@ -521,17 +520,16 @@ const READERS = {
     return { key: `install ${JSON.stringify([by, outcome, logo, colour, took, found, failed])}`,
       fields: { by, outcome, logo, colour, seconds: took, found, failed, count } };
   },
-  // The app by the install's own key for it, never the batch's `app`; a reason only with `failed`.
-  install_app(event, at) {
-    only(event, ['name', 'app', 'status', 'reason', 'seconds', 'count'], at);
+  // An app where the install failed, by the install's own key for it, never the batch's `app`, and why: every field
+  // there, and no other (no `status`: it is always a failure).
+  install_failure(event, at) {
+    exactly(event, ['app', 'reason', 'seconds', 'count'], at);
     const app = matches(event.app, APP, `${at}.app`);
-    const status = oneOf(event.status, INSTALL_STATUSES, `${at}.status`);
-    const reason = status === 'failed' ? oneOf(event.reason, INSTALL_FAILURES, `${at}.reason`)
-      : (event.reason === undefined ? null : fail(`${at}.reason: only a failed app names one`));
+    const reason = oneOf(event.reason, INSTALL_FAILURES, `${at}.reason`);
     const took = installSeconds(event.seconds, `${at}.seconds`);
     const count = some(event.count, `${at}.count`);
-    return { key: `install_app ${JSON.stringify([app, status, reason, took])}`,
-      fields: { plugin_app: app, status, reason, seconds: took, count } };
+    return { key: `install_failure ${JSON.stringify([app, reason, took])}`,
+      fields: { plugin_app: app, reason, seconds: took, count } };
   },
 };
 
@@ -588,8 +586,9 @@ const SCHEMAS = new Map([
       legacy_channel: null, source: null, process: oneOf(batch.process, PROCESSES_6, 'process') }),
     current: true, named: true, maxEvents: MAX_EVENTS_7, parts: true,
     snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_10, toolFailures: FAILURES_10, causes: true }],
-  // Schema 11 with the plugin's install in the agent apps, which cad runs itself: each run of it, and each app of one.
-  [12, { fields: ['app', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control', 'arrival', 'update', 'install', 'install_app']), kinds: KINDS_8,
+  // Schema 11 with the plugin's install in the agent apps, which cad runs itself: each run of it, and each app where one
+  // failed.
+  [12, { fields: ['app', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control', 'arrival', 'update', 'install', 'install_failure']), kinds: KINDS_8,
     origin: batch => ({ channel: null, app: matches(batch.app, APP, 'app'),
       legacy_channel: null, source: null, process: oneOf(batch.process, PROCESSES_6, 'process') }),
     current: true, named: true, maxEvents: MAX_EVENTS_7, parts: true,

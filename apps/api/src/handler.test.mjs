@@ -635,54 +635,58 @@ test("schema 12 counts each run of the plugin's install: who began it, how it en
   }
 });
 
-const installApp = fields => ({ name: 'install_app', app: 'claude', status: 'installed', seconds: 7, count: 1, ...fields });
+const installFailure = fields => ({ name: 'install_failure', app: 'claude', reason: 'timeout', seconds: 7, count: 1, ...fields });
 
-test("schema 12 counts each app of a run: which, what was done there, and why one failed, the batch's own app beside it", async () => {
+test("schema 12 names an app only where the plugin's install failed: which, why, its seconds, the batch's own app beside it", async () => {
   const shapes = [
     {},
-    ...['updated', 'removed', 'skipped'].map(status => ({ status })),
-    ...['timeout', 'command', 'network', 'exception', 'other'].map(reason => ({ status: 'failed', reason })),
+    ...['command', 'network', 'exception', 'other'].map(reason => ({ reason })),
     { app: 'claude-desktop' },
     { app: 'someone.else_2', seconds: 0 }, // an open set, checked by its shape
     { app: 'codex', seconds: 100000, count: 3 },
   ];
   const store = memory();
-  const batch = { ...INSTALLING, events: shapes.map(installApp) };
+  const batch = { ...INSTALLING, events: shapes.map(installFailure) };
   assert.equal((await send(store, 'POST', '/v1/events', JSON.parse(JSON.stringify(batch)))).status, 204);
-  // A row names the app the plugin was installed in `plugin_app`: its `app` stays the batch's, the app running cad.
-  assert.deepEqual(store.rows.map(fieldsOf), shapes.map(installApp).map(shape => ({
-    id: idOf(batch.batch, `install_app ${JSON.stringify([shape.app, shape.status, shape.reason ?? null, shape.seconds])}`),
-    at: batch.at, event: 'install_app', plugin_app: shape.app, status: shape.status, reason: shape.reason ?? null,
-    seconds: shape.seconds, count: shape.count,
+  // A row names the app where the install failed `plugin_app`: its `app` stays the batch's, the app running cad.
+  assert.deepEqual(store.rows.map(fieldsOf), shapes.map(installFailure).map(shape => ({
+    id: idOf(batch.batch, `install_failure ${JSON.stringify([shape.app, shape.reason, shape.seconds])}`),
+    at: batch.at, event: 'install_failure', plugin_app: shape.app, reason: shape.reason, seconds: shape.seconds,
+    count: shape.count,
   })));
   assert.ok(store.rows.every(row => row.app === 'claude-code' && row.process === 'cli'));
   for (const bad of [
-    ...['Claude Code', '/Users/someone/.claude', 'a'.repeat(41), '', 7, null].map(app => installApp({ app })),
-    installApp({ app: undefined }),
-    installApp({ status: 'not found' }), installApp({ status: 'note' }), installApp({ status: undefined }), // an app found, in five words
-    installApp({ status: 'failed' }), // a failure names why
-    installApp({ status: 'failed', reason: 'denied' }), // a word cad has not
-    installApp({ status: 'failed', reason: 'claude plugin install exited 1' }), // never its words
-    installApp({ reason: 'timeout' }), installApp({ status: 'skipped', reason: null }), // a reason without `failed`
-    ...[-1, 1.5, 100001, '7', null].map(seconds => installApp({ seconds })), installApp({ seconds: undefined }),
-    { ...installApp({}), plugin_app: 'claude' }, // the receiver's word, never a sender's
-    { ...installApp({}), path: '/Users/someone/.claude/plugins' }, // nothing else
-    installApp({ count: 0 }), installApp({ count: undefined }),
+    ...['Claude Code', '/Users/someone/.claude', 'a'.repeat(41), '', 7, null].map(app => installFailure({ app })),
+    installFailure({ app: undefined }),
+    installFailure({ reason: undefined }), installFailure({ reason: null }), // a failure always names why
+    installFailure({ reason: 'denied' }), // a word cad has not
+    installFailure({ reason: 'claude plugin install exited 1' }), // never its words
+    ...['failed', 'installed', 'updated', 'skipped'].map(status => installFailure({ status })), // no status: it failed
+    ...[-1, 1.5, 100001, '7', null].map(seconds => installFailure({ seconds })), installFailure({ seconds: undefined }),
+    { ...installFailure({}), plugin_app: 'claude' }, // the receiver's word, never a sender's
+    { ...installFailure({}), path: '/Users/someone/.claude/plugins' }, // nothing else
+    installFailure({ count: 0 }), installFailure({ count: undefined }),
   ]) {
     const body = JSON.parse(JSON.stringify({ ...INSTALLING, events: [bad] }));
     assert.equal((await send(memory(), 'POST', '/v1/events', body)).status, 400, JSON.stringify(bad));
   }
-  // One app's shape once per batch; and no schema before 12 sends one.
-  const twice = { ...INSTALLING, events: [installApp({}), installApp({})] };
+  // An app done well is never named: the kind of row that did is no kind at all.
+  for (const app of [{ name: 'install_app', app: 'claude', status: 'installed', seconds: 7, count: 1 },
+    { name: 'install_app', app: 'codex', status: 'failed', reason: 'timeout', seconds: 7, count: 1 }]) {
+    const body = { ...INSTALLING, events: [app] };
+    assert.equal((await send(memory(), 'POST', '/v1/events', body)).status, 400, JSON.stringify(app));
+  }
+  // One failure's shape once per batch; and no schema before 12 sends one.
+  const twice = { ...INSTALLING, events: [installFailure({}), installFailure({})] };
   assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(twice)))).status, 400);
-  for (const older of [{ ...ARRIVING, events: [installApp({})] }, { ...PARTS, schema: 10, process: 'cli', events: [installApp({})] }]) {
+  for (const older of [{ ...ARRIVING, events: [installFailure({})] }, { ...PARTS, schema: 10, process: 'cli', events: [installFailure({})] }]) {
     assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(older)))).status, 400, `schema ${older.schema}`);
   }
 });
 
 test('schema 12 reads everything schema 11 does, its rows keyed alike, and a schema 11 batch is read as ever', async () => {
-  // A run and its apps beside what a schema 11 batch counts: one batch, one row each.
-  const mixed = { ...INSTALLING, events: [install({ found: 2, failed: 1 }), installApp({}), installApp({ app: 'codex', status: 'failed', reason: 'timeout' }),
+  // A run and the app where it failed beside what a schema 11 batch counts: one batch, one row each.
+  const mixed = { ...INSTALLING, events: [install({ found: 2, failed: 1 }), installFailure({ app: 'codex' }),
     arrival({ step: 'setup', outcome: 'ok' }), update({}), ...PINNED.events] };
   const store = memory();
   assert.equal((await send(store, 'POST', '/v1/events', JSON.parse(JSON.stringify(mixed)))).status, 204);
@@ -692,7 +696,7 @@ test('schema 12 reads everything schema 11 does, its rows keyed alike, and a sch
   assert.equal((await send(twelve, 'POST', '/v1/events', { ...PINNED, schema: 12 })).status, 204);
   assert.deepEqual(twelve.rows, eleven.rows);
   // Up to 256 events, as every schema from 7.
-  const many = Array.from({ length: 257 }, (_, index) => installApp({ seconds: index }));
+  const many = Array.from({ length: 257 }, (_, index) => installFailure({ seconds: index }));
   assert.equal((await send(memory(), 'POST', '/v1/events', { ...INSTALLING, events: many.slice(0, 256) })).status, 204);
   assert.equal((await send(memory(), 'POST', '/v1/events', { ...INSTALLING, events: many })).status, 400);
 });
@@ -1057,7 +1061,7 @@ test('a refused report of a failed install is logged by its rule alone, and one 
   for (const line of lines.warn) for (const secret of [...secrets, RUN]) assert.ok(!line.includes(secret), line);
   assert.deepEqual([lines.error, store.reports.length], [[], 1]);
   // A batch of counts keeps its own size: 64 KiB, as ever.
-  const large = { ...INSTALLING, events: Array.from({ length: 256 }, (_, index) => installApp({ seconds: index })) };
+  const large = { ...INSTALLING, events: Array.from({ length: 256 }, (_, index) => installFailure({ seconds: index })) };
   assert.ok(JSON.stringify(large).length > 8192);
   assert.equal((await send(memory(), 'POST', '/v1/events', large)).status, 204);
 });

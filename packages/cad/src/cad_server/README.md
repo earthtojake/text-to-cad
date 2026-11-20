@@ -295,11 +295,11 @@ receiver to delete what was sent under the install id.
 person, the hosted install command handing over, cad's server), how it ended (`ok`: well; `failed`: every app it
 found failed; `stopped`: its deadline stopped it before it was done; `busy`: another run was going and this one
 ran nothing), what its terminal showed of the logo and in which colours, its whole seconds, how many agent apps it
-found and how many of those failed. And one `install_app` event for each
-app found: the app by cad's own key for it in `plugin/apps.py`, what was done there (`installed`, `updated`,
-`removed`, `skipped`, `failed`), for a failure why in one word chosen where it failed (`timeout`, `command`,
-`network`, `exception`, `other`), and its whole seconds. Never a path, a version of an app's, a line an app
-printed or an error's message. Whether a run that ended ended well is read from its apps where they are counted,
+found and how many of those failed: counts, never which apps. And one `install_failure` event for each app
+where the run failed, and for no other: the app by cad's own key for it in `plugin/apps.py`, why in one word
+chosen where it failed (`timeout`, `command`, `network`, `exception`, `other`), and its whole seconds. cad
+names an agent app only where its install failed, so which apps a computer has is never sent. Never a path, a
+version of an app's, a line an app printed or an error's message. Whether a run that ended ended well is read from its apps where they are counted,
 so the two never disagree: it is `failed` exactly where every app it found failed, and `ok` anywhere else. A run
 its deadline stopped says what it had found by then, whatever that was.
 The run is kept as one line in a file of its own beside the settings (`telemetry-installs.jsonl`, which no

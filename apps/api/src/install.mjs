@@ -2,7 +2,7 @@
  * What the install command sends (`scripts/install/`: `install.sh`, `install.ps1` and `install.py`) where a run of it
  * failed with no working cad to count it: one report of where it failed, checked field by field. A run that ends with
  * a cad that works sends nothing here: that cad counts the plugin's install itself (`events.mjs`: `install`,
- * `install_app`).
+ * `install_failure`).
  *
  * A report names its run by a random id made for that run alone and kept nowhere on the computer (`run`), so nothing
  * is held under an id that lasts and there is nothing to forget; when it was made (`at`, whole seconds of the sender's
