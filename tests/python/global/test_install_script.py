@@ -792,6 +792,32 @@ class InstallScriptTests(AgentApps):
         nowhere = self.run_install(CAD_INSTALL_BY_CAD="1", CAD_INSTALL_REPORT=str(self.root / "no folder" / "r.json"))
         self.assertEqual((nowhere.returncode, nowhere.stderr), (0, "cad (stand-in): the plugin, on stderr\n"))
 
+    def test_a_plugin_s_step_where_an_app_failed_keeps_no_release_by_the_switch_and_ends_as_it_did(self) -> None:
+        # The plugin is up to date for a release only where every app found went well: where the step's report names
+        # an app as failed, even with exit status 0, the switch is turned on with CAD_INSTALL_FAILED=1, so the cad
+        # takes nothing as up to date (released 0.11.12 and 0.11.13 read it the same way) and its server tries again.
+        # The run's exit status is the step's, and the report cad reads carries each app as it said it.
+        self.tools(cad="0.13.0")
+        report = self.root / "report.json"
+        for apps, code, failed in (({"claude": "failed", "codex": "updated"}, 0, "1"),
+                                   ({"claude": "failed", "codex": "failed"}, 1, "1"),
+                                   ({"claude": "updated", "codex": "not found"}, 0, None),
+                                   ({}, 0, None)):
+            with self.subTest(apps=apps):
+                done = self.run_install(FAKE_PLUGIN_APPS=json.dumps(apps) if apps else "",
+                                        FAKE_PLUGIN_EXIT_CAD=str(code), FAKE_LOG_ENV="CAD_INSTALL_FAILED",
+                                        CAD_INSTALL_REPORT=str(report))
+                self.assertEqual(code, done.returncode, done.stdout + done.stderr)
+                switched, = [call for call in self.logged("cad") if call["argv"] == AUTO_ON]
+                self.assertEqual(switched["env"]["CAD_INSTALL_FAILED"], failed)
+                self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["apps"], apps)
+                self.assertEqual(self.calls("cad")[-2:], [HANDED, AUTO_ON])
+        # A person's own CAD_INSTALL_FAILED is never passed on: only this run's step says it.
+        done = self.run_install(FAKE_PLUGIN_APPS=json.dumps({"codex": "updated"}), FAKE_LOG_ENV="CAD_INSTALL_FAILED",
+                                CAD_INSTALL_FAILED="1")
+        switched, = [call for call in self.logged("cad") if call["argv"] == AUTO_ON]
+        self.assertEqual((done.returncode, switched["env"]["CAD_INSTALL_FAILED"]), (0, None))
+
     def test_a_plugin_s_step_that_ended_badly_and_named_no_failure_is_one_to_the_releases_that_read_the_report(
             self) -> None:
         # 0.11.12 and 0.11.13 never read the run's exit status: by the report alone they take the run as done, and

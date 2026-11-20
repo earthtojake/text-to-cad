@@ -3,9 +3,10 @@ them (``cad_server.plugin``).
 
 - ``cad plugin install``: the one command that installs the plugin. For every agent app found here, the plugin
   installed or updated with that app's own command, then our older copies there removed (``cad_server.plugin.run``);
-  then, where the run ended well and this cad is the computer's global install, this cad kept as the release the
-  plugin is up to date for (``plugin_catch_up.ended``: a fact about the computer, which a run that failed, or a cad run
-  from anywhere else, never writes). That is all: it never changes ``cad plugin update auto``. It takes no options.
+  then, where every app it found went well (none failed; none found counts) and this cad is the computer's global
+  install, this cad kept as the release the plugin is up to date for (``plugin_catch_up.ended``: a fact about the
+  computer, which a run where an app failed, or a cad run from anywhere else, never writes). That is all: it never
+  changes ``cad plugin update auto``. It takes no options.
   In a person's terminal it builds the CAD logo first and keeps a live line under the apps' lines; anywhere else, the
   plain lines. Its exit status: 0 where it ended well; 1 where every app it found failed; 2 for a command line it
   does not take; ``plugin_catch_up.BUSY`` (75) where another run was going and a server began this one;
@@ -16,18 +17,19 @@ them (``cad_server.plugin``).
   and hidden: no help lists it. Released skills and scripts may run it.
 - ``cad plugin update auto [status|on|off]``: whether the server runs ``cad plugin install`` once where this cad is
   newer than the release the plugin is up to date for, however cad got newer (``plugin_catch_up``), off by default.
-  The hosted install command turns it on as its last step, and says there whether its run is ending badly
-  (``plugin_catch_up.FAILED_ENV``): then nothing is taken as up to date; otherwise, and turned on by hand, the plugin
-  is taken as up to date for the cad that turned it on, where that cad is the global install (``_keep``). Kept by the
-  server where one runs, as ``cad update auto`` is, so a shell whose sandbox may not write the state folder needs no
-  permission. It installs nothing, on this release and on every release before it.
+  The hosted install command turns it on as its last step, and says there whether the plugin's step ended badly or
+  an app failed (``plugin_catch_up.FAILED_ENV``): then nothing is taken as up to date; otherwise, and turned on by
+  hand, the plugin is taken as up to date for the cad that turned it on, where that cad is the global install
+  (``_keep``). Kept by the server where one runs, as ``cad update auto`` is, so a shell whose sandbox may not write
+  the state folder needs no permission. It installs nothing, on this release and on every release before it.
 
 A server's run: only one this release's server began (``plugin_catch_up.SERVER_ENV``, which no released cad sets) has
 ``INSTALL_SECONDS`` (``plugin_catch_up.deadline``): each command it runs is stopped, with every process it started,
 when they are up, no further app is begun, and it exits ``STOPPED``. And where the run has not ended by itself a short
 while past them, because a step of it never came back, it is ended all the same (``plugin_catch_up.HardStop``,
 ``_cut_off``): its record closed and the run counted as stopped, and the process gone with that exit status, so the
-lock it held is free. It closes the record's run as it ends (``plugin_catch_up.ended``). Any other run has no
+lock it held is free. It closes the record's run as it ends (``plugin_catch_up.ended``): ``ok`` only where every app
+it found went well, so a run where one failed, whose exit status is 0 all the same, is tried again. Any other run has no
 deadline, no such stop, and leaves the record's run as it is -- one the hosted install command started under an
 earlier cad's server run above all: 0.11.12 and 0.11.13 name their server's run ``CAD_INSTALL_ATTEMPT``, which
 everything it starts inherits, and which is not this command's to read (the hosted install command takes it out of
@@ -213,9 +215,9 @@ def _count(facts: Any, under: Any) -> None:
 
 def _install(prog: str) -> int:
     """``cad plugin install``, by either name: one run (``_run``), then how it ended kept (``plugin_catch_up.ended``:
-    this cad as the release the plugin is up to date for where it ended well on the global install; the record's run
-    closed where this release's server began it). A server's run (``plugin_catch_up.deadline``) has its deadline and
-    its hard stop; any other has neither."""
+    this cad as the release the plugin is up to date for where every app it found went well on the global install;
+    the record's run closed where this release's server began it, as failed where an app did). A server's run
+    (``plugin_catch_up.deadline``) has its deadline and its hard stop; any other has neither."""
     _load()  # before the hard stop is armed: what it says and counts by is this release's, as the run's is
     from cad_server._internal import plugin_catch_up
 
@@ -223,12 +225,12 @@ def _install(prog: str) -> int:
     stop = None if seconds is None else plugin_catch_up.HardStop(seconds)  # a run a server began: ended for certain
     try:
         try:
-            code = _run(prog, seconds=seconds, stop=stop).code
+            facts = _run(prog, seconds=seconds, stop=stop)
         except Exception:
             plugin_catch_up.ended(1)  # a crash: the status Python gives it
             raise
-        plugin_catch_up.ended(code)
-        return code
+        plugin_catch_up.ended(facts.code, failed=facts.failed > 0)
+        return facts.code
     finally:
         if stop is not None:
             stop.cancel()
@@ -267,7 +269,7 @@ def _switch(action: str, prog: str) -> int:
     if action == "status":
         print(_line(auto_update.plugin_switch()))
         return 0
-    try:  # the hosted install command's run ending badly: nothing taken as up to date
+    try:  # the hosted install command's plugin step ended badly, or an app failed: nothing taken as up to date
         kept = _keep(action == "on", note=not plugin_catch_up.failing())
     except OSError as error:
         return write(Failure(f"could not save the choice: {error}"), prog=prog, as_json=False)

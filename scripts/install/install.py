@@ -37,9 +37,10 @@ plugin install``, which carries the one table of them. It does these things alon
    ``cad setup``;
 5. turns on ``cad plugin update auto`` (``switch_on``), last, wherever a cad is installed: that tool's own ``cad plugin
    update auto on`` (never PATH's), with ``CAD_INSTALL_FAILED=1`` in that one call's environment where the plugin's
-   step did not end well (then cad turns the switch on and takes nothing as up to date). The person ran this command,
-   and the plugin following cad's updates is what they asked for by it; ``cad plugin install`` itself never changes
-   the switch. Whatever that call answers, the run ends as it would have: a failure is one line.
+   step did not end with every app it found gone well: it ended non-zero, or its report names an app ``failed``
+   (then cad turns the switch on and takes nothing as up to date, so its server tries again). The person ran this
+   command, and the plugin following cad's updates is what they asked for by it; ``cad plugin install`` itself never
+   changes the switch. Whatever that call answers, the run ends as it would have: a failure is one line.
 
 ``cad plugin install`` installs or updates the plugin in each agent app it finds and removes our older copies: nothing
 of that is here. This command never starts cad's server. Nothing it starts carries the name a cad server gives its own
@@ -188,8 +189,8 @@ BY_CAD = ("CAD_INSTALL_BY_CAD", "CAD_INSTALL_ATTEMPT", "CAD_INSTALL_REPORT")
 # and taken out of the environment of everything it starts. Each names that server's run alone; a ``cad plugin
 # install`` reached from here that took it for its own would close that run's record, under its deadline and lock.
 RUN_NAMES = ("CAD_INSTALL_ATTEMPT", "CAD_PLUGIN_SERVER_RUN")
-# Set to ``1`` for ``cad plugin update auto on`` where this run is ending badly (``switch_on``): cad then turns the
-# switch on and takes nothing as up to date. Never the caller's.
+# Set to ``1`` for ``cad plugin update auto on`` where the plugin's step did not end with every app it found gone well
+# (``switch_on``): cad then turns the switch on and takes nothing as up to date. Never the caller's.
 FAILED_ENV = "CAD_INSTALL_FAILED"
 # How long ``cad update`` may take: cad's own command waits ten minutes for a busy server, then says the update is
 # still underway.
@@ -887,10 +888,11 @@ def hand_over(here: Here, cad: Cad, reports: "Reports") -> Plugin:
 
 def switch_on(here: Here, cad: Cad, failed: bool) -> None:
     """Step 5 (see the module): ``cad plugin update auto on`` by the cad this computer has, the tool's own command;
-    ``failed``, the plugin's step did not end well, which cad is told (``FAILED_ENV``: ``1``, else not there, never the
-    caller's). That command keeps a setting and starts nothing, on every release that has it: it never runs this
-    command, an install or ``cad update`` (0.11.13's ``_switch`` keeps the switch by the running server, else by
-    itself, and that is all). Whatever it answers, the run ends as it would have: a failure is one line."""
+    ``failed``, the plugin's step did not end with every app it found gone well (it ended non-zero, or named an app
+    ``failed``), which cad is told (``FAILED_ENV``: ``1``, else not there, never the caller's). That command keeps a
+    setting and starts nothing, on every release that has it: it never runs this command, an install or ``cad
+    update`` (0.11.13's ``_switch`` keeps the switch by the running server, else by itself, and that is all).
+    Whatever it answers, the run ends as it would have: a failure is one line."""
     environ = {key: value for key, value in here.environ.items() if key != FAILED_ENV}
     if failed:
         environ[FAILED_ENV] = "1"
@@ -1146,7 +1148,7 @@ def run(here: Here, reports: Reports) -> int:
         update(here, cad)
     plugin = hand_over(here, cad, reports)
     if cad.command:
-        switch_on(here, cad, bool(plugin.code))
+        switch_on(here, cad, bool(plugin.code) or "failed" in plugin.apps.values())
     if cad.code:
         print("cad itself was not installed (what went wrong is above), and the plugin's skills need it: run this "
               "again.", flush=True)

@@ -262,7 +262,7 @@ on the PATH with `uv tool update-shell`; brings a cad that was there up to date 
 `cad update`, where a person ran it; and hands over to that cad's `cad plugin install` (where it has
 no such command, 0.11.12 and 0.11.13, or cad could not be installed: `uv tool run ... cad@latest plugin
 install`); last, it turns on `cad plugin update auto` with that cad's own command, with `CAD_INSTALL_FAILED=1`
-where the plugin's step did not end well. It has no modes, knows no app and reads no feed, and never runs `cad
+where the plugin's step ended non-zero or its report names an app as failed. It has no modes, knows no app and reads no feed, and never runs `cad
 plugin update` (but as that switch: on 0.11.12 and 0.11.13 the bare command runs the install command again) or `cad
 setup`. Its module docstring lists every caller and every edge, and why none loops. `tests/python/global/test_install_script.py`
 runs it in a home of its own, against a stand-in uv, pipx, curl and `cad`.
@@ -270,8 +270,8 @@ runs it in a home of its own, against a stand-in uv, pipx, curl and `cad`.
 `cad plugin install` is cad's own code (`packages/cad/src/cad_server/plugin/`, reached only by
 `cad_server/cli/plugin.py`): it installs the plugin from the `latest` branch in each agent app it
 finds with that app's own command and removes our own older copies, and nothing else: it keeps its
-release as the one the plugin is up to date for only where the run ended well and the cad that ran it
-is the computer's global install (the newest release run from uv's cache keeps none), and never
+release as the one the plugin is up to date for only where every app it found went well (none failed)
+and the cad that ran it is the computer's global install (the newest release run from uv's cache keeps none), and never
 changes `cad plugin update auto`. It is the one command that installs the plugin: `cad plugin update`
 is its hidden second name, run exactly as it is, kept for 0.11.12's and 0.11.13's skills and scripts. Its `APPS` table (`plugin/apps.py`) is the one list of apps;
 `docs/install.md` is the same list for people. `tests/python/packages/cad_server/plugin/` runs it
@@ -722,8 +722,8 @@ by case; the worker contract keeps no window, so a new worker contract always do
   major](#before-the-first-release-of-a-higher-major) is what must change first. cad's own update is
   forward only: it never installs an older release.
 - **The plugin follows cad.** Where `cad plugin update auto` is on (the install command turns it on
-  as its last step, and the plugin is up to date for the release a run that ended well on the global
-  install keeps) and cad is newer than
+  as its last step, and the plugin is up to date for the release a run on the global install keeps
+  where every app it found went well) and cad is newer than
   the release the plugin is up to date for, cad's server runs `cad plugin install` once, at a quiet
   tending a minute or more after it starts and never while a run holds the lock (the install command
   that just updated cad does the work in that minute), however cad got newer: its own update, a
@@ -733,8 +733,9 @@ by case; the worker contract keeps no window, so a new worker contract always do
   script. That run, named by `CAD_PLUGIN_SERVER_RUN` (which no released cad sets), has 15 minutes:
   each command it runs is stopped, with all it started, when they are up, and a run that has still not ended a minute past them, because a step never came back, is
   ended by a watchdog thread (`plugin_catch_up.HardStop`: its record closed and the run counted as
-  stopped, exit status 124), so its lock is freed. A failed run is tried again an hour or more
-  later: at most three runs for one release. One run of `cad plugin install` goes at a time (a lock
+  stopped, exit status 124), so its lock is freed. A failed run, and one where any app failed, is
+  tried again an hour or more later: at most three runs for one release, so an app broken for good
+  costs at most three background runs a release. One run of `cad plugin install` goes at a time (a lock
   in the state folder: a second run waits, unless a server began it, which
   runs nothing and exits 75; either tries for the lock for two seconds first), and cad's own update
   begins none while one is going (a typed `cad update` is refused in one line). `cad update` itself

@@ -9,20 +9,22 @@ gets newer -- its own automatic update, a typed ``cad update``, ``uv tool upgrad
 -- because it is the server of the newer cad that asks, whatever brought it.
 
 **The record** (``RECORD``, in the state folder beside ``auto-update.json``): ``for``, the release of cad the plugin is
-up to date for -- written by ``cad plugin install`` as it ends with exit status 0 (``ended``), and as the switch is
-turned on (``noted``, from ``auto_update.change_plugin``), and only ever by this computer's global install of cad
+up to date for -- written by ``cad plugin install`` as it ends with every app it found gone well (``ended``: exit
+status 0 and no app ``failed``; a run that found no app counts), and as the switch is turned on (``noted``, from
+``auto_update.change_plugin``), and only ever by this computer's global install of cad
 (``tool``): a cad run from anywhere else (the newest release from uv's cache, which the hosted install command runs
 for an installed cad with no ``cad plugin install``) is not the cad whose server asks the rule below, and its release,
 which may be of a higher major than that cad ever reaches, is never kept. ``cad plugin install`` installs and leaves
 the switch as it is; the switch is the person's, turned on by the hosted install command they ran, as its last step
 (``cad plugin update auto on``), which says how its run is ending in the environment of that call (``FAILED_ENV``):
-ending well, the switch is turned on and ``for`` written; ending badly (the plugin's step did not end well), the
-switch is turned on and nothing written, so a computer whose runs keep failing still has the plugin kept: where an
-earlier run ended well (``for`` older than this cad), the server runs the command again for this release; where none
-ever did (no ``for``), the rule below takes this release as up to date, and the command runs once cad is newer.
-0.11.12 and 0.11.13 read that variable the same way, so the call means one thing to every cad it reaches. A person
-who turns it on by hand, with no such variable, means "from this release on". A run that fails writes nothing
-of ``for``. Then the last run the server began (``begin``): ``release``, ``at``, ``tries`` (of that release),
+every app gone well, the switch is turned on and ``for`` written; otherwise (the plugin's step ended non-zero, or an
+app failed), the switch is turned on and nothing written, so a computer whose runs keep failing still has the plugin
+kept: where an earlier run went well (``for`` older than this cad), the server runs the command again for this
+release; where none ever did (no ``for``), the rule below takes this release as up to date, and the command runs once
+cad is newer. 0.11.12 and 0.11.13 read that variable the same way, so the call means one thing to every cad it
+reaches. A person who turns it on by hand, with no such variable, means "from this release on". A run that fails, or
+where any app failed, writes nothing of ``for``: the plugin is up to date for a release only where every app found
+went well. Then the last run the server began (``begin``): ``release``, ``at``, ``tries`` (of that release),
 ``outcome`` (``underway``, then ``ok`` or ``failed``), ``code`` (its exit status, null where it could not start) and
 ``ended``. It is a state record, not a choice, so it lives in the state folder, as the update's own record does, and
 not in the person's settings. ``cad doctor`` shows it.
@@ -40,15 +42,19 @@ for this release and nothing runs: a fresh install's command writes it itself, a
 before is taken as up to date. Bounded: a run underway, of any release, begun less than ``RETRY_SECONDS`` ago, is
 waited for; one of this release that failed (or never said how it ended) is tried again not sooner than
 ``RETRY_SECONDS`` after it began, and at a later tending: at most ``TRIES`` runs for one release, each an hour
-or more after the one before. Never in a loop. ``begin`` asks the record's half of it again under the state folder's
-lock, as it keeps its run (``_wanted``), so two servers on one state folder never both begin one.
+or more after the one before. Never in a loop. A run where any app failed is a failed run, though the others went
+well and it exited 0 (``ended``), so an app that is broken for good costs at most ``TRIES`` runs in the background for
+each release, an hour or more apart, and then nothing until cad is newer. ``begin`` asks the record's half of it
+again under the state folder's lock, as it keeps its run (``_wanted``), so two servers on one state folder never both
+begin one.
 
 **A run** (``begin``): the record says ``underway`` first; then this cad's own ``cad`` command
 (``auto_update.tool_command``) runs ``cad plugin install``, detached, with no window, in an environment that points at
 nothing of this one (``auto_update._UNSET``) and names the run (``SERVER_ENV``: its ``at``), its output in
 ``install-command.log`` (``auto_update.INSTALL_LOG``). Named so, and only so, that command is a server's run: it has
 ``INSTALL_SECONDS`` (``deadline``), its hard stop, a server's place at the lock, and it closes the record's run as it
-ends (``ended``). No released cad sets ``SERVER_ENV``. The name 0.11.12 and 0.11.13 give their server's run,
+ends (``ended``: ``ok`` only where every app it found went well, else ``failed``). No released cad sets
+``SERVER_ENV``. The name 0.11.12 and 0.11.13 give their server's run,
 ``ATTEMPT_ENV``, is no such mark: their run is their own ``cad plugin update``, which runs the hosted install
 command, and everything that command starts inherits the name -- a ``cad plugin install`` it reached that took it for
 its own would close another release's run, under a deadline and a lock role that are not its own. So nothing here
@@ -106,9 +112,9 @@ SERVER_ENV = "CAD_PLUGIN_SERVER_RUN"
 # never passed on by a run this server begins, and taken out of every cad command the hosted install command starts
 # (see the module).
 ATTEMPT_ENV = "CAD_INSTALL_ATTEMPT"
-# Set to ``1`` by the hosted install command for its own ``cad plugin update auto on`` where its run is ending badly:
-# the switch turned on, and nothing taken as up to date (see the module). Empty or absent: the run is ending well, or
-# a person typed it. 0.11.12 and 0.11.13 read it the same way.
+# Set to ``1`` by the hosted install command for its own ``cad plugin update auto on`` where its plugin step ended
+# non-zero or named an app as failed: the switch turned on, and nothing taken as up to date (see the module). Empty or
+# absent: every app went well, or a person typed it. 0.11.12 and 0.11.13 read it the same way.
 FAILED_ENV = "CAD_INSTALL_FAILED"
 # The command the server runs, as a line of its log names it.
 SAID = "`cad plugin install`"
@@ -141,7 +147,8 @@ UNDERWAY, OK, FAILED = "underway", "ok", "failed"
 
 
 def failing() -> bool:
-    """Whether this command was run by a hosted install command whose run is ending badly (``FAILED_ENV``)."""
+    """Whether this command was run by a hosted install command whose plugin step did not go well for every app
+    (``FAILED_ENV``)."""
     return os.environ.get(FAILED_ENV, "").strip() == "1"
 
 
@@ -274,20 +281,23 @@ def noted(release: str | None = None) -> None:
     _change(lambda found: {**found, "for": named})
 
 
-def ended(code: int | None) -> None:
-    """``cad plugin install`` ended with exit status ``code``: ``for`` this cad where it is 0 and this cad is the
-    computer's global install (``tool``; a run that failed writes none, nor does a cad run from anywhere else, see the
-    module), and, where this release's server began this run (``server_run``), the run's outcome; any other run leaves
-    the record's run as it is. Never raises."""
+def ended(code: int | None, *, failed: bool = False) -> None:
+    """``cad plugin install`` ended with exit status ``code``, ``failed`` where an app it found failed: it went well
+    where it is 0 and no app failed (one that found none included). Then ``for`` is this cad where this cad is the
+    computer's global install (``tool``; a run that did not go well writes none, nor does a cad run from anywhere
+    else, see the module), and, where this release's server began this run (``server_run``), the run's outcome:
+    ``ok`` where it went well, else ``failed`` with its exit status, so the rule tries it again later; any other run
+    leaves the record's run as it is. Never raises."""
     try:
         attempt = server_run()
-        mine = code == 0 and tool() is not None
+        well = code == 0 and not failed
+        mine = well and tool() is not None
 
         def change(found: dict[str, Any]) -> dict[str, Any]:
             if mine:
                 found["for"] = _version()
             if attempt and str(found.get("at")) == attempt and found.get("outcome") == UNDERWAY:
-                found.update(outcome=OK if code == 0 else FAILED, code=code, ended=time.time())
+                found.update(outcome=OK if well else FAILED, code=code, ended=time.time())
             return found
 
         _change(change)
@@ -408,8 +418,8 @@ def _wanted(found: dict[str, Any], version: str, now: float) -> bool:
 def begin(told, *, now: float | None = None) -> subprocess.Popen | None:
     """A run begun (see the module): the record's half of the rule asked again under the state folder's lock
     (``_wanted``) and the run kept as ``underway`` in the same step, then ``cad plugin install`` started. Its process,
-    or None where the record no longer wants one (another server began one, or a run ended with exit status 0 since
-    ``due`` was asked) or it could not start (kept as failed). Never raises."""
+    or None where the record no longer wants one (another server began one, or a run went well since ``due`` was
+    asked) or it could not start (kept as failed). Never raises."""
     return _begin(told, now=now)[0]
 
 

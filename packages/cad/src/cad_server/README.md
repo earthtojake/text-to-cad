@@ -119,8 +119,8 @@ cad_server/
   that app's own command, from the GitHub repository's `latest` branch, then our older copies there removed;
   one line per app (`plugin/`: `apps.py` is the one table of apps). It is the one command that installs the
   plugin, and it installs and nothing else: it never changes `cad plugin update auto` (the hosted install command
-  turns that on, below). It keeps this cad as the release the plugin is up to date for only where the run ended
-  well and this cad is the computer's global install (a cad run from anywhere else, as the newest release from
+  turns that on, below). It keeps this cad as the release the plugin is up to date for only where every app it
+  found went well (no app failed; none found counts) and this cad is the computer's global install (a cad run from anywhere else, as the newest release from
   uv's cache, keeps none: below). In a person's
   terminal it builds the CAD logo first and keeps a live line under the apps' lines; anywhere else the plain
   lines. No options. Exit status 0 where it ended well, 1 where every app it found failed, 2 for a command line
@@ -140,8 +140,8 @@ cad_server/
   (Telemetry, below). **`cad plugin update auto [status|on|off]`**: whether the server runs `cad plugin install`
   once where cad is newer than the release the plugin is up to date for (below), off by default, kept by the
   server as `cad update auto` is; it installs nothing. The hosted install command turns it on as its last step,
-  with `CAD_INSTALL_FAILED=1` where its run ended badly (then it keeps no release), as 0.11.12 and 0.11.13 read
-  it too. `cad plugin` is the one command that reaches `plugin/`, and that package the
+  with `CAD_INSTALL_FAILED=1` where the plugin's step ended non-zero or named an app as failed (then it keeps no
+  release), as 0.11.12 and 0.11.13 read it too. `cad plugin` is the one command that reaches `plugin/`, and that package the
   one place in cad that names an agent app, a plugin or a skill.
 - **`cad telemetry [status|on|off]`**: the person's answer about usage stats and crash reports.
 
@@ -226,20 +226,22 @@ after its start (`plugin_catch_up.START_SECONDS`: the install command that just 
 server, goes on to the plugin in that minute) and never while a run holds the lock (no try spent), so the
 rule holds however cad got newer: its own update, a typed `cad update`, `uv tool upgrade cad` or `pipx upgrade
 cad` by hand. That release is kept in `install-command.json`
-in the data folder, beside the update's own record: written when `cad plugin install` ends with exit status 0
-and when the switch is turned on (`cad plugin update auto on`, the hosted install command's last step, right
-after the plugin is in place, but written only where its run ended well: one that ended badly says so with
-`CAD_INSTALL_FAILED=1` and writes none; turned on by hand, it means "from this release on"); a run that fails
-writes none. Only the computer's global install of cad writes it: a cad run from anywhere else (the newest
+in the data folder, beside the update's own record: written when `cad plugin install` ends with every app it
+found gone well (exit status 0 and no app failed) and when the switch is turned on (`cad plugin update auto on`,
+the hosted install command's last step, right after the plugin is in place, but written only where every app
+went well: otherwise that command says so with `CAD_INSTALL_FAILED=1` and writes none; turned on by hand, it
+means "from this release on"); a run that fails, or where any app failed, writes none: the plugin is up to date
+for a release only where every app found went well. Only the computer's global install of cad writes it: a cad run from anywhere else (the newest
 release from uv's cache, which the hosted install command runs for an installed cad that has no `cad plugin
 install`) does the work and keeps no release, since its own may
 be of a major the installed cad never reaches, and this cad's server would then never catch up again. With no
 record and the switch on, the record is written for this release and nothing
 runs, so a fresh install runs nothing again. A run underway, of any release, begun less than an hour ago, is
 waited for, and the server that begins a run asks the record again under the state folder's lock as it keeps
-it, so two servers never both begin one. A run that failed, or never said how it ended, is tried again an
-hour later at the earliest, at a later tending: at most three runs for one release, each an hour or
-more after the one before. Never where the update check is off for the process
+it, so two servers never both begin one. A run that failed, where any app failed (its exit status 0 all the
+same), or that never said how it ended, is tried again an hour later at the earliest, at a later tending: at
+most three runs for one release, each an hour or more after the one before, so an app broken for good costs
+at most three runs in the background for each release. Never where the update check is off for the process
 (`CAD_UPDATE_CHECK=0`, CI, a development build), where `CAD_ENGINE_UPDATE_INSTALLER` is set and empty (a
 test's way to say the server runs nothing by itself; `cad plugin install` reads no such variable), for a cad
 that is no global install, or while the bridge owes its own run of the hosted install command.

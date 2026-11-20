@@ -55,9 +55,9 @@ Those two releases, and the move from 0.10.0 to 0.11.11 ([From an earlier
 release](#from-an-earlier-release)), run the install command by themselves. Run by cad, it skips
 step 3 and leaves your PATH as it is: only your own run updates cad or changes the PATH.
 
-Where every app it found failed, cad keeps no release as the one the plugin is up to date for, and
+Where any app it found failed, cad keeps no release as the one the plugin is up to date for, and
 runs `cad plugin install` again later where the plugin's automatic updates are on
-([Updating](#updating)).
+([Updating](#updating)): at most three times for one release, an hour or more apart.
 
 It removes only what is ours: a skill counts as ours only where its `SKILL.md` says it comes from
 text-to-cad's repository, so a skill of yours with the same name is left as it is. A copy from a
@@ -415,8 +415,8 @@ The install command turns on the plugin's automatic updates as its last step: ea
 newer than the release the plugin is up to date for, cad runs `cad plugin install` once, in the
 background, which puts the newest plugin in every agent app it finds. That holds however cad
 got newer: by itself, by `cad update`, or by `uv tool upgrade cad` or `pipx upgrade cad`. It happens
-the next time cad's server starts or looks after itself with nothing running. A run that fails, or
-that is still running after 15 minutes and is stopped (a minute later for certain, whatever it is
+the next time cad's server starts or looks after itself with nothing running. A run that fails (any
+app failing counts, though the others went well), or that is still running after 15 minutes and is stopped (a minute later for certain, whatever it is
 doing), is tried again an hour or more later: at most three runs for one release. To update the plugin now:
 
 ```bash

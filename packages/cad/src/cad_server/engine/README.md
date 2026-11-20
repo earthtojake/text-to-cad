@@ -288,7 +288,7 @@ from) stops the server, runs the installer's upgrade bounded to that major (`uv 
 gives up; a start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). With
 `cad plugin update auto` on, the server, at its start and at each quiet tending, runs `cad plugin install` (which
 updates the plugin in each agent app with that app's own command, with 15 minutes at most) once where its cad is
-newer than the release that command last ended well for, however it got newer (`_internal/plugin_catch_up.py`), then counts the last update attempt once (`auto_update.report`); the
+newer than the release that command last went well in every app for, however it got newer (`_internal/plugin_catch_up.py`), then counts the last update attempt once (`auto_update.report`); the
 helper and `cad update` run none, and no update of cad begins while a run of it is going. Where no server runs, a typed `cad update` begins the update itself
 (`cli/update.py`), and its helper starts no server after it.
 

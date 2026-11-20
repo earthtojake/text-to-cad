@@ -76,8 +76,8 @@ date with its own `cad update` where a person ran it, and hands over to that cad
 `cad plugin update auto` with that cad's own command. `cad plugin install`, the one command that installs
 the plugin, installs it from `latest` in each agent app it finds with that app's own command (its `APPS`
 table, in `cad_server/plugin/`, is the one list of apps) and removes our own older copies, and nothing else:
-it keeps its release as the one the plugin is up to date for only where it ends well and is the computer's
-global install, and never changes the switch. Neither starts the server, and no path loops: the install
+it keeps its release as the one the plugin is up to date for only where every app it found went well and it is
+the computer's global install, and never changes the switch. Neither starts the server, and no path loops: the install
 command never runs `cad plugin update` (on 0.11.12 and 0.11.13 it runs the install command) but as the
 switch, and `cad plugin install` runs no install command and no `cad update`. cad alone is installed by one promised line, `uv tool install cad`,
 which is what every skill's Setup block runs; no skill runs the install command. A global install updates

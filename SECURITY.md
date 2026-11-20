@@ -142,7 +142,7 @@ and nothing asked:
   It changes nothing else: `cad plugin update auto`, which `install.py` turns on, is
   what makes cad, each time it is newer than the release the plugin is up to date
   for, however it got newer (below), run `cad plugin install`, the same code, again,
-  once; a run that did not end well keeps no release as up to date.
+  once; a run that did not go well in every app it found keeps no release as up to date.
 - One report, only where the run fails with no working cad: the stage that failed,
   an exit status, the operating system and processor type and uv's version, sent to
   `api.texttocad.dev` under a random id made for that run and kept nowhere.

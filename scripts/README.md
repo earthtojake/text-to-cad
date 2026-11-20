@@ -329,8 +329,8 @@ where those files ship, so these scripts are what produces them.
   cad ran it (0.11.12 and 0.11.13 do, and the bridge from earlier releases), cad is left as it is. Then `<cad> plugin install` puts the plugin into each agent app
   (cad's table of apps, `cad_server/plugin`, with the terminal's logo and live line); a cad with no such
   command, or none at all, gets the newest release's by `uv tool run cad@latest plugin install`. Last, that
-  cad's own `cad plugin update auto on` turns the switch on (`CAD_INSTALL_FAILED=1` where the plugin's step did
-  not end well). It never runs `cad plugin update` alone or `cad setup`, and passes no cad server's name for
+  cad's own `cad plugin update auto on` turns the switch on (`CAD_INSTALL_FAILED=1` where the plugin's step
+  ended non-zero or named an app as failed). It never runs `cad plugin update` alone or `cad setup`, and passes no cad server's name for
   its run (`CAD_INSTALL_ATTEMPT`, `CAD_PLUGIN_SERVER_RUN`) to anything it starts. It exits 0 only where the run ended well, and writes the report 0.11.12 and
   0.11.13 read (`CAD_INSTALL_REPORT`) last: `apps` as `cad plugin install` said them, and, since those releases
   read the report and never the exit status, with `"plugin": "failed"` added wherever the plugin's step ended

@@ -172,12 +172,14 @@ The plugin is `cad plugin install`'s, the one command that installs it: for ever
 finds, the plugin installed or updated with that app's own command, then our older copies there
 removed, and nothing else. It never downloads or runs the hosted install command, and never changes
 `cad plugin update auto`. `cad plugin update` is its hidden second name, the one 0.11.12 and 0.11.13
-gave the run, kept for their skills and scripts. A run keeps cad's release as the one the plugin is
-up to date for only where it ended well and the cad that ran it is the computer's global install: a
-fact about the computer. The switch is off until the install command a person ran turns it on, as
-its last step, by the installed cad's own `cad plugin update auto on`; where the run's plugin step
-did not end well, that call says so (`CAD_INSTALL_FAILED=1`, which 0.11.12 and 0.11.13 read the same
-way) and the switch goes on with no release kept, so a computer whose runs keep failing still has
+gave the run, kept for their skills and scripts. The plugin is up to date for a release only where
+every app found went well: a run keeps cad's release as that one only where no app it found failed
+(one that found none included) and the cad that ran it is the computer's global install, a fact
+about the computer. A run where one app failed and the others went well still exits 0, but keeps no
+release. The switch is off until the install command a person ran turns it on, as its last step, by
+the installed cad's own `cad plugin update auto on`; where the run's plugin step ended non-zero or
+its report names an app as failed, that call says so (`CAD_INSTALL_FAILED=1`, which 0.11.12 and
+0.11.13 read the same way) and the switch goes on with no release kept, so a computer whose runs keep failing still has
 the plugin kept: where cad is newer than the release the plugin is up to date for, cad's server runs
 `cad plugin install` once, a minute after it starts at the earliest and never while a run is going:
 the install command that just updated cad, and so restarted the server, does the work in that
@@ -185,8 +187,8 @@ minute, and the server then finds nothing to do. A run of a cad from anywhere el
 newest release from uv's cache (`uv tool run cad@latest`, below), does the work and keeps none:
 its release is not the installed cad's, and may be of a major that cad never reaches, so kept,
 the installed cad's server would never catch up again. cad keeps that release in a small record of its state folder, written
-when `cad plugin install` ends with exit status 0 and when the switch is turned on by a run that
-ended well. The rule asks what cad is, not
+when `cad plugin install` ends with every app it found gone well and when the switch is turned on by
+a run that did. The rule asks what cad is, not
 how it got there, so a typed `cad update` or `uv tool upgrade cad` by hand brings the plugin along
 as cad's own update does, with one mechanism. A run cad's server began, which it names
 `CAD_PLUGIN_SERVER_RUN`, has 15 minutes: each command
@@ -195,8 +197,10 @@ session where `taskkill` is refused, only the command's own process is ended; wh
 run on). That much is asked between the run's steps, so the run also carries a hard stop: where a
 step never comes back and the run has not ended a minute past its 15, a thread of its own closes
 its record as a stopped run's, counts it as stopped and ends the process there and then, which
-frees its lock. A failed run is tried again an hour or more later: at most three runs for one
-release. Only that name makes a server's run: 0.11.12 and 0.11.13 name theirs `CAD_INSTALL_ATTEMPT`,
+frees its lock. A failed run, and one where any app failed, is tried again an hour or more later:
+at most three runs for one release, so an app that is broken for good costs at most three runs in
+the background for each release, each an hour or more after the one before, and then nothing until
+cad is newer. Only that name makes a server's run: 0.11.12 and 0.11.13 name theirs `CAD_INSTALL_ATTEMPT`,
 which everything their hosted install command starts inherits, so a `cad plugin install` reached
 from there that took it for its own would close another release's record under a deadline and a
 lock role that are not its own; the install command takes both names out of every cad command it
@@ -231,7 +235,8 @@ is there because two runs can meet: after a person's install command updated cad
 starts may begin its own run at the moment that command goes on to the plugin. cad's update holds
 because it replaces the files of the environment a run is reading. The hard stop is there because
 the lock holds back cad's own update and every run that waits: a run that hung for good would hold
-them for as long as its process lived.
+them for as long as its process lived. A run where one app failed keeps no release because, kept, the
+server would not try that app again until the next release of cad.
 
 **What it costs.** The plugin's install is only as new as the cad that runs it: a correction to an
 app's row waits for a release, and for that computer's update (the first decision). Released 0.11.12
@@ -239,8 +244,9 @@ and 0.11.13 still download the hosted install command and run it unattended, as 
 update` and after their own update, and so does the bridge for 0.10.0 to 0.11.11:
 [SECURITY.md](../../SECURITY.md) says so. Nothing shipped later can change those two releases: they
 stop only when their computers have updated. A typed `cad update` during a run fails and has to be
-typed again. The hard stop cannot end a process no thread of which runs at all (one a signal
-stopped). A store's copy of the skills lags cad by
+typed again. An app that fails for good costs up to three background runs a release, and each
+runs every app found again, the ones that went well too. The hard stop cannot end a process no
+thread of which runs at all (one a signal stopped). A store's copy of the skills lags cad by
 however long its store takes.
 
 ## Forward only

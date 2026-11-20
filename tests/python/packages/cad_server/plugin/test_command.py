@@ -115,8 +115,10 @@ class InstallTests(PluginRuns):
         self.assertIn("No app got the plugin: see each app's line above, then run this again.", done.stdout)
         self.assertNotIn("Start a new session", done.stdout)
         self.assertEqual(self.kept(), {"switch": False, "record": {}})
-        # One of them failing is the run ending well.
+        # One of them failing is the run ending well (exit status 0), but the plugin is up to date for a release only
+        # where every app found went well: no release is kept for it either.
         self.assertEqual(0, self.run_install(FAKE_FAIL="codex").returncode)
+        self.assertEqual(self.kept(), {"switch": False, "record": {}})
         # 2: a command line it does not take; nothing ran.
         for argv in (["install", "--force"], ["install", "claude"]):
             done = self.cad_plugin(*argv)
@@ -471,6 +473,51 @@ class UpdateTests(PluginRuns):
             done = self.cad_plugin("install")
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertEqual(ended(), (version, "underway", None))
+
+    def test_a_run_where_one_app_failed_is_tried_again_as_a_failed_run_at_most_three_times(self) -> None:
+        """The plugin is up to date for a release only where every app found went well. A run where one app failed
+        and the others went well exits 0, keeps no release, and, where a server began it, closes its record as failed:
+        the server tries it again an hour later and not before, at most three runs for one release, and then nothing
+        more for that release. One where every app went well, or that found none, is up to date."""
+        version = cad_server.__version__
+        now = time.time()
+
+        def server_run(tries: int, at: float, **extra: str) -> dict:
+            # The record as the server keeps a run it begins (``plugin_catch_up._begin``), then the run itself.
+            self.keep(**{**{key: value for key, value in self.kept()["record"].items() if key not in ("code", "ended")},
+                         "release": version, "at": at, "tries": tries, "outcome": "underway"})
+            done = self.cad_plugin("install", **{plugin_catch_up.SERVER_ENV: str(at)}, **extra)
+            self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+            return self.kept()["record"]
+
+        # No app found: nothing to retry, and up to date.
+        self.keep(**{"for": "0.0.1"})
+        record = server_run(1, now)
+        self.assertEqual((record["for"], record["outcome"], record["code"]), (version, "ok", 0))
+        self.assertFalse(plugin_catch_up._wanted(record, version, now + plugin_catch_up.RETRY_SECONDS))
+        self.programs("claude", "codex")
+        # A person's run, one app failing: exit status 0, no release kept.
+        self.keep(**{"for": "0.0.1"})
+        done = self.cad_plugin("install", FAKE_FAIL="codex")
+        self.assertEqual(0, done.returncode, done.stdout)
+        self.assertIn("Codex: failed", done.stdout)
+        self.assertEqual(self.kept(), {"switch": False, "record": {"for": "0.0.1"}})
+        # A server's, the same: kept as failed, try 1 of 3, and wanted again an hour after it began, not before.
+        at = now
+        for tries in range(1, plugin_catch_up.TRIES + 1):
+            record = server_run(tries, at, FAKE_FAIL="codex")
+            self.assertEqual((record["for"], record["outcome"], record["code"], record["tries"]),
+                             ("0.0.1", "failed", 0, tries))
+            self.assertFalse(plugin_catch_up._wanted(record, version, at + plugin_catch_up.RETRY_SECONDS - 1))
+            later = at + plugin_catch_up.RETRY_SECONDS
+            self.assertEqual(plugin_catch_up._wanted(record, version, later), tries < plugin_catch_up.TRIES, tries)
+            at = later
+        # Three such runs, then nothing more for this release, however long after.
+        self.assertFalse(plugin_catch_up._wanted(record, version, at + 100 * plugin_catch_up.RETRY_SECONDS))
+        # A run where every app went well is kept as ok, and the plugin up to date for this release.
+        record = server_run(1, now)
+        self.assertEqual((record["for"], record["outcome"], record["code"]), (version, "ok", 0))
+        self.assertFalse(plugin_catch_up._wanted(record, version, now + plugin_catch_up.RETRY_SECONDS))
 
     def test_a_run_a_server_began_that_never_comes_back_is_ended_for_certain(self) -> None:
         """The deadline is asked between a run's steps, so a step that never comes back would hold the run's lock, and

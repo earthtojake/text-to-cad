@@ -267,8 +267,9 @@ def plugin_switch(path: Path | None = None) -> bool:
 def change_plugin(on: bool, release: str | None = None, *, note: bool = True) -> bool:
     """``plugin.auto_update`` changed under the state folder's lock; turned on, the plugin is taken as up to date for
     ``release``, the cad that turned it on (this one's by default: ``plugin_catch_up.noted``) -- unless ``note`` is
-    false: turned on by the hosted install command whose run is ending badly (``plugin_catch_up.FAILED_ENV``), or by a
-    cad that is no global install, which takes nothing as up to date. ``OSError`` where it cannot be written."""
+    false: turned on by the hosted install command whose plugin step did not go well for every app it found (it ended
+    non-zero, or an app failed: ``plugin_catch_up.FAILED_ENV``), or by a cad that is no global install, which takes
+    nothing as up to date. ``OSError`` where it cannot be written."""
     from cad_server.settings import update_section
 
     update_section(PLUGIN_SECTION, lambda kept: {**kept, "auto_update": on})
