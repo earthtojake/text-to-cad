@@ -902,7 +902,13 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   axis to read whose sampled normals all face the skin's side, at a slant to it somewhere; within the sheet)
   is an `edge_break`, and a face square to the skin (a plane across it, a cylinder about its normal, a face
   with no axis square to it at every sample) that reaches it and its opposite skin through breaks is a cut
-  edge: its rays run across the plate and measure its width, never its thickness. A skin's rays that reach
+  edge: its rays run across the plate and measure its width, never its thickness. A cut may be several faces
+  across the thickness, none touching both skins: a plate extruded both ways along an ellipse or a spline
+  (the kernel merges the two halves of a plane or a cylinder, and leaves a surface of extrusion's two faces,
+  split at mid-thickness), layers joined and never merged. From each skin, its countersinks and its breaks,
+  the faces square to it are followed through their tangent joins, and a face reached from a skin and from
+  its opposite is a cut edge; a hole's wall in several faces is one wall, and the countersink beside one of
+  them is the hole's. A skin's rays that reach
   the other skin's break are short by that break, which is its own finding, not the skin's. A bend's end is broken by a cone or a torus
   about the bend's axis, beside one of its cylinders and a cut edge or a flange's break, within the sheet:
   an `edge_break` too, and the bend's length runs to the cut. A cut edge rounded whole from one skin to the
