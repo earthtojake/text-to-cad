@@ -264,6 +264,15 @@ def tend_seconds() -> float:
         return TEND_SECONDS
 
 
+def catch_up_seconds() -> float:
+    """How long the server waits after its start before the plugin first catches up (``plugin_catch_up.START_SECONDS``,
+    two tendings), in step with its tending where a test's computer sets that (``CAD_ENGINE_TEND_SECONDS``): as many of
+    its own tendings."""
+    from cad_server._internal.plugin_catch_up import START_SECONDS
+
+    return START_SECONDS * tend_seconds() / TEND_SECONDS
+
+
 def _held(error: OSError) -> bool:
     """Whether a bind failed because the port is someone else's (in use, or reserved on Windows)."""
     import errno
@@ -666,10 +675,10 @@ class Daemon:
         self.handover = Carrier(time.monotonic())
         self.bridge = Tending()
         # The install command's one run where cad is newer than the release it is up to date for
-        # (``plugin_catch_up``), held while it runs.
+        # (``plugin_catch_up``), held while it runs; none asked for until a short while after this start.
         from cad_server._internal.plugin_catch_up import Catcher
 
-        self.catching = Catcher()
+        self.catching = Catcher(self.began, wait=catch_up_seconds())
         from cad_server.engine.models import Models
 
         self.models = Models(self)
@@ -1883,7 +1892,8 @@ class Daemon:
     def caught_up(self) -> None:
         """What follows cad's own update, at the server's start and at each quiet tending (``tend``): the install
         command run once where cad is newer than the release it is up to date for and the person's switch says so
-        (``plugin_catch_up``), then the last update attempt counted once, where it ended and nothing it waits for is
+        (``plugin_catch_up``: never in the first ``catch_up_seconds`` of the server, nor while a run holds its lock),
+        then the last update attempt counted once, where it ended and nothing it waits for is
         underway (``auto_update.report``). Never on a server that stops; never fails the server."""
         if self.draining or self.stopping.is_set():
             return

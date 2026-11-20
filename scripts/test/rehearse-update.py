@@ -10,8 +10,9 @@ the index (``UV_FIND_LINKS``, ``CAD_UPDATE_FIND_LINKS``), and the version feed i
 (``CAD_API_URL``), as is PyPI's JSON API that ``cad update`` asks
 (``CAD_PYPI_URL``), which names what the feed names. Every computer's server takes a port of its own
 (``CAD_ENGINE_DEFAULT_PORT``: the true default, 3245, on CI alone). This build's servers tend themselves every two
-seconds, not every half minute (``CAD_ENGINE_TEND_SECONDS``); nothing else of their timing changes, so a step that
-waits for a minute with nothing run still waits that minute. No real agent app is on any PATH.
+seconds, not every half minute (``CAD_ENGINE_TEND_SECONDS``), and so wait two of those tendings, not a minute, after
+they start before the plugin first catches up; nothing else of their timing changes, so a step that waits for a minute
+with nothing run still waits that minute. No real agent app is on any PATH.
 
 Every computer has a folder of releases of its own, holding only those that are out (``Box.out``): the install command
 installs PyPI's newest, and an upgrade the newest of a major (``uv tool install --upgrade "cad>=X,<N"``; ``cad update

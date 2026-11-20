@@ -221,9 +221,11 @@ and what it started may run on). That deadline is asked between the run's steps,
 stop too (`plugin_catch_up.HardStop`, a thread of its own): a run that has not ended a minute past its 15,
 because a step never came back, has its record closed as a stopped run's, is counted as stopped, and its
 process exits with 124 there and then, waiting on nothing, which frees the lock it held for cad's own update
-and for every run that waits. The server asks at its start and at
-each tending once nothing is in flight, so the rule holds however cad got newer: its own update, a typed `cad
-update`, `uv tool upgrade cad` or `pipx upgrade cad` by hand. That release is kept in `install-command.json`
+and for every run that waits. The server asks at each tending once nothing is in flight, from a minute
+after its start (`plugin_catch_up.START_SECONDS`: the install command that just updated cad, restarting the
+server, goes on to the plugin in that minute) and never while a run holds the lock (no try spent), so the
+rule holds however cad got newer: its own update, a typed `cad update`, `uv tool upgrade cad` or `pipx upgrade
+cad` by hand. That release is kept in `install-command.json`
 in the data folder, beside the update's own record: written when `cad plugin install` ends with exit status 0
 and when the switch is turned on (`cad plugin update auto on`, the hosted install command's last step, right
 after the plugin is in place, but written only where its run ended well: one that ended badly says so with
@@ -236,7 +238,7 @@ record and the switch on, the record is written for this release and nothing
 runs, so a fresh install runs nothing again. A run underway, of any release, begun less than an hour ago, is
 waited for, and the server that begins a run asks the record again under the state folder's lock as it keeps
 it, so two servers never both begin one. A run that failed, or never said how it ended, is tried again an
-hour later at the earliest, at a later start or tending: at most three runs for one release, each an hour or
+hour later at the earliest, at a later tending: at most three runs for one release, each an hour or
 more after the one before. Never where the update check is off for the process
 (`CAD_UPDATE_CHECK=0`, CI, a development build), where `CAD_ENGINE_UPDATE_INSTALLER` is set and empty (a
 test's way to say the server runs nothing by itself; `cad plugin install` reads no such variable), for a cad

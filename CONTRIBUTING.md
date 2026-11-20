@@ -724,9 +724,11 @@ by case; the worker contract keeps no window, so a new worker contract always do
 - **The plugin follows cad.** Where `cad plugin update auto` is on (the install command turns it on
   as its last step, and the plugin is up to date for the release a run that ended well on the global
   install keeps) and cad is newer than
-  the release the plugin is up to date for, cad's server runs `cad plugin install` once, at its start
-  or a quiet tending, however cad got newer: its own update, a typed `cad update`, or `uv tool upgrade
-  cad` by hand (`cad_server/_internal/plugin_catch_up.py`). It is cad's own code
+  the release the plugin is up to date for, cad's server runs `cad plugin install` once, at a quiet
+  tending a minute or more after it starts and never while a run holds the lock (the install command
+  that just updated cad does the work in that minute), however cad got newer: its own update, a
+  typed `cad update`, or `uv tool upgrade cad` by hand (`cad_server/_internal/plugin_catch_up.py`).
+  It is cad's own code
   (`cad_server/plugin/`), the table of apps of the release just installed, and it downloads no
   script. That run, named by `CAD_PLUGIN_SERVER_RUN` (which no released cad sets), has 15 minutes:
   each command it runs is stopped, with all it started, when they are up, and a run that has still not ended a minute past them, because a step never came back, is

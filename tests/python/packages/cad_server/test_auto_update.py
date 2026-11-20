@@ -1912,7 +1912,7 @@ class PluginCatchUpTest(Case):
         self.switch_on()
         self.catch_up.noted("0.0.9")
         self.assertTrue(self.catch_up.due())
-        catcher = self.catch_up.Catcher()
+        catcher = self.catch_up.Catcher(wait=0.0)  # a server started a while ago
         # A server started under an earlier release's run, or a hosted install command's way of saying a run ends
         # badly, passes neither on: its run is named by this release's own mark alone.
         with mock.patch.object(self.catch_up.subprocess, "Popen") as popen, \
@@ -1946,7 +1946,7 @@ class PluginCatchUpTest(Case):
     def test_a_run_that_exited_without_saying_how_it_ended_is_kept_as_failed_with_its_exit_status(self) -> None:
         self.switch_on()
         self.catch_up.noted("0.0.9")
-        catcher = self.catch_up.Catcher()
+        catcher = self.catch_up.Catcher(wait=0.0)  # a server started a while ago
         with mock.patch.object(self.catch_up.subprocess, "Popen") as popen:
             popen.return_value.poll.return_value = None
             self.assertTrue(catcher.tend(self.told.append))
@@ -1955,6 +1955,61 @@ class PluginCatchUpTest(Case):
         record = self.catch_up.read()
         self.assertEqual((record["outcome"], record["code"], record["tries"]), ("failed", 7, 1))
         self.assertEqual(self.catch_up.last("0.1.0"), "failed")
+
+    def test_a_server_begins_none_in_its_first_minute_and_one_once_it_has_passed(self) -> None:
+        """A person's install command that updated cad restarted the server, and goes on to the plugin a moment later:
+        the server's first minute (``START_SECONDS``, by its own monotonic clock from its start) is that command's."""
+        self.switch_on()
+        self.catch_up.noted("0.0.9")
+        before = self.catch_up.read()
+        clock = [5000.0]
+        catcher = self.catch_up.Catcher(clock[0], clock=lambda: clock[0])
+        self.assertEqual((catcher.wait, self.catch_up.START_SECONDS), (60.0, 60.0))
+        with mock.patch.object(self.catch_up.subprocess, "Popen") as popen:
+            popen.return_value.poll.return_value = None
+            for seconds in (0.0, 1.0, self.catch_up.START_SECONDS - 0.5):
+                clock[0] = 5000.0 + seconds
+                self.assertFalse(catcher.tend(self.told.append), seconds)
+            popen.assert_not_called()
+            self.assertEqual(self.catch_up.read(), before, "nothing kept, no try spent")
+            clock[0] = 5000.0 + self.catch_up.START_SECONDS
+            self.assertTrue(catcher.tend(self.told.append))
+        self.assertEqual(popen.call_count, 1)
+        self.assertEqual((self.catch_up.read()["tries"], self.catch_up.read()["outcome"]), (1, "underway"))
+        # Made with no start, it starts now, by the monotonic clock.
+        fresh = self.catch_up.Catcher()
+        self.assertLess(abs(fresh.started - time.monotonic()), 5.0)
+        self.assertIs(fresh.clock, time.monotonic)
+
+    def test_while_a_run_holds_the_lock_the_server_begins_none_and_keeps_nothing(self) -> None:
+        """A person's run (or the hosted install command's) holds the lock: the server's tending begins nothing and
+        leaves the record exactly as it was, so no try is spent; with the lock free and the plugin up to date for this
+        release (that run kept it), still nothing; free and not up to date, one run."""
+        from cad_server._internal import file_lock
+
+        self.switch_on()
+        self.catch_up.noted("0.0.9")
+        record = self.state / self.catch_up.RECORD
+        before = record.read_bytes()
+        catcher = self.catch_up.Catcher(wait=0.0)
+        with mock.patch.object(self.catch_up.subprocess, "Popen") as popen:
+            popen.return_value.poll.return_value = None
+            with file_lock.exclusive(self.state / self.catch_up.LOCK):
+                self.assertTrue(self.catch_up.due(), "the rule alone would run it")
+                self.assertFalse(catcher.tend(self.told.append))
+                self.assertFalse(catcher.tend(self.told.append), "at every tending while it is held")
+                self.assertEqual(record.read_bytes(), before)
+                self.assertEqual(self.told, [])
+            popen.assert_not_called()
+            self.catch_up.noted("0.1.0")  # that run ended well: up to date for this release
+            after = record.read_bytes()
+            self.assertFalse(catcher.tend(self.told.append))
+            popen.assert_not_called()
+            self.assertEqual(record.read_bytes(), after)
+            self.catch_up.noted("0.0.9")  # free, and not up to date
+            self.assertTrue(catcher.tend(self.told.append))
+        self.assertEqual(popen.call_count, 1)
+        self.assertEqual(self.catch_up.read()["tries"], 1)
 
     def test_a_failed_run_is_tried_again_at_most_three_runs_each_an_hour_after_the_last_never_in_a_loop(self) -> None:
         self.switch_on()
@@ -2033,7 +2088,7 @@ class PluginCatchUpTest(Case):
         with mock.patch.object(self.catch_up.time, "time", side_effect=lambda: float(next(clock))), \
                 mock.patch.object(self.catch_up, "_change", side_effect=another_first), \
                 mock.patch.object(self.catch_up.subprocess, "Popen") as popen:
-            self.assertFalse(self.catch_up.Catcher().tend(self.told.append))
+            self.assertFalse(self.catch_up.Catcher(wait=0.0).tend(self.told.append))
         popen.assert_not_called()
         self.assertEqual((self.catch_up.read()["tries"], self.catch_up.read()["outcome"]), (1, "underway"))
 

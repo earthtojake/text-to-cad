@@ -179,10 +179,12 @@ its last step, by the installed cad's own `cad plugin update auto on`; where the
 did not end well, that call says so (`CAD_INSTALL_FAILED=1`, which 0.11.12 and 0.11.13 read the same
 way) and the switch goes on with no release kept, so a computer whose runs keep failing still has
 the plugin kept: where cad is newer than the release the plugin is up to date for, cad's server runs
-`cad plugin install` once. A run of a cad from anywhere else, such as the newest release from uv's
-cache (`uv tool run cad@latest`, below), does the work and keeps none: its release is not the
-installed cad's, and may be of a major that cad never reaches, so kept, the installed cad's server
-would never catch up again. cad keeps that release in a small record of its state folder, written
+`cad plugin install` once, a minute after it starts at the earliest and never while a run is going:
+the install command that just updated cad, and so restarted the server, does the work in that
+minute, and the server then finds nothing to do. A run of a cad from anywhere else, such as the
+newest release from uv's cache (`uv tool run cad@latest`, below), does the work and keeps none:
+its release is not the installed cad's, and may be of a major that cad never reaches, so kept,
+the installed cad's server would never catch up again. cad keeps that release in a small record of its state folder, written
 when `cad plugin install` ends with exit status 0 and when the switch is turned on by a run that
 ended well. The rule asks what cad is, not
 how it got there, so a typed `cad update` or `uv tool upgrade cad` by hand brings the plugin along
@@ -208,8 +210,9 @@ The only way back to the install command is an older release's server, bounded a
 cad started never updates cad, so it ends in `cad plugin install` and the switch.
 `tests/python/global/test_no_install_loops.py` holds the sources to it.
 
-One run at a time. A run holds a lock in cad's state folder from its start to its end. A second run
-waits for it; one a server began does not wait, runs nothing, and is tried again as a failed run
+One run at a time. A run holds a lock in cad's state folder from its start to its end. A server
+begins none while it is held, and that spends none of its tries. A second run waits for it; one a
+server began does not wait, runs nothing, and is tried again as a failed run
 is. Either tries for the lock for two seconds before it takes it as another run's: whether a run is
 going can only be asked by trying for the lock, so a server that asks holds it for an instant. cad's
 own update holds while a run is going: the automatic update begins none, and a typed `cad update`

@@ -27,9 +27,10 @@ of ``for``. Then the last run the server began (``begin``): ``release``, ``at``,
 ``ended``. It is a state record, not a choice, so it lives in the state folder, as the update's own record does, and
 not in the person's settings. ``cad doctor`` shows it.
 
-**The rule** (``due``), asked by the server at its start and as it tends itself, only once nothing is in flight: the
-switch on; the update check not turned off for this process (``updates.checking``: ``CAD_UPDATE_CHECK=0``, CI, a
-development build); no test saying to run nothing (``silenced``: ``CAD_ENGINE_UPDATE_INSTALLER`` set and empty, the
+**The rule** (``due``), asked by the server as it tends itself, only once nothing is in flight, never in its first
+``START_SECONDS`` (by its monotonic clock) and never while a run holds the lock (``Catcher``): the switch on; the
+update check not turned off for this process (``updates.checking``: ``CAD_UPDATE_CHECK=0``, CI, a development build);
+no test saying to run nothing (``silenced``: ``CAD_ENGINE_UPDATE_INSTALLER`` set and empty, the
 variable that names the bridge's stand-in for the hosted install command -- ``cad plugin install`` itself runs no
 install command and reads no such variable); this cad a global install (``tool``: an installer of
 ``auto_update.INSTALLERS`` made its environment) of a plain release;
@@ -38,7 +39,7 @@ other); and this cad newer than ``for``. Where the record names no ``for`` (none
 for this release and nothing runs: a fresh install's command writes it itself, and a computer whose switch was on
 before is taken as up to date. Bounded: a run underway, of any release, begun less than ``RETRY_SECONDS`` ago, is
 waited for; one of this release that failed (or never said how it ended) is tried again not sooner than
-``RETRY_SECONDS`` after it began, and at a later start or tending: at most ``TRIES`` runs for one release, each an hour
+``RETRY_SECONDS`` after it began, and at a later tending: at most ``TRIES`` runs for one release, each an hour
 or more after the one before. Never in a loop. ``begin`` asks the record's half of it again under the state folder's
 lock, as it keeps its run (``_wanted``), so two servers on one state folder never both begin one.
 
@@ -70,14 +71,16 @@ install command.
 
 **One run at a time** (``run_lock``, ``running``): a run of ``cad plugin install`` holds ``LOCK``, a file of its own in
 the state folder, from its start to its end, so it never holds the state folder's one lock while it works. A second
-run waits for it -- but one a server began (``SERVER_ENV``), which ends with exit
-status ``BUSY`` and runs nothing: after a person's install command updated cad, the server that starts may begin its
-own run at the moment that command goes on to the plugin. cad's own update begins none while the lock is held
-(``auto_update.due``, ``auto_update.asked``): it would replace this environment's files under the run. Whether it is
-held can only be asked by trying for it (``running``: neither ``flock`` nor Windows' ``locking`` says who holds a lock
-without taking it), so a server that asks holds it for an instant. A run therefore tries for ``SETTLE_SECONDS`` before
-it takes the lock as another run's (``run_lock``): only then does a server's run answer ``BUSY``, and a person's say
-that it waits.
+run waits for it -- but one a server began (``SERVER_ENV``), which ends with exit status ``BUSY`` and runs nothing.
+The server begins none while the lock is held, and none in its first ``START_SECONDS``: a person's install command
+that updated cad restarted the server, and goes on to the plugin a moment later; it takes the lock and does the work,
+and keeps this release, so the server, asking after it, finds the plugin up to date and runs nothing. Where nobody ran
+that command (cad's own update, one by hand), the run begins that much later. cad's own update begins none while the
+lock is held (``auto_update.due``, ``auto_update.asked``): it would replace this environment's files under the
+run. Whether it is held can only be asked by trying for it (``running``: neither ``flock`` nor Windows' ``locking``
+says who holds a lock without taking it), so a server that asks holds it for an instant. A run therefore tries for
+``SETTLE_SECONDS`` before it takes the lock as another run's (``run_lock``): only then does a server's run answer
+``BUSY``, and a person's say that it waits.
 
 Imports the standard library alone; what it asks of cad it imports as it asks.
 """
@@ -128,6 +131,10 @@ CLOSE_SECONDS = 5.0
 # whether a run is going (``running``) holds it for an instant, which is no run.
 SETTLE_SECONDS = 2.0
 SETTLE_STEP = 0.25
+# How long a server waits after its start before it first asks the rule (``Catcher``), by its own monotonic clock: two
+# of its tendings (``daemon.TEND_SECONDS``; on a test's computer, two of its own, ``daemon.catch_up_seconds``). A
+# person's install command that just updated cad, and with it restarted the server, goes on to the plugin within it.
+START_SECONDS = 60.0
 TRIES = 3  # how many runs one release gets: once, and twice more, each an hour or more after the one before
 RETRY_SECONDS = 60 * 60.0
 UNDERWAY, OK, FAILED = "underway", "ok", "failed"
@@ -460,15 +467,24 @@ def _begin(told, *, now: float | None = None) -> tuple[subprocess.Popen | None, 
 class Catcher:
     """The server's side (``daemon.Daemon``): the run it began last, held while it runs, so it begins no second, and
     kept as failed, with its exit status, where it exited without saying how it ended. It only asks whether the run
-    has exited: what ends a run past its deadline is the run's own command (``HardStop``), whichever server began it."""
+    has exited: what ends a run past its deadline is the run's own command (``HardStop``), whichever server began it.
 
-    def __init__(self) -> None:
+    ``started``: when the server started, by ``clock`` (monotonic; now by default); nothing is asked until ``wait``
+    seconds past it (``START_SECONDS``)."""
+
+    def __init__(self, started: float | None = None, *, wait: float = START_SECONDS,
+                 clock: Callable[[], float] = time.monotonic) -> None:
         self.process: subprocess.Popen | None = None
         self.at: float | None = None
+        self.clock = clock
+        self.started = clock() if started is None else started
+        self.wait = wait
 
     def tend(self, told) -> bool:
         """The rule asked (``due``) and a run begun where it says so (``begin``, which asks the record again under the
-        lock); never while this server's last run still runs. Whether one began."""
+        lock); never while this server's last run still runs, within ``wait`` of the server's start, or while another
+        run holds the lock (``running``): then nothing is begun or kept, no try is spent, and it is asked again at a
+        later tending. Whether one began."""
         if self.process is not None:
             code = self.process.poll()
             if code is None:
@@ -479,6 +495,10 @@ class Catcher:
                         if found.get("at") == at and found.get("outcome") == UNDERWAY else found)
             except OSError:
                 pass
+        if self.clock() - self.started < self.wait:
+            return False  # the install command that just updated cad goes on to the plugin now (see the module)
+        if running():
+            return False  # a person's run, or the hosted install command's: it does the work
         if not due():
             return False
         self.process, self.at = _begin(told)

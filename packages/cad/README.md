@@ -417,8 +417,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     server runs, `cad update` hands it over itself, and the helper starts none); a higher major only by `cad update
     --major` (`uv tool install --upgrade "cad>=<installed>"`). Where `cad plugin update auto` is on and cad is newer than the release
     the plugin was last updated well for, however it got newer, its server runs `cad plugin install` once,
-    detached, with 15 minutes, and ended for certain a minute past them; cad's own update begins none while such
-    a run is going. Nothing waits on
+    detached, a minute after it starts at the earliest and never while a run is going, with 15 minutes, and
+    ended for certain a minute past them; cad's own update begins none while such a run is going. Nothing waits on
     the install but a start that would otherwise start the release it replaces.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
     `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs

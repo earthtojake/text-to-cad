@@ -14,12 +14,13 @@ import os
 import subprocess
 import sys
 import time
+import types
 import unittest
 from unittest import mock
 
 import cad_server
-from cad_server import analytics
-from cad_server._internal import auto_update_helper, plugin_catch_up
+from cad_server import analytics, updates
+from cad_server._internal import auto_update, auto_update_helper, plugin_catch_up
 from cad_server.cli import plugin as command
 from cad_server.plugin import apps, computer, run, source
 from tests.python.support.agent_apps import PluginRuns
@@ -251,6 +252,58 @@ class InstallTests(PluginRuns):
                 self.assertEqual((0, ""), (done.returncode, done.stderr), done.stdout)
                 self.assertNotIn("Another run", done.stdout)
                 self.assertEqual(self.calls("claude"), ADD)
+
+    def test_the_server_an_install_command_s_update_restarted_leaves_the_plugin_to_that_command(self) -> None:
+        """A person runs the hosted install command on a computer whose server runs, ``cad plugin update auto`` on. It
+        updates cad by that cad's own ``cad update``, which restarts the server, and a moment later hands over to
+        ``cad plugin install``. The new server is newer than the release the plugin is up to date for, but begins
+        nothing in its first minute (``plugin_catch_up.START_SECONDS``, its clock driven here) nor while a run holds
+        the lock; the person's run does the work and keeps this release, so the server, asking after it, begins none.
+        Each app gets the plugin once. A run the server began would be a process of its own here, its apps' commands
+        logged as the person's are."""
+        self.programs("claude", "codex")
+        self.keep(**{"for": "0.0.1"})  # up to date for the release before the update
+        (self.state / "settings.json").write_text(json.dumps({"plugin": {"auto_update": True}}), encoding="utf-8")
+        clock = [1000.0]
+        server = plugin_catch_up.Catcher(clock[0], clock=lambda: clock[0])  # the new server, just started
+        begun: list = []
+        ours, real_popen = str(auto_update.tool_command(self.tool)), subprocess.Popen
+
+        def popen(line, **options):  # ``subprocess.Popen`` is every module's: only the server's run is taken over
+            if line[0] != ours:
+                return real_popen(line, **options)
+            begun.append(line)
+            argv, environ = self.child("install", **{plugin_catch_up.SERVER_ENV:
+                                                     options["env"][plugin_catch_up.SERVER_ENV]})
+            code = subprocess.run(argv, env=environ, capture_output=True, timeout=120).returncode
+            return types.SimpleNamespace(poll=lambda: code)
+
+        def tend(seconds: float) -> bool:
+            clock[0] = 1000.0 + seconds
+            return server.tend(lambda _line: None)
+
+        during: list = []
+        real = run.install_apps
+
+        def person_s(*args, **options):  # the server tends while the person's run holds the lock, its minute past
+            during.append(tend(plugin_catch_up.START_SECONDS + 1))
+            return real(*args, **options)
+
+        with mock.patch.object(updates, "checking", return_value=True), \
+                mock.patch.object(plugin_catch_up.subprocess, "Popen", side_effect=popen):
+            with self.on_this_computer():
+                self.assertTrue(plugin_catch_up.due(), "the rule alone would run it")
+                self.assertEqual((tend(0.0), tend(1.0)), (False, False), "the server's start, and a moment later")
+            with mock.patch.object(run, "install_apps", side_effect=person_s):
+                done = self.run_install(CAD_PLUGIN_BY="script")
+            self.assertEqual((0, ""), (done.returncode, done.stderr), done.stdout)
+            self.assertNotIn("Another run", done.stdout)
+            with self.on_this_computer():
+                for seconds in (plugin_catch_up.START_SECONDS + 30, 5 * plugin_catch_up.RETRY_SECONDS):
+                    self.assertFalse(tend(seconds), seconds)
+        self.assertEqual((during, begun), ([False], []))
+        self.assertEqual((self.calls("claude"), len(self.calls("codex"))), (ADD, 2))
+        self.assertEqual(self.kept(), {"switch": True, "record": {"for": cad_server.__version__}})
 
     def test_a_state_folder_it_may_not_lock_never_stops_the_run(self) -> None:
         self.programs("claude")
