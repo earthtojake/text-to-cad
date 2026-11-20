@@ -180,8 +180,9 @@ release. The switch is off until the install command a person ran turns it on, a
 the installed cad's own `cad plugin update auto on`; where the run's plugin step ended non-zero or
 its report names an app as failed, that call says so (`CAD_INSTALL_FAILED=1`, which 0.11.12 and
 0.11.13 read the same way) and the switch goes on with no release kept, so a computer whose runs keep failing still has
-the plugin kept: where cad is newer than the release the plugin is up to date for, cad's server runs
-`cad plugin install` once, a minute after it starts at the earliest and never while a run is going:
+the plugin kept: where cad is newer than the release the plugin is up to date for, or a run of the
+global install that did not go well marked its release as owed one (so a computer the plugin was
+never up to date on is tried again too), cad's server runs `cad plugin install` once, a minute after it starts at the earliest and never while a run is going:
 the install command that just updated cad, and so restarted the server, does the work in that
 minute, and the server then finds nothing to do. A run of a cad from anywhere else, such as the
 newest release from uv's cache (`uv tool run cad@latest`, below), does the work and keeps none:

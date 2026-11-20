@@ -14,6 +14,7 @@ import sys
 import unittest
 from pathlib import Path
 
+import cad_server
 from cad_server.plugin import apps, computer, source
 from tests.python.support.agent_apps import LATEST, OURS, OURS_OLD, STAND_IN, THEIRS, PluginRuns
 
@@ -155,11 +156,11 @@ class AppTableTests(PluginRuns):
         old = self.write(".cline/skills/pcb/SKILL.md", OURS.format(name="pcb"))
         done = self.run_install(FAKE_FAIL="claude:add,codex:add,gemini:install,git:clone")
         # Every app it found failed: the run says so, and fails, and keeps no release as the one the plugin is up to
-        # date for (``plugin_catch_up``), so cad's server runs it again where the switch is on. The switch it leaves
-        # as it is.
+        # date for but this one as owed a run (``plugin_catch_up``), so cad's server runs it again where the switch is
+        # on. The switch it leaves as it is.
         self.assertEqual(1, done.returncode, done.stdout)
         self.assertIn("No app got the plugin", done.stdout)
-        self.assertEqual(self.kept(), {"switch": False, "record": {}})
+        self.assertEqual(self.kept(), {"switch": False, "record": {"owed": cad_server.__version__}})
         self.assertNotIn("Start a new session", done.stdout)
         self.assertEqual(self.calls("claude"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"]])
         self.assertEqual(self.calls("codex"), [["plugin", "marketplace", "add", "earthtojake/text-to-cad", "--ref", "latest"]])

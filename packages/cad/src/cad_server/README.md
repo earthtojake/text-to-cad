@@ -234,9 +234,10 @@ means "from this release on"); a run that fails, or where any app failed, writes
 for a release only where every app found went well. Only the computer's global install of cad writes it: a cad run from anywhere else (the newest
 release from uv's cache, which the hosted install command runs for an installed cad that has no `cad plugin
 install`) does the work and keeps no release, since its own may
-be of a major the installed cad never reaches, and this cad's server would then never catch up again. With no
-record and the switch on, the record is written for this release and nothing
-runs, so a fresh install runs nothing again. A run underway, of any release, begun less than an hour ago, is
+be of a major the installed cad never reaches, and this cad's server would then never catch up again. A run of the
+global install that did not go well marks its release as owed a run (`owed`, dropped by one that goes well),
+which the server makes for that release or a later one, `for` or none. With no record and no such mark and the
+switch on (turned on by hand, or no run ever made), the record is written for this release and nothing runs. A run underway, of any release, begun less than an hour ago, is
 waited for, and the server that begins a run asks the record again under the state folder's lock as it keeps
 it, so two servers never both begin one. A run that failed, where any app failed (its exit status 0 all the
 same), or that never said how it ended, is tried again an hour later at the earliest, at a later tending: at

@@ -114,11 +114,12 @@ class InstallTests(PluginRuns):
         self.assertEqual(1, done.returncode, done.stdout)
         self.assertIn("No app got the plugin: see each app's line above, then run this again.", done.stdout)
         self.assertNotIn("Start a new session", done.stdout)
-        self.assertEqual(self.kept(), {"switch": False, "record": {}})
+        # It is owed a run, which the server makes (``plugin_catch_up``).
+        self.assertEqual(self.kept(), {"switch": False, "record": {"owed": cad_server.__version__}})
         # One of them failing is the run ending well (exit status 0), but the plugin is up to date for a release only
         # where every app found went well: no release is kept for it either.
         self.assertEqual(0, self.run_install(FAKE_FAIL="codex").returncode)
-        self.assertEqual(self.kept(), {"switch": False, "record": {}})
+        self.assertEqual(self.kept(), {"switch": False, "record": {"owed": cad_server.__version__}})
         # 2: a command line it does not take; nothing ran.
         for argv in (["install", "--force"], ["install", "claude"]):
             done = self.cad_plugin(*argv)
@@ -336,7 +337,8 @@ class InstallTests(PluginRuns):
             for name in ("install", "update"):
                 failed = self.cad_plugin(name, **EARLIER, FAKE_FAIL="claude")
                 self.assertEqual(1, failed.returncode, failed.stdout)
-                self.assertEqual(self.kept()["record"], {"for": "0.0.1", **underway}, "untouched, every field")
+                self.assertEqual(self.kept()["record"], {"for": "0.0.1", "owed": cad_server.__version__, **underway},
+                                 "its run untouched, every field; this release owed a run")
             with self.on_this_computer(**EARLIER):
                 self.assertIsNone(plugin_catch_up.deadline())
                 self.assertEqual(run.began_by(os.environ), run.PERSON)
@@ -353,7 +355,7 @@ class InstallTests(PluginRuns):
         self.assertEqual(self.calls("claude"), ADD)
         # Ended well on the global install, it keeps this release as the one the plugin is up to date for, as any run
         # does; the run of the record stays the earlier server's.
-        self.assertEqual(self.kept()["record"], {"for": cad_server.__version__, **underway})
+        self.assertEqual(self.kept()["record"], {"for": cad_server.__version__, **underway}, "and owed none")
         # This release's server's own name is the one that makes a server's run: its deadline, and its record closed.
         self.keep(**{"for": "0.0.1"}, **underway)
         with self.on_this_computer(**SERVER):
@@ -416,7 +418,7 @@ class UpdateTests(PluginRuns):
         done = self.cad_plugin("update", FAKE_FAIL="claude")
         self.assertEqual(1, done.returncode, done.stdout)
         self.assertIn("Claude Code: failed", done.stdout)
-        self.assertEqual(self.kept(), {"switch": False, "record": {"for": "0.0.1"}})
+        self.assertEqual(self.kept(), {"switch": False, "record": {"for": "0.0.1", "owed": cad_server.__version__}})
         done = self.cad_plugin("update")
         self.assertEqual((0, ""), (done.returncode, done.stderr), done.stdout)
         self.assertEqual(self.calls("claude"), ADD)
@@ -501,7 +503,7 @@ class UpdateTests(PluginRuns):
         done = self.cad_plugin("install", FAKE_FAIL="codex")
         self.assertEqual(0, done.returncode, done.stdout)
         self.assertIn("Codex: failed", done.stdout)
-        self.assertEqual(self.kept(), {"switch": False, "record": {"for": "0.0.1"}})
+        self.assertEqual(self.kept(), {"switch": False, "record": {"for": "0.0.1", "owed": version}})
         # A server's, the same: kept as failed, try 1 of 3, and wanted again an hour after it began, not before.
         at = now
         for tries in range(1, plugin_catch_up.TRIES + 1):

@@ -209,8 +209,9 @@ def _attempt() -> tuple[str, str]:
 
 def _catch_up() -> tuple[str, str]:
     """The plugin's record: the release of cad the plugin in the agent apps is up to date for -- the one ``cad plugin
-    install`` last ended with exit status 0 for, or the one that turned ``cad plugin update auto`` on (the hosted
-    install command's last step, its run ending well) --, and the last run of ``cad plugin install`` the server began
+    install`` last went well in every app for, or the one that turned ``cad plugin update auto`` on (the hosted
+    install command's last step, its run going well) --, the release a run is owed for where the last did not go
+    well, and the last run of ``cad plugin install`` the server began
     for a newer cad -- its release, when, how it went and its exit status, the try of how many."""
     import time
 
@@ -220,6 +221,8 @@ def _catch_up() -> tuple[str, str]:
     named = found.get("for")
     said = (f"the plugin is up to date for cad {named}" if isinstance(named, str)
             else "no record of the plugin being up to date on this computer")
+    if isinstance(found.get("owed"), str):
+        said += f"; a run is owed for cad {found['owed']} (the last did not go well)"
     if not isinstance(found.get("release"), str) or not isinstance(found.get("at"), (int, float)):
         return INFO, said
     when = time.strftime("%Y-%m-%d %H:%M", time.localtime(found["at"]))

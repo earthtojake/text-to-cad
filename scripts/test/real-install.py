@@ -19,7 +19,7 @@ named ``latest`` before it clones (there is none: it clones); that one request r
    GitHub at ``latest``) exactly once, copied from the local repository.
 2. cad: ``cad server start``; a box built by ``cad run`` and its page link answering with its token, refused without;
    a file shown by ``cad viewer`` the same way; ``cad doctor`` exit 0.
-3. again: the local repository moved on as a release moves it; the command again: cad "installed already", nothing
+3. again: the local repository moved on as a release moves it; the command again: cad found ("Updating cad"), nothing
    newer for it (a person's run asks it, ``cad update``) and no install, each app ``updated``, one copy each, the new
    commit's.
 4. migrate: each program left as 0.11.10's installer left it (``<state>/plugin`` made from the v0.11.10 tree by that

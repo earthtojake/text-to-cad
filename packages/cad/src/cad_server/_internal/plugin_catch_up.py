@@ -9,44 +9,46 @@ gets newer -- its own automatic update, a typed ``cad update``, ``uv tool upgrad
 -- because it is the server of the newer cad that asks, whatever brought it.
 
 **The record** (``RECORD``, in the state folder beside ``auto-update.json``): ``for``, the release of cad the plugin is
-up to date for -- written by ``cad plugin install`` as it ends with every app it found gone well (``ended``: exit
-status 0 and no app ``failed``; a run that found no app counts), and as the switch is turned on (``noted``, from
-``auto_update.change_plugin``), and only ever by this computer's global install of cad
-(``tool``): a cad run from anywhere else (the newest release from uv's cache, which the hosted install command runs
-for an installed cad with no ``cad plugin install``) is not the cad whose server asks the rule below, and its release,
-which may be of a higher major than that cad ever reaches, is never kept. ``cad plugin install`` installs and leaves
-the switch as it is; the switch is the person's, turned on by the hosted install command they ran, as its last step
-(``cad plugin update auto on``), which says how its run is ending in the environment of that call (``FAILED_ENV``):
-every app gone well, the switch is turned on and ``for`` written; otherwise (the plugin's step ended non-zero, or an
-app failed), the switch is turned on and nothing written, so a computer whose runs keep failing still has the plugin
-kept: where an earlier run went well (``for`` older than this cad), the server runs the command again for this
-release; where none ever did (no ``for``), the rule below takes this release as up to date, and the command runs once
-cad is newer. 0.11.12 and 0.11.13 read that variable the same way, so the call means one thing to every cad it
-reaches. A person who turns it on by hand, with no such variable, means "from this release on". A run that fails, or
-where any app failed, writes nothing of ``for``: the plugin is up to date for a release only where every app found
-went well. Then the last run the server began (``begin``): ``release``, ``at``, ``tries`` (of that release),
-``outcome`` (``underway``, then ``ok`` or ``failed``), ``code`` (its exit status, null where it could not start) and
-``ended``. It is a state record, not a choice, so it lives in the state folder, as the update's own record does, and
-not in the person's settings. ``cad doctor`` shows it.
+up to date for -- written by ``cad plugin install`` as it ends with every app it found gone well (``ended``: exit status
+0 and no app ``failed``; a run that found no app counts), and as the switch is turned on (``noted``, from
+``auto_update.change_plugin``), and only ever by this computer's global install of cad (``tool``): a cad run from
+anywhere else (the newest release from uv's cache, which the hosted install command runs for an installed cad with no
+``cad plugin install``) is not the cad whose server asks the rule below, and its release, which may be of a higher major
+than that cad ever reaches, is never kept. ``cad plugin install`` installs and leaves the switch as it is; the switch is
+the person's, turned on by the hosted install command they ran, as its last step (``cad plugin update auto on``), which
+says how its run is ending in the environment of that call (``FAILED_ENV``): every app gone well, the switch is turned
+on and ``for`` written; otherwise (the plugin's step ended non-zero, or an app failed), the switch is turned on and
+nothing written, so a computer whose runs keep failing still has the plugin kept: where an earlier run went well
+(``for`` older than this cad), the server runs the command again for this release; where none ever did (no ``for``), the
+run's own mark (``owed``, below) has it run again all the same. 0.11.12 and 0.11.13 read that variable the same way, so
+the call means one thing to every cad it reaches. A person who turns it on by hand, with no such variable, means "from
+this release on". A run that fails, or where any app failed, writes nothing of ``for``: the plugin is up to date for a
+release only where every app found went well. ``owed``: the release of the global install's last run that did not go
+well (an app failed, or the run did), dropped by one that went well and by the switch turned on (``noted``): the rule
+reads it as a run owed to that release and any later one, so a computer where the plugin was never up to date for any
+release (no ``for``: a fresh install whose first run had an app fail) is tried again too. 0.11.12 and 0.11.13 read only
+``for`` of the record, and keep any other field as they find it. Then the last run the server began (``begin``):
+``release``, ``at``, ``tries`` (of that release), ``outcome`` (``underway``, then ``ok`` or ``failed``), ``code`` (its
+exit status, null where it could not start) and ``ended``. It is a state record, not a choice, so it lives in the state
+folder, as the update's own record does, and not in the person's settings. ``cad doctor`` shows it.
 
 **The rule** (``due``), asked by the server as it tends itself, only once nothing is in flight, never in its first
-``START_SECONDS`` (by its monotonic clock) and never while a run holds the lock (``Catcher``): the switch on; the
-update check not turned off for this process (``updates.checking``: ``CAD_UPDATE_CHECK=0``, CI, a development build);
-no test saying to run nothing (``silenced``: ``CAD_ENGINE_UPDATE_INSTALLER`` set and empty, the
-variable that names the bridge's stand-in for the hosted install command -- ``cad plugin install`` itself runs no
-install command and reads no such variable); this cad a global install (``tool``: an installer of
-``auto_update.INSTALLERS`` made its environment) of a plain release;
-install mode not owed (BRIDGE-ONLY: a computer the bridge still carries gets that run, ``install_script``, and no
-other); and this cad newer than ``for``. Where the record names no ``for`` (none yet, or unreadable), it is written
-for this release and nothing runs: a fresh install's command writes it itself, and a computer whose switch was on
-before is taken as up to date. Bounded: a run underway, of any release, begun less than ``RETRY_SECONDS`` ago, is
-waited for; one of this release that failed (or never said how it ended) is tried again not sooner than
-``RETRY_SECONDS`` after it began, and at a later tending: at most ``TRIES`` runs for one release, each an hour
-or more after the one before. Never in a loop. A run where any app failed is a failed run, though the others went
-well and it exited 0 (``ended``), so an app that is broken for good costs at most ``TRIES`` runs in the background for
-each release, an hour or more apart, and then nothing until cad is newer. ``begin`` asks the record's half of it
-again under the state folder's lock, as it keeps its run (``_wanted``), so two servers on one state folder never both
-begin one.
+``START_SECONDS`` (by its monotonic clock) and never while a run holds the lock (``Catcher``): the switch on; the update
+check not turned off for this process (``updates.checking``: ``CAD_UPDATE_CHECK=0``, CI, a development build); no test
+saying to run nothing (``silenced``: ``CAD_ENGINE_UPDATE_INSTALLER`` set and empty, the variable that names the bridge's
+stand-in for the hosted install command -- ``cad plugin install`` itself runs no install command and reads no such
+variable); this cad a global install (``tool``: an installer of ``auto_update.INSTALLERS`` made its environment) of a
+plain release; install mode not owed (BRIDGE-ONLY: a computer the bridge still carries gets that run,
+``install_script``, and no other); and this cad newer than ``for``, or owed a run (``owed``, of this release or an
+earlier one). Where the record names no ``for`` (none yet, or unreadable) and owes no run, it is written for this
+release and nothing runs: the switch was turned on by hand, or no run was ever made, and a computer whose switch was on
+before is taken as up to date. Bounded: a run underway, of any release, begun less than ``RETRY_SECONDS`` ago, is waited
+for; one of this release that failed (or never said how it ended) is tried again not sooner than ``RETRY_SECONDS`` after
+it began, and at a later tending: at most ``TRIES`` runs for one release, each an hour or more after the one before.
+Never in a loop. A run where any app failed is a failed run, though the others went well and it exited 0 (``ended``), so
+an app that is broken for good costs at most ``TRIES`` runs in the background for each release, an hour or more apart,
+and then nothing until cad is newer. ``begin`` asks the record's half of it again under the state folder's lock, as it
+keeps its run (``_wanted``), so two servers on one state folder never both begin one.
 
 **A run** (``begin``): the record says ``underway`` first; then this cad's own ``cad`` command
 (``auto_update.tool_command``) runs ``cad plugin install``, detached, with no window, in an environment that points at
@@ -276,26 +278,45 @@ def _change(change) -> dict[str, Any] | None:
 
 def noted(release: str | None = None) -> None:
     """The switch turned on (``auto_update.change_plugin``): ``for`` is ``release`` (this cad's by default) from now
-    on. ``OSError`` where it cannot be written."""
+    on, and a run owed for it or an earlier release (``owed``) is owed no more. ``OSError`` where it cannot be
+    written."""
     named = release if _numbers(release) is not None else _version()
-    _change(lambda found: {**found, "for": named})
+
+    def change(found: dict[str, Any]) -> dict[str, Any]:
+        owed = _numbers(found.get("owed"))
+        kept = {key: value for key, value in found.items() if key != "owed" or owed is None
+                or owed > _numbers(named)}
+        return {**kept, "for": named}
+
+    _change(change)
+
+
+def owing(found: dict[str, Any], version: str) -> bool:
+    """Whether the record owes this cad, ``version``, a run: a run of the global install for it or an earlier release
+    did not go well (``owed``, see the module)."""
+    owed, mine = _numbers(found.get("owed")), _numbers(version)
+    return owed is not None and mine is not None and owed <= mine
 
 
 def ended(code: int | None, *, failed: bool = False) -> None:
     """``cad plugin install`` ended with exit status ``code``, ``failed`` where an app it found failed: it went well
     where it is 0 and no app failed (one that found none included). Then ``for`` is this cad where this cad is the
     computer's global install (``tool``; a run that did not go well writes none, nor does a cad run from anywhere
-    else, see the module), and, where this release's server began this run (``server_run``), the run's outcome:
-    ``ok`` where it went well, else ``failed`` with its exit status, so the rule tries it again later; any other run
-    leaves the record's run as it is. Never raises."""
+    else, see the module) and the run it was owed no longer owed; where it did not go well, this cad's release is
+    owed a run (``owed``: the global install's alone, as ``for``); and, where this release's server began this run
+    (``server_run``), the run's outcome: ``ok`` where it went well, else ``failed`` with its exit status, so the rule
+    tries it again later; any other run leaves the record's run as it is. Never raises."""
     try:
         attempt = server_run()
         well = code == 0 and not failed
-        mine = well and tool() is not None
+        mine = tool() is not None
 
         def change(found: dict[str, Any]) -> dict[str, Any]:
-            if mine:
+            if mine and well:
                 found["for"] = _version()
+                found.pop("owed", None)
+            elif mine:
+                found["owed"] = _version()
             if attempt and str(found.get("at")) == attempt and found.get("outcome") == UNDERWAY:
                 found.update(outcome=OK if well else FAILED, code=code, ended=time.time())
             return found
@@ -390,8 +411,8 @@ def due(*, now: float | None = None) -> bool:
         if owed is not None and owed.get("state") == install_script.OWED:
             return False  # BRIDGE-ONLY: the bridge's run, never a second
         found = read()
-        if _numbers(found.get("for")) is None:
-            noted(version)
+        if _numbers(found.get("for")) is None and not owing(found, version):
+            noted(version)  # the switch turned on by hand, or no run ever made: from this release on
             return False
         return _wanted(found, version, now)
     except Exception:  # noqa: BLE001 - a rule that cannot be asked runs nothing
@@ -399,11 +420,13 @@ def due(*, now: float | None = None) -> bool:
 
 
 def _wanted(found: dict[str, Any], version: str, now: float) -> bool:
-    """The record's half of the rule (see the module), for this cad, ``version``: newer than ``for``; no run underway,
-    of any release, begun less than ``RETRY_SECONDS`` ago; and, for this release, fewer than ``TRIES`` runs, the last
-    begun ``RETRY_SECONDS`` ago or more."""
+    """The record's half of the rule (see the module), for this cad, ``version``: newer than ``for``, or owed a run
+    (``owing``); no run underway, of any release, begun less than ``RETRY_SECONDS`` ago; and, for this release, fewer
+    than ``TRIES`` runs, the last begun ``RETRY_SECONDS`` ago or more."""
     mine, last_for = _numbers(version), _numbers(found.get("for"))
-    if mine is None or last_for is None or mine <= last_for:
+    if mine is None:
+        return False
+    if not owing(found, version) and (last_for is None or mine <= last_for):
         return False
     if found.get("outcome") == UNDERWAY and not _stale(found, now):
         return False  # waited for, whichever release and whichever server began it

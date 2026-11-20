@@ -1868,6 +1868,9 @@ class DoctorTest(Case):
                                                "outcome": "failed", "code": 1})
         self.assertRegex(doctor._catch_up()[1], r"^the plugin is up to date for cad 0\.0\.9; the last run, "
                                                 r"for cad 0\.1\.0 on \S+ \S+: failed \(exit 1\), try 2 of 3$")
+        plugin_catch_up._change(lambda found: {**found, "owed": "0.1.0"})
+        self.assertRegex(doctor._catch_up()[1], r"^the plugin is up to date for cad 0\.0\.9; a run is owed for cad "
+                                                r"0\.1\.0 \(the last did not go well\); the last run, ")
 
 
 class PluginCatchUpTest(Case):
@@ -1897,6 +1900,61 @@ class PluginCatchUpTest(Case):
         with mock.patch.object(self.catch_up.subprocess, "Popen") as popen:
             process = self.catch_up.begin(self.told.append, now=now)
         return process, popen
+
+    def test_a_computer_never_up_to_date_is_owed_the_run_an_app_s_failure_left_and_tries_it_at_most_three_times(
+            self) -> None:
+        """No ``for`` ever (a fresh install), and a person's run where one app failed: that run marks this release as
+        owed a run (``owed``), which the hosted install command's switch, told the run did not go well, leaves as it
+        is and keeps no release by. The server, past its first minute, runs it as it would for a newer cad: once, then
+        again an hour after each try began and not before, at most three runs for this release in all. A later run
+        that goes well clears the mark and keeps the release; the switch turned on by hand does too."""
+        self.switch_on()
+        self.catch_up.ended(0, failed=True)  # a person's run: exit status 0, one app failed
+        self.assertEqual(self.catch_up.read(), {"owed": "0.1.0"})
+        auto_update.change_plugin(True, "0.1.0", note=False)  # the install command's switch, with CAD_INSTALL_FAILED=1
+        self.assertEqual(self.catch_up.read(), {"owed": "0.1.0"})
+        started, now = [0.0], [1_000_000.0]
+        catcher = self.catch_up.Catcher(started=0.0, clock=lambda: started[0])
+        with mock.patch.object(self.catch_up.subprocess, "Popen") as popen, mock.patch("time.time", lambda: now[0]):
+            popen.return_value.poll.return_value = None
+            started[0] = self.catch_up.START_SECONDS - 1
+            self.assertFalse(catcher.tend(self.told.append), "never in the server's first minute")
+            self.assertEqual(self.catch_up.read(), {"owed": "0.1.0"}, "nor taken as up to date")
+            started[0] = self.catch_up.START_SECONDS
+            for tries in range(1, self.catch_up.TRIES + 1):
+                self.assertTrue(catcher.tend(self.told.append), tries)
+                record = self.catch_up.read()
+                self.assertEqual((record["release"], record["tries"], record["outcome"], "for" in record),
+                                 ("0.1.0", tries, "underway", False))
+                with mock.patch.dict(os.environ, {self.catch_up.SERVER_ENV: str(record["at"])}):
+                    self.catch_up.ended(0, failed=True)  # the same app failed again
+                popen.return_value.poll.return_value = 0
+                now[0] += self.catch_up.RETRY_SECONDS - 1
+                self.assertFalse(catcher.tend(self.told.append), "not within the hour")
+                popen.return_value.poll.return_value = None
+                now[0] += 1
+            record = self.catch_up.read()
+            self.assertEqual((record["owed"], record["outcome"], record["code"], record["tries"]),
+                             ("0.1.0", "failed", 0, 3))
+            self.assertFalse(catcher.tend(self.told.append))
+            now[0] += 100 * self.catch_up.RETRY_SECONDS
+            self.assertFalse(catcher.tend(self.told.append), "three runs for one release, then nothing more")
+            self.assertEqual(popen.call_count, self.catch_up.TRIES)
+        # A later run that goes well clears the mark and keeps this release.
+        self.catch_up.ended(0)
+        record = self.catch_up.read()
+        self.assertEqual((record["for"], "owed" in record), ("0.1.0", False))
+        self.assertFalse(self.catch_up.due())
+        # The switch turned on by hand means "from this release on": the mark goes, the release is kept.
+        self.catch_up.ended(1)
+        self.assertEqual(self.catch_up.read()["owed"], "0.1.0")
+        auto_update.change_plugin(True)
+        record = self.catch_up.read()
+        self.assertEqual((record["for"], "owed" in record), ("0.1.0", False))
+        # A mark of an earlier release is owed by a newer cad too, until a run goes well.
+        self.catch_up._change(lambda found: {"owed": "0.0.9"})
+        self.assertTrue(self.catch_up.due())
+        self.assertEqual(self.catch_up.read(), {"owed": "0.0.9"}, "a computer owed a run is not taken as up to date")
 
     def test_the_switch_off_runs_nothing_and_writes_nothing(self) -> None:
         self.assertFalse(self.catch_up.due())
