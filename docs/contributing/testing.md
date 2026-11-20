@@ -63,11 +63,12 @@ enough. Every other job runs on the changes that reach it. The two there now:
   `store-uv-line`), and the install command on a computer of 0.11.11; then cad's own update, automatic
   and typed with and without a server running, inside its major with a higher major out and across it by
   `cad update --major` (`self-major`), and cad installed by pipx (`self-pipx`); and after an update, the
-  new server's one `cad plugin update`, which runs cad's own code and no install command, read from
+  new server's one `cad plugin install`, which runs cad's own code and no install command, read from
   cad's record of it. One more route starts on the real 0.11.13 (`plugin-update`, on shard 1/2 of each
   system): that release's own `cad plugin update` runs this tree's install command, which finds no `cad
   plugin install` in it and has the newest release's do the work (`uv tool run ... cad@latest plugin
-  install`: this tree's), 0.11.13 left as it is. It is the one test
+  install`: this tree's), then turns the switch on by 0.11.13's own `cad plugin update auto on`, 0.11.13
+  left as it is and the install command run once. It is the one test
   of the move every computer makes, unattended or by the install command. It runs with the installer
   rehearsals, and on a change to the rehearsal itself. A route runs alone too, as
   `scripts/test/rehearse-update.py store-only`.
@@ -130,7 +131,7 @@ python3 scripts/github-workflows/select_checks.py --paths packages/cad/src/cad/r
    command. The shared
    temporary-directory helper retains the Windows cleanup retries used by the suite.
 
-   A test that runs `cad plugin install`, `cad plugin update` or the install script gives it a
+   A test that runs `cad plugin install` (by either name) or the install script gives it a
    computer of its own: a temporary home and stand-in programs on PATH for the agent apps' CLIs, git,
    uv and `cad` (`tests/python/support/agent_apps.py`: `AgentApps`, and `PluginRuns` for the
    command). The runner's folders are not enough: the command works in the home folder, and run in

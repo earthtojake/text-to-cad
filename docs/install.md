@@ -12,7 +12,7 @@ On Windows, in PowerShell:
 irm https://www.texttocad.dev/install.ps1 | iex
 ```
 
-It does four things, and nothing else:
+It does five things, and nothing else:
 
 1. Installs [uv](https://docs.astral.sh/uv/) if it is missing. Where uv is older than 0.9.0, it updates
    it, or installs a newer one beside it with uv's own installer.
@@ -27,11 +27,14 @@ It does four things, and nothing else:
    on: cad updates itself.
 4. Hands the agent apps to cad, by running `cad plugin install`. That installs or updates the
    plugin in each agent app it finds, with that app's own command (below), all but Kimi Code, which
-   you install by hand; removes what earlier releases of text-to-cad left in those apps; and turns
-   on the plugin's automatic updates ([Updating](#updating)). It prints one line per app.
+   you install by hand; and removes what earlier releases of text-to-cad left in those apps. It
+   prints one line per app.
+5. Turns on the plugin's automatic updates, with cad's own `cad plugin update auto on`
+   ([Updating](#updating)).
 
 It takes no options and does not start cad's server. Run it again at any time to bring cad and the
-plugin up to date in every app. To do step 4 alone, leaving cad as it is, run:
+plugin up to date in every app. To do step 4 alone, leaving cad and the plugin's automatic updates as
+they are, run:
 
 ```bash
 cad plugin install
@@ -52,7 +55,8 @@ release](#from-an-earlier-release)), run the install command by themselves. Run 
 step 3 and leaves your PATH as it is: only your own run updates cad or changes the PATH.
 
 Where every app it found failed, cad keeps no release as the one the plugin is up to date for, and
-runs `cad plugin update` again later ([Updating](#updating)).
+runs `cad plugin install` again later where the plugin's automatic updates are on
+([Updating](#updating)).
 
 It removes only what is ours: a skill counts as ours only where its `SKILL.md` says it comes from
 text-to-cad's repository, so a skill of yours with the same name is left as it is. A copy from a
@@ -68,7 +72,7 @@ PowerShell 5.1 does not follow the redirect from `texttocad.dev`.
 
 ## What it sends
 
-`cad plugin install` and `cad plugin update` count each run in cad's telemetry: who started it (you,
+`cad plugin install` counts each run in cad's telemetry: who started it (you,
 the install command or cad's server), how it ended, how many seconds it took, what the terminal was
 shown (the logo, and in which colours), and how many agent apps it found on your computer and how many
 of those failed, as numbers. cad names an agent app only where its install failed: by cad's own short
@@ -406,21 +410,22 @@ Once cad has updated itself, uv keeps it inside its major version, so `uv tool u
 
 ### The plugin
 
-`cad plugin install`, which the install command runs, turns on the plugin's automatic updates: each
-time cad is newer than the release the plugin is up to date for, cad runs `cad plugin update` once,
-in the background, which puts the newest plugin in every agent app it finds. That holds however cad
+The install command turns on the plugin's automatic updates as its last step: each time cad is
+newer than the release the plugin is up to date for, cad runs `cad plugin install` once, in the
+background, which puts the newest plugin in every agent app it finds. That holds however cad
 got newer: by itself, by `cad update`, or by `uv tool upgrade cad` or `pipx upgrade cad`. It happens
 the next time cad's server starts or looks after itself with nothing running. A run that fails, or
 that is still running after 15 minutes and is stopped (a minute later for certain, whatever it is
 doing), is tried again an hour or more later: at most three runs for one release. To update the plugin now:
 
 ```bash
-cad plugin update
+cad plugin install
 ```
 
-`cad plugin install` does the same. Neither changes cad; the install command updates cad first, then
-runs `cad plugin install`. One such run goes at a time: a second waits for the first to end, and
-`cad update` typed while one is going says so and updates nothing, so run it again afterwards.
+That leaves cad as it is; the install command updates cad first, then runs `cad plugin install`.
+(`cad plugin update`, the name 0.11.12 and 0.11.13 give it, still does the same.) One such run goes
+at a time: a second waits for the first to end, and `cad update` typed while one is going says so and
+updates nothing, so run it again afterwards.
 
 To update one app alone, run the update command under its name. To see whether the plugin's
 automatic updates are on, or to turn them off or on:
@@ -431,8 +436,8 @@ cad plugin update auto off
 cad plugin update auto on
 ```
 
-They are off until a run of `cad plugin install` or `cad plugin update` turns them on: cad never
-changes your apps where you did not ask it to.
+They are off until the install command turns them on, or you do: `cad plugin install` alone never
+changes them, and cad never changes your apps where you did not ask it to.
 
 A copy from a plugin store (Codex's or Claude's) is updated by that store, on its own schedule. Its
 skills may then be older than cad. That is fine: a command the skills used keeps working for at least
@@ -449,8 +454,9 @@ uv tool install cad==0.11.12
 cad server start
 ```
 
-Do not run the install command there: run by a person, it updates cad. `cad plugin update` brings
-the plugin up to date and leaves cad as it is. The newest plugin's skills may ask for a newer cad.
+Do not run the install command there: run by a person, it updates cad. `cad plugin install` (on
+0.11.12 and 0.11.13, `cad plugin update`) brings the plugin up to date and leaves cad as it is. The
+newest plugin's skills may ask for a newer cad.
 
 ### From an earlier release
 

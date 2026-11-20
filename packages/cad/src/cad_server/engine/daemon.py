@@ -561,11 +561,11 @@ def switch_auto_update(request: dict[str, Any]) -> dict[str, Any]:
 
 
 def switch_plugin(request: dict[str, Any]) -> dict[str, Any]:
-    """Whether the server runs the install command once where cad is newer than the release it is up to date for
+    """Whether the server runs ``cad plugin install`` once where cad is newer than the release it is up to date for
     (``plugin_catch_up``), switched by the server (``{"op": "plugin_auto_update", "on", "release", "note"}``: ``cad
-    plugin update auto on|off`` where a server runs; ``release``, the asking cad's, which turning it on takes the install
-    command as up to date for; this server's where it names none; ``"note": false``, nothing taken as up to date: the
-    run that turns it on is ending badly, or the cad that asks is no global install), as ``switch_auto_update`` keeps
+    plugin update auto on|off`` where a server runs; ``release``, the asking cad's, which turning it on takes the plugin
+    as up to date for; this server's where it names none; ``"note": false``, nothing taken as up to date: the install
+    command that turns it on is ending its run badly, or the cad that asks is no global install), as ``switch_auto_update`` keeps
     its own: ``{"ok": true, "on"}``, or ``{"failed"}`` in one line."""
     from cad_server._internal import auto_update
 

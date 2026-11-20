@@ -31,14 +31,14 @@ uv's is the one ``installed_tool`` finds.
 whether cad updates itself, ON where nothing is kept -- but OFF where 0.10.0 to 0.11.11 kept the person's own off
 (``updates.automatic: false``, the same file: every release reads the one state folder) and ``auto_update.on`` was
 never chosen, so a choice made before the update to this cad stands; ``cad update auto on`` then writes ``true``, which
-wins, and the earlier key is only read --; and ``plugin.auto_update``, whether the server runs the install
-command (``cad plugin update``) once where cad is newer than the release that command is up to date for
+wins, and the earlier key is only read --; and ``plugin.auto_update``, whether the server runs the plugin's install
+(``cad plugin install``) once where cad is newer than the release the plugin is up to date for
 (``plugin_catch_up``), OFF where nothing is kept. ``cad update auto`` and ``cad plugin update auto`` change them.
 
 **The check** (``due``): switch on, the check not turned off for this process (``updates.checking``:
 ``CAD_UPDATE_CHECK=0``, CI), this cad a global install whose installer is found, no attempt underway, of whatever
-release (``underway``: begun less than ``RETRY_SECONDS`` ago and not ended), no run of ``cad plugin install`` or ``cad
-plugin update`` going (``_installing``: its lock is held, and an update would replace this environment's files under
+release (``underway``: begun less than ``RETRY_SECONDS`` ago and not ended), no run of ``cad plugin install`` going
+(``_installing``: its lock is held, and an update would replace this environment's files under
 it; asked again as an update begins, ``_start``), and an update the version feed calls for
 (``choose``): the newest release of this cad's major its ``lines`` names, where it is newer than this cad; where the
 feed names none of this major, its ``latest`` where that is of this major and newer, or, where ``latest`` is of a
@@ -100,7 +100,7 @@ command. The switch, ``TRIES`` and ``RETRY_SECONDS`` do not apply (a typed updat
 reached, the upgrade runs all the same, and says what it got; the update begun as soon as nothing is in flight, not
 after the idle minute, or joined where one is underway. Counted in the record as any attempt is, so the automatic tries
 stay bounded. It never runs the install command itself, and says nothing of it; while a run of ``cad plugin install``
-or ``cad plugin update`` is going it is refused in one line (``INSTALLING``).
+is going it is refused in one line (``INSTALLING``).
 
 Imports the standard library alone; what it asks of cad it imports as it asks: ``cad.engine.places`` (the folders),
 ``cad_server.updates`` (the feed, PyPI), ``cad._internal.atomic_replace`` (the attempt kept),
@@ -128,7 +128,7 @@ from typing import Any
 SECTION = "auto_update"
 PLUGIN_SECTION = "plugin"
 RECORD = "auto-update.json"  # the last attempt, in the state folder
-INSTALL_LOG = "install-command.log"  # the output of the last `cad plugin update` the server ran (``plugin_catch_up``)
+INSTALL_LOG = "install-command.log"  # the output of the last `cad plugin install` the server ran (``plugin_catch_up``)
 IDLE_SECONDS = 60.0
 TRIES = 2  # how many times one release is tried: once, and once more at a later check
 RETRY_SECONDS = 60 * 60.0  # how long after an attempt (underway, or ended) its release may be tried again
@@ -259,7 +259,7 @@ def change(on: bool) -> dict[str, Any]:
 
 
 def plugin_switch(path: Path | None = None) -> bool:
-    """Whether the server runs ``cad plugin update`` once where cad is newer than the release it is up to date for
+    """Whether the server runs ``cad plugin install`` once where cad is newer than the release it is up to date for
     (``plugin_catch_up``): off unless ``true`` is kept."""
     return _section(PLUGIN_SECTION, path).get("auto_update") is True
 
@@ -267,8 +267,8 @@ def plugin_switch(path: Path | None = None) -> bool:
 def change_plugin(on: bool, release: str | None = None, *, note: bool = True) -> bool:
     """``plugin.auto_update`` changed under the state folder's lock; turned on, the plugin is taken as up to date for
     ``release``, the cad that turned it on (this one's by default: ``plugin_catch_up.noted``) -- unless ``note`` is
-    false: turned on by a run that is ending badly (``cad plugin install`` or ``cad plugin update`` in which every app
-    found failed), which takes nothing as up to date. ``OSError`` where it cannot be written."""
+    false: turned on by the hosted install command whose run is ending badly (``plugin_catch_up.FAILED_ENV``), or by a
+    cad that is no global install, which takes nothing as up to date. ``OSError`` where it cannot be written."""
     from cad_server.settings import update_section
 
     update_section(PLUGIN_SECTION, lambda kept: {**kept, "auto_update": on})
@@ -627,7 +627,7 @@ def due(*, fetch: bool = False, now: float | None = None) -> Due | None:
 
 
 def _installing() -> bool:
-    """Whether a run of ``cad plugin install`` or ``cad plugin update`` is going now (``plugin_catch_up.running``: its
+    """Whether a run of ``cad plugin install`` is going now (``plugin_catch_up.running``: its
     lock is held): no update begins under it, which would replace this environment's files as it runs."""
     from cad_server._internal import plugin_catch_up
 

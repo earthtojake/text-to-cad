@@ -86,9 +86,8 @@ export default function PrivacyPolicyPage() {
                 and whether updating the plugin in your apps afterwards worked;
               </li>
               <li>
-                when text-to-cad installs or updates the plugin in your agent apps (<code>cad plugin install</code>{" "}
-                and <code>cad plugin update</code>, which our install command and text-to-cad’s own updates
-                run): who started the run (you, our install command or text-to-cad itself), how it ended
+                when text-to-cad installs or updates the plugin in your agent apps (<code>cad plugin install</code>,
+                which our install command and text-to-cad’s own updates run): who started the run (you, our install command or text-to-cad itself), how it ended
                 (well, with every app failed, stopped at its time limit, or not run because another run
                 was going), how many whole seconds it took, what your terminal was shown (whether the logo
                 was drawn, built up or still, and in full colour, 256 colours or none), how many agent apps it found on your
@@ -158,10 +157,10 @@ export default function PrivacyPolicyPage() {
             from the Python Package Index (PyPI) and installs it; a new major version is installed only when you
             ask for it. Our install command, when you run it yourself, also brings a text-to-cad that is
             already installed to the newest release of its major version, from PyPI. Where the plugin’s
-            automatic updates are on (installing the plugin with our install command or{" "}
-            <code>cad plugin install</code> turns them on) and text-to-cad is newer than the release the
-            plugin in your agent apps was last brought up to date for, however it got newer, text-to-cad
-            then updates the plugin in your agent apps itself (<code>cad plugin update</code>): it downloads
+            automatic updates are on (our install command turns them on) and text-to-cad is newer than the
+            release the plugin in your agent apps was last brought up to date for, however it got newer,
+            text-to-cad then updates the plugin in your agent apps itself (<code>cad plugin install</code>): it
+            downloads
             the plugin from GitHub and runs each agent app’s own install command. Releases 0.11.12 and
             0.11.13 instead download our install script from this website and run it. When an earlier
             release that updated itself brings your

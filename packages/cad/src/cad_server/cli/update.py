@@ -21,7 +21,7 @@ installer runs (``cad_server._internal.auto_update_helper``). Everything the wai
 begins: from then on the files of this cad's environment change under it.
 
 A cad that is no global install does not update itself, and is refused. So is an update asked for while a run of
-``cad plugin install`` or ``cad plugin update`` is going (``auto_update.INSTALLING``): it would replace this
+``cad plugin install`` is going (``auto_update.INSTALLING``): it would replace this
 environment's files under that run.
 
 ``cad update auto [status|on|off]`` shows or changes whether cad updates itself (``cad_server.cli.auto_update``);

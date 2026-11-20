@@ -72,17 +72,20 @@ version and knows no agent app: the bootstrap in `scripts/install/` makes sure u
 `install.py`, which installs cad as a uv tool only where none is installed or the one there does not
 start (putting its folder on the PATH with `uv tool update-shell`), brings a cad that was there up to
 date with its own `cad update` where a person ran it, and hands over to that cad's `cad plugin install`
-(the newest release's, `uv tool run cad@latest`, where that cad has no such command). `cad plugin
-install` installs the plugin from `latest` in each agent app it finds with that app's own command (its
-`APPS` table, in `cad_server/plugin/`, is the one list of apps), removes our own older copies, and turns
-on `cad plugin update auto`, keeping its release as the one the plugin is up to date for only where it
-ends well and is the computer's global install. Neither starts the server. cad alone is installed by one promised line, `uv tool install cad`,
+(the newest release's, `uv tool run cad@latest`, where that cad has no such command), then turns on
+`cad plugin update auto` with that cad's own command. `cad plugin install`, the one command that installs
+the plugin, installs it from `latest` in each agent app it finds with that app's own command (its `APPS`
+table, in `cad_server/plugin/`, is the one list of apps) and removes our own older copies, and nothing else:
+it keeps its release as the one the plugin is up to date for only where it ends well and is the computer's
+global install, and never changes the switch. Neither starts the server, and no path loops: the install
+command never runs `cad plugin update` (on 0.11.12 and 0.11.13 it runs the install command) but as the
+switch, and `cad plugin install` runs no install command and no `cad update`. cad alone is installed by one promised line, `uv tool install cad`,
 which is what every skill's Setup block runs; no skill runs the install command. A global install updates
 itself to every newer release of its own major version, on by default (`cad update auto`), never to a
 higher major; `cad update` updates it now inside its major, and `cad update --major` to the newest of all.
 Where `cad plugin update auto` is on and cad is newer than the release the plugin is up to date for,
-however it got newer, cad's server runs `cad plugin update` once: the same run as `cad plugin install`,
-cad's own code, never the hosted script. One such run goes at a time, and cad's update holds while one is
+however it got newer, cad's server runs `cad plugin install` once: cad's own code, never the hosted
+script (`cad plugin update`, with no `auto`, is its hidden second name). One such run goes at a time, and cad's update holds while one is
 going. A store updates its own copy. cad names agent apps, skills and plugins in one place,
 `cad_server/plugin/`, reached only by `cad plugin` ([decisions](docs/contributing/decisions.md)).
 

@@ -406,8 +406,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     background and fail silently: no start, command, build, request or tool call waits on them -- but three a
     person or an app asks for by name: `cad update`, typed to get the newest release of its major now (`--major`:
     the newest of all), which waits on PyPI (5 s at most) and the install, and says in one line when either fails;
-    `cad plugin install` and `cad plugin update`, which run each agent app's own command and fetch the plugin
-    from GitHub, in the foreground; and `cad mcp` run from uv's cache on a
+    `cad plugin install`, which runs each agent app's own command and fetches the plugin from GitHub, in the
+    foreground; and `cad mcp` run from uv's cache on a
     computer with no global cad, which installs one first, the newest of its own major (four minutes at most).
     A global install of cad (`uv tool install cad`) updates itself unless the person turned it off (`cad
     update auto off`), and when asked (`cad update`): its server, at its start, after a failed start or once nothing
@@ -416,7 +416,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     bounded to that major (`uv tool install --upgrade "cad>=<installed>,<<next major>"`) and starts it again (where no
     server runs, `cad update` hands it over itself, and the helper starts none); a higher major only by `cad update
     --major` (`uv tool install --upgrade "cad>=<installed>"`). Where `cad plugin update auto` is on and cad is newer than the release
-    the plugin was last updated well for, however it got newer, its server runs `cad plugin update` once,
+    the plugin was last updated well for, however it got newer, its server runs `cad plugin install` once,
     detached, with 15 minutes, and ended for certain a minute past them; cad's own update begins none while such
     a run is going. Nothing waits on
     the install but a start that would otherwise start the release it replaces.
@@ -433,7 +433,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     than a window, with no other process sending, starts a sender detached that sends it and exits
     (the server's `_internal/telemetry_send.py`). Three counts start that sender at once, since whatever made
     them may be the last of cad's processes on the computer for a long while: a step of a computer's arrival at a
-    release, one of cad's own updates, and a run of `cad plugin install` or `cad plugin update`, counted as it
+    release, one of cad's own updates, and a run of `cad plugin install`, counted as it
     ends -- who began it, how it ended, how many agent apps it found and how many failed, and each app where it
     failed, in words of cad's and whole numbers (an app is named only where its install failed). A process that exits sends nothing either: its last batch is
     kept beside the settings, and the next process that sends sends it, in the background -- each row saying the

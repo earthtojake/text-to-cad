@@ -98,8 +98,8 @@ REQUIRED=(
   "cad_server/_internal/auto_update_helper.py"
   "cad_server/cli/auto_update.py"
   # The install command as the bridge's install mode runs it, once (`install_script`); and `cad plugin`, its command:
-  # `cad plugin update`, which the server of a newer cad runs where `cad plugin update auto` is on (`plugin_catch_up`,
-  # the rule it runs by), and `cad plugin install`, which the install command hands the agent apps to.
+  # `cad plugin install`, which the server of a newer cad runs where `cad plugin update auto` is on (`plugin_catch_up`,
+  # the rule it runs by), and which the install command hands the agent apps to.
   "cad_server/_internal/install_script.py"
   "cad_server/_internal/plugin_catch_up.py"
   "cad_server/cli/plugin.py"

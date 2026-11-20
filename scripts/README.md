@@ -122,7 +122,7 @@ where those files ship, so these scripts are what produces them.
   start, switched off, past a release
   whose server cannot start, back from one uv cannot install, inside its major with a higher major out and
   across it only by `cad update --major`, by pipx), and the new cad's server running `cad plugin
-  update` once, as its own run under a deadline, where `cad plugin update auto` is on and cad got newer, by
+  install` once, as its own run under a deadline, where `cad plugin update auto` is on and cad got newer, by
   itself or by a typed `cad update`, never after a failed update; that run installs the plugin with cad's own
   code, so it is read from cad's record of it, and the install command's count stays 0.
   `bridge`: a computer on a shipped release (0.11.11, or `--old`'s) arriving at this build by its updater,
@@ -133,9 +133,10 @@ where those files ship, so these scripts are what produces them.
   this build's servers there tend themselves every two seconds (`CAD_ENGINE_TEND_SECONDS`).
   `plugin-update`, of neither group: the real 0.11.13 from PyPI, a uv tool, whose own `cad plugin update`,
   typed, runs this tree's install command; that cad, left as it is, has no `cad plugin install` (exit status
-  2), so the newest release's runs instead (`uv tool run ... cad@latest plugin install`: this tree's) and turns
-  the switch on, and 0.11.13 keeps itself as the release the plugin is up to date for. It installs the
-  real releases from PyPI and publishes this tree as later releases. Needs uv and the network. Called by
+  2), so the newest release's runs instead (`uv tool run ... cad@latest plugin install`: this tree's); then
+  the install command turns the switch on by 0.11.13's own `cad plugin update auto on`, and 0.11.13 keeps
+  itself as the release the plugin is up to date for. Nothing it runs comes back to the install command. It
+  installs the real releases from PyPI and publishes this tree as later releases. Needs uv and the network. Called by
   `test.yml`'s `update-rehearsal` job on Linux, macOS and Windows.
 - `real-install.py --wheels DIR [--require claude,codex,gemini] [--keep] [--work DIR]` — the install script
   run for real against the real `claude`, `codex` and `gemini` found on PATH, on a private computer
@@ -145,8 +146,8 @@ where those files ship, so these scripts are what produces them.
   wheels in `DIR`, the plugin from this tree's `latest` copy (`plugin_branch.py`) in a local repository the
   computer's git reads for every address of ours on GitHub (Gemini CLI still asks GitHub's API for a release
   first, and finds none). It checks each program's own list (ours, once, this run's copy), `cad` (a uv tool
-  at this run's release, `cad update auto` on, `cad plugin update auto` turned on by the cad the script hands
-  the apps to, no server started), a model built and its page; then the script again (cad installed already,
+  at this run's release, `cad update auto` on, `cad plugin update auto` turned on by the script's last step,
+  by the cad it hands the apps to, no server started), a model built and its page; then the script again (cad installed already,
   nothing newer for its `cad update` to bring, each copy updated); then each program moved from the state
   0.11.10's installer left. The commands it keeps off the computer's PATH are those of cad's table of apps
   (`cad_server/plugin`). It cannot test the desktop
@@ -326,9 +327,11 @@ where those files ship, so these scripts are what produces them.
   is set). Where a person ran it and cad was here already, that cad's own `cad update` brings it up to date,
   inside its major, never failing the run; where cad ran it (0.11.12 and 0.11.13 do, and the bridge from
   earlier releases), cad is left as it is. Then `<cad> plugin install` puts the plugin into each agent app
-  (cad's table of apps, `cad_server/plugin`, with the terminal's logo and live line) and turns on `cad plugin
-  update auto`; a cad with no such command, or none at all, gets the newest release's by `uv tool run
-  cad@latest plugin install`. It exits 0 only where the run ended well, and writes the report 0.11.12 and
+  (cad's table of apps, `cad_server/plugin`, with the terminal's logo and live line); a cad with no such
+  command, or none at all, gets the newest release's by `uv tool run cad@latest plugin install`. Last, that
+  cad's own `cad plugin update auto on` turns the switch on (`CAD_INSTALL_FAILED=1` where the plugin's step did
+  not end well). It never runs `cad plugin update` alone or `cad setup`, and passes no cad server's name for
+  its run (`CAD_INSTALL_ATTEMPT`, `CAD_PLUGIN_SERVER_RUN`) to anything it starts. It exits 0 only where the run ended well, and writes the report 0.11.12 and
   0.11.13 read (`CAD_INSTALL_REPORT`) last: `apps` as `cad plugin install` said them, and, since those releases
   read the report and never the exit status, with `"plugin": "failed"` added wherever the plugin's step ended
   non-zero and named no app as failed (cad itself installed), so they run the command again later. It reads

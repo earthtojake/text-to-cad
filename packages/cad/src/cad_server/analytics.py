@@ -79,7 +79,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
   (``UPDATE_FAILURES``), its ``tries``, the ``installer`` that made the global install (``uv``, ``pipx``), whether it
   was typed (``asked``), and for a newer cad installed how the install command's run for it ended (``plugin``:
   ``UPDATE_PLUGIN``; ``underway`` where a new attempt began before it ended);
-- ``install`` (``install``): one run of ``cad plugin install`` or ``cad plugin update`` that ended, counted by the
+- ``install`` (``install``): one run of ``cad plugin install`` (by either name) that ended, counted by the
   command as it ends -- who began it (``INSTALL_BY``: a person, the hosted install command handing over, or cad's
   server), how it ended (``INSTALL_OUTCOMES``: well, every app it found failed, its deadline stopped it before it was
   done, or another run was going and this one ran nothing), what its terminal was shown (``INSTALL_LOGOS``,

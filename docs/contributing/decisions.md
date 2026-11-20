@@ -168,28 +168,45 @@ again. `cad update` updates cad now, inside its major (`--major`: the newest of 
 server running and with automatic updates off too, and touches nothing else. A cad that is not a global
 install, such as one installed with pip into a project's own Python, never updates itself.
 
-The plugin is `cad plugin install`'s: for every agent app it finds, the plugin installed or updated
-with that app's own command, then our older copies there removed. `cad plugin update` is the same
-run, and neither downloads or runs the hosted install command. As its last step a run turns on `cad
-plugin update auto`, which is off until then, and keeps cad's release as the one the plugin is up to
-date for only where it ended well and the cad that ran it is the computer's global install. A run
-in which every app it found failed turns the switch on and keeps none, so a computer whose runs
-keep failing still has the plugin kept: where cad is newer than the release the plugin is up to
-date for, cad's server runs `cad plugin update` once. A run of a cad from anywhere else, such as
-the newest release from uv's cache (`uv tool run cad@latest`, below), does the work, turns the
-switch on and keeps none too: its release is not the installed cad's, and may be of a major that
-cad never reaches, so kept, the installed cad's server would never catch up again. cad keeps that
-release in a small record of its state folder, written when `cad plugin update` ends with exit
-status 0 and when the switch is turned on by a run that ended well. The rule asks what cad is, not
+The plugin is `cad plugin install`'s, the one command that installs it: for every agent app it
+finds, the plugin installed or updated with that app's own command, then our older copies there
+removed, and nothing else. It never downloads or runs the hosted install command, and never changes
+`cad plugin update auto`. `cad plugin update` is its hidden second name, the one 0.11.12 and 0.11.13
+gave the run, kept for their skills and scripts. A run keeps cad's release as the one the plugin is
+up to date for only where it ended well and the cad that ran it is the computer's global install: a
+fact about the computer. The switch is off until the install command a person ran turns it on, as
+its last step, by the installed cad's own `cad plugin update auto on`; where the run's plugin step
+did not end well, that call says so (`CAD_INSTALL_FAILED=1`, which 0.11.12 and 0.11.13 read the same
+way) and the switch goes on with no release kept, so a computer whose runs keep failing still has
+the plugin kept: where cad is newer than the release the plugin is up to date for, cad's server runs
+`cad plugin install` once. A run of a cad from anywhere else, such as the newest release from uv's
+cache (`uv tool run cad@latest`, below), does the work and keeps none: its release is not the
+installed cad's, and may be of a major that cad never reaches, so kept, the installed cad's server
+would never catch up again. cad keeps that release in a small record of its state folder, written
+when `cad plugin install` ends with exit status 0 and when the switch is turned on by a run that
+ended well. The rule asks what cad is, not
 how it got there, so a typed `cad update` or `uv tool upgrade cad` by hand brings the plugin along
-as cad's own update does, with one mechanism. A run cad's server began has 15 minutes: each command
+as cad's own update does, with one mechanism. A run cad's server began, which it names
+`CAD_PLUGIN_SERVER_RUN`, has 15 minutes: each command
 it runs is stopped when they are up, with all it started, and no further app is begun (in a Windows
 session where `taskkill` is refused, only the command's own process is ended; what it started may
 run on). That much is asked between the run's steps, so the run also carries a hard stop: where a
 step never comes back and the run has not ended a minute past its 15, a thread of its own closes
 its record as a stopped run's, counts it as stopped and ends the process there and then, which
 frees its lock. A failed run is tried again an hour or more later: at most three runs for one
-release. A plugin store (Codex's directory, Claude's) updates the copy it installed.
+release. Only that name makes a server's run: 0.11.12 and 0.11.13 name theirs `CAD_INSTALL_ATTEMPT`,
+which everything their hosted install command starts inherits, so a `cad plugin install` reached
+from there that took it for its own would close another release's record under a deadline and a
+lock role that are not its own; the install command takes both names out of every cad command it
+starts. A plugin store (Codex's directory, Claude's) updates the copy it installed.
+
+No path loops. The install command runs `cad update` (a person's run alone), `cad plugin install`
+and `cad plugin update auto on`, never `cad plugin update` alone (on 0.11.12 and 0.11.13 that runs
+the install command) nor `cad setup`; `cad plugin install` runs each app's own commands and nothing
+of ours; the switch keeps a setting and runs nothing, on every release; `cad update` runs neither.
+The only way back to the install command is an older release's server, bounded as above, and a run
+cad started never updates cad, so it ends in `cad plugin install` and the switch.
+`tests/python/global/test_no_install_loops.py` holds the sources to it.
 
 One run at a time. A run holds a lock in cad's state folder from its start to its end. A second run
 waits for it; one a server began does not wait, runs nothing, and is tried again as a failed run
@@ -204,8 +221,8 @@ carries the plugin's install: it runs the installed cad's `cad plugin install`.
 **Why.** People install and forget, and they should get our fixes without being asked. Nothing of
 ours asks a person to update: in blind tests, agents would not install without the person's say-so,
 and a prompt the person must act on is one most people ignore. A command does what it says: `cad
-update` updates cad, and only a command the person ran themselves (the install command, `cad plugin
-install`) first changes their apps. The plugin's update is the code of the cad that is installed,
+update` updates cad, `cad plugin install` installs the plugin, and only the install command, which
+the person runs to have text-to-cad, also opts them in to the plugin following cad. The plugin's update is the code of the cad that is installed,
 so it is the release that was tested, and nothing is fetched from our website to run it. The lock
 is there because two runs can meet: after a person's install command updated cad, the server that
 starts may begin its own run at the moment that command goes on to the plugin. cad's update holds
@@ -302,8 +319,8 @@ a release of cad corrects it.
 
 **Decision.** Releases 0.10.0 to 0.11.11 shipped an updater of their own, which installs a newer
 release the old way and runs its hidden `cad setup --engine-update`. The new cad then runs the
-hosted install command once, which installs cad as a uv tool and hands the apps to that cad's `cad
-plugin install`, which installs the plugin and turns `cad plugin update auto` on. A computer whose apps got text-to-cad only from a plugin store gets the new cad
+hosted install command once, which installs cad as a uv tool, hands the apps to that cad's `cad
+plugin install`, and turns `cad plugin update auto` on. A computer whose apps got text-to-cad only from a plugin store gets the new cad
 alone: running the install command there would put our plugin in apps the person never asked us
 into. There, and where the install command failed before it installed cad, the new cad installs
 itself with uv, and that cad updates itself from then on. Where the new cad arrived by the uv line

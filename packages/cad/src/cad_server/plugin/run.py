@@ -106,8 +106,8 @@ def began_by(environ: Dict[str, str]) -> str:
 
 def install(*, prog: str, seconds: Optional[float] = None, going: Optional[Callable[[Facts], None]] = None) -> Facts:
     """One run (see the module), said as it goes on this process's output: what it was, ``Facts.code`` the exit status
-    of the command that ran it. ``prog``: the command's name, for a line on stderr. ``seconds``: the run's deadline, counted from here. ``going``: given the
-    run's ``Facts`` as it begins, the ones it fills as it goes and returns."""
+    of the command that ran it. ``prog``: the command's name, for a line on stderr. ``seconds``: the run's deadline,
+    counted from here. ``going``: given the run's ``Facts`` as it begins, the ones it fills as it goes and returns."""
     began = time.monotonic()
     here = Here()
     here.until = None if seconds is None else began + seconds

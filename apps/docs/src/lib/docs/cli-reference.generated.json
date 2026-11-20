@@ -3770,12 +3770,12 @@
   },
   {
    "command": "cad plugin",
-   "summary": "the plugin in your agent apps: `install` or `update` it; `update auto`: whether cad's updates do",
-   "usage": "cad plugin {install,update} ...",
+   "summary": "the plugin in your agent apps: `install` puts it in or updates it; `update auto`: whether cad's updates update it too",
+   "usage": "cad plugin {install} ...",
    "description": 153,
    "arguments": [
     {
-     "name": "{install,update} ...",
+     "name": "{install} ...",
      "choices": [
       "install",
       "update"
@@ -3791,9 +3791,8 @@
   },
   {
    "command": "cad plugin update",
-   "summary": "update the plugin in every agent app found on this computer, as `install` does; `update auto` shows or changes whether cad's updates do",
+   "summary": "The same as `cad plugin install`. `cad plugin update auto` shows or changes whether cad's updates update the plugin too.",
    "usage": "cad plugin update [auto [{status,on,off}]]",
-   "description": 155,
    "arguments": [
     {
      "name": "{auto} ...",
@@ -3807,7 +3806,7 @@
    "command": "cad plugin update auto",
    "summary": "show or change whether cad's updates update the plugin too",
    "usage": "cad plugin update auto [{status,on,off}]",
-   "description": 156,
+   "description": 155,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3824,13 +3823,13 @@
    "command": "cad run",
    "summary": "run a script (or -m, -c) as uv run does, cad pinned at this device's release with the integrations its imports use",
    "usage": "cad run [uv run's options] SCRIPT.py [ARGS...] | -m MODULE [ARGS...] | -c CODE [ARGS...] | COMMAND [ARGS...]",
-   "description": 157
+   "description": 156
   },
   {
    "command": "cad server",
    "summary": "the cad server: start, stop, status",
    "usage": "cad server [--rotate-token] [--yes] {start,stop,status} ...",
-   "description": 158,
+   "description": 157,
    "arguments": [
     {
      "name": "{start,stop,status} ...",
@@ -3846,14 +3845,14 @@
      "flags": [
       "--rotate-token"
      ],
-     "help": 159
+     "help": 158
     },
     {
      "flags": [
       "-y",
       "--yes"
      ],
-     "help": 160
+     "help": 159
     }
    ]
   },
@@ -3861,20 +3860,20 @@
    "command": "cad server start",
    "summary": "start the cad server where it is not running",
    "usage": "cad server start [--port PORT] [--foreground]",
-   "description": 161,
+   "description": 160,
    "options": [
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 162
+     "help": 161
     },
     {
      "flags": [
       "--foreground"
      ],
-     "help": 163
+     "help": 162
     }
    ]
   },
@@ -3887,7 +3886,7 @@
      "flags": [
       "--json"
      ],
-     "help": 164
+     "help": 163
     }
    ]
   },
@@ -3900,7 +3899,7 @@
      "flags": [
       "--json"
      ],
-     "help": 165
+     "help": 164
     }
    ]
   },
@@ -3908,7 +3907,7 @@
    "command": "cad telemetry",
    "summary": "show or change the usage stats and crash reports CAD sends: status, on, off",
    "usage": "cad telemetry [{status,on,off}]",
-   "description": 166,
+   "description": 165,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3925,7 +3924,7 @@
    "command": "cad update",
    "summary": "update cad now to the newest release of its major version (`--major`: of all); `update auto`: whether it does so itself",
    "usage": "cad update [--major]\ncad update auto [{status,on,off}]",
-   "description": 167,
+   "description": 166,
    "arguments": [
     {
      "name": "{auto} ...",
@@ -3939,7 +3938,7 @@
      "flags": [
       "--major"
      ],
-     "help": 168
+     "help": 167
     }
    ]
   },
@@ -3947,7 +3946,7 @@
    "command": "cad update auto",
    "summary": "show or change whether cad updates itself: status, on, off",
    "usage": "cad update auto [{status,on,off}]",
-   "description": 169,
+   "description": 168,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3964,11 +3963,11 @@
    "command": "cad viewer",
    "summary": "open a viewer page on the running cad server",
    "usage": "cad viewer [--host HOST] [--port PORT] [--json] [--no-open] [--dist DIST] [--api-only] [FILE ...]",
-   "description": 170,
+   "description": 169,
    "arguments": [
     {
      "name": "FILE",
-     "help": 171,
+     "help": 170,
      "optional": true,
      "repeatable": true
     }
@@ -3979,39 +3978,39 @@
       "--host"
      ],
      "metavar": "HOST",
-     "help": 172
+     "help": 171
     },
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 173
+     "help": 172
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 174
+     "help": 173
     },
     {
      "flags": [
       "--no-open"
      ],
-     "help": 175
+     "help": 174
     },
     {
      "flags": [
       "--dist"
      ],
      "metavar": "DIST",
-     "help": 176
+     "help": 175
     },
     {
      "flags": [
       "--api-only"
      ],
-     "help": 177
+     "help": 176
     }
    ]
   }
@@ -4171,9 +4170,8 @@
   "the report as one JSON document: each check's name, status (ok, info, warning, failed) and detail",
   "Serve CAD to the agent app that started this process, over MCP on standard input and output: this release's cad server started first, as `cad server start` starts it, and every request passed on to it. The app starts it; there is nothing to configure.",
   "The plugin in your agent apps: install or update it in every app found on this computer, or say whether cad's own updates update it too.",
-  "Install the plugin in every agent app found on this computer, each with that app's own command, or update it where it is installed; then remove the older copies of it there, and turn on `cad plugin update auto`. One line is printed per app. It exits 1 where every app it found failed.",
-  "Update the plugin in every agent app found on this computer, or install it where it is not: what `cad plugin install` does, and what cad runs by itself after its own update where `cad plugin update auto` is on.",
-  "Show or change whether cad runs `cad plugin update` once each time it is newer than the release the plugin is up to date for, however it was updated, so the plugin stays as new as cad. Off by default; `cad plugin install` and `cad plugin update` turn it on.",
+  "Install the plugin in every agent app found on this computer, each with that app's own command, or update it where it is installed; then remove the older copies of it there. One line is printed per app. It exits 1 where every app it found failed.",
+  "Show or change whether cad runs `cad plugin install` once each time it is newer than the release the plugin is up to date for, however it was updated, so the plugin stays as new as cad. Off by default; the install command turns it on.",
   "Run a program as `uv run` does, with cad pinned at this device's release: a script's `# /// script` header names its own packages, and cad's integrations are worked out from its imports (a header naming `cad[...]` decides them); a command an integration declares (`kicad-cli`) gets that integration and runs headless. A script that imports bpy gets the blender integration, on Python 3.13, the one its tool is built for. The environment is made once, by the device's engine, and used again. uv run's options are taken as uv takes them.",
   "The cad server, which builds, keeps and serves your documents: start it, stop it, or say what it runs.",
   "replace the page token: every link and browser session made before stops working, in the server running too; asked first",

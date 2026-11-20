@@ -235,10 +235,10 @@ def _install(prog: str) -> int:
 
 
 def _keep(on: bool, *, note: bool) -> bool:
-    """``cad plugin update auto on|off``: the switch kept as ``on`` -- by the server where one runs (``_by_the_server``),
-    else here -- and, turned on with ``note`` by this computer's global install of cad (``plugin_catch_up.tool``), this
-    cad's release kept as the one the plugin is up to date for: the switch as it is now. ``OSError`` where it could
-    not be kept.
+    """``cad plugin update auto on|off``: the switch kept as ``on`` -- by the server where one runs
+    (``_by_the_server``), else here -- and, turned on with ``note`` by this computer's global install of cad
+    (``plugin_catch_up.tool``), this cad's release kept as the one the plugin is up to date for: the switch as it is
+    now. ``OSError`` where it could not be kept.
 
     A cad that is no global install keeps no release, as a run that ended badly keeps none: the newest release run
     from uv's cache, a project's, a checkout's. Its release is not the installed cad's, and may be one that cad never

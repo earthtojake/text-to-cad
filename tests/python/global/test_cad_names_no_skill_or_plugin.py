@@ -38,13 +38,13 @@ NOT_MESSAGES = {
     # The command's name, its module and its one-line help in the command table, and the command named among those
     # that reach any release's server and that carry no notice (``cad plugin``).
     "cad_server/cli/__init__.py": {"plugin", "cad_server.cli.plugin",
-                                   "the plugin in your agent apps: `install` or `update` it; `update auto`: whether "
-                                   "cad's updates do"},
+                                   "the plugin in your agent apps: `install` puts it in or updates it; "
+                                   "`update auto`: whether cad's updates update it too"},
     # The settings section that keeps the command's switch (``plugin.auto_update``).
     "cad_server/_internal/auto_update.py": {"plugin"},
-    # The command words of ``cad plugin update``, which the server runs where cad is newer than the release the plugin
+    # The command words of ``cad plugin install``, which the server runs where cad is newer than the release the plugin
     # is up to date for, and the lines of the server's log that say so: the command by its name, and why it runs.
-    "cad_server/_internal/plugin_catch_up.py": {"plugin", "`cad plugin update`",
+    "cad_server/_internal/plugin_catch_up.py": {"plugin", "`cad plugin install`",
                                                 " is newer than the one the plugin is up to date for: "},
     # ``cad doctor`` names the command's switch as it reports it (``cad plugin update auto``), and its record's line:
     # the line's name, and what it says of the release the plugin is up to date for.

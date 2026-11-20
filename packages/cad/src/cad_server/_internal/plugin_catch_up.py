@@ -400,8 +400,8 @@ def _wanted(found: dict[str, Any], version: str, now: float) -> bool:
 
 def begin(told, *, now: float | None = None) -> subprocess.Popen | None:
     """A run begun (see the module): the record's half of the rule asked again under the state folder's lock
-    (``_wanted``) and the run kept as ``underway`` in the same step, then ``cad plugin install`` started. Its process, or
-    None where the record no longer wants one (another server began one, or a run ended with exit status 0 since
+    (``_wanted``) and the run kept as ``underway`` in the same step, then ``cad plugin install`` started. Its process,
+    or None where the record no longer wants one (another server began one, or a run ended with exit status 0 since
     ``due`` was asked) or it could not start (kept as failed). Never raises."""
     return _begin(told, now=now)[0]
 

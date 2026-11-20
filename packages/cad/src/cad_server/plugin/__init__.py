@@ -2,8 +2,8 @@
 
 Everything else in cad says what cad does without those words (as ``cad_server.mcp`` is the one place that knows the
 host). This package is reached only by the ``cad plugin`` command (``cad_server.cli.plugin``): ``cad plugin install``
-and ``cad plugin update`` run it (``run.install``); nothing else in cad imports it, and it runs no install command,
-hosted or other, and never cad's own update.
+(and ``cad plugin update``, its hidden second name) runs it (``run.install``); nothing else in cad imports it, and it
+runs no install command, hosted or other, never cad's own update, and never cad itself.
 
 - ``computer``: this computer as a run sees it (``Here``), a command run and stopped at its time, a person's config
   read whatever its shape, and nothing removed or replaced by half.
