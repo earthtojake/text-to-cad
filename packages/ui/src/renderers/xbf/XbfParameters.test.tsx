@@ -430,7 +430,7 @@ it('a Quick Edit sent while unsaved values are on screen says so, every time, an
   };
   await copy(1);
   await copy(2);
-  const line = 'Shown in the viewer, not saved: wall 2 -> 3.5 (bracket.py); the script still holds the first values';
+  const line = 'Shown in the viewer, not saved: wall 2 -> 3.5 (bracket.py); the script still holds the first values; write the new ones only if asked';
   expect(copied[0]).toContain(line);
   expect(copied[1]).toContain(line);
   expect(copied[0]).not.toContain('Saved from the viewer');

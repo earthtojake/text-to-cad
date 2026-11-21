@@ -29,7 +29,7 @@ selectors ([a picked element in a model's body](inspection-and-validation.md#a-p
 
 ## Labels and assemblies
 
-A label names a part, an assembly or a placement: in refs, the viewer's tree, the
+A label names a part, an assembly or a placement: in refs, the viewer, the
 STEP's instances and the GLB's nodes.
 
 ```python
@@ -56,8 +56,8 @@ Use build123d's native `bd_materials` objects. Set materials after geometric ope
 then set any explicit colour: build123d's material setter also sets colour. A transmissive
 material infers preview alpha (`transmission=1` gives `0.3`), even with PBR `opacity=1`.
 A transmissive part is one fade, never two, in every file of it: what draws transmission
-(the viewer's Render and Solid, a GLB's path tracer) draws it opaque with its transmission,
-and what draws none (Flat, X-ray, Parts, a snapshot, a 3MF) at that preview. The colour's
+(the viewer's preview and its solid mode, a GLB's path tracer) draws it opaque with its
+transmission, and what draws none (the viewer's other modes, a snapshot, a 3MF) at that preview. The colour's
 alpha does not fade it further; to fade it everywhere, give the look a PBR `opacity` below 1.
 
 - **Leave air between glass and what lies behind it.** A see-through part lying on another (a

@@ -80,5 +80,5 @@ test("values on screen and not saved are one line for the agent, the script's va
     { name: "holes", value: 6, kind: "int", writable: true, source: "lib/spec.py" }] });
   assert.equal(unsavedParametersNote(parameters, {}), "");
   assert.equal(unsavedParametersNote(parameters, { wall: 3.5, holes: 8 }),
-    "Shown in the viewer, not saved: wall 2 -> 3.5 (bracket.py), holes 6 -> 8 (spec.py); the script still holds the first values");
+    "Shown in the viewer, not saved: wall 2 -> 3.5 (bracket.py), holes 6 -> 8 (spec.py); the script still holds the first values; write the new ones only if asked");
 });

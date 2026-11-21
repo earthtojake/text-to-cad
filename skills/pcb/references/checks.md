@@ -57,7 +57,7 @@ The viewer hands you what the person picked as references, the file then `#` the
 | `#F.Cu@x10y5..x20y15` | an area on a layer | `Area` with `layer`: that layer's part of it, the parts on its side |
 
 Coordinates are millimetres in KiCad's frame, y down, as the file holds them. The viewer names an
-area when the person drags a box (it names no point; a point is yours to write): its layer is the
+area when a box the person draws picks nothing (it names no point; a point is yours to write): its layer is the
 one they were working on (the copper nearest them, or the layer they isolated), so put what they
 ask for there unless the note says otherwise. A `<uuid>` is the one the
 board file saved the item with (`(uuid "...")`), kept by every save and by KiCad's API, so it

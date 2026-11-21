@@ -1745,7 +1745,7 @@ a **draft**, the tab's own, until **Save**. While a draft differs the view draws
   message sent while another that carries it is still on its way carries none of it, so it is never
   said twice. A message sent while drafts are drawn (a preview) says so every time, after the saved
   line: "Shown in the viewer, not saved: wall 2 -> 3.5 (bracket.py); the script still holds the first
-  values", since what the agent is shown (the views, the picks) is not the script; it is the view's
+  values; write the new ones only if asked", since what the agent is shown (the views, the picks) is not the script; it is the view's
   state, not a change, so it is never remembered.
 
 ## Quick Edit

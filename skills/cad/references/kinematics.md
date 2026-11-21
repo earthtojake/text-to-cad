@@ -153,7 +153,7 @@ if __name__ == "__main__":
   not relate.
 - **No helper joints.** A joint exists because the mechanism moves there. A prismatic
   joint per part only to slide it out for an explode is an animation's job
-  ([animation](animation.md)), and the viewer's Position would show a slider for each.
+  ([animation](animation.md)), and each would be one more joint for the person to pose in the viewer.
 
 ## Mechanism states
 
@@ -161,14 +161,14 @@ if __name__ == "__main__":
 leaves out as built (a state that names none is the as-built pose under a name: a key, a
 `--zero`), and returns the assembly. A cylindrical joint takes
 `(angle, distance)` and a ball joint its three angles; a coupling takes its value
-(`bend=0.5`). Mechanism states are what the viewer's Position lists as presets, and what
+(`bend=0.5`). Mechanism states are the poses the viewer offers the person by name, and what
 a snapshot's `--pose` names.
 
 A file of the mechanism in another pose is a model of its own: `posed(hinge(), state)`
 returns a copy of the assembly with every part where the named state, or a mapping of
 joint label to value, puts it. The copy keeps its joints, couplings, states and
-sequences, with the asked values as its as-built state, so its page's Position and
-motions still work. An unknown state or joint is refused by name.
+sequences, with the asked values as its as-built state, so it still poses and plays its
+motions in the viewer. An unknown state or joint is refused by name.
 
 `posed` takes the handle the model call returns, as every verb does. In a body it poses
 the child's shape. In a plain script (a check) it poses the document the server holds and
@@ -245,8 +245,8 @@ if __name__ == "__main__":
 ```
 
 `--pose '{"index_bend": 0.6}'` poses the knuckles at 54, 60 and 42 degrees; its range,
-`[0, 1]`, is where every knuckle stays within its own. The viewer shows the coupling's
-slider and none of its joints', and setting one of its joints alone is refused. A
+`[0, 1]`, is where every knuckle stays within its own. In the viewer the person poses the
+coupling, never one of its joints alone, and setting one of its joints alone is refused. A
 planetary stage turns its carrier and planets from the sun, ranged by the sun's limits;
 a pinion drives a rack; a lead screw advances 2 mm a turn:
 
@@ -436,10 +436,9 @@ in degrees, a slide in millimetres; the rest as built): it says how the picture 
 drawn. An unknown state, joint or coupling, a value out of range and a coupling's joint
 set alone are refused by name before anything renders.
 
-On the model's page, Position poses the document live: a slider per coupling and per
-joint no coupling moves, and the mechanism states as presets. The playbar under the model, in the
-tools view and Preview, plays the document's configuration sequences (play, pause, scrub, loop, speed; scrubbed back to the start, the mechanism is at rest), so the page is
-where to review one.
+In the viewer the person can pose the document live, by each coupling and each joint no
+coupling moves, or at a mechanism state by name, and play, pause and seek its configuration
+sequences (at the start of one, the mechanism is at rest), so the viewer is where to review one.
 
 A sequence is drawn at a time of it, the mechanism where playback would have it then, and a list
 of jobs draws its frames in one command, each from one camera

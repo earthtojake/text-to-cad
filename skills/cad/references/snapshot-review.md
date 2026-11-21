@@ -4,7 +4,7 @@ Read this file when choosing visual checks for a model or a file the viewer open
 
 This is the catalogue of what a snapshot can draw. Take the snapshots a change needs to judge it,
 usually one from the angle that shows it; with a viewer open the person is looking too, so never
-screenshot the card to confirm your own work ([Check each change](../SKILL.md#check-each-change)).
+screenshot the viewer to confirm your own work ([Check each change](../SKILL.md#check-each-change)).
 
 ## Contents
 
@@ -72,7 +72,7 @@ view it replays was seen in: no flag or packet names a theme.
 `solid` (shaded, with edge linework), `shaded` (no edges), `parts` (each part its own
 colour), `xray` (translucent surfaces, hidden edges visible), `hidden-line`
 (linework with occluded edges suppressed) and `wireframe` (edges only). It also takes
-`exploded=AMOUNT` (the parts moved apart as the viewer's Explode moves them, 0 to 1)
+`exploded=AMOUNT` (the parts moved apart as the viewer's explode moves them, 0 to 1)
 and `edges=CLASS` (the edges of one class alone, by the viewer's names for them: `feature`,
 where faces meet at an angle; `tangent`, where they meet smoothly; `seam`, where a face
 closes on itself. `edges=feature` draws no line along a loft's or a cylinder's seam, nor
@@ -87,11 +87,11 @@ document of one part. Unknown keys and out-of-range values are refused.
 
 `--grid` draws the measuring grid (red X and green Y axes) under the model.
 
-`--preview` draws the viewer's Preview in place of a display mode: the model lit in a studio (a
+`--preview` draws the viewer's preview in place of a display mode: the model lit in a studio (a
 key light, softboxes, shadows on itself), in its materials, on a floor with its shadow, in
 perspective. It is the picture for a person, and the one that shows form on a part of one colour: a
 gloss-black shell, a white fairing. Review geometry in the display modes, where edges are drawn.
-The first Preview of a document takes some seconds longer than a mode. It is drawn by the same
+The first preview of a document takes some seconds longer than a mode. It is drawn by the same
 renderer, not a path tracer: glass is a see-through tint, a polished metal reads lighter than the
 viewer's, and nothing is reflected in the floor. A drawing, a board and a schematic have none.
 
@@ -179,7 +179,7 @@ holds:
   part. Read those to know what a mark is about;
 - `hidden` and `isolated`: with ink, the parts the view it was last drawn in hid
   and isolated, which `--annotation` leaves out of the picture;
-- `measurements`: Measure's dimensions, when they took any.
+- `measurements`: the dimensions the person measured, when they took any.
 
 The views' cameras, the ink and the measurements are in the viewer's scene coordinates
 -- a document's and a GLB's millimetres, a robot's metres, a 3MF's declared unit -- and
@@ -249,7 +249,7 @@ still on it.
 ## Mesh files, robots and drawings
 
 - **A mesh** (`.stl`, `.3mf`, `.glb`) takes every display mode, the grid, clip,
-  Explode (a file of several parts) and annotations; `--pose` is refused: a
+  an explode (a file of several parts) and annotations; `--pose` is refused: a
   mesh has no mechanism. A GLB is drawn at rest, its clips not played; its materials
   and base colour textures are drawn.
 - **A robot** (`.urdf`, `.srdf`) is its links' visuals in their colours, faces

@@ -66,8 +66,8 @@ The joint kinds are `RigidJoint` for fixed placement, `RevoluteJoint` for rotati
 `LinearJoint` for translation, `CylindricalJoint` for both about one axis and
 `BallJoint` for spherical orientation. Use a `Location` for rigid and ball joint
 frames and an `Axis` for revolute, linear and cylindrical joints. Two parts whose
-rigid joints are connected move as one; a moving joint makes a pair the viewer's
-Position, a snapshot's `--pose` and the model's motions drive ([kinematics](kinematics.md)).
+rigid joints are connected move as one; a moving joint makes a pair the person poses in
+the viewer, a snapshot's `--pose` sets and the model's motions drive ([kinematics](kinematics.md)).
 
 Connect parts before putting them in the compound that holds them. `connect_to`
 cannot place a part inside a nested assembly: there, put each part where it stands

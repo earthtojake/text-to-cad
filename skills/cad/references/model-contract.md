@@ -118,9 +118,8 @@ shared between two models: a builder several models call with the same arguments
 ### Parameters a person tunes
 
 The few numbers a person is likely to tune -- a fit, a wall, a clearance, a count -- can also be
-declared as the script's parameters, at the module's top level. The CAD Viewer's Params tab
-shows them, and the person can change them there: the view shows the model at the new values as they
-drag (nothing is written), and Save writes them into the script:
+declared as the script's parameters, at the module's top level. The viewer lists them, and the
+person can change them there and save them, which writes them into the script:
 
 ```python
 # src/bracket.py
@@ -164,7 +163,7 @@ def bracket():
     bore  3.2  float, in bracket.py, read-only: not a plain number in the code
   ```
 
-- **Setting one** writes the script and runs it again. The Params tab's Save and `cad model
+- **Setting one** writes the script and runs it again. A save from the viewer and `cad model
   set` are one path:
 
   ```bash
@@ -190,7 +189,7 @@ def bracket():
   good one; a script someone else changed meanwhile is left as it is, and the refusal says so. It prints no build report: check the change as after any run. `--json` answers
   `{"id", "written", "rebuilt"}`; `cad.model.set(handle_or_id, wall=2.5)` is the same from Python.
 - **An xbf keeps them, read-only**: a declared one and one exported (`cad model export "$ID" part.xbf`)
-  record each parameter at the value it was built with, which the CAD Viewer lists when the file is
+  record each parameter at the value it was built with, which the viewer lists when the file is
   opened; the code is the only place they change.
 
 ## `@memo` marks stages
@@ -281,7 +280,7 @@ if __name__ == "__main__":
   `part.located(...)` place the same geometry again, so a part used ten times is one
   part placed ten times, in memory and in every file. A model that needs a B-rep of its
   own copies it with `BRepBuilderAPI_Copy`.
-- **Label every placement**: the label names the occurrence in refs, the viewer's tree,
+- **Label every placement**: the label names the occurrence in refs, the viewer,
   a STEP's instances and a GLB's nodes. Siblings sharing a label are numbered among them
   (`finger.2`).
 - **A child's mechanism stays in its own document.** An assembly's joints are written in
@@ -441,7 +440,7 @@ it again.
   it, no surface says the script changed, and nothing reruns. After an edit, run the script
   (`cad run /work/arm.py`) to update the document and its open pages.
   The cache keeps every document until you delete it (`cad delete <id>`, or a script's
-  path for every document of it, or Delete in a card's menu on the home); nothing evicts
+  path for every document of it; the person can delete one in the viewer too); nothing evicts
   from it. Deleting removes the record and the cached document, never a file. It asks
   first: at a terminal `Delete them? (y/N)`; where nothing can ask, it deletes nothing
   without `--yes` (exit 2, `confirmation_required`, naming the command with it). Delete

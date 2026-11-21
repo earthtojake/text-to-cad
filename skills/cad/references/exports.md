@@ -19,9 +19,9 @@ converted for use in a model. A 2D profile's DXF is [2D profiles and DXF](2d-pro
 
 ## A file is an action
 
-A model's document lives in the server; a file is written from it when asked. In the
-viewer, Export is in the file menu, the ⋯ beside the model's name: pick a format, the server
-prepares the file, the browser saves it. No code changes, nothing rebuilds, and every
+A model's document lives in the server; a file is written from it when asked. The person
+can export from the viewer too: they pick a format, the server writes the file from the
+document and their browser saves it. No code changes, nothing rebuilds, and every
 destination is written from the document the server holds, by its suffix:
 
 ```bash

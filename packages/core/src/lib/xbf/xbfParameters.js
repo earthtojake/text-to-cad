@@ -200,13 +200,14 @@ export function savedParametersNote(saved) {
  * What a page tells an agent of the values on screen that are not saved (a preview: the model drawn at
  * values the script does not hold), as one line of plain text for a message sent while they are: each
  * parameter's value in the code and on screen, and the file that declares it ("Shown in the viewer, not
- * saved: wall 2 -> 3.5 (bracket.py); the script still holds the first values"). Said with every message
- * while it is so: it is the view's state, not a change. "" for none.
+ * saved: wall 2 -> 3.5 (bracket.py); the script still holds the first values; write the new ones only if
+ * asked"), so the line alone tells an agent what to do with them. Said with every message while it is so:
+ * it is the view's state, not a change. "" for none.
  * @param {readonly XbfParameter[]} parameters @param {Record<string, number>} changed  `changedParameters`'s.
  * @returns {string}
  */
 export function unsavedParametersNote(parameters, changed) {
   const said = (parameters || []).filter(parameter => Object.hasOwn(changed || {}, parameter.name))
     .map(parameter => `${parameter.name} ${parameter.value} -> ${changed[parameter.name]}${parameter.source ? ` (${baseName(parameter.source)})` : ""}`);
-  return said.length ? `Shown in the viewer, not saved: ${said.join(", ")}; the script still holds the first values` : "";
+  return said.length ? `Shown in the viewer, not saved: ${said.join(", ")}; the script still holds the first values; write the new ones only if asked` : "";
 }

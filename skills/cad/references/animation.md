@@ -20,7 +20,7 @@ Two layers, each true to its format:
 - **A configuration sequence** (`cad.build123d`'s `configuration_sequence`, a motion on
   the page) is the mechanism's: joint values over time, kept in the document as STEP
   AP242's configuration sequence. Every GLB of the model carries it as a clip, and the
-  page's Motion section plays it. A robot's gait, a door's opening, an engine's running
+  viewer plays it. A robot's gait, a door's opening, an engine's running
   belong here.
 - **An animation** (`cad.build123d`'s `animation`) is the GLB's: glTF channels
   (translation, rotation, scale) on the parts a GLB places, and the mechanism's forward
@@ -33,7 +33,7 @@ The rules:
 
 - **Prefer a motion where the mechanism says it**, and waypoints in it.
 - **No helper joints to fake an explode.** A joint per part only to slide it out is an
-  animation's job, and the Joints tab would show a slider for each.
+  animation's job, and each would be one more joint for the person to pose in the viewer.
 - **Animations are GLB-only.** `cad model export "$ID" model.glb`,
   `model.export(part(), "model.glb")` and `cad xbf export model.xbf model.glb` from an xbf the
   model exported all bake them, the same bytes. `xbf.read` imports a part's geometry
@@ -137,8 +137,7 @@ Each of these fails the run, by name:
 ## Reviewing
 
 Export the GLB and give the person its path; when they ask to see it, open it in the CAD
-Viewer ([Show the model](../SKILL.md#show-the-model)). Its panel's **Animation** tab lists the motions and the
-animations and plays, pauses and scrubs them (scrubbed back to the start, the model is at rest), with the speed, loop
-and autoplay under them; Preview has its own playbar. While one plays, it owns the parts' places; putting
-it down puts them back at rest. A snapshot shows the model as built: it never plays an
+Viewer ([Show the model](../SKILL.md#show-the-model)). The viewer plays the document's motions and animations,
+and the person can play, pause and seek them (at the start, the model is at rest). While one plays, it owns the
+parts' places; stopping it puts them back at rest. A snapshot shows the model as built: it never plays an
 animation.

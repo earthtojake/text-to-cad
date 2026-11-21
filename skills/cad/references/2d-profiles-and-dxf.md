@@ -312,7 +312,7 @@ overlapping or partly coincident curves, small features, kerf and the shop's rul
 cad dxf snapshot DXF/gasket.dxf tmp/gasket.png
 ```
 
-`cad dxf snapshot` draws a drawing the way the viewer's drawing pane does: whole, from above,
+`cad dxf snapshot` draws a drawing the way the viewer does: whole, from above,
 fitted with a margin, in the pens the file declares (an entity with no pen of its own takes the
 paper's ink), on white paper, whatever the viewer's theme. `--size-profile`, `--width` and `--height` size it; `--camera`
 takes a plan view, `--annotation` ink on the sheet and `--measurements` dimensions; every other flag
@@ -332,13 +332,11 @@ cad dxf snapshot DXF/panel.dxf tmp/view.png --annotation tmp/panel.snapshot.json
 A drawing script's model has a page, but it shows a flat face in the 3D viewer, with no pens, layers
 or entity refs. The drawing a person wants is the exported `.dxf`, which the viewer opens as a
 read-only 2D drawing with its layers (it never runs drawing scripts): show the `.dxf` when they ask
-to see the drawing, and give its path otherwise. Under Select a drag draws a box that picks the
-entities it touches; a right, middle or Shift
-drag pans, the wheel or a pinch zooms, and a double-click fits. Its Select, Draw and Measure feed Quick Edit, whose prompt names what
-the person picked by entity HANDLE: `panel.dxf#h2F` is the modelspace entity whose handle is `2F`
-(`doc.entitydb["2F"]` in ezdxf); anything a block reference draws is named by its INSERT, and a
-dimension is one entity. The prompt's chip reads it as the entity's type and layer ("Circle on
-CUT"). Measurements are in the unit `$INSUNITS` declares ("units" when it declares none).
+to see the drawing, and give its path otherwise. What the person picks, draws or measures on it
+reaches you in a Quick Edit prompt, which names each entity they picked by its HANDLE:
+`panel.dxf#h2F` is the modelspace entity whose handle is `2F` (`doc.entitydb["2F"]` in ezdxf);
+anything a block reference draws is named by its INSERT, and a dimension is one entity.
+Measurements are in the unit `$INSUNITS` declares ("units" when it declares none).
 
 Hand off the path of every `.dxf` you created or changed, the checks that ran, and every assumption
 (units, kerf, which faces made the profile).
