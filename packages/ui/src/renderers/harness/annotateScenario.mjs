@@ -117,22 +117,29 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
   await copy.waitFor();
   assert.ok(await moved(before) < 1e-6, 'annotation never moves the camera');
 
-  // Orbited — a right drag over the annotation is the view's — the view keeps the ink where it was
-  // drawn on the model: still red, somewhere else.
+  // Panned — a right drag over the annotation is the view's, as under Select — the view keeps the ink where
+  // it was drawn on the model: still red, somewhere else.
+  const eyeToTarget = () => page.evaluate(() => {
+    const { position, target } = window.cadHarness.a.controller.readState().camera;
+    return position.map((value, index) => value - target[index]);
+  });
+  const facing = await eyeToTarget();
   await page.mouse.move(...at(150, 150));
   await page.mouse.down({ button: 'right' });
   await page.mouse.move(...at(250, 190), { steps: 8 });
   await page.mouse.up({ button: 'right' });
-  // The orbit eases out: the camera is at rest once two readings 100 ms apart agree.
+  // The pan eases out: the camera is at rest once two readings 100 ms apart agree.
   await page.waitForFunction(() => {
     const now = window.cadHarness.a.controller.readState().camera.position.join();
     const resting = window.__annotateCamera === now;
     window.__annotateCamera = now;
     return resting;
   }, null, { polling: 100 });
-  const orbited = await until('the ink orbits with the model',
+  const orbited = await until('the ink moves with the model',
     seen => seen.red > 50 && Math.hypot(seen.x - stroke.x, seen.y - stroke.y) > 20);
-  assert.ok(await moved(before) > 1e-3, 'a right drag orbited the camera');
+  assert.ok(await moved(before) > 1e-3, 'a right drag moved the camera');
+  const turned = Math.hypot(...(await eyeToTarget()).map((value, index) => value - facing[index]));
+  assert.ok(turned < 1e-4 * Math.hypot(...facing), `a right drag pans, never turns the view: ${turned}`);
 
   // ⌘Z takes the stroke away, ⇧⌘Z brings it back where the view now has it: Undo and Redo
   // are the keyboard's, not buttons.

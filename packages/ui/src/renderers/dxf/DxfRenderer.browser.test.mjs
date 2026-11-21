@@ -382,3 +382,47 @@ test('the view a person chose comes back when the tab is reopened', async (t) =>
     `reopened where it was left: ${JSON.stringify(reopened)} vs ${JSON.stringify(chosen)}`);
   assert.deepEqual(errors, []);
 });
+
+test('Fill on a drawing fills a rectangle and a pen loop whose ends nearly meet, in the colour in hand, and leaves an open stroke alone', async (t) => {
+  const { page, pane, errors } = await open(t, 'sample.dxf');
+  await drawn(pane);
+  const canvas = await canvasOf(pane).boundingBox();
+  const at = (fx, fy) => [canvas.x + canvas.width * fx, canvas.y + canvas.height * fy];
+  const controls = pane.getByRole('toolbar', { name: 'Annotation controls', exact: true });
+  const use = name => controls.getByRole('button', { name, exact: true }).click();
+  await pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button', { name: 'Draw', exact: true }).click();
+  const drag = async points => {
+    await page.mouse.move(...points[0]);
+    await page.mouse.down();
+    for (const point of points.slice(1)) await page.mouse.move(...point, { steps: 2 });
+    await page.mouse.up();
+  };
+  // Three marks clear of each other: a rectangle, a pen loop whose ends stop 8px apart, and a pen stroke left open.
+  await use('Rectangle');
+  await drag([at(0.15, 0.55), at(0.3, 0.8)]);
+  await use('Pen');
+  const ring = (fx, fy, gap) => Array.from({ length: 33 }, (_, i) => {
+    const turn = (i / 32) * (2 * Math.PI - gap / 40);
+    return [canvas.x + canvas.width * fx + 40 * Math.cos(turn), canvas.y + canvas.height * fy + 40 * Math.sin(turn)];
+  });
+  await drag(ring(0.5, 0.68, 8));
+  await drag(ring(0.78, 0.68, 120));
+  // The fill's tint inside each mark: the neon red at 35%, in a small square at its middle, clear of its outline.
+  const tinted = (image, [x, y]) => {
+    let count = 0;
+    for (let dy = -8; dy <= 8; dy += 1) for (let dx = -8; dx <= 8; dx += 1) {
+      const [r, g, b] = pixel(image, x - canvas.x + dx, y - canvas.y + dy);
+      if (r - g > 40 && r - b > 30) count += 1;
+    }
+    return count;
+  };
+  const middles = [at(0.225, 0.675), at(0.5, 0.68), at(0.78, 0.68)];
+  const before = await frame(pane);
+  assert.deepEqual(middles.map(point => tinted(before, point)), [0, 0, 0], 'nothing filled yet');
+  await use('Fill');
+  for (const point of middles) await page.mouse.click(...point);
+  const after = await frame(pane, before);
+  const filled = middles.map(point => tinted(after, point) > 250);
+  assert.deepEqual(filled, [true, true, false], 'the rectangle and the loop are filled, the open stroke is not');
+  assert.deepEqual(errors, []);
+});

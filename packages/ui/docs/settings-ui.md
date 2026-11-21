@@ -624,11 +624,14 @@ chevron or menu: it shows the icon of what it draws with now (the pen at first; 
 tooltip that tool and its key ("Rectangle R"), and a press takes up the one last chosen. What it draws with is its
 row's (below): the **Pen** (the freehand ink, tapering with pressure or speed), the **Highlighter**, the **Line**,
 **Arrow**, **Rectangle**, **Ellipse**, **Text** (a mark put down in place), **Fill** and the **Eraser**. **Fill** (lucide's
-PaintBucket, its key **G**, a bucket for its cursor) draws nothing of its own: a press inside a closed shape (a rectangle,
-an ellipse) fills it with the colour in hand — the same fill, in the same data, as the selected shape's Fill toggle (an
-area grouped with the shape, lying where it does) — a press on a shape filled in that colour unfills it, and on one
-filled in another colour recolours its fill; a press on an open mark (a line, an arrow, a pen stroke) or on nothing does
-nothing; each is one step to undo. Under it Stroke width and Placement are off (Colour is what it puts down). Under it
+PaintBucket, its key **G**, a bucket for its cursor, its tooltip "Fill closed shapes") draws nothing of its own: a press
+inside a closed shape — a rectangle, an ellipse, or a pen or highlighter loop whose ends are less than 20px apart on the
+screen as it is now (`geometry.js`'s `FILL_LOOP_GAP_PX`, `fillableOutline`) — fills it with the colour in hand — the
+same fill, in the same data, as the selected shape's Fill toggle (an area grouped with the shape, lying where it does) —
+a press within 6px of its outline counting as inside it, and where shapes overlap the topmost (last drawn) taking it
+(`fillTargetAt`); the shape a press would fill is haloed while the pointer rests on it. A press on a shape filled in
+that colour unfills it, and on one filled in another colour recolours its fill; a press on an open mark (a line, an
+arrow, a pen stroke whose ends are apart) or on nothing does nothing; each is one step to undo. Under it Stroke width and Placement are off (Colour is what it puts down). Under it
 the two are still two modes of the tool (`pencil`, `shapes`: what each draws with, kept apart), a
 tool chosen in the row taking its family up, sharing the annotation and its history but not the style: the colour, stroke width
 and placement are kept **per drawing kind** — the Pen, the Highlighter (which opens in neon yellow) and Shapes (all five
@@ -666,7 +669,7 @@ own button, so a 3D view's right drag pans, a flat view's does what Select's doe
 view: `AnnotationOverlay.jsx`'s `viewPressInit`). Never a restyle of ink already down: the
 annotations Select picks have their own bar, a small floating toolbar on the tool strip's
 surface just above them — Color and Stroke width dropdowns, Fill for a closed
-shape, a rule, Delete. An update of the model forgets the annotations too, their history with
+shape (what the Fill tool takes: a pen or highlighter loop too), a rule, Delete. An update of the model forgets the annotations too, their history with
 them (Undo has nothing to bring back), and leaves the tool in hand, with its tool, colour,
 weight and placement. The pen and the shapes share one default stroke
 width. The annotations have no panel: while there are any they are Quick Edit's

@@ -203,7 +203,8 @@ it("a paused motion's frame is Joints' to take over: every control stays live, a
   frameAt(500);
   await user.click(within(bar()).getByRole('button', { name: 'Pause motion' }));
   expect(hingeAt(scene)).toBeCloseTo(7.5, 9);
-  const position = () => screen.getByRole('tabpanel', { name: 'Joints' });
+  // The tab's name carries its changed mark (", changed") while its Reset is on.
+  const position = () => screen.getByRole('tabpanel', { name: /^Joints\b/ });
   const field = () => within(position()).getByRole('textbox', { name: 'hinge slider value' }) as HTMLInputElement;
   expect([field().value, field().disabled]).toEqual(['7.50', false]);
   expect(within(position()).getByRole('slider', { name: 'hinge' }).getAttribute('data-disabled')).toBeNull();

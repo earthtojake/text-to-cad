@@ -109,8 +109,13 @@ const viewValue = (pane, id) => pane.locator(VIEW).getAttribute(`data-view-${id}
 async function chooseView(pane, id, value) {
   if (await viewValue(pane, id) === value) return;
   await pane.locator(VIEW).click();
-  const menu = pane.page().locator('[role=menu][aria-label="View"]');
-  await menu.locator(`[${OPTION[id]}="${value}"]`).click();
+  const page = pane.page(), menu = page.locator('[role=menu][aria-label="View"]');
+  // Each group is a submenu of View (`data-view-sub`): its row opens it, its options are in it. The pointer travels
+  // to the option as a mouse's does, through the submenu's grace area (a single jump there closes the submenu).
+  await menu.locator(`[data-view-sub="${id}"]`).click();
+  const option = await page.locator(`[data-view-sub-content="${id}"] [${OPTION[id]}="${value}"]`).boundingBox();
+  await page.mouse.move(option.x + option.width / 2, option.y + option.height / 2, { steps: 8 });
+  await page.mouse.click(option.x + option.width / 2, option.y + option.height / 2);
   await menu.waitFor({ state: 'detached' });
 }
 const toggleView = async (pane, id) => chooseView(pane, id, OTHER[await viewValue(pane, id)]);
