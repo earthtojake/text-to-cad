@@ -170,8 +170,8 @@ const opened = async (pane: HTMLElement) => {
   await waitFor(() => expect(frames.length).toBeGreaterThan(0));
 };
 const strip = (pane: HTMLElement) => within(pane).getByRole('group', { name: 'Interaction tools' });
-// The board's view settings, the navbar's View ▾ (`kit/shell/ViewSettingsMenu.jsx`, `BoardDisplay.jsx`'s `boardViewGroups`):
-// Side, Mode (2D/3D), Display (its presets), in 3D Projection, then Background, one menu; in 3D Home beside the zoom.
+// The board's view settings, the navbar's View (`kit/shell/ViewSettingsMenu.jsx`, `BoardDisplay.jsx`'s `boardViewGroups`):
+// Side, Mode (2D/3D), Display (its presets), in 3D Projection, then Background, one menu; in 3D Reset view last.
 const cornerStack = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-navbar-view-controls]');
 const viewButtons = (pane: HTMLElement) => [...(cornerStack(pane)?.querySelectorAll('button') ?? [])]
   .map(button => button.getAttribute('aria-label') || button.textContent);

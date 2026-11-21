@@ -9,8 +9,8 @@ export const VIEWPORT_TOP_BAR_PX = 48;
 // The cube, in the TOP-right corner, so the bottom row is Quick Edit's alone: its box hugs the right edge, 8px off the
 // top, as the strip is. A host whose own control floats over that corner lifts the corner clear by setting
 // `--cad-viewport-corner-top`, the room that control takes from the top edge. Hosts can also choose the left corner
-// with `--cad-viewport-corner-left` and `--cad-viewport-corner-right` (ViewPlaneControl), and the corner's pill and
-// stack follow it (`viewCornerLayout`); the default is the right.
+// with `--cad-viewport-corner-left` and `--cad-viewport-corner-right` (ViewPlaneControl), and a flat view's zoom
+// follows it (`viewCornerLayout`); the default is the right.
 // The cube's box is 68px, its drawing cropped to the cube (`ViewPlaneControl.js`), at the corner's 12px inset from the
 // right and the top: the host's corner variable is its box's edge (2px unset), and 10px in from it (`CUBE_GUTTER_PX`).
 export const VIEWPORT_CUBE_SIZE = "68px";

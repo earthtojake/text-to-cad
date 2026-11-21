@@ -80,8 +80,8 @@ const Board3dView = lazy(() => import("./Board3dView.jsx"));
  * (`kit/shell/FlatPanel.jsx`) is a search over three tabs, the Parts (in their schematic blocks), the
  * Nets and the Layers (each layer's eye, a row's press for the active layer), and under them the
  * picked part's or net's pads (`BoardSection.jsx`'s detail); its view
- * controls end the strip, after its rule (`BoardDisplay.jsx`): Flip (the side, top or bottom; ⇧F), 2D/3D
- * and Display (the preset), the first two each a button whose icon is the state on screen; the corner
+ * settings are View's (`BoardDisplay.jsx`'s `boardViewGroups`): Side (top or bottom; ⇧F), Mode (2D/3D; 3)
+ * and Display (the preset), and in 3D Projection and Reset view; the corner
  * holds the zoom pill alone; the Layers tab has the
  * layers, the other layers, the pours and the opacities: one contract with `cad <type> snapshot --display`. A payload without its
  * index (an older server's) is the picture alone: no tools, no Parts or Nets, no Quick Edit.
@@ -90,8 +90,8 @@ const Board3dView = lazy(() => import("./Board3dView.jsx"));
  * 2D drawer's picture of that side (`Board3dView.jsx`, a lazy chunk, over `@cad/core/lib/board3d/`). It
  * is the view's other canvas, in the same frame: the strip, the panel, the selection, the ink, the
  * measurements, Quick Edit and the corner are the same mounted components either way. The corner's
- * pill zooms the 3D camera (the 3D views' zoom, `viewportZoom`), and Display's menu ends with the
- * camera's projection; there is no cube (Zoom to fit frames the board). A press
+ * pill zooms the 3D camera (the 3D views' zoom, `viewportZoom`), and View adds the camera's
+ * Projection and Reset view; there is no cube (Zoom to fit frames the board). A press
  * picks what the 2D view picks where the pointer's ray meets the face it enters; a drag turns the view
  * (a box is the 2D view's); Flip turns the camera over, and its icon follows the camera to
  * whichever side of the board it is on, turned by hand too.

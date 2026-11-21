@@ -267,7 +267,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   `TOP_STRIP_BUTTON_CLASS`, `TOP_STRIP_SHAPE_CLASS`; `ToolModeMenu.jsx`; `FloatingToolBar`, `data-cad-toolbar`);
   the strip's colours and surface its own. A tool's sub-toolbar under it takes the same proportions (below; the
   drawing tools' two rows of seven 72px), and so do the panel's head buttons and the navbar's panel toggle (below); the corner's
-  stack, the zoom and Preview's playbar keep their 24px buttons. **The toolbar and the Quick Edit bar are centred on
+  zoom is 28px tall (below), and Preview's playbar keeps its 24px buttons. **The toolbar and the Quick Edit bar are centred on
   the window, always; panels never move them; where they meet a panel they sit above it** (`ViewFrame.jsx`'s top
   layer, `data-view-top-layer`, over the panel). A person finds the strip where it always is,
   whatever is open beside it; a strip that slid with each panel moved under the pointer as a panel came and went.
@@ -2134,7 +2134,7 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   field or Preview, take a tool up as a design or CAD tool's do: **V** Select, **M** Measure;
   **P** the Pen, **⇧P** the Highlighter, **E** the Eraser; **R** the Rectangle, **L** the Line,
   **⇧L** the Arrow, **O** the Ellipse, **T** Text, **G** Fill (each taking up Draw with that
-  tool in hand); and **F** frames the model (Zoom to fit: and the zoom's menu, the strip's percentage). A tool already in hand stays so.
+  tool in hand); and **F** frames the model (Zoom to fit: and the zoom's menu, the corner's percentage). A tool already in hand stays so.
   The zoom's keys are the design tools' (`pressZoomKey`), held keys repeating: **+** (or **=**) and
   **-** zoom in and out, with ⌘ or Ctrl as well (the view's then, never the page's zoom); **⇧1**
   fits as F does, **⇧2** frames what Select has picked (nothing with nothing picked), and **⇧0** is

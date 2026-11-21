@@ -4,7 +4,7 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
 const INSET = `${VIEWPORT_INSET_PX}px`;
 
 /**
- * The viewport's top-right column, under the corner (the cube or the zoom pill and the stack under it, which stand in the
+ * The viewport's top-right column, under the corner (the cube or a flat view's zoom, which stands in the
  * top-right corner itself: it starts an inset under them, `--cad-corner-below`, the shell's measure; at the top where the
  * host anchors the corner at the left): the host's notice first (`notice`, a question it asks once, such as whether to
  * share anonymous usage statistics), then anything else a view keeps there, under the notice rather than hiding under it

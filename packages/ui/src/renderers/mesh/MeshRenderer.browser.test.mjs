@@ -141,8 +141,8 @@ async function exported(page, file) {
   assert.ok(shown.revision.endsWith(`-${file}`), `the catalog hash of the bytes shown: ${shown.revision}`);
 }
 // A mesh file's strip: an STL's Select (in hand, picking its bodies), Draw and Clip; a 3MF's Select (in hand),
-// Draw, Measure and Clip. Clip is a tool as Draw is, pressed while in hand. Preview ends the strip; Display and
-// Projection are the corner's stack over the cube.
+// Draw, Measure and Clip. Clip is a tool as Draw is, pressed while in hand. View and Preview are the navbar's; the
+// corner holds the cube alone.
 const STL_TOOLS = ['Select:true', 'Draw:false', 'Clip:false'];
 const THREE_MF_TOOLS = ['Select:true', 'Draw:false', 'Measure:false', 'Clip:false'];
 const meshTools = async (pane, expected) => {

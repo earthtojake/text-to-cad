@@ -402,7 +402,7 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
   stage('idle');
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
   expect(barButtons()).toEqual(['View', 'Preview']);
-  // With nothing to work on yet, the strip is idle together, and so are the corner's Home and View, and Preview.
+  // With nothing to work on yet, the strip is idle together, and so are the navbar's View and Preview.
   stage('unready');
   expect(strip()).toEqual(['Select', 'Draw', 'Keep', 'Pose']);
   const idle = (name: string) => (['Preview', 'View'].includes(name) ? screen.getByRole('button', { name }) : tool(name)).hasAttribute('disabled');
@@ -414,8 +414,8 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
 it("Display and Preview are a 3D view's, as its renderer declares: a view that does not declare it has neither, not disabled ones, and a request for Preview leaves it as it is", () => {
   // Preview asked for from outside the strip, as a link or a host request would.
   const ask = () => act(() => { fireEvent.click(document.querySelector('[data-harness-ask-preview]')!); });
-  // A 3D view (the harness's, declared `previewable`): Home and View under the cube, Preview ending the strip, and a
-  // request enters it.
+  // A 3D view (the harness's, declared `previewable`): the view's controls, View then Preview, and a request
+  // enters it.
   frame();
   expect(barButtons()).toEqual(['View', 'Preview']);
   ask();

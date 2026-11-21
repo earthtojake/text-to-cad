@@ -253,7 +253,7 @@ test('the type scale and the strip\'s proportions, as drawn: the panel, a menu, 
 
 // In the dark (the harness's app), a toolbar button under the pointer is seen: its fill, lighter or darker as its surface
 // is (the corner's is the light viewport's), never the base Button's ghost hover, which matched the surface — the strip, the
-// panel's head, and the corner's stack, over the dark canvas and over a light viewport.
+// panel's head, and the corner's control, over the dark canvas and over a light viewport.
 test('a toolbar button under the pointer is seen on its surface in the dark, over a light viewport: the strip, the panel head and the corner', async (t) => {
   const origin = await serve(t);
   const { page, errors } = await newPage(t);
@@ -373,8 +373,8 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   });
   await page.goto(`${origin}/`);
   const first = page.getByTestId('one');
-  // A desktop's view settings are View, in the row under the cube. A pane narrower than a phone's breakpoint (each of two
-  // side by side) has a phone's strip and no cube: View is the corner's tile, the same menu (`ViewSettingsMenu.jsx`).
+  // A view's settings are View, the navbar's. A pane narrower than a phone's breakpoint (each of two side by side) has a
+  // phone's strip and no cube: View is still the navbar's, the same menu (`ViewSettingsMenu.jsx`).
   const displayButton = pane => pane.locator('[data-view-menu]');
   const viewButton = pane => pane.locator('[data-view-menu]');
   const display = page.locator('[role=menu][aria-label="View"]');

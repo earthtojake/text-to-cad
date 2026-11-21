@@ -320,8 +320,9 @@ are tabs of the view's panel, docked at the left, whatever the tool. The
 file's name in the navbar opens its name menu: Models and Files (the explorer).
 Every file's tools are on a strip at the top centre (each format's are the
 [design system's table](../../packages/ui/docs/settings-ui.md#tools-and-lifecycle)).
-Every 3D file's strip ends in Preview; the top-right corner holds the view cube with Display, Projection and Home
-stacked under it, or a flat view's zoom pill with a board's Display, Side and 2D/3D under it; the one panel, at the
+How the file is looked at is the navbar's **View** (one menu: a 3D view's Projection, Display, Background, Show grid
+and Reset view; a board's Side, Mode and Display), then a 3D file's Preview; the top-right corner holds the camera's
+own control alone, the view cube or a flat view's "100%" zoom; the one panel, at the
 left, is the file's structure and, as tabs after it, its Parameters, Joints and Animation; what is selected is read
 in Quick Edit's chip list; and Quick Edit is a bar at the
 bottom, centred on the window as the strip is, the bottom row its alone. DXF is a
@@ -508,8 +509,8 @@ which opens the name menu (Models and Files), with its ⋯ (Export, over a file 
 person's settings (Language — Automatic or a named language —, Telemetry, Theme), Send feedback (a new issue titled "Feedback: "),
 GitHub, Discord and, in gray, the version (a link to its release notes) and "Made by @…"
 (X), as in the CAD app, over a file and on the home alike.
-Preview at the tool strip's end and Display, Projection, Home and a board's Side and 2D/3D in the corner's stack
-are the view's, never the navbar's (whose first control, before the logo, is the panel's toggle);
+Its first control, before the logo, is the panel's toggle; at its right end the view portals its own View and a 3D
+file's Preview;
 in Preview the navbar gives way to Preview's own bar. This host
 supplies the links (`src/host/viewerLinks.js`): its version (with its build's id,
 `v0.10.0-dev.b80844940`, for any build but the release's own), the GitHub (where new

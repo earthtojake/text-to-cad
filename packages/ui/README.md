@@ -274,7 +274,7 @@ A CAD file's controls are the shell's chrome over the viewport. The tool strip a
 centre holds the file's tools — a STEP's Select (its selection filter the chevron after it),
 Draw (one plain button; its row under the strip holds the freehand and shape tools), Measure, then Explode and Clip; a robot's Select, Draw, Measure and Clip; a GLB's
 Select (its nodes), Draw, Measure, Explode (several parts) and Clip; a 3MF's Select (its
-objects), Draw, Measure and Clip; an STL's Draw and Clip — then a 3D view's Preview (a play triangle); a
+objects), Draw, Measure and Clip; an STL's Select (its bodies), Draw and Clip.
 No rule parts the strip, at Figma's toolbar's proportions (48px, 32px tiles). The view's settings are the navbar's,
 for every kind of file: **View** (a cube, no chevron; one menu of submenus, `kit/shell/ViewSettingsMenu.jsx`, ending
 with Reset view where there is a camera to bring back), then a 3D view's Preview. The corner at the top-right keeps

@@ -100,7 +100,7 @@ const hex = value => [1, 3, 5].map(index => Number.parseInt(value.slice(index, i
 const red = ([r, g, b]) => r > 150 && g < 90 && b < 90;
 
 
-// The board's view settings are the navbar's View ▾ (`kit/shell/ViewSettingsMenu.jsx`): Side, Mode (2D/3D), Display and
+// The board's view settings are the navbar's View (`kit/shell/ViewSettingsMenu.jsx`): Side, Mode (2D/3D), Display and
 // Background in one menu, its button saying each group's state (`data-view-side`, `data-view-dimension`).
 const VIEW = '[data-navbar-view-controls] [data-view-menu]';
 const OPTION = Object.freeze({ side: 'data-board-side-option', dimension: 'data-board-dimension-option' });
