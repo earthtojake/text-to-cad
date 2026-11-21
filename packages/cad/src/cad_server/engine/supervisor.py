@@ -495,6 +495,10 @@ class Process:
                     self.retired = True
                 return answer
             except OSError as error:
+                if self.overran:  # its supervisor stopped it before this request reached it: said as mid-request
+                    code = self.popen.wait()
+                    raise self._gone(f"{self._words('exited', code=code)}: {self.overran}", during=True,
+                                     code=code) from error
                 raise self._gone(self._words("broken", error=error)) from error
             finally:
                 self.sink = None
