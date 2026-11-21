@@ -312,10 +312,11 @@ it("a click on the toggle while it peeks pins it: open, pushing and kept, as a c
   const { writes, toggle, wait, peeked } = peeking();
   fireEvent.pointerEnter(toggle(), mouse);
   wait(PANEL_PEEK_DELAY_MS);
-  expect(peeked()).toBe(true);
+  // A peek is passing: no grip to set its width by. Pinned, the grip is back.
+  expect([peeked(), flatPanel().querySelector('[data-panel-grip]')]).toEqual([true, null]);
   fireEvent.click(toggle());
   expect([flatPanel().hidden, flatPanel().hasAttribute('data-panel-peek'), document.querySelector('[data-cad-surface]')!.getAttribute('data-sidebar'),
-    toggle().getAttribute('aria-expanded'), writes.at(-1)]).toEqual([false, false, 'push', 'true', { open: true }]);
+    toggle().getAttribute('aria-expanded'), writes.at(-1), Boolean(flatPanel().querySelector('[data-panel-grip]'))]).toEqual([false, false, 'push', 'true', { open: true }, true]);
   // Pinned, the pointer leaving puts nothing away.
   fireEvent.pointerLeave(toggle(), mouse);
   wait(PANEL_PEEK_DELAY_MS * 2);

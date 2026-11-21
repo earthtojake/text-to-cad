@@ -46,7 +46,7 @@ it('a tool is hinted only after a deliberate hover, with the same delay from one
   expect(tip()).toBeNull();
 });
 
-it('the strip and the view\'s actions share one hint with no native title; a click that focuses a trigger pins nothing, a Tab onto it names it', () => {
+it('the strip and the view\'s actions share one hint with no native title; a click that focuses a trigger pins nothing, a Tab onto it names it, and focus moved by code after that Tab names nothing', () => {
   render(<>
     {strip()}
     <ToolbarButton label="Display">D</ToolbarButton>
@@ -82,6 +82,16 @@ it('the strip and the view\'s actions share one hint with no native title; a cli
   wait(10);
   expect(tip()!.textContent).toBe('Preview');
   focusVisible.mockRestore();
+  // That Tab is spent on the move it made: focus code hands over later (a peek going from under the keyboard) names
+  // nothing, focus-visible as it is.
+  const draw = screen.getByRole('button', { name: 'Draw' });
+  const visible = vi.spyOn(draw, 'matches').mockImplementation(function (this: Element, selector: string) {
+    return selector === ':focus-visible' ? true : Element.prototype.matches.call(this, selector);
+  });
+  act(() => draw.focus());
+  wait(500);
+  expect(tip()).toBeNull();
+  visible.mockRestore();
 });
 
 it('preview puts the editor tools and their hints away', () => {

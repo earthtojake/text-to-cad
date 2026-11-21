@@ -22,7 +22,7 @@ export const PANEL_SURFACE_PX = 8;
 /** A peeking panel's elevation over the view: the floating chrome's shadow (`lib/floatingSurface.js`'s `shadow-md`). */
 export const PANEL_PEEK_ELEVATION_CLASS = "shadow-md";
 /**
- * A peeking panel is a card floating over the view (as Codex's and other apps' unpinned sidebars are), so it reads as
+ * A peeking panel is a card floating over the view (as other apps' unpinned sidebars are), so it reads as
  * hovering: its surface stands this far in from the window's left edge, the navbar's bottom and the view's bottom, its
  * right edge this far short of the docked panel's, with the floating chrome's rounded corners (the strip's 10px), border
  * and shadow, on the chrome's colour. Its content does not move: the panel's box is the docked one, and the card is drawn
@@ -98,7 +98,7 @@ export function usePanelWidth({ width, minWidth, maxWidth, onWidthChange }) {
  * `headStack`: a head of two rows, one over the other (the view's panel's search over its tabs).
  * `headRule` is false: a head that is its body's own title, which flows straight into it; `headCompact`, that title a
  * list row's height with nothing under it; `null`, no pinned row), ONE scroller round `children`, and its grip (none on
- * a phone's page).
+ * a phone's page or a peek).
  * @param {{ mode: "push" | "page", label: string, open: boolean, hidden?: boolean,
  *   width: number, grip: ReturnType<typeof usePanelWidth>["grip"] | null, gripLabel: string, head: import("react").ReactNode, headRule?: boolean, headCompact?: boolean,
  *   headRef?: import("react").Ref<HTMLDivElement>, headProps?: object, headInsets?: { start: number, end: number },
@@ -132,7 +132,8 @@ export function PanelSurface({ mode, label, open, hidden = false, width, grip, g
         data-panel-peek-card="" />
       <div className="relative flex min-h-0 flex-1 flex-col" style={PEEK_CONTENT_STYLE}>{headNode}{scroll}</div>
     </> : <>{headNode}{scroll}</>}
-    {page || !grip ? null : <div role="separator" aria-orientation="vertical" aria-label={gripLabel} tabIndex={0}
+    {/* No grip on a phone's page, nor on a peek: a peek is passing, so its width is not the person's to set there. */}
+    {page || peeking || !grip ? null : <div role="separator" aria-orientation="vertical" aria-label={gripLabel} tabIndex={0}
       aria-valuenow={grip["aria-valuenow"]} aria-valuemin={grip["aria-valuemin"]} aria-valuemax={grip["aria-valuemax"]}
       className={cn("absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize touch-none focus-visible:outline-none",
         "after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:transition-colors hover:after:bg-ring focus-visible:after:bg-ring",

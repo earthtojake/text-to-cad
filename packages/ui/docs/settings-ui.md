@@ -829,7 +829,8 @@ structure. Every rule here, and why:
   pointer is in that popup then), and the delay runs again once that popup is shut. **The keyboard in it does not hold
   it**: the pointer gone, it goes, whatever has focus, and focus that was in it goes to the toggle, never left on a
   panel that is gone. Everything in it works as in the docked panel — the same component: tabs, search (/ opens it in
-  the peek), a row's pick, sliders. **Escape** puts it away (before anything else of the view's: the tool in hand and
+  the peek), a row's pick, sliders — but its width: a peek is passing, so it has **no grip** (none to drag, no hover
+  line in the gap at its right, nothing in the tab order); its width is the docked panel's, changed once it is pinned. **Escape** puts it away (before anything else of the view's: the tool in hand and
   the selection stay), and so does a press on the model. **Only the toggle pins it**: a click on it while it peeks
   (or its key, ⌘\) pins it — open, pushing and kept, as a click on a collapsed panel always is (a click with no peek
   up opens it, as ever); nothing done inside it pins it, neither a pick, a tab, a search nor a slider, so moving off a
@@ -2205,8 +2206,8 @@ lit for its state is none of these: it keeps its hint, as a press on it still do
 control off for a reason the person can act on, whose hint says why and what to do (the [Parameters](#parameters)
 tab's Save, a parameter declared elsewhere: `TooltipHint`'s `explainsDisabled`, on a wrapper that takes the
 pointer and the keyboard for it); pressing or leaving cancels a
-pending one. A hint appears on focus only for keyboard navigation (a Tab), never
-when a closing menu hands focus back.
+pending one. A hint appears on focus only for keyboard navigation (the focus a Tab moves, that one move alone), never
+when code moves focus: a closing menu handing it back, a peek handing it to the panel's toggle as it goes.
 
 Copy, snapshot and prompt actions complete silently, the Copy and Quick Edit
 buttons showing a tick for a moment. An export is the one exception, and it works as a

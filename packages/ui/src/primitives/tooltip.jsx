@@ -57,8 +57,11 @@ export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
 
 // A hint on focus answers keyboard NAVIGATION: a Tab onto the control. Focus that a closing
 // menu or popover hands back to its trigger (after Escape, or a choice) is restoration, and
-// reopening the trigger's hint then reads as a hint that "sticks". So whether the last key
-// was Tab is tracked, in every document a hint is mounted in, and a pointer press clears it.
+// reopening the trigger's hint then reads as a hint that "sticks". So whether focus is arriving
+// by a Tab is tracked, in every document a hint is mounted in: a Tab's keydown sets it, and the
+// one focus move that Tab makes spends it (the document's `focusin`, after the trigger's own
+// focus handler has read it), so a later move made by code (a peek going from under the
+// keyboard, a closing popup) is never taken for one; any other key, or a pointer press, clears it.
 let focusArrivedByTab = false;
 const navigationDocuments = new WeakSet();
 function trackFocusNavigation(document) {
@@ -66,6 +69,7 @@ function trackFocusNavigation(document) {
   navigationDocuments.add(document);
   document.addEventListener("keydown", event => { focusArrivedByTab = event.key === "Tab"; }, true);
   document.addEventListener("pointerdown", () => { focusArrivedByTab = false; }, true);
+  document.addEventListener("focusin", () => { focusArrivedByTab = false; });
 }
 
 /**
