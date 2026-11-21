@@ -43,7 +43,7 @@ guide in a release that must break nothing: a patch below 1.0, a patch or a mino
 guide may be corrected in any release). Which releases install themselves is a second rule: cad installs
 every newer release of its own major by itself, so below 1.0 a minor that breaks too (this is a beta); a
 new major never arrives by itself, only by `cad update --major` ([decisions](docs/contributing/decisions.md)). A command
-the skills used keeps working for 30 days after they stop using it, which CI checks; otherwise a
+the skills used keeps working for 30 days after they stop using it, hidden if need be; otherwise a
 command, option or tool may change or go in any release. What breaks is law 15's tiers and the short
 list of what must stay the same
 ([CONTRIBUTING.md, "Which number a release bumps"](CONTRIBUTING.md#which-number-a-release-bumps)).
@@ -221,7 +221,7 @@ which installs the checkout as the `cad` tool, editable (`--release` goes back).
   commands, with no version, and says how to get cad in its SKILL.md's Setup block (the same in
   each); no skill installs cad any other way (no `requirements.txt` naming it), because a second
   installation is one the Setup block never names, and no skill names or runs the install command. A command the skills used keeps working for 30
-  days after they stop using it (`tests/python/global/test_released_commands_still_parse.py`).
+  days after they stop using it, hidden if need be.
   Skills do not vendor cad, and ship no scripts (claude.ai's plugin
   directory refuses a program): what a skill would script is a `cad` command whose parser
   and behaviour live in `cad_server.cli` (print3d's presets are `cad orcaslicer`). The

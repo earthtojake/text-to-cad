@@ -645,8 +645,8 @@ major from 1.0 and, below 1.0, which the standard leaves to the project, the min
 **A command the skills used keeps working for 30 days.** cad moves to the newest release of its major on
 every computer, and a store's copy of the skills can be weeks older. So a `cad` command, an option, a
 `--json` key, an exit status, an MCP tool or its arguments that the skills of any release in the last
-30 days use keeps working, hidden if need be; CI checks every release against that skill text
-(`tests/python/global/test_released_commands_still_parse.py`). Past that window it may change or go
+30 days use keeps working, hidden if need be. No test holds it: the change that removes one says which
+releases' skills used it. Past that window it may change or go
 in any release, and that is not a breaking change: it is a hard cutover (law 15, tier 1). A person's
 own script that runs `cad` commands may need an edit after an update; the release notes say what
 changed.

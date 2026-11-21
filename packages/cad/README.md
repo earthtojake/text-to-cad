@@ -332,10 +332,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     **Tier 1: what an agent reads each session** -- the skills, the `cad` command's verbs and flags,
     the CAD tools' arguments, the wording of docs. cad moves to the newest release of its major on every
     computer while a store's copy of the skills may be weeks older, so a command, flag or tool the skills used
-    keeps working for 30 days after the release whose skills stopped using it, hidden if need be; CI
-    checks each release against the skill text released in the last 30 days. Past that window, hard
-    cutovers only, in any release: removing or renaming one is not a breaking change and needs no
-    migration guide. A retired surface does not exist: no alias, no shim, and no error that
+    keeps working for 30 days after the release whose skills stopped using it, hidden if need be. Past
+    that window, hard cutovers only, in any release: removing or renaming one is not a breaking change
+    and needs no migration guide. A retired surface does not exist: no alias, no shim, and no error that
     recognizes its old spelling to explain what replaced it. A removed command, flag, argument, key, module or name gets what the
     current contract's ordinary validation says -- an unknown command, an unrecognized argument, an
     unknown key, an `ImportError`, an `AttributeError`.
