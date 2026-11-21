@@ -2024,7 +2024,6 @@ class _Analysis:
         import build123d as bd
 
         face = self.faces[ordinal - 1] if face is None else face
-        merged = bool((self._joined or {}).get(ordinal))  # one face made of several (``_laid``)
         mapping = lambda points: _apply(flange.to_flat, points)  # noqa: E731
 
         def polygon_face(points: np.ndarray) -> Any | None:
@@ -2058,9 +2057,12 @@ class _Analysis:
                     drawn.append(("path", _chorded([flat(p) for p in points])))
                 elif math.dist(*ends) > 1e-9:
                     drawn.append(("path", list(ends)))
-            # faces merged into one: each piece starts where the last one ends (an edge a layer cut ends a hair
-            # off its vertex)
-            runs = [points for how, points in drawn if how != "circle"] if merged else []
+            # each piece starts where the last one ends: the kernel joins two edges at a vertex within its
+            # tolerance, and an edge may end a hair off it (an edge a layer cut, the mitre where a round along an
+            # ellipse meets one along a line). The wire drawn here joins edges within 1e-7 mm alone: left open,
+            # the outline fell back to its sampled points, whose chords along a mitre are shorter than the
+            # tolerance the breaks are fused with, and the fuse lost material there
+            runs = [points for how, points in drawn if how != "circle"]
             for last, following in zip(runs, runs[1:] + runs[:1]):
                 if last is not following and 0.0 < math.dist(last[-1], following[0]) < 1e-6:
                     following[0] = last[-1]

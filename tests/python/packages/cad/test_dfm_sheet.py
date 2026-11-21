@@ -1360,6 +1360,28 @@ class ModellingMistakeTest(unittest.TestCase):
             with self.subTest(bracket="sides rounded whole", cut_at=depth):
                 agrees(layered(whole, within(steps, 2.0, depth, 50.0)), whole, k_factor=0.4)
 
+    def test_a_round_whose_edges_meet_a_hair_apart_is_laid_whole(self) -> None:
+        # a plate notched along half an ellipse, its rims rounded: the kernel may end the mitre where the round
+        # along the ellipse meets the one along the plate's edge a fraction of a micron off the vertex it shares
+        # with the edge along the skin (within that vertex's tolerance). The round's outline laid into the flat
+        # did not close over that gap and was laid as its sampled points, the mitre's chords a hundredth of a
+        # millimetre long, under the tolerance the breaks are fused with: the fuse lost material there (the
+        # flat two faces, 5 mm2 short, 99.7% of the material)
+        outline = (bd.Rectangle(80, 40) - bd.Pos(0, 20) * bd.Ellipse(12, 6)).face()
+        plate = bd.extrude(outline, amount=2)
+        levels = plate.edges().group_by(bd.Axis.Z)
+        unbroken = checked(plate).measurements["parts"]["items"][0]["flat_area_mm2"]
+        for name, edges, radius in (("one rim", levels[-1], 0.4), ("both rims", levels[0] + levels[-1], 0.2)):
+            with self.subTest(rounded=name):
+                part = bd.fillet(edges, radius)
+                found = checked(part).measurements["parts"]["items"][0]
+                self.assertAlmostEqual(found["flat_area_mm2"], unbroken, delta=0.05)
+                self.assertAlmostEqual(found["flat_material_fraction"], 1.0, places=3)
+                flat = sheet.unfold(part)
+                self.assertEqual(len(flat.faces()), 1)
+                # the outline's area, within its chords' sag along the notch
+                self.assertAlmostEqual(flat.area, 80 * 40 - math.pi * 12 * 6 / 2, delta=0.3)
+
     def test_what_countersinks_and_edge_breaks_cut_is_not_missing_from_the_flat(self) -> None:
         # the flat's area was held against the part's volume, which countersinks and edge breaks cut after the
         # blank: 24 countersinks in a 2 mm plate, or a 1 mm chamfer round a small 3 mm one, read 107% and 111%
