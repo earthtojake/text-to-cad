@@ -11,7 +11,8 @@ away is a *skin*. A pair of coaxial cylinders, one concave and one convex, whose
 touching both faces of a pair (a skin and its opposite, a bend's inside and outside) is a cut *edge*; a cone
 between a skin and a hole's wall is a countersink. A chamfer or a round of a skin's edge is an *edge break*,
 and a face square to the skin it joins to both skins through breaks is a cut edge too (its rays run across
-the plate: its width, never its thickness); a bend's end is broken by a cone or a torus about its axis; a cone, torus or freeform face a thickness across is *formed*
+the plate: its width, never its thickness), as is each face of a cut in several faces across the thickness,
+joined tangent (a plate extruded both ways along an ellipse or a spline); a bend's end is broken by a cone or a torus about its axis; a cone, torus or freeform face a thickness across is *formed*
 sheet, not a bend. Every other face, and every stretch of a skin whose rays
 cross anything but ``t``, is not sheet (``not_sheet``: a boss, a pocket, a round, at its ref, with how far it
 departs from ``t``).
@@ -626,6 +627,7 @@ class _Analysis:
         self.block = False                        # no face a skin's width against its opposite: a bar, a block
         self._boxes: tuple[np.ndarray, np.ndarray] | None = None
         self._sheet_volume: float | None = None
+        self._sunk_walls: dict[int, int] | None = None  # each face of a countersunk hole's wall -> its cone
 
     def ref(self, ordinal: int) -> str:
         return self.part.ref("face", int(ordinal))
@@ -971,10 +973,37 @@ class _Analysis:
             return None
         return float(heights.max() - heights.min())
 
+    def _split_cuts(self, paired: set[int], stands_for: dict[int, int], reached: dict[int, set[int]]) -> None:
+        """Cut edges in several faces across the thickness: a plate extruded both ways along an ellipse or a
+        spline (the kernel merges the halves of a plane or a cylinder, and leaves a surface of extrusion's two
+        faces, split at mid-thickness), layers joined and never merged. No one face of such a cut touches both
+        skins. From each skin (and from its countersinks and its breaks, ``reached``) the faces square to it are
+        followed through their tangent joins: a face reached from a skin and from its opposite is a cut edge."""
+        loose = {a for a in self.hits if a not in paired and a not in self.countersinks and a not in self.edge_set}
+        found: dict[int, set[int]] = {}
+        for skin in sorted(self.skins):
+            doors = {skin} | {c for c, s in stands_for.items() if s == skin} | \
+                {b for b, skins in reached.items() if skin in skins}
+            front = sorted({a for door in doors for a in self.neighbors[door]
+                            if a in loose and self._square(a, skin)})
+            seen = set(front)
+            while front:
+                a = front.pop()
+                for b in sorted(self.smooth[a]):
+                    if b in loose and b not in seen and self._square(b, skin):
+                        seen.add(b)
+                        front.append(b)
+            for a in seen:
+                found.setdefault(a, set()).add(skin)
+        for a, skins in found.items():
+            if any(c in self.partners.get(b, ()) for b in skins for c in skins):
+                self.edge_set.add(a)
+
     def _edge_breaks(self, paired: set[int], stands_for: dict[int, int]) -> None:
         """The chamfers and rounds that break the cut edges (``breaks``), and the cut edges behind them: a face
-        square to a skin, joined to it and to its opposite skin through such faces, is a cut edge. Its rays run
-        across the plate, so they measure its width, never its thickness."""
+        square to a skin, joined to it and to its opposite skin through such faces, is a cut edge, and so is one
+        of a cut in several faces across the thickness (``_split_cuts``). Its rays run across the plate, so
+        they measure its width, never its thickness."""
         t, tol = float(self.thickness), self.tolerance
         reached: dict[int, set[int]] = {}
         depth: dict[int, float] = {}
@@ -992,8 +1021,6 @@ class _Analysis:
                     depth[b] = max(depth.get(b, 0.0), extent)
                     following.append((b, skin))
             frontier = following
-        if not reached:
-            return
         for a in self.hits:
             if a in paired or a in self.countersinks or a in self.edge_set or a in reached:
                 continue
@@ -1003,6 +1030,7 @@ class _Analysis:
             if any(c in self.partners.get(b, ()) for b in near for c in near) and \
                     any(self._square(a, b) for b in near if b in self.skins):
                 self.edge_set.add(a)
+        self._split_cuts(paired, stands_for, reached)
         # a break of a cut edge: beside one, beside a break of the opposite skin (two chamfers meeting at a
         # knife edge), or beside such a break (the facet where two chamfers meet)
         used = {b for b in reached if self.neighbors[b] & self.edge_set or any(
@@ -1782,11 +1810,26 @@ class _Analysis:
         if through is not None:
             loop.through_diameter = 2.0 * float(self.surfaces[through - 1].radius)
         elif countersink is None:
-            for cone, wall in self.wall_of.items():
-                if wall in walls:
-                    countersink = self.countersinks[cone]
+            if self._sunk_walls is None:
+                self._sunk_walls = {face: cone for cone, wall in self.wall_of.items() for face in self._wall_faces(wall)}
+            for wall in walls:
+                if wall in self._sunk_walls:
+                    countersink = self.countersinks[self._sunk_walls[wall]]
         centre = points3.mean(axis=0) if len(points3) else np.zeros(3)
         self.holes.append(_HoleLoop(loop, walls or [skin], centre, in_bend, countersink))
+
+    def _wall_faces(self, wall: int) -> set[int]:
+        """A hole's wall whole: ``wall`` and the faces the same cylinder runs on in across the thickness, each
+        joined tangent to the last (a wall in layers: the countersink is beside one face, the far skin's rim
+        beside another)."""
+        found, front = {wall}, [wall]
+        while front:
+            a = front.pop()
+            for b in self.smooth[a] - found:
+                if self.surfaces[a - 1].kind == self.surfaces[b - 1].kind == "cylinder" and self._same_cylinder(a, b):
+                    found.add(b)
+                    front.append(b)
+        return found
 
     # -- back onto the part -------------------------------------------------------------------------------
 

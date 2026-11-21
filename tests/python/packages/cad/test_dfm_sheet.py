@@ -936,6 +936,92 @@ class ModellingMistakeTest(unittest.TestCase):
                     if len(edges) > len(top):  # both skins broken: their breaks fused on, one piece
                         self.assertEqual(len(sheet.unfold(part).faces()), 1)
 
+    def test_a_cut_edge_in_several_faces_across_the_thickness_is_one_cut(self) -> None:
+        # a plate extruded both ways along an ellipse or a spline: the kernel merges the halves of a plane or a
+        # cylinder and leaves such a cut two faces, split at mid-thickness. Neither touches both skins, so
+        # neither was a cut edge (FAILED, sheet.uniform_thickness), and no break of its edges was one: the
+        # flat stopped at the skins, 1 mm short across 0.5 mm chamfers, an elliptical hole 1 mm large. Layers
+        # joined and never merged (planes, cylinders, a bracket's sides and ends) read the same
+        def agrees(split: bd.Shape, whole: bd.Shape, **options) -> None:
+            result, wanted = checked(split, **options), checked(whole, **options)
+            self.assertTrue(wanted.ok, [f.message for f in wanted.findings if f.severity == "error"])
+            self.assertTrue(result.ok, [f.message for f in result.findings if f.severity == "error"])
+            self.assertEqual(verdicts(result), verdicts(wanted))
+            found, expected = (r.measurements["parts"]["items"][0] for r in (result, wanted))
+            for key in ("thickness_mm", "flat_length_mm", "flat_width_mm", "flat_area_mm2", "flat_material_fraction"):
+                self.assertAlmostEqual(found[key], expected[key], places=3, msg=key)
+            for family, keys in (("holes", ("size_mm", "countersunk", "countersink_diameter_mm")), ("bends", ("length_mm",))):
+                self.assertEqual([[item[key] for key in keys] for item in result.measurements[family]["items"]],
+                                 [[item[key] for key in keys] for item in wanted.measurements[family]["items"]], family)
+            self.assertEqual(len(sheet.unfold(split, **options).faces()), 1)
+
+        def rims(part: bd.Shape, both: bool) -> list[bd.Edge]:
+            levels = part.edges().group_by(bd.Axis.Z)
+            return [*levels[-1], *(levels[0] if both else [])]
+
+        def joined(first: bd.Shape, *more: bd.Shape) -> bd.Solid:
+            """The solids fused as the kernel fuses them: no face merged with the next (build123d's fuse merges)."""
+            from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
+
+            shape = first.wrapped
+            for other in more:
+                fuse = BRepAlgoAPI_Fuse(shape, other.wrapped)
+                fuse.Build()
+                shape = fuse.Shape()
+            return bd.Compound(shape).solids()[0]
+
+        def layered(outline: bd.Face, *levels: float) -> bd.Solid:
+            return joined(*(bd.extrude(bd.Pos(0, 0, low) * outline, amount=high - low)
+                            for low, high in zip(levels, levels[1:])))
+
+        spline = bd.Edge.make_spline([bd.Vector(x, y) for x, y in ((40, 0), (25, 18), (-5, 20), (-38, 12),
+                                                                  (-40, -6), (-15, -20), (20, -17))], periodic=True)
+        chamfer, fillet = (bd.chamfer, 0.5, True), (bd.fillet, 0.5, False)
+        for name, outline, breaks in (("ellipse", bd.Ellipse(40, 20).face(), (chamfer, fillet)),
+                                      ("spline", bd.Face(bd.Wire(spline)), ()),
+                                      ("elliptical hole", (bd.Rectangle(80, 40) - bd.Ellipse(12, 6)).face(), (chamfer,))):
+            whole, split = bd.extrude(outline, amount=2), bd.extrude(outline, amount=1, both=True)
+            with self.subTest(part=name, extruded="both ways"):
+                agrees(split, whole)
+            for how, size, both in breaks:
+                with self.subTest(part=name, extruded="both ways", broken=(how.__name__, size, both)):
+                    agrees(how(rims(split, both), size), how(rims(whole, both), size))
+
+        plate = (bd.RectangleRounded(80, 40, 5) - bd.Pos(-15, 0) * bd.SlotOverall(30, 8) - bd.Pos(25, 8) * bd.Circle(4)).face()
+        whole = bd.extrude(plate, amount=2)
+        for levels in ((0, 1, 2), (0, 0.6, 1.3, 2)):
+            with self.subTest(part="plate, a slot and a hole", layers=levels):
+                split = layered(plate, *levels)
+                self.assertGreater(len(split.faces()), len(whole.faces()))
+                agrees(split, whole)
+        with self.subTest(part="plate, a slot and a hole", layers=levels, broken="chamfer 0.4, both skins"):
+            agrees(bd.chamfer(rims(split, True), 0.4), bd.chamfer(rims(whole, True), 0.4))
+
+        # under a countersink the hole's wall reaches that skin through the cone: the wall in two faces
+        sunk = self._sunk((80, 40, 3), top=[(-20, 0)], bottom=[(20, 0)], hole=5, rim=7)
+        with self.subTest(part="countersunk holes", layers=2):
+            split = joined(*sunk.split(bd.Plane.XY, keep=bd.Keep.BOTH))
+            self.assertGreater(len(split.faces()), len(sunk.faces()))
+            agrees(split, sunk)
+
+        # an L bracket in two layers, one inside the other: its sides and ends each in two faces
+        def steps(radius: float) -> list[tuple]:
+            return [("line", 30), ("bend", 90, radius), ("line", 40)]
+
+        outer = bd.extrude(bd.Plane.XZ * profile(steps(3.0), 1.0), amount=-50)
+        inner = bd.extrude(bd.Plane.XZ * (bd.Pos(0, 1) * profile(steps(2.0), 1.0)), amount=-50)
+        with self.subTest(part="L bracket", layers=2):
+            split, whole = joined(outer, inner), bent(steps(2.0), 2.0, 50.0)
+            self.assertGreater(len(split.faces()), len(whole.faces()))
+            agrees(split, whole, k_factor=0.4)
+
+        # and what is no cut edge stays none: a bead along the middle of a plate's edge, tangent to the square
+        # faces above and below it (the faces followed are the square ones alone)
+        bead = bd.Spline((40, -0.5), (40.3, 0), (40, 0.5), tangents=((0, 1), (0, 1)))
+        section = bd.Wire([*bd.Polyline((40, 0.5), (40, 1), (-40, 1), (-40, -1), (40, -1), (40, -0.5)).edges(), bead])
+        beaded = checked(bd.extrude(bd.Plane.XZ * bd.Face(section), amount=-40))
+        self.assertIn(("error", "sheet.uniform_thickness"), verdicts(beaded))
+
     @staticmethod
     def _sunk(size: tuple[float, float, float], top: list[tuple[float, float]], bottom: list[tuple[float, float]],
               hole: float, rim: float) -> bd.Part:
