@@ -75,4 +75,4 @@ an agent. It runs no agent and grades nothing. `runs.tsv` says which folder had 
 each task expects; keep it from the agents. The tasks are `skill_ab/tasks/*.md` (a request and its
 objective answer) and their fixtures `skill_ab/fixtures/`; a STEP a task needs is built from its
 model when the runs are laid out, never committed. How to run and grade one is
-[Writing a skill](../../docs/contributing/writing-a-skill.md#test-a-change-ab).
+[Writing a skill](../../docs/contributing/writing-a-skill.md#test-a-large-change-ab).
