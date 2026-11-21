@@ -160,7 +160,8 @@ EXTRA_MODULES = {"build123d": {"build123d", "OCP", "bd_materials", "threejs_mate
                  "netgen": {"netgen"},
                  "calculix": {"cad_ccx"},
                  "trimesh": {"trimesh", "rtree", "scipy", "networkx"},
-                 "blender": {"bpy", "mathutils"}}  # mathutils is Blender's own, in bpy's wheel
+                 "blender": {"bpy", "mathutils"},  # mathutils is Blender's own, in bpy's wheel
+                 "quiddity": {"quiddity"}}
 # A platform an integration is built for (``cad.registry.PLATFORMS``' words), as its extra's marker says it.
 MARKED = {"macOS arm64": "(sys_platform == 'darwin' and platform_machine == 'arm64')",
           "Linux x86-64": "(sys_platform == 'linux' and platform_machine == 'x86_64')",

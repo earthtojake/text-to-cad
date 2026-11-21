@@ -477,6 +477,17 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                     Operation("complete", "write a printer, a process and filaments complete for OrcaSlicer's "
                                           "command line: every parent merged in, the printer named as compatible",
                               "orcaslicer"))),
+    "quiddity": Integration(
+        "quiddity", "quiddity, the feature recogniser for a STEP part: cad.quiddity.features hands it one part of a "
+                    "document and answers its holes and its other features, each face by its ordinal on the part "
+                    "and checked against the kernel, always in a process of its own that is stopped past a time "
+                    "limit (quiddity has none), and says so plainly where nothing could be measured",
+        extra="quiddity", process="separate",
+        modules=("quiddity",), distributions=("quiddity",), identity=("quiddity",),
+        # quiddity publishes one abi3 wheel for five platforms and none for Windows on ARM: the extra's marker says
+        # the same (packages/cad/pyproject.toml), and a test holds the two together.
+        platforms=("macOS arm64", "macOS x86-64", "Linux x86-64", "Linux arm64", "Windows x86-64"),
+        holds="quiddity's feature recogniser", download_mb=10),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})

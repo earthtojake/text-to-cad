@@ -15,7 +15,7 @@ members = [
 [manifest.dependency-groups]
 dev = [
     { name = "build" },
-    { name = "cad", extras = ["build123d", "trimesh", "mujoco", "coacd"], editable = "packages/cad" },
+    { name = "cad", extras = ["build123d", "trimesh", "mujoco", "coacd", "quiddity"], editable = "packages/cad" },
     { name = "distlib" },
     { name = "playwright", specifier = "==1.65.2" },
     { name = "pyrefly", specifier = "==1.4.1" },
@@ -175,6 +175,9 @@ mujoco = [
 netgen = [
     { name = "netgen-mesher", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') or sys_platform == 'darwin'" },
 ]
+quiddity = [
+    { name = "quiddity", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') or sys_platform == 'darwin'" },
+]
 trimesh = [
     { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "networkx", version = "3.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
@@ -204,6 +207,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2,<3" },
     { name = "pillow" },
     { name = "pillow", marker = "extra == 'build123d'" },
+    { name = "quiddity", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'quiddity') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'quiddity') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra == 'quiddity') or (sys_platform == 'darwin' and extra == 'quiddity')", specifier = "==0.5.5" },
     { name = "rtree", marker = "extra == 'trimesh'", specifier = ">=1.2,<2" },
     { name = "scipy", marker = "extra == 'build123d'", specifier = ">=1.17.1,<2" },
     { name = "scipy", marker = "extra == 'trimesh'", specifier = ">=1.17.1,<2" },
@@ -212,7 +216,7 @@ requires-dist = [
     { name = "trimesh", marker = "extra == 'trimesh'", specifier = ">=5.2.1,<6" },
     { name = "uv", specifier = ">=0.13.8" },
 ]
-provides-extras = ["build123d", "kicad", "netgen", "calculix", "trimesh", "mujoco", "coacd", "blender"]
+provides-extras = ["build123d", "kicad", "netgen", "calculix", "trimesh", "mujoco", "coacd", "blender", "quiddity"]
 
 [[package]]
 name = "cad-ccx"
@@ -2136,6 +2140,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/18/39/b3927f3616f6223832f9b760e4208e8a7c7e1dea2b4d9ad7d32a5d214c3a/python_dateutil-4.0.0.tar.gz", hash = "sha256:d7295ff14fdc0f92f662100bfb6c551d160ca090f2939f1ec5b9794265c03f06", size = 250419, upload-time = "2026-11-01T07:02:42.426Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2f/a9/52b89563d154433d79b51ed1eb4842bf7334cb2696891a7fe135618853d7/python_dateutil-4.0.0-py3-none-any.whl", hash = "sha256:a5e246f79eb80475e691bf93862cead98decd8a498cf53ba0516fcdc0f50dc1c", size = 92853, upload-time = "2026-11-01T07:02:40.797Z" },
+]
+
+[[package]]
+name = "quiddity"
+version = "0.5.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e9/12/6c4aace160fd3c7784fa467f40ba0ae2af6374d979e904d4f92f672e3758/quiddity-0.5.5.tar.gz", hash = "sha256:ef980516223566095b5f139458de42379cc6ece5da83f101eeb0a99f2eb406e6", size = 1738495, upload-time = "2026-11-21T08:59:22.62Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/76/5c/3fa01be8f0ae69114b34505b5978647a24feaa3cb9133dce6af8a663615b/quiddity-0.5.5-cp311-abi3-macosx_10_12_x86_64.whl", hash = "sha256:5ec201dcae22d011fa7be5295823b44640db62d0a0c2e1aba1b3b7853c896dfe", size = 8813678, upload-time = "2026-11-21T08:59:11.939Z" },
+    { url = "https://files.pythonhosted.org/packages/10/45/1f094f49f745e702007f06ece1e0b86751438259763231a941629162c933/quiddity-0.5.5-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:9dd190e9d17d8b193e28918c513a46375429adb4c054f85380b7102371e78963", size = 8185488, upload-time = "2026-11-21T08:59:14.479Z" },
+    { url = "https://files.pythonhosted.org/packages/75/34/56c4199d439e93a94dd3fe61add1f54b0633c9ec35d37ccb08dbe8adffb8/quiddity-0.5.5-cp311-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:9b8d5026758d7700e1cda19c6747fe35c8aa4e8201bc856d6aae0ff932962f1a", size = 8436878, upload-time = "2026-11-21T08:59:16.422Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/a9/bfd9dab814221662aad85e5a48459fc7543fab922ab1bef024e7dede77d7/quiddity-0.5.5-cp311-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:dbaa881d60a5d178f75646f659f56af8ff5701a0a27b42783e242774a578664e", size = 9243040, upload-time = "2026-11-21T08:59:18.585Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/d4/3248d9761223acebf93da288a99b5091f12d165be2c54ee92f425b5900c6/quiddity-0.5.5-cp311-abi3-win_amd64.whl", hash = "sha256:f7ad6fa8e1d50c7d222f08b9bad15187223ef4e8d3d8bc40013064535bb52cd3", size = 9364754, upload-time = "2026-11-21T08:59:20.582Z" },
 ]
 
 [[package]]

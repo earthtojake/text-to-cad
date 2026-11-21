@@ -142,6 +142,15 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertIsNone(integrations.for_command("bpy"))
         self.assertEqual(integrations.missing(ModuleNotFoundError("no bpy", name="bpy")),
                          "bpy comes with cad's blender integration: add `cad[blender]` to the script's header")
+        # quiddity is asked about a part's shape, the kernel's, always in a process of its own: its extra is
+        # quiddity alone (no kernel beside it in the environment the engine makes for it), it has no operation and
+        # no command of its own, and a program's import of it, or of cad's namespace for it, finds the integration.
+        quiddity = registry.INTEGRATIONS["quiddity"]
+        self.assertEqual((quiddity.extra, quiddity.process, quiddity.operations, quiddity.commands, quiddity.alongside),
+                         ("quiddity", "separate", (), (), ()))
+        self.assertEqual(("quiddity", "quiddity", "quiddity"),
+                         (integrations.for_module("quiddity"), integrations.for_distribution("quiddity"),
+                          integrations.for_name("cad.quiddity.features")))
         self.assertEqual(["macOS x86-64", "Linux arm64", "Windows x86-64", "macOS arm64"],
                          [registry.platform_of(*given) for given in (("darwin", "x86_64"), ("linux", "aarch64"),
                                                                      ("win32", "AMD64"), ("darwin", "arm64"))])

@@ -935,6 +935,33 @@
       "python": null,
       "platforms": [],
       "program": null
+    },
+    {
+      "name": "quiddity",
+      "summary": "quiddity, the feature recogniser for a STEP part: cad.quiddity.features hands it one part of a document and answers its holes and its other features, each face by its ordinal on the part and checked against the kernel, always in a process of its own that is stopped past a time limit (quiddity has none), and says so plainly where nothing could be measured",
+      "extra": "quiddity",
+      "process": "separate",
+      "operations": [],
+      "files": [],
+      "modules": [
+        "quiddity"
+      ],
+      "distributions": [
+        "quiddity"
+      ],
+      "commands": [],
+      "holds": "quiddity's feature recogniser",
+      "downloadMb": 10,
+      "alongside": [],
+      "python": null,
+      "platforms": [
+        "macOS arm64",
+        "macOS x86-64",
+        "Linux x86-64",
+        "Linux arm64",
+        "Windows x86-64"
+      ],
+      "program": null
     }
   ]
 }

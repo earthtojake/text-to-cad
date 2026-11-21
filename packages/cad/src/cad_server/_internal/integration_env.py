@@ -14,7 +14,8 @@ Python runs the library's runner of one operation (``cad._internal.operation``),
 stdin and answering it on stdout; what the operation says beside goes to stderr as it comes.
 
 A process that needs an integration its environment lacks -- a MuJoCo function's decomposition of a part's
-collision, the coacd integration's (``cad.engine.hulls``, for ``cad.mujoco.decompose``) -- asks the device's engine for it over the door
+collision, the coacd integration's (``cad.engine.hulls``, for ``cad.mujoco.decompose``); a part's features, the
+quiddity integration's (``cad.quiddity._process``) -- asks the device's engine for it over the door
 (``{"op": "integration", "integration"}``, ``made``), which makes the same environment the same way, and runs
 the integration's code there in a process of its own.
 

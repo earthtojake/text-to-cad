@@ -387,6 +387,11 @@ class ChoosingTest(unittest.TestCase):
                 ("from cad.model import solve\n", {"build123d", "calculix", "netgen"}),
                 ("import cad_ccx\ncad_ccx.run('job.inp')\n", {"calculix"}),
                 ("from cad.calculix import _program\n", {"calculix"}),
+                # A part's features are quiddity's, asked about a shape the program made with the kernel it
+                # imports itself; quiddity alone is its own.
+                ("import build123d as bd\nfrom cad import quiddity\nquiddity.features(bd.Box(1, 2, 3))\n",
+                 {"build123d", "quiddity"}),
+                ("import quiddity\nquiddity.recognise('p.step')\n", {"quiddity"}),
                 # The engine runs a type's export, snapshot and inspect: the program needs none of its own.
                 ("from cad import step\nstep.export('p.step', 'p.glb')\n", set()),
                 ("from cad import export\nexport('p.xbf', 'p.step')\n", set()),
