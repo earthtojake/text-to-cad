@@ -3,6 +3,7 @@ import { after, before, test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { harnessBundle } from '../harness/bundle.mjs';
+import { pressInPreview } from '../harness/preview.mjs';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
 import { fitPlotTransform, layoutPlot, pageToScreen } from '@cad/core/lib/plot2d/plot.js';
@@ -190,12 +191,12 @@ test('in 3D the board is its two faces in the 2D colours, a press on a pad’s p
   const pill = flat.at(-1);
   const stage = await pane.locator('[data-cad-canvas]').first().boundingBox();
   const strip = await pane.getByRole('group', { name: 'Interaction tools' }).boundingBox();
-  assert.equal(flat.length, 2, 'the zoom in the corner, and View in the navbar');
+  assert.equal(flat.length, 3, 'the zoom in the corner, and View and Preview in the navbar');
   assert.deepEqual([pill.height, stage.x + stage.width - pill.x - pill.width, Math.round(pill.y + pill.height / 2 - (strip.y + strip.height / 2))],
     [28, 12, 0], `the zoom: one control 28px tall, 12px in from the right, on the strip's middle line: ${JSON.stringify({ pill, strip })}`);
   assert.deepEqual(await pane.locator('[data-zoom-pill] button').evaluateAll(buttons => buttons.map(button => button.textContent)), ['100%'], 'no − or +');
-  // View: the navbar's 28px button, over the view, not on it.
-  assert.deepEqual(flat.slice(0, 1).map(button => [button.height, button.y + button.height <= stage.y]), [[28, true]], 'the view settings the navbar\'s');
+  // View, then Preview: the navbar's 28px buttons, over the view, not on it.
+  assert.deepEqual(flat.slice(0, 2).map(button => [button.height, button.y + button.height <= stage.y]), [[28, true], [28, true]], 'the view settings the navbar\'s');
   // The percentage opens the zoom's menu under it, the zoom's commands alone.
   await pane.locator('[data-zoom-pill] [data-zoom-control]').click();
   const zoomMenu = page.getByRole('menu', { name: 'Zoom' });
@@ -439,6 +440,50 @@ test('in 3D a part stands its model, a press on its body picks the part rather t
   await page.mouse.click(box.x + x, box.y + y);
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().selection[0]?.target.selectors[0] === '#R1.2');
   assert.deepEqual(await picked(), ['#R1.2']);
+  assert.deepEqual(errors, []);
+});
+
+test('Preview draws the board lit in a view of its own: its cover lifts on the studio\'s picture of the board with its part on it, Orbit turns it, and leaving gives the 2D view back as it was', async (t) => {
+  // R1's model is the bracket, a tenth its size, standing on the front face (z = 0), over it.
+  const name = '${KIPRJMOD}/bracket.step';
+  const plot = structuredClone(BOARD);
+  plot.board.parts.find(part => part.ref === 'R1').models = [{ name, offset: [0, 0, 0.2], scale: [0.1, 0.1, 0.1] }];
+  served = { plot, models: { [name]: { file: 'bracket.step', document: BRACKET_ID, api: '/api/v1/documents/step/bracket', stamp: '1-1' } } };
+  t.after(() => { served = { plot: BOARD, models: null }; });
+  const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
+  t.after(() => page.close());
+  page.setDefaultTimeout(30000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; window.__cadPromptDestination = 'clipboard'; });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb`);
+  const pane = page.getByTestId('one');
+  const flat = await frame(pane);
+  // Preview is the navbar's, right of View; a press covers the view, and the cover lifts on Preview's own view.
+  await pane.locator('[data-navbar-view-controls] [data-view-menu] + [data-view-preview]').click();
+  await pane.locator('[data-preview-cover]').waitFor();
+  await page.waitForFunction(() => document.querySelector('[data-preview-view] canvas') && !document.querySelector('[data-preview-cover]'));
+  // Render's studio, in perspective, round the slab with the part's body on it, its floor under the board's back.
+  const { stage, camera } = await page.evaluate(() => ({ stage: window.__cadStage(), camera: window.__cadCamera() }));
+  assert.ok(stage.studioGround, `the studio: ${JSON.stringify(stage)}`);
+  assert.equal(camera.projection, 'perspective');
+  assert.deepEqual([stage.bounds.min[2], stage.bounds.max[2] > 1, stage.studioGroundZ], [-1.6, true, -1.6], `the slab and the body on it, on the floor: ${JSON.stringify(stage)}`);
+  // The view on screen is Preview's (a live capture is of it): the board's face on the slab, its track in KiCad's red, lit.
+  const shot = PNG.sync.read(Buffer.from(await page.evaluate(async () => {
+    const bytes = new Uint8Array(await (await window.cadHarness.a.controller.capture()).arrayBuffer());
+    return btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''));
+  }), 'base64'));
+  let track = 0;
+  for (let offset = 0; offset < shot.data.length; offset += 4) if (red([shot.data[offset], shot.data[offset + 1], shot.data[offset + 2]])) track += 1;
+  assert.ok(track > 50, `the track on the lit face: ${track} red pixels`);
+  // Orbit, from Preview's settings, turns the camera about the board.
+  await pressInPreview(page, pane, pane.locator('[data-preview-settings]'));
+  await pane.locator('[data-preview-settings-panel]').getByRole('checkbox', { name: 'Orbit' }).click();
+  await page.waitForFunction(from => { const now = window.__cadCamera(); return now?.settling && Math.hypot(now.position[0] - from[0], now.position[1] - from[1]) > 1; }, camera.position);
+  // Escape leaves: Preview's view goes, and the 2D view is the picture it was.
+  await page.keyboard.press('Escape');
+  await pane.locator('[data-preview-view]').waitFor({ state: 'detached' });
+  assert.ok((await frame(pane)).shot.equals(flat.shot), 'the 2D view as it was left');
   assert.deepEqual(errors, []);
 });
 

@@ -3,6 +3,7 @@ import { useControlUsage } from "../../usage/controls.js";
 import { useViewportTheme } from "../kit/look/useViewportTheme.js";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BOARD_THICKNESS_MM, headOnCamera, sideSeenAlong } from "@cad/core/lib/board3d/boardFrame.js";
+import { VIEWER_SCENE_SCALE } from "@cad/core/lib/viewer/sceneScale.js";
 import { cn } from "@cad/ui/utils";
 import { boardOverlayColors, drawBoardOverlay } from "@cad/core/lib/board2d/boardOverlay.js";
 import { buildBoardRefToken, formatBoardRefSelector, parseBoardRefSelector, splitBoardRefSelectors } from "@cad/core/lib/boardRefs.js";
@@ -10,7 +11,7 @@ import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
 import { planCamera } from "@cad/core/lib/drawing2d/planView.js";
 import { screenToModel } from "@cad/core/lib/drawing2d/index.js";
 import {
-  boardDisplayAirwires, boardDrawView, boardMirrorX, boardPlanProjection, marksInPlan, nextBoardOthers, planToSheet
+  boardDisplayAirwires, boardDrawView, boardMirrorX, boardPalette, boardPlanProjection, marksInPlan, nextBoardOthers, planToSheet
 } from "@cad/core/lib/plot2d/index.js";
 import { useViewerHost } from "../../host/context.js";
 import { useViewerMobile } from "../../file-viewer/responsive.js";
@@ -18,6 +19,7 @@ import { annotationAt, withGroups } from "../../annotation/geometry.js";
 import { promptView } from "../../annotation/views.js";
 import FlatViewFrame, { flatViewTools } from "../kit/shell/FlatViewFrame.jsx";
 import { useFlatHandover, useFlatTools } from "../kit/shell/useFlatView.js";
+import { useFlatPreview } from "../kit/shell/useFlatPreview.jsx";
 import { readFileView, writeFileView } from "../kit/shell/fileView.js";
 import { exitIsolateEntry, menuEntry, menuGroups, pickGroup, referenceGroup, zoomGroup } from "../kit/shell/viewMenu.js";
 import AnnotationOverlay from "../kit/tools/annotate/AnnotationOverlay.jsx";
@@ -52,6 +54,9 @@ import { useBoardModels } from "./useBoardModels.js";
 
 // The board in 3D, its own chunk: a board shown in 2D loads no three.js.
 const Board3dView = lazy(() => import("./Board3dView.jsx"));
+// The board's Preview, its own chunk too, loaded as Preview is first entered (`BoardPreviewView.jsx`).
+const BoardPreviewView = lazy(() => import("./BoardPreviewView.jsx"));
+const BoardPreview = props => <Suspense fallback={null}><BoardPreviewView {...props} /></Suspense>;
 
 /**
  * A KiCad board as the picture drawn from its file, on a canvas, head on, as a drawing is: in
@@ -106,6 +111,14 @@ const Board3dView = lazy(() => import("./Board3dView.jsx"));
  * from the side Flip showed, its window kept as a Flip in 2D keeps it (the board in 3D up until the flat
  * canvas has painted it). Which of the two is up, and the 3D camera and projection, are the file's view
  * (`board3d`).
+ *
+ * **Preview**, as every 3D file's (`kit/shell/useFlatPreview.jsx`, the frame's `usePreviewFrame.jsx`): its button
+ * after View, and while it is up the whole page Preview's — the board as it is made, lit, in a view of its own
+ * (`BoardPreviewView.jsx`, a lazy chunk), under Preview's bar, with its settings (Orbit, Render's lighting, background
+ * and floor; no Part colours: a board's colours are its picture's). It is an addition: the working view, 2D or 3D,
+ * stays mounted under it exactly as it was (its window or camera, its Display, the tool in hand, what is picked,
+ * isolated, measured and drawn), and comes back as Preview closes. Preview's settings and Orbit's speed are the
+ * file's (`preview`, `playback` of its view).
  */
 
 const SAVE_DELAY_MS = 180;
@@ -177,12 +190,12 @@ function BoardSurface({ view, data }) {
   const [dimension, setDimension] = useState(restored3d.mode);
   const [projection, setProjection] = useState(restored3d.projection);
   const [showModels, setShowModels] = useState(restored3d.models);
-  const saved = useRef({ camera: restored, display, isolated: restoredIsolation, board3d: restored3d });
+  const saved = useRef({ camera: restored, display, isolated: restoredIsolation, board3d: restored3d, preview: stored.preview, playback: stored.playback });
   const storedRef = useRef("");
   const saveTimer = useRef(0);
   const stateChangeRef = useRef(view.onStateChange);
   stateChangeRef.current = view.onStateChange;
-  const recordOf = ({ camera, display: board, isolated, board3d }) => writeFileView({ camera,
+  const recordOf = ({ camera, display: board, isolated, board3d, preview, playback }) => writeFileView({ camera, preview, playback,
     renderer: { board, isolated: { selectors: [...isolated] }, board3d }, signatures: SLICES });
   const save = useCallback(change => {
     saved.current = { ...saved.current, ...change };
@@ -196,7 +209,7 @@ function BoardSurface({ view, data }) {
   // A view that is still the fit stores no camera: `null` is "fit me".
   const rememberView = useCallback(moved => save({ camera: readFlatView(moved) }), [save]);
   const remember3d = useCallback(change => save({ board3d: { ...saved.current.board3d, ...change } }), [save]);
-  useEffect(() => { storedRef.current = JSON.stringify(recordOf({ camera: restored, display, isolated: restoredIsolation, board3d: restored3d })); }, []);
+  useEffect(() => { storedRef.current = JSON.stringify(recordOf(saved.current)); }, []);
   useEffect(() => { save({ display, isolated: isolation.isolated }); }, [display, isolation.isolated, save]);
   useEffect(() => { remember3d({ mode: dimension, projection, models: showModels }); }, [dimension, projection, showModels, remember3d]);
   // Gone with a write still pending (a file left at once, a view its boundary took down): written now, not dropped,
@@ -206,6 +219,22 @@ function BoardSurface({ view, data }) {
     window.clearTimeout(saveTimer.current);
     stateChangeRef.current?.(recordOf(saved.current));
   }, []);
+
+  // ---- Preview: the board as it is made, lit, in a view of its own ---------------
+  // Offered where 3D is (a board read with its layers); its view is built as it opens, from the plot, the parts and
+  // the models table (`BoardPreviewView.jsx`), which says while the parts' bodies are still arriving (`complete`).
+  const previewable = Boolean(layered && plot);
+  // The parts the 3D views stand models on: the index's (page millimetres, as the stage's outline is), each with its models.
+  const boardParts = useMemo(() => (index ? [...index.parts.values()] : null), [index]);
+  const [previewComplete, setPreviewComplete] = useState(true);
+  const previewLayout = plot?.layout, previewOutline = plot?.board?.outline ?? null, previewClient = workspace.client;
+  const previewView = useMemo(() => (previewable ? { layout: previewLayout, outline: previewOutline, thickness, parts: boardParts, models,
+    client: previewClient, showModels, colorScheme, complete: previewComplete, onComplete: setPreviewComplete } : null),
+  [previewable, previewLayout, previewOutline, thickness, boardParts, models, previewClient, showModels, colorScheme, previewComplete]);
+  const preview = useFlatPreview({ fileView: view, modelKey: file, viewport, restored: stored, View: BoardPreview, view: previewView,
+    stageColor: boardPalette(colorScheme).background, sceneScaleMode: VIEWER_SCENE_SCALE.CAD, offered: previewable, available: previewable && shown, mobile,
+    partColours: false, onRecordChange: save });
+  const previewing = preview.previewing;
 
   // ---- tools ----------------------------------------------------------------
   const tools = useFlatTools({ toolModes: BOARD_TOOL_MODES, file, revision: workspace.resource.revision, ready: Boolean(index) });
@@ -486,7 +515,9 @@ function BoardSurface({ view, data }) {
   const [closing3d, setClosing3d] = useState(false);
   const boardView = useBoardView({
     plot, restored, colorScheme, onViewMoved: rememberView, drawView, overlay, onTap: handlers.tap, onHover: handlers.hover,
-    paused: dimension === "3d" && shown3d
+    paused: dimension === "3d" && shown3d,
+    // Under Preview the flat canvas is left exactly as it is: the page's chrome goes and comes back round it.
+    suspended: previewing
   });
   viewRef.current = boardView;
   useFlatBoxSelect(boardView, { enabled: toolMode === BOARD_TOOL.SELECT && dimension === "2d" && Boolean(index), onBox: handlers.box });
@@ -588,7 +619,7 @@ function BoardSurface({ view, data }) {
   useMeasureOverlay({
     measureCanvasRef, measureState: measure.state, activeMeasurementId: measure.activeId,
     selectedMeasurementIds: measure.selected, hoveredMeasurementId: measure.hovered, measureHoverRef,
-    measureModeActive: measuring, runtimeRef: measureRuntimeRef, mountRef: containerRef, preview: false, viewerReadyTick: 0
+    measureModeActive: measuring, runtimeRef: measureRuntimeRef, mountRef: containerRef, preview: previewing, viewerReadyTick: 0
   });
 
   // Settled is this revision's board painted: a capture waits out an update.
@@ -648,11 +679,12 @@ function BoardSurface({ view, data }) {
       if (!solid) throw new Error(BOARD_NO_CAMERA);
       solid.setCamera(camera);
     },
-    resetCamera() { fit(); },
+    // Framed again, and captured: the view on screen, which is Preview's while it is up.
+    resetCamera() { if (previewing) preview.viewRef.current?.resetZoom?.(); else fit(); },
     setDisplaySettings() { throw new Error(BOARD_NO_DISPLAY); },
     select: selectList,
     clearSelection() { selectionRef.current.clear(); },
-    capture,
+    capture: () => (previewing && preview.viewRef.current?.captureScreenshotBlob ? preview.viewRef.current.captureScreenshotBlob() : capture()),
     thumbnail
   };
   // Ctrl+H (⌘H), as KiCad's: the other layers shown, dimmed, hidden, and round again.
@@ -676,7 +708,9 @@ function BoardSurface({ view, data }) {
       if (shortcutOfEvent(event) !== BOARD_FLIP_SHORTCUT) return false;
       chooseSide(displayRef.current.side === "bottom" ? "top" : "bottom");
       return true;
-    }
+    },
+    // In Preview the keys are Preview's: Escape leaves it, and the tools', the view's and the zoom's do nothing.
+    previewing, leavePreview: preview.leave
   });
 
   // ---- the menu: a secondary tap on the board, under Select (`kit/shell/viewMenu.js`'s groups) ----
@@ -763,8 +797,6 @@ function BoardSurface({ view, data }) {
     onSide: chooseSide, projection: solid ? { value: projection, onChange: setProjection } : null,
     background: { value: viewport.background, onChange: viewport.setBackground }, onReset: home3d }) : [];
   const resetView = home3d || (() => zoom.fit?.());
-  // The parts the 3D view stands models on: the index's (page millimetres, as the stage's outline is), each with its models.
-  const boardParts = useMemo(() => (index ? [...index.parts.values()] : null), [index]);
   return (
     <FlatViewFrame surface={BOARD_SURFACE} viewport={viewport} containerRef={containerRef} busy={document.loading || document.updating}
       file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed} loading={document.loading} loadingLabel={t("board.text.reading_board")}
@@ -772,22 +804,23 @@ function BoardSurface({ view, data }) {
       panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload} canvasRef={activeCanvasRef} contextMenuItems={contextMenuItems}
-      zoom={zoom} inspect={inspect}>
-      {/* In 3D the flat canvas takes no pointer: until the board in 3D is up it shows the picture that opens it. */}
+      zoom={zoom} inspect={inspect} preview={preview}>
+      {/* In 3D the flat canvas takes no pointer: until the board in 3D is up it shows the picture that opens it. Under
+          Preview the working view is out of sight, kept as it is: Preview's own Background may be see-through. */}
       <canvas ref={canvasRef} aria-label={t("board.text.board_file", { file: view.file.name })} role="img" data-board-tool={toolMode}
-        className={cn("absolute inset-0 block touch-none select-none", cursor, solid && "pointer-events-none", solid && shown3d && "invisible")} />
+        className={cn("absolute inset-0 block touch-none select-none", cursor, solid && "pointer-events-none", ((solid && shown3d) || previewing) && "invisible")} />
       {/* The board in 3D, unseen over the flat canvas until it has drawn the same picture, which then lets its rasters
           go; leaving, over it until it has painted the window it is handed. */}
       {mounted3d ? <Suspense fallback={null}>
         <Board3dView handle={view3dRef} viewerRef={viewer3dRef} modelKey={`${file}#3d`} layout={plot.layout} outline={plot.board?.outline ?? null}
           thickness={thickness} parts={boardParts} models={models} client={workspace.client} showModels={showModels} bodyInk={bodyInk} pickPart={handlers.pickPart}
           display={display} colorScheme={colorScheme} opening={opening} projection={projection} pickAt={handlers.pickLocated}
-          onTap={handlers.tap} onHover={handlers.hover} picking={Boolean(index) && !annotating} shown={shown3d || !opening.flat}
+          onTap={handlers.tap} onHover={handlers.hover} picking={Boolean(index) && !annotating && !previewing} suspended={previewing} shown={(shown3d || !opening.flat) && !previewing}
           overlay={overlay} onCamera={onCamera3d} onShown={() => { if (dimensionRef.current === "3d") setShown3d(true); }} />
       </Suspense> : null}
       {/* Measure's layer, over the board and under the tools: the pointer stays the board's. */}
-      <canvas ref={measureCanvasRef} className="pointer-events-none absolute inset-0 z-[1] h-full w-full" aria-hidden="true" data-scene-measure="" />
-      {annotating && shown && index ? <AnnotationOverlay annotation={annotation} surface={annotationSurface} viewOf={currentView} /> : null}
+      <canvas ref={measureCanvasRef} className={cn("pointer-events-none absolute inset-0 z-[1] h-full w-full", previewing && "invisible")} aria-hidden="true" data-scene-measure="" />
+      {annotating && shown && index && !previewing ? <AnnotationOverlay annotation={annotation} surface={annotationSurface} viewOf={currentView} /> : null}
     </FlatViewFrame>
   );
 }

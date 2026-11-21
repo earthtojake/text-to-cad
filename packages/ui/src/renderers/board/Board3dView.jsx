@@ -62,9 +62,11 @@ const POINTER_ONLY = Object.freeze({ pick: () => null });
  *   picking: boolean, overlay(ctx: CanvasRenderingContext2D, frame: object): boolean,
  *   onCamera(camera: object, side: "top" | "bottom"): void, onShown(): void }} props
  *   `shown`: the board view shows this canvas in place of the flat one (after `onShown`).
+ *   `suspended`: the view is covered (the board's Preview is up over it): it draws nothing, and what it owes as it is uncovered.
  */
 export default function Board3dView({ handle, viewerRef, modelKey, layout, outline, thickness = BOARD_THICKNESS_MM, display, colorScheme, opening, projection, shown = false,
-  pickAt, onTap, onHover, picking, overlay, onCamera, onShown, parts = null, models = null, client = null, showModels = true, bodyInk = null, pickPart = null }) {
+  pickAt, onTap, onHover, picking, overlay, onCamera, onShown, parts = null, models = null, client = null, showModels = true, bodyInk = null, pickPart = null,
+  suspended = false }) {
   const live = useRef(null);
   live.current = { pickAt, onTap, onHover, overlay, onCamera, onShown, display, colorScheme, client, bodyInk, pickPart };
   // The viewport the 3D views' overlay is handed: its runtime, and the element its pointer events arrive on.
@@ -322,7 +324,7 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
   // Unseen until shown: see-through (the viewport's cover with it) and deaf to the pointer, over the flat canvas.
   return <div ref={frameRef} className={shown ? "absolute inset-0 z-0" : "pointer-events-none absolute inset-0 z-0 opacity-0"} data-board-3d="">
     <ShellViewport ref={viewerRef} scene={stage} modelKey={modelKey} sceneScaleMode={SCALE} perspective={initial} {...props}
-      viewCube={false} onPerspectiveChange={perspectiveChange} onPresentationChange={presentation} onCameraSettled={requestPaint}>{children}</ShellViewport>
+      viewCube={false} suspended={suspended} onPerspectiveChange={perspectiveChange} onPresentationChange={presentation} onCameraSettled={requestPaint}>{children}</ShellViewport>
   </div>;
 }
 

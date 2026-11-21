@@ -30,27 +30,13 @@ import { DISPLAY_MODE_OPTIONS } from "../view-settings/DisplayModeOptions.js";
 import { normalizeViewFeatures } from "@cad/core/common/viewSettings.js";
 import { useWhenSettled } from "./useWhenSettled.js";
 import { useControlUsage, useToolControl } from "../../../usage/controls.js";
+import { usePreviewState } from "./usePreviewState.js";
 
 // A Preview setting's group and field, as one control's name: `preview_lighting_exposure`.
 const previewControl = (group, field) => `preview_${group}_${field.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)}`;
 
 
-/**
- * Preview mode's one state: the viewer with its tools put away, the model drawn in Render, where its
- * routines play and it orbits on request. The shell holds it unless the renderer passes it in
- * (`useRendererShell`'s `preview`).
- * `now()` is the state as last set, before React renders it: what a command preview's own crossing
- * calls (its routine played on the way in) asks of it.
- * @returns {{ previewing: boolean, set: (previewing: boolean) => void, now: () => boolean }}
- */
-
-export function usePreviewState() {
-  const [previewing, setPreviewing] = useState(false);
-  const latest = useRef(false);
-  const set = useCallback(next => { latest.current = Boolean(next); setPreviewing(Boolean(next)); }, []);
-  const now = useCallback(() => latest.current, []);
-  return useMemo(() => ({ previewing, set, now }), [previewing, set, now]);
-}
+export { usePreviewState };
 
 /**
  * What the viewport reports it is previewing (`ShellViewport`'s `onPresentationChange`): the file, the

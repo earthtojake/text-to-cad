@@ -28,7 +28,9 @@ import { useWhenSettled } from "./useWhenSettled.js";
  * Select picked, ⌘Z walks the history, a tool's letter takes it up and F fits, ⌘\ shows or hides the
  * view's panel and / opens it on its search (`panelControl`, which the frame fills in), the copy key copies
  * the annotated view while a drawing tool is up, else what `copySelection` copies), a host's capture
- * request, the live binding, and the alert card with its dismissal.
+ * request, the live binding, and the alert card with its dismissal. While the view is in Preview (`previewing`, a view
+ * that offers it: `useFlatPreview.jsx`) the keys are Preview's, as in every view: Escape leaves it, once an open
+ * dropdown has closed, and the tools', the zoom's, Delete, undo and the copy key do nothing.
  */
 
 /** A flat view's tools: the ids the strip and the tool modes share. */
@@ -88,9 +90,11 @@ export function useFlatTools({ toolModes, file, revision, ready }) {
  * @param {((event: KeyboardEvent) => boolean) | null} [options.onViewKey]  A single key of the view's own (a
  *   view drawn flat or in 3D switching between them, or one seen from two sides turning over: View's Mode
  *   and Side keys, 3 and ⇧F), tried before the tools' letters; true when it took it.
+ * @param {boolean} [options.previewing]  The view is in Preview: its tools are put away, and so are their keys.
+ * @param {(() => void) | null} [options.leavePreview]  Escape's, while it is.
  */
 export function useFlatHandover({ view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
-  capture, currentView, annotationDocument, runtime, live, copySelection = null, fit, captureFailed, packetReferences = null, onChord = null, onViewKey = null }) {
+  capture, currentView, annotationDocument, runtime, live, copySelection = null, fit, captureFailed, packetReferences = null, onChord = null, onViewKey = null, previewing = false, leavePreview = null }) {
   const host = useViewerHost();
   const destination = usePromptDestination();
   const viewerElement = useContext(ViewerElementContext);
@@ -165,6 +169,7 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
   const clearQuickEdit = () => { selection.clear(); measure.select([]); if (annotation.hasAnnotation) annotation.forget(); };
   // A drawing tool's copy: the picture with its ink, to the clipboard; otherwise the view's own (its selection).
   const copyAction = () => {
+    if (previewing) return false;
     if (annotating) {
       if (!shown) return false;
       void host.clipboard.writeImage(capture()).catch(error => setActionError(error instanceof Error ? error.message : String(error)));
@@ -194,6 +199,7 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
   useViewerShortcuts({
     viewerElement,
     onChord: event => {
+      if (previewing) return false;
       if ((event.code === "Backslash" || event.key === "\\") && !event.shiftKey && panelControl.current) {
         panelControl.current.toggle();
         return true;
@@ -202,22 +208,25 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
     },
     onCopy: () => copyAction(),
     onDelete: () => {
-      if (annotating) return false;
+      if (annotating || previewing) return false;
       const session = annotationRef.current;
       const ink = session.selected.length > 0;
       if (ink) session.remove(session.selected);
       return Boolean(measureRef.current.removeSelected()) || ink;
     },
-    onUndo: () => history.undo(),
-    onRedo: () => history.redo(),
-    // A tool's letter takes it up, F fits the picture (`toolShortcuts.js`), over the strip as drawn.
-    onKey: event => (event.key === "/" && !event.shiftKey && panelControl.current ? panelControl.current.search()
+    // ⌘Z and ⇧⌘Z walk the view's history; never in Preview.
+    onUndo: () => !previewing && history.undo(),
+    onRedo: () => !previewing && history.redo(),
+    // A tool's letter takes it up, F fits the picture (`toolShortcuts.js`), over the strip as drawn; never in Preview.
+    onKey: event => (previewing ? false : event.key === "/" && !event.shiftKey && panelControl.current ? panelControl.current.search()
       : shown && (viewKeyRef.current?.(event) === true
       || pressToolKey(event, { tools: toolKeys.current, selectDrawing: tool => annotationRef.current.selectTool(tool), fit }))),
-    zoom: () => (shown ? zoomKeys.current : null),
-    escapeActive: Boolean(selection.active || measure.drafting || measure.selected.length || annotation.selected.length || !selecting),
+    zoom: () => (shown && !previewing ? zoomKeys.current : null),
+    escapeActive: Boolean(previewing || selection.active || measure.drafting || measure.selected.length || annotation.selected.length || !selecting),
     onEscape(event) {
+      // A popup opened in this viewer (a menu, a Select, a colour picker) owns Escape before Preview.
       if (hasOpenPopup(viewerElement?.current)) return;
+      if (previewing) { leavePreview?.(); return; }
       // The drawing tools' layer spends its own Escape (its editor, the stroke in hand).
       if (annotating && event.target instanceof Element && event.target.closest("[data-cad-annotation-overlay]")) return;
       if (letGo()) return;

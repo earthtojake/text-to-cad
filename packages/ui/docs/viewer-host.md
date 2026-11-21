@@ -159,10 +159,12 @@ renderer's list adds a prop or a slot to those, never a row of its own
 ## Preview and renderer navigation actions
 
 Preview is the shared shell's own state (`previewing`); there is no host
-prop for it and a host cannot start or observe it. It is a 3D view's alone, and each
+prop for it and a host cannot start or observe it. It is a 3D view's, and each
 renderer says whether its view is one: it declares `previewable` to the shell
-(`useRendererShell`), as an engine document (an `.xbf`, a STEP), GLB, STL/3MF and URDF/SRDF do. A view that does
-not — a DXF's 2D drawing, which draws its own surface without the shell — has no
+(`useRendererShell`), as an engine document (an `.xbf`, a STEP), GLB, STL/3MF and URDF/SRDF do. A KiCad board has it
+too, the board shown in 3D as it is made, lit (`kit/shell/useFlatPreview.jsx`): the same state, button, bar and
+settings, with nothing more for a host to do. A view that does
+not — a DXF's 2D drawing or a schematic, which draw their own surface without the shell — has no
 Preview at all, no control and not a disabled one, and nothing that asks for it
 (a link or a host request, should either come to) takes it there: it keeps
 the normal view. The CAD app's Full size, inline, is the host's display mode, not
@@ -629,7 +631,7 @@ it over the model as a floating card, pushing nothing, and only the toggle pins 
 top-right the camera's own control alone: the view cube (a 68px box at the corner's 12px inset), or a flat view's
 "100%" zoom dropdown. Under a file's navbar the view's settings are its right end for every kind of file — **View**,
 one menu (a 3D view's Projection, Display, Background, Show grid and Reset view; a board's Side, Mode, Display, in 3D
-Projection, Background and Reset view; a drawing's Background, `ViewSettingsMenu.jsx`), then a 3D view's Preview: the
+Projection, Background and Reset view; a drawing's Background, `ViewSettingsMenu.jsx`), then a 3D view's or a board's Preview: the
 file viewer draws a view slot there (`file-viewer/navbarSlots.js`'s `NavbarViewSlotContext`) and the view portals them
 in (`NavbarViewControls.jsx`). On a phone the slot holds the same View and Preview, the picture has no cube or zoom,
 and the panel is a sheet from the left (shadcn's Sheet, portalled into the viewer's element:

@@ -71,9 +71,10 @@ function Palette({ colors, onChange }) {
 /**
  * Preview's own settings (Render's part colours, lighting, background and floor), every one visible
  * without opening sections. `settings` is Preview's sparse settings; `display` the file's, for the
- * appearance it pins.
+ * appearance it pins. `partColours`: false for a view whose scene wears no surface look (its picture is its
+ * colours): the Part colours section, which would change nothing there, is left out.
  */
-export function PreviewRenderSettings({ settings = {}, display = {}, appearance = "light", lightingQuality = "preview", onPatch, onReset }) {
+export function PreviewRenderSettings({ settings = {}, display = {}, appearance = "light", lightingQuality = "preview", partColours = true, onPatch, onReset }) {
   const { t } = useI18n();
   const options = { appearance: display?.appearance ?? (appearance === "dark" ? "dark" : "light"), lightingQuality };
   const look = resolvePreviewSettings(settings, options);
@@ -83,13 +84,13 @@ export function PreviewRenderSettings({ settings = {}, display = {}, appearance 
   return <div className="flex min-h-0 flex-1 flex-col">
     <ScrollArea className="min-h-0 flex-1">
       <div className="px-3 py-1">
-        <FileSheetSettingsSection title={t("render.partColours")}>
+        {partColours ? <FileSheetSettingsSection title={t("render.partColours")}>
           <Choice label={t("render.source")} name={t("render.colourSource")} value={look.parts.colorMode} options={[["original", t("render.source.original")], ["single", t("render.source.single")], ["by-part", t("render.source.byPart")]]}
             onChange={colorMode => patch("parts", { colorMode })} />
           {look.parts.colorMode === "by-part"
             ? <Palette colors={look.parts.colors} onChange={colors => patch("parts", { colors })} />
             : color("parts", t("render.partColour"), look.parts.colorMode !== "single")}
-        </FileSheetSettingsSection>
+        </FileSheetSettingsSection> : null}
         <FileSheetSettingsSection title={t("render.lighting")}>
           <Choice label={t("render.quality")} value={look.lighting.quality} options={[["preview", t("render.quality.preview")], ["final", t("render.quality.final")]]} onChange={quality => patch("lighting", { quality })} />
           <Range label={t("render.exposure")} value={look.lighting.exposure} min={-5} max={5} step={0.1} scale={1} format={v => `${v.toFixed(1)} EV`} onChange={exposure => patch("lighting", { exposure })} />

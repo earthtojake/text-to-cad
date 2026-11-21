@@ -277,7 +277,7 @@ Select (its nodes), Draw, Measure, Explode (several parts) and Clip; a 3MF's Sel
 objects), Draw, Measure and Clip; an STL's Draw and Clip — then a 3D view's Preview (a play triangle); a
 No rule parts the strip, at Figma's toolbar's proportions (48px, 32px tiles). The view's settings are the navbar's,
 for every kind of file: **View** (a cube, no chevron; one menu of submenus, `kit/shell/ViewSettingsMenu.jsx`, ending
-with Reset view where there is a camera to bring back), then a 3D view's Preview. The corner at the top-right keeps
+with Reset view where there is a camera to bring back), then a 3D view's Preview, and a board's. The corner at the top-right keeps
 only the camera's own control: a 3D view's cube, or a flat view's one "100%" zoom dropdown. Without a navbar View and
 Preview end the strip. A phone's picture has no corner control. The bottom row is Quick Edit's alone. The tool in hand's
 controls are one row under the strip, its sub-toolbar (`kit/tools/SubToolbar.jsx`):
@@ -368,7 +368,10 @@ no path of the machine. The card's Details have a copy icon at their top-right c
 copies all of them through the host's clipboard.
 
 The native `.kicad_pcb` renderer lives in `src/renderers/board/`, using the same file service,
-selection, Measure, annotation and Quick Edit host capabilities as the other renderers.
+selection, Measure, annotation and Quick Edit host capabilities as the other renderers. A board has Preview as a 3D
+file has (the same button right of View, bar, settings, less Part colours, and camera), showing the board as it is
+made, lit, in a view of its own (`board/BoardPreviewView.jsx` over the kit's `usePreviewFrame.jsx`); its 2D/3D Mode
+and its tools are untouched by it ([a board in 3D](docs/settings-ui.md#a-board-in-3d)).
 It consumes the core plot payload; authoring and DRC belong to KiCad and the `cad` command.
 The `.kicad_sch` renderer, `src/renderers/schematic/`, is the same flat plot view from the kit
 (`kit/viewport/usePlotView.js`, `kit/inspector/CircuitTree.jsx`, `kit/tools/select/SelectFilterMenu.jsx`),

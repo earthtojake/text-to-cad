@@ -19,7 +19,9 @@ import { StripViewMenu, ViewMenu } from "./ViewSettingsMenu.jsx";
  * `quickEdit`), its panel's tabs (`panel`), and its corner, at the top-right: the zoom (`ZoomControl.jsx`) alone, the
  * same corner while the picture is shown in 3D, whose zoom it then is. On a phone with no navbar the view's controls are
  * rows of the strip's More (`views`), with the zoom. The renderer brings the picture (its canvases and layers, `children`, in the box the canvas
- * view measures: `containerRef`).
+ * view measures: `containerRef`). A flat view whose picture can be shown in 3D, lit, offers Preview (`preview`,
+ * `usePreviewFrame.jsx`'s result, through `useFlatPreview.jsx`): its button after View, in the navbar or at the strip's
+ * end, and while it is up the frame's Preview chrome, view and cover, exactly a 3D view's.
  *
  * The panel, the strip at the view's centre, the measure, the loading cover and the card are the
  * frame's, the same as a 3D view's: see `ViewFrame.jsx`. ⌘\ (Ctrl+\) shows and hides the panel,
@@ -81,11 +83,14 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, se
  *   Reset view on a desktop too, where the view has a camera to bring back (a board in 3D: what its Home was).
  *   `contextMenuItems`: the view's menu on a secondary tap over its canvas (`canvasRef`), every view's
  *   (`ViewportContextMenu.jsx`, its entries `viewMenu.js`'s); a right drag still pans.
+ *   `preview`: Preview, for a view that can offer it (`useFlatPreview.jsx`'s result: `offered`, whether this file does;
+ *   `frame`, what `ViewFrame` takes while it is up; `navbarButton` and `stripView`, its button; `rootRef`, the frame's
+ *   root, where its chrome watches the pointer); null or omitted, or not `offered`, the view has no Preview at all.
  */
 export default function FlatViewFrame({ surface, containerRef, busy, children, file, mobile, compact, chromeHidden, failed = undefined, loading, loadingLabel,
   updating, updateStatus, tools, toolRow = null, views = undefined, panel = null, panelControl = null, toolStack, onToolStackChange, notice = null, quickEdit,
   alert, cardAlert, alertDismissal, shown, onReload, canvasRef = null, contextMenuItems = null, zoom = null, inspect = null, viewport = null,
-  viewGroups = null, onResetView = null, cameraReset = null }) {
+  viewGroups = null, onResetView = null, cameraReset = null, preview = null }) {
   const { t } = useI18n();
   // The picture catching up: said as every view says it (`ViewFrame.jsx`'s status). A flat view's update
   // has nothing of its own to retry: one that fails is the card's, whose Retry reloads the file.
@@ -98,14 +103,18 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
   const reset = mobile ? onResetView : cameraReset;
   const stripViews = inNavbar ? [] : mobile ? views || []
     : viewGroups?.length ? [{ id: "view", label: t("view.menu"), tile: <StripViewMenu groups={viewGroups} onReset={reset} /> }] : [];
+  // Preview, where the view offers it, after View: the navbar's, or the strip's last (a phone's More's last row).
+  const previewOffered = Boolean(preview?.offered);
+  const previewViews = previewOffered && !inNavbar ? [preview.stripView] : [];
   const navbarNode = shown && inNavbar ? <NavbarViewControls>
     <ViewMenu groups={viewGroups} onReset={reset} />
+    {previewOffered ? preview.navbarButton : null}
   </NavbarViewControls> : null;
   const cornerNode = shown && zoom ? <ZoomPill zoom={zoom} /> : null;
   return (
-    <ViewFrame surface={surface} viewport={viewport} canvasBoxRef={containerRef} busy={busy} file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed}
-      selecting={!tools.length || tools.some(tool => tool.id === FLAT_TOOL.SELECT && tool.active)} inspect={inspect}
-      tools={tools} views={mobile && !inNavbar ? [...stripViews, ...(zoom && shown ? [zoomViewControl(zoom, { t })] : [])] : stripViews} toolRow={toolRow} status={status}
+    <ViewFrame rootRef={preview?.rootRef ?? null} surface={surface} viewport={viewport} canvasBoxRef={containerRef} busy={busy} file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed}
+      selecting={!preview?.previewing && (!tools.length || tools.some(tool => tool.id === FLAT_TOOL.SELECT && tool.active))} inspect={inspect} {...preview?.frame}
+      tools={tools} views={mobile && !inNavbar ? [...stripViews, ...(zoom && shown ? [zoomViewControl(zoom, { t })] : []), ...previewViews] : [...stripViews, ...previewViews]} toolRow={toolRow} status={status}
       panel={panel?.tabs.length ? panel : null} panelControl={panelControl} layout={toolStack} onLayoutChange={onToolStackChange}
       corner={cornerNode} navbar={navbarNode} notice={notice}
       quickEdit={quickEdit ? <QuickEdit key={file} className="self-stretch" hidden={chromeHidden} docked={mobile} {...quickEdit} /> : null}

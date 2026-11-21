@@ -64,7 +64,7 @@ builds its own list from `shell.tools.own(...)`, adding `shell.tools.drawing` (D
 them, declared in its `toolModes` as two modes (`pencil`, `shapes`) (a press on the tool in hand does nothing); the engine document's is in `xbf/XbfRenderer.jsx`.
 Routines play, in the tools view, from the Animation tab the shell adds to the panel, last, for any file with
 routines (`kit/tools/playbar/AnimationSection.jsx`), never from the strip; in Preview from Preview's playbar
-(`PreviewPlaybar.jsx`). Preview is not a tool: its tile, at the strip's end, enters it. Nor is Quick Edit: it is a bar at the view's bottom, on the strip's centre line, there while something is picked or annotated. `createToolModes({ defaultMode, modes })`
+(`PreviewPlaybar.jsx`). Preview is not a tool: its button, the navbar's after View or the strip's last tile, enters it. Nor is Quick Edit: it is a bar at the view's bottom, on the strip's centre line, there while something is picked or annotated. `createToolModes({ defaultMode, modes })`
 answers what a press does (`next`), what a saved tab may record (`persisted`) and
 which tool a file opens in (`restore`); the engine document's declaration is
 `XBF_TOOL_MODES` in `xbf/tools.js`. The scrubber follows the clock on
@@ -168,6 +168,8 @@ calls one hook; the shell owns the rest.
 | `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the drawing tools' surface and the annotations' ink in the model, the view cube (bottom-right, `VIEWPORT_CUBE_BOTTOM`; not mounted in Preview's viewport, while the model loads, or when the shell says so, `viewCube`), frame presentation and the queued view-settings handshake. Its children may be a function of the viewport (`{ runtimeRef, hostRef, mountRef, viewerReadyTick, commitScene, syncSceneBounds }`), which is how a renderer mounts its own overlay or pointer pick. A scene that changes IN PLACE (it arrives in pieces, swaps its detail, is rebuilt under one identity) calls `commitScene()` from its own effect: the viewport re-reads what it placed, fits the stage and the depth range and applies the framing rules THEN, because a child's effects run before the viewport's own adoption effect. The one thing a commit never does ahead of the viewport is FRAME under a camera that is about to change: when the same render also changed the lens, the projection or the viewing mode, the stage is adopted at once and the framing follows once the camera has been given those props (a stored camera applied under the old projection and then converted comes out about a sixth smaller). A scene is framed once, on its `restBounds`. A scene that says `complete: false` (one still arriving) is framed on what has arrived and once more when it is whole, unless the camera on screen is by then the person's: one they dragged, wheeled, turned by keys or the cube, zoomed to a selection or set through `setCamera` during the current mount, or one a reload restored from the file's view. A rebuild of the open file is not a reframe: it keeps a camera the person took exactly, and fits again, animated as Zoom to fit does, only a camera still untouched since the page opened or the last fit, and only when the rebuild changed the rest box (`camera/cameraTouch.js`; a reload's restored view counts as touched). A file shown again in the page that left it opens on the camera it was left at, restored as a reload restores the file on screen's (the page keeps the view of each file it left, `tab-store`'s `files.retain`); a file the page has not shown starts with fresh framing. `studio` makes it Preview's viewport (opened at rest, framed afresh from the default direction, keeping no camera, no cube and no drawing tools; `orbit` turns the camera at `orbitSpeed`); `suspended` makes it draw nothing while another view covers it, and draws a frame asked of it meanwhile synchronously, before paint, as it is uncovered (`runtime.setSuspended`). `preserveInteractionPixelRatio` keeps the idle pixel ratio while the camera moves (a scene drawn with hairlines, and Preview's orbit), and `runtimeLifecycle` (`onRelease(runtime, { handoff })` while the WebGL renderer is still alive, `onContextLost()`, `onInitializationError(error)`) is for a renderer that hangs its own objects or in-flight work on the runtime. `syncSceneBounds()` re-fits lighting, shadows and the floor's height to a scene that moved its own bounds, with no React render and no reframe; a sync that finds the bounds (and every setting the fit reads) as they were refits nothing and keeps the shadow maps (`look/stageFollow.js`). What is SIZED stays sized from the rest placement, in Inspect and in Render alike: the grid and stage (`sceneRadiusForBounds` on `restBounds`) and the Render studio's floor plane (`applyPhotographicStudio`'s `groundBounds`), so a pose or a playing routine never rescales or slides the ground under the model; `zoomToBounds(bounds)` frames part of the scene. Read-only test seams, the view on screen's (Preview's while it is open, the editor's again as it closes): `window.__cadCamera()` (the live camera, its depth range included, and `settling`: true while a gesture, a camera transition, a held orbit key, Preview's orbit or the controls' damping still moves it, so a test waits on the camera at rest and not on its coordinates holding still) and `window.__cadStage()` (the ground's radius, the bounds the stage is fitted to, the floor's height, the studio floor's size and centre). |
 | `PreviewView.jsx` | Preview's view: a `ShellViewport` of its own (`preview`, `orbit`, `orbitSpeed`), with its own view-update coordinator over `frame.previewDesiredScene`, drawing the renderer's `studio.scene` and mounting `studio.overlay(viewport, drawn)` inside it. Its canvas, scene, camera and look are its own; only the GPU device is shared with the editor's, which it never reaches. `onPresented` says when its first frame is on screen. |
 | `usePreviewScene.js` | Preview's scene for a family whose core scene has `createSibling()` (GLB, mesh, robot, engine document): the editor's scene's sibling, made as Preview opens and disposed as it closes, before the scene it shares geometry with. |
+| `usePreviewFrame.jsx` | Preview's frame, the same for every view that has Preview, over the one `previewing` state its caller holds: entering under the cover and leaving, the cover's lift (`previewCover.js`: presented, `view.complete`, the picture converged, or the cap), a new file leaving Preview, the host's navbar stepping aside (`onPreviewChange`), Preview's bar and settings panel (`PreviewChrome`'s props; the chrome's idle store, `usePreviewIdle`), Preview's view as the frame's underlay (`View`: `PreviewView.jsx`, or a view's own around it) and the Preview button (the navbar's, and the strip's entry). `RendererShell.jsx` calls it for a 3D view and `useFlatPreview.jsx` for a flat one; it returns `ViewFrame`'s props (`previewing`, `preview`, `underlay`, `overlays`). |
+| `useFlatPreview.jsx` | Preview for a view outside the shell (a flat view whose picture can be shown in 3D, lit: a board): what `useRendererShell.js` holds of Preview, under the same rules — the `previewing` state (`usePreviewState.js`), Orbit (off at every entry and exit), Preview's settings in a view settings store of their own and the scene Preview draws from them (`previewViewScene.js`), Orbit's speed, what the file's view keeps of them (`preview`, `playback`), Preview's viewport's handle — handed to `usePreviewFrame.jsx`. The view brings Preview's own view component (lazy, where its 3D code loads) and what it draws. Nothing is prepared ahead: there is no viewport until Preview is entered. `FlatViewFrame.jsx` takes its result as `preview`; `useFlatView.js`'s `useFlatHandover` takes `previewing` and `leavePreview` for the keys. |
 | `fileView.js` | The file's view `{ version, camera, display, preview, playback, renderer }`, read forgivingly and written exactly: the camera (restored in place of the open-time fit; null fits), the Display settings, Preview's Render settings (`preview`), the playback settings (`tools/playbar/playbackPreferences.js`), and the renderer's own slices, each `{ signature, value }` and restored only under the signature the renderer declares now (`readFileView(raw, signatures)`); the camera, the display, the preview and the playback are always kept. The host keys it `[file path, renderer id]` in the tab store, which keeps it for the file on screen alone. Not in it: the tool in hand, a selection, measurements, ink, Preview, a routine's time — every open starts those afresh. |
 | `liveBinding.ts` | `attachLiveBinding`: the live command surface. Base commands (`readState`, `setCamera`, `resetCamera`, `setDisplaySettings`, `capture`, `thumbnail`) mean the same for every renderer; a renderer ADDS commands by name and DECLINES the known host commands (`HOST_LIVE_COMMANDS`) that make no sense for it with the sentence the caller reads. Binding fails when a renderer does neither. |
 | `promptContext.js` | `createViewPromptContext` (a snapshot and what it depicts) and `promptDeliveryError`. A renderer with a reference vocabulary of its own passes `promptContext` instead, and may then return that vocabulary from `promptReferences`. |
@@ -205,8 +207,9 @@ shell.syncSceneBounds();         // the scene moved its bounds (a pose): the sta
 shell.scheduleStateSave();       // a slice changed: write the view soon, and on unmount
 shell.playback; shell.setPlayback(patch); // the file's: Orbit's speed, Autoplay, the chosen Speed and Loop
 shell.orbiting; shell.setOrbiting(on);   // Preview's Orbit, transient: off at every entry and exit
-// The shell adds Projection, Display and Preview (a `previewable` view's, ending the strip), Preview's bar (the
-// file's name, Preview settings, Exit preview), for a file with routines the Animation section and Preview's playbar, and the sub-toolbar of its own tool (the drawing tools').
+// The shell adds Projection, Display and Preview (a `previewable` view's: the navbar's, or ending the strip), Preview's
+// frame (`usePreviewFrame.jsx`: its cover, its bar — the file's name, Preview settings, Exit preview — and its view),
+// for a file with routines the Animation section and Preview's playbar, and the sub-toolbar of its own tool (the drawing tools').
 const tools = [shell.tools.own({ id, label, icon, menu }), ...shell.tools.drawing].filter(Boolean); // []: no tools, and no strip
 // subToolbar: the renderer's tool in hand's row; sidebar: the file's sections, each a ToolPanel, a tab each of the view's panel
 return <RendererShell shell={shell} tools={tools} subToolbar={toolRow} sidebar={<>{treeSection}{positionSection}</>}
@@ -286,6 +289,24 @@ the bodies and blocks shown on it at that moment (the stage's `shownBounds`), wh
 the slab's (what 100% means): a body arriving moves no camera, and the next fit takes it in. The
 canvas element says what it holds: `data-board-bodies`, `-blocks`, `-models`, `-mesh-mb`,
 `-models-waiting`, `-models-failed`.
+
+A board has Preview (`kit/shell/useFlatPreview.jsx`, through `FlatViewFrame.jsx`'s `preview`), where it has the layers to
+be shown in 3D: the frame's Preview is every view's (`usePreviewFrame.jsx`), and what it draws is the board's own
+(`board/BoardPreviewView.jsx`, a lazy chunk mounted only while Preview is up): `PreviewView.jsx` around a scene built
+as Preview opens, from the plot, the parts and the models table — core's stage in its `lit` form (`boardStage.js`'s
+`lit`: the two faces `MeshStandardMaterial`s whose `map` is the 2D drawer's picture, sRGB, both wanted from the start;
+the slab casting; no overlay and no surround) and its parts (`boardParts.js`'s `shadows` and `blocks: false`: the
+bodies casting, no block for a missing model), with a model loader of its own. Its scene's `bounds` are the slab with
+the bodies on it as they stand (`shownBounds`), `complete: false` while models are still wanted, each arrival adopted
+in place (`viewport.commitScene()`, once a frame) and said to the frame (`view.onComplete`, the cover's
+`view.complete`); it takes shadows on every surface (`setShadowReception`) and wears no surface look, so Preview's
+settings leave Part colours out. It draws `BOARD_DISPLAY_DEFAULTS` in the viewport's theme, whatever the Layers tab
+shows; the 3D models eye alone carries over. The working view stays mounted under it and is never told: the flat
+canvas is `suspended` (`useFlatCanvasView`'s: its size, view and fit held while the page's chrome goes and comes back
+round it, so it is uncovered exactly as it was left), the board in 3D's viewport `suspended` as a 3D file's editor
+is, both out of sight (Preview's Background may be see-through), and the flat views' keys are Preview's
+(`useFlatHandover`'s `previewing`). A live `capture` and `resetCamera` act on the view on screen, Preview's while it
+is up. Preview's settings and Orbit's speed are written with the file's view (`preview`, `playback`).
 
 A renderer whose model moves outside React (a robot's pose) keeps that state in
 its own store: `rendererState.read()` is called at the moment the view is
@@ -1606,12 +1627,15 @@ nowhere, while the editor's camera stays where it was, untouched, under it.
 `zoomRuntimeToBounds` is the single framing act used by context-menu
 Zoom to Fit and live `resetCamera`. Cube shortcuts preserve zoom and pan.
 
-Preview is one `previewing` state the shell owns (`usePreviewState` in
-`useRendererShell.js`); a renderer whose own gates run before the shell's hook holds
+Preview is one `previewing` state the shell owns (`usePreviewState`, `kit/shell/usePreviewState.js`); a renderer whose
+own gates run before the shell's hook holds
 it and passes it in as `preview`, as the engine document's does. It is a 3D view's: a renderer that
 offers it declares `previewable` (the engine document's, GLB, the meshes and robots do), and one that
-does not has no Preview button and stays in its normal view whatever sets the state. The
-Preview tile, last on the strip, sets it — after covering the view in the frame of the
+does not has no Preview button and stays in its normal view whatever sets the state. A board, a flat view whose
+picture is shown in 3D, has it too, holding the same state outside the shell (`useFlatPreview.jsx`; see the board's
+paragraphs under [Shell](#shell)). Everything of Preview that is not a family's own scene is one hook for both,
+`usePreviewFrame.jsx`. The
+Preview button, the navbar's after View or the strip's last tile, sets it — after covering the view in the frame of the
 press ("Preparing preview…", until Preview's view has presented, its published mesh is complete and the
 picture has converged) — and Escape or Exit preview, an X beside Preview settings in Preview's bar, clears it;
 no host prop reaches it.

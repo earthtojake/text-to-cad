@@ -207,8 +207,9 @@ tabs of the view's panel (see
 [settings-ui.md](./settings-ui.md#the-views-panel-and-the-tool-stack)); nothing in them is
 a display setting.
 
-Display and Preview, the view's controls at the strip's end, are offered by a 3D view
-alone, as its renderer declares to the shell (`useRendererShell`'s `previewable`):
+Display and Preview, the view's controls at the strip's end, are offered by a 3D view,
+as its renderer declares to the shell (`useRendererShell`'s `previewable`); a board, a flat view shown in 3D,
+has Preview too, without the shell's Display:
 
 | Renderer | Files | Display and Preview |
 | --- | --- | --- |
@@ -217,7 +218,7 @@ alone, as its renderer declares to the shell (`useRendererShell`'s `previewable`
 | `mesh` | STL, 3MF | Yes |
 | `robot` | URDF, SRDF | Yes |
 | `dxf` | DXF | No: a 2D drawing, on a surface of its own, without the shell |
-| `board` | KiCad board | No Preview: drawn flat; its Display is the board's own (mode, side, pours, layers, Dim, the zones' and tracks' opacities), drawn in the app's theme |
+| `board` | KiCad board | Preview, outside the shell (`kit/shell/useFlatPreview.jsx`: the board in 3D as it is made, lit, with Render's settings less Part colours); no Display of the shell's: drawn flat or in 3D, its Display is the board's own (mode, side, pours, layers, Dim, the zones' and tracks' opacities), drawn in the app's theme |
 
 A view without them has no Display or Preview control, not a disabled one, and a
 request for Preview leaves its normal view as it is.
