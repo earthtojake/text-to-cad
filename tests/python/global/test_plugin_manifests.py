@@ -254,6 +254,30 @@ class PluginManifestPolicyTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertIn(command, page)
 
+    def test_codex_checks_out_every_file_its_plugin_names(self) -> None:
+        # cad's Codex row adds the catalog with a few paths checked out (`CODEX_SPARSE`; the files at the root come
+        # with them): the catalog, Codex's manifest and every file that manifest names must lie in one.
+        from cad_server.plugin.apps import CODEX_SPARSE
+
+        def strings(value):
+            if isinstance(value, dict):
+                for item in value.values():
+                    yield from strings(item)
+            elif isinstance(value, list):
+                for item in value:
+                    yield from strings(item)
+            elif isinstance(value, str):
+                yield value
+
+        named = [value[2:] for value in strings(load_json(CODEX_PLUGIN_PATH)) if value.startswith("./")]
+        self.assertTrue(named)
+        for path in [*named, MARKETPLACE_PATH.relative_to(REPO_ROOT).as_posix(),
+                     CODEX_PLUGIN_PATH.relative_to(REPO_ROOT).as_posix()]:
+            with self.subTest(path=path):
+                self.assertTrue((REPO_ROOT / path).exists(), path)
+                root_file = "/" not in path.rstrip("/") and (REPO_ROOT / path).is_file()
+                self.assertTrue(root_file or path.split("/")[0] in CODEX_SPARSE, f"{path} is not checked out")
+
     def test_codex_starts_the_cad_server_of_its_release(self) -> None:
         # One uniquely named server (a host allowlists servers by name): uvx runs cad at this plugin's release, as
         # `cad mcp`, from uv's cache, installing nothing. Not offline: the first start downloads that release. No

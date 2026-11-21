@@ -29,6 +29,9 @@ from pathlib import Path
 from unittest import mock
 
 LATEST = "a" * 40  # the commit of `latest`, as the stand-in git names it
+# How Codex adds our catalog: from GitHub at `latest`, checking out only what its plugin needs.
+CODEX_ADD = ["plugin", "marketplace", "add", "earthtojake/text-to-cad", "--ref", "latest", "--sparse", ".claude-plugin",
+             "--sparse", ".codex-plugin", "--sparse", "skills", "--sparse", "codex.mcp.json"]
 OURS = "---\nname: {name}\ndescription: x\nmetadata:\n  repository: earthtojake/text-to-cad\n---\n"
 # A skill of 0.5.0-0.8.4: no metadata, our provenance line in its body.
 OURS_OLD = ("---\nname: {name}\ndescription: x\nlicense: MIT\n---\n\n# X\n\n"

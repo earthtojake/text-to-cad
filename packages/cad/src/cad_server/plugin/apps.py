@@ -37,6 +37,14 @@ from .terminal import Live
 
 # The CLI the Codex app bundles (macOS).
 CODEX_BUNDLED = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"
+# What Codex checks out of the `latest` branch (`marketplace add --sparse`): the catalog, Codex's manifest and what it
+# names (its logo, the skills, the server line), the files at the branch's root coming with them. Without it, Codex
+# clones the whole repository, every commit of every branch (over 400 MB), as it adds the catalog and again at every
+# `marketplace upgrade`, which gives that clone 30 seconds (0.171.0): too few on a Windows computer (measured: 47 s
+# on Windows Server 2022, 25 s on a fast Linux one), where the upgrade, and so every update, failed. Sparse, the add
+# and the upgrade take 2 to 3 seconds and keep 19 MB. A file the Codex manifest comes to name outside these is added
+# here (``tests/python/global/test_plugin_manifests.py`` checks it).
+CODEX_SPARSE = (".claude-plugin", ".codex-plugin", "skills", "codex.mcp.json")
 
 
 # --- the apps -----------------------------------------------------------------------------------------
@@ -165,6 +173,7 @@ class Catalog:
     kind: str  # github, git, directory, other
     where: str = ""  # the repository or the folder
     ref: str = ""
+    sparse: Tuple[str, ...] = ()  # the paths a git copy checks out, where it checks out a few (Codex's ``--sparse``)
 
     def ours(self, here: Here) -> bool:
         if self.name == DEV_CATALOG:
@@ -175,20 +184,23 @@ class Catalog:
             return our_folder(here, self.where)
         return False
 
-    def matches(self, here: Here, source: Source) -> bool:
-        """Whether it is the catalog the source installs from, as the source would add it."""
+    def matches(self, here: Here, source: Source, sparse: Sequence[str] = ()) -> bool:
+        """Whether it is the catalog the source installs from, as the source would add it (``sparse``: the paths a
+        git copy of it checks out, none for all)."""
         if source.local:
             return self.kind == "directory" and same_path(self.where, source.folder)
-        return self.kind in ("github", "git") and our_repository(self.where) and self.ref == BRANCH
+        return (self.kind in ("github", "git") and our_repository(self.where) and self.ref == BRANCH
+                and tuple(self.sparse) == tuple(sparse))
 
 
 def marketplace_app(app: App, here: Here, context: Context, cli: Optional[str], catalogs: Dict[str, Catalog],
-                    plugins: Sequence[str], verbs: Dict[str, Any]) -> Outcome:
+                    plugins: Sequence[str], verbs: Dict[str, Any], sparse: Sequence[str] = ()) -> Outcome:
     """Claude Code's and Codex's flow. First ours is put in: the source's catalog added (or brought up to date) and
     our plugin installed (or updated) from it. Only once that worked do our other catalogs and plugins go. Where a
     catalog of ours under the source's name points elsewhere (``main``, a checkout) it must be replaced: GitHub is
     checked first, and if the new one cannot be added and installed, the old one is put back. ``verbs``: the app's
-    commands, by what they do; ``verbs["readd"]`` makes the command that adds a recorded catalog again."""
+    commands, by what they do; ``verbs["readd"]`` makes the command that adds a recorded catalog again. ``sparse``: the
+    paths the app's copy of a GitHub catalog checks out (none: all); one of ours that checks out others is replaced."""
     if not cli:
         return NOT_FOUND
     source = context.source
@@ -207,7 +219,7 @@ def marketplace_app(app: App, here: Here, context: Context, cli: Optional[str], 
     if present is not None and not present.ours(here):
         raise Failed(f"the {target} catalog is another source's ({present.where or present.kind}): left alone")
     replaced = False
-    if present is not None and present.matches(here, source):
+    if present is not None and present.matches(here, source, sparse):
         do("refresh")
         do("update" if ours in plugins else "install")
         status = "updated" if ours in plugins else "installed"
@@ -351,35 +363,42 @@ def codex_cli(here: Here) -> Optional[str]:
 
 def codex(app: App, here: Here, context: Context) -> Outcome:
     """Codex, from its config (``$CODEX_HOME/config.toml``: ``[marketplaces.<name>]`` with ``source_type``,
-    ``source`` and ``ref``; ``[plugins."<id>"]``). A copy from OpenAI's directory (``openai-*``) is left.
-    Verified: `codex plugin --help` and its subcommands (0.169: `marketplace add <owner/repo> --ref`, `marketplace
-    upgrade`, `add`, `remove`); docs https://developers.openai.com/codex/plugins/build (`--ref`, `upgrade`). `add`
-    again after `upgrade` copies the plugin again: Codex keeps a copy, and the docs do not say an upgrade refreshes
-    it."""
+    ``source``, ``ref`` and ``sparse_paths``; ``[plugins."<id>"]``). A copy from OpenAI's directory (``openai-*``) is
+    left. Our GitHub catalog checks out ``CODEX_SPARSE`` alone; one added before it did (a whole clone, whose upgrade
+    fails on a slow disk) is replaced. Verified: `codex plugin --help` and its subcommands (0.169: `marketplace add
+    <owner/repo> --ref`, `marketplace upgrade`, `add`, `remove`; 0.171: `--sparse`, there in 0.139 already, which
+    finds no plugin in our catalog with or without it), and the commands run (0.149.1,
+    0.169.0 and 0.171.0 on Linux, 0.171.0 on Windows, no one signed in); docs
+    https://developers.openai.com/codex/plugins/build (`--ref`, `upgrade`). `add` again after `upgrade` copies the
+    plugin again: Codex keeps a copy, and the docs do not say an upgrade refreshes it."""
     config = read_toml(Path(here.environ.get("CODEX_HOME") or here.home / ".codex") / "config.toml")
     plugins = list(table(config.get("plugins")).keys())
     catalogs = {}
     for name, entry in table(config.get("marketplaces")).items():
         if isinstance(entry, dict):
             local = entry.get("source_type") == "local"
+            paths = entry.get("sparse_paths")
             catalogs[name] = Catalog(name, "directory" if local else "git", str(entry.get("source") or ""),
-                                     str(entry.get("ref") or ""))
+                                     str(entry.get("ref") or ""),
+                                     tuple(str(path) for path in paths) if isinstance(paths, list) else ())
 
     def readd(catalog: Catalog) -> List[str]:
         return ["plugin", "marketplace", "add", catalog.where,
-                *(["--ref", catalog.ref] if catalog.ref and catalog.kind != "directory" else [])]
+                *(["--ref", catalog.ref] if catalog.ref and catalog.kind != "directory" else []),
+                *[word for path in catalog.sparse for word in ("--sparse", path)]]
 
     verbs = {
         "remove": [["plugin", "remove"]],
         "forget": [["plugin", "marketplace", "remove"]],
-        "add": [["plugin", "marketplace", "add", "{repo}", "--ref", "{branch}"]],
+        "add": [["plugin", "marketplace", "add", "{repo}", "--ref", "{branch}",
+                 *[word for path in CODEX_SPARSE for word in ("--sparse", path)]]],
         "add_local": [["plugin", "marketplace", "add", "{folder}"]],
         "refresh": [] if context.source.local else [["plugin", "marketplace", "upgrade", "{catalog}"]],
         "install": [["plugin", "add", "{plugin}@{catalog}"]],
         "update": [["plugin", "add", "{plugin}@{catalog}"]],
         "readd": readd,
     }
-    return marketplace_app(app, here, context, codex_cli(here), catalogs, plugins, verbs)
+    return marketplace_app(app, here, context, codex_cli(here), catalogs, plugins, verbs, CODEX_SPARSE)
 
 
 def git_origin(folder: Path) -> Optional[str]:
