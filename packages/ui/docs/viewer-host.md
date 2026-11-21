@@ -626,7 +626,7 @@ top centre of the window, ending in Preview (a 3D view's), the tool in hand's su
 the model aside (collapsed on its own where it would leave the model under 640px; a mouse resting on its toggle peeks
 it over the model as a floating card, pushing nothing, and only the toggle pins it), Quick Edit's bar at the bottom centred on the window as the strip is
 (the panel never moves either; where they meet it they sit above it), the bottom row Quick Edit's alone, and at the
-top-right the camera's own control alone: the view cube (a 68px box at the corner's 12px inset), or a flat view's
+top-right the camera's own control alone: the view cube (a 6rem box, 2px from the right edge and 8px off the top), or a flat view's
 "100%" zoom dropdown. Under a file's navbar the view's settings are its right end for every kind of file — **View**,
 one menu (a 3D view's Projection, Display, Background, Show grid and Reset view; a board's Side, Mode, Display, in 3D
 Projection, Background and Reset view; a drawing's Background, `ViewSettingsMenu.jsx`), then a 3D view's Preview: the

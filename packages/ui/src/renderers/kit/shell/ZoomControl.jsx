@@ -37,7 +37,7 @@ const ZOOM_BUTTON_CLASS = cn("h-7 w-auto gap-0.5 rounded-md bg-foreground/6 px-2
  * moves. The number is the view's, read through `zoom.read()` and redrawn at most once a frame as the view
  * tells it moved (`zoom.subscribe(listener)`, which hands back its unsubscribe); nothing else re-renders.
  *
- * It stands in the corner wherever the host anchors it, its outer edge on the cube box's and its middle on the tool
+ * It stands in the corner wherever the host anchors it, its outer edge the corner's inset (12px) in and its middle on the tool
  * strip's (`viewCornerLayout`'s `pill`), unless `style` places it.
  *
  * @param {{ zoom: ViewZoom, style?: object }} props

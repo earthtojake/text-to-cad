@@ -61,7 +61,7 @@ import { renderThumbnail } from "../viewport/thumbnail.js";
 import { useViewerRuntime } from "../viewport/useViewerRuntime.js";
 import ViewportError from "../status/ViewportError.jsx";
 import { useI18n } from "@cad/ui/i18n";
-import { CUBE_GUTTER_PX, VIEWPORT_CUBE_SIZE, VIEWPORT_CUBE_TOP, VIEWPORT_CORNER_INSET_PX } from "./viewportLayout.js";
+import { VIEWPORT_CUBE_SIZE, VIEWPORT_CUBE_TOP, VIEWPORT_CORNER_INSET_PX } from "./viewportLayout.js";
 
 const STORED_CAMERA_COORDINATES = "cad-z-up-v1";
 // The theme's lights on the viewer runtime (`useViewerRuntime`): what Render and a scene's own rig hide.
@@ -1299,7 +1299,6 @@ const ShellViewport = forwardRef(function ShellViewport({
         // Close into the top-right corner (the bottom row is Quick Edit's), clear of the canvas's left edge: the cube's
         // box is larger than the cube, whose labels overhang it.
         viewPlaneOffsetRight={VIEWPORT_CORNER_INSET_PX}
-        viewPlaneGutter={CUBE_GUTTER_PX}
         viewPlaneOffsetTop={VIEWPORT_CUBE_TOP}
         viewPlaneSize={VIEWPORT_CUBE_SIZE}
         compact={false}

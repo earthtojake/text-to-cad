@@ -132,9 +132,9 @@ function drag(handle: Element, [dx, dy]: [number, number], { release = true } = 
 it("the strip is at the top centre with the stack under it; the view's panel is docked at the left, open, a tab per section, the first shown, and nothing is stored until a person changes it", () => {
   const { preferences } = frame();
   // The strip and the stack under it, 8px down from the viewer's top, centred on the whole view,
-  // stopping 8px above the cube's line (the cube's box 8px off the bottom).
+  // stopping clear of Quick Edit's row, 84px off the bottom (`VIEWPORT_STACK_BOTTOM`).
   // The panels never move it: it stands over them, centred on the window (`ViewFrame.jsx`'s top layer).
-  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: '8px', right: '8px', bottom: 'calc(84px)' });
+  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: '8px', right: '8px', bottom: '84px' });
   expect(document.querySelector('[data-cad-tool-groups]')!.closest('[data-view-top-layer]')).not.toBeNull();
   // The panel (`FlatPanel.jsx`), a board's: the search over its tabs, a tab per section in their order, the first shown.
   expect([flatPanel().getAttribute('data-flat-panel'), flatPanel().hidden]).toEqual(['docked', false]);

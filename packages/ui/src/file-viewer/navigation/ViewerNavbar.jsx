@@ -59,8 +59,10 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
 /**
  * The left of the row: the logo, the file's name and its ⋯, one kind of control — transparent until
  * the pointer is on it or its menu is open, then the same accent — and none with a tooltip: each
- * says what it is. They sit edge to edge, spaced by their own padding alone: the logo, Back, Forward
- * and the ⋯ in 28px buttons (the tool strip's), the name 4px in from its edges.
+ * says what it is. On a desktop they sit edge to edge, spaced by their own padding alone: the logo, Back, Forward
+ * and the ⋯ in 28px buttons (the tool strip's), the name 4px in from its edges. On a phone, 36px tiles 4px apart (the
+ * navbar's own tile and gap), the name's text 10px in. Their fill is `hover:` (only where the pointer hovers) or an open
+ * menu's, their ring `focus-visible:`, so a tap leaves neither.
  */
 const NAV_ITEM_CLASS = "flex h-7 shrink-0 cursor-pointer items-center rounded-md outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground";
 
@@ -69,9 +71,10 @@ const NAV_ITEM_CLASS = "flex h-7 shrink-0 cursor-pointer items-center rounded-md
  * document (one mark, no wordmark and nothing that moves between the two); over the home its menu
  * has no Back to home. It is the way back to the home from every page.
  */
-function LogoMenu({ onHome, menu }) {
+function LogoMenu({ onHome, menu, mobile = false }) {
   const { t } = useI18n();
-  return <AppMenu onHome={onHome} {...menu} trigger={<button type="button" aria-label={t("navbar.menu")} className={cn(NAV_ITEM_CLASS, "cad-navbar-logo w-7 justify-start px-1.5")}
+  // A desktop's mark stands on the 16px line (its tile's left padding); a phone's is centred in its 36px tile.
+  return <AppMenu onHome={onHome} {...menu} trigger={<button type="button" aria-label={t("navbar.menu")} className={cn(NAV_ITEM_CLASS, "cad-navbar-logo w-7", mobile ? "justify-center px-0" : "justify-start px-1.5")}
     data-navbar-menu="" data-logo="mark">
     <img src={logo} alt="" className="cad-navbar-mark" draggable={false} />
   </button>} />;
@@ -218,7 +221,7 @@ function FileName({ path, name: given, kind = "file", explorer, recent }) {
   const mobile = useViewerMobile();
   const usage = useControlUsage();
   const name = given || path.split("/").pop() || path;
-  if (!explorer && !recent) return <span className="flex min-w-0 items-center gap-1 px-1" data-file-name=""><span className="truncate">{name}</span></span>;
+  if (!explorer && !recent) return <span className={cn("flex min-w-0 items-center gap-1", mobile ? "px-2.5" : "px-1")} data-file-name=""><span className="truncate">{name}</span></span>;
   // Opened, the tab's filter has the keyboard (the explorer's, or the Models tab's), so typing
   // finds a document at once; Down takes it into the rows. A phone keeps its keyboard down, the menu
   // holding focus itself. Nothing else is focused for the person on opening.
@@ -238,7 +241,7 @@ function FileName({ path, name: given, kind = "file", explorer, recent }) {
   // Opened, the tab it opens on is a use of that tab (`usage/controls.js`: `models`, `explorer`).
   return <Popover open={open} onOpenChange={next => { if (next && !open) usage.used(TAB_CONTROLS[firstTab(kind, explorer, recent)]); setOpen(next); }}>
     <PopoverTrigger asChild>
-      <button type="button" className={cn(NAV_ITEM_CLASS, "min-w-0 shrink gap-1 px-1 text-left")} data-file-name="">
+      <button type="button" className={cn(NAV_ITEM_CLASS, "min-w-0 shrink gap-1 text-left", mobile ? "px-2.5" : "px-1")} data-file-name="">
         <span className="truncate">{name}</span>
         {/* The name opens its menu; the chevron says so. A plain name (no menu) has none. */}
         <ChevronDown className="ml-0.5 size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -352,14 +355,17 @@ export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file
   const header = useRef(null), lead = useRef(null), trail = useRef(null);
   const homing = Boolean(homeSlots && !file);
   const homeInsets = useHomeColumn(header, trail, homing);
-  const leadNav = <nav ref={lead} aria-label={t("navbar.viewer")} className={cn("flex min-w-0 items-center overflow-hidden text-sm", homing ? "shrink-0" : "flex-1")}>
+  // A phone's row: the toggle, the logo, the name and its ⋯, 36px tall each (`globals.css`), the first on the row's 8px
+  // inset, each 4px from the next (the gap between the row's icon buttons, `NAVBAR_CONTROLS_CLASS`), every icon centred
+  // in its tile and the name's text as far in from its button's edges as an icon is from its tile's (10px).
+  const leadNav = <nav ref={lead} aria-label={t("navbar.viewer")} className={cn("flex min-w-0 items-center overflow-hidden text-sm", homing ? "shrink-0" : "flex-1", mobile && "gap-1")}>
     {/* The panel's toggle first, where the file has a panel (the home has none), then the logo, edge to edge. Its icon
         stands on the panel's inset, 16px in: the row's 8px, 2px here and its 28px tile's own 6px round its 16px icon. */}
-    {file && panels?.left ? <span className="ml-0.5 flex shrink-0 items-center"><PanelToggleButton toggle={panels.left} /></span> : null}
-    {onHome || menu ? <LogoMenu onHome={onHome} menu={menu} /> : null}
+    {file && panels?.left ? <span className={cn("flex shrink-0 items-center", !mobile && "ml-0.5")}><PanelToggleButton toggle={panels.left} /></span> : null}
+    {onHome || menu ? <LogoMenu onHome={onHome} menu={menu} mobile={mobile} /> : null}
     {/* A phone's row has no room for them: Back and Forward are a desktop's alone. */}
     {history && !mobile ? <HistoryButtons viewHistory={history} /> : null}
-    {file ? <span className="flex min-w-0 items-center">
+    {file ? <span className={cn("flex min-w-0 items-center", mobile && "gap-1")}>
       <FileName path={file} name={name} kind={kind} explorer={explorer} recent={recent} />
       {fileMenu ? <FileMenu {...fileMenu} /> : null}
     </span> : null}

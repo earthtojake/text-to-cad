@@ -7,8 +7,11 @@ import { XIcon } from "lucide-react"
 import { cn } from "@cad/ui/utils"
 
 // shadcn's Sheet as shipped (Radix's Dialog drawn from an edge), with no window breakpoints (settings-ui.md): a side
-// sheet is 3/4 of the window wide and never wider than 20rem. One addition: `onSwipeClose`, where a finger swiped
-// towards the sheet's own edge closes it (a phone's sidebar is put away the way it came), which Radix's Dialog has none of.
+// sheet is 3/4 of the window wide and never wider than 20rem. Additions: `onSwipeClose`, where a finger swiped
+// towards the sheet's own edge closes it (a phone's sidebar is put away the way it came), which Radix's Dialog has none of;
+// and, for a sheet that is part of the page rather than a step out of it (a phone's sidebar), `scrim={false}` (its overlay
+// kept but clear: a press beside the sheet still lands on it and closes the sheet, and reaches nothing under it),
+// `animated={false}` (it appears and goes at once, no slide or fade) and `overlayStyle` (where the overlay starts).
 
 /** @param {React.ComponentProps<typeof SheetPrimitive.Root>} props */
 function Sheet({ ...props }) {
@@ -30,13 +33,16 @@ function SheetPortal({ ...props }) {
   return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />
 }
 
-/** @param {React.ComponentProps<typeof SheetPrimitive.Overlay>} props */
-function SheetOverlay({ className, ...props }) {
+/** @param {React.ComponentProps<typeof SheetPrimitive.Overlay> & { scrim?: boolean, animated?: boolean }} props */
+function SheetOverlay({ className, scrim = true, animated = true, ...props }) {
   return (
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
+      data-scrim={scrim ? "" : undefined}
       className={cn(
-        "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        "fixed inset-0 z-50",
+        scrim && "bg-black/50",
+        animated && "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className
       )}
       {...props}
@@ -49,10 +55,12 @@ const SWIPE_CLOSE_PX = 48
 
 /**
  * @param {React.ComponentProps<typeof SheetPrimitive.Content> & { side?: "top" | "right" | "bottom" | "left",
- *   showCloseButton?: boolean, closeLabel?: string, onSwipeClose?: (() => void) | null, container?: HTMLElement | null }} props
+ *   showCloseButton?: boolean, closeLabel?: string, onSwipeClose?: (() => void) | null, container?: HTMLElement | null,
+ *   scrim?: boolean, animated?: boolean, overlayStyle?: React.CSSProperties }} props
  *   `container`: its portal's, where the sheet must stand inside an element (the viewer's, whose phone styles reach it).
  */
-function SheetContent({ className, children, side = "right", showCloseButton = true, closeLabel = "Close", onSwipeClose = null, container = undefined, ...props }) {
+function SheetContent({ className, children, side = "right", showCloseButton = true, closeLabel = "Close", onSwipeClose = null, container = undefined,
+  scrim = true, animated = true, overlayStyle = undefined, ...props }) {
   const start = React.useRef(null)
   const swipe = onSwipeClose ? {
     onPointerDown: event => { if (event.pointerType !== "mouse") start.current = { x: event.clientX, y: event.clientY, id: event.pointerId } },
@@ -69,19 +77,20 @@ function SheetContent({ className, children, side = "right", showCloseButton = t
   } : null
   return (
     <SheetPortal container={container}>
-      <SheetOverlay />
+      <SheetOverlay scrim={scrim} animated={animated} style={overlayStyle} />
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          "fixed z-50 flex flex-col gap-4 bg-background shadow-lg transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500",
-          side === "right" &&
-            "inset-y-0 right-0 h-full w-3/4 max-w-xs border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
-          side === "left" &&
-            "inset-y-0 left-0 h-full w-3/4 max-w-xs border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
-          side === "top" &&
-            "inset-x-0 top-0 h-auto border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
-          side === "bottom" &&
-            "inset-x-0 bottom-0 h-auto border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+          "fixed z-50 flex flex-col gap-4 bg-background shadow-lg",
+          animated && "transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500",
+          side === "right" && "inset-y-0 right-0 h-full w-3/4 max-w-xs border-l",
+          side === "right" && animated && "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+          side === "left" && "inset-y-0 left-0 h-full w-3/4 max-w-xs border-r",
+          side === "left" && animated && "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
+          side === "top" && "inset-x-0 top-0 h-auto border-b",
+          side === "top" && animated && "data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
+          side === "bottom" && "inset-x-0 bottom-0 h-auto border-t",
+          side === "bottom" && animated && "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
           className
         )}
         {...swipe}
