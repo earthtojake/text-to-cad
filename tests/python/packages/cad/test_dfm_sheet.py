@@ -318,6 +318,9 @@ class UnfoldTest(unittest.TestCase):
         outline, lines = cut.children
         self.assertEqual(len(outline.faces()[0].inner_wires()), 2)
         self.assertEqual(len(lines.edges()), 2)
+        # The lines are one shape, not an assembly of them: a child would be a part of its own, which a DXF writes
+        # on a layer of its own name and the cut-file check then reads as an open cut.
+        self.assertEqual(len(lines.children), 0)
         round_holes = [i for i in items(report, "holes") if i["kind"] == "round"]
         self.assertEqual([i["diameter_mm"] for i in round_holes], [6.0])
         # a flat plate has no bend line, and unfolds to the same two layers, one of them empty
