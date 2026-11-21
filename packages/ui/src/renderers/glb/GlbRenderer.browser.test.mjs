@@ -78,8 +78,10 @@ after(async () => {
 });
 
 // `record` opens the page as a previous session left its tab (`window.__cadTabRecord`); `width`, the view's.
-async function open(t, file, { record = null, width = 800 } = {}) {
+async function open(t, file, { record = null, width = 800, clock = false } = {}) {
   const page = await browser.newPage({ viewport: { width, height: 500 }, deviceScaleFactor: 1 });
+  // `clock`: the page's timers Playwright's, to run forward (`page.clock`).
+  if (clock) await page.clock.install();
   t.after(() => page.close());
   page.setDefaultTimeout(15000);
   const errors = [];
@@ -508,13 +510,15 @@ test('a GLB\'s tools: Select picks a node into Quick Edit, Measure reads metres 
 test('a GLB has its Model tab from the first frame, open as it stays once the file is in; one with no node lists the file', async (t) => {
   // Wide enough that the panel starts open beside the model (it keeps 640px).
   const release = hold('bare.glb');
-  const { page, pane, errors } = await open(t, 'bare.glb', { width: 1000 });
+  const { page, pane, errors } = await open(t, 'bare.glb', { width: 1000, clock: true });
   const panel = pane.locator('aside[data-flat-panel]');
   await panel.locator('[data-flat-panel-heading]').filter({ hasText: 'Model' }).waitFor();
   const toggle = pane.locator('[data-viewer-navbar] [data-navbar-panel]');
   const first = await toggle.getAttribute('aria-expanded');
-  assert.deepEqual([first, await pane.locator('[aria-busy="true"]').count() > 0, await panel.locator('[data-scene-node]').count()], ['true', true, 0],
-    'open, the file still loading, its list empty');
+  // Past the update status's delay: a first load is the loading cover's to say, never "Updating view…".
+  await page.clock.runFor(1000);
+  assert.deepEqual([first, await pane.locator('[aria-busy="true"]').count() > 0, await panel.locator('[data-scene-node]').count(),
+    await pane.locator('[data-view-update-status]').count()], ['true', true, 0, 0], 'open, the file still loading, its list empty, no update status');
   release();
   await ready(pane);
   const row = panel.locator('[data-scene-node="file"]');
