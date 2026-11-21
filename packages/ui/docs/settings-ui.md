@@ -744,9 +744,16 @@ view's its renderer's structure (`ToolPanel`s, each a tab by its name: a STEP's 
 tree, a part file's one row —, the Model's Show all on a line over its rows, the trees searched by the panel's search;
 a robot's **Links**). A GLB's Model tab is its node tree, a 3MF's its objects and an STL's its bodies
 (`kit/inspector/SceneTreeSection.jsx`: a row a node, an object or a body, a pick in it the same as on the model). **Every
-file has the panel, from the view's first frame**: its structure's tab is there while the file loads, empty until it is
-in, so neither the panel nor its toggle comes in late and pushes the model aside, and it is open or collapsed then as it
-is once the file is in; a load that fails has none. A file whose tree is optional always shows it, even of one row, as a
+file has the panel, from the view's first frame**: its structure's tab is there while the file loads, so neither the
+panel nor its toggle comes in late and pushes the model aside, and it is open or collapsed then as it is once the file
+is in; a load that fails has none. **While the file loads, a structure tab with no row yet shows placeholder rows**
+(`FlatPanel.jsx`'s `FlatPanelRowsLoading`, `primitives/tree-row.jsx`'s `TreeRowsLoading`, in the pinned panel, a peek
+and a phone's sheet alike): six of the rows' own 28px lines, each a block the glyph's size on the inset and a bar where
+a name starts, of uneven widths, fading out downwards, in the muted ink, pulsing gently (still where less motion is
+asked for); its tabpanel `aria-busy`, and "Loading" said to assistive technology. No spinner and no words in the panel:
+the view's loading cover says what is loading. They go as the tab's first row is drawn (an engine document's tree
+fills before its model is drawn, so its rows replace them early), and never stand in for a search's hits. Loaded, a tab
+with nothing to list shows what it always has, and a failed load has no panel. A file whose tree is optional always shows it, even of one row, as a
 STEP part does: a 3MF of one object its one row, a GLB of one node its one, a GLB with no node one row named for the
 file, which picks nothing. An STL lists its bodies (`stlBodies.js`: the triangles that share corners, welded at a
 millionth of the model's diagonal), largest first by triangles, as **Body 1**…**Body N** (a named solid of an ASCII STL
@@ -795,7 +802,13 @@ structure. Every rule here, and why:
   the selection stay), and so does a press on the model. **Only the toggle pins it**: a click on it while it peeks
   (or its key, ⌘\) pins it — open, pushing and kept, as a click on a collapsed panel always is (a click with no peek
   up opens it, as ever); nothing done inside it pins it, neither a pick, a tab, a search nor a slider, so moving off a
-  peek always closes it. A peek is never kept: the file's `open` is the person's pin or close alone.
+  peek always closes it. A peek is never kept: the file's `open` is the person's pin or close alone. **It slides**: in
+  from the window's left edge as it opens and back out as it goes, the card and all it holds as one (a transform, at the
+  menus' 150ms, eased out coming and in going: nothing laid out again, the canvas and camera untouched), removed once
+  it is out; the pointer back on the toggle or the card while it slides out brings it back. Pinned from a peek it does
+  not slide (the card becomes the docked panel in place), and where less motion is asked for it appears and goes. Once
+  it is up, **the toggle's tooltip goes**, and stays away while it is: the panel is showing, which is what the tip
+  offered.
 - **Pinned, it always pushes.** Open, it takes its width beside the model, the model's area the narrower for it (the
   model centred in what is left); nothing pinned overlays the model at any width, and Escape and a press on the model
   mean what they always mean. **A peek is the one thing that overlays**: it floats over the view at the docked panel's

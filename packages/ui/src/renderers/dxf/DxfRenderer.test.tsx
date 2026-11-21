@@ -436,10 +436,13 @@ it('a drawing has its Layers from the first frame, open as it stays once the dra
   const toggle = () => pane.querySelector('[data-viewer-navbar] [data-navbar-panel]')!.getAttribute('aria-expanded');
   const rows = () => [...aside.querySelectorAll('[data-layer-row]')].map(row => row.getAttribute('data-layer-row'));
   const first = toggle();
-  expect([first, aside.querySelector('[data-flat-panel-heading]')!.textContent, pane.querySelector('[aria-busy="true"]') !== null, rows()])
-    .toEqual(['true', 'Layers', true, []]);
+  // While it loads, the Layers' placeholder rows in a busy tabpanel, said as loading; gone as the layers arrive.
+  const placeholders = () => aside.querySelectorAll('[role="tabpanel"][aria-busy="true"] [data-tree-row-placeholder]').length;
+  expect([first, aside.querySelector('[data-flat-panel-heading]')!.textContent, pane.querySelector('[aria-busy="true"]') !== null, rows(), placeholders(),
+    within(aside).getByRole('status').textContent]).toEqual(['true', 'Layers', true, [], 6, 'Loading']);
   await act(async () => { release(); });
   await waitFor(() => expect(rows()).toEqual(['CUT', 'BEND', 'ENGRAVE', 'HARDWARE', 'CENTRE', '0']));
+  expect([placeholders(), aside.querySelector('[aria-busy="true"]')]).toEqual([0, null]);
   expect(toggle()).toBe(first);
   dispose();
 });

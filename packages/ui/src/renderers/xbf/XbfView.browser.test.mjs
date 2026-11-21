@@ -67,6 +67,9 @@ test('an engine document reopens with its tree as it was left, and its selection
   assert.deepEqual(errors, []);
 });
 
+// While the file loads, a structure tab with no row shows the panel's placeholder rows, its tabpanel busy.
+const loadingRows = scope => scope.locator('aside[data-flat-panel] [role="tabpanel"][aria-busy="true"] [data-tree-row-placeholder]');
+
 // Every file has its panel from the first frame: a STEP's Model tab is there while its structure is on its way, its
 // rows once it is in — an assembly's, a part file's one — and the panel open then as it is once the file is in.
 test('an engine document (a STEP\'s renderer) has its Model tab from the first frame, open as it stays once the file is in: an assembly\'s rows, a part\'s one', async (t) => {
@@ -79,10 +82,11 @@ test('an engine document (a STEP\'s renderer) has its Model tab from the first f
     const toggle = pane.locator('[data-viewer-navbar] [data-navbar-panel]');
     const first = await toggle.getAttribute('aria-expanded');
     const names = () => panel.locator('[aria-label="Modeling tree"] [data-tree-row-name]').allInnerTexts();
-    assert.deepEqual([first, await pane.locator('[aria-busy="true"]').count() > 0, await names()], ['true', true, []], 'open, the file still loading, no rows');
+    assert.deepEqual([first, await pane.locator('[aria-busy="true"]').count() > 0, await names(), await loadingRows(pane).count()], ['true', true, [], 6],
+      'open, the file still loading, its placeholder rows');
     release();
     await page.waitForFunction(() => { try { return window.cadHarness.a.controller?.readState().loading === false; } catch { return false; } });
-    assert.deepEqual(await names(), rows);
+    assert.deepEqual([await names(), await loadingRows(pane).count()], [rows, 0]);
     assert.equal(await toggle.getAttribute('aria-expanded'), first, 'the panel as it was at the first frame');
     assert.deepEqual(errors, []);
   }

@@ -40,7 +40,7 @@ import { SETTINGS_PANEL_SURFACE_CLASS, FLOATING_CHROME_SURFACE_CLASS, FLOATING_S
 import { ControlUsageProvider } from '../../../../dist/usage/controls.js';
 import { PanelTogglesContext } from '../../../../dist/file-viewer/panelToggles.js';
 import { FilePanelContext } from '../../../../dist/file-viewer/filePanel.js';
-import { PANEL_PEEK_DELAY_MS } from '../../../../dist/renderers/kit/shell/usePanelPeek.js';
+import { PANEL_PEEK_DELAY_MS, PANEL_PEEK_EXIT_FALLBACK_MS } from '../../../../dist/renderers/kit/shell/usePanelPeek.js';
 
 // The panel's toggle, as the navbar draws it (`file-viewer/panelToggles.js`): what the frame says, as a button.
 function NavbarToggles({ children }: { children: React.ReactNode }) {
@@ -236,7 +236,10 @@ it("a mouse resting on the collapsed panel's toggle peeks it over the view after
   wait(PANEL_PEEK_DELAY_MS - 1);
   expect(peeked()).toBe(true);
   wait(1);
-  expect(flatPanel().hidden).toBe(true);
+  // Going, it slides out, still there until it is out (jsdom plays no animation: its fallback ends it), then gone.
+  expect([peeked(), flatPanel().hasAttribute('data-panel-peek-leaving')]).toEqual([true, true]);
+  wait(PANEL_PEEK_EXIT_FALLBACK_MS);
+  expect([flatPanel().hidden, flatPanel().hasAttribute('data-panel-peek-leaving')]).toEqual([true, false]);
   // Only the hide was written; the tab is the file's as a choice always is.
   expect(writes.map(write => (write as any).open)).toEqual([false, false]);
   vi.useRealTimers();
@@ -257,6 +260,7 @@ it("no peek with a button held, nor for a finger; Escape puts it away before the
   expect(peeked()).toBe(true);
   const view = document.querySelector<HTMLElement>('[data-slot="cad-file-view"]')!;
   fireEvent.keyDown(view, { key: 'Escape' });
+  wait(PANEL_PEEK_EXIT_FALLBACK_MS);
   expect([flatPanel().hidden, tool('Draw').getAttribute('aria-pressed')]).toEqual([true, 'true']);
   fireEvent.keyDown(view, { key: 'Escape' });
   expect(tool('Draw').getAttribute('aria-pressed')).toBe('false');
@@ -265,6 +269,7 @@ it("no peek with a button held, nor for a finger; Escape puts it away before the
   wait(PANEL_PEEK_DELAY_MS);
   expect(peeked()).toBe(true);
   fireEvent.pointerDown(document.querySelector('[data-mock-viewport] canvas')!, { button: 0 });
+  wait(PANEL_PEEK_EXIT_FALLBACK_MS);
   expect(flatPanel().hidden).toBe(true);
   vi.useRealTimers();
 });
@@ -288,7 +293,7 @@ it("only the toggle pins a peek: a tab, a pick or / inside it pins nothing; the 
     .toEqual([true, true, 'closed', 'false']);
   // The pointer leaving it, the keyboard still in its box: it goes after the delay, the keyboard handed to the toggle.
   fireEvent.pointerLeave(flatPanel(), mouse);
-  wait(PANEL_PEEK_DELAY_MS);
+  wait(PANEL_PEEK_DELAY_MS + PANEL_PEEK_EXIT_FALLBACK_MS);
   expect([flatPanel().hidden, document.activeElement === toggle()]).toEqual([true, true]);
   // A popup opened from it (a dropdown's trigger saying so, as Radix's does) holds it, the pointer being in that popup;
   // closed, the delay runs.
@@ -301,10 +306,29 @@ it("only the toggle pins a peek: a tab, a pick or / inside it pins nothing; the 
   wait(PANEL_PEEK_DELAY_MS * 3);
   expect(peeked()).toBe(true);
   trigger.setAttribute('aria-expanded', 'false');
-  wait(PANEL_PEEK_DELAY_MS);
+  wait(PANEL_PEEK_DELAY_MS + PANEL_PEEK_EXIT_FALLBACK_MS);
   expect(flatPanel().hidden).toBe(true);
   trigger.remove();
   expect(writes.some(write => (write as any).open === true)).toBe(false);
+  vi.useRealTimers();
+});
+
+it("a peek sliding out comes back as the pointer comes back onto it; where motion is not welcome it goes at once", () => {
+  const { toggle, wait, peeked } = peeking();
+  fireEvent.pointerEnter(toggle(), mouse);
+  wait(PANEL_PEEK_DELAY_MS);
+  fireEvent.pointerLeave(toggle(), mouse);
+  wait(PANEL_PEEK_DELAY_MS);
+  expect(flatPanel().hasAttribute('data-panel-peek-leaving')).toBe(true);
+  // Back on the card while it slides out: up again, and it stays.
+  fireEvent.pointerEnter(flatPanel(), mouse);
+  wait(PANEL_PEEK_EXIT_FALLBACK_MS * 4);
+  expect([peeked(), flatPanel().hasAttribute('data-panel-peek-leaving')]).toEqual([true, false]);
+  // Less motion asked for: no slide, gone the moment it goes.
+  vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce'), media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }));
+  fireEvent.pointerLeave(flatPanel(), mouse);
+  wait(PANEL_PEEK_DELAY_MS);
+  expect([flatPanel().hidden, flatPanel().hasAttribute('data-panel-peek-leaving')]).toEqual([true, false]);
   vi.useRealTimers();
 });
 

@@ -152,8 +152,9 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
     const current = stateRef.current;
     if (current.mobile) { if (current.phoneHas) setSheetOpen(open => !open); return; }
     if (!current.has) return;
-    // A click (or ⌘\) while it peeks pins it: the panel opens as a click on a collapsed one always has.
-    closePeek(false);
+    // A click (or ⌘\) while it peeks pins it: the panel opens as a click on a collapsed one always has, where the peek
+    // is (no slide: the card becomes the docked panel in place).
+    closePeek(false, true);
     const next = toggleSidebar(current);
     if (next.kept) change({ open: next.want });
     setOpened(next.opened);
@@ -181,7 +182,10 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
       return true;
     }
   };
-  const panelNode = has && !mobile ? <FlatPanel mode="docked" open={mode !== "closed" || peek.peeking} peek={mode === "closed" && peek.peeking}
+  // While the file loads (the frame's chrome hidden, the panel there): a structure tab with no row yet shows placeholders.
+  const panelLoading = has && chromeHidden;
+  const panelNode = has && !mobile ? <FlatPanel mode="docked" open={mode !== "closed" || peek.shown} peek={mode === "closed" && peek.shown}
+    peekLeaving={peek.leaving} onPeekExited={peek.exited} loading={panelLoading}
     surfaceRef={peek.panelRef} surfaceProps={peek.panelHandlers} hidden={previewing} onClose={toggle}
     label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null} sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab}
     width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
@@ -192,7 +196,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
     <SheetContent side="left" showCloseButton={false} onSwipeClose={closeSheet} container={viewerElement?.current ?? undefined}
       aria-describedby={undefined} className="w-[85%] max-w-[20rem] gap-0 overflow-hidden border-border p-0" data-panel-sheet="">
       <SheetTitle className="sr-only">{panel.label}</SheetTitle>
-      <FlatPanel mode="page" open onClose={closeSheet} label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null}
+      <FlatPanel mode="page" open onClose={closeSheet} loading={panelLoading} label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null}
         sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab} width={flat.width} maxWidth={flat.maxWidth}
         onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} />
     </SheetContent>
@@ -203,8 +207,8 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   const showToggle = has && !previewing;
   const toggles = useMemo(() => (!showToggle ? null : {
     left: { open: panelOpen, label: t(panelOpen ? "flatPanel.hide" : "flatPanel.show"), shortcut: flatPanelShortcut(platform), toggle,
-      hover: mobile ? null : peek.toggleHandlers }
-  }), [showToggle, panelOpen, platform, toggle, t, mobile, peek.toggleHandlers]);
+      hover: mobile ? null : peek.toggleHandlers, peeking: peek.peeking }
+  }), [showToggle, panelOpen, platform, toggle, t, mobile, peek.toggleHandlers, peek.peeking]);
   // Leaving a phone's width (or Preview) puts its sheet away.
   useLayoutEffect(() => { if (!mobile || previewing) setSheetOpen(false); }, [mobile, previewing]);
   usePanelToggles(toggles);

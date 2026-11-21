@@ -15,6 +15,7 @@ import { createContext, useContext, useEffect } from "react";
  * @property {() => void} toggle
  * @property {object | null} [hover]  Its pointer handlers (`onPointerEnter`, `onPointerLeave`, `onPointerDown`): a mouse
  *   resting on it peeks the collapsed panel (`renderers/kit/shell/usePanelPeek.js`).
+ * @property {boolean} [peeking]  The panel peeks: the toggle's tooltip is closed while it does.
  *
  * @typedef {{ left?: PanelToggle | null }} PanelToggles  The panel's toggle (`left`: the panel is the left sidebar).
  */

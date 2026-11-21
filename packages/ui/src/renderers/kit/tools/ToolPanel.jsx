@@ -2,7 +2,7 @@ import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } f
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { cn } from "@cad/ui/utils";
 import { ScrollArea } from "@cad/ui/primitives/scroll-area";
-import { FlatPanelSectionScope } from "../shell/FlatPanel.jsx";
+import { FlatPanelRowsLoading, FlatPanelSectionScope } from "../shell/FlatPanel.jsx";
 import { FLOATING_CHROME_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 import ResizeGrip from "./ResizeGrip.jsx";
@@ -209,12 +209,15 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
 
   const dragging = draft !== null;
   if (tabbed) {
-    // One tab shows at a time, a search's too (it filters each tab the panel's search covers: `FlatPanel.jsx`).
+    // One tab shows at a time, a search's too (it filters each tab the panel's search covers: `FlatPanel.jsx`). A
+    // structure tab with no row yet while its file loads shows the panel's placeholder rows, busy.
+    const loadingRows = Boolean(id && stack.loadingTabs?.has(id));
     return <section ref={section} aria-label={label} hidden={hidden || stack.activeSection !== id} role="tabpanel"
       id={`flat-panel-body-${id}`} aria-labelledby={`flat-panel-tab-${id}`} data-flat-panel-section={id} data-tool-panel-id={id || undefined} data-tool-panel={fit}
-      className="min-w-0 text-ui">
+      aria-busy={loadingRows || undefined} className="min-w-0 text-ui">
       <div ref={body} data-tool-panel-body="" className="min-w-0">
         <div ref={content} className="flow-root"><FlatPanelSectionScope id={id}>{children}</FlatPanelSectionScope></div>
+        {loadingRows ? <FlatPanelRowsLoading /> : null}
       </div>
     </section>;
   }

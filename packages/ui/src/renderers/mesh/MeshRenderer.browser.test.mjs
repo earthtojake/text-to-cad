@@ -451,6 +451,9 @@ test('a 3MF\'s tools: Select picks an object by its place in the build, Measure 
 const modelRows = pane => pane.locator('aside[data-flat-panel] [data-scene-node]');
 const panelOpen = pane => pane.locator('[data-viewer-navbar] [data-navbar-panel]').getAttribute('aria-expanded');
 
+// While the file loads, a structure tab with no row shows the panel's placeholder rows, its tabpanel busy.
+const loadingRows = scope => scope.locator('aside[data-flat-panel] [role="tabpanel"][aria-busy="true"] [data-tree-row-placeholder]');
+
 test('every mesh file has its Model tab from the first frame, open as it stays once the file is in, a row for its one object or body', async (t) => {
   // Wide enough that the panel starts open beside the model (it keeps 640px).
   for (const [file, rows] of [['cube.stl', ['cube.stl']], ['part.stl', ['box']], ['single.3mf', ['bracket']]]) {
@@ -460,12 +463,12 @@ test('every mesh file has its Model tab from the first frame, open as it stays o
     const first = await panelOpen(pane);
     // Past the update status's delay: a first load is the loading cover's to say, never "Updating view…".
     await page.clock.runFor(1000);
-    assert.deepEqual([first, await pane.locator('[aria-busy="true"]').count() > 0, await modelRows(pane).count(), await pane.locator('[data-view-update-status]').count()],
-      ['true', true, 0, 0], `${file}: open, the file still loading, its list empty, no update status`);
+    assert.deepEqual([first, await pane.locator('[aria-busy="true"]').count() > 0, await modelRows(pane).count(), await loadingRows(pane).count(),
+      await pane.locator('[data-view-update-status]').count()], ['true', true, 0, 6, 0], `${file}: open, the file still loading, its placeholder rows, no update status`);
     release();
     await ready(pane);
     await modelRows(pane).first().waitFor();
-    assert.deepEqual(await modelRows(pane).allInnerTexts(), rows, `${file}: one row, named for the file, its solid or its object`);
+    assert.deepEqual([await modelRows(pane).allInnerTexts(), await loadingRows(pane).count()], [rows, 0], `${file}: one row, named for the file, its solid or its object, in the placeholders' place`);
     assert.equal(await panelOpen(pane), first, `${file}: the panel as it was at the first frame`);
     assert.deepEqual(errors, []);
   }

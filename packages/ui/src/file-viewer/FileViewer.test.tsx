@@ -67,9 +67,11 @@ it('draws the view\'s panel toggle first in the navbar, before the logo: the sam
   const toggling = defineFileRenderer({ id: 'panels', priority: 1, matches: () => true, prepare: async () => ({ data: null }),
     load: async () => ({ default: function Panels() {
       const [shown, setShown] = React.useState(false);
-      usePanelToggles(React.useMemo(() => ({ left: { open: shown, label: shown ? 'Hide panel' : 'Show panel', shortcut: '⌘\\',
-        toggle: () => { left(); setShown(value => !value); } } }), [shown]));
-      return <p>shown</p>;
+      // The panel peeking under the toggle (`usePanelPeek.js`), as a rest on it makes it.
+      const [peeking, setPeeking] = React.useState(false);
+      usePanelToggles(React.useMemo(() => ({ left: { open: shown, label: shown ? 'Hide panel' : 'Show panel', shortcut: '⌘\\', peeking,
+        toggle: () => { left(); setShown(value => !value); } } }), [shown, peeking]));
+      return <><p>shown</p><button type="button" aria-label="Peek" onClick={() => setPeeking(value => !value)} /></>;
     } }) });
   const actionsHost = { ...host, navigation: { ...(host as any).navigation, home() {} }, fileActions: { platform: 'darwin', perform: { 'copy-path': async () => {} } } };
   render(<FileViewer file={FILE} host={actionsHost as any} renderers={[toggling]} state={{}} onStateChange={() => {}} navbarActions={<button type="button" aria-label="Full size" />} />);
@@ -85,6 +87,13 @@ it('draws the view\'s panel toggle first in the navbar, before the logo: the sam
   // Its icon: the sidebar's own (a rounded rectangle and a short line), not lucide's panel.
   expect([Boolean(toggle().querySelector('svg[data-sidebar-icon] rect[rx="3"]')), toggle().querySelector('.lucide-panel-left'),
     toggle().className.includes('size-7'), toggle().getAttribute('aria-keyshortcuts')]).toEqual([true, null, true, '⌘\\']);
+  // Its tooltip shows on a rest on it; once the panel peeks under it, it goes (the pointer still on it): the panel is
+  // showing, which is what the tip offered.
+  await user.hover(toggle());
+  expect((await screen.findByRole('tooltip')).textContent).toContain('Show panel');
+  fireEvent.click(screen.getByRole('button', { name: 'Peek' }));
+  await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
+  fireEvent.click(screen.getByRole('button', { name: 'Peek' }));
   await user.click(toggle());
   // Open, the same neutral button: only its name and aria-expanded say so.
   expect(look()).toEqual(['Hide panel', 'true', null, 'ghost']);

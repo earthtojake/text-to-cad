@@ -11,12 +11,20 @@ import { hasOpenPopup } from "../../../lib/popups.js";
 // that popup then), checked again after each delay. The keyboard in it does not hold it: what goes, goes, its focus
 // handed to the toggle. Only the toggle pins it (a click, or its key ⌘\: the frame's toggle); nothing done inside it
 // does (a pick, a tab, a search, a slider). Escape or a press on the model put it away (the frame's). Nothing of it is
-// ever kept.
+// ever kept. It slides in as it opens and back out as it goes (`PanelSurface.jsx`), and is gone once it is out
+// (`exited`, or `PANEL_PEEK_EXIT_FALLBACK_MS` should the animation's end never come); while it slides out, the pointer
+// back on the toggle or the card brings it back at once. Pinned, it goes at once (the docked panel takes its place),
+// and so it does where motion is not welcome.
 //
 // Importing this module has no environmental effects.
 
 /** How long the pointer rests on the toggle before the panel peeks, and how long it is away before the peek goes. */
 export const PANEL_PEEK_DELAY_MS = 500;
+/** The longest a peek sliding out (150ms) stays mounted when its animation's end is never heard. */
+export const PANEL_PEEK_EXIT_FALLBACK_MS = 250;
+
+/** Whether the person asks for less motion: a peek then appears and goes without sliding. */
+const reducedMotion = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 
 /** A pointer that can rest over a control without pressing it. */
 const hovers = event => event.pointerType === "mouse" || event.pointerType === "pen";
@@ -24,13 +32,22 @@ const hovers = event => event.pointerType === "mouse" || event.pointerType === "
 /**
  * @param {{ enabled: boolean }} options  `enabled`: the panel is collapsed and could peek (a desktop's docked panel,
  *   not in Preview). Turned off, a peek goes at once.
- * @returns {{ peeking: boolean, close(): void, toggleHandlers: object, panelHandlers: object, panelRef: { current: HTMLElement | null } }}
- *   `toggleHandlers` go on the navbar's toggle, `panelHandlers` and `panelRef` on the panel's surface.
+ * @returns {{ peeking: boolean, shown: boolean, leaving: boolean, exited(): void, close(refocus?: boolean, instant?: boolean): void,
+ *   toggleHandlers: object, panelHandlers: object, panelRef: { current: HTMLElement | null } }}
+ *   `peeking`: up (not going); `shown`: on screen, sliding out included (`leaving`), until `exited` is called (the
+ *   slide's end). `toggleHandlers` go on the navbar's toggle, `panelHandlers` and `panelRef` on the panel's surface.
  */
 export function usePanelPeek({ enabled }) {
   const [peeking, setPeeking] = useState(false);
   const peekingRef = useRef(false);
   peekingRef.current = peeking;
+  const [leaving, setLeaving] = useState(false);
+  const leavingRef = useRef(false);
+  leavingRef.current = leaving;
+  const exitTimer = useRef(null);
+  // Out: off the screen, and off the tree.
+  const exited = useCallback(() => { clearTimeout(exitTimer.current); exitTimer.current = null; setLeaving(false); }, []);
+  const show = () => { exited(); setPeeking(true); };
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
   const timer = useRef(null);
@@ -40,15 +57,25 @@ export function usePanelPeek({ enabled }) {
   // The toggle, where the keyboard goes when the peek goes from under it.
   const toggleRef = useRef(null);
   const clear = () => { clearTimeout(timer.current); timer.current = null; };
-  // Going, a peek hands the keyboard, if it was in it, to the toggle, so it is never left on a panel that is gone.
-  const hide = (refocus = true) => {
+  // Going, a peek hands the keyboard, if it was in it, to the toggle, so it is never left on a panel that is gone. It
+  // slides out, unless `instant` (a pin: the docked panel takes its place) or motion is not welcome.
+  const hide = (refocus = true, instant = false) => {
     const panel = panelRef.current, focused = typeof document === "undefined" ? null : document.activeElement;
     if (refocus && panel && focused && panel.contains(focused)) toggleRef.current?.focus({ preventScroll: true });
     setPeeking(false);
+    if (instant || reducedMotion()) { exited(); return; }
+    setLeaving(true);
+    clearTimeout(exitTimer.current);
+    exitTimer.current = setTimeout(exited, PANEL_PEEK_EXIT_FALLBACK_MS);
   };
   // Put away (Escape, a press on the model, a pin): the panel it leaves is gone from under the pointer. `refocus`
-  // false where the keyboard goes elsewhere anyway (a pin keeps the panel; a press on the model takes it).
-  const close = useCallback((refocus = true) => { clear(); inside.current.panel = false; if (peekingRef.current) hide(refocus); }, []);
+  // false where the keyboard goes elsewhere anyway (a pin keeps the panel; a press on the model takes it); `instant`
+  // for a pin, which leaves the panel where it is, docked.
+  const close = useCallback((refocus = true, instant = false) => {
+    clear();
+    inside.current.panel = false;
+    if (peekingRef.current) hide(refocus, instant); else if (instant) exited();
+  }, []);
   // The one thing that holds it up: a popup opened from it (the pointer is in that popup).
   const held = () => hasOpenPopup(panelRef.current);
   const armClose = () => {
@@ -68,6 +95,8 @@ export function usePanelPeek({ enabled }) {
         toggleRef.current = event.currentTarget;
         inside.current.toggle = true;
         if (peekingRef.current) { clear(); return; }
+        // Back on the toggle while it slides out: it comes back at once.
+        if (leavingRef.current && enabledRef.current) { clear(); show(); return; }
         if (!enabledRef.current || event.buttons) return;
         clear();
         timer.current = setTimeout(() => {
@@ -86,6 +115,7 @@ export function usePanelPeek({ enabled }) {
       onPointerEnter() {
         inside.current.panel = true;
         if (peekingRef.current) clear();
+        else if (leavingRef.current && enabledRef.current) show();
       },
       onPointerLeave() {
         inside.current.panel = false;
@@ -94,7 +124,8 @@ export function usePanelPeek({ enabled }) {
     }
   }), []);
   // Pinned (or gone to a phone, or Preview): the peek goes, the panel, if pinned, keeping the keyboard where it is.
-  useEffect(() => { if (!enabled) close(false); }, [enabled, close]);
-  useEffect(() => clear, []);
-  return { peeking: peeking && enabled, close, toggleHandlers: handlers.toggle, panelHandlers: handlers.panel, panelRef };
+  useEffect(() => { if (!enabled) close(false, true); }, [enabled, close]);
+  useEffect(() => () => { clear(); clearTimeout(exitTimer.current); }, []);
+  return { peeking: peeking && enabled, shown: (peeking || leaving) && enabled, leaving: leaving && enabled, exited, close,
+    toggleHandlers: handlers.toggle, panelHandlers: handlers.panel, panelRef };
 }
