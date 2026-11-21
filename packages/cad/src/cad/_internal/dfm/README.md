@@ -910,7 +910,8 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   across the thickness, none touching both skins: a plate extruded both ways along an ellipse or a spline
   (the kernel merges the two halves of a plane or a cylinder, and leaves a surface of extrusion's two faces,
   split at mid-thickness), layers joined and never merged. From each skin, its countersinks and its breaks,
-  the faces square to it are followed through their tangent joins, and a face reached from a skin and from
+  the faces square to it are followed through their tangent joins (through one that is a cut edge already,
+  too), and a face reached from a skin and from
   its opposite is a cut edge; a hole's wall in several faces is one wall, and the countersink beside one of
   them is the hole's. A skin's rays that reach
   the other skin's break are short by that break, which is its own finding, not the skin's. A bend's end is broken by a cone or a torus
@@ -919,7 +920,11 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   about its axis t/2 round, from one of its cylinders to the other, read the same. A cut edge rounded whole
   from one skin to the other (a full round, r = t/2: a convex cylinder along the skins, a torus or sphere
   about their normal, and the face that turns a corner of the outline between two) leaves no face of the cut
-  square to the skins: it is an `edge_break` of both, no cut edge. A cone, torus, sphere or freeform face whose
+  square to the skins: it is an `edge_break` of both, no cut edge. A break may be several faces of one
+  surface, each joined tangent to the last (a layer cut it across): they are one break, as deep as they are
+  together. The piece of a bend's end's break that lies beside the cut touches no cylinder of the bend, no one
+  piece of a full round touches both skins (or, round a bend, both cylinders), and the corner between two
+  full rounds is in pieces as they are: each is read as the whole face is. A cone, torus, sphere or freeform face whose
   rays cross `t` is `formed` (a cone between flanges is not a bend). A face square between two opposite planes that face away from each other,
   nearer each other than its own rays run, is the cut edge of a stretch off the thickness (a 3 mm wall's end
   cap): the stretch is judged on its skins, not on rays that run along it. Everything else, and any stretch
@@ -968,6 +973,10 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   a line), and round a bend at the cylinder midway through the sheet, each half unrolled: an 80 x 40 plate
   with full-round ends unfolds 80 x 40, not 78 x 40, a 50 mm wide bracket with full-round sides is 50 mm
   wide across its bends too, not 48, and a hole with a full-round rim is its narrowest.
+  A break in several faces is laid, unrolled and counted as the faces the kernel merges them into (grown a
+  face at a time, so a round that was two faces whole stays two): laid face by face, a piece that projects
+  narrower than the tolerance the breaks are fused with is lost there, and a hole's rim with it. A merged
+  face's edges were cut too: its pieces on in one line are one, and each starts where the last one ends.
   A countersink sunk into the unfolded side is laid in the same way: that skin's hole is the countersink's
   rim, the flat's the hole under it (a plate countersunk from both sides has one whichever side unfolds).
   A rim that runs off the outline, into a cutout or into another rim is no whole circle of the skin's, and
