@@ -193,7 +193,7 @@ class RootExports(unittest.TestCase):
 
     def test_a_name_the_root_never_had_is_pythons_own_error(self):
         # No backwards compatibility: a retired name is no name, and says nothing about history.
-        # ``build`` among them: a model builds by a decorated function's call, never cad.build (law 12).
+        # ``build`` among them: a model builds by a decorated function's call, never cad.build (law 11).
         for name in ("Material", "materials", "build", "read_scene", "AssemblyHelper", "label_shape", "revolute", "compound_from_instances",
                      "mechanism_state", "animation", "select", "report", "track", "serve", "status", "stop",
                      "daemon", "server", "srgb", "srgb_to_linear", "linear_to_srgb", "validate", "check"):

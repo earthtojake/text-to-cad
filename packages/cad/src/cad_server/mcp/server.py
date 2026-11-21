@@ -1156,7 +1156,7 @@ class Server:
             return _data({"events": []})
         model = arguments.get("model")
         if isinstance(model, str):
-            self.sync_document(model)  # the canonical address as the view names it, never a path of it (law 14)
+            self.sync_document(model)  # the canonical address as the view names it, never a path of it (law 19)
         state = arguments.get("state") if isinstance(arguments.get("state"), dict) else None
         focused = arguments.get("focused") is True
         # Use the agent's tools never see: a person touching the view. (The file on screen is counted
