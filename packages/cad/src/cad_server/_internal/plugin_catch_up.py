@@ -26,7 +26,11 @@ this release on". A run that fails, or where any app failed, writes nothing of `
 release only where every app found went well. ``owed``: the release of the global install's last run that did not go
 well (an app failed, or the run did), dropped by one that went well and by the switch turned on (``noted``): the rule
 reads it as a run owed to that release and any later one, so a computer where the plugin was never up to date for any
-release (no ``for``: a fresh install whose first run had an app fail) is tried again too. 0.11.12 and 0.11.13 read only
+release (no ``for``: a fresh install whose first run had an app fail) is tried again too. BRIDGE-ONLY: the bridge's run
+of the hosted install command, done once cad is installed whatever the apps did (``install_script``), marks it too
+where its report says the plugin's step failed and no run is owed already (``owe``): the release that run was owed
+for, so the plugin is this rule's to try again even where no global install's run marked it (the step ran a cad from
+uv's cache, or could not run at all). 0.11.12 and 0.11.13 read only
 ``for`` of the record, and keep any other field as they find it. Then the last run the server began (``begin``):
 ``release``, ``at``, ``tries`` (of that release), ``outcome`` (``underway``, then ``ok`` or ``failed``), ``code`` (its
 exit status, null where it could not start) and ``ended``. It is a state record, not a choice, so it lives in the state
@@ -39,7 +43,8 @@ saying to run nothing (``silenced``: ``CAD_ENGINE_UPDATE_INSTALLER`` set and emp
 stand-in for the hosted install command -- ``cad plugin install`` itself runs no install command and reads no such
 variable); this cad a global install (``tool``: an installer of ``auto_update.INSTALLERS`` made its environment) of a
 plain release; install mode not owed (BRIDGE-ONLY: a computer the bridge still carries gets that run,
-``install_script``, and no other); and this cad newer than ``for``, or owed a run (``owed``, of this release or an
+``install_script``, and no other, until that run is done, which it is once cad is installed: an app that failed there
+is this rule's from then on); and this cad newer than ``for``, or owed a run (``owed``, of this release or an
 earlier one). Where the record names no ``for`` (none yet, or unreadable) and owes no run, it is written for this
 release and nothing runs: the switch was turned on by hand, or no run was ever made, and a computer whose switch was on
 before is taken as up to date. Bounded: a run underway, of any release, begun less than ``RETRY_SECONDS`` ago, is waited
@@ -289,6 +294,14 @@ def noted(release: str | None = None) -> None:
         return {**kept, "for": named}
 
     _change(change)
+
+
+def owe(release: str) -> None:
+    """BRIDGE-ONLY. The bridge's run of the hosted install command ended done with the plugin's step failed
+    (``install_script``): a run owed for ``release`` (``owed``, see the module), unless one is owed already -- the mark
+    ``cad plugin install`` leaves where the global install ran it (``ended``), kept as it is. ``OSError`` where it
+    cannot be written."""
+    _change(lambda found: None if _numbers(found.get("owed")) is not None else {**found, "owed": release})
 
 
 def owing(found: dict[str, Any], version: str) -> bool:

@@ -111,10 +111,11 @@ by the switch's call.
 What each caller reads back: a person and their shell, the exit status. Of 0.11.12 and 0.11.13, the typed ``cad plugin
 update`` gives the exit status as its own and, on 0, keeps its release as the one the plugin is up to date for; the
 one their server began keeps it in its record (``ok``, or ``failed`` with the status); plain ``cad setup`` gives it as
-its own; ``once`` reads nothing. Install mode reads the report alone (``CAD_INSTALL_REPORT``, above): two fields of it,
-``setup`` the integer 0 and no value of ``apps`` ``failed``, and never the exit status -- so ``"plugin": "failed"``
-(``UNSAID``) is written wherever the plugin's step ended non-zero and named no app as failed, or that reader would take
-the run as done and never run it again.
+its own; ``once`` reads nothing. Install mode reads the report alone (``CAD_INSTALL_REPORT``, above), never the exit
+status. That of 0.11.12 to 0.11.14 reads two fields of it, ``setup`` the integer 0 and no value of ``apps`` ``failed``
+-- so ``"plugin": "failed"`` (``UNSAID``) is written wherever the plugin's step ended non-zero and named no app as
+failed, or that reader would take the run as done and never run it again. Later releases' take a run whose ``setup`` is
+0 as done, and any ``failed`` in ``apps``, ``UNSAID`` included, as the plugin's to run again by cad's own retry.
 
 No loops. The edges: this command starts uv and pipx (installs only), the installed ``cad --version``, ``cad update`` (a
 person's run alone), ``cad plugin install --help`` (the installed cad's, which runs nothing on any release), ``cad

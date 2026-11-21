@@ -26,9 +26,15 @@ uv's own installer told to leave shell profiles alone (``UV_NO_MODIFY_PATH``). N
 server that stops leaves it running, and the next server judges its report. It is stopped, with what it started,
 after ``RUN_SECONDS``; one the server that started it no longer watches is taken as failed then.
 
-**Its outcome** (``judge``): ``done`` when the report says the cad step ended 0 and no app's step failed; else failed,
-by why: ``no_report`` (none written: the command could not be fetched, was stopped, or writes none), ``setup`` (its cad
-step failed), ``app`` (an app's step failed: cad itself was installed) or ``other`` (the command could not start).
+**Its outcome** (``judge``): ``done`` when the report says the cad step ended 0, whatever the apps' steps did; else
+failed, by why: ``no_report`` (none written: the command could not be fetched, was stopped, or writes none), ``setup``
+(its cad step failed) or ``other`` (the command could not start). The run is cad's: once cad is installed it is over.
+Where the report also says the plugin's step failed (a value of its ``apps`` ``failed``: an app's, or the step's own,
+``"plugin"``), that is left to cad's own retry of the plugin, as on any computer, and the computer is marked as owed a
+run of it for the release this run was owed for (``plugin_catch_up.owe``), where ``cad plugin install`` did not mark it
+itself; a run of that retry is never held back once this run is done (``plugin_catch_up.due``). 0.11.12 to 0.11.14 took
+such a run for a failed one (``app``) and ran it again, hourly and then daily: a record of theirs that says so is
+attempted again as any failed one, and that attempt is done once cad is there.
 
 The record, ``handover.json`` in the state folder, one at a time: ``schema``, ``mode`` (``install``), ``version`` (the
 release it is owed for), ``state`` (``owed``, ``done``, ``superseded``, ``gave up``), ``owed`` (when), ``attempts``,
@@ -76,6 +82,8 @@ SCHEMA = "cad hand-over/2"
 INSTALL = "install"
 OWED, DONE, SUPERSEDED, GAVE_UP = "owed", "done", "superseded", "gave up"
 RUNNING = "running"
+# Why an attempt failed. ``app`` (an app's step failed, cad installed) is 0.11.12 to 0.11.14's, kept in their records:
+# this release takes such an attempt as done (``judge``).
 FAILURES = ("no_report", "setup", "app", "other")
 ATTEMPT = "attempt"
 # Install mode's wait before its first attempt: a shipped updater's switch (0.10.0 to 0.11.11, ``switch._started``)
@@ -221,19 +229,20 @@ def first_seconds() -> float:
         return FIRST_SECONDS
 
 
-def judge(report: Path) -> tuple[str, bool]:
-    """An attempt's outcome by the report at ``report`` (see the module) -- ``done``, ``no_report``, ``setup`` or
-    ``app`` -- and whether it says cad was installed (its cad step ended 0)."""
+def judge(report: Path) -> tuple[str, bool, bool]:
+    """An attempt's outcome by the report at ``report`` (see the module) -- ``done``, ``no_report`` or ``setup`` --,
+    whether it says cad was installed (its cad step ended 0), and whether, done, it says the plugin's step failed (a
+    value of its ``apps`` ``failed``), which is cad's own retry's to run again."""
     try:
         found = json.loads(report.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return "no_report", False
+        return "no_report", False, False
     steps = found.get("apps") if isinstance(found, dict) else None
     if not isinstance(steps, dict):
-        return "no_report", False
+        return "no_report", False, False
     if found.get("setup") != 0 or isinstance(found.get("setup"), bool):
-        return "setup", False
-    return ("app" if any(status == "failed" for status in steps.values()) else DONE), True
+        return "setup", False, False
+    return DONE, True, any(status == "failed" for status in steps.values())
 
 
 # How long ``_stop`` lets taskkill run, and then waits for the process itself to be gone.
@@ -294,12 +303,12 @@ class Carrier:
             self.process = None
             record = read()
             if record is not None and record.get("outcome") == RUNNING:
-                self.end(record, *judge(report), told, wall)
+                self.judged(record, report, told, wall)
         record = read()
         if record is not None and record.get("outcome") == RUNNING:  # an earlier server's attempt
             if not report.exists() and wall - (_time(record.get("last")) or 0.0) < RUN_SECONDS:
                 return None
-            self.end(record, *judge(report), told, wall)
+            self.judged(record, report, told, wall)
             record = read()
         if record is None or not installer():
             return None
@@ -333,6 +342,21 @@ class Carrier:
         except (OSError, ValueError) as error:
             told(f"the install command could not start: {error}")
             self.end(record, "other", False, told, wall)
+
+    def judged(self, record: dict[str, Any], report: Path, told: Callable[[str], None], wall: float) -> None:
+        """The attempt ended, judged by its report (``judge``): ended (``end``), and, done with the plugin's step
+        failed, cad's own retry of the plugin owed a run (``plugin_catch_up.owe``, see the module)."""
+        outcome, installed, left = judge(report)
+        self.end(record, outcome, installed, told, wall)
+        if outcome == DONE and left:
+            from cad_server._internal import plugin_catch_up
+
+            try:
+                plugin_catch_up.owe(record["version"])
+            except OSError as error:
+                told(f"an agent app's step failed, and could not be marked to run again: {error}")
+                return
+            told("an agent app's step failed: cad runs that step again later, by itself")
 
     def end(self, record: dict[str, Any], outcome: str, installed: bool, told: Callable[[str], None],
             wall: float) -> None:
