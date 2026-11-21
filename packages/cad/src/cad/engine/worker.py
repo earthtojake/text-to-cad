@@ -33,10 +33,11 @@ An ``export`` request with ``check`` (``{"type", "process", "resolved", "candida
 alone -- this program started for a slot of the daemon's pool, never a model's worker -- of a file (``path``)
 or of the bytes of a document the engine holds (``document``, its bytes after the line), measured in memory
 (``_check``: the integration ``cad.registry.manufacturing_check`` names) and answered ``{"id", "done":
-{"checked": ...}}``. Nothing stops a check from within: the daemon holds it to its limits from outside and
-kills the process of one it stops, which holds nothing but what it read for checks. A checks process over its
-memory cap after a check drops what it read (``shed``) and, still over it, is retired as a worker is after a
-build.
+{"checked": ...}}``; one whose ``check`` says ``describe`` is read alike and measured nowhere, its ``checked``
+holding what a measurement of it would read (``content``). Nothing stops a check from within: the daemon holds it
+to its limits from outside and kills the process of one it stops, which holds nothing but what it read for checks.
+A checks process over its memory cap after a check drops what it read (``shed``) and, still over it, is retired as
+a worker is after a build.
 
 A worker whose resident memory alone is over the workers' memory cap after a build
 (``CAD_ENGINE_WORKER_RSS_MB``, by default a quarter of the machine's memory, which the daemon holds
@@ -806,8 +807,10 @@ def _check(request: dict[str, Any]) -> dict[str, Any]:
     memory (its integration's ``held``). Answers ``{"reports": [], "files": [], "checked"}``, the ``checked``
     saying the release that measured it, what measures here (``measures``), whether it read the document anew
     (``read``) and, for a file, the digest of the bytes it measured -- or, where they changed while it read
-    them, ``changed`` and nothing measured: no version of the file is those bytes. A caller of other code or
-    libraries than this process's is answered with no ``checked``, nothing measured."""
+    them, ``changed`` and nothing measured: no version of the file is those bytes. A ``check`` with ``describe``
+    measures nothing: ``checked`` holds what a manufacturing check's measurement would read of the document
+    instead (its ``content``, the integration's ``described``), with the rest as for a check. A caller of other
+    code or libraries than this process's is answered with no ``checked``, nothing measured."""
     from cad.engine import export
     from cad.engine.contract import measures_for, measuring, release
     from cad.registry import interference_check, manufacturing_check
@@ -838,7 +841,9 @@ def _check(request: dict[str, Any]) -> dict[str, Any]:
     else:
         # A check is its family's to measure: an interference check's (``cad._internal.interference``), else a manufacturing one's.
         measurer = interference_check() if check.get("process") == "interference" else manufacturing_check()
-        checked = measurer.held(source, check, read)
+        # Asked to describe the document (``describe``), it answers what a measurement would read, measuring nothing.
+        held = measurer.described if check.get("describe") else measurer.held
+        checked = held(source, check, read)
     return {"reports": [], "files": [], "checked": {**checked, **said, "read": fresh,
                                                     **({"digest": digest} if "path" in spec else {})}}
 

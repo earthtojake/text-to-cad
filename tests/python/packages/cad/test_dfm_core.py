@@ -557,6 +557,158 @@ class MeasuresTest(unittest.TestCase):
         self.assertEqual(measurers - listed, {"build123d/_dfm_dxf.py"})
         self.assertEqual(set(_measuring.DFM), set(manufacturing.PROCESSES))
 
+    def test_a_measurement_s_key_holds_the_options_it_reads_and_the_code_that_measures(self) -> None:
+        from cad._internal import dfm
+        from cad._internal.dfm import kept
+
+        read = {"cnc": {"axes": 5, "turning": True, "tools": "3,6", "stock": "100x60x25"},
+                "sheet": {"thickness": 2.0, "k_factor": 0.4, "material": "aluminum"},
+                "molding": {"pull": "x", "wall_limit": 30.0, "zero_tol": 0.1},
+                "printing": {"technology": "sla", "angle_limit": 30.0, "layer_height": 0.1, "samples": 500,
+                             "nozzle": 0.6, "build_volume": "200x200x200",
+                             "printer": {"name": "p", "file": "p.json", "supplied": ["build_volume"]}}}
+        for process in dfm.PROCESSES:
+            resolved = manufacturing.options("step", process, {})
+            key = kept.measure_key("step", process, False, resolved, "c0de")
+            self.assertEqual(set(read[process]), set(dfm.module(process).MEASURES))
+            for name, value in read[process].items():
+                with self.subTest(process=process, reads=name):
+                    self.assertNotEqual(kept.measure_key("step", process, False, {**resolved, name: value}, "c0de"), key)
+            for name, value in self.RULES_ALONE[process].items():
+                with self.subTest(process=process, rules_alone=name):
+                    self.assertEqual(kept.measure_key("step", process, False, {**resolved, name: value}, "c0de"), key)
+            for other in (("xbf", process, False, resolved, "c0de"), ("step", process, True, resolved, "c0de"),
+                          ("step", process, False, resolved, "c0de+edited")):
+                self.assertNotEqual(kept.measure_key(*other), key)
+
+
+def _saved(folder: Path, result: bd.Shape, name: str) -> tuple[Path, bytes]:
+    """``result`` saved as ``name``.xbf in ``folder``, its parts keyed as a build keys them, and the bytes the
+    engine holds of such a document (``document.to_bytes``)."""
+    from cad.engine import document
+
+    tree = document.collect(result, name)
+    for part in tree.parts:
+        part.shape = document.direct(part.shape)
+        part.key = document.geometry_key(part.shape)
+    held = document.to_xcaf(tree)
+    path = folder / f"{name}.xbf"
+    document.save(held, path, compare=False)
+    return path, document.to_bytes(held)
+
+
+def _described(source: dict, payload: bytes | None = None) -> dict:
+    """What a checks process answers when asked to describe ``source`` (``worker._check``)."""
+    from cad.engine import worker
+    from cad.engine.contract import measuring
+
+    return worker._check({"source": source, "payload": payload,
+                          "check": {"describe": True, "type": "xbf", "measures": measuring()}})["checked"]
+
+
+class ContentTest(unittest.TestCase):
+    """What a measurement reads of a document (``_dfm_brep.content``), answered by a checks process asked to
+    describe it: a model's document and its xbf alike, changed by what a measurement reads and by nothing else."""
+
+    def setUp(self) -> None:
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.folder = Path(folder.name)
+
+    @staticmethod
+    def _block(label: str = "block", material: object = None, color: str | None = None,
+               where: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> bd.Part:
+        from bd_materials import metals
+        from bd_materials.processes import machined
+
+        part = bd.Pos(*where) * (bd.Box(30, 20, 12) - bd.Pos(0, 0, 4) * bd.Box(12, 8, 4.01))
+        part.label = label
+        part.material = metals.aluminum(process=machined()) if material is None else material
+        if color is not None:
+            part.color = bd.Color(color)
+        return part
+
+    def _content(self, result: bd.Shape, name: str = "block") -> dict:
+        folder = self.folder / str(len(list(self.folder.iterdir())))
+        folder.mkdir()
+        path, _ = _saved(folder, result, name)
+        return _described({"path": str(path)})["content"]
+
+    def test_a_model_s_document_and_its_xbf_are_one_content_changed_by_what_a_measurement_reads(self) -> None:
+        from bd_materials import metals
+        from bd_materials.processes import machined
+
+        from cad._internal.dfm import kept
+
+        path, payload = _saved(self.folder, self._block(), "block")
+        filed = _described({"path": str(path)})
+        held = _described({"document": "block-id", "name": "block", "version": "1"}, payload)
+        self.assertNotIn("measured", filed)
+        self.assertEqual(held["content"], filed["content"])
+        content = filed["content"]
+        self.assertEqual(content["key"], kept.content_key(content))
+        self.assertEqual([part["owner"] for part in content["parts"]], ["block/block"])
+        self.assertEqual(content["parts"][0]["material"]["process"]["process"], "machined")
+        self.assertNotIn("pbr", content["parts"][0]["material"], "its look is no measurement's")
+        self.assertEqual(self._content(self._block(color="red"))["key"], content["key"], "a colour reads alike")
+        for change, result in (("moved", self._block(where=(5.0, 0.0, 0.0))), ("renamed", self._block("plate")),
+                               ("its material", self._block(material=metals.stainless(process=machined()))),
+                               ("its process", self._block(material=metals.aluminum()))):
+            with self.subTest(change=change):
+                self.assertNotEqual(self._content(result)["key"], content["key"])
+        self.assertEqual(_described({"path": str(self.folder / "missing.xbf")})["unmeasured"]["code"],
+                         "document_unreadable")
+
+    def test_a_triangulation_a_part_was_read_with_is_in_its_content(self) -> None:
+        """A measurement keeps a mesh fine enough where it finds one, so the mesh a part was read with is read."""
+        from OCP.BRepMesh import BRepMesh_IncrementalMesh
+
+        shape = bd.Cylinder(10, 10).wrapped
+        self.assertEqual(brep._meshed(shape), "")
+        BRepMesh_IncrementalMesh(shape, 0.5)
+        coarse = brep._meshed(shape)
+        BRepMesh_IncrementalMesh(shape, 0.01)
+        self.assertNotIn(brep._meshed(shape), ("", coarse))
+
+    def test_every_field_of_a_part_and_a_document_is_in_its_content_or_said_why_not(self) -> None:
+        import dataclasses
+
+        content = self._content(self._block())
+        for kind, held in ((brep.Part, set(content["parts"][0])), (brep.Document, set(content) - {"key"})):
+            with self.subTest(kind=kind.__name__):
+                fields = {field.name for field in dataclasses.fields(kind)}
+                self.assertEqual(fields - set(brep.NOT_CONTENT), held)
+
+    def test_what_the_parts_declare_is_read_from_the_content_as_from_the_parts(self) -> None:
+        """A check given no process resolves it from the content record (``kept.asked``) as ``_dfm_check`` does from
+        the parts it read: the process, its options and the finding that says so; a refusal and an empty document
+        alike."""
+        from bd_materials import metals, plastics
+        from bd_materials.processes import fdm, machined
+
+        from cad._internal.dfm import kept
+
+        pla = plastics.pla(process=fdm(layer_height_mm=0.16))
+        two = bd.Compound(children=[self._block("a"), self._block("b", material=pla, where=(50.0, 0.0, 0.0))],
+                          label="two")
+        for name, result in (("machined", self._block()), ("printed", self._block(material=pla)),
+                             ("none", self._block(material=metals.aluminum())), ("two", two)):
+            with self.subTest(declared=name):
+                path, _ = _saved(self.folder, result, name)
+                content = _described({"path": str(path)})["content"]
+                check = {"type": "xbf", "process": None, "given": {}, "candidates": False}
+                try:
+                    process, resolved, said = manufacturing.declared(
+                        "xbf", [(part.owner or part.name, part.material) for part in brep.read("xbf", path).parts], {})
+                except ValueError as refused:
+                    self.assertEqual(kept.asked(content, check), {"refused": str(refused)})
+                    continue
+                self.assertEqual(kept.asked(content, check), {"process": process, "resolved": resolved,
+                                                              "declared": said})
+        given = {"type": "xbf", "process": "cnc", "resolved": {"axes": 5}, "given": {}}
+        self.assertEqual(kept.asked(content, given), {"process": "cnc", "resolved": {"axes": 5}, "declared": None})
+        self.assertEqual(kept.asked({**content, "parts": []}, given)["unmeasured"]["code"], "document_empty")
+
 
 class GeometryTest(unittest.TestCase):
     @classmethod
