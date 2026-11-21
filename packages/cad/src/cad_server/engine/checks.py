@@ -389,9 +389,12 @@ POOL = 4
 def pool_size() -> tuple[int, str | None]:
     """How many checks processes measure at once, and the line said when ``CAD_ENGINE_CHECKS`` was held to its
     bounds: ``CAD_ENGINE_CHECKS`` (one to the machine's cores), else half the machine's cores, one at least and
-    ``POOL`` at most -- a small pool, as each is a kernel process of its own."""
+    ``POOL`` at most -- a small pool, as each is a kernel process of its own. The variable's saved setting
+    (``cad config``) stands in for it where it is unset."""
+    from cad._internal import environment
+
     cores = os.cpu_count() or 1
-    given = os.environ.get("CAD_ENGINE_CHECKS", "").strip()
+    given = environment.value("CAD_ENGINE_CHECKS").strip()
     if not given:
         return min(POOL, max(1, cores // 2)), None
     try:

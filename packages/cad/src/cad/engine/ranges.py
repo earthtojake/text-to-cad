@@ -37,6 +37,27 @@ between the two meshes, and at most ``2 * RESOLUTION`` over it (each side's near
   sample counted truly came nearer: its gap now is at least its true gap, and its gap as built at most
   ``RESOLUTION`` over its true one.
 
+**Near, in a turn.** A turn moves a point as far as it stands from the axis for each radian turned, so a gap that is
+a hair of turning far from the axis is a wide angle near it: 0.3 mm is half a degree at 30 mm and 25 degrees at 0.7.
+A face through the axis closing on another through it (a lid hinged on its edge folding back onto its box's wall, a
+door onto the wall beside its hinge) lies within any clearance of that face along the hinge line long before it
+lands, and so does one drawn a little off its seat. So in a turn a moving sample closes a gap or counts towards a
+contact, in either half above, only where its gap is also under ``ARC`` of its distance from the axis: one farther
+from the still part than that is not brought to it by ``ARC`` radians (5.7 degrees) more of turning. Such a face
+meets where no more than that much turning is left, whatever the clearance and however near it was drawn. From
+``RESOLUTION / ARC`` (3 mm) of the axis out this asks no more of a contact than ``RESOLUTION`` does, and from
+``bound / ARC`` no more of a gap than the pair's bound: there a sample is read by its distance alone, and a clearance
+holds from ten times itself out. Nearer the axis the share is under ``RESOLUTION``, which the samples do not resolve
+(a sample lying on a face may stand that far from the face's nearest sample): there its gap is measured to the still
+part's surface itself, the triangles that its samples within ``2 * RESOLUTION`` lie on (``_Sweep._surface``), its
+true distance wherever that is under ``RESOLUTION``. There, too, a sample that is near counts towards a contact as
+``RESOLUTION`` over its share of samples: its band is that much narrower than the ``RESOLUTION`` a contact is counted
+in, and an edge or a small face coming down near the axis brings that much less of its surface into it, the contact
+it would be farther out (a flap 3 mm wide landing on its end face, a thin lid's back edge coming round onto its
+wall). A part moved by a joint that follows this one turns about that joint's axis, or slides along it: its samples
+are read by the two halves alone, as a slide's are. Neither the share nor that count reads the clearance, so the rule
+below holds.
+
 **Parts drawn overlapping.** A pair touching as built may be drawn one inside the other (a vendor's simplified
 envelope sunk into its neighbour, a carriage drawn inside its rail, a link drawn a little too wide for its
 clevis): their surfaces cross. Such a pair is **overlapping** where any of its moving samples lies inside the still
@@ -95,7 +116,8 @@ alone moves each on a circle or a line, so one whose path passes no still point'
 (``_Reach``); at each pose the rest are placed by cluster (``_Clusters``), each cluster only where a coarse
 mask of the still side says it may be that near (``_Occupied``); each sample left is looked up against
 each still part it may be near, only as far as its pair's bound or ``RESOLUTION`` (``_Cells``, at halves
-of the clearance).
+of the clearance); and of those that come that near in a turn, the ones nearer its axis than ``RESOLUTION / ARC``
+are measured once more, to the still part's triangles (``_Sweep._surface``).
 
 **Progress.** A joint whose sweep may take more than ``LONG`` seconds (its first pose's time times its poses, a full
 turn each way at most) is said as it starts, with about how long; once the sweep has run ``QUIET`` seconds, every
@@ -122,7 +144,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-__all__ = ["CLOSED", "GEOMETRY", "RESOLUTION", "Contact", "JointStops", "Near", "Overlap", "Riding", "sweep",
+__all__ = ["CLOSED", "RESOLUTION", "Contact", "JointStops", "Near", "Overlap", "Riding", "sweep",
            "unknown"]
 
 #: Every point of a tested surface is within this many millimetres of one of its samples, at any clearance: a gap
@@ -158,6 +180,12 @@ GROWN = 3
 #: says it turns (or slides) on them (``JointStops.riding``).
 RIDING = math.sin(math.radians(20.0))
 RIDES = 0.9
+#: The share of its distance from a turn's axis that a moving sample's gap is under where the sample is near (the
+#: module's **Near, in a turn**): a tenth, which is a tenth of a radian (5.7 degrees) of turning from touching. At
+#: that, ``RESOLUTION`` holds as the least clearance from ten times itself (3 mm) of the axis out, and a face closing
+#: about the axis is told to meet within 6 degrees of where it lands: smaller tells it nearer its landing, and holds
+#: a clearance only from farther out.
+ARC = 0.1
 #: A full turn, in degrees: a turning joint clear this far each way has no stop.
 TURN = 360.0
 SWEPT = ("revolute", "continuous", "prismatic")
@@ -324,17 +352,20 @@ def _count(number: int) -> str:
     return f"{number / 1e6:.2g} million" if number >= 1_000_000 else f"{number:,}"
 
 
-def _sampled(vertices: np.ndarray, faces: np.ndarray, resolution: float) -> tuple[np.ndarray, np.ndarray]:
-    """A surface's samples (``_samples``) and the unit normal of the triangle each lies on, as ``float16`` (a sample
-    on no triangle, of a surface of none, a zero one): which way the surface faces there, either way round."""
+def _sampled(vertices: np.ndarray, faces: np.ndarray, resolution: float
+             ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """A surface's samples (``_samples``), the unit normal of the triangle each lies on, as ``float16`` (a sample
+    on no triangle, of a surface of none, a zero one): which way the surface faces there, either way round; and that
+    triangle's index among ``faces``, as ``int32``."""
     points, triangle = _samples(vertices, faces, resolution, triangles=True)
+    triangle = triangle.astype(np.int32)
     if not len(faces):
-        return points, np.zeros((len(points), 3), dtype=np.float16)
+        return points, np.zeros((len(points), 3), dtype=np.float16), triangle
     corners = vertices[faces]
     normals = np.cross(corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 0])
     length = np.linalg.norm(normals, axis=1, keepdims=True)
     normals = np.divide(normals, length, out=np.zeros_like(normals), where=length > 0)
-    return points, normals[triangle].astype(np.float16)
+    return points, normals[triangle].astype(np.float16), triangle
 
 
 def _samples(vertices: np.ndarray, faces: np.ndarray, resolution: float, triangles: bool = False) -> Any:
@@ -371,6 +402,27 @@ def _samples(vertices: np.ndarray, faces: np.ndarray, resolution: float, triangl
     start, end = a[at] + up * (c[at] - a[at]), b[at] + up * (c[at] - b[at])
     points = start + on_row[:, None] * (end - start)
     return (points, at) if triangles else points
+
+
+def _to_triangle(points: np.ndarray, a: np.ndarray, b: np.ndarray, c: np.ndarray) -> np.ndarray:
+    """Each point's distance from its own triangle (``a``, ``b``, ``c``: a row of each a point): its height over the
+    triangle's plane where its foot on that plane lies in the triangle, else its distance from the nearest of the
+    triangle's three edges."""
+    normal = np.cross(b - a, c - a)
+    doubled = np.linalg.norm(normal, axis=1, keepdims=True)
+    normal = np.divide(normal, doubled, out=np.zeros_like(normal), where=doubled > 0)
+    height = np.einsum("ij,ij->i", points - a, normal)
+    foot = points - height[:, None] * normal
+    over = doubled[:, 0] > 0  # whether the foot lies in the triangle: on the inner side of each edge
+    nearest = np.full(len(points), np.inf)
+    for start, end in ((a, b), (b, c), (c, a)):
+        along = end - start
+        length = np.einsum("ij,ij->i", along, along)
+        share = np.clip(np.divide(np.einsum("ij,ij->i", points - start, along), length, out=np.zeros(len(points)),
+                                  where=length > 0), 0.0, 1.0)
+        nearest = np.minimum(nearest, np.linalg.norm(points - start - share[:, None] * along, axis=1))
+        over &= np.einsum("ij,ij->i", np.cross(along, foot - start), normal) >= 0
+    return np.where(over, np.abs(height), nearest)
 
 
 #: Where a ray of ``_inside`` starts, off each point, in metres: a hair off the round numbers surfaces are drawn on,
@@ -705,6 +757,7 @@ class _Sweep:
         self.parts: list[tuple[str, str]] = []  # (part, link) by part index
         self.points: dict[str, np.ndarray] = {}
         self.normals: dict[str, np.ndarray] = {}  # each sample's surface normal, in its link's frame (``_sampled``)
+        self.lying: dict[str, np.ndarray] = {}  # the triangle of its part each sample lies on (``_sampled``)
         self.owners: dict[str, np.ndarray] = {}
         surfaces = []
         for link in description.links:
@@ -729,20 +782,22 @@ class _Sweep:
         # Each part's triangles in its link's frame, by part index: what a point inside it is told by (``_inside``).
         self.meshes: list[tuple[np.ndarray, np.ndarray]] = []
         for link in description.links:
-            found, facing, owners = [], [], []
+            found, facing, lying, owners = [], [], [], []
             for name, path, vertices, faces in by_link.get(link.name, ()):
                 index = len(self.parts)
                 self.parts.append((name, link.name))
                 self.meshes.append((vertices, faces))
-                sampled, normals = _sampled(vertices, faces, self.resolution)
+                sampled, normals, triangles = _sampled(vertices, faces, self.resolution)
                 found.append(sampled)
                 facing.append(normals)
+                lying.append(triangles)
                 owners.append(np.full(len(sampled), index, dtype=np.int64))
             if found:
                 points, owners = np.vstack(found), np.concatenate(owners)
                 keep = _outside(points, owners, self.resolution * math.sqrt(2.0))
                 self.points[link.name], self.owners[link.name] = points[keep], owners[keep]
                 self.normals[link.name] = np.vstack(facing)[keep]
+                self.lying[link.name] = np.concatenate(lying)[keep]
         self.hashed: dict[tuple[int, float], _Cells] = {}  # each part's samples as built, by cell size (``_hashed``)
         self.as_built: dict[int, np.ndarray] | None = None
         # Of a moving part's samples, which lie inside a still part as built, by (moving, still) (``_buried``); and
@@ -753,6 +808,8 @@ class _Sweep:
         self.insides: dict[int, tuple[np.ndarray, float, np.ndarray, np.ndarray]] = {}  # a still part's (``_deep``)
         self.rays: dict[int, tuple[_Rays, np.ndarray]] = {}  # each still part's, made once (``_filed``)
         self.pressed: dict[tuple[int, int], np.ndarray] = {}  # a moving part's depths in a still one as built
+        # Each still part's triangles as built, and the one each of its samples lies on: made once (``_surface``).
+        self.facets: dict[int, tuple[np.ndarray, np.ndarray]] = {}
 
     def _hashed(self, part: int, size: float) -> _Cells:
         """A part's samples where it stands as built, hashed in cells of ``size`` metres: the same for every joint
@@ -858,6 +915,35 @@ class _Sweep:
             nearest[at] = held
             left = left[nearest[left] < 0]
         return depth, nearest
+
+    def _surface(self, still: int, points: np.ndarray) -> np.ndarray:
+        """Each of ``points``' distance from ``still``'s surface as built, in metres, wherever that is under
+        ``RESOLUTION``: the least of its distances from the triangles that the part's samples within ``2 * RESOLUTION``
+        of it lie on (``inf`` where none is). Every point of a triangle is within ``RESOLUTION`` of one of that
+        triangle's samples (``_samples``), so a triangle under ``RESOLUTION`` from a point has a sample within twice
+        that of it and is among them; where the surface is farther, the answer is never under its distance. Surface
+        inside the link, where two of its parts meet, holds no sample (``_outside``) and is not measured to; a part of
+        no triangle is its samples."""
+        found = self.facets.get(still)
+        if found is None:
+            link = self.parts[still][1]
+            vertices, faces = self._rest_mesh(still)
+            found = self.facets[still] = (vertices[faces], self.lying[link][self.owners[link] == still])
+        corners, lying = found
+        least = np.full(len(points), np.inf)
+        for first in range(0, len(points), 2000):  # a couple of thousand at once: a fine mesh holds hundreds a point
+            block = points[first:first + 2000]
+            asked, held, apart = self._hashed(still, 2 * self.resolution).pairs(block)
+            if not len(asked):
+                continue
+            if len(corners):
+                # Each (point, triangle) once, however many of the triangle's samples are that near.
+                pairs = np.unique(asked * len(corners) + lying[held])
+                asked, triangle = pairs // len(corners), corners[pairs % len(corners)]
+                apart = _to_triangle(block[asked], triangle[:, 0], triangle[:, 1], triangle[:, 2])
+            each, nearest = _least(asked, apart)
+            least[first + each] = nearest
+        return least
 
     def _deep(self, still: int, depth: float) -> tuple[np.ndarray, float, np.ndarray]:
         """Where a point lies inside ``still`` as built deeper than ``depth`` mm: the cells of a grid over it
@@ -1105,7 +1191,14 @@ class _Sweep:
                 found = radii[part] = np.linalg.norm(np.cross(axis[:3, 2], offset), axis=1)
             return found
 
-        if not any(other.follows is not None and self._leads(joint.name, other) for other in self.description.joints):
+        led = [other.name for other in self.description.joints
+               if other.follows is not None and self._leads(joint.name, other)]
+        # The parts a turn carries on circles about its axis (the module's **Near, in a turn**): those it moves, less
+        # what a joint that follows it moves, which turns about that joint's axis or slides along it.
+        followed = set().union(*(self.moved_by(name) for name in led))
+        circling = np.array([turning and link in moving and link not in followed for _part, link in self.parts],
+                            dtype=bool)
+        if not led:
             # Alone, the joint moves its points on circles about its axis (or lines along it): one whose circle
             # passes no still point's within the clearance never comes within it, and is left out of every pose.
             inverse = np.linalg.inv(axis)
@@ -1309,8 +1402,25 @@ class _Sweep:
                     on = on | (radius(part)[held] <= reaches[part][of[asked]])
                 sliding = np.zeros(len(sample), dtype=bool)
                 sliding[asked[touching & on]] = True
-                touches = np.bincount(of_each[(least < self.resolution) & ~stood[each] & ~sliding[each]],
-                                      minlength=width)
+                counted = (least < self.resolution) & ~stood[each] & ~sliding[each]
+                worth = np.ones(len(each))  # how many samples each counts for, towards a contact
+                # In a turn a sample is near only where its gap is also under ``ARC`` of its distance from the axis
+                # (the module's **Near, in a turn**). Its gap to the part's samples is never under its distance from
+                # the part's surface, so one under its share by the samples is under it; of the rest, one whose share
+                # is under ``RESOLUTION`` is measured to the surface itself. One near within a share under
+                # ``RESOLUTION`` counts for as many samples as that band is narrower.
+                judged = np.flatnonzero((closes | counted) & circling[of_each])
+                if len(judged):
+                    points = where[each[judged]]
+                    share = ARC * np.linalg.norm(np.cross(axis[:3, 2], points - axis[:3, 3]), axis=1)
+                    nearing = least[judged] < share
+                    unsure = ~nearing & (share < self.resolution)
+                    if unsure.any():
+                        nearing[unsure] = self._surface(part, points[unsure]) < share[unsure]
+                    closes[judged[~nearing]] = False
+                    counted[judged[~nearing]] = False
+                    worth[judged[nearing]] = np.maximum(1.0, self.resolution / share[nearing])
+                touches = np.bincount(of_each[counted], weights=worth[counted], minlength=width)
                 grown = np.flatnonzero(touches > STOP)
                 met = set(np.unique(of_each[closes]).tolist()) | set(grown.tolist())
                 if not met:

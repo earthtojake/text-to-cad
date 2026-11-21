@@ -39,8 +39,8 @@ TYPES = {
     "kicad_pcb": ("export", "snapshot", "inspect", "drc"),
     "kicad_sch": ("export", "snapshot", "inspect", "erc"),
 }
-COMMANDS = ("serve", "status", "stop", "delete", "server", "mcp", "run", "requirement", "doctor", "cache", "setup",
-            "viewer", "telemetry", "update", "plugin")
+COMMANDS = ("serve", "status", "stop", "delete", "server", "mcp", "run", "requirement", "doctor", "cache", "config",
+            "setup", "viewer", "telemetry", "update", "plugin")
 # Run, never listed by `cad --help`: the bridge's (0.10.0 to 0.11.11's skill text and updaters), and the commands for
 # programs rather than people.
 UNLISTED = ("status", "stop", "setup", "serve", "requirement")
@@ -304,7 +304,10 @@ class MujocoCheck(unittest.TestCase):
         code, said, _ = _run(["--help"])
         self.assertEqual(0, code)
         self.assertIn("integrations, for a tool's own files cad checks or writes and does not show (cad <integration> "
-                      "<operation> [FILE]):\n  mujoco      check              compile a MuJoCo model", said)
+                      "<operation> [FILE]):\n  mujoco  check  compile a MuJoCo model", said)
+        # A deprecated integration's commands still run (the 30 days a command the skills used is kept) and are
+        # no longer listed: `cad orcaslicer`, deprecated (a project saved from OrcaSlicer's app slices as it is).
+        self.assertNotIn("orcaslicer", said.split("integrations, for a tool's own files", 1)[1])
         code, said, _ = _run(["mujoco", "--help"])
         self.assertEqual(0, code)
         self.assertIn("usage: cad mujoco <operation> FILE [options]", said)

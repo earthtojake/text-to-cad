@@ -14,7 +14,8 @@ Edge cases: fillets everywhere, a freeform (spline) surface, an assembly, an inc
 2.2 m one, a turned part, a part that needs six setups, a T-slot and a dovetail (through and blind), a closed
 void, an inclined hole and an inclined pocket on three axes and on five, a sharp-cornered window, a hole a
 slot splits, an offset cross hole on a turned part, creases either side of the ball end mill's angle,
-engraved text, and a rounded chamber no tool gets into behind a bore beside one a keyseat cutter does.
+engraved text, a rounded chamber no tool gets into behind a bore beside one a keyseat cutter does, and holes
+that straddle a pocket's wall beside the same holes clear of it.
 
 Every case is checked again tilted a third of a degree off the world's axes: a verdict never turns with the
 part's placement.
@@ -347,6 +348,23 @@ def chambers() -> Any:
     return _labelled(part, "chambers")
 
 
+def mount_plate(pitch: float = 31.0) -> Callable[[], Any]:
+    """A 10 mm plate (z -5 .. 5) with a 40 x 30 mm pocket 5 deep, R2 corners, a 22 mm bore in the pocket's floor
+    and four 4.5 mm holes on a square of ``pitch``. At 31 mm each hole's axis lies 0.5 mm behind a long wall of
+    the pocket (y = +-15), 1.75 mm of the hole over the pocket (planted); at 38 mm each stands 1.75 mm clear
+    of it (control), with a fifth hole counterbored beside them."""
+    def build() -> Any:
+        part = bd.Box(80, 60, 10) - _pocket(40, 30, 5, 2.0, 5) - bd.Cylinder(11, 12)
+        for x in (-pitch / 2, pitch / 2):
+            for y in (-pitch / 2, pitch / 2):
+                part -= bd.Pos(x, y, 0) * bd.Cylinder(2.25, 12)
+        if pitch > 31.0:
+            part -= bd.Pos(30, 0, 0) * bd.Cylinder(2.25, 12)
+            part -= bd.Pos(30, 0, 5.5) * bd.Cylinder(4, 5, align=(A.CENTER, A.CENTER, A.MAX))
+        return _labelled(part, "mount_plate")
+    return build
+
+
 def knife() -> Any:
     """A block whose +x end is bevelled to an 18.4-degree knife edge (planted)."""
     profile = bd.Polygon((0, 0), (40, 0), (40, 10), (30, 10), align=None)
@@ -482,6 +500,12 @@ CASES = [
     Case("webs", webs, {"material": "aluminum"},
          expect=[("cnc.wall_thickness", None, box(-20.3, -0.1, -5, -19.7, 0.1, 5)),
                  ("cnc.wall_thickness_recommended", None, box(-20.3, -0.1, -5, -19.7, 0.1, 5))]),
+    # each hole's mouth is cut by a long wall of the pocket, the hole whole below its floor: a partial hole, one
+    # finding a hole; the bore lies whole in the floor. Clear of the pocket the same holes are none
+    Case("mount_plate", mount_plate(), {"material": "aluminum", "tools": "3,6,10"},
+         expect=[("cnc.partial_hole", None, box(x - 2.25, y - 2.25, -5, x + 2.25, y + 2.25, 5))
+                 for x in (-15.5, 15.5) for y in (-15.5, 15.5)]),
+    Case("mount_plate-clear", mount_plate(38.0), {"material": "aluminum", "tools": "3,6,10"}),
     Case("knife", knife, {"material": "aluminum"}, expect=[("cnc.knife_edge", None, box(-0.1, -7.5, -0.1, 0.1, 7.5, 0.1))]),
     Case("valley", valley(), {"material": "aluminum"}),
     Case("valley-160", valley(160.0), {"material": "aluminum"}),

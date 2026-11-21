@@ -92,11 +92,13 @@ FAILURES = {
     State.STOPPED: STOPPED,
     State.OVER_TIME: "the manufacturing check was stopped after {seconds:.0f} s, over a check's time limit of "
                      "{limit:g} s: nothing was measured. Check a smaller part or fewer samples, or raise the limit "
-                     "(CAD_ENGINE_CHECK_SECONDS, in the environment the CAD server starts in; 0 for none)",
+                     "with `cad config set engine_check_seconds N` (0 for none), which the CAD server takes when it "
+                     "starts again; CAD_ENGINE_CHECK_SECONDS, where the server starts with it, overrides it",
     State.OVER_MEMORY: "the manufacturing check was stopped with its process at {resident:.0f} MB, over a check's "
                        "memory limit of {limit:.0f} MB: nothing was measured. The part may be too large to check "
-                       "on this machine; check a smaller part, or raise the limit (CAD_ENGINE_CHECK_RSS_MB, in the "
-                       "environment the CAD server starts in; 0 for none)",
+                       "on this machine; check a smaller part, or raise the limit with `cad config set "
+                       "engine_check_rss_mb N` (0 for none), which the CAD server takes when it starts again; "
+                       "CAD_ENGINE_CHECK_RSS_MB, where the server starts with it, overrides it",
     State.SUPERSEDED: SUPERSEDED,
 }
 

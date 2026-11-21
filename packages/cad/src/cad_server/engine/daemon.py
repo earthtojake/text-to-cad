@@ -188,9 +188,12 @@ def standby() -> bool:
 
 
 def worker_cap() -> int:
-    """The live workers' cap: ``CAD_ENGINE_WORKERS``, else the machine's cores."""
+    """The live workers' cap: ``CAD_ENGINE_WORKERS``, else its saved setting (``cad config``), else the machine's
+    cores."""
+    from cad._internal import environment
+
     try:
-        given = int(os.environ.get("CAD_ENGINE_WORKERS", "").strip() or 0)
+        given = int(environment.value("CAD_ENGINE_WORKERS").strip() or 0)
     except ValueError:
         given = 0
     return given if given > 0 else (os.cpu_count() or 1)
@@ -240,8 +243,11 @@ def refused(error: Exception) -> dict[str, Any]:
 
 
 def environment_port() -> int | None:
-    """``CAD_ENGINE_PORT`` as a port (0: any free one), or None when it names none."""
-    given = os.environ.get("CAD_ENGINE_PORT", "").strip()
+    """``CAD_ENGINE_PORT``, else its saved setting (``cad config``), as a port (0: any free one), or None when
+    neither names one."""
+    from cad._internal import environment
+
+    given = environment.value("CAD_ENGINE_PORT").strip()
     if not given:
         return None
     try:
@@ -430,7 +436,11 @@ def _listen(host: str, port: int, source: str, token: str, listen: Callable[[int
 def _holder(port: int, source: str) -> PortHeld:
     """``port`` refused, naming who holds it as the system names it (``_who``) and what to do about it.
     ``source``: where the port came from (``bind``), which says how to name another."""
-    other = "pass another --port" if source == "--port" else "start the server with another CAD_ENGINE_PORT"
+    from cad._internal.environment import SAVED, resolved
+
+    other = ("pass another --port" if source == "--port"
+             else "name another with `cad config set engine_port N` and start the server again"
+             if resolved("CAD_ENGINE_PORT")[1] == SAVED else "start the server with another CAD_ENGINE_PORT")
     who = _who(port)
     return PortHeld(f"port {port} is held by {who}: stop it, or {other}", who)
 
@@ -623,6 +633,9 @@ class Daemon:
         from cad.engine.serve import Pressure
         from cad.engine.worker import footprint_mb, memory_ceiling_mb, rss_cap_mb
 
+        # The processes' memory cap and the ceiling on one busy process, read once as the server starts: a saved
+        # setting changed while it runs (``cad config``) waits for its next start, as a variable does.
+        cap_mb, ceiling_mb = rss_cap_mb(), memory_ceiling_mb()
         # The system's memory-pressure signal, the server's too once it runs (``serve``): under it the
         # supervisor sheds the standby and its least recently used processes (``Supervisor.shed``); as
         # ``CAD_ENGINE_PRESSURE`` says, where it is set (``Pressure.from_environment``).
@@ -631,8 +644,8 @@ class Daemon:
         # here by name: the drain (a worker's documents taken from it before it stops), what a page
         # watches, the progress that wakes pages, and the cache's ``saved``.
         self.supervisor = Supervisor(cap or worker_cap(), SERVICES, watched=self.connected,
-                                     drain=lambda process: self.models.drain(process), memory=rss_cap_mb,
-                                     ceiling=memory_ceiling_mb, measure=footprint_mb,
+                                     drain=lambda process: self.models.drain(process), memory=lambda: cap_mb,
+                                     ceiling=lambda: ceiling_mb, measure=footprint_mb,
                                      pressed=self.pressure.under, on_progress=self.progressed,
                                      on_event={"saved": lambda process, header, payload:
                                                self.models.cache.saved(process, header, payload)})
@@ -1851,8 +1864,6 @@ class Daemon:
         standby (never a script's worker: its process, its memory, how long it has stood by), its
         processes' memory against its cap, the builds waiting for a worker, the last retirements, and
         what it serves and draws."""
-        from cad.engine.worker import rss_cap_mb
-
         now = time.monotonic()
         server = self.server
         supervisor = self.supervisor
@@ -1871,7 +1882,8 @@ class Daemon:
         return {"ok": True, "pid": os.getpid(), "version": version(), "installation": installation(),
                 "up": round(time.time() - self.born, 1),
                 "workers": workers, "standby": standby, "cap": supervisor.cap, "waiting": supervisor.waiting("worker"),
-                "rssMb": round(supervisor.resident()), "rssCapMb": rss_cap_mb(), "retired": list(supervisor.retired),
+                "rssMb": round(supervisor.resident()), "rssCapMb": supervisor.memory(),
+                "retired": list(supervisor.retired),
                 "idle": round(now - self.last, 1), "holders": self.holders, "hosts": dict(self.hosts),
                 "busy": self.busy, "prefix": sys.prefix,
                 "watched": 0 if server is None else len(server.watched()),

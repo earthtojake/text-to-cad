@@ -13,7 +13,8 @@ names against a few folders, and nothing else:
 
 ``${...}`` and ``$(...)`` are KiCad's two spellings of a variable; a variable the project's ``.kicad_pro``
 defines (``text_variables``) is read too. The person's KiCad settings (their own path variables, their
-3D search paths) are never read, nor the process's environment but ``CAD_KICAD_3DMODELS``.
+3D search paths) are never read, nor the process's environment but ``CAD_KICAD_3DMODELS`` (else its saved
+setting, ``cad config``).
 
 The model must be a STEP: a ``.wrl`` or ``.wrz`` name is read as the ``.step`` or ``.stp`` beside it, as
 KiCad's own libraries ship both. A resolved file's REAL path (every symlink followed) must lie inside one
@@ -136,9 +137,13 @@ def standard_libraries(platform: str | None = None, environ: Mapping[str, str] |
 
 
 def library_roots(environ: Mapping[str, str] | None = None, platform: str | None = None) -> list[str]:
-    """The 3D libraries a board's models are read in: ``CAD_KICAD_3DMODELS``'s folders, then KiCad's own."""
+    """The 3D libraries a board's models are read in: ``CAD_KICAD_3DMODELS``'s folders (else its saved setting's,
+    ``cad config``), then KiCad's own. ``environ`` given, it alone is read, as a test's own environment."""
+    from cad.engine.places import setting
+
+    given = setting("CAD_KICAD_3DMODELS")[0] if environ is None else environ.get("CAD_KICAD_3DMODELS")
     environ = os.environ if environ is None else environ
-    named = [folder for folder in (environ.get("CAD_KICAD_3DMODELS") or "").split(os.pathsep) if folder.strip()]
+    named = [folder for folder in (given or "").split(os.pathsep) if folder.strip()]
     roots: list[str] = []
     for folder in [*named, *standard_libraries(platform, environ)]:
         real = os.path.realpath(os.path.expanduser(folder))

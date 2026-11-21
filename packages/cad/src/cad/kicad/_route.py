@@ -39,7 +39,7 @@ from typing import Any, Mapping, Sequence
 
 __all__ = ["Routed", "route"]
 
-#: The keys an entry of the plan, and route's keyword options, may name (law 16: a closed set).
+#: The keys an entry of the plan, and route's keyword options, may name (law 15: a closed set).
 OPTIONS = ("layers", "width", "clearance", "vias", "via_cost")
 _KEYS = ("net", "pads", *OPTIONS)
 #: What a via costs, in millimetres of track, where the plan does not say.
@@ -250,8 +250,8 @@ def _wants(entries: Sequence[Mapping[str, Any]], board: Any, rules: Any) -> list
         partner = complement(net)
         if partner is not None and partner in pads_of:
             raise ValueError(f"{where}: {net} and {partner} are a differential pair to KiCad (its diff_pair_gap and any "
-                             "pair rule apply), and route routes no pair: route the pair by hand (layout.md), and leave "
-                             "both out of the plan")
+                             "pair rule apply), and route routes no pair: route the pair by hand, and leave both "
+                             "out of the plan")
         layers = _layers(entry["layers"], copper, where)
         named = {layer for layer, _ in layers}
         off = [pad.ref or f"a pad of {pad.part}" for pad in pads if not named & set(pad.layers)]
@@ -387,7 +387,8 @@ def _rules(board: Any, names: Sequence[str]) -> tuple[Any, list[str]]:
         dru = _project_file(board, ".kicad_dru")
         if dru is not None and dru.is_file() and "(rule" in dru.read_text(encoding="utf-8", errors="replace"):
             raise ValueError(f"route keeps the board's custom rules ({dru.name}), and this KiCad cannot give them over "
-                             "its API: run the edit with kicode's kicad-cli (unset CAD_KICAD_CLI), or take the rules "
+                             "its API: run the edit with kicode's kicad-cli (`cad config unset kicad_cli`, with "
+                             "CAD_KICAD_CLI unset), or take the rules "
                              "out while routing") from None
         response = None
     custom = []

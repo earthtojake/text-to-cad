@@ -515,6 +515,25 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   (axial; radial: square to the axis and meeting it; perpendicular: square to it, beside it; off_axis). Drill table: Wikipedia
   "Drill bit sizes" (ASME B94.11M): metric 0.2-25 mm in its steps, fractional 1/64 in to 1 3/4 in, #80-#1,
   A-Z.
+  A hole's **mouth** (`_dfm_cnc_holes.mouths`): `mouth` is `whole` where no wall cuts it. A wall cuts it where
+  faces that are none of the hole's and rise along its axis, either way (`Model.rises`: a cavity's wall, a
+  step's, the part's side, another hole's), meet its narrowest cylinder by two convex edges with an opening
+  between them, and from the axis, 0.05 mm inside an end the hole opens by (`MOUTH_INSET_MM`; a tenth of the
+  hole's run where that is less), a ray through the middle of that opening meets no wall of the hole -- a
+  drill starts there with part of its tip over the void: `stepped` where the opening ends at a floor (an edge
+  of the cylinder crosses its middle and the wall is met just beyond: the mouth lies on two levels), `open`
+  where it runs the hole's whole length (a hole that breaks out of the part's side). `past_wall_mm` (how far
+  the hole's circle reaches past that wall, the move back that clears it: a plane's by its normal where the
+  cylinder meets it, a cylinder's along the axis by the distance between the two axes; 0 where no wall cuts
+  it), `open_deg` (the angle of the cylinder the wall opens), `open_mm` (how far along the axis), `cut_by` (the
+  wall it reaches furthest past) and `cut_faces` (the faces the opening lies between: one wall's, two walls' at
+  a corner, or the two faces of a wall thinner than the hole that stands across its mouth, a rib); of several
+  openings, the one that reaches furthest. Two sides that face each other across the opening (their normals'
+  cosine under -0.7, `SLOT_SIDES`, as a gap's two faces, each in front of the other) are a slot's that runs
+  into the hole -- a slit across a clamp's bore, a keyway, a channel that leaves a hole --, cut after it:
+  `slotted`, no wall the hole crosses. No cut either: an opening in the hole's side below its mouth (a cross
+  hole's, a cavity's), an end on a face that does not rise (an inclined one, a curved one), a modelled thread's
+  groove where it runs out, and a counterbore's own wall (the mouth judged is the drilled cylinder's).
 - **threads** — modelled threads: non-analytic faces (no surface of revolution) whose edge points sweep >= 350
   degrees about a cylinder's axis in a radial band under a third of the radius, with a flank edge winding half
   a turn or more (a pitch), with their end caps. `internal`, `major_diameter_mm`,
@@ -778,7 +797,9 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
 makes as drawn; a warning a recommendation, a cost or a risk: it is made.
 
 A number a published guide states cites it: Protolabs Network (Hubs)'s "How to design parts for CNC
-machining" (`hubs-cnc`) and its CNC machining service page's maximum part sizes (`hubs-cnc-service`). A floor
+machining" (`hubs-cnc`) and its CNC machining service page's maximum part sizes (`hubs-cnc-service`). A
+practice that guide says nothing of and another states cites that one: Fictiv's "CNC machining design guide"
+(`fictiv-cnc`), for a hole a wall cuts (`cnc.partial_hole`, below). A floor
 no guide states is cad's own (`rules.OWN`: its finding's `source` reads `cad, ...`, never the
 publisher's name, and the rule's note gives the reason). A limit that follows the tools is the smallest
 `--tools` tool's where one is given. With none, one tool floor holds for holes, slots and corners: the 0.05 mm
@@ -799,6 +820,17 @@ diameters a section), groove depth (a quarter of the bore a warning, half of it 
 and width (five). The part's size alone fails no part: long-bed mills and vertical lathes exist, so both size
 rules are warnings, and only a `--stock` given that the part does not fit is an error.
 
+`cnc.partial_hole` (a warning) is a drilled hole a wall cuts at its mouth (`holes.mouth` `stepped` or `open`):
+its figure is the hole's reach past that wall (`past_wall_mm`), and any is said. The guide states the practice
+and no number -- "Partial holes should be avoided because there is a high chance of tip wander", and drilled
+holes are placed "so they are not intersecting with an existing cavity in the part" -- so the limit is none
+at all, and never an error: the part is made, the hole drilled before its wall is cut, or milled, and the wall
+keeps the hole's scallop. A hole an end mill makes (a flat floor, a diameter over the largest drill) is
+measured and not judged, and a slot that runs into a hole is the slot's (`slotted`). A hole that breaks out of
+the part's side is one too where the check reads a hole at all, 300 degrees or more of its wall left (its two
+feather edges are `cnc.knife_edge`'s besides); with less left it is a notch of the outline, an end mill's, and
+no hole.
+
 The pocket and corner rules apply under `--turning` too, to the live tooling's pockets. Under `--turning` the
 milling rules -- `sharp_internal_edge`, `gap_width*`, `inclined_feature`, `special_cutter`, `undercut`,
 `setups` -- are `not_applicable`, and `cnc.turning_not_judged` (info) says what turning does not judge.
@@ -813,7 +845,9 @@ Each finding's message ends with what its item says of itself (`Rule.detail`): `
 edge, height and depth below the top; a round corner's rules its height and its cavity (`pocket`; the finding
 is at the corner's own face); `sharp_internal_edge` its edge, the two faces (in words, `between`: every ref an
 item carries is one ref), the void angle and xyz
-(its fix names the angle); every `walls` and `gaps` rule the face across (`opposite`) and the thinnest point.
+(its fix names the angle); every `walls` and `gaps` rule the face across (`opposite`) and the thinnest point;
+`partial_hole` the wall (`cut_by`), the angle of the hole's wall it opens and, of a stepped mouth, how far
+from the mouth.
 
 Fact findings (not rules): `cnc.stock_too_small` (e: the part does not fit `--stock`), `cnc.no_turning_axis`
 (e, `--turning` on a part with no surface of revolution), `cnc.mostly_not_turned` (w, under half the area
@@ -840,7 +874,10 @@ the travel between them not); a rounded recess fed from an open side that no str
 face no line reaches is tried for a disc plunged along its shank alone); a disc cutter's shank (taken of no
 breadth: the floor is geometry's, a real cutter reaches less); an angled fixture's reach (an inclined feature is counted as one more setup); fixturing and
 workholding; tolerances, surface finish, cycle time or cost; thread callouts on a drawing (only modelled
-threads and tap-drill diameters); hole axes other than a cylinder's (a slot milled as a hole); pockets whose
+threads and tap-drill diameters); hole axes other than a cylinder's (a slot milled as a hole); a hole's end
+on an inclined or a curved face, an opening a cavity makes in a hole's side below its mouth, and the order a
+shop cuts in (a wall across a hole's mouth is said, `cnc.partial_hole`; whether the hole is drilled before
+that wall is cut is the shop's); pockets whose
 floor is not planar (a 3D-contoured cavity is reported through access and walls, not as a pocket); sharp
 edges are judged at their midpoint; text and engraving are recognised only as many fine faces and as
 narrow gaps; a crease a ball end mill makes is accepted at `BALL_VOID_DEG` whatever the part's tolerance

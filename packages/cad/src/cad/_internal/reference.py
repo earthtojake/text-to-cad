@@ -9,8 +9,9 @@ declares, never a guess:
   (``cad.registry.DOCUMENT_TYPES``);
 * of each document type, what its registry entry gives it -- its decorator, its reader, its operations and its
   edit -- and whatever else its package's own ``__all__`` names (``cad._internal.document_type``);
-* each integration's namespace (``cad.registry.INTEGRATIONS``, in its order) and the names its ``__all__``
-  declares, a public submodule's (``cad.build123d.materials``) with its own ``__all__``.
+* each integration's namespace (``cad.registry.INTEGRATIONS``, in its order, a deprecated one left out as
+  ``cad --help`` leaves it out) and the names its ``__all__`` declares, a public submodule's
+  (``cad.build123d.materials``) with its own ``__all__``.
 
 The document types are read at run time: ``import cad`` loads no CAD kernel, and their operations are
 objects the registry makes. An integration's names are read from its source with ``ast`` instead, never
@@ -396,7 +397,9 @@ def as_docs() -> dict[str, Any]:
                        "doc": _doc(getattr(cad, entry.id).__doc__), "members": _type_members(entry)}
                       for entry in DOCUMENT_TYPES.values()]
     integrations = []
-    for name in INTEGRATIONS:
+    for name, entry in INTEGRATIONS.items():
+        if entry.deprecated:  # as `cad --help` leaves it out
+            continue
         module = f"cad.{name}"
         package = importlib.import_module(module)  # its __all__ alone: the package loads nothing of its tool's
         declared = list(getattr(package, "__all__", ()))

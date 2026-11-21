@@ -321,11 +321,13 @@ def _cgroup_limit() -> int | None:
 
 
 def memory_budget() -> int:
-    """The daemon's memory budget, in bytes: ``CAD_ENGINE_MEMORY_MB``, else a quarter of the
-    machine's physical memory (of its cgroup's limit, when that is less), else 4 GiB where neither
-    can be read."""
+    """The daemon's memory budget, in bytes: ``CAD_ENGINE_MEMORY_MB`` (else its saved setting, ``cad config``),
+    else a quarter of the machine's physical memory (of its cgroup's limit, when that is less), else 4 GiB where
+    neither can be read."""
+    from cad.engine.places import setting
+
     try:
-        given = float(os.environ.get("CAD_ENGINE_MEMORY_MB", "").strip() or 0)
+        given = float(setting("CAD_ENGINE_MEMORY_MB")[0].strip() or 0)
     except ValueError:
         given = 0.0
     if given > 0:
@@ -474,7 +476,7 @@ class KernelProcessesUnavailable(RuntimeError):
     is missing a module. Its message carries the original error's type and words, and ``__cause__`` the
     error itself; ``cause`` is a word saying which failure it was, never read from the words (``pool``:
     the pool refused; else the word the server gave the environment's failure). There is no in-process
-    fallback, because kernel work never runs in the engine's threads (law 20). A refused pool is tried
+    fallback, because kernel work never runs in the engine's threads (law 19). A refused pool is tried
     again by the next request; a failed making of the environment is remembered by the server that made
     it, which says what clears it."""
 

@@ -213,7 +213,9 @@ class SchedulingTest(unittest.TestCase):
         self.assertEqual(supervisor.overrun(), [], "one reading past it kills nothing")
         self.assertEqual(supervisor.overrun(), [busy], "an idle one is shed's; a busy one under it goes on")
         self.assertIn("stopped it at 29.3 GiB of memory, over the 24.0 GiB", busy.overran)
-        self.assertIn("(CAD_ENGINE_WORKER_CEILING_MB, read when the engine starts)", busy.overran)
+        self.assertIn("`cad config set engine_worker_ceiling_mb N` (0 for none), which the CAD server takes when it "
+                      "starts again; CAD_ENGINE_WORKER_CEILING_MB, where the server starts with it, overrides it",
+                      busy.overran)
         self.assertIn(("kill", "busy.py"), self.said)
         self.assertFalse(calm.stopped or idle.stopped)
         supervisor.measure = lambda _pid: None
@@ -639,7 +641,7 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual(len(failed), 1, "the request failed")
         self.assertTrue(failed[0].during)
         self.assertIn("the child doc.xbf exited (", str(failed[0]), "said as a child gone mid-request is")
-        self.assertIn("one process may hold (CAD_ENGINE_WORKER_CEILING_MB, read when the engine starts)",
+        self.assertIn("one process may hold. Raise the limit with `cad config set engine_worker_ceiling_mb N`",
                       str(failed[0]), "the request's error says why")
         supervisor.release(process)
 
@@ -680,7 +682,8 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual(len(failed), 1, "the request failed")
         self.assertTrue(failed[0].during)
         self.assertIn("the child doc.xbf exited (", str(failed[0]))
-        self.assertIn("one process may hold (CAD_ENGINE_WORKER_CEILING_MB", str(failed[0]), "the error says why")
+        self.assertIn("one process may hold. Raise the limit with `cad config set engine_worker_ceiling_mb",
+                      str(failed[0]), "the error says why")
         supervisor.release(process)
 
     def test_an_answer_that_says_retire_retires_its_process_once_let_go(self) -> None:

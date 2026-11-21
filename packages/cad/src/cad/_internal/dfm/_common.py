@@ -42,7 +42,7 @@ def _flag(name: str) -> str:
 
 def require_int(name: str, value: Any) -> int:
     """``value``, a count or a whole number: an ``int``, never a ``bool`` (``True`` is no count) nor a float
-    (``3.7`` axes are not taken as 3); ``ArgumentRefused`` naming the flag else (laws 16, 17)."""
+    (``3.7`` axes are not taken as 3); ``ArgumentRefused`` naming the flag else (laws 15, 16)."""
     if isinstance(value, bool) or not isinstance(value, int):
         raise ArgumentRefused(f"{_flag(name)} is a whole number, not {value!r}")
     return value

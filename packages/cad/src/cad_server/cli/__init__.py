@@ -7,8 +7,9 @@ integration's, for its tool's own files, which are no document type, which cad c
 shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations``: ``cad mujoco check``,
 ``cad orcaslicer presets``), only for the integrations the registry gives operations. And the commands that are no file's: the server's (``server``: ``start``,
 ``stop``, ``status``), the CAD app an agent app starts (``mcp``), the engine's verbs (``serve``, ``delete``), ``run``,
-and the installation's (``requirement``, ``setup``, ``doctor``, ``cache``, ``viewer``, ``telemetry``, ``update``, whose
-``update auto`` is cad's own switch, and ``plugin``). ``cad --help`` lists them all but ``_UNLISTED``'s.
+and the installation's (``requirement``, ``setup``, ``doctor``, ``cache``, ``config``, ``viewer``, ``telemetry``,
+``update``, whose ``update auto`` is cad's own switch, and ``plugin``). ``cad --help`` lists them all but
+``_UNLISTED``'s.
 
 A command that reaches the server holds it to its own release (``cad.engine.client.RELEASE``): one of another
 release is refused in one line. The server's own commands are not held to it (``_ANY_RELEASE``).
@@ -60,6 +61,8 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "setup": ("cad_server.cli.setup", "the bridge from releases 0.10.0 to 0.11.11"),
     # A page of the running server's; the launcher exits.
     "viewer": ("cad_server.cli.viewer", "open a viewer page on the running cad server"),
+    "config": ("cad_server.cli.config", "show or change the settings an environment variable overrides: list, "
+                                        "get, set, unset"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
     "update": ("cad_server.cli.update", "update cad now to the newest release of its major version (`--major`: of "
                                      "all); `update auto`: whether it does so itself"),
@@ -109,8 +112,9 @@ def _type_lines() -> str:
 def _integration_lines() -> str:
     """The integrations with operations of their own, each with them and the files they take, or, for one whose
     tool's files are found by name in its own folders, that tool (``cad.registry``)."""
-    width = max(len(name) for name in INTEGRATION_COMMANDS)
-    ops = {name: ", ".join(INTEGRATIONS[name].operation_names) for name in INTEGRATION_COMMANDS}
+    listed = [name for name in INTEGRATION_COMMANDS if not INTEGRATIONS[name].deprecated]
+    width = max(len(name) for name in listed)
+    ops = {name: ", ".join(INTEGRATIONS[name].operation_names) for name in listed}
     ops_width = max(len(text) for text in ops.values())
 
     def takes(entry) -> str:
@@ -119,7 +123,7 @@ def _integration_lines() -> str:
         return f"found by name in {entry.summary.split(',')[0]}'s own folders"
 
     return "\n".join(f"  {name.ljust(width)}  {ops[name].ljust(ops_width)}  {takes(INTEGRATIONS[name])}"
-                     for name in INTEGRATION_COMMANDS) + "\n"
+                     for name in listed) + "\n"
 
 
 def _usage() -> str:

@@ -25,10 +25,10 @@ import sys
 import time
 from pathlib import Path
 
+from cad.engine.places import INSTALLATION_ENV as NAME_ENV
 from cad.engine.places import VERSION, alive, installation_record
 
 DIR_ENV = "CAD_LAUNCHER_DIR"
-NAME_ENV = "CAD_INSTALLATION_VERSION"
 FOLDER = "installations"  # ``cad.engine.places.INSTALLATIONS``, which clients read
 WINDOWS = os.name == "nt"
 # The ``cad`` command's file on Windows (0.11.x's; 0.10.x wrote ``cad.cmd``).

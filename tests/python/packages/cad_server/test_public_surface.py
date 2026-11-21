@@ -113,6 +113,8 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "setup": frozenset({"engine_update"}),
     # cad's cache: where it is, what this release cannot use removed, all of it removed.
     "cache": frozenset({"command", "dir", "prune", "clean"}),
+    # The settings an environment variable overrides: listed, read, saved, removed.
+    "config": frozenset({"command", "list", "get", "set", "unset", "json"}),
     # The exact cad requirement for a Python of a program's own: its integrations, and --json.
     "requirement": frozenset({"integrations", "json"}),
     # One read-only report of this cad.

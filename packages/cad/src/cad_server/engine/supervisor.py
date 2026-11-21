@@ -1031,8 +1031,10 @@ class Supervisor:
                     process.over = request
                 else:
                     process.overran = (f"the engine stopped it at {held / 1024:.1f} GiB of memory, over the "
-                                       f"{limit / 1024:.1f} GiB one process may hold "
-                                       f"(CAD_ENGINE_WORKER_CEILING_MB, read when the engine starts)")
+                                       f"{limit / 1024:.1f} GiB one process may hold. Raise the limit with `cad "
+                                       f"config set engine_worker_ceiling_mb N` (0 for none), which the CAD server "
+                                       f"takes when it starts again; CAD_ENGINE_WORKER_CEILING_MB, where the server "
+                                       f"starts with it, overrides it")
                     process.kill(wait=False)
                     killed.append(process)
         return killed

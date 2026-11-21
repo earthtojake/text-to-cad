@@ -2810,6 +2810,7 @@ def unfold(shape: Any, *, thickness: float | None = None, k_factor: float | None
         return cut
     cut.label = "CUT"
     lines = [line for item in found for line in item.bend_lines]
-    bends = bd.Compound(children=lines) if lines else bd.Compound([])  # (Compound() of nothing is refused)
+    # One shape of all the lines, not an assembly of them: a child would be a part of its own, on a layer of its own.
+    bends = bd.Compound(lines)
     bends.label = "BEND"
     return bd.Compound(children=[cut, bends])

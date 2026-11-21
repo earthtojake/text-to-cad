@@ -1,5 +1,9 @@
 """Flat patterns from 3D topology: exact 2D geometry for ``@dxf`` drawings.
 
+Every name here is build123d's own call under a name of ours (``Plane.to_local_coords``, ``offset``, ``fuse``), so
+none is the library's any more: each answers its earlier spelling through ``cad._internal.aliases``, with a warning
+that names build123d's call, until the release that removes it. A drawing calls build123d.
+
 A drawing model returns build123d 2D geometry and the engine writes the DXF
 (``cad.engine.export.dxf``). This module is the bridge from a solid to that
 geometry: pick the planar faces that make up the flat pattern, lay each one into

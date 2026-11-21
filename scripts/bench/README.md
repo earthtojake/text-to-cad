@@ -58,3 +58,21 @@ writes `tmp/bench/dfm-<time>/rows.jsonl` (each check's wall time, `ok`, findings
 ids, families not measured, faces and parts; a check that raised records its error) and `table.md`, per
 process: parts, median, p95 and max seconds, what raised or could not measure, and the most frequent
 failing rules. Its table and file order are the pure helpers the global suite tests.
+
+## The skills, A/B
+
+`skill_ab.py` lays out an A/B test of the skills: the same tasks done once with the skills of a Git
+ref and once with the working tree's, each by a fresh agent that reads only its own copy.
+
+```sh
+.venv/bin/python scripts/bench/skill_ab.py --base main                    # every task
+.venv/bin/python scripts/bench/skill_ab.py --base main --task cad-part    # one; repeat --task for more
+```
+
+It writes one folder per task and skill set under `tmp/skill-ab` (`--out` names another): a copy of
+the skills, the task's fixtures, an `env.sh` for a server of the run's own, and a `BRIEF.md` to hand
+an agent. It runs no agent and grades nothing. `runs.tsv` says which folder had which skills and what
+each task expects; keep it from the agents. The tasks are `skill_ab/tasks/*.md` (a request and its
+objective answer) and their fixtures `skill_ab/fixtures/`; a STEP a task needs is built from its
+model when the runs are laid out, never committed. How to run and grade one is
+[Writing a skill](../../docs/contributing/writing-a-skill.md#test-a-change-ab).

@@ -9,7 +9,10 @@ refused by name. The stops are said as a table, and a long sweep says each joint
 it starts and ends; a verbose one says each step as it starts. A pair near as built, its gap narrowing a hair as the
 joint turns, stops nothing until it truly closes, and is reported with its gaps. A pair drawn one inside the other
 stops nothing where its overlap shrinks or slides, only where it deepens, and is reported with its volume and
-depth."""
+depth. A lid hinged on its edge, near its box's wall all along the hinge line long before it folds back onto it, stops
+within a tenth of a radian of lying on it, as does one drawn a millimetre off its rim, a door on a vertical hinge and
+a flap 3 mm wide, whose end face is less than a contact asks for far from an axis; a tab 2 mm from its axis still
+stops at its block."""
 
 from __future__ import annotations
 
@@ -198,6 +201,108 @@ def clevis():
     bd.RigidJoint("pivot", arm, pivot.location)
     pivot.connect_to(arm.joints["pivot"], angle=0)
     return bd.Compound(children=[base, arm], label="clevis")
+"""
+
+
+# A box with a lid hinged on its edge: the hinge line is the top outer edge of the tray's back wall and the lid's lower
+# back edge, so the lid's back end face (80 x 3 mm) is a plane through the axis, and a half turn round it lies on the
+# wall's outer face (at 181 degrees the solids overlap). On the way that face is within 0.3 mm of the wall along the
+# hinge line from 22 degrees out, where nothing stops it. ``raised`` is the same lid drawn 1 mm above the rim: its end
+# face, 1 to 4 mm from the axis, lands on the wall at a half turn too.
+LID = """
+import build123d as bd
+from cad.engine import xbf
+
+
+def box(lift):
+    tray = bd.Box(80, 50, 30, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    tray -= bd.Pos(0, 0, 2) * bd.Box(76, 46, 28, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    lid = bd.Pos(0, 0, 30 + lift) * bd.Box(80, 50, 3, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    tray.label, lid.label = "tray", "lid"
+    hinge = bd.RevoluteJoint("hinge", tray, axis=bd.Axis((0, 25, 30), (-1, 0, 0)), angular_range=(0, 270))
+    bd.RigidJoint("hinge", lid, hinge.location)
+    hinge.connect_to(lid.joints["hinge"], angle=0)
+    return bd.Compound(children=[tray, lid], label="box")
+
+
+@xbf("XBF/lid.xbf")
+def lid():
+    return box(0)
+
+
+@xbf("XBF/raised.xbf")
+def raised():
+    return box(1)
+"""
+
+
+# A door on a vertical hinge, drawn closed against a stop behind its latch edge: the hinge line is the wall's outer
+# corner edge and the door's, so the door's outer face (40 x 50 mm) is a plane through the axis, and a half turn round
+# it lies on the wall's. Turned the other way it goes into its stop at once.
+DOOR = """
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/door.xbf")
+def door():
+    wall = bd.Box(60, 5, 50, align=(bd.Align.MIN, bd.Align.MAX, bd.Align.MIN))
+    wall.label = "wall"
+    stop = bd.Pos(-40, -3, 0) * bd.Box(8, 3, 50, align=(bd.Align.CENTER, bd.Align.MAX, bd.Align.MIN))
+    stop.label = "stop"
+    frame = bd.Compound(children=[wall, stop], label="frame")
+    leaf = bd.Box(40, 3, 50, align=(bd.Align.MAX, bd.Align.MAX, bd.Align.MIN))
+    leaf.label = "leaf"
+    hinge = bd.RevoluteJoint("hinge", frame, axis=bd.Axis((0, 0, 0), (0, 0, -1)), angular_range=(0, 180))
+    bd.RigidJoint("hinge", leaf, hinge.location)
+    hinge.connect_to(leaf.joints["hinge"], angle=0)
+    return bd.Compound(children=[frame, leaf], label="door")
+"""
+
+
+# A flap 3 mm wide lying along the top of a base, hinged on its edge as the lid is: its end face, 3 x 3 mm, lands on the
+# base's back face a half turn round (at 181 degrees the solids overlap). That is 9 mm^2 of contact, under the 15 a
+# contact grown is far from an axis.
+FLAP = """
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/flap.xbf")
+def flap():
+    base = bd.Box(10, 30, 20, align=(bd.Align.CENTER, bd.Align.MAX, bd.Align.MIN))
+    leaf = bd.Pos(0, 0, 20) * bd.Box(3, 30, 3, align=(bd.Align.CENTER, bd.Align.MAX, bd.Align.MIN))
+    base.label, leaf.label = "base", "flap"
+    hinge = bd.RevoluteJoint("hinge", base, axis=bd.Axis((0, 0, 20), (-1, 0, 0)), angular_range=(0, 180))
+    bd.RigidJoint("hinge", leaf, hinge.location)
+    hinge.connect_to(leaf.joints["hinge"], angle=0)
+    return bd.Compound(children=[base, leaf], label="flap")
+"""
+
+
+# A rotor over a plate, a tab of it reaching 3 mm from its axis, and a block standing on the plate 2 mm from the axis,
+# in the tab's way: the block's corner, 2.15 mm from the axis, meets the tab's flank at 54.8 degrees one way and 234.8
+# the other (the solids overlap from 56 and 236). A stop where 0.3 mm is 8 degrees of turning.
+TAB = """
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/tab.xbf")
+def tab():
+    plate = bd.Box(30, 30, 3, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX))
+    plate.label = "plate"
+    block = bd.Pos(0, 2.8, 0) * bd.Box(1.6, 1.6, 5, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    block.label = "block"
+    base = bd.Compound(children=[plate, block], label="base")
+    hub = bd.Pos(0, 0, 1) * bd.Cylinder(1.0, 4, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    lug = bd.Pos(0.8, 0, 1) * bd.Box(2.2, 1.0, 4, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    rotor = hub + lug
+    rotor.label = "rotor"
+    pivot = bd.RevoluteJoint("pivot", base, axis=bd.Axis((0, 0, 0), (0, 0, 1)), angular_range=(-360, 360))
+    bd.RigidJoint("pivot", rotor, pivot.location)
+    pivot.connect_to(rotor.joints["pivot"], angle=0)
+    return bd.Compound(children=[base, rotor], label="tab")
 """
 
 
@@ -396,6 +501,70 @@ class Ranges(unittest.TestCase):
         self.assertTrue(-195.4 <= pivot["lower"] <= -193.0, pivot)
         self.assertEqual([("arm", "clevis")], [(pair["moving"], pair["still"]) for pair in pivot["riding"]])
         self.assertEqual([], pivot["overlapping"])
+
+    def test_a_lid_hinged_on_its_edge_stops_where_it_folds_back_onto_its_box(self) -> None:
+        from cad import xbf
+        from cad.engine import build as engine_build
+
+        script = self.folder / "lid.py"
+        script.write_text(textwrap.dedent(LID), encoding="utf-8")
+        for report in engine_build.build(script, ["lid", "raised"], cwd=self.folder):
+            self.assertTrue(report["ok"], report)
+        for name in ("lid", "raised"):
+            with self.subTest(name):
+                [hinge] = xbf.ranges(self.folder / f"XBF/{name}.xbf").measurements["joints"]
+                # Its end face lands on the wall at 180 degrees. Near the wall along the hinge line from far short of
+                # that (within 0.3 mm of it 0.8 mm from the axis at 158, and 1 mm from it at 163 for the raised one),
+                # it stops where a tenth of a radian (5.7 degrees) and a step are left, and short of landing.
+                self.assertEqual(("lid", "tray", "lid", "tray"),
+                                 (hinge["lower_contact"]["moving"], hinge["lower_contact"]["still"],
+                                  hinge["upper_contact"]["moving"], hinge["upper_contact"]["still"]), hinge)
+                self.assertTrue(174.0 <= hinge["upper"] < 180.0, hinge)
+                # Turned down it goes into the rim at once (the raised one a degree down, the rim 1 mm under it).
+                self.assertTrue(-1.0 <= hinge["lower"] <= 0.0, hinge)
+
+    def test_a_door_on_a_vertical_hinge_stops_where_it_folds_back_onto_its_wall(self) -> None:
+        from cad import xbf
+        from cad.engine import build as engine_build
+
+        script = self.folder / "door.py"
+        script.write_text(textwrap.dedent(DOOR), encoding="utf-8")
+        self.assertTrue(engine_build.build(script, ["door"], cwd=self.folder)[0]["ok"])
+        [hinge] = xbf.ranges(self.folder / "XBF/door.xbf").measurements["joints"]
+        # Turned in it goes into its stop where it stands; turned out, its face lands on the wall's at 180 degrees,
+        # near it along the hinge line long before: it stops within a tenth of a radian and a step of landing.
+        self.assertEqual(("stop", "wall"), (hinge["lower_contact"]["still"], hinge["upper_contact"]["still"]), hinge)
+        self.assertEqual(0.0, hinge["lower"], hinge)
+        self.assertTrue(174.0 <= hinge["upper"] < 180.0, hinge)
+
+    def test_a_flap_3_mm_wide_stops_short_of_folding_back_onto_its_base(self) -> None:
+        from cad import xbf
+        from cad.engine import build as engine_build
+
+        script = self.folder / "flap.py"
+        script.write_text(textwrap.dedent(FLAP), encoding="utf-8")
+        self.assertTrue(engine_build.build(script, ["flap"], cwd=self.folder)[0]["ok"])
+        [hinge] = xbf.ranges(self.folder / "XBF/flap.xbf").measurements["joints"]
+        # Its end face lands on the base at 180 degrees, 9 mm^2 of it. Within 3 mm of the axis a sample counts for as
+        # many as its band is narrower than 0.3 mm, so that is a contact: the flap stops short of landing, as the
+        # lid does, not two degrees into the base.
+        self.assertEqual(("base", "base"), (hinge["lower_contact"]["still"], hinge["upper_contact"]["still"]), hinge)
+        self.assertEqual(0.0, hinge["lower"], hinge)
+        self.assertTrue(174.0 <= hinge["upper"] < 180.0, hinge)
+
+    def test_a_tab_near_its_axis_still_stops_at_its_block(self) -> None:
+        from cad import xbf
+        from cad.engine import build as engine_build
+
+        script = self.folder / "tab.py"
+        script.write_text(textwrap.dedent(TAB), encoding="utf-8")
+        self.assertTrue(engine_build.build(script, ["tab"], cwd=self.folder)[0]["ok"])
+        [pivot] = xbf.ranges(self.folder / "XBF/tab.xbf").measurements["joints"]
+        # The block's corner meets the tab's flank at 54.8 degrees one way and 234.8 the other: each is found short
+        # of it, by no more than the 8 degrees 0.3 mm is worth 2.15 mm from the axis and a step.
+        self.assertEqual(("block", "block"), (pivot["lower_contact"]["still"], pivot["upper_contact"]["still"]), pivot)
+        self.assertTrue(45.0 <= pivot["upper"] <= 54.0, pivot)
+        self.assertTrue(-234.0 <= pivot["lower"] <= -225.0, pivot)
 
     def test_the_stops_are_said_as_a_table_and_a_long_sweep_as_it_goes(self) -> None:
         import contextlib
