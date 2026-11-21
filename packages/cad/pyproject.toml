@@ -211,5 +211,5 @@ cad_server = ["py.typed", "_runtime/**/*"]
 # The viewer server's catalog ordering is ICU root collation, read from this table at
 # runtime; it ships beside the code that reads it.
 "cad_server.viewer" = ["collation.json"]
-# The engine's README is the mechanisms the server's laws constrain.
-"cad_server.engine" = ["README.md"]
+# The engine's README and its pages are the mechanisms the laws constrain: an index, and a page per mechanism.
+"cad_server.engine" = ["README.md", "docs/*.md"]
