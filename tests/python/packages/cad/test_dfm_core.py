@@ -687,6 +687,41 @@ class ContentTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "the process it names"):
             _checked({"path": str(path)}, None)
 
+    def test_a_report_a_busier_machine_makes_otherwise_is_said_transient_beside_it(self) -> None:
+        """Molding's release search spends rays, which run out alike on any machine, and seconds, which do not:
+        a report it cut short for its seconds says less than the part's own, and is said ``transient`` beside
+        it, as is one a family failed for memory in, and one a table of which says it is not repeatable (a
+        recognition that fell back for a reason the next run may not meet), whatever made the table. A report
+        whole, cut short for its rays, with a family that failed otherwise or with a table that says it is
+        repeatable, or nothing of it, is the part's each time, and says nothing."""
+        from unittest import mock
+
+        from cad.build123d import _dfm_check
+        from cad.build123d import _dfm_molding as molding
+
+        part = bd.Box(30, 20, 10) - bd.Rot(0, 90, 0) * bd.Cylinder(3, 40)  # a hole across the pull: an undercut
+        part.label = "block"
+        path, _ = _saved(self.folder, part, "block")
+        with mock.patch.object(molding, "_RELEASE_SECONDS", 0.0):
+            cut = _checked({"path": str(path)}, "molding")
+        self.assertEqual((cut.get("transient"), cut["measured"]["report"]["undercuts"]["unsearched_count"]), (True, 1))
+        with mock.patch.object(molding, "_RELEASE_RAYS", 0):
+            spent = _checked({"path": str(path)}, "molding")
+        self.assertEqual(("transient" in spent, spent["measured"]["report"]["undercuts"]["unsearched_count"]),
+                         (False, 1), "out of rays: the same on any machine")
+        whole = _checked({"path": str(path)}, "molding")
+        self.assertEqual(("transient" in whole, whole["measured"]["report"]["undercuts"]["unsearched_count"]), (False, 0))
+        for said, report in ((True, {"holes": {"error": "block: MemoryError: "}}),
+                             (True, {"pulls": [{"walls": {"error": "MemoryError: 2 GiB"}}]}),
+                             (True, {"holes": {"items": [], "count": 0, "recognition": {"repeatable": False}}}),
+                             (False, {"holes": {"items": [], "count": 0, "recognition": {"repeatable": True}}}),
+                             (False, {"holes": {"items": [], "count": 0, "recognition": {"repeatable": None}}}),
+                             (False, {"holes": {"items": [], "count": 0, "recognition": {"mode": "own"}}}),
+                             (False, {"holes": {"error": "block: ValueError: no axis"}, "partial": True}),
+                             (False, {"holes": {"items": [], "count": 0}, "partial": False})):
+            with self.subTest(report=report):
+                self.assertEqual(_dfm_check._transient("cnc", report), said)
+
     def test_a_triangulation_a_part_was_read_with_is_in_its_content(self) -> None:
         """A measurement keeps a mesh fine enough where it finds one, so the mesh a part was read with is read."""
         from OCP.BRepMesh import BRepMesh_IncrementalMesh

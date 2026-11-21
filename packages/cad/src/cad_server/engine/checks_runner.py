@@ -851,9 +851,9 @@ def _clean(checked: dict[str, Any]) -> bool:
 def _keepable(checked: dict[str, Any]) -> bool:
     """Whether a manufacturing check's answer holds a measurement to keep: a report, with every family
     measured or not -- a family its code cannot measure of those parts it cannot measure the next time either
-    -- unless its measurer says it ``transient``: made otherwise on a machine less busy (a search that ran out
-    of its seconds, a family that ran out of memory), which the next check may measure whole. Never a document
-    that did not read, nor one with no part a process makes."""
+    -- unless its measurer says it ``transient``: made otherwise the next time (a search that ran out of its
+    seconds, a family that ran out of memory, a table of the report that says it is not repeatable), which the
+    next check may measure whole. Never a document that did not read, nor one with no part a process makes."""
     measured = checked.get("measured")
     return (isinstance(measured, dict) and isinstance(measured.get("report"), dict)
             and not checked.get("transient"))

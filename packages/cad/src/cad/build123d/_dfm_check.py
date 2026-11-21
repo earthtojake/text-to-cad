@@ -252,8 +252,9 @@ def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]
     ``kept.measuring``), measured in memory (``_dfm_brep.of_source``). Plain data: ``{"measured": {"process",
     "resolved", "report"}, "content_key"}``, the report with the key of the content record of the very parts
     it was measured of (``_dfm_brep.content``), so whoever keeps the report keeps it under what was measured,
-    whatever it took the document to hold; or ``{"unmeasured": {"code", "message"}}``. ``read``: what a reading
-    failure is said as, ``failed to read ...``.
+    whatever it took the document to hold -- and ``"transient": True`` beside them for a report not to be kept
+    at all (``_transient``); or ``{"unmeasured": {"code", "message"}}``. ``read``: what a reading failure is
+    said as, ``failed to read ...``.
 
     A check given no process is not asked of it: whoever asks reads the process the parts declare from the
     document's record (``described``, ``kept.asked``) and names it here. Its measurements equal ``measure``'s
@@ -277,7 +278,31 @@ def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]
         report = _measured(document, document_type, process, resolved, candidates)
     except Unmeasured as failure:
         return {"unmeasured": {"code": failure.code, "message": failure.message}}
-    return {"measured": {"process": process, "resolved": resolved, "report": report}, "content_key": key}
+    return {"measured": {"process": process, "resolved": resolved, "report": report}, "content_key": key,
+            **({"transient": True} if _transient(process, report) else {})}
+
+
+def _transient(process: str, report: dict[str, Any]) -> bool:
+    """Whether a report just measured here is one the same parts, options and code could measure otherwise the
+    next time, so no one keeps it in a measurement's place: its process's module says so of the measurement it
+    last made (``transient()``: a search that ran out of its seconds, molding's release search); a family
+    failed for memory (its ``error`` names ``MemoryError``); or a table of the report says of itself that it is
+    not repeatable (``"repeatable": False``, wherever it lies and whatever made it: what it holds came of
+    something the next run may not meet -- a helper not ready yet, an answer that timed out; one that says
+    true, or nothing, is repeatable). Every other report, with a family not measured or none, is what its code
+    makes of those parts each time."""
+    said = getattr(importlib.import_module(f"cad.build123d._dfm_{process}"), "transient", None)
+    if callable(said) and said():
+        return True
+
+    def says_so(value: Any) -> bool:
+        if isinstance(value, dict):
+            error = value.get("error")
+            return ((isinstance(error, str) and "MemoryError" in error) or value.get("repeatable") is False
+                    or any(says_so(item) for item in value.values()))
+        return isinstance(value, list) and any(says_so(item) for item in value)
+
+    return says_so(report)
 
 
 def described(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]:
