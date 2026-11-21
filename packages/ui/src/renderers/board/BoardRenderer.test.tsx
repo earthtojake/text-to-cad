@@ -305,13 +305,13 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
   expect([viewValue(pane, 'side'), viewValue(pane, 'dimension'), viewValue(pane, 'display')]).toEqual(['top', '2d', 'board']);
   for (const button of cornerStack(pane)!.querySelectorAll('button')) expect(button.className.includes('size-7')).toBe(true);
   expect([cornerStack(pane)!.closest('[data-viewer-navbar]') !== null, pane.querySelector('[data-view-corner-stack]')]).toEqual([true, null]);
-  // View's submenus, in order, each row the choice on screen's icon, its name and the choice's: Side (Top ticked, ⇧F on
+  // View's submenus, in order, each row its name and the choice's (no icon): Side (Top ticked, ⇧F on
   // the other), Mode (2D ticked, 3 on 3D), Display's presets each with its icon, the one on screen checked; then the
   // Background, Light and Dark, each its icon.
   await userEvent.setup({ skipHover: true, pointerEventsCheck: 0 }).click(displayButton(pane));
   const rowsOf = (await openMenu('View')).querySelectorAll<HTMLElement>('[data-view-sub]');
   expect([...rowsOf].map(row => [row.getAttribute('data-view-sub'), row.querySelector('[data-view-sub-value]')!.textContent, Boolean(row.querySelector('svg:not(.lucide-chevron-right)'))]))
-    .toEqual([['side', 'Top', true], ['dimension', '2D', true], ['display', 'Board', true], ['background', 'Light', true]]);
+    .toEqual([['side', 'Top', false], ['dimension', '2D', false], ['display', 'Board', false], ['background', 'Light', false]]);
   expect([viewRows('data-board-side-option'), viewRows('data-board-dimension-option')])
     .toEqual([[['Top', 'true', ''], ['Bottom', 'false', '⇧F']], [['2D', 'true', ''], ['3D', 'false', '3']]]);
   fireEvent.keyDown(document.querySelector('[role=menu][aria-label="View"]')!, { key: 'Escape' });

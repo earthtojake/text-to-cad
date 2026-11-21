@@ -1,7 +1,7 @@
 import { useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
 import { useViewCornerSide, viewCornerAway } from "./ViewCorner.jsx";
-import { viewCornerLayout } from "./viewportLayout.js";
+import { CORNER_TILE_PX, CUBE_ROW_FROM_BOX_PX, CUBE_ROW_WIDTH_PX, viewCornerLayout } from "./viewportLayout.js";
 
 /**
  * A corner stack button: 24px, its icon 14px at the muted foreground (62%), on no tile, border or shadow at
@@ -17,17 +17,13 @@ export const CORNER_BUTTON_CLASS = [
 ].join(" ");
 
 /**
- * The view's controls in its corner (a 3D view's Display, then Projection, then Home), as Figma keeps its view
- * settings out of its toolbar: a column of single buttons, 4px apart, with no group surface, under the cube at the
- * view's top-right, its right edge at the corner's inset (12px, the zoom pill's: `viewCornerLayout`'s `stack`), 4px
- * under the cube's box. Their menus and tooltips open to the side away from the corner (`viewCornerAway`: the left),
- * a menu's top on its button's. Where the host anchors the corner at the left, the stack stands there, mirrored. A
- * flat view that has view controls for its corner (a board's Display, side and 2D/3D) stands them under its zoom pill
- * instead (`under: "pill"`), at the same inset. A phone has none: its view's controls are rows of the strip's More.
- *
- * Where the view's settings are the navbar's (`NavbarViewControls.jsx`), the cube keeps Home alone, against the cube's
- * drawing at its top-left, 4px from it and top-aligned with its top face (`under: "home"`, `viewCornerLayout`'s `home`),
- * never over the cube, so the two read as one.
+ * A flat view's controls in its corner, as Figma keeps its view settings out of its toolbar: a column of single
+ * buttons, 4px apart, with no group surface, at the corner's inset (12px, the zoom pill's: `viewCornerLayout`), under
+ * its zoom pill (`under: "pill"`: a board's Display, side and 2D/3D where its host has no navbar), or beside it
+ * (`under: "pillHome"`: a board's 3D Home), or where a cube would stand (`under: "cube"`). Their menus and tooltips open
+ * to the side away from the corner (`viewCornerAway`: the left), a menu's top on its button's. Where the host anchors
+ * the corner at the left, the stack stands there, mirrored. A phone has none: its view's controls are rows of the
+ * strip's More. A 3D view's corner is the cube and its row under it (`CubeRow`, below).
  *
  * `children` are drawn from a render prop with what each button needs: `({ className, tooltipSide, side, align })`.
  * @param {{ children(placement: { className: string, tooltipSide: "left" | "right", side: "left" | "right", align: "start" | "end" }): import("react").ReactNode }} props
@@ -37,9 +33,42 @@ export default function ViewCornerStack({ children, under = "cube" }) {
   const corner = useViewCornerSide();
   const away = viewCornerAway(corner);
   return <div role="group" aria-label={t("toolbar.view")} data-view-corner-stack=""
-    // Home stands a little over the cube's box, against its drawing: over the box, so the box never takes its press.
-    className={cn("pointer-events-auto absolute flex flex-col items-center gap-1", under === "home" ? "z-40" : "z-20")} style={viewCornerLayout(corner)[{ pill: "stackUnderPill", home: "home", pillHome: "pillHome" }[under] ?? "stack"]}
-    data-view-corner-home={under === "home" || under === "pillHome" ? "" : undefined}>
+    className="pointer-events-auto absolute z-20 flex flex-col items-center gap-1" style={viewCornerLayout(corner)[{ pill: "stackUnderPill", pillHome: "pillHome" }[under] ?? "stack"]}
+    data-view-corner-home={under === "pillHome" ? "" : undefined}>
     {children({ className: CORNER_BUTTON_CLASS, tooltipSide: away.side, side: away.side, align: away.align })}
+  </div>;
+}
+
+/**
+ * A 3D view's row under its cube (`viewCornerLayout`'s `cubeRow`): Home, then View, 24px tiles 4px apart with no
+ * group surface, centred under the cube as drawn, so the camera's controls and how the file is looked at stand in one
+ * place. `children` are drawn from a render prop with what each needs: `({ className, tooltipSide, menu })`, `menu` the
+ * View menu's placement (`ViewMenu`'s `placement`): under the row, its outer edge on the cube box's
+ * (`CUBE_ROW_FROM_BOX_PX` past the row's), so the open menu never covers the cube.
+ * @param {{ children(placement: { className: string, tooltipSide: "bottom", menu: { align: "start" | "end", alignOffset: number } }): import("react").ReactNode }} props
+ */
+export function CubeRow({ children }) {
+  const { t } = useI18n();
+  const corner = useViewCornerSide();
+  const away = viewCornerAway(corner);
+  // View is the row's second tile: at the right its outer edge is the row's; mirrored at the left, a tile and a gap in.
+  const menu = corner === "left" ? { align: "start", alignOffset: -(CUBE_ROW_FROM_BOX_PX + CUBE_ROW_WIDTH_PX - CORNER_TILE_PX) }
+    : { align: "end", alignOffset: -CUBE_ROW_FROM_BOX_PX };
+  return <div role="group" aria-label={t("toolbar.view")} data-view-corner-stack="" data-view-cube-row=""
+    className="pointer-events-auto absolute z-20 flex items-center gap-1" style={viewCornerLayout(corner).cubeRow}>
+    {children({ className: CORNER_BUTTON_CLASS, tooltipSide: "bottom", menu, away })}
+  </div>;
+}
+
+/**
+ * A phone's corner (no cube, no zoom pill): one tile at the corner's inset (`viewCornerLayout`'s `pill`), the phone's
+ * 36px, as a 3D view's View stands there (`RendererShell.jsx`). `children(className)` draws it.
+ */
+export function CornerTile({ children }) {
+  const { t } = useI18n();
+  const corner = useViewCornerSide();
+  return <div role="group" aria-label={t("toolbar.view")} data-view-corner-stack="" data-view-corner-tile=""
+    className="pointer-events-auto absolute z-20 flex" style={viewCornerLayout(corner).pill}>
+    {children(CORNER_BUTTON_CLASS)}
   </div>;
 }

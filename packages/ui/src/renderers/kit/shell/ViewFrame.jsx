@@ -52,8 +52,9 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *   less its inset, above its safe area. The measure writes where it stands (`--cad-quick-edit-left`,
  *   `--cad-quick-edit-width`, from the view's left).
  * - **The navbar's view settings** (`navbar`: what a view portals into the file's navbar, `NavbarViewControls.jsx`),
- *   drawn while the chrome is, on a desktop and a phone alike (the corner is a desktop's alone).
- * - **The corner** (`corner`, the view's top-right — the cube or a flat view's zoom pill, the stack under it — or its
+ *   drawn while the chrome is, on a desktop and a phone alike (the corner is a desktop's, but for `phoneCorner`).
+ * - **The corner** (`corner`, the view's top-right — the cube and its row, or a flat view's zoom pill and the stack under
+ *   it; on a phone `phoneCorner`, a 3D view's View tile alone — or its
  *   top-left where the host anchors the cube there: the side read off the root with the measure, `viewCornerSide`, and said to everything in
  *   the corner, `ViewCornerSideProvider`), **the bottom centre** (`bottomCentre`, a
  *   playbar), the renderer's `underlay` (between the canvas and the chrome: Preview's view) and its
@@ -99,7 +100,7 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
 export default function ViewFrame({ rootRef = null, surface = null, className = "", rootHandlers = null, stageColor = undefined,
   canvasBoxRef = null, busy = undefined, children, underlay = null, overlays = null, file, mobile, compact, chromeHidden, failed = undefined, previewing = false, selecting = false,
   preview = null, tools, views = [], toolRow = null, toolStack = null, status = null, panel = null, panelControl = null,
-  layout, onLayoutChange, corner = null, navbar = null, notice = null, quickEdit = null, bottomCentre = null, loading = null, alert = null,
+  layout, onLayoutChange, corner = null, phoneCorner = null, navbar = null, notice = null, quickEdit = null, bottomCentre = null, loading = null, alert = null,
   contextMenu = null, onCanvasPress = null, inspect = null, viewport = null }) {
   const { t } = useI18n();
   // The viewport's theme (`look/useViewportTheme.js`): what stands on the picture — the canvas box (labels, chips,
@@ -269,9 +270,9 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
         </div>
         {underlay}
         <PreviewChrome active={false} {...preview}>
-          {toolsHidden || previewing || mobile ? null : <ViewCornerSideProvider value={cornerSide}>
+          {toolsHidden || previewing || (mobile && !phoneCorner) ? null : <ViewCornerSideProvider value={cornerSide}>
             {/* The corner's buttons stand bare on the picture: in the viewport's theme, so they and their halo read on it. */}
-            <div className={cn("contents", scheme)} data-view-corner="">{corner}</div>
+            <div className={cn("contents", scheme)} data-view-corner="">{mobile ? phoneCorner : corner}</div>
           </ViewCornerSideProvider>}
           {/* What the view portals into the file's navbar (its view settings), on a desktop and a phone alike. */}
           {toolsHidden || previewing ? null : navbar}

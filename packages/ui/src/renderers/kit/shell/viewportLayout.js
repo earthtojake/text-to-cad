@@ -31,15 +31,16 @@ export const CUBE_STACK_GAP_PX = 4;
 const PILL_FROM_CUBE_BOX_PX = CORNER_INSET_PX - VIEWPORT_CORNER_INSET_PX;
 // The zoom's height: its row of bare 24px buttons (`ZoomControl.jsx`), drawn as the corner's stack is.
 const ZOOM_PILL_PX = 24;
-// Home, against the cube: 4px from the cube's drawing (not its box), at its left, top-aligned with its top face, as the
-// cube is drawn from the view the file opens with (the camera's default direction), which Home goes back to. The cube's
-// drawing is inset in its box (`ViewPlaneControl.js`'s `cubeInkBox`), so Home stands a little over the box's edge.
-const HOME_FROM_CUBE_PX = 4;
-export const HOME_BUTTON_PX = 24;
-export const CUBE_HOME_INK = Object.freeze(cubeInkBox(DEFAULT_VIEW_DIRECTION, VIEWPORT_CUBE_PX));
-// Home's outer edge from the cube's box's outer edge (its right, at the right), and its top under the box's.
-export const CUBE_HOME_FROM_BOX_PX = Math.round(VIEWPORT_CUBE_PX - CUBE_HOME_INK.left + HOME_FROM_CUBE_PX);
-export const CUBE_HOME_TOP_PX = Math.round(CUBE_HOME_INK.top);
+// The cube's row under it: Home, then View (the view's settings), 24px tiles 4px apart, centred under the cube as it is
+// drawn from the view the file opens with (the camera's default direction, which Home goes back to): the drawing is
+// inset in its box (`ViewPlaneControl.js`'s `cubeInkBox`), and the row's middle is its middle.
+export const CORNER_TILE_PX = 24;
+const CUBE_ROW_GAP_PX = 4;
+export const CUBE_ROW_WIDTH_PX = 2 * CORNER_TILE_PX + CUBE_ROW_GAP_PX;
+export const CUBE_INK = Object.freeze(cubeInkBox(DEFAULT_VIEW_DIRECTION, VIEWPORT_CUBE_PX));
+const CUBE_INK_MIDDLE_PX = (CUBE_INK.left + CUBE_INK.right) / 2;
+// The row's outer edge from the cube's box's outer edge (its right, at the right), in px.
+export const CUBE_ROW_FROM_BOX_PX = Math.round(VIEWPORT_CUBE_PX - CUBE_INK_MIDDLE_PX - CUBE_ROW_WIDTH_PX / 2);
 // A flat view's camera Home stands beside its zoom pill, 4px from it.
 const HOME_FROM_PILL_PX = 4;
 // The zoom pill's width: −, the 40px percentage and + (`ZoomControl.jsx`).
@@ -54,9 +55,9 @@ const TOP = "var(--cad-viewport-corner-top, 0px)";
  * The view's controls' stack (`ViewCornerStack.jsx`: Display, Projection, Home) stands at the same inset from that edge
  * as the pill, under the cube (`stack`: its box's top and size, and a 4px gap), or under a flat view's zoom pill
  * (`stackUnderPill`: the pill's inset and height, and the chrome's 8px), mirrored with it.
- * `home`: the cube's Home, against the cube's drawing on its inner side (its left; mirrored, its right), 4px from it and
- * level with its top face's top (`CUBE_HOME_INK`), so the two read as one.
- * @returns {{ pill: object, stack: object, stackUnderPill: object, home: object }}
+ * `cubeRow`: a 3D view's row under the cube, Home and View (`ViewCornerStack.jsx`'s `CubeRow`), centred under the cube's
+ * drawing (`CUBE_INK`), its top the stack's.
+ * @returns {{ pill: object, stack: object, stackUnderPill: object, cubeRow: object, pillHome: object }}
  */
 export function viewCornerLayout(side = "right") {
   const edge = side === "left" ? "var(--cad-viewport-corner-left, 0px)" : `var(--cad-viewport-corner-right, ${VIEWPORT_CORNER_INSET_PX}px)`;
@@ -68,8 +69,8 @@ export function viewCornerLayout(side = "right") {
     stack: { ...at(`${PILL_FROM_CUBE_BOX_PX}px`), top: `calc(${VIEWPORT_CUBE_TOP_PX + CUBE_STACK_GAP_PX}px + ${VIEWPORT_CUBE_SIZE} + ${TOP})` },
     // Under a flat view's zoom pill: its inset, its height, then the chrome's 8px.
     stackUnderPill: { ...at(`${PILL_FROM_CUBE_BOX_PX}px`), top: `calc(${CORNER_INSET_PX + ZOOM_PILL_PX + CHROME_INSET_PX}px + ${TOP})` },
-    // Home, against the cube's drawing, never over it.
-    home: { ...at(`${PILL_FROM_CUBE_BOX_PX + CUBE_HOME_FROM_BOX_PX}px`), top: `calc(${VIEWPORT_CUBE_TOP_PX + CUBE_HOME_TOP_PX}px + ${TOP})` },
+    // The cube's row (Home, View): under its box, as the stack is, centred on its drawing.
+    cubeRow: { ...at(`${PILL_FROM_CUBE_BOX_PX + CUBE_ROW_FROM_BOX_PX}px`), top: `calc(${VIEWPORT_CUBE_TOP_PX + CUBE_STACK_GAP_PX}px + ${VIEWPORT_CUBE_SIZE} + ${TOP})` },
     // A flat view's camera Home (a board's in 3D), beside its zoom pill, as the cube's beside the cube.
     pillHome: { ...at(`${PILL_FROM_CUBE_BOX_PX + ZOOM_PILL_WIDTH_PX + HOME_FROM_PILL_PX}px`), top: `calc(${CORNER_INSET_PX}px + ${TOP})` }
   };

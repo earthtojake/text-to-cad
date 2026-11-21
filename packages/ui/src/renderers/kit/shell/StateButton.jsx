@@ -3,12 +3,11 @@ import { useStripButtonClass } from "../tools/FloatingToolBar.js";
 
 /**
  * A state of how the view is looked at, as one icon button a press switches: the one control every
- * such state is drawn with — the camera's Projection (`ProjectionToggle.jsx`), and a view's own (a
- * picture drawn flat or in 3D, the side it is seen from) — as Blender's viewport gizmo shows its
- * projection and Flux's camera options theirs. Its icon is the state on screen. Its name says that
- * state ("Projection: Orthographic"), so the name changes with it, which makes it a plain button with no
+ * such state is drawn with — a view's own (a picture drawn flat or in 3D, the side it is seen from: a
+ * board's) — as Blender's viewport gizmo shows its projection. Its icon is the state on screen. Its name
+ * says that state ("Side: Top"), so the name changes with it, which makes it a plain button with no
  * `aria-pressed` (the W3C APG button pattern: a toggle keeps one name). Its tooltip says what a press
- * does ("Switch to Perspective"), with the key that does the same (`shortcut`, muted after it, as the
+ * does ("View from bottom"), with the key that does the same (`shortcut`, muted after it, as the
  * strip's tooltips show theirs). No state is drawn as pressed or selected: the icon says which is on screen,
  * and the tile is filled only under the pointer, as the strip's tiles are, in either state.
  *

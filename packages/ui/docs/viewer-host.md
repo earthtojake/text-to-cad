@@ -202,8 +202,8 @@ render loops. These actions use existing host capabilities for effects. What a
 person tells the agent about a CAD file is [Quick Edit](#prompt-handoff)'s.
 
 A renderer's controls for the view are the renderer's own: the viewer's for a 3D view, under a file's navbar
-portalled into its view slot (View ▾ and Preview; a phone's View and Preview), the cube's Home attached to the cube;
-without a navbar Preview at its strip's end and Display, Projection and Home stacked under the cube at the top-right;
+portalled into its view slot (Preview), and Home and View in one row under the cube at the top-right (a phone's View
+alone in the corner); without a navbar Preview at its strip's end and the same row under the cube;
 and in Preview its bar's Preview settings and Exit preview, the navbar hidden. The host draws none of them. The host's `captureRequest`
 command is the same capture: to a composer destination it delivers the view and
 the selection through `promptContext.deliver`. Neither route detects the platform.
@@ -623,17 +623,18 @@ top centre of the window, ending in Preview (a 3D view's), the tool in hand's su
 (the file's structure, then its Parameters, Joints and Animation, as tabs) docked at the left, always pushing the model
 aside (collapsed on its own under 700px of view), Quick Edit's bar at the bottom centred on the window as the strip is
 (the panel never moves either; where they meet it they sit above it), the bottom row Quick Edit's alone, and at the
-top-right the view cube (a 68px box at the corner's 12px inset) with its Home attached to the drawn cube, or a flat
-view's zoom pill. Under a file's navbar the view's settings are the navbar's right end — **View ▾**, one menu of every
-group (a 3D view's Display, Projection, Grid and Background; a board's Side, Mode, Display and Background; a drawing's
-Background), then a 3D view's Preview: the file viewer draws a view slot there (`file-viewer/navbarSlots.js`'s
-`NavbarViewSlotContext`) and the view portals them in (`NavbarViewControls.jsx`, `ViewSettingsMenu.jsx`). On a phone
-the same slot holds the same **View ▾** menu and Preview alone, the picture has no cube or zoom,
+top-right the view cube (a 68px box at the corner's 12px inset) with, centred under the drawn cube, one row: Home and
+**View** (one menu: Projection, Display, Background and Grid, `ViewSettingsMenu.jsx`), with a navbar or without; or a
+flat view's zoom pill. Under a file's navbar its right end holds a 3D view's Preview, and a flat view's settings,
+still its **View ▾** (a board's Side, Mode, Display and Background; a drawing's Background): the file viewer draws a
+view slot there (`file-viewer/navbarSlots.js`'s `NavbarViewSlotContext`) and the view portals them in
+(`NavbarViewControls.jsx`). On a phone the slot holds Preview (a flat view's View ▾), a 3D view's corner its View tile
+alone (its menu ending with Reset view), the picture has no cube or zoom,
 and the panel is a sheet from the left (shadcn's Sheet, portalled into the viewer's element:
-`ViewerElementContext`), so a host keeps the viewer's element round its view. A host that shows the view with no navbar keeps them on the picture: Display,
-Projection and Home stacked under the cube at the corner's inset, a board's under its zoom pill, Preview at the strip's end. A host that anchors the corner at the left (`--cad-viewport-corner-left`) moves the stack
-with it, mirrored at the top-left. A host's one notice goes through the shell too: `notice` is drawn at the top-right,
-under the corner (an inset under its last button; at the top itself where the corner is at the left), once the
+`ViewerElementContext`), so a host keeps the viewer's element round its view. A host that shows the view with no navbar keeps them on the picture: a 3D view's
+row of Home and View under the cube, a board's Display, Side and 2D/3D stacked under its zoom pill, Preview at the strip's end. A host that anchors the corner at the left (`--cad-viewport-corner-left`) moves the row and the
+stack with it, mirrored at the top-left. A host's one notice goes through the shell too: `notice` is drawn at the top-right,
+under the corner (an inset under its lowest control; at the top itself where the corner is at the left), once the
 file is on screen, never while it loads or after it failed to, with Quick Edit stacked under
 it while it stands; the home never shows it. The CAD app's file handler hands its corner (Full
 size) as its notice; the web viewer has none.

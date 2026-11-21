@@ -196,12 +196,12 @@ async function open(t, file, { panel = true } = {}) {
     },
     // A selection is React state: it is on screen a render after whatever changed it.
     waitPressed: count => page.waitForFunction(wanted => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === wanted, count),
-    // The view's controls: Home attached to the cube, then the navbar's (View ▾, Preview).
-    viewControls: async () => [...await pane.locator('[data-view-corner-home] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+    // The view's controls: the row under the cube (Home, View), then the navbar's (Preview).
+    viewControls: async () => [...await pane.locator('[data-view-cube-row] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
       ...await pane.locator('[data-navbar-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label').split(':')[0]))],
-    // Display: the corner's first button, its menu (the modes, Grid and the Background), a dropdown over the view.
+    // View: the row's second tile, its menu (Projection, Display, Background, Grid), a dropdown over the view.
     async openDisplay() {
-      await pane.locator('[data-navbar-view-controls] [data-display-mode]').click();
+      await pane.locator('[data-view-cube-row] [data-view-menu]').click();
       await robot.displayPanel().waitFor();
     },
     displayPanel: () => page.locator('[role=menu][aria-label="View"]'),

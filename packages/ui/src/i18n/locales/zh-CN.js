@@ -392,8 +392,6 @@ export default {
   "mode.wireframe": "线框",
 
   "projection.label": "投影",
-  "projection.current": "投影：{mode}",
-  "projection.switchTo": "切换到{mode}",
   "projection.orthographic": "正交",
   "projection.perspective": "透视",
 

@@ -391,8 +391,6 @@ export default {
   "mode.wireframe": "와이어프레임",
 
   "projection.label": "투영",
-  "projection.current": "투영: {mode}",
-  "projection.switchTo": "{mode}(으)로 전환",
   "projection.orthographic": "직교 투영",
   "projection.perspective": "원근 투영",
 

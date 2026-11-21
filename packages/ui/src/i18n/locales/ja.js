@@ -391,8 +391,6 @@ export default {
   "mode.wireframe": "ワイヤーフレーム",
 
   "projection.label": "投影",
-  "projection.current": "投影: {mode}",
-  "projection.switchTo": "{mode}に切り替え",
   "projection.orthographic": "平行投影",
   "projection.perspective": "透視投影",
 

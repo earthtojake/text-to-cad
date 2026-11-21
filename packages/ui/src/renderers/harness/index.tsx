@@ -27,6 +27,8 @@ const requested = new URLSearchParams(location.search).get('file') || 'part.stl'
 const file = requested.startsWith('/') ? requested : `/models/${requested}`;
 // The host's theme: dark, as the viewer opens, unless `?scheme=light` asks for the light one.
 const colorScheme = new URLSearchParams(location.search).get('scheme') === 'light' ? 'light' as const : 'dark' as const;
+// The first pane as a host that shows the view alone, with no navbar (`chrome: "bare"`), where `?chrome=bare` asks for it.
+const chrome = new URLSearchParams(location.search).get('chrome') === 'bare' ? 'bare' as const : 'page' as const;
 const promptMessages: string[] = [];
 const captures: { file: string; size: number; type: string; references: unknown }[] = [];
 // What a renderer asked the host to open (a mesh a robot description names, say).
@@ -119,7 +121,7 @@ function App() {
   Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, tabStore, record: tabStore.getSnapshot(), captures, promptMessages, opened, exportViews, capture: a.capture, selectReference: a.selectReference, second: setSecond, mounted: setMounted } });
   return <div className="dark" style={{ display: 'flex', width: '1200px', height: '720px' }}>
     <section data-testid="one" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      {mounted && <ExportContext.Provider value={publishExportView}><FileViewer file={file} host={a.host} renderers={a.renderers} state={state} onStateChange={onStateChange} /></ExportContext.Provider>}
+      {mounted && <ExportContext.Provider value={publishExportView}><FileViewer file={file} host={a.host} renderers={a.renderers} state={state} onStateChange={onStateChange} chrome={chrome} /></ExportContext.Provider>}
     </section>
     {second && <section data-testid="two" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <FileViewer file={file} host={b.host} renderers={b.renderers} state={otherState} onStateChange={onOtherStateChange} />
