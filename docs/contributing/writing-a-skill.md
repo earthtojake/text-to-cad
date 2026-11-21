@@ -126,7 +126,8 @@ skills/<name>/
   agent handle the case you did not write down; an emphatic NEVER is not a reason.
 - A number comes from a source: a datasheet, a fab's limits, a measurement, a standard. Say which.
 - Say what a check does not establish, so a clean result is not read as more than it is.
-- Name only the environment variables a person may set, never one that tunes or debugs the engine.
+- Name only the environment variables a person may set
+  (`cad._internal.environment`, the public tier).
 
 ## Test a change (A/B)
 

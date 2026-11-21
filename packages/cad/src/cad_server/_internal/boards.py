@@ -10,8 +10,8 @@ key and nothing stale is ever read, and deleting the document (``cad delete``, t
 them with it:
 
 * ``refill``: KiCad's refill of a copy's zones (``cad.kicad._refill``), which ``poured.payload`` plots the
-  pours from (``CAD_KICAD_REFILL=0`` turns it off: the pours as saved, and no kicode fetched to draw a board;
-  the test runner's default, but for the KiCad suite); ``payload`` is that payload, the one the viewer's board page and ``cad kicad_pcb
+  pours from (``CAD_KICAD_REFILL=0``, or its saved setting ``kicad_refill``, turns it off: the pours as saved,
+  and no kicode fetched to draw a board; the test runner's default, but for the KiCad suite); ``payload`` is that payload, the one the viewer's board page and ``cad kicad_pcb
   snapshot`` both draw (``prepare`` keeps it before a snapshot's render process reads it).
 * ``drc``: ``cad.kicad_pcb.drc`` of the saved board, the ``CheckResult`` ``cad kicad_pcb drc --json``
   prints, as data (``drc.json``).
@@ -61,8 +61,11 @@ def refill(board: Path, out_dir: Path) -> Path:
 
 
 def refills() -> bool:
-    """Whether a board's pours are refilled by KiCad before it is plotted: unless ``CAD_KICAD_REFILL=0``."""
-    return os.environ.get("CAD_KICAD_REFILL", "").strip() != "0"
+    """Whether a board's pours are refilled by KiCad before it is plotted: unless ``CAD_KICAD_REFILL=0``, else its
+    saved setting (``cad config set kicad_refill 0``), says not."""
+    from cad._internal import environment
+
+    return environment.value("CAD_KICAD_REFILL").strip() != "0"
 
 
 def payload(board: Path, board_key: str | None = None) -> tuple[bytes, bool]:
@@ -70,7 +73,7 @@ def payload(board: Path, board_key: str | None = None) -> tuple[bytes, bool]:
     from cad.engine.formats.kicad.poured import payload as poured
 
     if not refills():
-        return poured(board, board_key=board_key, why="KiCad's refill is off here (CAD_KICAD_REFILL=0)")
+        return poured(board, board_key=board_key, why="KiCad's refill is off here (CAD_KICAD_REFILL=0, or the saved setting kicad_refill)")
     return poured(board, refill=refill, board_key=board_key)
 
 

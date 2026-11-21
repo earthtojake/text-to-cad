@@ -245,6 +245,12 @@ def enabled() -> bool:
     return os.environ.get("CAD_ENGINE_MEMO", "1").strip() != "0"
 
 
+def bodies_enabled() -> bool:
+    """Whether a model's body is replayed from its last run where its inputs are unchanged:
+    ``CAD_ENGINE_BODIES=0`` turns that off and nothing else (every body runs, its kernel calls still hit)."""
+    return os.environ.get("CAD_ENGINE_BODIES", "1").strip() != "0"
+
+
 # --- what is patched ----------------------------------------------------------------------
 #
 # (class, attribute, op label), enumerated from build123d 0.13.0's topology modules.
@@ -1954,7 +1960,7 @@ def body(name: str, source: Callable[[], str], function: Callable[[], Any], *, i
     state = getattr(_LOCAL, "run", None)
     if state is None or not enabled():
         return function()
-    if os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0":
+    if not bodies_enabled():
         # Bodies off: every body runs, its calls hit one by one, nothing is logged.
         try:
             return function()
@@ -2062,7 +2068,7 @@ def adopt(name: str, result: Any) -> Any:
     miss. A result any shape of which the memo made already, a call not kept, or none running:
     ``result`` as it is."""
     state = getattr(_LOCAL, "run", None)
-    if state is None or state.depth or not enabled() or os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0":
+    if state is None or state.depth or not enabled() or not bodies_enabled():
         return result
     record = _BODIES.get(name)
     if record is None or not record.direct:
@@ -2098,7 +2104,7 @@ def harvest_of(state: _Run, name: str, tree: Any) -> tuple[Any, list] | None:
     a verifying run, a run with retention off, a file changed. ``state`` is the build's run,
     asked as its files are written, after it."""
     if (state.verify or not enabled() or state.statuses.get(name) != "replayed"
-            or os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0"):
+            or not bodies_enabled()):
         return None
     record = _BODIES.get(name)
     if record is None or record.harvest is None or state.records.get(name) is not record:
@@ -2164,7 +2170,7 @@ def listened(sample: Callable[[], list]) -> list:
     is sampled (``_audited``) and held to their bytes in the ``motion_reads`` around it; outside
     one, or with retention off, just sampled."""
     held_by = getattr(_LOCAL, "motions", None)
-    if held_by is None or not enabled() or os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0":
+    if held_by is None or not enabled() or not bodies_enabled():
         return sample()
     log = _BodyLog()
     previous = getattr(_LOCAL, "sampling", None)
@@ -2409,7 +2415,7 @@ def used(name: str) -> None:
 def replayable(name: str, source: str) -> bool:
     """Whether ``body(name, ...)``, its source ``source``, would replay the body's last run
     in this process rather than run it."""
-    if not enabled() or os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0":
+    if not enabled() or not bodies_enabled():
         return False
     record = _BODIES.get(name)
     return record is not None and record.source == source and _replayable(record)

@@ -190,8 +190,10 @@ def rss_cap_mb() -> float | None:
     """The resident memory the daemon's workers, its standby and its render processes may hold
     together (``Supervisor.shed``), and so one of them alone after a build or a frame:
     ``CAD_ENGINE_WORKER_RSS_MB`` (``0`` for no cap), else a quarter of the machine's memory, at
-    least 2 GiB. None: no cap."""
-    given = os.environ.get("CAD_ENGINE_WORKER_RSS_MB", "").strip()
+    least 2 GiB. None: no cap. The variable's saved setting (``cad config``) stands in for it where it is unset."""
+    from cad.engine.places import setting
+
+    given = setting("CAD_ENGINE_WORKER_RSS_MB")[0].strip()
     if given:
         try:
             value = float(given)
@@ -264,8 +266,11 @@ def memory_ceiling_mb() -> float | None:
     """The memory one busy process of the daemon may reach before the daemon stops its work
     (``Supervisor.overrun``): a build runs in native code, which nothing of its own interrupts, and
     left alone one that runs away takes the machine. ``CAD_ENGINE_WORKER_CEILING_MB`` (``0`` for
-    none), else half the machine's memory, at least 4 GiB. None: no ceiling."""
-    given = os.environ.get("CAD_ENGINE_WORKER_CEILING_MB", "").strip()
+    none), else half the machine's memory, at least 4 GiB. None: no ceiling. The variable's saved setting (``cad
+    config``) stands in for it where it is unset."""
+    from cad.engine.places import setting
+
+    given = setting("CAD_ENGINE_WORKER_CEILING_MB")[0].strip()
     if given:
         try:
             value = float(given)
@@ -293,11 +298,14 @@ def check_limits(cap: Callable[[], float | None] = rss_cap_mb) -> tuple[
     time it is looked at (None: no limit), ``CAD_ENGINE_CHECK_RSS_MB``, by default ``cap()`` -- the memory the
     engine holds all its processes to together (``rss_cap_mb``: ``CAD_ENGINE_WORKER_RSS_MB``), which one check
     alone never takes; ``0`` for no limit; and what is said of a setting that is no number of zero or more,
-    for which the default holds."""
+    for which the default holds. Each variable's saved setting (``cad config``) stands in for it where it is
+    unset."""
+    from cad.engine.places import setting
+
     notes: list[str] = []
 
     def number(name: str) -> float | None:
-        given = os.environ.get(name, "").strip()
+        given = setting(name)[0].strip()
         if not given:
             return None
         try:

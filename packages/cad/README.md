@@ -345,7 +345,7 @@ renumbers the list and every citation in the same change.
     (`cad[<integration>]` at the installation's release, made once on first need), as a subprocess. No
     module of the server imports an integration's code. A command line an extra installs runs the same
     way (`cad run kicad-cli …`), headless in private homes, never one on PATH. cad runs the program its
-    extra pins, unless `CAD_CCX` or `CAD_KICAD_CLI` names another copy of it. An integration with no
+    extra pins, unless `CAD_CCX` or `CAD_KICAD_CLI` names another copy of it (law 30). An integration with no
     extra (`orcaslicer`, the standard library alone) runs in the command's own process.
 28. **cad wraps a tool only where it adds something.** *The package.* A helper or a typed command for
     a third-party tool exists only where cad adds what the tool lacks, and says what: one result shape
@@ -364,6 +364,17 @@ renumbers the list and every citation in the same change.
     own: `with <type>.edit(path) as document:` opens the file in its tool, hands the block the tool's
     live document, and saves at the block's end only when the block changed it, never when it raises.
     A type has a decorator or an edit, never both.
+30. **A variable is the last resort, and every one is declared.** *The package.* An environment
+    variable exists only where nothing else can carry the value: a folder, a port or a limit a process
+    must know before it starts, a fact one of cad's processes hands the next, or another copy of a
+    program an extra pins, for the computer the pinned one does not run on (`CAD_CCX`,
+    `CAD_KICAD_CLI`). A choice a person keeps is a setting, and an input of one call is that call's
+    option. A public variable that is configuration a person keeps (a limit or the port of the server; a
+    program, folders or a switch of an integration's) is also a saved setting, which the variable overrides: the
+    variable holds for one process, the setting for the computer (`cad config`). Every variable is declared
+    once with who sets it (`cad._internal.environment`: public, development, internal, deprecated), and a
+    setting by the same declaration (`setting=True`), which gives it its key, its check, its command and its
+    row; only the public ones are named to a person or in a skill, and a test holds the table to the source.
 
 
 ## Inspection

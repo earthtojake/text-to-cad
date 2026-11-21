@@ -139,8 +139,10 @@ uv run cad server start
 - The test runners need none of this: each test file gets a server and folders of its own.
 - A checkout's cad is a development build, which sends no telemetry by default
   (`cad_server/_internal/editable.py`).
-- A checkout serves its own web build; `CAD_VIEWER_DIST` and `CAD_MCP_APP_DIR` name another, for a
-  test or a build elsewhere.
+- The variables for a checkout alone (`CAD_VIEWER_DIST`, `CAD_MCP_APP_DIR`, `CAD_MCP_PRESENTATION`
+  and the rest) are the development tier of `cad._internal.environment`, where every variable cad
+  reads is declared (law 30); `tests/python/global/test_environment_variables.py` fails on one the
+  source reads and the table lacks.
 
 ## Test In Agent Apps
 

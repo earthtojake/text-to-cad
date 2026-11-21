@@ -39,7 +39,8 @@ __all__ = ["BYTECODE", "DISPLAY", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME"
            "alive", "appdata_cache_dir", "appdata_engine_dir", "appdata_state_dir", "bytecode", "bytecode_tag",
            "cache_dir", "current", "detached", "door_path", "earlier_cache_dir", "earlier_state_dir", "endpoints",
            "engine_dir", "engine_root", "extras", "failure_path", "folder_refusal", "home", "installation", "kernel",
-           "lock", "lock_path", "make_engine_dir", "port_path", "registered", "run_with", "state_dir", "windowless"]
+           "lock", "lock_path", "make_engine_dir", "port_path", "registered", "run_with", "saved_settings",
+           "setting", "setting_key", "state_dir", "windowless"]
 
 WINDOWS = os.name == "nt"
 # The engine's name in its engine folder: its lock, door (on Windows its port file) and failure note
@@ -126,6 +127,46 @@ def state_dir() -> Path:
     if override:
         return Path(override)
     return _local_state() / STATE
+
+
+#: The section of the state folder's ``settings.json`` that keeps the settings an environment variable overrides:
+#: ``cad config`` writes it, ``setting`` reads it. And where a value in effect came from, as ``setting`` says it.
+CONFIG = "config"
+ENVIRONMENT, SAVED, DEFAULT = "environment", "saved", "default"
+
+
+def setting_key(name: str) -> str:
+    """The key a variable's saved setting is kept under, by the one rule: its name without ``CAD_``, in lower case
+    (``CAD_ENGINE_WORKERS`` is ``engine_workers``)."""
+    return name.removeprefix("CAD_").lower()
+
+
+def saved_settings() -> dict[str, str]:
+    """The saved settings, by key: the ``config`` section of ``settings.json`` in the state folder, its text values
+    (a number written by hand is read as its text). Never raises: a file that is missing, unreadable or malformed,
+    or a section that is not an object, saves nothing, as it would be read with no settings kept at all."""
+    try:
+        with open(state_dir() / SETTINGS, encoding="utf-8") as handle:
+            section = json.load(handle).get(CONFIG)
+    except (OSError, ValueError, AttributeError):
+        return {}
+    if not isinstance(section, dict):
+        return {}
+    return {key: str(found) for key, found in section.items()
+            if isinstance(key, str) and isinstance(found, (str, int, float)) and not isinstance(found, bool)}
+
+
+def setting(name: str) -> tuple[str, str]:
+    """The value in effect of the variable ``name``, one that is also a saved setting (``cad._internal.environment``
+    declares which), and where it came from: the environment's where the variable is set and not blank, as it is
+    set (``ENVIRONMENT``); else the saved one (``SAVED``); else ``""``, which the reader takes for its own default
+    (``DEFAULT``). Here, in the engine, because the server, its workers and every reader of a file read their limits
+    and folders by it, whoever started them, from the standard library alone."""
+    given = os.environ.get(name, "")
+    if given.strip():
+        return given, ENVIRONMENT
+    kept = saved_settings().get(setting_key(name), "")
+    return (kept, SAVED) if kept.strip() else ("", DEFAULT)
 
 
 def appdata_state_dir() -> Path | None:
