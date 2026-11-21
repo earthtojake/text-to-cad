@@ -1442,7 +1442,8 @@ the options go on to the engine unresolved), and `resolved` carries plain values
 `printable_height` as `build_volume`, the first `nozzle_diameter` as `nozzle` -- each only where its own option is
 not given -- and `printer` as `{name, file, supplied}`, the name `printer_settings_id`, else `name`, else the file's.
 The volume is then the printer's own, judged as `--build-volume` is (`volume_origin` names the printer and the
-file), the nozzle a nozzle given. A file that is no such 3MF or JSON, or has no bed or height, is refused naming
+file and says the volume is the bed's bounding box: a round bed's outline and an excluded zone are not read), the
+nozzle a nozzle given. A file that is no such 3MF or JSON, or has no bed or height, is refused naming
 the file; a preset with `inherits` and no bed holds only its differences, and the refusal says to give a 3MF the
 slicer saved. A technology other than `fdm` refuses it.
 The build volume is the printer's given (`--build-volume` or `--printer`), else a typical machine of the

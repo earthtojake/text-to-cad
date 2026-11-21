@@ -68,7 +68,8 @@ the verdicts:
   Studio saved (a sliced `.gcode.3mf` or a project), or a complete machine preset JSON. The fit check uses the
   bed's rectangular bounding box and the printable height. A part that fits this box can still extend past a
   round bed's outline or into an excluded zone. Its first nozzle supplies the nozzle size.
-  Explicit `--build-volume` and `--nozzle` win. A preset that holds only its differences from a parent
+  Explicit `--build-volume` and `--nozzle` win. Over the printer's volume is an error naming the printer.
+  A preset that holds only its differences from a parent
   (`inherits`) has no volume: give a 3MF the slicer saved. Ask the person for the file once; do not copy the
   printer's numbers into instructions.
 - `--layer-height` and `--nozzle` (FDM): stair-stepping and fine detail; the nozzle sets FDM's minimum
