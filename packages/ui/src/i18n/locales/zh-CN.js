@@ -366,7 +366,6 @@ export default {
   "progress.inspect-measure.measure": "正在测量零件",
 
   "display.label": "显示",
-  "display.mode": "显示模式",
   "display.showGrid": "显示网格",
   "animation.tab": "动画",
   "animation.motionTab": "运动",
@@ -376,8 +375,9 @@ export default {
   "display.background": "背景",
   "display.background.light": "浅色",
   "display.background.dark": "深色",
-  "view.menu": "视图",
-  "view.reset": "重置视图",
+  "display.style": "样式",
+  "display.close": "关闭显示设置",
+  "settings.reset": "重置",
   "mode.solid": "实体",
   "mode.shaded": "着色",
   "mode.parts": "零件",
@@ -434,7 +434,6 @@ export default {
   "render.finish": "表面",
   "render.finish.matte": "哑光",
   "render.finish.glossy": "光泽",
-  "render.reset": "恢复默认",
 
   "colorPicker.saturationBrightness": "饱和度与亮度",
   "colorPicker.hue": "色相",

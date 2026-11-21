@@ -10,7 +10,7 @@ import { useViewerMobile } from "../../file-viewer/responsive.js";
 import { annotationAt, withGroups } from "../../annotation/geometry.js";
 import { promptView } from "../../annotation/views.js";
 import { readFileView, writeFileView } from "../kit/shell/fileView.js";
-import { backgroundGroup } from "../kit/shell/ViewSettingsMenu.jsx";
+import { backgroundGroup } from "../kit/shell/DisplaySettings.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 import FlatViewFrame, { flatViewTools } from "../kit/shell/FlatViewFrame.jsx";
 import { useFlatHandover, useFlatTools } from "../kit/shell/useFlatView.js";
@@ -80,7 +80,7 @@ function DxfSurface({ view, data }) {
   // The viewport's theme (`kit/look/useViewportTheme.js`): the person's Background, whatever the app's light or dark.
   // The picture — its paper, its strokes, the marks over it — is drawn in its scheme; the chrome keeps the app's.
   const viewport = useViewportTheme(workspace.services.preferences, workspace.services.onPreferenceChange);
-  // Its view settings, the navbar's View (`kit/shell/ViewSettingsMenu.jsx`): a drawing's one, the viewport's Background.
+  // Its view settings, Display's card (`kit/shell/DisplaySettings.jsx`): a drawing's one, the viewport's Background.
   const usage = useControlUsage();
   const viewGroups = [backgroundGroup({ value: viewport.background, onChange: viewport.setBackground }, t, usage.used)];
   const colorScheme = viewport.scheme;
@@ -409,7 +409,7 @@ function DxfSurface({ view, data }) {
   return (
     <FlatViewFrame surface={DRAWING_SURFACE} viewport={viewport} containerRef={containerRef} busy={payload.loading || payload.updating}
       file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed} loading={payload.loading} loadingLabel={t("drawing.reading")}
-      updating={payload.updating} updateStatus={{ pending: true, label: t("drawing.updating") }} tools={strip} toolRow={row} views={[]} viewGroups={viewGroups} onResetView={zoom?.fit ?? null}
+      updating={payload.updating} updateStatus={{ pending: true, label: t("drawing.updating") }} tools={strip} toolRow={row} viewGroups={viewGroups}
       panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={handover.quickEdit} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems} zoom={zoom} inspect={inspect}>

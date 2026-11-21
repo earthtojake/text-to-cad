@@ -9,24 +9,21 @@ import {
   FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetSettingRow, FileSheetSettingsSection, parseFileSheetNumberInput
 } from "../kit/inspector/FileSheet.js";
 import { SliderField } from "../kit/inspector/SliderField.jsx";
-import { CircuitBoard, Cpu, Route, RotateCcw, SquareDashed } from "lucide-react";
-import { DisplayMenuItems } from "../kit/shell/DisplayPopover.jsx";
-import { backgroundGroup, displayGroup, projectionGroup } from "../kit/shell/ViewSettingsMenu.jsx";
+import { CircuitBoard, Cpu, Route, SquareDashed } from "lucide-react";
+import { backgroundGroup, displayGroup, projectionGroup } from "../kit/shell/DisplaySettings.jsx";
 import { textGlyphIcon } from "../kit/shell/TextGlyph.jsx";
-import { SolidModeIcon } from "../kit/view-settings/DisplayModeOptions.js";
 import { BoardBottomSideIcon, BoardTopSideIcon } from "./boardSideIcons.jsx";
 
 /**
  * How a board is drawn (`settings-ui.md`), by how often it is changed (the rule: on the screen what is
  * changed often, in the panel or behind a menu what is changed now and then):
  *
- * - **On the screen** (`boardViewControls`), the strip's end, after its rule (`kit/tools/FloatingToolBar.js`'s
- *   `views`; on a phone, rows of the strip's More): **Flip** (KiCad's View ▸ Flip Board View), the side the
- *   board is seen from, top or bottom: from the bottom the board is mirrored, its back layers on top;
- *   **2D/3D**; and **Display**, the presets (the modes, `plot2d/boardDisplay.js`'s layer sets, KiCad's layer
- *   presets: Board, Copper, Assembly, Placement, and **Custom** while the Layers tab's eyes have left the
- *   mode's set: choosing a mode goes back to it), and in 3D the camera's projection under them. Flip and
- *   2D/3D are each one button whose icon is the state on screen.
+ * - **Display's card** (`boardViewGroups`, `kit/shell/DisplaySettings.jsx`), opened by the navbar's Display
+ *   button: **Side** (KiCad's View ▸ Flip Board View), the side the board is seen from, top or bottom: from the
+ *   bottom the board is mirrored, its back layers on top; **Mode**, 2D or 3D, and in 3D the camera's **Projection**;
+ *   then **Style**, the presets (the modes, `plot2d/boardDisplay.js`'s layer sets, KiCad's layer presets: Board,
+ *   Copper, Assembly, Placement, and **Custom** while the Layers tab's eyes have left the mode's set: choosing a mode
+ *   goes back to it), and the Background.
  * - **Layer display**, in the panel's Layers tab (`LayersSection.jsx`), under its layers, as KiCad's
  *   Appearance panel has them, KiCad's Layer
  *   Display Options: **Others**, every layer but the active one (a press on its row chooses it) **Shown**,
@@ -88,8 +85,8 @@ function Opacity({ id, label, name, value, onChange }) {
 }
 
 /**
- * The board's **Display**: its presets (KiCad's layer presets, `plot2d/boardDisplay.js`'s modes) as a
- * 3D view's Display lists its modes (`kit/shell/DisplayPopover.jsx`), the one on screen ticked, and
+ * The board's **Style**: its presets (KiCad's layer presets, `plot2d/boardDisplay.js`'s modes) as a
+ * 3D view's Style lists its modes (`kit/shell/DisplaySettings.jsx`), the one on screen ticked, and
  * Custom, a state rather than a choice, while the Layers tab's eyes have left the preset's set
  * (choosing a preset goes back to it).
  * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet: object | null, onChange(display: object): void, t?: Function }} options
@@ -132,55 +129,23 @@ const FlatGlyph = textGlyphIcon("2D");
 const SolidGlyph = textGlyphIcon("3D");
 
 /**
- * The board's view controls as the rows of a phone's More (`FloatingToolBar.js`'s `ViewportViewControl`s), where the
- * host shows the view with no navbar (everywhere else they are View's, `boardViewGroups`): **View from bottom**, ticked
- * while it is (KiCad's View ▸ Flip Board View; ⇧F); **3D view**, its glyph the word 3D, ticked in 3D (3); **Display**,
- * its presets (`boardPresetMode`) and, in 3D, the camera's projection, opened under its row; in 3D **Reset view**, the
- * board's way back to where its 3D view opened (`onReset`). From the bottom the board is mirrored, its back layers on
- * top; in 3D the camera turns over to the other side (`onSide`).
- *
- * The rest of how the board is drawn — its layers and its layer display — is the Layers tab's
- * (`LayersSection.jsx`), opened now and then.
+ * The board's view settings as Display's card draws them (`kit/shell/DisplaySettings.jsx`), the camera's section
+ * first: **Side** (Top, Bottom; ⇧F), **Mode** (2D, 3D; 3), in 3D the camera's **Projection**; then the picture's:
+ * **Style**, its presets (`boardPresetMode`), and the **Background**. A side or a mode chosen is counted as the keys
+ * count them (`board_side`, `board_dimension`), and does what they do (`onSide` turns a 3D view's camera over).
+ * `defaults`: `{ side, dimension, style, projection }`, what a board opened for the first time gets (Reset's).
  * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet?: object | null, onChange(display: object): void,
  *   dimension?: "2d" | "3d", onDimensionChange?: ((dimension: "2d" | "3d") => void) | null,
  *   onSide?: ((side: "top" | "bottom") => void) | null, projection?: { value: string, onChange(value: string): void } | null,
- *   background?: object | null, onReset?: (() => void) | null, disabled?: boolean, t?: Function }} options
+ *   background?: object | null, defaults?: object | null, t?: Function, used?: ((control: string) => void) | null }} options
  *   `onSide`: what choosing a side does where it is more than the Display's (a 3D view turns its camera to it).
  *   `projection`: the 3D camera's, while the board is in 3D; null in 2D, which has none.
  */
-export function boardViewControls({ display, sheet = null, onChange, dimension = "2d", onDimensionChange = null, onSide = null, projection = null,
-  background = null, onReset = null, disabled = false, t = english, used = null }) {
-  const below = display.side === "bottom";
-  // The side and 2D/3D, however they are switched (View's submenus, More, their keys), are counted as the person's
-  // use of them (`board_side`, `board_dimension`: `usage/controls.js`).
-  const flip = () => { used?.("board_side"); const next = below ? "top" : "bottom"; if (onSide) onSide(next); else onChange({ ...display, side: next }); };
-  const solid = dimension === "3d";
-  const switchDimension = () => { used?.("board_dimension"); onDimensionChange(solid ? "2d" : "3d"); };
-  const presets = boardPresetMode({ display, sheet, onChange, t });
-  return [
-    { id: "side", label: t("board.text.view_from_bottom"), icon: <BoardBottomSideIcon />, disabled, active: below, onSelect: flip },
-    ...(onDimensionChange ? [{ id: "dimension", label: t("board.text.view_in_3d"), icon: <SolidGlyph />, disabled, active: solid, onSelect: switchDimension }] : []),
-    { id: "display", label: t("display.label"), icon: <SolidModeIcon />, disabled,
-      submenu: () => <DisplayMenuItems mode={presets} projection={projection} background={background} /> },
-    ...(onReset ? [{ id: "reset", label: t("view.reset"), icon: <RotateCcw aria-hidden="true" />, disabled, onSelect: onReset }] : [])
-  ];
-}
-
-/**
- * The board's view settings as View draws them (`kit/shell/ViewSettingsMenu.jsx`: the navbar's, on a desktop and a
- * phone alike, or the strip's end with no navbar), top to bottom: **Side** (Top, Bottom; ⇧F), **Mode** (2D, 3D; 3), its
- * **Display** presets (`boardPresetMode`), in 3D the camera's **Projection**, and the **Background** (in 3D then Reset
- * view, the frame's). A side or a mode chosen is counted as the More rows count it (`board_side`, `board_dimension`), and
- * does what they do (`onSide` turns a 3D view's camera over).
- * @param {Parameters<typeof boardViewControls>[0]} options
- */
 export function boardViewGroups({ display, sheet = null, onChange, dimension = "2d", onDimensionChange = null, onSide = null, projection = null,
-  background = null, t = english, used = null }) {
+  background = null, defaults = null, t = english, used = null }) {
   const side = display.side === "bottom" ? "bottom" : "top";
-  const sideGroup = { id: "side", label: t("board.text.side"), value: side, data: "data-board-side-option",
-    // The key on the choice it would make: the other side.
-    options: [{ value: "top", label: t("board.text.top"), Icon: BoardTopSideIcon, shortcut: side === "top" ? "" : BOARD_FLIP_SHORTCUT },
-      { value: "bottom", label: t("board.text.bottom"), Icon: BoardBottomSideIcon, shortcut: side === "bottom" ? "" : BOARD_FLIP_SHORTCUT }],
+  const sideGroup = { id: "side", label: t("board.text.side"), value: side, data: "data-board-side-option", reset: defaults?.side,
+    options: [{ value: "top", label: t("board.text.top"), Icon: BoardTopSideIcon }, { value: "bottom", label: t("board.text.bottom"), Icon: BoardBottomSideIcon }],
     onChange: next => {
       if (next === side) return;
       used?.("board_side");
@@ -188,9 +153,9 @@ export function boardViewGroups({ display, sheet = null, onChange, dimension = "
     } };
   const solid = dimension === "3d";
   const modeGroup = onDimensionChange ? { id: "dimension", label: t("board.text.mode"), value: solid ? "3d" : "2d", data: "data-board-dimension-option",
-    options: [{ value: "2d", label: t("board.text.view_2d"), Icon: FlatGlyph, shortcut: solid ? BOARD_DIMENSION_SHORTCUT : "" },
-      { value: "3d", label: t("board.text.view_3d"), Icon: SolidGlyph, shortcut: solid ? "" : BOARD_DIMENSION_SHORTCUT }],
+    reset: defaults?.dimension,
+    options: [{ value: "2d", label: t("board.text.view_2d"), Icon: FlatGlyph }, { value: "3d", label: t("board.text.view_3d"), Icon: SolidGlyph }],
     onChange: next => { if (next === dimension) return; used?.("board_dimension"); onDimensionChange(next); } } : null;
-  return [sideGroup, modeGroup, displayGroup(boardPresetMode({ display, sheet, onChange, t }), t), projectionGroup(projection, t),
-    backgroundGroup(background, t, used)].filter(Boolean);
+  return [sideGroup, modeGroup, projectionGroup(projection, t, defaults?.projection),
+    displayGroup(boardPresetMode({ display, sheet, onChange, t }), t, defaults?.style), backgroundGroup(background, t, used)].filter(Boolean);
 }

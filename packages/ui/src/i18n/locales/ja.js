@@ -365,7 +365,6 @@ export default {
   "progress.inspect-measure.measure": "パーツを計測しています",
 
   "display.label": "表示",
-  "display.mode": "表示モード",
   "display.showGrid": "グリッドを表示",
   "animation.tab": "アニメーション",
   "animation.motionTab": "モーション",
@@ -375,8 +374,9 @@ export default {
   "display.background": "背景",
   "display.background.light": "ライト",
   "display.background.dark": "ダーク",
-  "view.menu": "ビュー",
-  "view.reset": "ビューをリセット",
+  "display.style": "スタイル",
+  "display.close": "表示の設定を閉じる",
+  "settings.reset": "リセット",
   "mode.solid": "ソリッド",
   "mode.shaded": "シェーディング",
   "mode.parts": "パーツ",
@@ -433,7 +433,6 @@ export default {
   "render.finish": "仕上げ",
   "render.finish.matte": "マット",
   "render.finish.glossy": "光沢",
-  "render.reset": "デフォルトに戻す",
 
   "colorPicker.saturationBrightness": "彩度と明度",
   "colorPicker.hue": "色相",

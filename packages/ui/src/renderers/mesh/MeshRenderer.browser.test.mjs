@@ -150,12 +150,12 @@ const meshTools = async (pane, expected) => {
     .evaluateAll(buttons => buttons.filter(button => button.hasAttribute('aria-pressed') && !button.closest('[data-view-controls]')).map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
   expected);
   const strip = pane.getByRole('group', { name: 'Interaction tools' });
-  // The strip is the tools alone, Clip last, no rule; the view's settings are the navbar's, View left of Preview, and
+  // The strip is the tools alone, Clip last, no rule; the view's settings are the navbar's, Display left of Preview, and
   // the corner is the cube alone.
   assert.equal(await strip.locator('[data-view-controls]').count(), 0, 'nothing of the view on the strip');
   assert.equal(await strip.locator('[data-strip-rule]').count(), 0, 'no rule');
   assert.deepEqual(await pane.locator('[data-viewer-navbar] [data-navbar-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label').split(':')[0])),
-    ['View', 'Preview'], 'the navbar\'s: View, then Preview');
+    ['Display', 'Preview'], 'the navbar\'s: Display, then Preview');
   assert.equal(await pane.locator('[data-view-corner] *').count(), 0, 'nothing beside the cube in its corner');
   // Nothing else of the view on screen.
   for (const name of ['Orbit', 'Pencil', 'Shapes', 'Explode', 'Joints', 'Animation']) assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
@@ -175,25 +175,29 @@ function projector(camera, box) {
     return [box.x + (dot(offset, right) / halfWidth * 0.5 + 0.5) * box.width, box.y + (0.5 - dot(offset, up) / camera.halfHeight * 0.5) * box.height];
   };
 }
-// View: the navbar's (`kit/shell/ViewSettingsMenu.jsx`), its menu's Display submenu the modes a file offers (a radio
-// each), then Show grid, then the Background.
-const displayButton = pane => pane.locator('[data-navbar-view-controls] [data-view-menu]');
-// Display's menu opened, its rows read (the modes by id; whether Grid is there; the Background's choices), and shut again.
+// Display: the navbar's (`kit/shell/DisplaySettings.jsx`), its card's Style the modes a file offers (an option each),
+// then the Background and Show grid.
+const displayButton = pane => pane.locator('[data-navbar-view-controls] [data-display-settings]');
+// Display's card opened, its rows read (the modes by id; whether Grid is there; the Background's choices), and shut again.
 async function displayMenu(pane) {
   const page = pane.page();
   await displayButton(pane).click();
-  const menu = page.locator('[role=menu][aria-label="View"]');
-  // A choice is a submenu (Display ▸, Background ▸), opened from its row; Grid a check row of the menu itself.
+  const card = page.locator('[data-display-settings-card]');
+  await card.waitFor();
+  // A choice is a dropdown of the card (Style, Background), its options in its list; Grid a switch of the card's.
   const choices = async (id, attribute) => {
-    await menu.locator(`[data-view-sub="${id}"]`).click();
-    const options = page.locator(`[data-view-sub-content="${id}"] [${attribute}]`);
+    await card.locator(`[data-settings-select="${id}"]`).click();
+    const options = page.getByRole('listbox').locator(`[${attribute}]`);
     await options.first().waitFor();
-    return options.evaluateAll((items, name) => items.map(item => item.getAttribute(name)), attribute);
+    const values = await options.evaluateAll((items, name) => items.map(item => item.getAttribute(name)), attribute);
+    await page.keyboard.press('Escape');
+    await page.getByRole('listbox').waitFor({ state: 'detached' });
+    return values;
   };
-  const rows = { modes: await choices('display', 'data-display-mode-option'), grid: await menu.locator('[data-view-toggle="grid"]').count() === 1,
+  const rows = { modes: await choices('display', 'data-display-mode-option'), grid: await card.getByRole('switch', { name: 'Show grid', exact: true }).count() === 1,
     backgrounds: await choices('background', 'data-display-background') };
-  await page.keyboard.press('Escape');
-  await menu.waitFor({ state: 'detached' });
+  await card.getByRole('button', { name: 'Close display settings', exact: true }).click();
+  await card.waitFor({ state: 'detached' });
   return rows;
 }
 const displayModes = async pane => (await displayMenu(pane)).modes;
@@ -499,7 +503,7 @@ test('a corrupt mesh raises the viewer\'s load alert and an empty one says there
   assert.match(await alert.innerText(), /Couldn’t load the model/);
   assert.match(await alert.innerText(), /broken\.stl/);
   // Nothing on screen is the file's to work on: the card alone, with no tools or view actions.
-  for (const name of ['View', 'Preview']) {
+  for (const name of ['Display', 'Preview']) {
     assert.equal(await broken.pane.getByRole('button', { name, exact: true }).count(), 0, `no ${name} over a failed load`);
   }
   assert.equal(await alert.getByRole('button', { name: 'Retry', exact: true }).count(), 1);

@@ -101,23 +101,22 @@ const hex = value => [1, 3, 5].map(index => Number.parseInt(value.slice(index, i
 const red = ([r, g, b]) => r > 150 && g < 90 && b < 90;
 
 
-// The board's view settings are the navbar's View (`kit/shell/ViewSettingsMenu.jsx`): Side, Mode (2D/3D), Display and
-// Background in one menu, its button saying each group's state (`data-view-side`, `data-view-dimension`).
-const VIEW = '[data-navbar-view-controls] [data-view-menu]';
+// The board's view settings are the navbar's Display (`kit/shell/DisplaySettings.jsx`): its card Side, Mode (2D/3D) |
+// Style and Background, its button saying each group's state (`data-view-side`, `data-view-dimension`).
+const VIEW = '[data-navbar-view-controls] [data-display-settings]';
 const OPTION = Object.freeze({ side: 'data-board-side-option', dimension: 'data-board-dimension-option' });
 const OTHER = Object.freeze({ top: 'bottom', bottom: 'top', '2d': '3d', '3d': '2d' });
 const viewValue = (pane, id) => pane.locator(VIEW).getAttribute(`data-view-${id}`);
 async function chooseView(pane, id, value) {
   if (await viewValue(pane, id) === value) return;
+  const page = pane.page(), card = page.locator('[data-display-settings-card]');
   await pane.locator(VIEW).click();
-  const page = pane.page(), menu = page.locator('[role=menu][aria-label="View"]');
-  // Each group is a submenu of View (`data-view-sub`): its row opens it, its options are in it. The pointer travels
-  // to the option as a mouse's does, through the submenu's grace area (a single jump there closes the submenu).
-  await menu.locator(`[data-view-sub="${id}"]`).click();
-  const option = await page.locator(`[data-view-sub-content="${id}"] [${OPTION[id]}="${value}"]`).boundingBox();
-  await page.mouse.move(option.x + option.width / 2, option.y + option.height / 2, { steps: 8 });
-  await page.mouse.click(option.x + option.width / 2, option.y + option.height / 2);
-  await menu.waitFor({ state: 'detached' });
+  // Each group is a dropdown of the card: it opens its list, its options in it. The card is put away after, by its X,
+  // so it stands over nothing the next step presses (the corner's zoom).
+  await card.locator(`[data-settings-select="${id}"]`).click();
+  await page.getByRole('listbox').locator(`[${OPTION[id]}="${value}"]`).click();
+  await card.getByRole('button', { name: 'Close display settings', exact: true }).click();
+  await card.waitFor({ state: 'detached' });
 }
 // A step in, from the zoom's menu (the zoom has no + of its own).
 async function zoomIn(pane) {
@@ -209,10 +208,10 @@ test('in 3D the board is its two faces in the 2D colours, a press on a pad’s p
   await page.waitForFunction(() => document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible'));
   // Toggled to 3D on a board just opened: the board in 3D, never the view's "Could not display that file".
   assert.equal(await page.getByText('Could not display that file').count(), 0, 'the board in 3D, not the error card');
-  // In 3D the zoom alone in the corner, where it stood, and View in the navbar where it stood: no Home on the picture.
+  // In 3D the zoom alone in the corner, where it stood, and Display in the navbar where it stood: no Home on the picture.
   const solid = await controls();
-  assert.deepEqual(solid, flat, 'the zoom and View where they stood');
-  assert.equal(await pane.locator('[data-view-home]').count(), 0, 'no Home: its way back is View\'s Reset view');
+  assert.deepEqual(solid, flat, 'the zoom and Display where they stood');
+  assert.equal(await pane.locator('[data-view-home]').count(), 0, 'no Home: its way back is the zoom\'s fit');
   // The pill is the 3D camera's zoom: a step in (half again), and it reads the camera's new percentage.
   const settled = () => page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling; });
   await settled();
@@ -375,7 +374,7 @@ test('in 3D Flip turns the camera over and its icon is the side the camera is on
   const rest = () => page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling; })
     .then(() => page.evaluate(() => {
       const { position, target } = window.__cadCamera();
-      return { camera: target[2] - position[2] > 0 ? 'bottom' : 'top', flip: document.querySelector('[data-navbar-view-controls] [data-view-menu]').dataset.viewSide };
+      return { camera: target[2] - position[2] > 0 ? 'bottom' : 'top', flip: document.querySelector('[data-navbar-view-controls] [data-display-settings]').dataset.viewSide };
     }));
   // The corner's Side says the side the camera is on.
   const top = { camera: 'top', flip: 'top' }, bottom = { camera: 'bottom', flip: 'bottom' };
@@ -400,7 +399,7 @@ test('in 3D Flip turns the camera over and its icon is the side the camera is on
   await toggleView(pane, 'dimension');
   await pane.locator('[data-board-3d]').waitFor({ state: 'detached' });
   assert.deepEqual(await page.evaluate(() => [window.cadHarness.a.controller.readState().boardDisplay.side,
-    document.querySelector('[data-navbar-view-controls] [data-view-menu]').dataset.viewSide, document.querySelector('[data-navbar-view-controls] [data-view-menu]').dataset.viewDimension]),
+    document.querySelector('[data-navbar-view-controls] [data-display-settings]').dataset.viewSide, document.querySelector('[data-navbar-view-controls] [data-display-settings]').dataset.viewDimension]),
   ['bottom', 'bottom', '2d']);
   assert.deepEqual(errors, []);
 });
@@ -460,7 +459,7 @@ test('Preview draws the board lit in a view of its own: its cover lifts on the s
   const pane = page.getByTestId('one');
   const flat = await frame(pane);
   // Preview is the navbar's, right of View; a press covers the view, and the cover lifts on Preview's own view.
-  await pane.locator('[data-navbar-view-controls] [data-view-menu] + [data-view-preview]').click();
+  await pane.locator('[data-navbar-view-controls] [data-display-settings] + [data-view-preview]').click();
   await pane.locator('[data-preview-cover]').waitFor();
   await page.waitForFunction(() => document.querySelector('[data-preview-view] canvas') && !document.querySelector('[data-preview-cover]'));
   // Render's studio, in perspective, round the slab with the part's body on it (in under the cover, or, where the
@@ -480,7 +479,7 @@ test('Preview draws the board lit in a view of its own: its cover lifts on the s
   assert.ok(track > 50, `the track on the lit face: ${track} red pixels`);
   // Orbit, from Preview's settings, turns the camera about the board.
   await pressInPreview(page, pane, pane.locator('[data-preview-settings]'));
-  await pane.locator('[data-preview-settings-panel]').getByRole('checkbox', { name: 'Orbit' }).click();
+  await pane.locator('[data-preview-settings-panel]').getByRole('switch', { name: 'Orbit' }).click();
   await page.waitForFunction(from => { const now = window.__cadCamera(); return now?.settling && Math.hypot(now.position[0] - from[0], now.position[1] - from[1]) > 1; }, camera.position);
   // Escape leaves: Preview's view goes, and the 2D view is the picture it was.
   await page.keyboard.press('Escape');
@@ -502,10 +501,10 @@ test('3D entered from the 2D bottom eases to Home’s tilt under the board, Flip
   // Seen from the bottom in 2D, then in 3D, Flip's side read on every frame: head on from below, then eased to
   // Home's tilt from below (the world's z up), the camera never over the board's plane.
   await toggleView(pane, 'side');
-  await pane.locator('[data-navbar-view-controls] [data-view-menu][data-view-side="bottom"]').waitFor({ state: 'attached' });
+  await pane.locator('[data-navbar-view-controls] [data-display-settings][data-view-side="bottom"]').waitFor({ state: 'attached' });
   await page.evaluate(() => {
     window.__sides = new Set();
-    const look = () => { if (!window.__sides) return; window.__sides.add(document.querySelector('[data-navbar-view-controls] [data-view-menu]')?.dataset.viewSide); requestAnimationFrame(look); };
+    const look = () => { if (!window.__sides) return; window.__sides.add(document.querySelector('[data-navbar-view-controls] [data-display-settings]')?.dataset.viewSide); requestAnimationFrame(look); };
     requestAnimationFrame(look);
   });
   await toggleView(pane, 'dimension');

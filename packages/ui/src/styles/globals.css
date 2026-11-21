@@ -83,7 +83,7 @@
    under it). */
 [data-viewer-layout="mobile"] :is([data-viewer-navbar], [data-preview-bar]) { height: 48px; }
 [data-viewer-layout="mobile"] :is([data-viewer-navbar], [data-preview-bar]) :is(button, a) { min-height: 36px; min-width: 36px; }
-[data-viewer-layout="mobile"] [data-preview-panel] { top: 48px; }
+[data-viewer-layout="mobile"] [data-preview-panel] { --preview-bar-height: 48px; }
 [data-viewer-layout="mobile"] [data-select-trigger], [data-viewer-layout="mobile"] [data-slot="select-trigger"] { min-height: 36px; }
 /* A slider anywhere on a phone (the slider control, in the panel or a tool's row, and the scrubber):
  * a 36px band to press in — the band takes the finger, so the thumb need only be seen: 16px. The selected ink's
@@ -107,8 +107,12 @@
 [data-viewer-layout="mobile"] [data-panel-surface="page"] [data-slider-field]:not([data-inline]) [data-slider-field-track] { height: 16px; }
 [data-viewer-layout="mobile"] [data-panel-surface="page"] [data-slider-field]:not([data-inline]) [data-slider-field-track]::before { content: ""; position: absolute; inset: -10px 0; }
 [data-viewer-layout="mobile"] [data-panel-surface="page"] [data-slider-field]:not([data-inline]) [data-slider-field-label] { line-height: 16px; }
-[data-viewer-layout="mobile"] [data-panel-surface="page"] [data-slider-field-value-box] { height: 24px; }
-[data-viewer-layout="mobile"] [data-panel-surface="page"] [data-slider-field-value-box] input[type="text"] { height: auto; }
+[data-viewer-layout="mobile"] :is([data-panel-surface="page"], [data-panel-surface="card"]) [data-slider-field-value-box] { height: 24px; }
+[data-viewer-layout="mobile"] :is([data-panel-surface="page"], [data-panel-surface="card"]) [data-slider-field-value-box] input[type="text"] { height: auto; }
+/* A settings card's slider (`SettingsCard.jsx`) keeps the card's rhythm on a phone, a 12px track under its 24px line, and
+ * takes the finger in a 36px band over it, reaching invisibly over its line's foot and the gap under it. */
+[data-viewer-layout="mobile"] [data-panel-surface="card"] [data-slider-field]:not([data-inline]) [data-slider-field-track] { height: 12px; }
+[data-viewer-layout="mobile"] [data-panel-surface="card"] [data-slider-field]:not([data-inline]) [data-slider-field-track]::before { content: ""; position: absolute; inset: -12px 0; }
 
 @layer base {
   * {

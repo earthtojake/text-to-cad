@@ -2,7 +2,7 @@ import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, u
 import { clonePerspectiveSnapshot } from "@cad/core/lib/perspective.js";
 import { VIEWER_SCENE_SCALE } from "@cad/core/lib/viewer/sceneScale.js";
 import { ViewerElementContext, useViewerHost, usePromptDestination } from "../../../host/context.js";
-import { hasOpenPopup } from "../../../lib/popups.js";
+import { hasOpenPopup, ownsEscape } from "../../../lib/popups.js";
 import { useAnnotationSession } from "../../../annotation/session.js";
 import { drawStripTool, isDrawingMode } from "../../../annotation/toolbar.jsx";
 import { useI18n } from "@cad/ui/i18n";
@@ -16,10 +16,9 @@ import { CAD_ANNOTATION_DEFAULTS } from "../tools/annotate/AnnotationOverlay.jsx
 import { annotationDocumentOf } from "../tools/annotate/annotation3d.js";
 import { normalizeToolStack } from "../tools/toolStackLayout.js";
 import { normalizePlayback } from "../tools/playbar/playbackPreferences.js";
-import { PreviewRenderSettings } from "../view-settings/PreviewRenderSettings.jsx";
 import { useAppliedViewSettings } from "../view-settings/useAppliedViewSettings.js";
 import { useViewSettings } from "../view-settings/useViewSettings.js";
-import { cameraForViewSettings, viewerDisplaySettingsForCamera } from "../view-settings/viewerDisplaySettings.js";
+import { DISPLAY_RESET_PATCH, cameraForViewSettings, viewerDisplaySettingsForCamera } from "../view-settings/viewerDisplaySettings.js";
 import { attachLiveBinding } from "./liveBinding.js";
 import { shellLoadReport } from "./loadReport.js";
 import { createViewPromptContext, promptDeliveryError } from "./promptContext.js";
@@ -577,7 +576,7 @@ export function useRendererShell({
     onEscape(event) {
       // A popup opened in THIS viewer (a menu, a Select, a colour picker, Display) owns Escape before
       // preview; another viewer's popup is not this one's business.
-      if (hasOpenPopup(viewerElement.current)) return;
+      if (hasOpenPopup(viewerElement.current) || ownsEscape(event.target)) return;
       if (previewing) { setPreviewing(false); return; }
       // Picked ink goes first, wherever the key landed: Annotate's surface, which takes the keyboard
       // on a press, lets go of it on its own Escape; with nothing picked, its Escape is the ladder's.
@@ -679,12 +678,12 @@ export function useRendererShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [viewSettingsStore, desiredScene, displaySettings, previewLook, features]);
   // Preview's own settings, its panel's (`PreviewSettings.jsx`): Render's lighting, background, floor and part colours.
-  const previewSettings = <PreviewRenderSettings settings={previewLook} display={displaySettings}
-    appearance={colorScheme} lightingQuality="preview" onReset={() => { controls.used("preview_reset"); viewSettingsStore.resetPreview(); }}
-    onPatch={patch => {
+  const previewSettings = { settings: previewLook, display: displaySettings, appearance: colorScheme, lightingQuality: "preview",
+    onReset: () => { controls.used("preview_reset"); viewSettingsStore.resetPreview(); },
+    onPatch: patch => {
       for (const [group, change] of Object.entries(patch || {})) for (const field of Object.keys(change || {})) controls.changed(previewControl(group, field));
       viewSettingsStore.patchPreview(patch);
-    }} />;
+    } };
   const projection = projectionControl(viewSettingsStore, desiredScene, value => controls.used(`projection_${value}`));
   const stripTool = ({ id, label, icon, ...rest }) => ({
     id, label, icon, active: !previewing && !effectInHand && toolMode === id, disabled: idle, onSelect: () => selectTool(id), ...rest
@@ -733,6 +732,8 @@ export function useRendererShell({
       // Select is the tool in hand (the default one), where a press on ink picks it before a part.
       selecting: !previewing && Boolean(toolModes) && toolMode === toolModes.defaultMode,
       annotateToolActive, annotation, history, deletePicked, toolKeys: toolKeysRef, zoomKeys: zoomKeysRef, animation, previewSettings, displayMode, grid, projection, sceneEffects,
+      // Display's Reset: the Style, the grid and the projection a file with no saved record gets.
+      resetDisplay: () => viewSettingsStore.patch(DISPLAY_RESET_PATCH),
       previewDesiredScene,
       // The viewport's theme, and Display's Background (the person's, every view's).
       viewport, background: { value: viewport.background, onChange: viewport.setBackground }

@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { ToolbarTooltipScope } from "@cad/ui/primitives/toolbar-button";
 import { cn } from "@cad/ui/utils";
-import { VIEWPORT_INSET_PX } from "../shell/viewportLayout.js";
+import { SETTINGS_CARD_GAP_PX, SettingsCardDock } from "../view-settings/SettingsCard.jsx";
 
 /** How long Preview's chrome stays up after the pointer last moved, as a video player's controls do:
  * counted from the frame that shows it, so a long frame (a slow GPU drawing Render) is not idle time. */
 export const PREVIEW_IDLE_MS = 2000;
-// How Preview's settings panel slides in and out from the view's right edge: its translate and
-// opacity, 200ms, easing out; at once where motion is reduced.
-export const SIDEBAR_SLIDE_CLASS = "transition-[translate,opacity] duration-200 ease-out motion-reduce:transition-none";
 // How what fades goes and comes back.
 export const PREVIEW_FADE_CLASS = "transition-opacity duration-300 motion-reduce:transition-none";
 
@@ -146,8 +143,8 @@ export function usePreviewIdle(root, active, held) {
  * the view's top edge, Preview's own bar: the file's name at the left, as words, and `controls` at
  * the right (its settings and the way out), nothing else, on no surface: the model shows through.
  * It comes and goes with the playbar (`idle`, `usePreviewIdle`). Under its right end `panel`,
- * Preview's settings, docked at the view's right edge, sliding in from it while `panelOpen` and out
- * again as it closes (`SIDEBAR_SLIDE_CLASS`).
+ * Preview's settings, a settings card docked at the view's right edge (`SettingsCard.jsx`'s dock, the Display
+ * card's place under the navbar, here under the bar), sliding in from it while `panelOpen` and out again as it closes.
  *
  * The bar is drawn in the backdrop's ink (`scheme`, `backdropScheme`), its token scope `.light` or `.dark`; the panel,
  * on a surface of its own, keeps the app's.
@@ -163,12 +160,10 @@ export default function PreviewChrome({ active, name = "", controls = null, pane
     </div>
     {active ? <ToolbarTooltipScope enabled>
       <PreviewBar name={name} controls={controls} idle={idle} scheme={scheme} />
-      {/* `panel`, under the bar (`top-10`), as tall as its content up to the room under it. Closed, it
-          is off the view's right edge, out of reach and out of the accessibility tree. */}
-      {panel ? <div data-preview-panel="" data-open={panelOpen ? "" : undefined} inert={!panelOpen} aria-hidden={panelOpen ? undefined : true}
-        className={cn("pointer-events-none absolute top-10 z-30 flex min-h-0 max-w-[calc(100%-1rem)] flex-col items-end", SIDEBAR_SLIDE_CLASS,
-          panelOpen ? null : "translate-x-[calc(100%+1rem)] opacity-0")}
-        style={{ right: VIEWPORT_INSET_PX, bottom: VIEWPORT_INSET_PX }}>{panel}</div> : null}
+      {/* `panel`, the bar's height and the card's gap under the view's top edge, as tall as its content up to the room
+          under it. */}
+      {panel ? <SettingsCardDock open={panelOpen} className="z-30" style={{ top: `calc(var(--preview-bar-height, 2.5rem) + ${SETTINGS_CARD_GAP_PX}px)` }}
+        data-preview-panel="">{panel}</SettingsCardDock> : null}
     </ToolbarTooltipScope> : null}
   </>;
 }
@@ -184,7 +179,7 @@ function PreviewBar({ name, controls, idle, scheme }) {
       shown ? "opacity-100" : "opacity-0")}>
     <span data-preview-name="" className={cn("min-w-0 truncate px-1 text-sm text-muted-foreground [text-shadow:0_0_6px_var(--background)]", reach)}>{name}</span>
     {/* Its controls stand where the navbar's view buttons stood (`NavbarViewControls.jsx`): 2px apart, so Preview
-        settings' cube is where View's was. */}
+        settings' cube is where Display's was. */}
     {controls ? <div data-preview-controls="" className={cn("flex shrink-0 items-center gap-0.5", reach)}>{controls}</div> : null}
   </div>;
 }

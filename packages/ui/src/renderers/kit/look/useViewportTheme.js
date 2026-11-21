@@ -21,7 +21,7 @@ export function useViewportTheme(preferences, onPreferenceChange = null) {
   return useMemo(() => ({ ...resolveViewportTheme(background), setBackground }), [background, setBackground]);
 }
 
-/** Display's Background, as `DisplayMenuItems` takes it: the choice and its change. */
+/** Display's Background, as its card's group takes it (`DisplaySettings.jsx`): the choice and its change. */
 export function viewportBackgroundControl(viewport) {
   return viewport?.setBackground ? { value: viewport.background, onChange: viewport.setBackground } : null;
 }

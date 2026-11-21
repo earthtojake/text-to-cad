@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useControlUsage } from "../../../usage/controls.js";
 import { normalizePlayback } from "../tools/playbar/playbackPreferences.js";
-import { PreviewRenderSettings } from "../view-settings/PreviewRenderSettings.jsx";
 import { useViewSettings } from "../view-settings/useViewSettings.js";
 import { previewViewScene } from "../viewport/previewViewScene.js";
 import { usePreviewFrame } from "./usePreviewFrame.jsx";
@@ -38,12 +37,11 @@ const previewControl = (group, field) => `preview_${group}_${field.replace(/[A-Z
  * @param {boolean} options.offered  The view offers Preview at all (its picture can be shown in 3D): its button is drawn.
  * @param {boolean} options.available  The view can be previewed now (its picture is in): the button is live.
  * @param {boolean} options.mobile
- * @param {import("react").ComponentType<object>} [options.ViewIcon]  The cube the view's View button wears: Preview settings'.
  * @param {boolean} [options.partColours]
  * @param {(record: { preview: object, playback: object }) => void} [options.onRecordChange]
  */
 export function useFlatPreview({ fileView, modelKey, viewport, restored, View, view, stageColor, sceneScaleMode, offered, available, mobile,
-  partColours = true, onRecordChange = null, ViewIcon = undefined }) {
+  partColours = true, onRecordChange = null }) {
   const controls = useControlUsage();
   const colorScheme = viewport.scheme;
   const state = usePreviewState();
@@ -87,12 +85,12 @@ export function useFlatPreview({ fileView, modelKey, viewport, restored, View, v
   // store's resolved scene (which a new colour scheme reaches after this render), not on the scheme.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const desired = useMemo(() => previewViewScene(store.renderScene()), [store, scene, display, look]);
-  const render = <PreviewRenderSettings settings={look} display={display} appearance={colorScheme} lightingQuality="preview" partColours={partColours}
-    onReset={() => { controls.used("preview_reset"); store.resetPreview(); }}
-    onPatch={patch => {
+  const render = { settings: look, display, appearance: colorScheme, lightingQuality: "preview", partColours,
+    onReset: () => { controls.used("preview_reset"); store.resetPreview(); },
+    onPatch: patch => {
       for (const [group, change] of Object.entries(patch || {})) for (const field of Object.keys(change || {})) controls.changed(previewControl(group, field));
       store.patchPreview(patch);
-    }} />;
+    } };
 
   // The frame's root: where Preview's chrome watches the pointer rest.
   const rootRef = useRef(null);
@@ -101,6 +99,6 @@ export function useFlatPreview({ fileView, modelKey, viewport, restored, View, v
   const viewRef = useRef(null);
   const frame = usePreviewFrame({ previewing, setPreviewing, modelKey, fileView, hostElement, stageColor, viewportScheme: colorScheme,
     View, view, desired, sceneScaleMode, viewRef, moving: orbiting, orbit: orbiting, onOrbitChange: setOrbiting,
-    orbitSpeed: playback.orbitSpeed, onOrbitSpeedChange: setOrbitSpeed, render, disabled: !available, mobile, ViewIcon });
+    orbitSpeed: playback.orbitSpeed, onOrbitSpeedChange: setOrbitSpeed, render, disabled: !available, mobile });
   return { ...frame, offered, rootRef, viewRef, record };
 }

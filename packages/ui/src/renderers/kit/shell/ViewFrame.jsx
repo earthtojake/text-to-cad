@@ -19,6 +19,7 @@ import { hasOpenPopup } from "../../../lib/popups.js";
 import { ViewCornerSideProvider, viewCornerSide } from "./ViewCorner.jsx";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
 import { ViewportTopRight } from "./ViewportTopRight.jsx";
+import { SETTINGS_CARD_GAP_PX, SETTINGS_CARD_LAYER_CLASS, SettingsCardDock } from "../view-settings/SettingsCard.jsx";
 import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
 
 /**
@@ -56,7 +57,9 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *   less its inset, above its safe area. The measure writes where it stands (`--cad-quick-edit-left`,
  *   `--cad-quick-edit-width`, from the view's left).
  * - **The navbar's view settings** (`navbar`: what a view portals into the file's navbar, `NavbarViewControls.jsx`),
- *   drawn while the chrome is, on a desktop and a phone alike (the corner is a desktop's alone).
+ *   drawn while the chrome is, on a desktop and a phone alike (the corner is a desktop's alone), and **Display's
+ *   card** (`card`: `{ open, content }`, `DisplaySettings.jsx`'s), docked under the navbar at the view's right edge,
+ *   over the corner and the strip's layer (`docs/settings-ui.md`, "Layering").
  * - **The corner** (`corner`, the view's top-right — the cube, or a flat view's zoom — or its
  *   top-left where the host anchors the cube there: the side read off the root with the measure, `viewCornerSide`, and said to everything in
  *   the corner, `ViewCornerSideProvider`), **the bottom centre** (`bottomCentre`, a
@@ -103,7 +106,7 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
 export default function ViewFrame({ rootRef = null, surface = null, className = "", rootHandlers = null, stageColor = undefined,
   canvasBoxRef = null, busy = undefined, children, underlay = null, overlays = null, file, mobile, compact, chromeHidden, failed = undefined, previewing = false, selecting = false,
   preview = null, tools, views = [], toolRow = null, toolStack = null, status = null, panel = null, panelControl = null,
-  layout, onLayoutChange, corner = null, navbar = null, notice = null, quickEdit = null, bottomCentre = null, loading = null, alert = null,
+  layout, onLayoutChange, corner = null, navbar = null, card = null, notice = null, quickEdit = null, bottomCentre = null, loading = null, alert = null,
   contextMenu = null, onCanvasPress = null, inspect = null, viewport = null }) {
   const { t } = useI18n();
   // The viewport's theme (`look/useViewportTheme.js`): what stands on the picture — the canvas box (labels, chips,
@@ -339,6 +342,8 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
               bottom: mobile ? `calc(${INSET} + env(safe-area-inset-bottom, 0px))` : 2 * VIEWPORT_INSET_PX }}>{quickEdit}</div>}
         </ToolbarTooltipScope>
       </div>
+      {card && !toolsHidden && !previewing ? <SettingsCardDock open={card.open} className={SETTINGS_CARD_LAYER_CLASS} style={{ top: SETTINGS_CARD_GAP_PX }}
+        data-display-settings-dock="">{card.content}</SettingsCardDock> : null}
     </div>
     </InspectContext.Provider>
   );

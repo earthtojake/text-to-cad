@@ -30,7 +30,7 @@ const ZOOM_BUTTON_CLASS = cn("h-7 w-auto gap-0.5 rounded-md bg-foreground/6 px-2
  * 100%, then Zoom to fit and Zoom to selection (off with nothing picked), each with its key (`zoomShortcuts`; the view's
  * keys, `pressZoomKey`; no key hints on a touch screen). The wheel, a pinch, a double-click and the keys zoom as before.
  * A 3D view shows no percentage: its corner is the cube's alone. A flat view that draws its picture in 3D (a board)
- * keeps it, and it zooms the 3D camera (`viewportZoom`); the way back to where the file opened is View's Reset view.
+ * keeps it, and it zooms the 3D camera (`viewportZoom`); its way back is its own Zoom to fit.
  *
  * 100% is the picture as authored, framed whole (a flat view's fit; in 3D the 3D views' own ruler, the
  * authored box at the camera's angle): a fixed ruler, which nothing shown

@@ -13,7 +13,7 @@ import { useViewerHost } from "../../host/context.js";
 import { useViewerMobile } from "../../file-viewer/responsive.js";
 import { annotationAt, withGroups } from "../../annotation/geometry.js";
 import { promptView } from "../../annotation/views.js";
-import { backgroundGroup } from "../kit/shell/ViewSettingsMenu.jsx";
+import { backgroundGroup } from "../kit/shell/DisplaySettings.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 import FlatViewFrame, { flatViewTools } from "../kit/shell/FlatViewFrame.jsx";
 import { useFlatHandover, useFlatTools } from "../kit/shell/useFlatView.js";
@@ -94,7 +94,7 @@ function SchematicSurface({ view, data }) {
   // The viewport's theme (`kit/look/useViewportTheme.js`): the person's Background, whatever the app's light or dark.
   // The picture — its paper, its strokes, the marks over it — is drawn in its scheme; the chrome keeps the app's.
   const viewport = useViewportTheme(workspace.services.preferences, workspace.services.onPreferenceChange);
-  // Its view settings, the navbar's View (`kit/shell/ViewSettingsMenu.jsx`): a drawing's one, the viewport's Background.
+  // Its view settings, Display's card (`kit/shell/DisplaySettings.jsx`): a drawing's one, the viewport's Background.
   const usage = useControlUsage();
   const viewGroups = [backgroundGroup({ value: viewport.background, onChange: viewport.setBackground }, t, usage.used)];
   const colorScheme = viewport.scheme;
@@ -545,7 +545,7 @@ function SchematicSurface({ view, data }) {
     <FlatViewFrame surface={SCHEMATIC_SURFACE} viewport={viewport} containerRef={containerRef} busy={document.loading || document.updating}
       file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed} loading={document.loading} loadingLabel={t("schematic.text.reading_schematic")}
       updating={document.updating} updateStatus={{ pending: true, label: t("schematic.text.updating_schematic") }} tools={index ? strip : []}
-      toolRow={index ? toolRow : null} views={[]} viewGroups={viewGroups} onResetView={zoom?.fit ?? null} panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
+      toolRow={index ? toolRow : null} viewGroups={viewGroups} panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems}
       zoom={zoom} inspect={inspect}>

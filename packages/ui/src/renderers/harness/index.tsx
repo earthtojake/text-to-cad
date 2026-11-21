@@ -29,6 +29,8 @@ const file = requested.startsWith('/') ? requested : `/models/${requested}`;
 const colorScheme = new URLSearchParams(location.search).get('scheme') === 'light' ? 'light' as const : 'dark' as const;
 // The first pane as a host that shows the view alone, with no navbar (`chrome: "bare"`), where `?chrome=bare` asks for it.
 const chrome = new URLSearchParams(location.search).get('chrome') === 'bare' ? 'bare' as const : 'page' as const;
+// The language the panes read in (`?locale=ja`): English unless asked.
+const locale = new URLSearchParams(location.search).get('locale') || undefined;
 const promptMessages: string[] = [];
 const captures: { file: string; size: number; type: string; references: unknown }[] = [];
 // What a renderer asked the host to open (a mesh a robot description names, say).
@@ -96,7 +98,7 @@ function workspace(id: string, store: TabStore) {
     search: async () => ({ paths: [file], truncated: false })
   };
   const destination = { kind: (window as unknown as { __cadPromptDestination?: 'clipboard' }).__cadPromptDestination || 'composer' as const, available: true };
-  const host: ViewerHost = { files: source, navigation: { openFile(path) { opened.push(path); } }, environment: { colorScheme, platform: keyboardPlatform },
+  const host: ViewerHost = { files: source, navigation: { openFile(path) { opened.push(path); } }, environment: { colorScheme, platform: keyboardPlatform, locale },
     clipboard: { writeText: async text => { promptMessages.push(await text); }, writeImage: async () => {} },
     promptFiles: createHttpPromptFiles({ origin: `${location.origin}/${id}` }),
     promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async context => {

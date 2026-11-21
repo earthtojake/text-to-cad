@@ -31,7 +31,7 @@ export const PANEL_PEEK_ELEVATION_CLASS = "shadow-md";
  * leaves a row's fill (8px out from the content line) 3px of the card's inside at the left and 4px at the right.
  */
 export const PANEL_PEEK_GAP_PX = 4;
-const PANEL_PEEK_RADIUS_PX = 10;
+export const PANEL_PEEK_RADIUS_PX = 10;
 // In the panel's padding box (its right 1px is the docked panel's rule, kept transparent so the content's width holds).
 const PEEK_CARD_STYLE = Object.freeze({ inset: `${PANEL_PEEK_GAP_PX}px ${PANEL_PEEK_GAP_PX - 1}px ${PANEL_PEEK_GAP_PX}px ${PANEL_PEEK_GAP_PX}px`,
   borderRadius: PANEL_PEEK_RADIUS_PX });
@@ -43,8 +43,15 @@ const PEEK_CONTENT_STYLE = Object.freeze({ clipPath: `inset(${PANEL_PEEK_GAP_PX 
  * one (a transform: nothing is laid out again, the view under it untouched), at the chrome's menus' pace (tw-animate's
  * 150ms, eased out coming in and in going out). Where motion is not welcome it appears and goes (`motion-reduce`).
  */
-const PEEK_IN_CLASS = "animate-in slide-in-from-left duration-150 ease-out motion-reduce:animate-none";
-const PEEK_OUT_CLASS = "animate-out slide-out-to-left fill-mode-forwards duration-150 ease-in motion-reduce:animate-none";
+const PEEK_SLIDE_CLASSES = Object.freeze({
+  left: Object.freeze({ in: "animate-in slide-in-from-left duration-150 ease-out motion-reduce:animate-none",
+    out: "animate-out slide-out-to-left fill-mode-forwards duration-150 ease-in motion-reduce:animate-none" }),
+  // The mirror, for a card docked at the view's right edge (`kit/view-settings/SettingsCard.jsx`).
+  right: Object.freeze({ in: "animate-in slide-in-from-right duration-150 ease-out motion-reduce:animate-none",
+    out: "animate-out slide-out-to-right fill-mode-forwards duration-150 ease-in motion-reduce:animate-none" })
+});
+/** The peek's slide, in from `edge` ("left" or "right") or, `leaving`, back out to it: one motion for every card that peeks. */
+export const peekSlideClass = (edge, leaving) => PEEK_SLIDE_CLASSES[edge][leaving ? "out" : "in"];
 const NO_HEAD_INSETS = Object.freeze({ start: 0, end: 0 });
 const KEY_NUDGE_PX = 16;
 
@@ -126,7 +133,7 @@ export function PanelSurface({ mode, label, open, hidden = false, width, grip, g
     onAnimationEnd={peeking && peekLeaving ? event => { if (event.target === event.currentTarget) onPeekExited?.(); } : undefined}
     className={cn("flex min-h-0 flex-col text-ui text-foreground", !peeking && "bg-sidebar",
       mode === "push" && !peek && "relative h-full shrink-0 border-r border-border",
-      peeking && "absolute inset-y-0 left-0 z-40 border-r border-transparent", peeking && (peekLeaving ? PEEK_OUT_CLASS : PEEK_IN_CLASS),
+      peeking && "absolute inset-y-0 left-0 z-40 border-r border-transparent", peeking && peekSlideClass("left", peekLeaving),
       page && "absolute inset-0 z-50")}
     style={page ? PANEL_ROW_VARIABLES : { ...PANEL_ROW_VARIABLES, width }}>
     {peeking ? <>

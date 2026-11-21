@@ -11,7 +11,8 @@ import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
 import { planCamera } from "@cad/core/lib/drawing2d/planView.js";
 import { screenToModel } from "@cad/core/lib/drawing2d/index.js";
 import {
-  boardDisplayAirwires, boardDrawView, boardMirrorX, boardPalette, boardPlanProjection, marksInPlan, nextBoardOthers, planToSheet
+  BOARD_DISPLAY_DEFAULTS, boardDisplayAirwires, boardDrawView, boardMirrorX, boardPalette, boardPlanProjection, marksInPlan, nextBoardOthers, planToSheet,
+  selectBoardMode
 } from "@cad/core/lib/plot2d/index.js";
 import { useViewerHost } from "../../host/context.js";
 import { useViewerMobile } from "../../file-viewer/responsive.js";
@@ -20,7 +21,6 @@ import { promptView } from "../../annotation/views.js";
 import FlatViewFrame, { flatViewTools } from "../kit/shell/FlatViewFrame.jsx";
 import { useFlatHandover, useFlatTools } from "../kit/shell/useFlatView.js";
 import { useFlatPreview } from "../kit/shell/useFlatPreview.jsx";
-import { projectionGroup, viewIcon } from "../kit/shell/ViewSettingsMenu.jsx";
 import { readFileView, writeFileView } from "../kit/shell/fileView.js";
 import { exitIsolateEntry, menuEntry, menuGroups, pickGroup, referenceGroup, zoomGroup } from "../kit/shell/viewMenu.js";
 import AnnotationOverlay from "../kit/tools/annotate/AnnotationOverlay.jsx";
@@ -36,7 +36,7 @@ import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { plotAnnotationDocument, plotAnnotationSurface } from "../kit/tools/annotate/plotAnnotation.js";
 import { useBoardDescribe, useBoardInspect, useBoardReferences, useBoardTip } from "./boardReferences.jsx";
 import { createBoardScene } from "./boardScene.js";
-import { BOARD_DIMENSION_SHORTCUT, BOARD_FLIP_SHORTCUT, boardViewControls, boardViewGroups, readBoardDisplay } from "./BoardDisplay.jsx";
+import { BOARD_DIMENSION_SHORTCUT, BOARD_FLIP_SHORTCUT, boardViewGroups, readBoardDisplay } from "./BoardDisplay.jsx";
 import { shortcutOfEvent } from "../kit/tools/toolShortcuts.js";
 import BoardSection, { useBoardTrees } from "./BoardSection.jsx";
 import BoardSelectFilter from "./BoardSelectFilter.jsx";
@@ -86,8 +86,8 @@ const BoardPreview = props => <Suspense fallback={null}><BoardPreviewView {...pr
  * (`kit/shell/FlatPanel.jsx`) is a search over three tabs, the Parts (in their schematic blocks), the
  * Nets and the Layers (each layer's eye, a row's press for the active layer), and under them the
  * picked part's or net's pads (`BoardSection.jsx`'s detail); its view
- * settings are View's (`BoardDisplay.jsx`'s `boardViewGroups`): Side (top or bottom; ⇧F), Mode (2D/3D; 3)
- * and Display (the preset), and in 3D Projection and Reset view; the corner
+ * settings are Display's card's (`BoardDisplay.jsx`'s `boardViewGroups`): Side (top or bottom; ⇧F), Mode (2D/3D; 3)
+ * and in 3D Projection, then Style (the preset) and Background, and its Reset; the corner
  * holds the zoom pill alone; the Layers tab has the
  * layers, the other layers, the pours and the opacities: one contract with `cad <type> snapshot --display`. A payload without its
  * index (an older server's) is the picture alone: no tools, no Parts or Nets, no Quick Edit.
@@ -96,8 +96,8 @@ const BoardPreview = props => <Suspense fallback={null}><BoardPreviewView {...pr
  * 2D drawer's picture of that side (`Board3dView.jsx`, a lazy chunk, over `@cad/core/lib/board3d/`). It
  * is the view's other canvas, in the same frame: the strip, the panel, the selection, the ink, the
  * measurements, Quick Edit and the corner are the same mounted components either way. The corner's
- * pill zooms the 3D camera (the 3D views' zoom, `viewportZoom`), and View adds the camera's
- * Projection and Reset view; there is no cube (Zoom to fit frames the board). A press
+ * pill zooms the 3D camera (the 3D views' zoom, `viewportZoom`), and Display adds the camera's
+ * Projection; there is no cube (Zoom to fit frames the board). A press
  * picks what the 2D view picks where the pointer's ray meets the face it enters; a drag turns the view
  * (a box is the 2D view's); Flip turns the camera over, and its icon follows the camera to
  * whichever side of the board it is on, turned by hand too.
@@ -114,7 +114,7 @@ const BoardPreview = props => <Suspense fallback={null}><BoardPreviewView {...pr
  * (`board3d`).
  *
  * **Preview**, as every 3D file's (`kit/shell/useFlatPreview.jsx`, the frame's `usePreviewFrame.jsx`): its button
- * after View, and while it is up the whole page Preview's — the board as it is made, lit, in a view of its own
+ * after Display, and while it is up the whole page Preview's — the board as it is made, lit, in a view of its own
  * (`BoardPreviewView.jsx`, a lazy chunk), under Preview's bar, with its settings (Orbit, Render's lighting, background
  * and floor; no Part colours: a board's colours are its picture's). It is an addition: the working view, 2D or 3D,
  * stays mounted under it exactly as it was (its window or camera, its Display, the tool in hand, what is picked,
@@ -133,6 +133,11 @@ function readBoard3d(raw) {
   return { mode: value.mode === "3d" ? "3d" : "2d", camera: value.camera && typeof value.camera === "object" ? value.camera : null,
     projection: value.projection === "perspective" ? "perspective" : "orthographic", models: value.models !== false };
 }
+// What a board opened for the first time gets of what Display's card sets, its Reset's: the side and the preset of a
+// Display with no record, 2D, and the 3D camera's projection with none. Never the Background: the person's.
+const BOARD_BLANK_3D = readBoard3d(null);
+const BOARD_VIEW_DEFAULTS = Object.freeze({ side: BOARD_DISPLAY_DEFAULTS.side, style: BOARD_DISPLAY_DEFAULTS.mode,
+  dimension: BOARD_BLANK_3D.mode, projection: BOARD_BLANK_3D.projection });
 const point3 = value => Array.isArray(value) && value.length === 3 && value.every(Number.isFinite);
 /** The side of the board a stored 3D camera sees (`boardFrame.js`'s `sideSeenAlong`), or null for none. */
 const cameraSide = camera => (point3(camera?.position) && point3(camera?.target)
@@ -234,9 +239,7 @@ function BoardSurface({ view, data }) {
   [previewable, previewLayout, previewOutline, thickness, boardParts, models, previewClient, showModels, colorScheme, previewComplete]);
   const preview = useFlatPreview({ fileView: view, modelKey: file, viewport, restored: stored, View: BoardPreview, view: previewView,
     stageColor: boardPalette(colorScheme).background, sceneScaleMode: VIEWER_SCENE_SCALE.CAD, offered: previewable, available: previewable && shown, mobile,
-    partColours: false, onRecordChange: save,
-    // Preview settings wears View's cube: the 3D camera's projection's while the board is in 3D, the plain one in 2D.
-    ViewIcon: viewIcon([projectionGroup(previewable && dimension === "3d" ? { value: projection } : null)].filter(Boolean)) });
+    partColours: false, onRecordChange: save });
   const previewing = preview.previewing;
 
   // ---- tools ----------------------------------------------------------------
@@ -788,22 +791,21 @@ function BoardSurface({ view, data }) {
   const solid = dimension === "3d" && layered && plot;
   // The board in 3D is mounted while it is the view, and while it leaves (`closing3d`).
   const mounted3d = (dimension === "3d" || closing3d) && layered && plot;
-  // In 3D, Reset view: the camera back where the 3D view opened (what its Home was, counted as Home always was).
-  const home3d = solid ? () => { controls.used("view_home"); view3dRef.current?.home?.(); } : null;
-  // The board's settings as View draws them (`kit/shell/ViewSettingsMenu.jsx`): Side, Mode, Display, in 3D Projection,
-  // and Background, then in 3D Reset view; a phone's Reset view is 3D's, or 2D's fit. A phone with no navbar has them
-  // as rows of its More (`boardViewControls`).
+  // The board's settings as Display's card draws them (`kit/shell/DisplaySettings.jsx`): Side, Mode, in 3D Projection,
+  // then Style and Background. Its Reset puts the side, the mode, the preset and the projection back to what a board
+  // opened for the first time gets (`BOARD_VIEW_DEFAULTS`), leaving its Background, the person's.
   const viewGroups = layered ? boardViewGroups({ t, used: controls.used, display, sheet, onChange: setDisplay, dimension, onDimensionChange: switchDimension,
     onSide: chooseSide, projection: solid ? { value: projection, onChange: setProjection } : null,
-    background: { value: viewport.background, onChange: viewport.setBackground } }) : null;
-  const views = layered ? boardViewControls({ t, used: controls.used, display, sheet, onChange: setDisplay, disabled: !shown, dimension, onDimensionChange: switchDimension,
-    onSide: chooseSide, projection: solid ? { value: projection, onChange: setProjection } : null,
-    background: { value: viewport.background, onChange: viewport.setBackground }, onReset: home3d }) : [];
-  const resetView = home3d || (() => zoom.fit?.());
+    background: { value: viewport.background, onChange: viewport.setBackground }, defaults: BOARD_VIEW_DEFAULTS }) : null;
+  const resetView = () => {
+    setProjection(BOARD_VIEW_DEFAULTS.projection);
+    switchDimension(BOARD_VIEW_DEFAULTS.dimension);
+    setDisplay(current => ({ ...selectBoardMode(current, BOARD_VIEW_DEFAULTS.style), side: BOARD_VIEW_DEFAULTS.side }));
+  };
   return (
     <FlatViewFrame surface={BOARD_SURFACE} viewport={viewport} containerRef={containerRef} busy={document.loading || document.updating}
       file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} failed={failed} loading={document.loading} loadingLabel={t("board.text.reading_board")}
-      updating={document.updating} updateStatus={{ pending: true, label: t("board.text.updating_board") }} tools={index ? strip : []} toolRow={index ? row : null} views={views} viewGroups={viewGroups} onResetView={resetView} cameraReset={home3d}
+      updating={document.updating} updateStatus={{ pending: true, label: t("board.text.updating_board") }} tools={index ? strip : []} toolRow={index ? row : null} viewGroups={viewGroups} onResetDisplay={resetView}
       panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload} canvasRef={activeCanvasRef} contextMenuItems={contextMenuItems}

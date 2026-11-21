@@ -18,12 +18,12 @@ it('keeps editor controls hidden throughout Preview and restores them on exit', 
 });
 
 it("puts Preview's own bar over the view's top edge, the name at its left and its controls at its right, and its panel under it, only while it is up", () => {
-  const view = render(<PreviewChrome active name="arm.step" controls={<button>Exit preview</button>} panel={<div data-testid="settings" />} />);
+  const view = render(<PreviewChrome active name="arm.step" controls={<button>Exit preview</button>} panel={<div data-testid="settings" />} panelOpen />);
   const bar = view.container.querySelector<HTMLElement>('[data-preview-bar]')!;
   expect([bar.querySelector('[data-preview-name]')!.textContent, bar.querySelector('[data-preview-name]')!.nextElementSibling!.hasAttribute('data-preview-controls')]).toEqual(['arm.step', true]);
   expect(screen.getByRole('button', { name: 'Exit preview' }).closest('[data-preview-controls]')).not.toBeNull();
   expect(screen.getByTestId('settings').closest('[data-preview-panel]')).not.toBeNull();
-  view.rerender(<PreviewChrome active={false} name="arm.step" controls={<button>Exit preview</button>} panel={<div data-testid="settings" />} />);
+  view.rerender(<PreviewChrome active={false} name="arm.step" controls={<button>Exit preview</button>} panel={<div data-testid="settings" />} panelOpen />);
   expect(view.container.querySelector('[data-preview-bar]')).toBeNull();
   expect(screen.queryByRole('button', { name: 'Exit preview' })).toBeNull();
 });

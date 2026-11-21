@@ -77,7 +77,7 @@ const settle = page => page.evaluate(() => new Promise(resolve => requestAnimati
 // temporary harness.
 const mesh = 'solid triangle\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 20 0 0\nvertex 0 20 0\nendloop\nendfacet\nendsolid triangle\n';
 
-test('a phone\'s tools centre on the viewport as space runs out; its View and Preview are the navbar\'s', async (t) => {
+test('a phone\'s tools centre on the viewport as space runs out; its Display and Preview are the navbar\'s', async (t) => {
   const origin = await serve(t);
   const { page, errors } = await newPage(t);
   await page.goto(`${origin}/?file=panel.harness`);
@@ -98,9 +98,9 @@ test('a phone\'s tools centre on the viewport as space runs out; its View and Pr
       return Math.abs(tools.left - expected) < 1 && tools.right <= view.right - 7;
     }, width);
   }
-  // At 599 every tool fits, and the navbar's right end is View and Preview alone: no More, no cube, no zoom.
+  // At 599 every tool fits, and the navbar's right end is Display and Preview alone: no More, no cube, no zoom.
   assert.equal(await pane.getByRole('button', { name: 'More tools', exact: true }).count(), 0);
-  assert.deepEqual(await pane.locator('[data-navbar-view] [data-navbar-view-controls] > *').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))), ['View', 'Preview']);
+  assert.deepEqual(await pane.locator('[data-navbar-view] [data-navbar-view-controls] > *').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))), ['Display', 'Preview']);
   assert.deepEqual([await pane.locator('[data-view-cube]').count(), await pane.locator('[data-zoom-pill]').count()], [0, 0]);
   assert.deepEqual(errors, []);
 });
@@ -120,7 +120,7 @@ const drawingRoute = (url, root, response) => {
 };
 for (const [what, file, route, groups] of [['a 3D view', 'panel.harness', undefined, ['projection', 'display', 'background', 'grid']],
   ['a flat view', 'layered.dxf', drawingRoute, ['background']]]) {
-  test(`${what}: the strip stays at the view's centre as the panel opens and shuts, the picture is centred in what a pushed panel leaves, and a phone's panel is a sheet, its View the desktop's menu`, async (t) => {
+  test(`${what}: the strip stays at the view's centre as the panel opens and shuts, the picture is centred in what a pushed panel leaves, and a phone's panel is a sheet, its Display the desktop's card`, async (t) => {
     const origin = await serve(t, route);
     const { page, errors } = await newPage(t);
     await page.addInitScript(() => { window.Worker = undefined; });
@@ -196,17 +196,18 @@ for (const [what, file, route, groups] of [['a 3D view', 'panel.harness', undefi
     await settle(page);
     await page.mouse.click(380, 300);
     await sheet.waitFor({ state: 'detached' });
-    // View opens the desktop's menu (no bottom sheet), its submenus and check rows the file's, Reset view last; a tap
-    // outside shuts it.
-    await pane.locator('[data-view-menu]').click();
-    const viewMenu = page.locator('[role=menu][aria-label="View"]');
-    await viewMenu.waitFor();
-    assert.deepEqual(await viewMenu.locator('[data-view-sub], [data-view-toggle]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-view-sub') ?? node.getAttribute('data-view-toggle'))), groups);
-    assert.equal(await viewMenu.locator('[data-view-reset]').count(), 1);
+    // Display opens its card, the desktop's (no bottom sheet), its rows the file's; a tap outside leaves it open, as a
+    // person working in the view leaves it; its X puts it away.
+    await pane.locator('[data-display-settings]').click();
+    const card = page.locator('[data-display-settings-card]');
+    await card.waitFor();
+    assert.deepEqual(await card.locator('[data-settings-row]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-settings-row'))), groups);
     assert.equal(await page.locator('[data-slot=drawer-content]').count(), 0, 'no bottom sheet');
     await settle(page);
     await page.mouse.click(200, 500);
-    await viewMenu.waitFor({ state: 'detached' });
+    assert.equal(await card.count(), 1, 'a tap on the view leaves the card open');
+    await card.getByRole('button', { name: 'Close display settings', exact: true }).click();
+    await card.waitFor({ state: 'detached' });
     assert.deepEqual(errors, []);
   });
 }
@@ -286,7 +287,7 @@ test('a toolbar button under the pointer is seen on its surface in the dark, ove
   // A tool with a menu (this harness's has none; `FloatingToolBar.test.tsx` holds its classes) is the strip's fill round both.
   if (await pane.locator('[data-navbar-panel="left"][aria-expanded="false"]').count()) await pane.locator('[data-navbar-panel="left"]').click();
   await seen('the panel head', pane.locator('[data-flat-panel-head]').getByRole('tab', { selected: false }).first());
-  await seen('View', pane.locator('[data-navbar-view-controls] [data-view-menu]'));
+  await seen('Display', pane.locator('[data-navbar-view-controls] [data-display-settings]'));
   assert.deepEqual(errors, []);
 });
 
@@ -373,11 +374,11 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   });
   await page.goto(`${origin}/`);
   const first = page.getByTestId('one');
-  // A view's settings are View, the navbar's. A pane narrower than a phone's breakpoint (each of two side by side) has a
-  // phone's strip and no cube: View is still the navbar's, the same menu (`ViewSettingsMenu.jsx`).
-  const displayButton = pane => pane.locator('[data-view-menu]');
-  const viewButton = pane => pane.locator('[data-view-menu]');
-  const display = page.locator('[role=menu][aria-label="View"]');
+  // A view's settings are Display's, the navbar's. A pane narrower than a phone's breakpoint (each of two side by side)
+  // has a phone's strip and no cube: Display is still the navbar's, the same card (`DisplaySettings.jsx`).
+  const displayButton = pane => pane.locator('[data-display-settings]');
+  const viewButton = displayButton;
+  const display = page.locator('[data-display-settings-card]');
   const cameraZoom = id => page.evaluate(pane => window.cadHarness[pane].controller?.readState().camera?.zoom ?? null, id);
   await displayButton(first).waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
   await page.waitForFunction(() => Object.keys(window.cadHarness.state.renderers || {}).length > 0);
@@ -406,25 +407,27 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   // observer and camera event publish before taking the saved snapshot.
   await settle(page);
 
-  // The file goes with its View menu open (the first pane is phone-wide now too): its submenus the 3D view's, the STL's
-  // one mode in Display's, Grid a check row that toggles and leaves the menu open.
+  // The file goes with its Display card open (the first pane is phone-wide now too): its rows the 3D view's, the STL's
+  // one mode in Style's list, Show grid a switch that leaves the card open.
   await page.setViewportSize({ width: 800, height: 812 });
   await viewButton(first).click();
   await display.waitFor();
-  assert.deepEqual(await display.locator('[data-view-sub], [data-view-toggle]').evaluateAll(rows => rows.map(row => row.getAttribute('data-view-sub') ?? row.getAttribute('data-view-toggle'))),
-    ['projection', 'display', 'background', 'grid'], 'the menu\'s rows: Projection, Display, Background, Grid');
-  await display.locator('[data-view-sub="display"]').click();
-  assert.deepEqual(await page.locator('[data-view-sub-content="display"] [data-display-mode-option]').allInnerTexts(), ['Solid'], 'an STL of one mesh: Solid alone');
+  assert.deepEqual(await display.locator('[data-settings-row]').evaluateAll(rows => rows.map(row => row.getAttribute('data-settings-row'))),
+    ['projection', 'display', 'background', 'grid'], 'the card\'s rows: Projection, Style, Background, Grid');
+  await display.locator('[data-settings-select="display"]').click();
+  assert.deepEqual(await page.getByRole('listbox').locator('[data-display-mode-option]').allInnerTexts(), ['Solid'], 'an STL of one mesh: Solid alone');
+  await page.keyboard.press('Escape');
+  await page.getByRole('listbox').waitFor({ state: 'detached' });
   assert.equal(await first.locator('[data-viewer-navbar] [data-navbar-panel]').count(), 1, 'an STL has its panel (its Model tab, its one body), so its toggle');
-  const grid = display.locator('[data-view-toggle="grid"]');
+  const grid = display.getByRole('switch', { name: 'Show grid', exact: true });
   await grid.click();
   assert.equal(await grid.getAttribute('aria-checked'), 'true');
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.grid === true);
-  assert.equal(await display.count(), 1, 'ticking Grid leaves the menu open');
+  assert.equal(await display.count(), 1, 'the grid switched leaves the card open');
   await page.evaluate(() => window.cadHarness.mounted(false));
   await display.waitFor({ state: 'detached' }).catch(async (error) => {
     const left = await page.evaluate(() => ({
-      open: [...document.querySelectorAll('[role=menu]')].map(node => ({ settings: node.getAttribute('aria-label'), state: node.getAttribute('data-state'),
+      open: [...document.querySelectorAll('[data-display-settings-card]')].map(node => ({ settings: node.getAttribute('aria-label'), state: node.parentElement.getAttribute('data-settings-card-slide'),
         pane: node.closest('[data-testid]')?.getAttribute('data-testid') ?? 'body' })),
       viewerOne: Boolean(document.querySelector('[data-testid="one"] [data-viewer-layout]')),
       layouts: [...document.querySelectorAll('[data-viewer-layout]')].map(node => `${node.closest('[data-testid]')?.getAttribute('data-testid')}:${node.getAttribute('data-viewer-layout')}`),
@@ -441,9 +444,9 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
     assert.deepEqual([saved.display.mode, saved.display.grid], ['solid', true], 'and the display: its mode and the Grid switch');
   }
   await page.evaluate(() => window.cadHarness.mounted(true));
-  // Whether View is open is transient, not file state.
+  // Whether Display's card is open is transient, not file state.
   await viewButton(first).waitFor();
-  assert.equal(await display.count(), 0, 'the remounted file opens with its View menu shut');
+  assert.equal(await display.count(), 0, 'the remounted file opens with its Display card shut');
   assert.equal(await viewButton(first).getAttribute('aria-expanded'), 'false');
   // The pane remounts before the viewport adopts the mesh and publishes its restored
   // camera. Wait for the actual presented frame, not an arbitrary settling delay.
@@ -661,7 +664,7 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   const snapped = await page.evaluate(() => window.__cadCamera());
   snapped.target.forEach((value, index) => assert.ok(Math.abs(value - beforeSnap.target[index]) < 1e-8));
   assert.equal(snapped.zoom, beforeSnap.zoom);
-  // Reset view, View's last row (the view the file opened with: `ShellChrome.test.tsx` presses it); no Home on the picture.
+  // No Home on the picture: the camera's way back is Zoom to fit (the view's menu and F) and the cube.
   assert.equal(await pane.locator('[data-view-home]').count(), 0, 'no Home on the picture');
   await page.evaluate(() => window.cadHarness.a.controller.resetCamera());
   const recovered = await settleInk(ink => ink > 0.05, 'Zoom to Fit frames the plate after panning away');
@@ -858,9 +861,9 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.ok(stackBox.y + stackBox.height <= frameBox.y + frameBox.height - 68 - 16 + 0.5, 'the tool stack stops clear of Quick Edit\'s row');
   assert.equal(await pane.locator('[data-cad-toolbar] [data-view-controls]').count(), 0, 'nothing of the view on the strip');
   assert.deepEqual(await pane.locator('[data-viewer-navbar] [data-navbar-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['View', 'Preview'], 'View and Preview, the navbar\'s');
-  const [viewBox, previewBox] = [await pane.locator('[data-navbar-view-controls] [data-view-menu]').boundingBox(), await pane.locator('[data-view-preview]').boundingBox()];
-  assert.ok(viewBox.x + viewBox.width <= previewBox.x && Math.abs(viewBox.y - previewBox.y) < 0.5, `View left of Preview, on its line: ${JSON.stringify({ viewBox, previewBox })}`);
+    ['Display', 'Preview'], 'Display and Preview, the navbar\'s');
+  const [viewBox, previewBox] = [await pane.locator('[data-navbar-view-controls] [data-display-settings]').boundingBox(), await pane.locator('[data-view-preview]').boundingBox()];
+  assert.ok(viewBox.x + viewBox.width <= previewBox.x && Math.abs(viewBox.y - previewBox.y) < 0.5, `Display left of Preview, on its line: ${JSON.stringify({ viewBox, previewBox })}`);
   assert.equal(await pane.locator('[data-view-corner] *').count(), 0, 'the corner holds the cube alone');
   assert.equal(await pane.locator('[data-cad-toolbar] [data-strip-rule]').count(), 0, 'no rule on the strip');
 
@@ -1299,5 +1302,45 @@ test('three tabs and the search fit the 232px panel with no ⋯; a fourth is ⋯
   assert.deepEqual([phone.row, phone.tab], [desktop.row, desktop.tab], `the phone's rows and tabs are the desktop's: ${JSON.stringify({ desktop, phone })}`);
   assert.deepEqual([desktop.height, phone.height, desktop.row.between, desktop.tabs, desktop.more, phone.tabs, phone.more], [28, 36, 2, 4, false, 4, false]);
   assert.equal(await page.locator('[data-panel-sheet] [data-flat-panel-head] button:not([role=tab]):not([data-flat-panel-search-open])').count(), 0, 'the sheet\'s head is the tabs and the search alone: no Back');
+  assert.deepEqual(errors, []);
+});
+
+// Display's card (`DisplaySettings.jsx`, `kit/view-settings/SettingsCard.jsx`), as a page lays it out: the sidebar's peek
+// card mirrored at the view's right edge (the same box, gaps and content inset), over the cube; its dropdowns one width;
+// nothing in it cut short.
+test('Display\'s card is the peek card\'s mirror at the view\'s right edge, over the cube: the same gaps, width and inset, its dropdowns one width, nothing cut', async (t) => {
+  const origin = await serve(t);
+  const { page, errors } = await newPage(t);
+  await page.addInitScript(() => { window.Worker = undefined; });
+  await page.goto(`${origin}/?file=panel.harness`);
+  const pane = page.getByTestId('one');
+  await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
+  if (await pane.getByRole('button', { name: 'Hide panel', exact: true }).count()) await pane.getByRole('button', { name: 'Hide panel', exact: true }).click();
+  await pane.locator('[data-display-settings]').click();
+  await pane.locator('[data-settings-card-slide="in"] [data-display-settings-card]').waitFor();
+  await pane.locator('[data-navbar-panel="left"]').hover();
+  await pane.locator('[data-panel-peek-card]').waitFor();
+  await page.waitForFunction(() => !document.getAnimations().some(animation => animation.playState === 'running'));
+  const at = await page.evaluate(() => {
+    const rect = element => element.getBoundingClientRect();
+    const view = rect(document.querySelector('[data-testid="one"] [data-slot="cad-file-view"]'));
+    const card = document.querySelector('[data-display-settings-card]'), peek = rect(document.querySelector('[data-panel-peek-card]'));
+    const box = rect(card);
+    const firstLabel = rect(card.querySelector('[data-settings-label]'));
+    const peekLabel = rect(document.querySelector('[data-panel-peek] [data-flat-panel-tab-name]'));
+    const cube = rect(document.querySelector('[data-view-cube]'));
+    const over = document.elementFromPoint(cube.left + cube.width / 2, cube.top + cube.height / 2);
+    const cut = [...card.querySelectorAll('[data-settings-label], [data-settings-value-label], [data-settings-title]')]
+      .filter(element => element.scrollWidth > element.clientWidth).map(element => element.textContent);
+    return { card: [box.left, box.top, box.width], right: view.right - box.right, peek: [peek.left - view.left, peek.top, peek.width],
+      inset: firstLabel.left - box.left, peekInset: peekLabel.left - peek.left,
+      widths: [...card.querySelectorAll('[data-settings-select]')].map(trigger => rect(trigger).width), cut, overCube: card.contains(over) };
+  });
+  assert.deepEqual([at.card[1], at.card[2], at.right], [at.peek[1], at.peek[2], at.peek[0]], `the peek card's box, mirrored: ${JSON.stringify(at)}`);
+  assert.deepEqual([at.inset, at.peekInset], [12, 12], 'the content 12px in, as the peek card\'s is');
+  assert.ok(at.widths.length === 3 && at.widths.every(width => Math.abs(width - at.widths[0]) < 0.5) && at.widths[0] >= (at.card[2] - 24) / 2 - 0.5,
+    `the dropdowns one width, half the content at least: ${at.widths}`);
+  assert.deepEqual(at.cut, [], 'no label or value cut short');
+  assert.equal(at.overCube, true, 'the card over the cube');
   assert.deepEqual(errors, []);
 });

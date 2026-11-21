@@ -170,36 +170,51 @@ const opened = async (pane: HTMLElement) => {
   await waitFor(() => expect(frames.length).toBeGreaterThan(0));
 };
 const strip = (pane: HTMLElement) => within(pane).getByRole('group', { name: 'Interaction tools' });
-// The board's view settings, the navbar's View (`kit/shell/ViewSettingsMenu.jsx`, `BoardDisplay.jsx`'s `boardViewGroups`):
-// Side, Mode (2D/3D), Display (its presets), in 3D Projection, then Background, one menu; in 3D Reset view last.
+// The board's view settings, the navbar's Display (`kit/shell/DisplaySettings.jsx`, `BoardDisplay.jsx`'s `boardViewGroups`):
+// its card Side, Mode (2D/3D), in 3D Projection | Style (its presets), Background, and Reset.
 const cornerStack = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-navbar-view-controls]');
 const viewButtons = (pane: HTMLElement) => [...(cornerStack(pane)?.querySelectorAll('button') ?? [])]
   .map(button => button.getAttribute('aria-label') || button.textContent);
-const displayButton = (pane: HTMLElement) => within(cornerStack(pane)!).getByRole('button', { name: 'View' });
-// The state View says each group is in: the side, 2D or 3D, the preset.
+const displayButton = (pane: HTMLElement) => within(cornerStack(pane)!).getByRole('button', { name: 'Display' });
+// The state Display says each group is in: the side, 2D or 3D, the preset.
 const viewValue = (pane: HTMLElement, id: 'side' | 'dimension' | 'display') => displayButton(pane).getAttribute(`data-view-${id}`);
-// View's submenus, one a choice (`ViewSettingsMenu.jsx`): each item's attribute, its submenu's row.
-const SUB_OF: Record<string, string> = { 'data-board-side-option': 'side', 'data-board-dimension-option': 'dimension', 'data-display-mode-option': 'display',
+const displayCard = () => document.querySelector<HTMLElement>('[data-settings-card-slide="in"] [data-display-settings-card]');
+// Display's card, opened by its button where it is not; it stays open while the person works.
+const openCard = (pane: HTMLElement) => { if (!displayCard()) fireEvent.click(displayButton(pane)); return displayCard()!; };
+// The card's rows, section by section: each row's id and the value it shows.
+const cardSections = (pane: HTMLElement) => {
+  const sections: string[][][] = [[]];
+  for (const node of openCard(pane).querySelector('[data-settings-card-body]')!.children) {
+    if (node.hasAttribute('data-settings-rule')) { sections.push([]); continue; }
+    sections.at(-1)!.push([node.getAttribute('data-settings-row')!, node.querySelector('[data-settings-value-label]')!.textContent!]);
+  }
+  return sections;
+};
+// Each option's attribute, its dropdown's row.
+const ROW_OF: Record<string, string> = { 'data-board-side-option': 'side', 'data-board-dimension-option': 'dimension', 'data-display-mode-option': 'display',
   'data-display-projection': 'projection', 'data-display-background': 'background' };
-// A submenu of View's (open), opened as a press on its row opens it: its content, or null where View has no such row.
-const viewSub = (id: string) => {
-  const trigger = document.querySelector<HTMLElement>(`[role=menu][aria-label="View"] [data-view-sub="${id}"]`);
+// A dropdown of the card, opened as a tap opens it: its list, or null where the card has no such row.
+const viewSub = (pane: HTMLElement, id: string) => {
+  const trigger = openCard(pane).querySelector<HTMLElement>(`[data-settings-select="${id}"]`);
   if (!trigger) return null;
-  if (trigger.getAttribute('data-state') !== 'open') fireEvent.click(trigger);
-  return document.querySelector<HTMLElement>(`[data-view-sub-content="${id}"]`);
+  if (trigger.getAttribute('aria-expanded') !== 'true') fireEvent.click(trigger);
+  return document.querySelector<HTMLElement>('[role=listbox]');
 };
-// A choice of View's, made as a person makes it: the menu opened (on the press, as Radix's trigger opens), its submenu, the row chosen.
-const pickView = (pane: HTMLElement, attribute: string, value: string) => {
-  if (!menuShown('View')) fireEvent.pointerDown(displayButton(pane), { button: 0, ctrlKey: false, pointerType: 'mouse' });
-  fireEvent.click(viewSub(SUB_OF[attribute])!.querySelector<HTMLElement>(`[${attribute}="${value}"]`)!);
-};
+// The open list put away, as Escape puts it away.
+const closeSub = () => { const list = document.querySelector('[role=listbox]'); if (list) fireEvent.keyDown(list, { key: 'Escape' }); };
+// A choice of Display's, made as a person makes it: its dropdown opened, the option chosen.
+const pickView = (pane: HTMLElement, attribute: string, value: string) =>
+  fireEvent.click(viewSub(pane, ROW_OF[attribute])!.querySelector<HTMLElement>(`[${attribute}="${value}"]`)!);
 // Flip and 2D/3D: the other side, the other mode.
 const flip = (pane: HTMLElement) => pickView(pane, 'data-board-side-option', viewValue(pane, 'side') === 'top' ? 'bottom' : 'top');
 const switchDimension = (pane: HTMLElement) => pickView(pane, 'data-board-dimension-option', viewValue(pane, 'dimension') === '2d' ? '3d' : '2d');
-// View's groups as its menu draws them: each row's name, whether it is ticked, and the key it shows.
-const viewRows = (attribute: string) => [...(viewSub(SUB_OF[attribute])?.querySelectorAll<HTMLElement>(`[${attribute}]`) ?? [])]
-  .map(row => { const name = row.cloneNode(true) as HTMLElement; name.querySelector('[data-slot=dropdown-menu-shortcut]')?.remove(); name.querySelectorAll('svg').forEach(svg => svg.remove());
-    return [name.textContent, row.getAttribute('aria-checked'), row.querySelector('[data-slot=dropdown-menu-shortcut]')?.textContent ?? '']; });
+// A dropdown's options as its list draws them: each its name, whether it is the one chosen, and whether it has its icon.
+const viewRows = (pane: HTMLElement, attribute: string) => {
+  const rows = [...(viewSub(pane, ROW_OF[attribute])?.querySelectorAll<HTMLElement>(`[${attribute}]`) ?? [])]
+    .map(row => [row.querySelector(':scope > span:last-child')?.textContent ?? row.textContent, String(row.getAttribute('data-state') === 'checked'), Boolean(row.querySelector('svg.lucide:not(.lucide-check), svg[data-board-side-icon], svg[data-text-glyph]'))]);
+  closeSub();
+  return rows;
+};
 const box = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-quick-edit-box]');
 // The view's panel (`kit/shell/FlatPanel.jsx`), a tab of it by name, its search box, and one of its tabs' bodies.
 const panel = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-flat-panel]')!;
@@ -226,38 +241,16 @@ const choose = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElemen
 };
 const choice = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElement, name: string) =>
   within(await displayMenu(user, pane)).getByRole('combobox', { name }).textContent;
-// The corner's Display: its menu opened, its presets read (each its name, whether it is checked and whether it has its
-// icon) and the menu shut again; a preset picked from it; the one it ticks (Custom while the eyes have left the preset's set).
-const presetMenu = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElement) => {
-  if (!menuShown('View')) await user.click(displayButton(pane));
-  await openMenu('View');
-  return [...(viewSub('display')?.querySelectorAll<HTMLElement>('[data-display-mode-option]') ?? [])];
-};
-// View's other choices after the presets: each submenu's radio choices (in 3D the projection, then the Background).
-const displayChoices = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElement) => {
-  await presetMenu(user, pane);
-  const rows = ['data-display-projection', 'data-display-background'].flatMap(attribute => viewRows(attribute).length
-    ? [...viewSub(SUB_OF[attribute])!.querySelectorAll<HTMLElement>(`[${attribute}]`)] : [])
-    .map(item => [item.textContent, item.getAttribute('aria-checked'), Boolean(item.querySelector('svg.lucide:not(.lucide-check)'))]);
-  await user.keyboard('{Escape}');
-  await waitFor(() => expect(menuShown('View')).toBeNull());
-  return rows;
-};
-const presets = async (pane: HTMLElement) => {
-  const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
-  const rows = (await presetMenu(user, pane)).map(option => [option.textContent, option.getAttribute('aria-checked'), Boolean(option.querySelector('svg.lucide'))]);
-  await user.keyboard('{Escape}');
-  await waitFor(() => expect(menuShown('View')).toBeNull());
-  return rows;
-};
-const pickPreset = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElement, name: string) =>
-  user.click((await presetMenu(user, pane)).find(option => option.textContent === name)!);
-const presetChoice = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElement) => {
-  const ticked = (await presetMenu(user, pane)).find(option => option.getAttribute('aria-checked') === 'true')?.textContent ?? null;
-  await user.keyboard('{Escape}');
-  await waitFor(() => expect(menuShown('View')).toBeNull());
-  return ticked;
-};
+// Display's Style: its presets (each its name, whether it is chosen and whether it has its icon); a preset picked from it;
+// the one chosen (Custom while the eyes have left the preset's set).
+const presets = async (pane: HTMLElement) => viewRows(pane, 'data-display-mode-option');
+const pickPreset = async (_user: ReturnType<typeof userEvent.setup>, pane: HTMLElement, name: string) =>
+  fireEvent.click([...viewSub(pane, 'display')!.querySelectorAll<HTMLElement>('[data-display-mode-option]')].find(option => option.textContent === name)!);
+const presetChoice = async (_user: ReturnType<typeof userEvent.setup>, pane: HTMLElement) =>
+  (await presets(pane)).find(([, chosen]) => chosen === 'true')?.[0] ?? null;
+// Display's other choices after the presets: in 3D the projection's options, then the Background's.
+const displayChoices = async (_user: ReturnType<typeof userEvent.setup>, pane: HTMLElement) =>
+  [...viewRows(pane, 'data-display-projection'), ...viewRows(pane, 'data-display-background')];
 const controllerOf = (view: { controller: any }) => waitFor(() => { expect(view.controller).not.toBeNull(); return view.controller; });
 // An open menu, by its accessible name (portalled under the body, as every dropdown is).
 const openMenu = (name: string) => waitFor(() => { const found = document.querySelector<HTMLElement>(`[role=menu][aria-label="${name}"]`); expect(found).not.toBeNull(); return found!; });
@@ -291,7 +284,7 @@ const tap = (pane: HTMLElement, at: [number, number], init: Record<string, unkno
   fireEvent.pointerUp(canvas, event);
 };
 
-it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view settings (Side, Mode, Display, Background) the navbar's View menu; its panel is docked, open, the Parts, the Nets, then the Layers", async () => {
+it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view settings (Side, Mode | Style, Background) the navbar's Display card; its panel is docked, open, the Parts, the Nets, then the Layers", async () => {
   const { pane, dispose } = await open();
   await opened(pane);
   const tools = strip(pane);
@@ -299,27 +292,19 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
     .map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Draw', 'Measure']);
   expect(within(tools).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
   expect(within(tools).getByRole('button', { name: 'Filter: everything' })).toBeTruthy();
-  // Its view settings are the navbar's, at its right end — View, the plain cube, no chevron, one menu: Side, Mode,
-  // Display, Background — the navbar's 28px button; the corner holds the zoom alone, and nothing of the view is on the
-  // strip, which has no rule.
-  expect([viewButtons(pane), displayButton(pane).querySelector('.lucide-chevron-down')]).toEqual([['View', 'Preview'], null]);
+  // Its view settings are the navbar's, at its right end — Display, the plain cube, no chevron, a toggle whose card is
+  // Side and Mode | Style and Background, with Reset — the navbar's 28px button; the corner holds the zoom alone, and
+  // nothing of the view is on the strip, which has no rule.
+  expect([viewButtons(pane), displayButton(pane).querySelector('.lucide-chevron-down')]).toEqual([['Display', 'Preview'], null]);
   expect([viewValue(pane, 'side'), viewValue(pane, 'dimension'), viewValue(pane, 'display')]).toEqual(['top', '2d', 'board']);
   for (const button of cornerStack(pane)!.querySelectorAll('button')) expect(button.className.includes('size-7')).toBe(true);
   expect([cornerStack(pane)!.closest('[data-viewer-navbar]') !== null, pane.querySelector('[data-view-corner-stack]')]).toEqual([true, null]);
-  // View's submenus, in order, each row its name and the choice's (no icon): Side (Top ticked, ⇧F on
-  // the other), Mode (2D ticked, 3 on 3D), Display's presets each with its icon, the one on screen checked; then the
-  // Background, Light and Dark, each its icon.
-  await userEvent.setup({ skipHover: true, pointerEventsCheck: 0 }).click(displayButton(pane));
-  const viewMenu = await openMenu('View');
-  const rowsOf = viewMenu.querySelectorAll<HTMLElement>('[data-view-sub]');
-  expect([...rowsOf].map(row => [row.getAttribute('data-view-sub'), row.querySelector('[data-view-sub-value]')!.textContent, Boolean(row.querySelector('svg:not(.lucide-chevron-right)'))]))
-    .toEqual([['side', 'Top', false], ['dimension', '2D', false], ['display', 'Board', false], ['background', 'Light', false]]);
-  // In 2D there is nothing to reset: the zoom's Zoom to fit brings the board back.
-  expect(viewMenu.querySelector('[data-view-reset]')).toBeNull();
-  expect([viewRows('data-board-side-option'), viewRows('data-board-dimension-option')])
-    .toEqual([[['Top', 'true', ''], ['Bottom', 'false', '⇧F']], [['2D', 'true', ''], ['3D', 'false', '3']]]);
-  fireEvent.keyDown(document.querySelector('[role=menu][aria-label="View"]')!, { key: 'Escape' });
-  await waitFor(() => expect(menuShown('View')).toBeNull());
+  // Each dropdown shows its choice with its icon; its options each theirs, the one on screen chosen. In 2D there is no
+  // Projection; Reset is off while the board is as it opened for the first time.
+  expect(cardSections(pane)).toEqual([[['side', 'Top'], ['dimension', '2D']], [['display', 'Board'], ['background', 'Light']]]);
+  expect(within(displayCard()!).getByRole('button', { name: 'Reset' }).hasAttribute('disabled')).toBe(true);
+  expect([viewRows(pane, 'data-board-side-option'), viewRows(pane, 'data-board-dimension-option')])
+    .toEqual([[['Top', 'true', true], ['Bottom', 'false', true]], [['2D', 'true', true], ['3D', 'false', true]]]);
   expect(await presets(pane)).toEqual([['Board', 'true', true], ['Copper', 'false', true], ['Assembly', 'false', true], ['Placement', 'false', true]]);
   expect(await displayChoices(userEvent.setup({ skipHover: true, pointerEventsCheck: 0 }), pane)).toEqual([['Light', 'true', true], ['Dark', 'false', true]]);
   expect(tools.querySelector('[data-strip-rule], [data-view-controls]')).toBeNull();
@@ -385,7 +370,7 @@ it('a board without its index is the picture, its view controls, and its Layers 
   expect(pane.querySelector('canvas')?.getAttribute('aria-label')).toBe('Board: blinky.kicad_pcb');
   // No tools: no strip at all; its view controls are the corner's, over the zoom.
   expect(within(pane).queryByRole('group', { name: 'Interaction tools' })).toBeNull();
-  expect(viewButtons(pane)).toEqual(['View', 'Preview']);
+  expect(viewButtons(pane)).toEqual(['Display', 'Preview']);
   expect(pane.querySelector('[data-zoom-pill]')).not.toBeNull();
   // Its one list, under its title: one tab is no pill.
   expect([within(panel(pane)).queryAllByRole('tab').length, panel(pane).querySelector('[data-flat-panel-heading]')!.textContent]).toEqual([0, 'Layers']);
@@ -1091,9 +1076,9 @@ it("at 900px the panel pushes the board aside, and below 700px it starts collaps
   expect(narrow.pane.querySelector('[data-flat-panel-scrim]')).toBeNull();
   narrow.dispose();
   cleanup();
-  // A phone: no docked panel and no pill; the navbar's toggle opens the panel as a sheet from the left, and View opens the
-  // desktop's View menu (`ViewSettingsMenu.jsx`), the same submenus — Side, Mode, Display, Background — and Reset view, a
-  // phone having no corner; no bottom sheet. Bottom, chosen in Side's submenu, turns the board over and closes the menu.
+  // A phone: no docked panel and no pill; the navbar's toggle opens the panel as a sheet from the left, and Display opens
+  // its card, the desktop's — Side, Mode | Style, Background — a phone having no corner; no bottom sheet. Bottom, chosen
+  // in Side's dropdown, turns the board over, the card staying open.
   sized(400);
   const phone = await open();
   await opened(phone.pane);
@@ -1104,15 +1089,12 @@ it("at 900px the panel pushes the board aside, and below 700px it starts collaps
   await waitFor(() => expect(document.querySelector('[data-panel-sheet] [data-flat-panel="page"]')).not.toBeNull());
   fireEvent.keyDown(document.querySelector('[data-panel-sheet]')!, { key: 'Escape' });
   await waitFor(() => expect(document.querySelector('[data-panel-sheet]')).toBeNull());
-  expect(viewButtons(phone.pane)).toEqual(['View', 'Preview']);
-  fireEvent.pointerDown(displayButton(phone.pane), { button: 0, ctrlKey: false, pointerType: 'mouse' });
-  const phoneMenu = await openMenu('View');
-  expect([[...phoneMenu.querySelectorAll('[data-view-sub]')].map(row => row.getAttribute('data-view-sub')), phoneMenu.querySelector('[data-view-reset]')?.textContent,
-    document.querySelector('[data-vaul-drawer], [data-view-sheet]')]).toEqual([['side', 'dimension', 'display', 'background'], 'Reset view', null]);
+  expect(viewButtons(phone.pane)).toEqual(['Display', 'Preview']);
+  expect([cardSections(phone.pane).map(rows => rows.map(([id]) => id)), document.querySelector('[data-vaul-drawer], [data-view-sheet]')])
+    .toEqual([[['side', 'dimension'], ['display', 'background']], null]);
   pickView(phone.pane, 'data-board-side-option', 'bottom');
   await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'bottom' }));
-  await waitFor(() => expect(menuShown('View')).toBeNull());
-  expect(viewValue(phone.pane, 'side')).toBe('bottom');
+  expect([viewValue(phone.pane, 'side'), displayCard() !== null]).toEqual(['bottom', true]);
   phone.dispose();
 });
 
@@ -1174,7 +1156,7 @@ it("2D/3D is one view: the strip, its view controls, the panel and the corner st
   const controls = () => ({
     strip: strip(pane), panel: panel(pane), views: cornerStack(pane), pill: pane.querySelector<HTMLElement>('[data-zoom-pill]'),
     names: [...pane.querySelectorAll<HTMLElement>('[data-cad-tool-groups] button, [data-flat-panel] [role=tab], [data-zoom-pill] button, [data-navbar-view-controls] button')]
-      .map(button => (button.getAttribute('aria-label') || button.textContent)!.replace(/^(View|Display mode): .*/, '$1'))
+      .map(button => (button.getAttribute('aria-label') || button.textContent)!.replace(/^(Display mode): .*/, '$1'))
   });
   const flat = controls();
   expect(flat.pill).not.toBeNull();
@@ -1187,43 +1169,42 @@ it("2D/3D is one view: the strip, its view controls, the panel and the corner st
   // Its first frame up, the flat canvas is put away (and lets its rasters go); the camera eases to Home.
   await waitFor(() => expect(pane.querySelector('[data-board-surface] canvas[role=img]')!.classList.contains('invisible')).toBe(true));
   await waitFor(() => expect(viewport3d.calls).toContain('goHome'));
-  // The same controls, by name and by element: the same View button, reading 3D.
+  // The same controls, by name and by element: the same Display button, reading 3D.
   const solid = controls();
   expect(solid.names).toEqual(flat.names);
   for (const key of ['strip', 'panel', 'views', 'pill'] as const) expect(solid[key], key).toBe(flat[key]);
   expect(displayButton(pane)).toBe(dimension);
   expect(viewValue(pane, 'dimension')).toBe('3d');
-  // The corner is the one it was: the zoom (the 3D camera's now), and no cube, Home or Projection of a 3D view's. The way
-  // back is View's last row in 3D, Reset view: what the board's Home was, easing to the opening view.
+  // The corner is the one it was: the zoom (the 3D camera's now), and no cube, Home or Projection of a 3D view's.
   expect(viewport3d.props.viewCube).toBe(false);
   expect([within(pane).queryByRole('button', { name: /^Projection/ }), pane.querySelector('[data-view-home]')]).toEqual([null, null]);
-  const homes = viewport3d.calls.filter(call => call === 'goHome').length;
-  await user.click(displayButton(pane));
-  fireEvent.click((await openMenu('View')).querySelector<HTMLElement>('[data-view-reset]')!);
-  await waitFor(() => expect(viewport3d.calls.filter(call => call === 'goHome').length).toBe(homes + 1));
   // The pick and the measurement are where they were; a camera is the 3D view's to pose.
   expect(selected(controller)).toEqual(['#R1.2']);
   fireEvent.click(within(strip(pane)).getByRole('button', { name: 'Measure' }));
   expect(within(pane).getByRole('button', { name: 'Measurement 1: 1.65 mm' })).toBeTruthy();
   await controller.setCamera({ position: [0, 0, 100], target: [0, 0, 0], up: [0, 1, 0] });
   expect(viewport3d.calls.at(-1)).toBe('setPerspective [0,0,100]');
-  // Display's presets, in 3D as in 2D, and the camera's Projection in its menu, the one on screen ticked.
-  expect(viewButtons(pane)).toEqual(['View', 'Preview']);
+  // Display's card in 3D: the camera's Projection after Side and Mode, the one on screen chosen; the presets as in 2D.
+  expect(viewButtons(pane)).toEqual(['Display', 'Preview']);
+  expect(cardSections(pane)).toEqual([[['side', 'Top'], ['dimension', '3D'], ['projection', 'Orthographic']], [['display', 'Board'], ['background', 'Light']]]);
   expect((await displayChoices(user, pane)).map(([name, checked]) => [name, checked])).toEqual([['Perspective', 'false'], ['Orthographic', 'true'], ['Light', 'true'], ['Dark', 'false']]);
-  await presetMenu(user, pane);
-  await user.click(viewSub('projection')!.querySelector<HTMLElement>('[data-display-projection="perspective"]')!);
+  pickView(pane, 'data-display-projection', 'perspective');
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value?.projection).toBe('perspective'));
   await pickPreset(user, pane, 'Copper');
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value?.mode).toBe('copper'));
   // The file keeps it: 3D, opened again in 3D.
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value).toMatchObject({ mode: '3d', projection: 'perspective' }));
-  // 3, as KiCad's Alt+3: back to 2D, the same pill, the flat canvas shown.
-  fireEvent.keyDown(pane.querySelector('[data-board-3d] canvas')!, { key: '3' });
+  // Reset: the board as it opens for the first time — the top, 2D, Board and Orthographic — the same pill, the flat canvas
+  // shown, the pick kept; the Background, the person's, left.
+  fireEvent.click(within(displayCard()!).getByRole('button', { name: 'Reset' }));
   await waitFor(() => expect(pane.querySelector('[data-board-3d]')).toBeNull());
+  expect(cardSections(pane)).toEqual([[['side', 'Top'], ['dimension', '2D']], [['display', 'Board'], ['background', 'Light']]]);
+  expect(within(displayCard()!).getByRole('button', { name: 'Reset' }).hasAttribute('disabled')).toBe(true);
   expect(pane.querySelector('[data-zoom-pill]')).toBe(flat.pill);
   expect(pane.querySelector('[data-board-surface] canvas[role=img]')!.classList.contains('invisible')).toBe(false);
   expect(selected(controller)).toEqual(['#R1.2']);
-  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value?.mode).toBe('2d'));
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value).toMatchObject({ mode: '2d', projection: 'orthographic' }));
+  // 3, as KiCad's Alt+3: 3D again.
   fireEvent.keyDown(pane.querySelector('[data-board-surface] canvas')!, { key: '3' });
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value?.mode).toBe('3d'));
   const stored = view.state;
@@ -1235,21 +1216,15 @@ it("2D/3D is one view: the strip, its view controls, the panel and the corner st
   again.dispose();
 });
 
-it("View's Side and Mode tick the state on screen and show the key on the choice it makes; ⇧F flips as F still fits", async () => {
+it("Display's Side and Mode choose the state on screen; ⇧F flips as F still fits", async () => {
   const view = await open();
   const { pane, dispose } = view;
   await opened(pane);
-  // View's Side and Mode: the state on screen ticked, the key on the other choice, the one it makes.
+  // Display's Side and Mode: the state on screen chosen.
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
-  const rows = async () => {
-    await user.click(displayButton(pane));
-    await openMenu('View');
-    const read = [viewRows('data-board-side-option'), viewRows('data-board-dimension-option')];
-    fireEvent.keyDown(document.querySelector('[role=menu][aria-label="View"]')!, { key: 'Escape' });
-    await waitFor(() => expect(menuShown('View')).toBeNull());
-    return read;
-  };
-  expect(await rows()).toEqual([[['Top', 'true', ''], ['Bottom', 'false', '⇧F']], [['2D', 'true', ''], ['3D', 'false', '3']]]);
+  const rows = async () => [viewRows(pane, 'data-board-side-option'), viewRows(pane, 'data-board-dimension-option')]
+    .map(list => list.map(([name, chosen]) => [name, chosen]));
+  expect(await rows()).toEqual([[['Top', 'true'], ['Bottom', 'false']], [['2D', 'true'], ['3D', 'false']]]);
   // Moved off the fit (a middle-button pan), so F's fit would show.
   const canvas = pane.querySelector<HTMLCanvasElement>('[data-board-surface] canvas')!;
   const fitted = { ...frames.at(-1)! };
@@ -1260,22 +1235,20 @@ it("View's Side and Mode tick the state on screen and show the key on the choice
   fireEvent.pointerUp(canvas, { ...middle, ...at([25, 15]) });
   await waitFor(() => expect(frames.at(-1)!.offsetX).not.toBe(fitted.offsetX));
   const moved = { ...frames.at(-1)! };
-  // The sides' glyphs, View's Top and Bottom rows': the board's two layers, the solid one at 85%, set as the side it shows.
-  await user.click(displayButton(pane));
-  const glyph = (side: string) => { const svg = viewSub('side')!.querySelector(`[data-board-side-option="${side}"] svg[data-board-side-icon]`)!;
+  // The sides' glyphs, Side's Top and Bottom options': the board's two layers, the solid one at 85%, set as the side it shows.
+  const list = viewSub(pane, 'side')!;
+  const glyph = (side: string) => { const svg = list.querySelector(`[data-board-side-option="${side}"] svg[data-board-side-icon]`)!;
     return { place: svg.querySelector('g')!.getAttribute('transform'), paths: [...svg.querySelectorAll('path')].map(path => [path.getAttribute('d'), path.getAttribute('fill-opacity')]) }; };
-  await openMenu('View');
   const top = glyph('top'), bottom = glyph('bottom');
   expect(top.paths.map(([, fill]) => fill)).toEqual(['0.85', null]);
   // The same drawing mirrored top to bottom, so the two sides weigh the same: the top's set 0.75 down, the bottom's 0.75 up.
   expect([top.place, bottom.place, bottom.paths]).toEqual(['translate(0 0.75)', 'matrix(1 0 0 -1 0 23.25)', top.paths]);
-  fireEvent.keyDown(document.querySelector('[role=menu][aria-label="View"]')!, { key: 'Escape' });
-  await waitFor(() => expect(menuShown('View')).toBeNull());
-  // ⇧F turns the board over, the window kept: drawn from the bottom, and View ticks it, its key on the way back.
+  closeSub();
+  // ⇧F turns the board over, the window kept: drawn from the bottom, and Display's Side says so.
   fireEvent.keyDown(canvas, { key: 'F', code: 'KeyF', shiftKey: true });
   await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'bottom' }));
   expect(frames.at(-1)).toEqual(moved);
-  expect((await rows())[0]).toEqual([['Top', 'false', '⇧F'], ['Bottom', 'true', '']]);
+  expect((await rows())[0]).toEqual([['Top', 'false'], ['Bottom', 'true']]);
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value?.side).toBe('bottom'));
   // F is the fit, still, not a flip; ⇧F again, and the top is back.
   fireEvent.keyDown(canvas, { key: 'f', code: 'KeyF' });
@@ -1467,13 +1440,13 @@ it("in 3D each part's model is opened once by its document id, and a revision of
   dispose();
 });
 
-it("a board has Preview as a 3D file has: its button right of View, the page Preview's while it is up (its bar, no navbar, no tools, no Part colours), Escape back to the view as it was, its settings kept with the file", async () => {
+it("a board has Preview as a 3D file has: its button right of Display, the page Preview's while it is up (its bar, no navbar, no tools, no Part colours), Escape back to the view as it was, its settings kept with the file", async () => {
   const view = await open();
   const { pane } = view;
   await opened(pane);
   tap(pane, [35.825, 15]);
   await waitFor(() => expect(selected(view.controller)).toEqual(['#R1.2']));
-  expect(viewButtons(pane)).toEqual(['View', 'Preview']);
+  expect(viewButtons(pane)).toEqual(['Display', 'Preview']);
   fireEvent.click(within(cornerStack(pane)!).getByRole('button', { name: 'Preview' }));
   // Preview's own bar names the file, in the navbar's place; the strip, the panel and Quick Edit are put away, and
   // Preview's own view (a viewport of its own, in Preview) is mounted over the board's.
@@ -1486,8 +1459,8 @@ it("a board has Preview as a 3D file has: its button right of View, the page Pre
   // Its settings: Orbit, then Render's lighting, background and floor; no Part colours. An edit is the file's.
   fireEvent.click(within(bar).getByRole('button', { name: 'Preview settings' }));
   const settings = pane.querySelector<HTMLElement>('[data-preview-settings-panel]')!;
-  expect([...settings.querySelectorAll('h2')].map(heading => heading.textContent)).toEqual(['Orbit', 'Lighting', 'Background', 'Floor']);
-  fireEvent.click(within(settings).getByRole('checkbox', { name: 'Floor' }));
+  expect([...settings.querySelectorAll('[data-settings-heading]')].map(heading => heading.textContent)).toEqual(['Orbit', 'Lighting', 'Background', 'Floor']);
+  fireEvent.click(within(settings).getByRole('switch', { name: 'Floor' }));
   await waitFor(() => expect(view.state.renderers?.[KEY]?.preview).toEqual({ floor: { enabled: false } }));
   // A tool's key takes up nothing in Preview; Escape leaves it, and the view is as it was: the navbar, the tool in hand, the pick.
   fireEvent.keyDown(settings, { key: 'm' });
@@ -1495,6 +1468,6 @@ it("a board has Preview as a 3D file has: its button right of View, the page Pre
   await waitFor(() => expect(pane.querySelector('[data-preview-bar]')).toBeNull());
   await waitFor(() => expect(pane.querySelector('[data-viewer-navbar]')).not.toBeNull());
   expect([viewButtons(pane), within(strip(pane)).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed'), selected(view.controller),
-    pane.querySelector('[data-board-surface] canvas[role=img]')!.classList.contains('invisible')]).toEqual([['View', 'Preview'], 'true', ['#R1.2'], false]);
+    pane.querySelector('[data-board-surface] canvas[role=img]')!.classList.contains('invisible')]).toEqual([['Display', 'Preview'], 'true', ['#R1.2'], false]);
   view.dispose();
 });

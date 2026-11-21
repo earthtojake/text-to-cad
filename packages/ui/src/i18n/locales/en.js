@@ -382,7 +382,6 @@ export default {
 
   // Display: its tile and menu, the modes (`DisplayModeOptions.js`, by value) and the Grid switch.
   "display.label": "Display",
-  "display.mode": "Display mode",
   "display.showGrid": "Show grid",
   "animation.tab": "Animation",
   "animation.motionTab": "Motion",
@@ -392,8 +391,9 @@ export default {
   "display.background": "Background",
   "display.background.light": "Light",
   "display.background.dark": "Dark",
-  "view.menu": "View",
-  "view.reset": "Reset view",
+  "display.style": "Style",
+  "display.close": "Close display settings",
+  "settings.reset": "Reset",
   "mode.solid": "Solid",
   "mode.shaded": "Shaded",
   "mode.parts": "Parts",
@@ -454,7 +454,6 @@ export default {
   "render.finish": "Finish",
   "render.finish.matte": "Matte",
   "render.finish.glossy": "Glossy",
-  "render.reset": "Reset to default",
 
   // The colour picker's controls.
   "colorPicker.saturationBrightness": "Saturation and brightness",

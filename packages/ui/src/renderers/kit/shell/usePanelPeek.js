@@ -24,7 +24,7 @@ export const PANEL_PEEK_DELAY_MS = 500;
 export const PANEL_PEEK_EXIT_FALLBACK_MS = 250;
 
 /** Whether the person asks for less motion: a peek then appears and goes without sliding. */
-const reducedMotion = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+export const reducedMotion = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 
 /** A pointer that can rest over a control without pressing it. */
 const hovers = event => event.pointerType === "mouse" || event.pointerType === "pen";
@@ -128,4 +128,24 @@ export function usePanelPeek({ enabled }) {
   useEffect(() => () => { clear(); clearTimeout(exitTimer.current); }, []);
   return { peeking: peeking && enabled, shown: (peeking || leaving) && enabled, leaving: leaving && enabled, exited, close,
     toggleHandlers: handlers.toggle, panelHandlers: handlers.panel, panelRef };
+}
+
+/**
+ * A card that comes and goes as the peek does (`PanelSurface.jsx`'s `peekSlideClass`): on screen while `open`, and
+ * while it slides out after (`leaving`), until `exited` is called at the slide's end (or `PANEL_PEEK_EXIT_FALLBACK_MS`
+ * should that end never come); gone at once where motion is not welcome.
+ * @param {boolean} open
+ * @returns {{ shown: boolean, leaving: boolean, exited(): void }}
+ */
+export function useSlidingCard(open) {
+  const [state, setState] = useState({ open, leaving: false });
+  if (state.open !== open) setState({ open, leaving: !open && !reducedMotion() });
+  const exited = useCallback(() => setState(now => (now.leaving ? { ...now, leaving: false } : now)), []);
+  const leaving = !open && state.leaving;
+  useEffect(() => {
+    if (!leaving) return undefined;
+    const timer = setTimeout(exited, PANEL_PEEK_EXIT_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [leaving, exited]);
+  return { shown: open || leaving, leaving, exited };
 }

@@ -26,15 +26,16 @@ const SCRUB_SLOP_PX = 3;
  *   value: number, min: number, max: number, step?: number, origin?: number,
  *   onValueChange(value: number): void, onValueCommit?(value: number): void,
  *   text: string, onTextCommit(draft: string): void, textLabel: string, scale?: number,
- *   hint?: import("react").ReactNode, disabled?: boolean, inline?: boolean, className?: string,
+ *   hint?: import("react").ReactNode, disabled?: boolean, inline?: boolean, compact?: boolean, className?: string,
  *   thumbProps?: object,
- * }} props `name` is the slider's accessible name, `textLabel` the value's; `hint` a tooltip on the
+ * }} props `compact`: a settings card's (`SettingsCard.jsx`), its label and value on a 24px line and no gap of its own
+ *   under the slider (the card's rows keep their own). `name` is the slider's accessible name, `textLabel` the value's; `hint` a tooltip on the
  *   slider (a joint's range); `scale`, how many of the number `text` shows one of `value` is (a percentage shown
  *   for 0–1: 100). Other props (`data-*`) go on the control's root.
  */
 export function SliderField({
   label, labelTitle, name, value, min, max, step = 1, origin, onValueChange, onValueCommit,
-  text, onTextCommit, textLabel, scale = 1, hint = null, disabled = false, inline = false, className, thumbProps, ...props
+  text, onTextCommit, textLabel, scale = 1, hint = null, disabled = false, inline = false, compact = false, className, thumbProps, ...props
 }) {
   const scrub = useRef(null);
   // Disabled, the slider alone looks it (half strength, the primitive's, and a not-allowed pointer); its label and its
@@ -87,8 +88,8 @@ export function SliderField({
       {field}
     </div>;
   }
-  return <div data-slider-field="" className={cn("min-w-0 pb-2", className)} {...props}>
-    <div className="flex h-7 min-w-0 items-center justify-between gap-2">
+  return <div data-slider-field="" className={cn("min-w-0", !compact && "pb-2", className)} {...props}>
+    <div className={cn("flex min-w-0 items-center justify-between gap-2", compact ? "h-6" : "h-7")}>
       <TooltipHint content={labelTitle || label} overflowOnly><FieldLabel data-slider-field-label="" {...scrubProps}
         className={cn("select-none", disabled ? "cursor-default" : "cursor-ew-resize touch-pan-y")}>{label}</FieldLabel></TooltipHint>
       {field}

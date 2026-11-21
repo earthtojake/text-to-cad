@@ -201,7 +201,7 @@ it("the host's notice shows at the top-right once the drawing is on screen", asy
   dispose();
 });
 
-it("a DXF's strip is Select (in hand), Draw and Measure, its zoom the corner's pill: no Display, no Preview; its View menu the Background alone", async () => {
+it("a DXF's strip is Select (in hand), Draw and Measure, its zoom the corner's pill, no Preview; its Display card the Background alone, no rule and no Reset", async () => {
   const { pane, delivered, dispose } = await openDrawing();
   const inPane = within(pane);
   const strip = inPane.getByRole('group', { name: 'Interaction tools' });
@@ -210,23 +210,22 @@ it("a DXF's strip is Select (in hand), Draw and Measure, its zoom the corner's p
   // Tools alone, no rule: the drawing's zoom is the corner's pill (`ViewCorner.jsx`).
   expect(strip.querySelector('[data-strip-rule]')).toBeNull();
   expect(pane.querySelector('[data-zoom-pill] [data-zoom-control]')!.textContent).toBe('100%');
-  for (const name of ['Orbit', 'Joints', 'Animation', 'Preview', 'Display', 'Display settings', 'Projection', 'Explode', 'Clip']) {
+  for (const name of ['Orbit', 'Joints', 'Animation', 'Preview', 'Display settings', 'Projection', 'Explode', 'Clip']) {
     expect(inPane.queryByRole('button', { name }), name).toBeNull();
   }
   expect(pane.querySelectorAll('[data-view-controls] button')).toHaveLength(0);
-  // Its view settings, the navbar's View: one submenu, the viewport's Background, Light ticked; a choice is the person's.
-  expect([...pane.querySelectorAll('[data-navbar-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['View']);
+  // Its view settings, the navbar's Display: its card the viewport's Background alone, Light; a choice is the person's.
+  expect([...pane.querySelectorAll('[data-navbar-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Display']);
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
-  await user.click(inPane.getByRole('button', { name: 'View' }));
-  const menu = await waitFor(() => { const found = document.querySelector<HTMLElement>('[role=menu][aria-label="View"]'); expect(found).not.toBeNull(); return found!; });
-  expect([...menu.querySelectorAll('[data-view-sub]')].map(row => [row.getAttribute('data-view-sub'), row.querySelector('[data-view-sub-value]')!.textContent]))
-    .toEqual([['background', 'Light']]);
-  fireEvent.click(menu.querySelector<HTMLElement>('[data-view-sub="background"]')!);
-  const backgrounds = document.querySelector<HTMLElement>('[data-view-sub-content="background"]')!;
-  expect([...backgrounds.querySelectorAll('[data-display-background]')].map(item => [item.textContent, item.getAttribute('aria-checked')]))
-    .toEqual([['Light', 'true'], ['Dark', 'false']]);
-  await user.click(backgrounds.querySelector<HTMLElement>('[data-display-background="dark"]')!);
-  await waitFor(() => expect(inPane.getByRole('button', { name: 'View' }).getAttribute('data-view-background')).toBe('dark'));
+  await user.click(inPane.getByRole('button', { name: 'Display' }));
+  const card = document.querySelector<HTMLElement>('[data-display-settings-card]')!;
+  expect([[...card.querySelectorAll('[data-settings-row]')].map(row => [row.getAttribute('data-settings-row'), row.querySelector('[data-settings-value-label]')!.textContent]),
+    card.querySelectorAll('[data-settings-rule]').length, within(card).queryByRole('button', { name: 'Reset' })]).toEqual([[['background', 'Light']], 0, null]);
+  // Its dropdown opened as a tap opens it, Dark chosen.
+  fireEvent.click(within(card).getByRole('combobox', { name: 'Background' }));
+  expect(screen.getAllByRole('option').map(option => [option.textContent, option.getAttribute('data-state')])).toEqual([['Light', 'checked'], ['Dark', 'unchecked']]);
+  fireEvent.click(screen.getByRole('option', { name: 'Dark' }));
+  await waitFor(() => expect(inPane.getByRole('button', { name: 'Display' }).getAttribute('data-view-background')).toBe('dark'));
   // A drawing always has its Layers (open, or its pill where the view starts it collapsed), one layer its one row.
   expect(pane.querySelector('[data-flat-panel], [data-flat-panel-pill]')).not.toBeNull();
   // Nothing is picked, drawn or measured yet: Quick Edit is not there, and nothing went anywhere.

@@ -365,7 +365,6 @@ export default {
   "progress.inspect-measure.measure": "부품 측정 중",
 
   "display.label": "표시",
-  "display.mode": "표시 모드",
   "display.showGrid": "그리드 표시",
   "animation.tab": "애니메이션",
   "animation.motionTab": "모션",
@@ -375,8 +374,9 @@ export default {
   "display.background": "배경",
   "display.background.light": "라이트",
   "display.background.dark": "다크",
-  "view.menu": "보기",
-  "view.reset": "보기 재설정",
+  "display.style": "스타일",
+  "display.close": "표시 설정 닫기",
+  "settings.reset": "초기화",
   "mode.solid": "솔리드",
   "mode.shaded": "음영",
   "mode.parts": "부품",
@@ -433,7 +433,6 @@ export default {
   "render.finish": "마감",
   "render.finish.matte": "무광",
   "render.finish.glossy": "유광",
-  "render.reset": "기본값으로 재설정",
 
   "colorPicker.saturationBrightness": "채도 및 명도",
   "colorPicker.hue": "색조",
