@@ -535,8 +535,10 @@ not). Before the view is up (its file being read, its chunk loading, or its fram
 `FileViewer` draws the toggle the view will have, from a document page's first frame, by the view's own rule
 (`panelToggles.js`'s `sidebarLayout`, which `sidebars.js` re-exports): the file's choice kept for this session (its view
 in `state.renderers`, by its own path or the host's `filePath`) at any width, else open where the model keeps 640px
-beside the default-width panel, closed on a phone; `aria-disabled` until the view takes it over, as a press is the
-view's to keep. Open, the panel's frame stands in its place at the width the view will draw (the kept one within the
+beside the default-width panel, closed on a phone; pressable from the first frame: a press pins or unpins it, the
+person's choice on the file, which the view opens with and writes as its own toggle would. Collapsed, a mouse resting
+on it peeks the stand-in over the page (`panelPeek.js`: the page's one peek, which `FileViewer` holds and hands to the
+view's frame, `PanelPeekContext`, so a card up as the view arrives stays up, taken over where it stands). Open, the panel's frame stands in its place at the width the view will draw (the kept one within the
 grip's bounds, `clampPanelWidth`; `data-panel-loading`), drawn as the view's panel is while its file loads: the head's
 one block (a bar where a lone title's name will stand) over its rule, then the placeholder rows, busy, on the same lines
 (`panelToggles.js`'s metrics), so nothing moves as the view mounts; a view with no frame (none says so as it renders,

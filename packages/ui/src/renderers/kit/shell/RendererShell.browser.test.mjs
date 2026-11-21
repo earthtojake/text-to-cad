@@ -107,7 +107,9 @@ test('a phone\'s navbar starts regular: 36px controls 4px apart from the row\'s 
     await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAttribute('data-state') === 'open', selector);
     await page.touchscreen.tap(200, 500);
     await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAttribute('data-state') === 'closed', selector);
-    await settle(page);
+    // Its colour transition (`transition-colors`) run out: what is left is what stays.
+    await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAnimations()
+      .every(animation => animation.playState === 'finished'), selector);
     assert.deepEqual(await marks(selector), { fill: 'rgba(0, 0, 0, 0)', ring: false }, `${selector}: no fill or ring after a tap`);
   }
 });

@@ -821,7 +821,10 @@ structure. Every rule here, and why:
   viewer's: it hides nothing.
 - **Collapsed, it leaves nothing over the model**: its toggle in the navbar, or its key, brings it back; nothing opens
   on a hover of the view's **edge** (no hot zone, no rail). **A mouse resting on its toggle peeks it**
-  (`kit/shell/usePanelPeek.js`, as VS Code's and Linear's unpinned sidebars show themselves): collapsed by the person or
+  (`file-viewer/panelPeek.js`, as VS Code's and Linear's unpinned sidebars show themselves), **from the page's first frame**:
+  the file viewer holds the one peek, so while the file still loads a rest on the toggle peeks the stand-in (its
+  placeholder head and rows, the same card, place, delay and slide), and the view, arriving, takes that card over where
+  it stands, with no flicker and no second slide (a press on the stand-in pins or unpins as the view's toggle does). Collapsed by the person or
   by a narrow view, the panel shows after the pointer has rested on the toggle 500ms (`PANEL_PEEK_DELAY_MS`), never
   while a mouse button is held (a drag passing over it), and never for a pointer that cannot rest (a finger: a phone's,
   or a touch screen's press, is a click) nor on keyboard focus — ⌘\ is the keyboard's way to it. It goes once the
@@ -836,9 +839,12 @@ structure. Every rule here, and why:
   (or its key, ⌘\) pins it — open, pushing and kept, as a click on a collapsed panel always is (a click with no peek
   up opens it, as ever); nothing done inside it pins it, neither a pick, a tab, a search nor a slider, so moving off a
   peek always closes it. A peek is never kept: the file's `open` is the person's pin or close alone. **It slides**: in
-  from the window's left edge as it opens and back out as it goes, the card and all it holds as one (a transform, at the
-  menus' 150ms, eased out coming and in going: nothing laid out again, the canvas and camera untouched), removed once
-  it is out; the pointer back on the toggle or the card while it slides out brings it back. Pinned from a peek it does
+  from the window's left edge as it opens and back out as it goes, the card and all it holds as one (a transform: nothing
+  laid out again, the canvas and camera untouched), removed once it is out. **Its timings**, all `panelPeek.js`'s, the
+  one source every card mirroring it takes: the rest before it opens, 500ms (`PANEL_PEEK_DELAY_MS`); the slide in,
+  100ms eased out (`PANEL_PEEK_IN_MS`); the grace once the pointer has left the toggle and the card before it goes,
+  the same 500ms; the slide out, 80ms eased in (`PANEL_PEEK_OUT_MS`; should its end go unheard, it is removed after
+  `PANEL_PEEK_EXIT_FALLBACK_MS`, 180ms); the pointer back on the toggle or the card while it slides out brings it back. Pinned from a peek it does
   not slide (the card becomes the docked panel in place), and where less motion is asked for it appears and goes. Once
   it is up, **the toggle's tooltip goes**, and stays away while it is: the panel is showing, which is what the tip
   offered.

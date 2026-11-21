@@ -15,7 +15,7 @@ import { ViewerElementContext, ViewerHostContext } from "../../../host/context.j
 import { Sheet, SheetContent, SheetTitle } from "@cad/ui/primitives/sheet";
 import { usePhoneSheetPlace } from "./usePhoneSheetPlace.js";
 import { sidebarLayout, toggleSidebar } from "./sidebars.js";
-import { usePanelPeek } from "./usePanelPeek.js";
+import { PanelPeekContext, usePanelPeek } from "./usePanelPeek.js";
 import { hasOpenPopup } from "../../../lib/popups.js";
 import { ViewCornerSideProvider, viewCornerSide } from "./ViewCorner.jsx";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
@@ -145,8 +145,13 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   stateRef.current = sidebarState;
   // A choice the person made is kept, for the file, and holds at any width; what the width does is never kept.
   const change = flat.change;
-  // A peek (`usePanelPeek.js`): the collapsed panel over the view while a mouse rests on its toggle; never kept.
-  const peek = usePanelPeek({ enabled: has && !mobile && !previewing && mode === "closed" });
+  // A peek (`usePanelPeek.js`): the collapsed panel over the view while a mouse rests on its toggle; never kept. Inside a
+  // file viewer it is the page's one peek (`PanelPeekContext`), up from the first frame, its enabled state what this
+  // frame says with its toggle (`peekable`); outside one, the frame's own.
+  const peekable = has && !mobile && !previewing && mode === "closed";
+  const pagePeek = useContext(PanelPeekContext);
+  const ownPeek = usePanelPeek({ enabled: !pagePeek && peekable });
+  const peek = pagePeek ?? ownPeek;
   const closePeek = peek.close;
   const toggle = useCallback(() => {
     const current = stateRef.current;
@@ -184,7 +189,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   // While the file loads (the frame's chrome hidden, the panel there): a structure tab with no row yet shows placeholders.
   const panelLoading = has && chromeHidden;
   const panelNode = has && !mobile ? <FlatPanel mode="docked" open={mode !== "closed" || peek.shown} peek={mode === "closed" && peek.shown}
-    peekLeaving={peek.leaving} onPeekExited={peek.exited} loading={panelLoading}
+    peekLeaving={peek.leaving} peekEntered={peek.entered} onPeekExited={peek.exited} loading={panelLoading}
     surfaceRef={peek.panelRef} surfaceProps={peek.panelHandlers} hidden={previewing} onClose={toggle}
     label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null} sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab}
     width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
@@ -210,8 +215,9 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   const showToggle = has && !previewing;
   const toggles = useMemo(() => (!showToggle ? null : {
     left: { open: panelOpen, label: t(panelOpen ? "flatPanel.hide" : "flatPanel.show"), shortcut: flatPanelShortcut(platform), toggle,
-      hover: mobile ? null : peek.toggleHandlers, peeking: peek.peeking }
-  }), [showToggle, panelOpen, platform, toggle, t, mobile, peek.toggleHandlers, peek.peeking]);
+      // Whether it may peek, once the frame has measured its width (before, its mode is not yet known: not said).
+      hover: mobile ? null : peek.toggleHandlers, peeking: peek.peeking, peekable: flat.frameWidth > 0 ? peekable : undefined }
+  }), [showToggle, panelOpen, platform, toggle, t, mobile, peek.toggleHandlers, peek.peeking, peekable, flat.frameWidth > 0]);
   // Leaving a phone's width (or Preview) puts its sheet away.
   useLayoutEffect(() => { if (!mobile || previewing) setSheetOpen(false); }, [mobile, previewing]);
   usePanelToggles(toggles);

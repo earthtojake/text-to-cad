@@ -372,6 +372,54 @@ test('a loading tab\'s placeholder rows stand on the inset, where the page\'s ow
   assert.deepEqual(errors, []);
 });
 
+// The peek from the page's first frame: collapsed (an 860px window: under 640px + the 232px panel), a mouse resting on
+// the navbar's toggle while the page itself is still looking the file up peeks the stand-in, the view's peek's card;
+// when the view arrives with the card up, the view's panel takes the card over where it stands: never gone, no slide.
+test('the collapsed panel peeks from the page\'s first frame, and the view takes the card over where it stands', async t => {
+  let release;
+  held = new Promise(resolve => { release = resolve; });
+  t.after(() => { release(); held = null; });
+  const page = await browser.newPage({ viewport: { width: 860, height: 700 }, deviceScaleFactor: 1 });
+  t.after(() => page.close().catch(() => {}));
+  page.setDefaultTimeout(20000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; window.__cadHoldStat = new Promise(resolve => { window.__cadReleaseStat = resolve; }); });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=layered.dxf`);
+  await page.addStyleTag({ content: '#root > div { width: 860px !important; height: 700px !important; }' });
+  const pane = page.getByTestId('one');
+  const toggle = pane.locator('[data-navbar-panel="left"]');
+  await toggle.waitFor();
+  assert.equal(await toggle.getAttribute('aria-expanded'), 'false', 'collapsed in the page\'s phase');
+  const box = await toggle.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const standIn = pane.locator('aside[data-panel-peek][data-panel-loading]');
+  await standIn.waitFor();
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] aside[data-panel-peek]').getAnimations().every(animation => animation.playState === 'finished'));
+  const rect = () => page.evaluate(() => {
+    const card = document.querySelector('[data-testid="one"] [data-panel-peek-card]').getBoundingClientRect();
+    return [card.left, card.top, card.width, card.height];
+  });
+  const before = await rect();
+  // Watch for a frame with no card, and for a slide, as the view takes over.
+  await page.evaluate(() => {
+    window.__peekGaps = 0; window.__peekSlides = 0;
+    const root = document.querySelector('[data-testid="one"]');
+    new MutationObserver(() => {
+      const aside = root.querySelector('aside[data-panel-peek]');
+      if (!aside) window.__peekGaps += 1;
+      else if (aside.getAnimations().some(animation => animation.playState === 'running')) window.__peekSlides += 1;
+    }).observe(root, { subtree: true, childList: true, attributes: true });
+  });
+  await page.evaluate(() => window.__cadReleaseStat());
+  await pane.locator('aside[data-flat-panel][data-panel-peek]').waitFor();
+  assert.equal(await standIn.count(), 0, 'the stand-in gone, the view\'s panel in its place');
+  assert.deepEqual(await rect(), before, 'the card where it stood');
+  assert.deepEqual(await page.evaluate(() => [window.__peekGaps, window.__peekSlides]), [0, 0], 'never gone, never sliding again');
+  release();
+  assert.deepEqual(errors, []);
+});
+
 // A file's other tabs arrive after it has loaded (a model's Params, Joints and Motion come with its structure): the head
 // is one block for its lone title and for its tabs, so the body's top, where its first row stands, does not move.
 test('a file whose tabs arrive after its title: the head keeps its block and the body its top', async t => {
