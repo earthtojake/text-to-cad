@@ -141,8 +141,9 @@ is the script's folder; two explicit names in it must differ.
   (a fit, a wall, a clearance, a count) at the top of the model's own script, a plain number
   with its range and unit: `WALL = model.param("wall", 2.0, min=1, max=5, unit="mm")`, then use
   `WALL`. Not every number: the rest stay helper arguments or constants. The person can change
-  a parameter in the viewer's Parameters tab, whose Save rewrites the number in the script and
-  builds it again, so read a script again before you edit it. To change a value yourself, run
+  a parameter in the viewer's Params tab (the view shows the model at the new value as they
+  drag, and writes nothing), whose Save rewrites the number in the script and builds it again, so
+  read a script again before you edit it. To change a value yourself, run
   `cad model set "$ID" wall=2.5` for a writable parameter (it checks, writes and rebuilds), else
   edit the code and run it ([parameters](references/model-contract.md#parameters-a-person-tunes)).
 - **`@memo` marks stages, never parts.** The server already replays every kernel call, so
@@ -261,7 +262,9 @@ relative to your workspace, else from `~/`), selected entities under `References
 snapshot packet as inline JSON or a `.snapshot.json` path. A line before `File:` such as
 `Saved from the viewer since your last edit: wall 2 -> 2.5 (bracket.py)` names parameters the
 person saved from the page: those values are already in the script and built, so keep them and
-never set them back. Save inline JSON to a temporary `.snapshot.json`, and draw the view the person
+never set them back. A line `Shown in the viewer, not saved: wall 2 -> 3.5 (bracket.py); ...` means
+the views and picks show the model at values the person is trying and has not saved: the script
+still holds the first values; write the new ones only if the person asks. Save inline JSON to a temporary `.snapshot.json`, and draw the view the person
 drew their ink in, ink included:
 
 ```bash
