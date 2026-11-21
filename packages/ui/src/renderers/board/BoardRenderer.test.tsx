@@ -302,7 +302,7 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
   // Its view settings are the navbar's, at its right end — View, the plain cube, no chevron, one menu: Side, Mode,
   // Display, Background — the navbar's 28px button; the corner holds the zoom alone, and nothing of the view is on the
   // strip, which has no rule.
-  expect([viewButtons(pane), displayButton(pane).querySelector('.lucide-chevron-down')]).toEqual([['View'], null]);
+  expect([viewButtons(pane), displayButton(pane).querySelector('.lucide-chevron-down')]).toEqual([['View', 'Preview'], null]);
   expect([viewValue(pane, 'side'), viewValue(pane, 'dimension'), viewValue(pane, 'display')]).toEqual(['top', '2d', 'board']);
   for (const button of cornerStack(pane)!.querySelectorAll('button')) expect(button.className.includes('size-7')).toBe(true);
   expect([cornerStack(pane)!.closest('[data-viewer-navbar]') !== null, pane.querySelector('[data-view-corner-stack]')]).toEqual([true, null]);
@@ -328,7 +328,7 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
   const pill = pane.querySelector<HTMLElement>('[data-zoom-pill]')!;
   expect([[...pill.querySelectorAll('button')].map(button => button.textContent), surface.some(name => pill.classList.contains(name))]).toEqual([['100%'], false]);
   expect(within(pane).queryByRole('button', { name: 'Home' })).toBeNull();
-  for (const name of ['Preview', 'Projection', 'Explode', 'Clip', 'Orbit', 'Joints', 'Animation', 'Settings']) {
+  for (const name of ['Projection', 'Explode', 'Clip', 'Orbit', 'Joints', 'Animation', 'Settings']) {
     expect(within(pane).queryByRole('button', { name }), name).toBeNull();
   }
   // The panel, docked at the left: one head row, the tabs, then the search's icon at its right end; its toggle is the
@@ -382,7 +382,7 @@ it('a board without its index is the picture, its view controls, and its Layers 
   expect(pane.querySelector('canvas')?.getAttribute('aria-label')).toBe('Board: blinky.kicad_pcb');
   // No tools: no strip at all; its view controls are the corner's, over the zoom.
   expect(within(pane).queryByRole('group', { name: 'Interaction tools' })).toBeNull();
-  expect(viewButtons(pane)).toEqual(['View']);
+  expect(viewButtons(pane)).toEqual(['View', 'Preview']);
   expect(pane.querySelector('[data-zoom-pill]')).not.toBeNull();
   // Its one list, under its title: one tab is no pill.
   expect([within(panel(pane)).queryAllByRole('tab').length, panel(pane).querySelector('[data-flat-panel-heading]')!.textContent]).toEqual([0, 'Layers']);
@@ -1098,7 +1098,7 @@ it("at 900px the panel pushes the board aside, and below 700px it starts collaps
   await waitFor(() => expect(document.querySelector('[data-panel-sheet] [data-flat-panel="page"]')).not.toBeNull());
   fireEvent.keyDown(document.querySelector('[data-panel-sheet]')!, { key: 'Escape' });
   await waitFor(() => expect(document.querySelector('[data-panel-sheet]')).toBeNull());
-  expect(viewButtons(phone.pane)).toEqual(['View']);
+  expect(viewButtons(phone.pane)).toEqual(['View', 'Preview']);
   fireEvent.pointerDown(displayButton(phone.pane), { button: 0, ctrlKey: false, pointerType: 'mouse' });
   const phoneMenu = await openMenu('View');
   expect([[...phoneMenu.querySelectorAll('[data-view-sub]')].map(row => row.getAttribute('data-view-sub')), phoneMenu.querySelector('[data-view-reset]')?.textContent,
@@ -1202,7 +1202,7 @@ it("2D/3D is one view: the strip, its view controls, the panel and the corner st
   await controller.setCamera({ position: [0, 0, 100], target: [0, 0, 0], up: [0, 1, 0] });
   expect(viewport3d.calls.at(-1)).toBe('setPerspective [0,0,100]');
   // Display's presets, in 3D as in 2D, and the camera's Projection in its menu, the one on screen ticked.
-  expect(viewButtons(pane)).toEqual(['View']);
+  expect(viewButtons(pane)).toEqual(['View', 'Preview']);
   expect((await displayChoices(user, pane)).map(([name, checked]) => [name, checked])).toEqual([['Perspective', 'false'], ['Orthographic', 'true'], ['Light', 'true'], ['Dark', 'false']]);
   await presetMenu(user, pane);
   await user.click(viewSub('projection')!.querySelector<HTMLElement>('[data-display-projection="perspective"]')!);
@@ -1459,4 +1459,36 @@ it("in 3D each part's model is opened once by its document id, and a revision of
   await waitFor(() => expect(pane.querySelector('[data-board-3d][data-board-models="1"][data-board-models-waiting="0"]')).not.toBeNull());
   expect(reads(`/step/${id}/structure`)).toBe(1);
   dispose();
+});
+
+it("a board has Preview as a 3D file has: its button right of View, the page Preview's while it is up (its bar, no navbar, no tools, no Part colours), Escape back to the view as it was, its settings kept with the file", async () => {
+  const view = await open();
+  const { pane } = view;
+  await opened(pane);
+  tap(pane, [35.825, 15]);
+  await waitFor(() => expect(selected(view.controller)).toEqual(['#R1.2']));
+  expect(viewButtons(pane)).toEqual(['View', 'Preview']);
+  fireEvent.click(within(cornerStack(pane)!).getByRole('button', { name: 'Preview' }));
+  // Preview's own bar names the file, in the navbar's place; the strip, the panel and Quick Edit are put away, and
+  // Preview's own view (a viewport of its own, in Preview) is mounted over the board's.
+  const bar = await waitFor(() => { const found = pane.querySelector<HTMLElement>('[data-preview-bar]'); expect(found).not.toBeNull(); return found!; });
+  expect(bar.querySelector('[data-preview-name]')!.textContent).toBe('blinky.kicad_pcb');
+  await waitFor(() => expect(pane.querySelector('[data-viewer-navbar]')).toBeNull());
+  expect(pane.querySelector('[data-view-top-layer]')!.hasAttribute('hidden')).toBe(true);
+  await waitFor(() => expect(pane.querySelector('[data-preview-view] [data-stand-in-viewport]')).not.toBeNull());
+  expect([viewport3d.props.preview, viewport3d.props.renderMode, pane.querySelector('[data-board-3d]')]).toEqual([true, true, null]);
+  // Its settings: Orbit, then Render's lighting, background and floor; no Part colours. An edit is the file's.
+  fireEvent.click(within(bar).getByRole('button', { name: 'Preview settings' }));
+  const settings = pane.querySelector<HTMLElement>('[data-preview-settings-panel]')!;
+  expect([...settings.querySelectorAll('h2')].map(heading => heading.textContent)).toEqual(['Orbit', 'Lighting', 'Background', 'Floor']);
+  fireEvent.click(within(settings).getByRole('checkbox', { name: 'Floor' }));
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.preview).toEqual({ floor: { enabled: false } }));
+  // A tool's key takes up nothing in Preview; Escape leaves it, and the view is as it was: the navbar, the tool in hand, the pick.
+  fireEvent.keyDown(settings, { key: 'm' });
+  fireEvent.keyDown(settings, { key: 'Escape' });
+  await waitFor(() => expect(pane.querySelector('[data-preview-bar]')).toBeNull());
+  await waitFor(() => expect(pane.querySelector('[data-viewer-navbar]')).not.toBeNull());
+  expect([viewButtons(pane), within(strip(pane)).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed'), selected(view.controller),
+    pane.querySelector('[data-board-surface] canvas[role=img]')!.classList.contains('invisible')]).toEqual([['View', 'Preview'], 'true', ['#R1.2'], false]);
+  view.dispose();
 });

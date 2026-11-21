@@ -25,11 +25,11 @@ Each kind of file gets its own tools, on a strip at the top of the view. How you
 - **Meshes (GLB, STL, 3MF)**: orbit and clip; an STL lists its bodies, Body 1 to Body N. A GLB or 3MF can also be measured, but only approximately, on triangles.
 - **Drawings (DXF)**: a flat 2D canvas with pan and zoom, and a Layers tab where the file has layers.
 - **Robots (URDF, SRDF)**: the links, and a Joints tab to pose the joints.
-- **Boards (KiCad)**: a board in 2D or 3D, and a schematic you can enter sheet by sheet. You do not need KiCad installed to view one.
+- **Boards (KiCad)**: a board in 2D or 3D, with Preview (the board rendered in 3D, its parts on it), and a schematic you can enter sheet by sheet. You do not need KiCad installed to view one.
 
 Every file has a panel on the left, with tabs: the file's structure first (a model's **Model**, a robot's **Links**, a board's **Parts**, **Nets** and **Layers**), then, where the file has them, **Params**, **Joints** and **Motion** (**Animation** in a GLB). The panel button at the left of the navbar shows or hides it, as does `⌘\` (`Ctrl+\` on Windows and Linux).
 
-Preview is a full-page mode that draws the model rendered and plays its animations from a bar under it.
+Preview is a full-page mode that draws the model rendered and plays its animations from a bar under it. Every 3D file has it, and so does a board.
 
 On a STEP or a robot, pick something, draw or measure, and Quick Edit appears at the bottom of the view. Write a note, use Copy Prompt and paste it into your agent: the prompt names the file and what you picked.
 

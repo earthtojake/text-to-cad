@@ -384,6 +384,9 @@ const ShellViewport = forwardRef(function ShellViewport({
     // frames in the room under the strip, which depends on the height, so a fit to Preview's
     // height kept after it would leave the view off the open fit when it is uncovered.
     if (suspendedRef.current || !refitOpenFraming(runtime)) syncRuntimeViewportFraming(runtime);
+    // The zoom's reading follows: a pane that changed size (a panel docked, the page's chrome gone under Preview and
+    // back) rescales an orthographic camera without moving it, which the controls report to no one.
+    runtime.controls?.dispatchEvent?.({ type: CAMERA_ZOOMED_EVENT });
     emitPerspectiveChange(runtime);
     // A resize can change what is on screen without changing the stored perspective,
     // so the settle is reported here rather than left to perspective deduplication.

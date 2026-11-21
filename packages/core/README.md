@@ -280,5 +280,6 @@ person's message (`sent`); this package never submits a prompt or knows a sessio
 Native KiCad board plots use the read-only payload contract in [plot-payload](docs/plot-payload.md).
 `lib/plot2d` draws its layers; `lib/board2d` handles picking and nets; `lib/board3d` stands the
 bare board in 3D (a slab cut to the outline, its faces `plot2d`'s own pictures of the two sides,
-three.js passed in, the sheet-to-world frame and the rays' picks). File loading rereads
+three.js passed in, the sheet-to-world frame and the rays' picks; `lit`, the same board for a
+presentation render, its faces lit surfaces and its slab and parts casting shadows). File loading rereads
 the board's `plot`; no browser snapshot bundle is shipped.

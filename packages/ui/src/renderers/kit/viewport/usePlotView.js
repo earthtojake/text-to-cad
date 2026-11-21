@@ -38,9 +38,11 @@ import { createPlotRasters } from "./plotRasters.js";
  * @param {Parameters<typeof useFlatCanvasView>[0]["onDoubleTap"]} [options.onDoubleTap]  A double-click the tool takes (a sheet entered), else the fit.
  * @param {boolean} [options.paused]  The pane is covered (its picture shown another way meanwhile): its rasters
  *   are let go and nothing is painted, until it is uncovered; the view, the capture and the card's picture stay.
+ * @param {boolean} [options.suspended]  The view is covered by one that took the whole page (`useFlatCanvasView`'s): it
+ *   keeps its size, its view and its picture as they were, and is uncovered exactly so.
  */
 export function usePlotView({ plot, restored = null, colorScheme = "light", surround, noun = "board", onViewMoved, drawView = null, overlay = null,
-  onTap = null, onHover = null, onDoubleTap = null, paused = false }) {
+  onTap = null, onHover = null, onDoubleTap = null, paused = false, suspended = false }) {
   const plotRef = useRef(plot);
   plotRef.current = plot;
   const surroundRef = useRef(surround);
@@ -61,7 +63,7 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
   }, []);
   // The fit, as its first view and a double-click take it: a board's margin, clear of the tool strip.
   const view = useFlatCanvasView({ content: plot, bounds: plot?.layout.modelBounds ?? null, restored, colorScheme, onViewMoved, paint, onTap, onHover,
-    fitBox: fitBoardBounds, clearStrip: true, onDoubleTap, middlePan: true, orbitPan: true });
+    fitBox: fitBoardBounds, clearStrip: true, onDoubleTap, middlePan: true, orbitPan: true, suspended });
   const { requestPaint, paintNow, encode } = view;
 
   // One raster cache per plot, view and theme: a new revision, a new set of layers or a switch of

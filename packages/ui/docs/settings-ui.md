@@ -321,7 +321,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 - **The host's notice** (a question it asks once) stands under the corner, at the right, an inset under the corner's
   control (the cube, or the zoom) (`ViewportTopRight`, `--cad-corner-below`, the frame's measure of the corner); at the top-right itself
   where the host anchors the corner at the left.
-- **Preview** is the navbar's last view button under a file's navbar (`data-view-preview`), right of View, a phone's too; elsewhere it ends the tool strip, after View, for a 3D file (`data-view-controls`, `FloatingToolBar`'s `views`):
+- **Preview** is the navbar's last view button under a file's navbar (`data-view-preview`), right of View, a phone's too; elsewhere it ends the tool strip, after View, for a 3D file and for a board (`data-view-controls`, `FloatingToolBar`'s `views`):
   lucide's Play (a play triangle), the way into Preview — a mode of the whole view, not a setting of it. It
   is no tool: pressing it leaves the tool in hand as it is. Outside a navbar, on a phone it is a row of the strip's More.
 - **The view's corner** (`kit/shell/ViewCorner.jsx`), at the **top-right**, is where the picture is
@@ -375,8 +375,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a plain drag draws [the box](#box-selection), naming the area on the view's working layer where it takes nothing; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom, a double-click fits: the board whole, 6% of the pane’s smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Draw, Measure |
 | KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a plain drag draws [the box](#box-selection), taking what it touches; the rest are a board's drags; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Draw, Measure |
 
-The view's controls are not on the strip under a file's navbar: they are the navbar's **View** and a 3D view's
-**Preview**, View left of Preview, for every kind of file ([The View menu](#the-view-menu-and-a-phones-sheets): a 3D
+The view's controls are not on the strip under a file's navbar: they are the navbar's **View** and a 3D view's or a
+board's **Preview**, View left of Preview, for every kind of file ([The View menu](#the-view-menu-and-a-phones-sheets): a 3D
 view's Projection, Display, Background, Show grid and Reset view; a board's Side, Mode, Display, in 3D Projection,
 Background and in 3D Reset view; a drawing's and a schematic's Background), and the picture keeps the camera's own
 control: a 3D view's cube, a flat view's zoom. Outside a navbar (a host's inline card) View and Preview end the strip
@@ -1268,6 +1268,29 @@ the 2D canvas has painted its window. Which is up, the 3D camera and its project
 The library card's picture is the flat board in either mode. On a phone, 2D/3D is the View menu's **Mode ▸**, and in 3D
 Projection follows the presets.
 
+**A board has Preview**, exactly a 3D file's ([Preview](#camera-animation-and-preview)): the same button (a play
+triangle) right of View in the navbar, or ending the strip where there is none, from 2D and from 3D alike; the same
+cover ("Preparing preview…"), bar (the file's name, Preview settings, Exit preview), settings panel (Orbit and its
+Speed, then Render's Lighting, Background and Floor; no Part colours), camera (its own, framed afresh from the top at
+Preview's opening angle, in perspective, still until Orbit) and keys (Escape leaves; the tools', the view's — 3, ⇧F,
+Ctrl+H — and the zoom's do nothing). A board has no routine, so no playbar. What it shows is **the board as it is
+made, lit** (`board/BoardPreviewView.jsx`, a lazy chunk; core's stage `lit`): the slab cut to its outline, its two
+faces the 2D drawer's pictures of the two sides as lit surfaces, and the parts standing on their 3D models, casting
+and taking shadows on Render's floor, under the board's lowest point. It is an addition, and a view of its own: 2D/3D
+Mode, and picking, Measure, Draw and the annotations in the working view, 2D or 3D, stay exactly as they are, and
+leaving Preview gives that view back as it was left (its 2D window or its 3D camera and zoom, its Display, the tool
+in hand, what is picked, isolated, measured and drawn).
+
+| In Preview | A board's |
+| --- | --- |
+| What is drawn | The whole board, whatever the Layers tab shows: the Display every board opens with (Board, poured, every layer), both faces, in the viewport's theme; in its stack-up's colours where its file names them, else in the layers' colours, as the board's 3D view draws it |
+| The parts | Each footprint's 3D model in its authored colours; a part whose model is missing stands nothing (no see-through block). The Layers tab's 3D models eye carries over: off, no bodies |
+| What is not drawn | The highlight, an isolation's fade, the ink, the measurements, and what the 2D view draws past the outline (a dimension, a fab note) |
+| Holes | Painted on the faces, as in the board's 3D view, not cut through the slab |
+| The cover | Lifts once the board is drawn and the parts' models are in, or at five seconds (a second more at the latest) on the board as it stands: models that land after it stand on the board as they arrive, and the camera frames the whole once more when the last is in, unless the person has taken it |
+| Settings kept | Preview's settings and Orbit's speed are the file's (`preview`, `playback` of its view), as a 3D file's |
+| A live capture, a fit | Of the view on screen: Preview's while it is up |
+
 ## The View menu and a phone's sheets
 
 One description of the view's settings (`kit/shell/ViewSettingsMenu.jsx`: groups, each `{ id, label, value, options,
@@ -1335,7 +1358,8 @@ Background. Checks sit at the row's right end. Clicking outside or pressing Esca
 active tool and its controls in place. A DXF view's View menu is Background alone, and it has no Preview. A native
 KiCad board's view settings are rows of View — Side ▸, Mode ▸ (2D/3D), Display ▸ (its presets), in 3D Projection ▸,
 Background ▸ and Reset view ([The View menu](#the-view-menu-and-a-phones-sheets)) — and its Layers tab's layer display
-(see [A flat view's panel](#the-views-panel-and-the-tool-stack)); it has no Preview.
+(see [A flat view's panel](#the-views-panel-and-the-tool-stack)); it has Preview, right of View, as a 3D file has
+([A board in 3D](#a-board-in-3d)).
 It is drawn in the viewport's theme as every view is (the person's Background, [below](#the-viewports-theme-background)):
 its canvas (the light or the dark one) and a palette for it (`plot2d/theme.js`: KiCad's default colours
 on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
@@ -1366,7 +1390,9 @@ Projection is a menu of its own, orthographic by default, kept per file with its
 Preview's Render resolves to perspective while preserving the file's choice.
 
 Preview's settings panel (`PreviewSettings.jsx`, its body `PreviewRenderSettings.jsx`) is
-the one settings form: Orbit, then Render's Part colours, Lighting, Background and Floor.
+the one settings form: Orbit, then Render's Part colours, Lighting, Background and Floor. A board's has no Part
+colours (`partColours: false`): its colours are its picture's and its parts' models' own, and a section that changed
+nothing is left out, not shown disabled.
 It shows all groups under static section headings and dividers, with no collapsible
 sections or cascading settings menus. A heading is 24px of regular `text-xs` in the
 foreground colour, a rule above every one but the first. A feature that switches on and off
@@ -1959,11 +1985,14 @@ the saved view, and a camera restored is the person's, so it is touched until th
 opened afresh starts untouched. Preview's view, which keeps no camera, re-fits nothing.
 
 **Preview** (`previewing` in code) is available for every 3D file, animated
-or not, and for nothing else: a renderer declares it (`useRendererShell`'s `previewable`: STEP,
-GLB, STL/3MF, URDF/SRDF), and a view whose renderer does not (a DXF, 2D) has no Preview
-button, not a disabled one, and never enters it, whatever asks. It is the shell's own state;
-hosts neither start nor observe it. Its button is lucide's Play, a play triangle ("Preview"), the strip's last
-tile, in every host. A press covers the view at once
+or not, and for a KiCad board ([A board in 3D](#a-board-in-3d)), and for nothing else: a renderer declares it
+(`useRendererShell`'s `previewable`: STEP, GLB, STL/3MF, URDF/SRDF; a board through `useFlatPreview.jsx`, where it
+has the layers to be shown in 3D), and a view whose renderer does not (a DXF, a schematic) has no Preview
+button, not a disabled one, and never enters it, whatever asks. It is the view's own state;
+hosts neither start nor observe it. Its button is lucide's Play, a play triangle ("Preview"), the navbar's last view
+button, right of View, or the strip's last tile where there is no navbar, in every host. Its frame is one piece of
+code for every view that has it (`kit/shell/usePreviewFrame.jsx`: the cover, entering and leaving, the bar and its
+panel, Preview's view, the button), so a board's Preview and a 3D file's cannot drift apart. A press covers the view at once
 ("Preparing preview…", on the canvas) and enters Preview under the cover,
 which lifts once Preview's view has presented its first frame, its published mesh is complete
 and the studio frame's picture has converged
