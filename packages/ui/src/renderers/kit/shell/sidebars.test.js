@@ -1,42 +1,37 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DEFAULT_PANEL_WIDTH, MIN_MODEL_WIDTH, sidebarCollapsed, sidebarLayout, sidebarWant, toggleSidebar } from "./sidebars.js";
+import { DEFAULT_PANEL_WIDTH, MAX_PANEL_WIDTH, MIN_MODEL_WIDTH, clampPanelWidth, sidebarCollapsed, sidebarLayout, toggleSidebar } from "./sidebars.js";
 
-const state = (frameWidth, extra = {}) => ({ frameWidth, want: true, has: true, opened: false, ...extra });
+const state = (frameWidth, extra = {}) => ({ frameWidth, has: true, ...extra });
+const mode = (frameWidth, extra) => sidebarLayout(state(frameWidth, extra)).mode;
 
-test("the one panel always pushes; it starts collapsed where open it would leave the model under 640px", () => {
+test("with no choice on the file, the panel follows the view: open where the model keeps 640px beside it, collapsed below", () => {
   assert.equal(MIN_MODEL_WIDTH, 640);
-  // The 232px panel: 872px of view and more starts it open.
+  // The 232px panel: 872px of view and more opens it, again as the window crosses the line either way.
   assert.equal(DEFAULT_PANEL_WIDTH, 232);
-  assert.deepEqual([1440, 1100, 1024, 872, 871, 867, 700].map(width => sidebarLayout(state(width)).mode),
-    ["push", "push", "push", "push", "closed", "closed", "closed"]);
-  // A panel the person widened needs the more: 320px of it, 960px of view.
-  assert.deepEqual([960, 959].map(width => sidebarLayout(state(width, { panelWidth: 320 })).mode), ["push", "closed"]);
-  // Not measured yet: not collapsed.
+  assert.deepEqual([1440, 872, 871, 700, 872].map(width => mode(width)), ["push", "push", "closed", "closed", "push"]);
+  assert.deepEqual(sidebarLayout(state(700)), { mode: "closed", auto: true });
+  // Against the default width, whatever the grip set: a panel dragged to 480px in a 900px view stays open.
+  assert.equal(mode(900, { panelWidth: 480 }), "push");
+  // Not measured yet: not collapsed. A file with no panel has none at any width.
   assert.equal(sidebarCollapsed(0), false);
-  // A file with no panel has none at any width.
-  assert.equal(sidebarLayout(state(1440, { has: false })).mode, "closed");
+  assert.equal(mode(1440, { has: false }), "closed");
 });
 
-test("a collapse the width made is marked so and never kept; opening it then pushes, unwritten", () => {
-  const narrow = state(650);
-  assert.deepEqual(sidebarLayout(narrow), { mode: "closed", auto: true });
-  const opened = toggleSidebar(narrow);
-  assert.deepEqual(opened, { want: true, opened: true, kept: false });
-  assert.equal(sidebarLayout({ ...narrow, opened: opened.opened }).mode, "push");
-  // Wide again, the person's choice (open) holds; nothing the width did was written.
-  assert.equal(sidebarLayout({ ...state(1440), opened: opened.opened }).mode, "push");
+test("the person's choice on the file holds at every width: closed stays closed as the window widens, open stays open as it narrows", () => {
+  // Closed by the toggle in a wide view: closed at any width from then on.
+  const closed = toggleSidebar(state(1440));
+  assert.deepEqual(closed, { open: false });
+  assert.deepEqual([1440, 2000, 700].map(width => mode(width, { choice: closed.open })), ["closed", "closed", "closed"]);
+  // Opened by the toggle in a narrow view: open, pushing, at any width.
+  const opened = toggleSidebar(state(700));
+  assert.deepEqual(opened, { open: true });
+  assert.deepEqual([700, 500, 1440].map(width => mode(width, { choice: opened.open })), ["push", "push", "push"]);
+  assert.equal(sidebarLayout(state(500, { choice: true })).auto, false);
 });
 
-test("a person's close and open are kept", () => {
-  const wide = state(1440);
-  assert.deepEqual(toggleSidebar(wide), { want: false, opened: false, kept: true });
-  assert.deepEqual(sidebarLayout({ ...wide, want: false }), { mode: "closed", auto: false }, "closed by the person, not by the width");
-  assert.deepEqual(toggleSidebar({ ...wide, want: false }), { want: true, opened: false, kept: true });
-  // Opened by the person where the width collapses it: kept open, and pushing now.
-  assert.deepEqual(toggleSidebar({ ...state(650), want: false }), { want: true, opened: true, kept: true });
-  // Absent choices are open.
-  assert.equal(sidebarWant(undefined), true);
-  assert.equal(sidebarWant(false), false);
+test("the width is the person's between fixed bounds, whatever the window: a stored width outside them reads as the bound", () => {
+  assert.equal(MAX_PANEL_WIDTH, 480);
+  assert.deepEqual([660, 480, 300, 150, undefined, Number.NaN].map(width => clampPanelWidth(width, 200)), [480, 480, 300, 200, 232, 232]);
 });

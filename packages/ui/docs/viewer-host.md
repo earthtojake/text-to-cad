@@ -142,8 +142,9 @@ picture) and, in Preview, Preview's own bar (`settings-ui.md#camera-animation-an
 DXF's are its own canvas's. Nothing a renderer does opens or closes the explorer (only the
 file's name opens that). The layout a person gives the tool stack's panels is one
 of the tab's settings (`settings.toolStack` of the tab record, `@cad/ui/tab-store`),
-beside the appearance and the home's layout; the panel — open or collapsed by the person (a collapse the
-view's width made is not kept, nor a peek), its width and its tab — is the file's, kept in its view as its camera is (`file-viewer/filePanel.js`, merged
+beside the appearance and the home's layout; the panel — open or collapsed by the person (a choice that then holds on
+that file at any window width; what the view's width does is not kept, nor a peek), its width (200 to 480px) and its
+tab — is the file's, kept in its view as its camera is (`file-viewer/filePanel.js`, merged
 into the renderer's record by `FileViewer`).
 The model area is drawn in **the viewport's theme**, not the host's `colorScheme`: the person's Background
 (`settings.viewportBackground` of the tab record: Light by default, or Dark), resolved by
@@ -531,11 +532,14 @@ viewport's top-right (`notice`); no host hands it today, since the navbar holds 
 panel toggle is the navbar's** (`file-viewer/panelToggles.js`): the view's frame says it (`usePanelToggles`), and the
 navbar draws it first, before the logo, the same neutral button open or shut (`aria-expanded` says which, pinned or
 not). Before the view is up (its file being read, its chunk loading, or its frame mounted but its toggle not said yet)
-`FileViewer` draws the toggle the view will have, from a document page's first frame: the file's choice kept for this
-session (its view in `state.renderers`, by its own path or the host's `filePath`), else open where the model keeps
-640px beside it (`sidebars.js`), closed on a phone; `aria-disabled` until the view takes it over, as the view's own
-opening over a narrow width cannot be handed to it. Open, the panel's frame stands in its place at its width, its body
-empty (`data-panel-loading`), so nothing moves as the view mounts; a view with no frame (none says so as it renders,
+`FileViewer` draws the toggle the view will have, from a document page's first frame, by the view's own rule
+(`panelToggles.js`'s `sidebarLayout`, which `sidebars.js` re-exports): the file's choice kept for this session (its view
+in `state.renderers`, by its own path or the host's `filePath`) at any width, else open where the model keeps 640px
+beside the default-width panel, closed on a phone; `aria-disabled` until the view takes it over, as a press is the
+view's to keep. Open, the panel's frame stands in its place at the width the view will draw (the kept one within the
+grip's bounds, `clampPanelWidth`; `data-panel-loading`), drawn as the view's panel is while its file loads: the head's
+one block (a bar where a lone title's name will stand) over its rule, then the placeholder rows, busy, on the same lines
+(`panelToggles.js`'s metrics), so nothing moves as the view mounts; a view with no frame (none says so as it renders,
 `PanelFrameContext`) has none, and a file that will not open has neither. The view's own toggle comes with the pointer handlers the frame hands with it (`hover`): a mouse resting on it peeks the collapsed panel over
 the model as a floating card, pushing nothing, until the pointer leaves both (only the toggle's click, or ⌘\, pins it);
 otherwise a collapsed panel leaves nothing over the model.
@@ -633,10 +637,11 @@ not open that file" and the reason otherwise, each with a Go home button where t
 The viewport's edges and corners are the shell's, never the host's: the tool strip at the
 top centre of the window, ending in Preview (a 3D view's), the tool in hand's sub-toolbar under it, the one panel
 (the file's structure, then its Parameters, Joints and Animation, as tabs) docked at the left, pinned open always pushing
-the model aside (collapsed on its own where it would leave the model under 640px; a mouse resting on its toggle peeks
+the model aside (collapsed on its own where it would leave the model under 640px, until the person opens or closes it
+on that file; a mouse resting on its toggle peeks
 it over the model as a floating card, pushing nothing, and only the toggle pins it), Quick Edit's bar at the bottom centred on the window as the strip is
 (the panel never moves either; where they meet it they sit above it), the bottom row Quick Edit's alone, and at the
-top-right the camera's own control alone: the view cube (a 68px box at the corner's 12px inset), or a flat view's
+top-right the camera's own control alone: the view cube (a 6rem box, 2px from the right edge and 8px off the top), or a flat view's
 "100%" zoom dropdown. Under a file's navbar the view's settings are its right end for every kind of file — **View**,
 one menu (a 3D view's Projection, Display, Background, Show grid and Reset view; a board's Side, Mode, Display, in 3D
 Projection, Background and Reset view; a drawing's Background, `ViewSettingsMenu.jsx`), then a 3D view's or a board's Preview: the

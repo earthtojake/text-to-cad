@@ -14,8 +14,7 @@ import { ViewerElementContext, ViewerHostContext } from '../host/context.js';
 import { I18nProvider, translator } from "../i18n/index.js";
 import { mayTakeKeyboard } from "./takeKeyboard.js";
 import { FilePanelContext, filePanelOf, withFilePanel } from "./filePanel.js";
-import { DEFAULT_PANEL_WIDTH, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX, PANEL_TITLE_BODY_GAP_PX, PANEL_TITLE_HEAD_PX, PanelFrameContext, PanelTogglesContext,
-  sidebarCollapsed, sidebarWant } from "./panelToggles.js";
+import { PANEL_HEAD_ROW_PX, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX, PanelFrameContext, PanelTogglesContext, clampPanelWidth, sidebarLayout } from "./panelToggles.js";
 import { TreeRowsLoading } from "../primitives/tree-row.jsx";
 import { NavbarSlotsContext, NavbarViewSlotContext } from "./navbarSlots.js";
 import type { PanelToggles } from "./panelToggles.js";
@@ -125,13 +124,14 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
     onNavigationActionsChange, onOpenFile, appearance, rendererState, setRendererState, filePanel, reload, t, setPanelToggles, frameSaid]);
 
   // The panel before the view is up — the file read, or the view's chunk loading, or the view mounted but its toggle not
-  // said yet: the navbar has its toggle from the page's first frame, in the state the view will open it in (the
-  // file's choice for this session, else open where the model keeps 640px beside it: `sidebars.js`), drawn
-  // disabled: the view's own opening over a narrow width is its frame's and cannot be handed to it, so a press here
-  // could not be kept as it would be. Open, the panel's frame stands in its place, at its width (`data-panel-loading`),
-  // drawn as the view's own panel is while its file loads: a one-title head (a bar where the title will be: the tab is not
-  // known yet) and the placeholder rows (`TreeRowsLoading`), on the same lines (`panelToggles.js`'s metrics), so nothing
-  // moves as the view takes over. A file that will not open has neither.
+  // said yet: the navbar has its toggle from the page's first frame, in the state the view will open it in (the one
+  // rule, `sidebarLayout`: the person's choice on the file for this session at any width, else open where the model
+  // keeps 640px beside the default-width panel), drawn disabled: a press is the view's to take and keep (its frame
+  // writes the choice to the file's entry), so one here does nothing. Open, the panel's frame stands in its place, at the
+  // width the view will draw (the kept one within its bounds, `clampPanelWidth`; `data-panel-loading`), drawn as the
+  // view's own panel is while its file loads: the head's one block (a bar where a lone title's name will be: the tabs are
+  // not known yet) over its rule, and the placeholder rows (`TreeRowsLoading`) where the first rows will stand, on the
+  // same lines (`panelToggles.js`'s metrics), so nothing moves as the view takes over. A file that will not open has neither.
   const bodyBox = useRef<HTMLDivElement | null>(null);
   const [bodyWidth, setBodyWidth] = useState(0);
   const pending = Boolean(path) && (loaded.status === "loading" || (loaded.status === "ready" && saidToggles?.key !== key));
@@ -156,8 +156,8 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
     }
     return {};
   }, [pending, path, filePath, state.renderers]);
-  const pendingWidth = keptPanel.width ?? DEFAULT_PANEL_WIDTH;
-  const pendingOpen = pending && !mobile && sidebarWant(keptPanel.open) && !sidebarCollapsed(bodyWidth, pendingWidth);
+  const pendingWidth = clampPanelWidth(keptPanel.width);
+  const pendingOpen = pending && !mobile && sidebarLayout({ frameWidth: bodyWidth, choice: keptPanel.open, has: true }).mode === "push";
   const pendingToggles = useMemo<PanelToggles | null>(() => (pending ? { left: { open: pendingOpen, disabled: true,
     label: t(pendingOpen ? "flatPanel.hide" : "flatPanel.show"), shortcut: appearance.platform === "darwin" ? "⌘\\" : "Ctrl+\\", toggle: () => {} } } : null),
     [pending, pendingOpen, appearance.platform, t]);
@@ -176,11 +176,11 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
     body = pendingOpen ? <div className="flex h-full min-h-0">
       <aside aria-busy="true" className="relative flex h-full shrink-0 flex-col border-r border-border bg-sidebar text-ui" style={{ ...PANEL_ROW_VARIABLES, width: pendingWidth }}
         data-panel-loading="">
-        <div aria-hidden="true" className="box-content flex shrink-0 items-center border-b border-transparent px-(--panel-inset)"
-          style={{ paddingTop: PANEL_SURFACE_PX, height: PANEL_TITLE_HEAD_PX }} data-panel-head="">
+        <div aria-hidden="true" className="box-content flex shrink-0 items-center border-b border-border px-(--panel-inset)"
+          style={{ paddingTop: PANEL_SURFACE_PX, paddingBottom: PANEL_SURFACE_PX, height: PANEL_HEAD_ROW_PX }} data-panel-head="">
           <span className="block h-2 w-12 rounded-full bg-muted-foreground/20 motion-safe:animate-pulse" data-panel-loading-title="" />
         </div>
-        <div className="flex flex-col px-(--panel-inset)" style={{ paddingTop: PANEL_TITLE_BODY_GAP_PX }}><TreeRowsLoading label={t("spinner.loading")} /></div>
+        <div className="flex flex-col px-(--panel-inset)" style={{ paddingTop: PANEL_SURFACE_PX }}><TreeRowsLoading label={t("spinner.loading")} /></div>
       </aside>
       <div className="min-w-0 flex-1">{loading}</div>
     </div> : loading;

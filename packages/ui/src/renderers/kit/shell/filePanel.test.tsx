@@ -157,17 +157,21 @@ it("a compact view (a picture taken out of sight) leaves the tab's old shared pa
 
 // The panel's width is one number (`sidebars.js`): the default, whatever the view's width; only the grip is bounded,
 // leaving the model 640px as it is dragged.
-it("draws one width at every view width; the grip alone leaves the model 640px", async () => {
+it("draws one width at every view width, its grip bounded by 200 and 480px whatever the view; a stored width past them reads as the bound", async () => {
   frameWidth = 1024;
-  function Capped() {
+  function Capped({ stored }: { stored?: number }) {
     const frameRef = useRef<HTMLDivElement>(null);
-    const flat = useFlatPanelState({ frameRef, kind: 'board', toolStack: { panels: {}, collapsed: {} }, onToolStackChange: () => {} });
+    const flat = useFlatPanelState({ frameRef, kind: 'board', toolStack: { panels: stored ? { flat: { width: stored } } : {}, collapsed: {} }, onToolStackChange: () => {} });
     return <div ref={frameRef} data-frame=""><output data-testid="width">{flat.width}</output><output data-testid="max">{flat.maxWidth}</output></div>;
   }
-  render(<Capped />);
-  expect([screen.getByTestId('width').textContent, screen.getByTestId('max').textContent]).toEqual(['232', '384']);
+  const read = () => [screen.getByTestId('width').textContent, screen.getByTestId('max').textContent];
+  const view = render(<Capped />);
+  expect(read()).toEqual(['232', '480']);
   resize(700);
-  expect([screen.getByTestId('width').textContent, screen.getByTestId('max').textContent]).toEqual(['232', '200']);
+  expect(read()).toEqual(['232', '480']);
   resize(1440);
-  expect([screen.getByTestId('width').textContent, screen.getByTestId('max').textContent]).toEqual(['232', '800']);
+  expect(read()).toEqual(['232', '480']);
+  view.unmount();
+  render(<Capped stored={660} />);
+  expect(read()).toEqual(['480', '480']);
 });

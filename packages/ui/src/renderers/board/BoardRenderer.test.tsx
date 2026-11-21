@@ -342,13 +342,16 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
   const leftToggle = pane.querySelector<HTMLElement>('[data-viewer-navbar] [data-navbar-panel="left"]')!;
   expect([leftToggle.getAttribute('aria-label'), leftToggle.getAttribute('aria-expanded'), leftToggle.getAttribute('aria-pressed'), leftToggle.getAttribute('aria-keyshortcuts')])
     .toEqual(['Hide panel', 'true', null, expect.stringMatching(/\\$/)]);
-  // 8px over the tabs and under them; at its sides the panel's inset less what the pills (8px) and the search's button
+  // 8px over the tabs and under them; at its sides the panel's inset less what the pills (6px) and the search's button
   // (7px) hang out by, so the tabs' names and the search's icon stand on the inset (`--panel-inset`).
   expect([head.style.paddingTop, head.style.paddingBottom, head.style.paddingLeft, head.style.paddingRight])
-    .toEqual(['8px', '8px', 'calc(var(--panel-inset) - 8px)', 'calc(var(--panel-inset) - 7px)']);
-  expect(searchBox(pane).placeholder).toBe('Search');
+    .toEqual(['8px', '8px', 'calc(var(--panel-inset) - 6px)', 'calc(var(--panel-inset) - 7px)']);
   expect(within(aside).getAllByRole('tab').map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')])).toEqual([['Parts', 'true'], ['Nets', 'false'], ['Layers', 'false']]);
   expect(aside.querySelector('[role=tab] svg')).toBeNull();
+  // The search's box takes the tabs' row; Escape gives it back.
+  expect([searchBox(pane).placeholder, within(aside).queryByRole('tablist')]).toEqual(['Search', null]);
+  fireEvent.keyDown(searchBox(pane), { key: 'Escape' });
+  expect([openSearch(pane), within(aside).getAllByRole('tab').length]).toEqual([null, 3]);
   expect(tabBody(pane, 'parts').hidden).toBe(false);
   expect(tabBody(pane, 'nets').hidden).toBe(true);
   expect(tabBody(pane, 'layers').hidden).toBe(true);
@@ -711,9 +714,9 @@ it('the Parts tab is the parts in their schematic blocks and the Nets tab the ne
   // The match lit in its name, as the Parts' and Nets' are.
   expect([...tabBody(pane, 'layers').querySelectorAll('[data-layer-row="B.Cu"] [data-tree-filter-hit]')].map(hit => hit.textContent).join('')).toBe('B.Cu');
   fireEvent.keyDown(searchBox(pane), { key: 'Escape' });
-  expect(searchBox(pane).value).toBe('');
-  expect(tabBody(pane, 'layers').querySelector('[data-flat-panel-hit]')).toBeNull();
-  expect(within(panel(pane)).getByRole('tablist')).toBeTruthy();
+  // Closed: the tabs again, on the tab that was open (the Nets), no hits anywhere.
+  expect([openSearch(pane), tabBody(pane, 'layers').querySelector('[data-flat-panel-hit]'), within(panel(pane)).getByRole('tab', { selected: true }).querySelector('[data-flat-panel-tab-name]')!.textContent])
+    .toEqual([null, null, 'Nets']);
   fireEvent.click(within(panel(pane)).getByRole('tab', { name: 'Parts' }));
   fireEvent.click(within(parts).getByRole('button', { name: 'Isolate J1' }));
   expect(within(parts).getByRole('button', { name: 'Exit isolate J1' }).getAttribute('aria-pressed')).toBe('true');

@@ -48,19 +48,24 @@ export function usePanelToggles(toggles) {
   }, [publish, toggles]);
 }
 
-// Where the view's panel starts open (`renderers/kit/shell/sidebars.js`, which re-exports these): here, so the file
-// viewer draws the toggle the view will have before any renderer is loaded.
+// Where the view's panel is open, and how wide (`renderers/kit/shell/sidebars.js`, which re-exports these and says the
+// rule in full): here, so the file viewer draws the toggle, and the panel's frame, the view will have before any
+// renderer is loaded.
 
-/** The least width the model's area keeps with the panel open beside it; narrower, the panel starts collapsed. */
+/** The least width the model's area keeps beside the default-width panel; narrower, a file with no choice of the person's has it collapsed. */
 export const MIN_MODEL_WIDTH = 640;
 /**
  * The panel's width where none is given (`FlatPanel.jsx`'s `FLAT_PANEL_DEFAULT_WIDTH`): one fixed number, never the
  * view's or the tabs', budgeted for three tabs: the least width on the 8px grid where every three tabs a file can have
  * (a model's Model and two of Params, Joints and Motion; a board's Parts, Nets and Layers; a schematic's Parts, Nets and
- * Hierarchy) stand in English beside the search's icon with no ⋯ (the widest, Model, Params and Motion, needs 225px). A
- * fourth tab is ⋯'s.
+ * Hierarchy) stand in English beside the search's icon with no ⋯ (the widest, Model, Params and Motion, needs 213px with
+ * the pills' 6px padding, so 19px to spare, kept for longer translations). A fourth tab is ⋯'s.
  */
 export const DEFAULT_PANEL_WIDTH = 232;
+/** The narrowest the grip takes the panel (`FlatPanel.jsx`'s `FLAT_PANEL_MIN_WIDTH`). */
+export const MIN_PANEL_WIDTH = 200;
+/** The widest the grip takes the panel, at any window width: on the 8px grid, about twice the default. */
+export const MAX_PANEL_WIDTH = 480;
 
 /**
  * Whether the view's width collapses the panel on its own: open, it would leave the model under `MIN_MODEL_WIDTH`
@@ -70,15 +75,35 @@ export function sidebarCollapsed(frameWidth, panelWidth = DEFAULT_PANEL_WIDTH) {
   return frameWidth > 0 && frameWidth - panelWidth < MIN_MODEL_WIDTH;
 }
 
-// The panel surface's metrics the file viewer's stand-in for it needs too (`renderers/kit/shell/PanelSurface.jsx`, which
-// uses these): drawn before any view is up, it stands exactly where the view's loading panel will.
+/**
+ * Where the panel is: `"push"` (beside the model, the model narrower for it) or `"closed"`; and whether that is the
+ * view's doing (`auto`: the person has made no choice on this file, so the view's width decides).
+ *
+ * @param {{ frameWidth: number, choice?: boolean, has: boolean }} state
+ *   `choice`: the person's, on this file (`filePanel.js`'s `open`): open (true), closed (false), or none (absent): then
+ *   the view's width decides, against the default width (`sidebarCollapsed`).
+ * @returns {{ mode: "push" | "closed", auto: boolean }}
+ */
+export function sidebarLayout({ frameWidth, choice, has }) {
+  const auto = typeof choice !== "boolean";
+  const open = Boolean(has) && (auto ? !sidebarCollapsed(frameWidth) : choice);
+  return { mode: open ? "push" : "closed", auto };
+}
 
-/** The panel's vertical step: 8px over the head's row (and under it, to its rule, where it has one). */
+/** A width as the panel draws it: the person's (or the default), within the fixed bounds, whatever was stored. */
+export const clampPanelWidth = (width, minWidth = MIN_PANEL_WIDTH) =>
+  Math.round(Math.min(MAX_PANEL_WIDTH, Math.max(minWidth, Number(width) || DEFAULT_PANEL_WIDTH)));
+
+// The panel surface's metrics the file viewer's stand-in for it needs too (`renderers/kit/shell/PanelSurface.jsx` and
+// `FlatPanel.jsx` use these): drawn before any view is up, it stands exactly where the view's loading panel will.
+
+/** The panel's vertical step: 8px over the head's row, 8px under it to its rule, and 8px from the rule to the body's first row. */
 export const PANEL_SURFACE_PX = 8;
-/** The head's row where it is one title (the view's single tab, or a tab not known yet): a list row's height, 28px. */
-export const PANEL_TITLE_HEAD_PX = 28;
-/** The body under a one-title head starts this far under it (`FlatPanel.jsx`'s `pt-1`), so the list follows the title. */
-export const PANEL_TITLE_BODY_GAP_PX = 4;
+/**
+ * The head's row: ONE block whatever it holds (a lone title, the tabs, the search box): 32px (the 28px pills and
+ * buttons and 4px), between its two 8px steps, over its 1px rule.
+ */
+export const PANEL_HEAD_ROW_PX = 32;
 /**
  * The rows' horizontal geometry the panel sets (`primitives/tree-row.jsx` reads it): a row's fill hangs half the inset
  * out past the line and its glyph stands half the inset into it; its last action's glyph ends the inset from the
@@ -86,6 +111,3 @@ export const PANEL_TITLE_BODY_GAP_PX = 4;
  */
 export const PANEL_ROW_VARIABLES = Object.freeze({ "--tree-row-pad": "calc(var(--panel-inset) / 2)", "--tree-row-hang": "calc(var(--panel-inset) / 2)",
   "--tree-row-actions-pad": "calc(var(--panel-inset) / 2 - 2px)" });
-
-/** The person's choice as the file's entry keeps it (`filePanel.js`'s `open`): open (true) or closed (false), absent for the default, open. */
-export const sidebarWant = kept => kept !== false;

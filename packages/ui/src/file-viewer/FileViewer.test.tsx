@@ -58,7 +58,7 @@ it('has the panel\'s toggle from a document page\'s first frame, in the state it
   const look = () => [toggle()?.getAttribute('aria-expanded'), toggle()?.getAttribute('aria-disabled'), Boolean(document.querySelector('aside[data-panel-loading]')), fileName().textContent];
   const view = render(<FileViewer file={ID} host={slow as any} renderers={[framed]} state={{}} onStateChange={() => {}} />);
   // The first frame: the toggle, open and not pressable yet, the panel's frame in its place, and no id for a name. The
-  // frame is drawn as the view's loading panel is: a one-title head (a bar for the title not known yet), then the
+  // frame is drawn as the view's loading panel is: the head's one block (a bar for the title not known yet), then the
   // placeholder rows, busy (their places against the view's are `PanelInset.browser.test.mjs`'s).
   expect(look()).toEqual(['true', 'true', true, '']);
   const frame = document.querySelector('aside[data-panel-loading]')!;
@@ -71,6 +71,17 @@ it('has the panel\'s toggle from a document page\'s first frame, in the state it
   // The file's choice for this session, closed: the toggle says so, and no frame is drawn.
   render(<FileViewer file={ID} host={slow as any} renderers={[framed]} state={{ renderers: { [JSON.stringify([ID, 'framed'])]: { panel: { open: false } } } }} onStateChange={() => {}} />);
   expect(look()).toEqual(['false', 'true', false, '']);
+  cleanup();
+  // The view's own rule (`sidebars.js`): with no choice, an 800px view (under 640px + the default 232px) has it
+  // collapsed; the person's choice, open, holds there all the same, its frame at the width the view will draw (a
+  // stored 660px within the grip's 480px bound).
+  const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 800, height: 700, top: 0, left: 0, right: 800, bottom: 700, x: 0, y: 0, toJSON() {} } as DOMRect);
+  render(<FileViewer file={ID} host={slow as any} renderers={[framed]} state={{}} onStateChange={() => {}} layout="desktop" />);
+  expect(look()).toEqual(['false', 'true', false, '']);
+  cleanup();
+  render(<FileViewer file={ID} host={slow as any} renderers={[framed]} state={{ renderers: { [JSON.stringify([ID, 'framed'])]: { panel: { open: true, width: 660 } } } }} onStateChange={() => {}} layout="desktop" />);
+  expect([...look(), document.querySelector<HTMLElement>('aside[data-panel-loading]')?.style.width]).toEqual(['true', 'true', true, '', '480px']);
+  rect.mockRestore();
   cleanup();
   // A file that will not open has neither.
   render(<FileViewer file={ID} host={{ ...host, files: { id: 'gone', stat: async () => { throw new Error('gone'); } } } as any} renderers={[framed]} state={{}} onStateChange={() => {}} />);

@@ -99,9 +99,14 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   own single-colour mark where one is published under a licence the package can ship (provenance:
   `src/assets/README.md`), else Lucide's `AppWindow`, never a mark drawn by hand; **Browser** `Globe`,
   the file manager `Folder`, **Default app** `ExternalLink`. No ⋯ where there is nothing. The home has no file and no ⋯. The name has
-  no right-click menu and there are no crumbs. The left's controls sit edge to edge, spaced
+  no right-click menu and there are no crumbs. On a desktop the left's controls sit edge to edge, spaced
   by their own padding alone: the logo, Back, Forward and the ⋯ in 28px buttons, and the name
-  4px in from its edges. Right,
+  4px in from its edges. On a phone they are the row's 36px tiles, all on its middle line: the first (the toggle) on
+  the row's 8px inset, each 4px from the next (the gap between the navbar's icon buttons, `NAVBAR_CONTROLS_CLASS`),
+  the logo's mark centred in its tile, and the name's button as tall, sized by its text, its text and chevron 10px in
+  from its edges as an icon is in its tile. A fill comes only under a pointer that hovers (Tailwind's `hover:`, inside
+  `@media (hover: hover)`) or while a control's menu is open, and the ring only for keyboard focus (`:focus-visible`),
+  so a finger's tap leaves neither behind. Right,
   only what a host or a file adds, in this order: first, while
   a person has put an alert card away, the card's own icon (a circle
   with an exclamation mark, red for an error and amber for a warning, named and hinted by
@@ -289,7 +294,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 - **Tool stack** under the sub-toolbar, in the same centred column: a renderer's own
   `toolPanels`, where it hands any (see
   [The view's panel and the tool stack](#the-views-panel-and-the-tool-stack)). The column
-  stops clear of Quick Edit's row (`VIEWPORT_STACK_BOTTOM`, 68px and 16px off the bottom), so it never runs past the
+  stops clear of Quick Edit's row (`VIEWPORT_STACK_BOTTOM`, 84px off the bottom), so it never runs past the
   view.
 - **The panel**, the view's one sidebar, docked at the left: its tabs, with one search over the tree-like ones (an icon at
   the head row's right end) — first the file's structure (a
@@ -303,11 +308,12 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   400px wide at most, else the window less 16px a side (`QUICK_EDIT_MAX_PX`, `QUICK_EDIT_MARGIN_PX`), a STEP's or a
   robot's: the bar of the note a person writes to their agent, there only while something is picked or drawn
   (see [Quick Edit](#quick-edit)). **The bottom row is Quick Edit's alone**: nothing of the corner stands there.
-- **View cube** at the **top-right**, its 68px box 12px from the right edge and 12px off the top (the corner's inset:
-  the host's corner variable, 2px unset, and `CUBE_GUTTER_PX`; `VIEWPORT_CUBE_TOP`), the cube drawn as before, scaled
-  uniformly, its drawing cropped to the cube (`ViewPlaneControl.js`'s view box), its X, Y and Z lines on its own edges
-  nearest the camera (X and Y the bottom's near edges, Z the upright edge at their corner), each drawn from its negative
-  end to its positive one and lettered just inside its positive end, so nothing it draws sticks out past the cube.
+- **View cube** at the **top-right**, its 6rem box 2px from the right edge (the host's corner variable, 2px unset;
+  `VIEWPORT_CORNER_INSET_PX`) and 8px off the top, its top on the strip's (`VIEWPORT_CUBE_TOP`). The box is the whole
+  drawing (`ViewPlaneControl.js`'s 0–100 view box): the cube, and its X, Y and Z lines from one corner just outside it,
+  each past its positive face, lettered a little past its end, every letter kept inside the box however the cube turns
+  (the view's edge would cut one off). The cube stands well inside its box, so at rest its right edge is 22px from the
+  view's and the Z letter's top 16px down, a little inside a flat view's zoom (12px and 14px).
   The cube has enlarged face/edge/corner hit areas and neutral hover and XYZ guides, and it stands alone in its corner
   (**The view's corner**, below). A host whose own control floats over that corner lowers it clear with
   `--cad-viewport-corner-top`, the room that control takes from the top edge. A host can instead anchor it at the
@@ -315,8 +321,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   corner follows it there (**The corner at the left**, below).
   Codex's tab presentation uses this for all its views, clear of its floating chat button.
   Preview omits it, and so does a phone. **The strip and the cube**: the strip is centred on the window and the cube
-  hugs the right edge, so they meet only where the window is narrower than the strip and about 200px (under 600px for
-  a 3D file's strip, which is a phone's layout, with no cube); where they would, the strip, in the layer over the
+  hugs the right edge, so they meet only where the window is narrower than the strip and about 200px (the cube's box
+  takes 98px from the right edge, its drawing at rest 84px; under 600px for a 3D file's strip, which is a phone's layout, with no cube); where they would, the strip, in the layer over the
   corner (`data-view-top-layer`), stands over the cube: a tool is never under anything.
 - **The host's notice** (a question it asks once) stands under the corner, at the right, an inset under the corner's
   control (the cube, or the zoom) (`ViewportTopRight`, `--cad-corner-below`, the frame's measure of the corner); at the top-right itself
@@ -342,7 +348,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   type scale's `text-tiny` and tabular digits with a small chevron, no − or + and no Home, on a faint resting surface
   (the foreground at 6%, a step more under the pointer and while its menu is open) so it reads as a control over the
   drawing, the digits haloed in the viewport's background; 28px tall, its middle on the tool strip's middle line, its
-  outer edge on the cube box's line (`chromeInset.js`'s `CORNER_INSET_PX`, 12px from the right; `viewCornerLayout`'s
+  outer edge the corner's inset from the right (`chromeInset.js`'s `CORNER_INSET_PX`, 12px; `viewCornerLayout`'s
   `pill`). Its menu, under it, is the zoom's commands alone ([The zoom](#camera-animation-and-preview)). A board in 3D
   keeps its zoom, which zooms its camera: there is no cube, and its way back is View's Reset view. The corner's
   controls stand bare on the picture, so they take **the viewport's theme** (below), not the app's. A phone has no
@@ -781,7 +787,10 @@ file has the panel, from the view's first frame**: its structure's tab is there 
 panel nor its toggle comes in late and pushes the model aside, and it is open or collapsed then as it is once the file
 is in; a load that fails has none. **While the file loads, a structure tab with no row yet shows placeholder rows**
 (`FlatPanel.jsx`'s `FlatPanelRowsLoading`, `primitives/tree-row.jsx`'s `TreeRowsLoading`, in the pinned panel, a peek
-and a phone's sheet alike): six of the rows' own 28px lines, each a block the glyph's size on the inset and a bar where
+and a phone's sheet alike): six of the rows' own 28px lines, the first where the tab's first row will stand (under
+the head's one block, 8px into the body; the page's own stand-in for the panel before any view is up,
+`FileViewer`'s `data-panel-loading`, draws the same block, a bar where a lone title's name will stand, and the same rows
+on the same lines: `file-viewer/panelToggles.js`'s metrics), each a block the glyph's size on the inset and a bar where
 a name starts, of uneven widths, fading out downwards, in the muted ink, pulsing gently (still where less motion is
 asked for); its tabpanel `aria-busy`, and "Loading" said to assistive technology. No spinner and no words in the panel:
 the view's loading cover says what is loading. They go as the tab's first row is drawn (an engine document's tree
@@ -858,14 +867,18 @@ structure. Every rule here, and why:
   panel's padding, never its content — and the head's rule, a scrolled row and the sticky actions foot end inside the
   card, clipped to its rounded inside; 4px leaves a row's fill, 8px out from the content line, 3px of the card's inside
   at the left and 4px at the right. Pinned, the panel is as it always was: full height, touching the edges, its rule at
-  its right. **A narrow pane starts it collapsed**: it starts open only where the model's area keeps 640px beside
-  it (`sidebars.js`'s `MIN_MODEL_WIDTH`), so the view at least 640px and the panel's width (872px with the 232px
-  panel), and collapsed below. **That
-  collapse isn't remembered**, so widening the view brings back the person's choice; opened over it, it pushes. The
-  strip and Quick Edit stay centred on the window, over the panel (the hard rule above).
+  its right. **Until the person chooses, the view decides**: on a file whose panel they have not opened or closed in
+  this session, it is open where the model's area keeps 640px beside the default-width panel (`sidebars.js`'s
+  `MIN_MODEL_WIDTH`: the view at least 640px and 232px, 872px, whatever width the grip has set, so a drag never
+  collapses the panel under the grip), collapsed below, and it follows the window as it
+  is resized across that line; what the width does is never kept. **Once they open or close it on a file** (its
+  toggle, its key, a peek pinned), **their choice holds there at any width**: no window re-opens or re-collapses it. A
+  peek is no choice. Another file follows the view until it has a choice of its own. The strip and Quick Edit stay
+  centred on the window, over the panel (the hard rule above).
 - **What is kept is the person's choice, per file, for the session** (the file's entry in the tab's settings,
-  `filePanel.js`: `open`, `width`, `tab`); a record from when the view had a right panel (`right`,
-  `rightWidth`, `sections`), or from when \ alone hid everything (`hidden`), is read as nothing.
+  `filePanel.js`: `open`, `width`, `tab`): open or closed, the width they dragged it to (kept as it is closed,
+  reopened and peeked) and the tab; a record from when the view had a right panel (`right`, `rightWidth`, `sections`),
+  or from when \ alone hid everything (`hidden`), is read as nothing.
 - **Its tabs**: the structure's first (Model; a board's Parts, Nets and Layers; a schematic's Parts, Nets and
   Hierarchy; a drawing's Layers; a robot's Links), then **Params**, **Joints** and **Animation**, each only where
   the file has it. Their content is as it was in the right panel's sections: Parameters' two-row sliders with the
@@ -910,12 +923,15 @@ structure. Every rule here, and why:
   width in English beside the search's icon, the widest (Model, Params, Motion) with 7.5px to spare; a fourth, and a
   translation that runs longer (Japanese's model tabs), is ⋯'s. **The tabs that do not fit are ⋯'s items**
   (`FlatPanel.jsx`'s `fitTabs`, measured on a hidden ruler of every tab and the row's own width as a ResizeObserver
-  sees them, no fixed breakpoint), in order, each with its icon (and, searching, its count); **the open tab always
+  sees them, no fixed breakpoint), in order, each with its icon; **the open tab always
   shows**: where it would be in ⋯ it takes the last shown tab's place. Nothing in the row scrolls. The panel's width is
   its own: one fixed default (232px, `sidebars.js`'s `DEFAULT_PANEL_WIDTH`: the least width on the 8px grid where every
   three tabs fit, so the panel takes no more of the model than three need), or what the person's grip set it to, never
-  the view's or what the tabs need; the grip alone is bounded as it moves (200px, and the model kept 640px). A narrow
-  view collapses the panel; it never shrinks it.
+  the view's or what the tabs need, **between fixed bounds, the same at any window width**: 200px (`FlatPanel.jsx`'s
+  `FLAT_PANEL_MIN_WIDTH`) to 480px (`sidebars.js`'s `MAX_PANEL_WIDTH`, about twice the default), the grip working in
+  any desktop window within them and saying them (`aria-valuemin`, `aria-valuemax`); a width stored outside them reads
+  as the bound. A panel the person pins open in a narrow window may leave the model little room: their choice (the
+  view's own rule would have collapsed it). No window shrinks it. A phone's sheet has no grip.
 - **A tab's changed dot**: Params, Joints and Animation carry a dot (`kit/tools/ChangedDot.jsx`: 4px, `--brand-icon`)
   against their name's top-right, which moves neither the name nor the tab's width, while their state is off its
   default, exactly while the tab's Reset is on, from the state that turns Reset on (`FlatPanelChanged`, beside the
@@ -925,27 +941,40 @@ structure. Every rule here, and why:
 - **The search** covers the tree-like tabs alone — a STEP's or an `.xbf`'s Model, a robot's Links, a board's Parts,
   Nets and Layers, a schematic's Parts, Nets and Hierarchy, a drawing's Layers (`isStructureTab`: the `tree` section,
   or a tab handed in unless it says `search: false`) — never Params, Joints or Animation; its icon is there only where
-  the file has a searchable tab. Pressed (or **/**), the head row becomes the search box (`TreeFilterInput`, dense,
-  placeholder "Search", its accessible name what it searches — "Search the board", "Search the schematic", "Search the
-  drawing", "Search the model"), its X (**Close search**) where the icon was, and the tabs stand in a row under it; its
-  magnifier starts on the inset and its X's glyph ends on the right inset, as every icon in the panel does.
-  Like Figma's layer search it is **no box**: no border, fill or ring, only its icon and its text, 28px. **Escape or
-  the X closes it**, the query gone. A query filters **every searchable tab at once** (KiCad's Parts, Nets and Layers
-  alike), each searchable tab's name saying how many it finds (`useFlatPanelMatches`), the open tab showing its own;
-  opened from a tab it does not cover it opens the first it does, and a query that finds nothing in the open tab and
-  something in another opens the first such, until a tab is chosen by hand.
+  the file has a searchable tab. Pressed (or **/**), **the head's row becomes the search box** (`TreeFilterInput`,
+  dense, placeholder "Search", its accessible name what it searches — "Search the board", "Search the schematic",
+  "Search the drawing", "Search the model"), its X (**Close search**) where the icon was: one row, no tabs, no title,
+  no counts, no ⋯ — there is no point in tabs while searching. **Nothing under it moves**: the box takes the row as
+  it is (the head's one block, a title's or the tabs', 32px over its rule), at the same height, place and
+  padding, so the body's top and every row under it stay at their pixel, open or shut (`PanelInset.browser.test.mjs`
+  measures it, in the docked panel and the peek card alike); its magnifier starts on the inset and its X's glyph
+  ends on the right inset, as every icon in the panel does. Like Figma's layer search it is **no box**: no border,
+  fill or ring, only its icon and its text, 28px. **An empty box changes only the head**: the body stays the tab that
+  was open, scrolled, picked and folded as it was, whatever the tab (Joints and Params alike). **A query shows
+  results, and only results**: a file of one tree-like tab (a model's Model, a robot's Links, a GLB's, a 3MF's or an
+  STL's Model, a drawing's Layers) shows that tree's hits, whatever tab was open; a file of several (a board's Parts,
+  Nets and Layers; a schematic's Parts, Nets and Hierarchy) shows **one list across them**, a group per tab that finds
+  something, in the tabs' order, each under the panel's muted 28px heading (`TreeRowHeading`) of the tab's name and its
+  count ("Parts 5", `useFlatPanelMatches`); a tab that finds nothing has no group, and nothing found anywhere is one
+  line. Params, Joints and Animation are never searched nor shown while a query is. A hit is its tab's, as in it: a
+  press picks it, hover lights it, its row's actions work, no tab chosen for it; the arrows walk the hits through the
+  groups in order (the cursor drawn in one group at a time) and Enter picks under it. **Escape or the X closes it**,
+  the query gone, and the head and the body are what they were — the tab that was open, scrolled where it was: the
+  search never changes which tab is open.
 - **One tab is a title.** A panel with a single tab (a Model with nothing to Position or set, a drawing's Layers, a board
-  read without its index) draws no pill: its name, a plain title at the tabs' size and the open tab's weight (500) in
-  the tab's place, and no rule under the head, so the title flows straight into its list. **The title is a list row**:
-  the head 28px tall (a row's height, not the 32px tab row), 8px over it and nothing under it (`PanelSurface`'s
-  `headCompact`), its name on the rows' icons' line, the panel's inset where a row's chevron or icon starts (the head's
-  padding, the inset less 8px, and the title's own 8px, a pill's), and the list 4px under it (the
-  body's `pt-1`), so no gap stands between the title and its first row. The search's icon stands at the row's right
-  end. Several tabs are pills over the rule.
-- **Its tabs**, the head's row, pills as Figma's right panel draws them (Design / Prototype), with Figma's room: 28px, 8px
-  of padding either side and 4px between pills, so two names stand 20px apart (`FlatPanel.jsx`'s `TAB_PAD_PX`,
-  `TAB_GAP_PX`); three fit the 232px panel, and at the grip's 200px the last go into ⋯. The first pill's box hangs 8px
-  out past the inset, as a selected row's fill does, so its name stands on it,
+  read without its index, or a file whose other tabs have not arrived yet) draws no pill: its name, a plain title at the
+  tabs' size and the open tab's weight (500) in the tab's place. **The head is one geometry, whatever it holds**: the
+  title stands in the tabs' block — the same 32px row, 8px over it and 8px under it to the same rule — its name on the
+  panel's inset at the tab labels' line (the head's padding, the inset less 6px, and the title's own 6px, a pill's).
+  So the body's top is at one pixel for a lone title, for tabs and for the search box, and nothing under the head moves
+  when a file's tabs arrive after it has loaded (its title first, then Params, Joints, Motion; a board's Nets and
+  Layers) or when the search opens. The search's icon stands at the row's right end.
+- **Its tabs**, the head's row, pills as Figma's right panel draws them (Design / Prototype): 28px, 6px
+  of padding either side and 4px between pills, so two names stand 16px apart (`FlatPanel.jsx`'s `TAB_PAD_PX`,
+  `TAB_GAP_PX`); three fit the 232px panel, and at the grip's 200px the last go into ⋯. The 6px is the pill's padding
+  above and below its 16px line too, so a pill is as padded across as it is tall, and the open pill stands as far from
+  the panel's left edge as from its top (10px pinned, 6px from the peek card's), and 10px over the rule. The first
+  pill's box hangs 6px out past the inset, so its name stands on it,
   the search's icon (in its 28px button, 7px of it either side) ending on the right inset; the open one a rounded pill on the accent's subtle fill, its name the foreground's at
   medium weight, the others muted on no fill (the accent's half fill and the foreground on hover); each as
   wide as its name in medium weight, so choosing one moves nothing; the head's rule 8px under them; a board's **Parts**, **Nets** then **Layers**, a schematic's **Parts**, **Nets** then, for more than one
@@ -959,7 +988,7 @@ structure. Every rule here, and why:
   file's name over its parameters, a status line ("12 matches", "Saved"), a settings label; a value, a switch and a
   row's last action end on the right inset — and so does the navbar's panel toggle's icon, over it. A box drawn round
   what is read hangs out past the inset by its own padding, so what it holds stays on it: a row's fill (hover,
-  selected) by half the inset (8px in from the panel's edge), a tab's pill by its 8px, the head's icon buttons and a
+  selected) by half the inset (8px in from the panel's edge), a tab's pill by its 6px, the head's icon buttons and a
   number field's outline by their 7px. The panel owns the line: its body pads by the inset, and it sets the rows'
   `--tree-row-pad` and `--tree-row-hang` (half the inset) and `--tree-row-actions-pad` (half the inset less 2px), which
   the one row reads (`PanelSurface.jsx`, `primitives/tree-row.jsx`); no section and no list pads itself. Every rule runs the
@@ -1098,9 +1127,10 @@ structure. Every rule here, and why:
   file's name) and the sheets each places, in page order, each row the Model tree's — a branch's
   chevron or a sheet's glyph, its name, its page number as its detail, its file in its tooltip — every
   sheet open, the sheet shown lit; a press on a row shows that sheet, the way back up from one entered.
-- **Search is the panel's.** What is typed filters every searchable tab at once; the open tab shows its hits, the match
-  lit (`TreeFilterHighlight`) — the layers or sheets whose names match, the Parts' and the Nets' ranked hits (the
-  arrows and Enter walk and pick the open tab's, else the first list's) — and one line where it finds nothing there.
+- **Search is the panel's.** What is typed filters every searchable tab at once; the hits are the results (one tree's,
+  or one list grouped by tab: [The panel](#the-panel)), the match lit (`TreeFilterHighlight`) — the layers or sheets
+  whose names match, the Parts' and the Nets' ranked hits (the arrows walk them through the groups, Enter picks) — and
+  one line where it finds nothing.
   Escape or the box's X closes it, each tree folded and open as the person left it: a search opens or shuts no tree's
   own rows. Most tabs list their hits flat, with
   no chevron (the Model's, the Links', the Parts', the Nets', a board's layers, the Hierarchy); a
@@ -1110,9 +1140,8 @@ structure. Every rule here, and why:
   reveal on a hover of the view's edge, and a pick on the picture never opens it; a mouse resting on its toggle peeks it,
   over the view and pushing nothing, until the pointer has left both ([The panel](#the-panel)).
   ⌘\ (Ctrl+\) shows and hides it, and / opens it on its search with the keyboard in the box, while the view has
-  the keyboard. Docked, open or collapsed is the person's, and so is its width (232px at first; from a grip on its
-  right edge, Left/Right by 16px, from 200px to what leaves the model 640px, and, before the view is measured, no
-  wider than it is). **All of the panel's state is
+  the keyboard. Docked, open or collapsed is the person's once they choose, and so is its width (232px at first; from
+  a grip on its right edge, Left/Right by 16px, from 200px to 480px at any window width). **All of the panel's state is
   the file's**, as its camera and its layers are: open or collapsed, the width and the tab are kept in
   the file's view (`panel`, `file-viewer/filePanel.js`), written by the panel's
   own state (`useFlatPanelState`) for every view that has a panel, 2D and 3D alike, and merged into the
@@ -1126,8 +1155,8 @@ structure. Every rule here, and why:
   the pane it was framed in (`kit/viewport/flatView.js`), so a file reopened with its panel open (the
   canvas the whole view until the panel docks) comes back exactly as it was left. Zoom to fit and 100%
   measure the room beside the panel. A file whose panel the person has not opened or closed has it open, and collapsed
-  (by the width, not kept) where open it would leave the model under 640px; once they have chosen, the choice is the file's at any width, and a
-  panel opened always pushes ([The panel](#the-panel)). **On a phone** (under 600px) the panel is a sheet from the
+  (by the width, not kept) where the default-width panel would leave the model under 640px, following the window; once they have
+  chosen, the choice is the file's at any width, and a panel opened always pushes ([The panel](#the-panel)). **On a phone** (under 600px) the panel is a sheet from the
   left, in every renderer ([A phone's sidebar](#a-phones-sidebar)): `FlatPanel`'s phone page (`mode: "page"`, the
   desktop's head, tabs, search and rows) inside shadcn's Sheet; ⌘\\ opens and shuts it
   too, and / does nothing there.
@@ -1149,8 +1178,8 @@ Its panels follow these rules:
 - **One grip, on a resizable panel only**: its bottom-right corner, moving
   its width and cap at once, a separator in the tab order named after its panel (Left/Right
   nudge the width and Up/Down the cap by 16px, Home and End take both to their bounds). A folded panel has no grip: there is no height to set.
-- **Never past the viewer.** The column stops 8px above the cube's line
-  (`VIEWPORT_STACK_BOTTOM`, `calc(68px + 16px)`). When the panels need more, a `"tree"` panel
+- **Never past the viewer.** The column stops clear of Quick Edit's row
+  (`VIEWPORT_STACK_BOTTOM`, 84px off the bottom). When the panels need more, a `"tree"` panel
   gives way first, down to 128px or its content, then the `"details"` panels together, each in
   proportion to its height, down to 96px or its content; a `"fixed"` panel keeps its height.
   If what cannot give way still does not fit, the column itself scrolls — a panel is never cut.
@@ -1384,14 +1413,18 @@ not buttons of their own: changed now and then, they are submenus of the one men
 ### A phone's sidebar
 
 On a phone the navbar's panel toggle (its first control) opens the view's panel as a standard mobile sidebar: shadcn's
-**Sheet** from the left, 85% of the screen wide and 20rem at most, over the model with the Sheet's scrim, starting
-closed each time (kept nowhere). In it **the desktop's panel, the same components at the same sizes, gaps and type**:
+**Sheet** from the left, 85% of the screen wide and 20rem at most, **under the navbar** (its top the navbar's bottom
+edge, so the toggle, the name, View and Preview stay in sight and usable), over the strip, the model and Quick Edit,
+with **no scrim** and **no animation**: it is there, and gone, at once (the Sheet's `scrim={false}` and
+`animated={false}`, `usePhoneSheetPlace.js`), starting closed each time (kept nowhere). In it **the desktop's panel, the same components at the same sizes, gaps and type**:
 its head (the tabs, ⋯, the search's icon; no Back), its search, its tree rows (`primitives/tree-row.jsx`: the same 4px
 gap, 12px glyph slot, 16x20 actions 2px apart, 6px from the right; the row's own touch height, 36px, the one thing a
 phone changes in it) and every tab's content (`FlatPanel`'s `mode: "page"`). Only what a phone cannot do differs: a
 row's actions are always shown, as nothing hovers (`globals.css`'s `[data-panel-surface="page"]`). A tap outside it, a
 swipe back to the left (the sheet's `onSwipeClose`: 48px towards its edge, more across than along it), Escape or the
-toggle again close it; ⌘\ too. Nothing hovers, so a phone has no peek.
+toggle again close it; ⌘\ too. A tap on the picture lands on the Sheet's overlay, kept but clear, so it closes the sheet
+and reaches nothing under it; a tap on View, Preview or the name closes it and does what it does. Focus moves into it
+as it opens and back to the toggle as it closes. Nothing hovers, so a phone has no peek.
 
 ## Display settings and section primitives
 
@@ -1486,8 +1519,8 @@ Three interface sizes and one heading, each on a fixed line height, as Figma's U
 | Role | Size / line height / weight | Token |
 | --- | --- | --- |
 | Tooltips, shortcut hints (a menu's, a tooltip's key), small metadata (a tile's age, the app menu's version, a value badge, the zoom's percentage, a status under the view) | 11 / 16, regular | `text-tiny` |
-| The view's panel (every step of the scale inside it: `--cad-text-panel`, [One surface, one text size](#the-views-panel-and-the-tool-stack)), Quick Edit, the sub-toolbars and their popovers, Preview's settings, the tool stack's panels, and every menu, dropdown, select, context menu and toast | 12 / 16, regular (a menu's label too) | `text-xs` |
-| App chrome: the navbar and the file's name, dialogs (What's new), the Home's body, the loading indicator's step line | 13 / 20, regular | `text-ui` (`text-sm`, `text-base`) |
+| The view's panel (every step of the scale inside it: `--cad-text-panel`, [One surface, one text size](#the-views-panel-and-the-tool-stack)), Quick Edit (its chips, hints and buttons), the sub-toolbars and their popovers, Preview's settings, the tool stack's panels, and every menu, dropdown, select, context menu and toast | 12 / 16, regular (a menu's label too) | `text-xs` |
+| App chrome: the navbar and the file's name, dialogs (What's new), the Home's body, the text a person types in Quick Edit's note (and its placeholder), floating or docked, and the loading indicator's step line | 13 / 20, regular | `text-ui` (`text-sm`, `text-base`) |
 | The one heading: the CAD app's notice title (the Home's **Recent** is the navbar's, 13/20 at 500) | 15 / 20, semibold | `text-heading` |
 
 A phone takes one step up on the same line heights: 12, 13 and 14px, the heading 16px
@@ -1868,7 +1901,7 @@ so no setting turns it off.
 
 The bar stands 16px off the view's bottom. **The toolbar and the Quick Edit bar are centred on the window, always;
 panels never move them; where they meet a panel they sit above it.** Its width is 400px at most, else the window less
-16px a side (8px on a phone), measured by the one frame every view mounts (`ViewFrame.jsx`'s `QUICK_EDIT_MAX_PX` and
+16px a side (on a phone the window less 8px a side, whatever its width), measured by the one frame every view mounts (`ViewFrame.jsx`'s `QUICK_EDIT_MAX_PX` and
 `QUICK_EDIT_MARGIN_PX`, written to `--cad-quick-edit-left` and `--cad-quick-edit-width`), in the top layer over both
 panels and an overlaid one. Why: the bar is where the person writes, and it stays where their eyes left it whatever
 opens beside it; a bar that moved or shrank with each panel was a different target every time.
@@ -1880,8 +1913,8 @@ upward, line by line, as it is written (never on focus), to six lines, then scro
 border is blue while the note has the keyboard. Where the bar is narrow its chips give way to
 **+N more** sooner and Copy Prompt drops its words for its icon (only where the window makes the bar narrower than 400px).
 
-On a phone (`docked`) the bar is the same two rows across the view, 8px in, above the safe
-area, at a finger's sizes (36px buttons, the note's text a step up). A pick never brings up the
+On a phone (`docked`) the bar is the same two rows across the view's full width, 8px in a side, never capped at 400px,
+above the safe area, at a finger's sizes (36px buttons, the note's text a step up). A pick never brings up the
 keyboard there: the note is a tap away. A tap on a chip opens its card (above the chip) and
 copies nothing: the card's title copies. On a desktop a card opens above its chip too, and a
 click on the chip copies it.

@@ -30,6 +30,9 @@ const BOARD = readFileSync(new URL('../../board/__fixtures__/board.plot.json', i
 const DRAWING = readFileSync(new URL('../../dxf/__fixtures__/layered.drawing.json', import.meta.url));
 const MESH = readFileSync(join(GLB, 'pair.slide.glb'));
 const FILES = { 'hinge.step': 'step', 'blinky.kicad_pcb': 'kicad_pcb', 'layered.dxf': 'dxf', 'pair.glb': 'glb' };
+// `late.step`, the hinge again, its structure held until the test lets it go: a file whose tabs arrive after its title.
+let releaseLate;
+const lateStructure = new Promise(resolve => { releaseLate = resolve; });
 const INSET = 16;
 // A drawing's answer held back while a test looks at the panel as the file loads (`held`, released by the test).
 let held = null;
@@ -54,7 +57,7 @@ before(async () => {
     }
     const rest = path.slice(at);
     if (rest === '/api/v1/documents' && request.method === 'GET') {
-      const answer = () => json(response, { documents: Object.entries(FILES).map(([file, kind]) => {
+      const answer = () => json(response, { documents: Object.entries({ ...FILES, 'late.step': 'step' }).map(([file, kind]) => {
         const entry = { kind, file: `/models/${file}`, url: `/${file}`, hash: `h-${file}`, bytes: 4096 };
         return { entry, revision: entry.hash };
       }) });
@@ -75,6 +78,7 @@ before(async () => {
     if (rest === '/api/v1/look') return json(response, LOOK);
     if (rest === '/api/v1/look/environment') return send(response, 'application/octet-stream', ENVIRONMENT);
     if (rest.endsWith('/version')) return json(response, { version: HINGE.version, patch: null });
+    if (rest.endsWith('/structure') && rest.includes('/late.step/')) { lateStructure.then(() => json(response, STRUCTURE)); return; }
     if (rest.endsWith('/structure')) return json(response, STRUCTURE);
     if (rest.endsWith('/plot')) return json(response, BOARD);
     if (rest.endsWith('/drawing')) return Promise.resolve(held).then(() => json(response, DRAWING));
@@ -130,9 +134,14 @@ function measurePanel() {
     const range = document.createRange();
     range.setStart(node, start);
     range.setEnd(node, end);
-    const rects = [...range.getClientRects()].filter(rect => rect.width > 0);
+    // What a clipping box round it (a name that truncates) leaves of it: glyphs cut off are not drawn.
+    let clip = Infinity;
+    for (let box = node.parentElement; box && box !== panel; box = box.parentElement) {
+      if (getComputedStyle(box).overflowX !== 'visible') clip = Math.min(clip, box.getBoundingClientRect().right);
+    }
+    const rects = [...range.getClientRects()].filter(rect => rect.width > 0 && rect.left < clip - 0.5);
     if (!rects.length) continue;
-    const left = Math.min(...rects.map(rect => rect.left)), right = Math.max(...rects.map(rect => rect.right));
+    const left = Math.min(...rects.map(rect => rect.left)), right = Math.min(clip, Math.max(...rects.map(rect => rect.right)));
     push(node.parentElement, { left, right, top: rects[0].top }, 'text', text.trim());
   }
   const BOX = '[data-flat-panel-body] :is([role=combobox], [aria-haspopup=menu], [data-slot=checkbox])';
@@ -249,6 +258,31 @@ for (const file of Object.keys(FILES)) {
       return icon.left - document.querySelector('[data-testid="one"] [data-flat-panel]').getBoundingClientRect().left;
     });
     assert.ok(Math.abs(toggle - INSET) <= 0.5, `${file}: the navbar's toggle's icon at ${toggle}px`);
+    // Opening the search (its icon, or /) and closing it move nothing under the head: the body's top, the open tab's
+    // first row and the scroll stay at their pixel, in a single title's row (the drawing) and the tabs' (the model, its
+    // last tab open: not one the search covers).
+    if (file === 'hinge.step' || file === 'layered.dxf') {
+      const still = () => page.evaluate(() => {
+        const panel = document.querySelector('[data-testid="one"] [data-flat-panel]'), body = panel.querySelector('[data-flat-panel-body]');
+        const shown = body.querySelector(':scope > [data-flat-panel-section]:not([hidden])');
+        const first = shown?.querySelector('[data-tree-row], [data-slider-field], [data-panel-row], li, button') ?? shown;
+        const box = element => { const rect = element.getBoundingClientRect(); return [rect.left, rect.top, rect.width, rect.height]; };
+        return { body: body.getBoundingClientRect().top, first: first ? box(first) : null, scroll: panel.querySelector('[data-flat-panel-scroller]').scrollTop };
+      });
+      const before = await still();
+      await pane.locator('[data-flat-panel-search-open]').click();
+      await pane.locator('[data-flat-panel-search] input').waitFor();
+      assert.deepEqual(await still(), before, `${file}: the search's icon moves nothing`);
+      await page.keyboard.press('Escape');
+      await pane.locator('[data-flat-panel-search]').waitFor({ state: 'detached' });
+      assert.deepEqual(await still(), before, `${file}: closing it moves nothing`);
+      await pane.locator('[data-cad-surface]').focus();
+      await page.keyboard.press('/');
+      await pane.locator('[data-flat-panel-search] input').waitFor();
+      assert.deepEqual(await still(), before, `${file}: / moves nothing`);
+      await page.keyboard.press('Escape');
+      await pane.locator('[data-flat-panel-search]').waitFor({ state: 'detached' });
+    }
     // The collapsed panel peeking over the view (a mouse resting on its toggle) is the same panel, on the same lines.
     if (file === 'hinge.step') {
       // The surface's gaps to the view's frame (left, top, bottom): pinned it touches the edges; peeked it is a card
@@ -280,7 +314,8 @@ for (const file of Object.keys(FILES)) {
 }
 
 // While a file loads, a structure tab with no row shows placeholder rows on the rows' own lines: each glyph block on the
-// inset, each name's bar where a name starts (16px after the glyph's line), none past the right inset.
+// inset, each name's bar where a name starts (16px after the glyph's line), none past the right inset; the first under
+// the head's one block where the first real row then stands.
 test('a loading tab\'s placeholder rows stand on the inset, where the page\'s own stand-in drew them before the view was up', async t => {
   let release;
   held = new Promise(resolve => { release = resolve; });
@@ -303,13 +338,24 @@ test('a loading tab\'s placeholder rows stand on the inset, where the page\'s ow
   // The page's phase (the file not looked up yet): its stand-in; then the view's, the drawing still on its way.
   await pane.locator('aside[data-panel-loading] [data-tree-row-placeholder]').first().waitFor();
   const before = await place('aside[data-panel-loading]');
+  const stand = await page.evaluate(() => {
+    const rect = document.querySelector('[data-testid="one"] aside[data-panel-loading] [data-panel-loading-title]').getBoundingClientRect();
+    return [Math.round(rect.left * 2) / 2, Math.round((rect.top + rect.height / 2) * 2) / 2];
+  });
   await page.evaluate(() => window.__cadReleaseStat());
   await pane.locator('[data-flat-panel] [data-tree-row-placeholder]').first().waitFor();
   assert.deepEqual(await place('[data-flat-panel]'), before, 'nothing moves as the view takes over from the page\'s stand-in');
+  // The stand-in's bar stands where the view's lone title's name then does: on the inset, centred on the head's row.
+  const textAt = selector => page.evaluate(selector => {
+    const rect = document.querySelector(`[data-testid="one"] ${selector}`).getBoundingClientRect();
+    return [Math.round(rect.left * 2) / 2, Math.round((rect.top + rect.height / 2) * 2) / 2];
+  }, selector);
+  assert.deepEqual(await textAt('[data-flat-panel-heading] > span'), stand, 'the stand-in\'s title bar where the title\'s name stands');
   const placed = await page.evaluate(() => {
     const panel = document.querySelector('[data-testid="one"] [data-flat-panel]'), left = panel.getBoundingClientRect().left;
     const edges = selector => [...panel.querySelectorAll(selector)].map(node => node.getBoundingClientRect()).map(rect => [rect.left - left, rect.right - left]);
-    return { clientWidth: panel.clientWidth, glyphs: edges('[data-tree-row-placeholder-glyph]'), names: edges('[data-tree-row-placeholder-name]') };
+    return { clientWidth: panel.clientWidth, glyphs: edges('[data-tree-row-placeholder-glyph]'), names: edges('[data-tree-row-placeholder-name]'),
+      top: panel.querySelector('[data-tree-row-placeholder]').getBoundingClientRect().top - panel.getBoundingClientRect().top };
   });
   assert.equal(placed.glyphs.length, 6, 'six placeholder rows');
   const right = placed.clientWidth - INSET;
@@ -318,5 +364,31 @@ test('a loading tab\'s placeholder rows stand on the inset, where the page\'s ow
   release();
   await pane.locator('[data-flat-panel] [data-layer-row]').first().waitFor();
   assert.equal(await pane.locator('[data-flat-panel] [data-tree-row-placeholder]').count(), 0, 'gone as the layers arrive');
+  const rowTop = await page.evaluate(() => {
+    const panel = document.querySelector('[data-testid="one"] [data-flat-panel]');
+    return panel.querySelector('[data-flat-panel-body] [data-tree-row]').getBoundingClientRect().top - panel.getBoundingClientRect().top;
+  });
+  assert.equal(placed.top, rowTop, 'the first placeholder row where the first row then stands');
   assert.deepEqual(errors, []);
+});
+
+// A file's other tabs arrive after it has loaded (a model's Params, Joints and Motion come with its structure): the head
+// is one block for its lone title and for its tabs, so the body's top, where its first row stands, does not move.
+test('a file whose tabs arrive after its title: the head keeps its block and the body its top', async t => {
+  const { page, pane } = await open(t, 'late.step');
+  const place = () => page.evaluate(() => {
+    const panel = document.querySelector('[data-testid="one"] [data-flat-panel]'), top = panel.getBoundingClientRect().top;
+    const row = panel.querySelector('[data-flat-panel-body] [data-tree-row]');
+    return { head: panel.querySelector('[data-flat-panel-head]').getBoundingClientRect().height,
+      body: panel.querySelector('[data-flat-panel-body]').getBoundingClientRect().top - top, row: row ? row.getBoundingClientRect().top - top : null };
+  });
+  await pane.locator('[data-flat-panel] [data-flat-panel-heading]').waitFor();
+  const loading = await place();
+  releaseLate();
+  await pane.locator('[data-flat-panel] [role=tab]').first().waitFor();
+  await pane.locator('[data-flat-panel] [data-flat-panel-body] [data-tree-row]').first().waitFor();
+  const loaded = await place();
+  assert.deepEqual([loaded.head, loaded.body], [loading.head, loading.body], `the head and the body's top: ${JSON.stringify({ loading, loaded })}`);
+  // The first row stands at the body's top and its 8px, where it (or a row standing in for it) stood while the file loaded.
+  assert.equal(loaded.row, loading.body + 8);
 });

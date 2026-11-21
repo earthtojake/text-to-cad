@@ -287,15 +287,17 @@ The view's one panel, docked at the left, whatever the tool
 (`kit/shell/FlatPanel.jsx`): one head row, as Figma's Layers panel's — a tab per part of the file's structure (a STEP's or
 an .xbf's Model, a robot's Links; a board's Parts, Nets and Layers, a
 schematic's Parts, Nets and Hierarchy, a drawing's Layers), then, only where the file has them, its Parameters, Joints and
-Animation (`ToolPanel`s; their rows `kit/inspector/panelRows.jsx`), then Search, an icon that opens the one search box in
-the tabs' place (one tab is a plain title, a row high, its list right under it) — its lists at its full height, in one
+Animation (`ToolPanel`s; their rows `kit/inspector/panelRows.jsx`), then Search, an icon that turns the head's row into the one search box, in the tabs' (or the title's) place, nothing under
+it moving, its results one tree's hits or, where several tabs are searched (a board's, a schematic's), one list grouped
+by tab (one tab is a plain title, in the tabs' own block, so the head never changes height) — its lists at its full height, in one
 12px text size and 28px rows, a row's one glyph on the 16px line and its name 32px in. What is picked is read in Quick
 Edit's chip list (each reference its kind and key facts: `kit/inspector/inspect.js`'s descriptions); the hover tip over
 the canvas is the frame's (`kit/shell/ViewFrame.jsx`). Pinned open, the panel always pushes the model aside; collapsed, a mouse
 resting on its toggle peeks it over the model, a floating card 4px in from the edges, its content where the docked
-panel's is, pushing nothing, kept nowhere and pinned only by the toggle (`kit/shell/usePanelPeek.js`); a view
-that would leave the model under 640px beside it starts it collapsed, never written (`kit/shell/sidebars.js`); it is 232px wide (budgeted for three tabs) until its grip
-sets another width, its toggle the navbar's first control, before the logo (`file-viewer/panelToggles.js`; ⌘\); on a
+panel's is, pushing nothing, kept nowhere and pinned only by the toggle (`kit/shell/usePanelPeek.js`); until the
+person opens or closes it on a file, it follows the view, collapsed where it would leave the model under 640px, never
+written, and after that their choice holds on that file at any width (`kit/shell/sidebars.js`); it is 232px wide
+(budgeted for three tabs) until its grip sets another width, from 200 to 480px at any window width, its toggle the navbar's first control, before the logo (`file-viewer/panelToggles.js`; ⌘\); on a
 phone the toggle opens it as a sheet from the left (`primitives/sheet.jsx`).
 Its tabs stay mounted, so a tree keeps its scroll and expansion;
 only what is on screen does background work. What is picked is Quick Edit's chips. Links is

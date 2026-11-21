@@ -132,9 +132,9 @@ function drag(handle: Element, [dx, dy]: [number, number], { release = true } = 
 it("the strip is at the top centre with the stack under it; the view's panel is docked at the left, open, a tab per section, the first shown, and nothing is stored until a person changes it", () => {
   const { preferences } = frame();
   // The strip and the stack under it, 8px down from the viewer's top, centred on the whole view,
-  // stopping 8px above the cube's line (the cube's box 8px off the bottom).
+  // stopping clear of Quick Edit's row, 84px off the bottom (`VIEWPORT_STACK_BOTTOM`).
   // The panels never move it: it stands over them, centred on the window (`ViewFrame.jsx`'s top layer).
-  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: '8px', right: '8px', bottom: 'calc(84px)' });
+  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: '8px', right: '8px', bottom: '84px' });
   expect(document.querySelector('[data-cad-tool-groups]')!.closest('[data-view-top-layer]')).not.toBeNull();
   // The panel (`FlatPanel.jsx`), a board's: the search over its tabs, a tab per section in their order, the first shown.
   expect([flatPanel().getAttribute('data-flat-panel'), flatPanel().hidden]).toEqual(['docked', false]);
@@ -153,7 +153,7 @@ it("the strip is at the top centre with the stack under it; the view's panel is 
 });
 
 it("the panel's tabs are there whatever the tool, a tool's own section coming and going with it; a tab shows its section alone, its content kept; the tab, the width and a collapse are the person's, and never the tab's settings", () => {
-  // The view's frame as wide as the viewer, so the grip's bound is the model's 640px: 1280 - 640.
+  // The grip's bounds are fixed, whatever the view: 200 and 480px.
   const rect = Element.prototype.getBoundingClientRect;
   override(Element.prototype, 'getBoundingClientRect', { value(this: HTMLElement) {
     return this.hasAttribute('data-sidebar') ? DOMRect.fromRect({ x: 0, y: 0, ...VIEWER }) : rect.call(this);
@@ -173,7 +173,7 @@ it("the panel's tabs are there whatever the tool, a tool's own section coming an
   // Its width, from the grip on its right edge: 16px a key, Home and End to its bounds.
   const grip = screen.getByRole('separator', { name: 'Resize panel' });
   fireEvent.keyDown(grip, { key: 'End' });
-  expect([flatPanel().style.width, grip.getAttribute('aria-valuemax')]).toEqual(['640px', '640']);
+  expect([flatPanel().style.width, grip.getAttribute('aria-valuemin'), grip.getAttribute('aria-valuemax')]).toEqual(['480px', '200', '480']);
   fireEvent.keyDown(grip, { key: 'Home' });
   expect(flatPanel().style.width).toBe('200px');
   // Collapsed, it goes whole, nothing of it over the model (its toggle the navbar's); shown again, on the tab it showed.

@@ -184,7 +184,7 @@ test('in 3D the board is its two faces in the 2D colours, a press on a pad’s p
   const pane = page.getByTestId('one');
   await frame(pane);
   // In 2D the corner, at the top-right (the bottom row is Quick Edit's): the zoom, ONE control 28px tall, its right edge
-  // 12px in from the pane's (on the cube box's line), its middle on the tool strip's; the view's settings are the navbar's View.
+  // 12px in from the pane's (the corner's inset), its middle on the tool strip's; the view's settings are the navbar's View.
   const controls = () => pane.evaluate(element => [...element.querySelectorAll('[data-navbar-view-controls] button'), ...element.querySelectorAll('[data-zoom-pill]')]
     .map(control => { const { x, y, width, height } = control.getBoundingClientRect(); return { x, y, width, height }; }));
   const flat = await controls();

@@ -13,7 +13,8 @@ import HoverTip, { useFrameHoverTip } from "./HoverTip.jsx";
 import { usePanelToggles } from "../../../file-viewer/panelToggles.js";
 import { ViewerElementContext, ViewerHostContext } from "../../../host/context.js";
 import { Sheet, SheetContent, SheetTitle } from "@cad/ui/primitives/sheet";
-import { sidebarLayout, sidebarWant, toggleSidebar } from "./sidebars.js";
+import { usePhoneSheetPlace } from "./usePhoneSheetPlace.js";
+import { sidebarLayout, toggleSidebar } from "./sidebars.js";
 import { usePanelPeek } from "./usePanelPeek.js";
 import { hasOpenPopup } from "../../../lib/popups.js";
 import { ViewCornerSideProvider, viewCornerSide } from "./ViewCorner.jsx";
@@ -34,7 +35,7 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *   navbar's (`file-viewer/panelToggles.js`), its first control: a collapsed panel leaves nothing over the model but
  *   while a mouse rests on that toggle, when it peeks over the view, pushing nothing (`usePanelPeek.js`), until the
  *   pointer has left both, Escape, a press on the model, or a click on the toggle (or ⌘\) pins it. On a
- *   phone the same toggle opens it as a sheet from the left (shadcn's Sheet), over the model with a scrim, starting
+ *   phone the same toggle opens it as a sheet from the left (shadcn's Sheet) under the navbar, over the model with no scrim and no slide, starting
  *   closed each time: a tap outside it, a swipe back to the left, Escape or its Back put it away. Preview keeps the
  *   docked panel mounted, out of sight, so a tree keeps its state.
  * - **The strip's column** at the top centre of the WHOLE view, always: no panel moves it, and where it meets one it
@@ -52,8 +53,8 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  * - **The top-right**: the corner (below), and under it (`ViewportTopRight`, `--cad-corner-below`, measured) the host's
  *   notice once the view is up.
  * - **Quick Edit's bar** (`quickEdit`), in the same layer, at the bottom, centred on the WHOLE view, always: 400px at
- *   most, narrower only with the view (16px in from each side); over a panel where they meet; a phone's the view's width
- *   less its inset, above its safe area. The measure writes where it stands (`--cad-quick-edit-left`,
+ *   most, narrower only with the view (16px in from each side); over a panel where they meet; a phone's the view's full
+ *   width less its 8px inset a side, never capped, above its safe area. The measure writes where it stands (`--cad-quick-edit-left`,
  *   `--cad-quick-edit-width`, from the view's left).
  * - **The navbar's view settings** (`navbar`: what a view portals into the file's navbar, `NavbarViewControls.jsx`),
  *   drawn while the chrome is, on a desktop and a phone alike (the corner is a desktop's alone).
@@ -131,19 +132,18 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   // What a press would pick, beside the pointer.
   const hoverTip = useFrameHoverTip({ hovered: inspect?.hovered || "", describe: inspect?.describe || null, tip: inspect?.tip || null, enabled: selecting && !toolsHidden && !previewing });
   const flat = useFlatPanelState({ frameRef: root, kind: panel?.kind ?? "", toolStack: layout, onToolStackChange: onLayoutChange, compact: Boolean(compact) });
-  // The choice kept (the file's entry in the tab's settings, `filePanel.js`): open or closed. The panel opened over the
-  // width's collapse is the view's for now, kept nowhere.
+  // The person's choice on this file (its entry in the tab's settings, `filePanel.js`): open, closed, or none yet (the
+  // view's width decides, `sidebars.js`).
   const kept = flat.record;
-  const [opened, setOpened] = useState(false);
   // The panel is there from the view's first frame, the file still loading: its kind says it has one (its tabs fill as
   // the file arrives), so neither it nor its toggle comes in late and pushes the model aside. A load that failed, or a
   // compact host, has none.
   const has = sided && !(failed ?? chromeHidden) && !compact;
-  const sidebarState = { frameWidth: flat.frameWidth, panelWidth: flat.width, want: sidebarWant(kept.open), has: has && !mobile, opened, mobile, phoneHas: has };
+  const sidebarState = { frameWidth: flat.frameWidth, choice: kept.open, has: has && !mobile, mobile, phoneHas: has };
   const { mode } = sidebarLayout(sidebarState);
   const stateRef = useRef(sidebarState);
   stateRef.current = sidebarState;
-  // A choice the person made is kept, for the file; a collapse the width made never is.
+  // A choice the person made is kept, for the file, and holds at any width; what the width does is never kept.
   const change = flat.change;
   // A peek (`usePanelPeek.js`): the collapsed panel over the view while a mouse rests on its toggle; never kept.
   const peek = usePanelPeek({ enabled: has && !mobile && !previewing && mode === "closed" });
@@ -153,11 +153,10 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
     if (current.mobile) { if (current.phoneHas) setSheetOpen(open => !open); return; }
     if (!current.has) return;
     // A click (or ⌘\) while it peeks pins it: the panel opens as a click on a collapsed one always has, where the peek
-    // is (no slide: the card becomes the docked panel in place).
+    // is (no slide: the card becomes the docked panel in place), and that is the person's choice on this file, kept. A
+    // peek on its own is none.
     closePeek(false, true);
-    const next = toggleSidebar(current);
-    if (next.kept) change({ open: next.want });
-    setOpened(next.opened);
+    change({ open: toggleSidebar(current).open });
   }, [change, closePeek]);
   // Escape puts a peek away, before anything else of the view's (the tool in hand, the selection: the view's ladder
   // leaves it to the peek, `lib/popups.js`), after a popup or the search box in it has spent its own.
@@ -191,10 +190,14 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
     width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
   // A phone's: the same panel, its tabs, search and every tab's content, the same components at the same sizes (a tree
   // row's own touch height aside), in a sheet from the left over the model (`FlatPanel`'s "page" mode), in the viewer's element.
+  // Under the navbar, there and gone at once, with no scrim (`usePhoneSheetPlace`).
   const closeSheet = useCallback(() => setSheetOpen(false), []);
+  const sheetPlace = usePhoneSheetPlace(viewerElement, has && mobile && sheetOpen && !previewing);
   const sheetNode = has && mobile ? <Sheet open={sheetOpen && !previewing} onOpenChange={setSheetOpen}>
     <SheetContent side="left" showCloseButton={false} onSwipeClose={closeSheet} container={viewerElement?.current ?? undefined}
-      aria-describedby={undefined} className="w-[85%] max-w-[20rem] gap-0 overflow-hidden border-border p-0" data-panel-sheet="">
+      scrim={false} animated={false} style={sheetPlace.style} overlayStyle={sheetPlace.style} onCloseAutoFocus={sheetPlace.onCloseAutoFocus}
+      onPointerDownOutside={sheetPlace.onPointerDownOutside}
+      aria-describedby={undefined} className="h-auto w-[85%] max-w-[20rem] gap-0 overflow-hidden border-border p-0" data-panel-sheet="">
       <SheetTitle className="sr-only">{panel.label}</SheetTitle>
       <FlatPanel mode="page" open onClose={closeSheet} loading={panelLoading} label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null}
         sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab} width={flat.width} maxWidth={flat.maxWidth}
@@ -223,11 +226,11 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
       // rest is: whenever the view's box or what stands in it changes.
       setCornerSide(viewCornerSide(frame));
       const stageBox = stage.getBoundingClientRect();
-      // Quick Edit's bar, centred on the whole view, always: 400px at most, else the view's width less its margins.
-      // No panel moves or narrows it; where it meets one, it stands over it.
+      // Quick Edit's bar, centred on the whole view, always: 400px at most, else the view's width less its margins; a
+      // phone's the view's full width less its inset, uncapped. No panel moves or narrows it; where it meets one, it stands over it.
       const viewWidth = frame.getBoundingClientRect().width;
       const margin = mobile ? VIEWPORT_INSET_PX : QUICK_EDIT_MARGIN_PX;
-      const barWidth = Math.max(0, Math.min(QUICK_EDIT_MAX_PX, viewWidth - 2 * margin));
+      const barWidth = Math.max(0, mobile ? viewWidth - 2 * margin : Math.min(QUICK_EDIT_MAX_PX, viewWidth - 2 * margin));
       frame.style.setProperty("--cad-quick-edit-left", `${Math.round((viewWidth - barWidth) / 2)}px`);
       frame.style.setProperty("--cad-quick-edit-width", `${Math.round(barWidth)}px`);
       // The rows with something in them: an empty one (no update under way) still takes the

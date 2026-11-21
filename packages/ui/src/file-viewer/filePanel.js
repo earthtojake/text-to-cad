@@ -8,11 +8,11 @@ import { createContext } from "react";
 // `FilePanelContext` — the tab's settings for this browser session, the file's entry. Each absent until the
 // person sets it:
 //
-//   open          the person opened (`true`) or closed (`false`) the left panel; absent, open;
-//   width         the width they dragged it to;
+//   open          the person opened (`true`) or closed (`false`) the left panel, which then holds at any width;
+//                 absent, no choice yet: the view's width opens or collapses it (`renderers/kit/shell/sidebars.js`);
+//   width         the width they dragged it to (drawn within the panel's bounds: `panelToggles.js`'s `clampPanelWidth`);
 //   tab           the tab it shows.
-// Only a choice is written: a panel the view collapsed because it was too narrow (`renderers/kit/shell/sidebars.js`)
-// is not, so a wider view brings it back.
+// Only a choice is written: what the view's width does to the panel is not, and a peek is no choice.
 // (A record from before the panel lost its Selected pane may hold `detailHeight`, one from when the view had a right
 // panel `right`, `rightWidth` and `sections`, and one from when \ alone hid everything `hidden`: each is read as nothing.)
 //

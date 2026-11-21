@@ -372,8 +372,9 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
           <div ref={field} role="textbox" aria-multiline="true" aria-label={t("quickEdit.describeLabel")} tabIndex={0}
             contentEditable="plaintext-only" suppressContentEditableWarning data-placeholder={t("quickEdit.describe")} data-quick-edit-note=""
             className={cn("w-full whitespace-pre-wrap break-words px-1.5 py-1.5 text-foreground outline-none empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]",
-              // The size before the 20px lines: cn() lets a later font size drop an earlier leading.
-              docked ? "min-h-9 text-ui leading-5" : "min-h-8 text-xs leading-5")}
+              // What a person types (and its placeholder) at the chrome's UI size, as a field's text is, docked or floating;
+              // the size before the 20px lines: cn() lets a later font size drop an earlier leading.
+              "text-ui leading-5", docked ? "min-h-9" : "min-h-8")}
             onInput={event => readNote(event.currentTarget)} onKeyDown={onKeyDown} onPaste={onPaste} onMouseDown={onNoteMouseDown} />
         </ScrollArea>
         <div className="flex shrink-0 items-center gap-1" data-quick-edit-actions="">{ctas()}</div>

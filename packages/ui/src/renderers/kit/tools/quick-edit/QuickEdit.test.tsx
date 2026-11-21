@@ -292,6 +292,8 @@ it("is a chat's input at the bottom of the view: what goes with the note on its 
   expect([box()!.querySelector('[data-quick-edit-resize]'), document.querySelector('[data-quick-edit-sheet]')]).toEqual([null, null]);
   expect((box()!.querySelector('[data-quick-edit-note-box]') as HTMLElement).style.maxHeight).toBe('132px');
   expect(field().getAttribute('data-placeholder')).toBe('Describe a change…');
+  // What a person types, and the placeholder, at the chrome's UI size (13/20), not the bar's 12px.
+  expect([field().classList.contains('text-ui'), field().classList.contains('text-xs'), field().classList.contains('leading-5')]).toEqual([true, false, true]);
 });
 
 it('Shift+Enter writes a new line in the note, a real one that goes with it; Enter copies', async () => {
