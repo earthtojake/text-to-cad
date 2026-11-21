@@ -1345,6 +1345,32 @@ there, so no script names it in its header. It is refused by name, naming the pa
 has no wheel, no engine answers, or the making fails; a hit needs no coacd at all. `cad[coacd]` is one wheel, about
 3 MB, for macOS arm64, Linux x86-64 and aarch64 and Windows x86-64.
 
+**A part's features.** `cad.quiddity.features(part)` (`features_of(parts)` for several) asks quiddity, a recogniser
+of a STEP part's features, about one part of a document: its holes and its other features, each with its faces, and
+where every face went (a feature, the body's own stock, a refusal, unexplained). The part's STEP is written in memory
+(`engine/export/step.py`'s `shape_bytes`: geometry alone, where the part stands, the same bytes for the same shape)
+and handed over a pipe to a child interpreter (`python -m cad.quiddity._recogniser`, the one module that imports
+quiddity), one child for all the parts of a call, nothing written to disk. It is a process of its own because
+quiddity has no time limit, no way to stop a run and no bound on its memory, and a fault in its native code would
+end the process that holds the kernel: a part not answered in `timeout_s` (30 s unless the caller says) is given up
+and the child stopped, a child that ends with a part says so, and the parts after either go to a new child. quiddity
+numbers the faces of the file from 0 in its order; the kernel's writer puts a shape's faces there in the order it
+numbers them (`TopExp.MapShapes`, a ref's ordinal), so quiddity's face `i` is `face i+1`. That is checked on every
+call (`cad.quiddity._features`, the gate): quiddity counts the faces the kernel counts and accounts for each; the
+point it proves on each face lies on the kernel's face of that ordinal; and where a record's family says what its
+faces are, the kernel's own reading of them agrees (a hole's cylinders concave, about its axis and at its diameter or
+a step's; a countersink's cone about that axis; a step level's faces planes). A part that fails any of it has no
+features, never some. The result is plain data, JSON-safe and the same for the same part: `available`, and then
+either the records, the holes in the words a check reads first and the accounting of every face, each face its
+ordinal and every length in millimetres where the part stands; or the reason nothing was measured, one of a closed
+set (`cad.quiddity.REASONS`), which no call raises for. An available result is not a complete one: quiddity leaves
+faces unexplained and says which, so nothing found is never nothing there. Where the calling environment does not
+hold quiddity -- the base, `cad[build123d]`, which the engine's kernel processes run in -- the device's engine makes
+`cad[quiddity]`'s environment on first need over its door (`{"op": "integration", "integration": "quiddity"}`,
+`integration_env.made`) and the child runs there, so the base is as it was. `cad[quiddity]` is one wheel, about
+9 MB, for macOS, Linux x86-64 and aarch64 (glibc 2.28 or newer) and Windows x86-64; anywhere else a part's features
+are unavailable (`no_wheel`). No command runs it and no check reads it yet.
+
 **A GLB in Blender's scene.** `cad.blender.load` is the `blender` integration's one helper, for a script that
 renders with bpy (Blender as a Python module, its extra `cad[blender]`), run by `cad run` in the environment
 **Running a model** describes; no command of the server's runs it. It reads the GLB with the library's own

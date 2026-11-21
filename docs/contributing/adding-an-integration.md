@@ -1,9 +1,9 @@
 # Adding an integration
 
 An **integration** is our support for one third-party tool, named for the tool's own project
-(`build123d`, `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`, `orcaslicer`), never for a
-capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs, where
-it needs any (`orcaslicer`'s is the standard library alone: no extra); our code for it --
+(`build123d`, `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`, `orcaslicer`, `quiddity`),
+never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code for
+it needs, where it needs any (`orcaslicer`'s is the standard library alone: no extra); our code for it --
 helpers that take its objects, producers and operations; and a process kind: in-process, separate
 process, or both. The definitions and laws are the library's README
 ([`packages/cad/README.md`](../../packages/cad/README.md), **Definitions** and laws 23 to 28); the
@@ -36,6 +36,7 @@ The integrations so far came out in different shapes, each from those answers:
 | `trimesh` | mesh measurements as a library | a mesh's 3D printing check: the measurements judged against cited rules, in the shape every manufacturing check answers |
 | `netgen`, `calculix` | a mesher, a solver | a B-rep type's `solve`: the study read, the document meshed and solved, the results as standard files |
 | `coacd` | convex decomposition of a mesh | nothing a person calls: it backs `cad.mujoco.decompose`, run in a process of its own, its hulls kept in the cache |
+| `quiddity` | a recogniser of a STEP part's features, every face accounted for: one Python function that takes a file or its bytes and runs to its end | the tie to a document: `cad.quiddity.features` hands it one part alone, answers each face by its ordinal on the part and checks that numbering against the kernel on every call, runs it in a process of its own that is stopped past a time limit, and gives one explicit result where nothing was measured. Nothing a person calls: a check reads it. No document type and no command |
 | `blender` | all of Blender as a Python module, `bpy` | one helper, `cad.blender.load`: a GLB cad wrote, in Blender's scene, with each node's object by its name and its clips to play. The framing, the lights and the render are `bpy`'s own, in the script. No document type and no command |
 | `mujoco` | a compiler, a simulator, `MjSpec`, MuJoCo Studio | a document as an `MjSpec`, a part's collision chosen by its label path, a spec saved as a folder that travels, and one operation on a file that is no document type, `cad mujoco check` (below). No reader, no viewer and no still of an MJCF: Studio shows one |
 | `orcaslicer` | a slicer's command line and app, which keep presets as differences from a parent | the presets its command line cannot make: `cad orcaslicer presets` names those a person can select, and `cad orcaslicer complete` writes them with every parent merged in and the printer named as compatible (below). The slice stays OrcaSlicer's own command line, which our code never runs. Standard library alone: no extra, no probe |
@@ -94,7 +95,8 @@ document with the kernel, meshes it with netgen and solves it with CalculiX: the
 asks the engine for that environment over its door (`{"op": "integration"}`, `integration_env.made`), which makes
 it the same way and answers its Python, and runs the integration's code there in a process of its own: a worker's
 decomposition of a collision, the `coacd` integration's (`cad.engine.hulls`), so no model names `cad[coacd]` in its
-header. An external program that ships as a Python package (KiCad's `kicad-cli`, in
+header; and a part's features, the `quiddity` integration's (`cad.quiddity._process`), so the base the kernel
+processes run in stays `cad[build123d]`. An external program that ships as a Python package (KiCad's `kicad-cli`, in
 kicode; CalculiX's `ccx`, in the cad-ccx package) is its integration's extra and installs the same way; any other is
 the person's to install, found by its probe: an integration with no extra and a probe alone. When a program
 ships no package, packaging it, its own binary unmodified in a wheel per platform with a launcher that names

@@ -69,7 +69,7 @@ These words mean one thing each, in the code, the commands and every document.
   OrcaSlicer reads it.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`, `orcaslicer`),
+  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`, `orcaslicer`, `quiddity`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs, where it needs any (`orcaslicer`'s code is the standard library alone, so it has none); our
   code for it -- helpers that take its objects, producers and operations; and a process kind: in-process,
@@ -420,9 +420,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     ended for certain a minute past them; cad's own update begins none while such a run is going. Nothing waits on
     the install but a start that would otherwise start the release it replaces.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
-    `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
-    it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot
-    reach the network says so in a line, and nothing else waits on it.
+    `cad[coacd]`'s, for a MuJoCo function's `decompose`; `cad[quiddity]`'s, for a part's features) is fetched
+    once, the first time a command needs it, from uv's cache and the network, and works offline after that; a
+    first-need fetch that cannot reach the network says so in a line, and nothing else waits on it.
     A command sends nothing itself: what it counted -- an engine verb's export or snapshot
     (`_internal/engine_telemetry.py`, the server's observer of the engine), a drawing, a crash --
     and each model build the daemon answered, counted there after its answer, for the person who
@@ -546,6 +546,10 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     with nothing of ours between, a remote service, or a desktop app the person uses is no integration.
     *The signature rule* decides where a helper goes: one taking only paths, plain values or our own types
     goes under the document type; one taking a third-party library's objects goes under that integration.
+    A tool that has no objects of its own (quiddity: a STEP's bytes in, JSON out) is asked about another
+    integration's: the helper that asks goes under the tool it asks (`cad.quiddity.features` takes a part's
+    shape, build123d's), reaches the other integration through the library's own modules, and still imports
+    no dependency but its own extra's.
 
 26. **A decorator works out its producer from what the function returns.** *The package.* A file decorator declares a
     persistent script's output; the registry's producers -- each a type, a matcher, the code that writes
@@ -719,6 +723,12 @@ src/cad/
                          #   render, every node's object found by its place in the file, each node
                          #   a clip moves put back where the file places it, and one clip played at
                          #   a time (load, Model, Clip: _scene)
+  quiddity/              # the quiddity integration, the feature recogniser: one part's features as plain
+                         #   data, each face by its ordinal on the part, or why there are none (features,
+                         #   features_of: _features, the mapping and the gate that checks it against the
+                         #   kernel on every call); quiddity itself in a process of its own that is stopped
+                         #   past a time limit (_process, which starts it; _recogniser, the one module that
+                         #   imports quiddity; _frames, what crosses the pipe between them)
   calculix/              # the calculix integration, the cad-ccx package's ccx: found, checked and run
                          #   headless (_program, on _internal/programs; `cad run ccx`, _command),
                          #   its input and printed output (_files)
