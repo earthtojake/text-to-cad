@@ -416,12 +416,13 @@ function XbfSurface({ view, data }) {
     setChosen(now => pickNode(now, id, multiSelect));
   }, [ensureSelect]);
   // Isolate: what it names alone in reach, everything else dimmed; its parts shown, opened.
-  const isolate = useCallback((ids) => {
+  // `keepSelection`: a double-click's isolate, which leaves the selection as the gesture's first click left it.
+  const isolate = useCallback((ids, { keepSelection = false } = {}) => {
     if (!assembly) return;
     const targets = [ids].flat().filter(id => tree.nodes.has(id));
     if (!targets.length) { setIsolatedIds(EMPTY); return; }
     const leaves = new Set(leavesOf(targets));
-    setChosen(EMPTY);
+    if (!keepSelection) setChosen(EMPTY);
     setIsolatedIds(targets);
     setExpansion(now => openRows(now, targets, "isolation"));
     setHiddenIds(now => (now.some(id => leaves.has(id)) ? now.filter(id => !leaves.has(id)) : now));
@@ -563,12 +564,9 @@ function XbfSurface({ view, data }) {
     if (chains.length) setChosen(now => withTangentChains(now, chains));
   }, [scene, groupsOf]);
 
-  // The selection as the last activation found it: what a double-click whose first click picked puts back.
-  const lastPick = useRef(null);
   const handlePick = useCallback((found, modifiers) => {
     const hit = found?.press || null;
     const multiSelect = Boolean(modifiers?.multiSelect);
-    lastPick.current = { before: selectedRef.current };
     if (shellRef.current?.toolMode !== XBF_TOOL.SELECT) ensureSelect();
     if (!hit) { if (!multiSelect) { setChosen(EMPTY); measureRef.current.select([]); } return; }
     if (!multiSelect) measureRef.current.select([]);
@@ -576,6 +574,19 @@ function XbfSurface({ view, data }) {
     const node = nodeOf(hit);
     if (node && (!selectableIds || selectableIds.has(node))) setChosen(now => pickNode(now, node, multiSelect));
   }, [ensureSelect, nodeOf, selectableIds]);
+  // Whether a pick would take the selection away rather than select what was pressed: the thing selected pressed
+  // again (let go of), or empty space with something selected. Such a pick waits the double-click window
+  // (`clickActivation.js`), so a double-click never shows the selection going before it acts.
+  const pickTakesAway = useCallback((found, modifiers) => {
+    const hit = found?.press || null;
+    const multiSelect = Boolean(modifiers?.multiSelect);
+    const now = selectedRef.current;
+    if (!hit) return !multiSelect && now.length > 0;
+    const pressed = hit.kind ? [hit.id] : [nodeOf(hit)].flat().filter(Boolean);
+    if (!pressed.length) return false;
+    const next = hit.kind ? pickElements(now, pressed, multiSelect) : pickNode(now, pressed, multiSelect);
+    return !pressed.every(id => next.includes(id));
+  }, [nodeOf]);
   // Box select: what the box takes of the model, by a click's rules (`pickBox`, `pickOptions`): what
   // shows in it, touching it even in part. Under
   // All the faces and edges of the parts that are open and every other part as the node a click
@@ -643,19 +654,17 @@ function XbfSurface({ view, data }) {
     const subject = xbfLookSubject(scene, id);
     if (subject) shellRef.current?.frame.viewerRef.current?.lookAt?.(subject);
   }, [scene]);
-  // `activated`: the gesture's first click picked (`clickActivation.js`), so the selection it found
-  // comes back first, through the one setter every pick goes through; then the double-click acts
-  // as if that click had never happened. Under Select, Explode or Clip alike: under the two a pick
-  // would leave, the click waited, so the tool is still the one in hand.
-  const handleDoublePick = useCallback((clientX, clientY, { activated = false } = {}) => {
-    if (activated && lastPick.current) setChosen(lastPick.current.before);
-    lastPick.current = null;
+  // The gesture's first click stands: what it selected stays selected, and a click that would have taken the
+  // selection away waited and was dropped (`pickTakesAway`), so nothing is put back and nothing flickers. Under
+  // Select, Explode or Clip alike: under the two a pick would leave, the click waited, so the tool is still the
+  // one in hand.
+  const handleDoublePick = useCallback((clientX, clientY) => {
     const hit = pickAtClient(clientX, clientY);
     // Empty space: out of isolation, or, with nothing isolated, the model fitted (as F, and every view's double-click).
     if (!hit) { if (isolatedIdsRef.current.length) exitIsolate(); else shellRef.current?.frame.viewerRef.current?.resetZoom?.(); return; }
     if (hit.kind) { usage.used("look_at"); lookAt(hit.id); return; }
     const node = nodeOf(hit);
-    if (node && assembly) { usage.used("isolate"); isolate([node]); }
+    if (node && assembly) { usage.used("isolate"); isolate([node], { keepSelection: true }); }
   }, [pickAtClient, exitIsolate, lookAt, nodeOf, assembly, isolate, usage]);
   // Under Measure, as a STEP's: the face or edge Measure takes there is looked at, empty space
   // leaves isolation (the presses of the gesture were Measure's own).
@@ -812,7 +821,7 @@ function XbfSurface({ view, data }) {
         <XbfMeasureOverlay viewport={viewport} scene={scene} measure={measure} picking={measuring} preview={shell.previewing}
           filter={measureFilter} source={source} fetch={engineFetch} onHoverElement={hoverElement} onDoublePick={handleMeasureDoublePick} />
         {handles ? <JointHandleOverlay handles={handles} layoutSeamRef={handleLayoutRef} {...viewport} /> : null}
-        <XbfPick viewport={viewport} scene={picker} enabled={picking} onPick={handlePick} onHover={handleHover} onDoublePick={handleDoublePick}
+        <XbfPick viewport={viewport} scene={picker} enabled={picking} onPick={handlePick} takesAway={pickTakesAway} onHover={handleHover} onDoublePick={handleDoublePick}
           deferRef={deferPickRef} pointerTypeRef={pointerTypeRef} />
       </>;
     }} />;
@@ -832,10 +841,10 @@ const COARSE_TAP_SLOP_PX = 12;
  * (`kit/viewport/touchGestures.js`), and as a finger's press carries no count from the browser, the
  * second tap of one is counted here by the same window.
  */
-function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, deferRef, pointerTypeRef }) {
+function XbfPick({ viewport, scene, enabled, onPick, takesAway, onHover, onDoublePick, deferRef, pointerTypeRef }) {
   const { hostRef, runtimeRef, viewerReadyTick } = viewport;
   const callbacks = useRef(null);
-  callbacks.current = { onPick, onDoublePick };
+  callbacks.current = { onPick, onDoublePick, takesAway };
   // The browser's count of the press just released in its click sequence (`detail`: 2 for a double-click's second).
   const countRef = useRef(0);
   const activation = useMemo(() => createClickActivation({ commit: (found, options) => callbacks.current.onPick(found, options) }), []);
@@ -887,9 +896,9 @@ function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, defe
     };
     const dblclick = (event) => {
       if (!onCanvas(event)) return;
-      // Whether the first click of this gesture picked: what the double-click puts back first.
-      const activated = activation.double();
-      callbacks.current.onDoublePick?.(event.clientX, event.clientY, { activated });
+      // A click still waiting (the gesture's second, or one that would take the selection away) is dropped.
+      activation.double();
+      callbacks.current.onDoublePick?.(event.clientX, event.clientY);
     };
     host.addEventListener("pointerdown", down, true);
     host.addEventListener("mousedown", mouseDown, true);
@@ -910,7 +919,10 @@ function XbfPick({ viewport, scene, enabled, onPick, onHover, onDoublePick, defe
   }, [enabled, hostRef, runtimeRef, viewerReadyTick, pointerTypeRef, activation]);
   usePointerPick({
     viewport, scene, enabled, onHover,
-    onPick: (found, modifiers) => activation.tap(countRef.current, found, modifiers, { wait: Boolean(deferRef.current) }),
+    onPick: (found, modifiers) => activation.tap(countRef.current, found, modifiers, {
+      wait: Boolean(deferRef.current) || Boolean(callbacks.current.takesAway?.(found, modifiers)),
+      // A finger's double-click window is its double tap's.
+      waitMs: pointerTypeRef.current === "touch" ? DOUBLE_TAP_MS : undefined }),
     sameHit: (left, right) => (left?.rest?.id || "") === (right?.rest?.id || "")
   });
   return null;

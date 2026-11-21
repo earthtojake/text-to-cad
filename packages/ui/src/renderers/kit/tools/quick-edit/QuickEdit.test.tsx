@@ -31,19 +31,21 @@ const note = () => field().textContent;
 const write = (value: string) => { field().textContent = value; fireEvent.input(field()); };
 const buttons = () => within(box()!).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent);
 
-it('follows what it would carry while the note is empty: open for the person with the keyboard, for an agent without it', () => {
+it('is always there: one row with nothing to carry, no close button; a row of attachments above the note with a pick, the keyboard the person\'s, never an agent\'s', () => {
   const edge = { resource, target: { kind: 'cad-selector', selectors: ['base/e:base.extrude1.3'] } } as const;
   const { update } = mount();
-  // With nothing to carry there is nothing at all: no box, and no button standing in for one.
-  expect(box()).toBeNull();
-  expect(screen.queryByRole('button')).toBeNull();
-  // An agent's selection (no press of the person's) opens it, and leaves their keyboard where it was.
+  // Nothing to carry: the bar, one row (the note and Copy Prompt); no attachments row, no X.
+  expect([box() !== null, box()!.querySelector('[data-quick-edit-context]'), buttons()]).toEqual([true, null, ['Copy Prompt']]);
+  // An agent's selection (no press of the person's) brings the attachments, above the note, which stays the same
+  // element at the bar's foot (its box unmoved: `RendererShell.browser.test.mjs`), and leaves their keyboard where it was.
+  const compose = box()!.querySelector('[data-quick-edit-compose]');
   update({ references: [face] });
-  expect(box()).not.toBeNull();
-  expect(document.activeElement).not.toBe(field());
+  const context = box()!.querySelector('[data-quick-edit-context]');
+  expect([context !== null, document.activeElement === field(), box()!.querySelector('[data-quick-edit-compose]') === compose,
+    Boolean(context && context.compareDocumentPosition(compose!) & Node.DOCUMENT_POSITION_FOLLOWING)]).toEqual([true, false, true, true]);
   update({ references: [] });
-  expect(box()).toBeNull();
-  // The person's pick opens it with the keyboard in its note; a renderer with no chips of its own has its references
+  expect([box() !== null, box()!.querySelector('[data-quick-edit-context]')]).toEqual([true, null]);
+  // The person's pick puts the keyboard in its note; a renderer with no chips of its own has its references
   // drawn as chips, one chip as every other: one is its own name, several their count.
   const groupText = () => [...box()!.querySelectorAll('[data-quick-edit-ref]')].map(chip => chip.textContent);
   press();
@@ -62,26 +64,13 @@ it('follows what it would carry while the note is empty: open for the person wit
   update({ references: several });
   expect(groupText()).toEqual(['3 refs']);
   expect(quickEditReferenceIds(several)).toEqual(['base/f:base.extrude1.2', 'base/e:base.extrude1.3', 'base/e:base.fillet1.4']);
-  // A note keeps it open when the selection goes.
+  // A note is kept as the selection goes.
   write('Round it.');
   update({ references: [] });
   expect(note()).toBe('Round it.');
-  // The X puts the bar away, the note with it, for what it carries now: the selection stays (no clear asked of the
-  // renderer), and a new pick brings it back, empty.
-  const clear = vi.fn();
-  update({ references: [face, edge], onClear: clear });
-  fireEvent.click(within(box()!).getByRole('button', { name: 'Close Quick Edit' }));
-  expect([box(), clear.mock.calls.length]).toEqual([null, 0]);
-  update({ references: [face, edge], onClear: clear });
-  expect(box()).toBeNull();
-  update({ references: [face], onClear: clear });
-  expect(note()).toBe('');
-  update({ references: [] });
-  expect(box()).toBeNull();
-  // Escape keeps a note, box and all; in an empty box it is the viewer's own (whose clear closes it).
+  // Escape keeps a note; in an empty box it is the viewer's own (whose clear takes the attachments).
   const escape = vi.fn();
   update({ references: [face], onEscape: escape });
-  write('Round it.');
   fireEvent.keyDown(field(), { key: 'Escape' });
   expect([box() !== null, escape.mock.calls.length]).toEqual([true, 0]);
   write('');
@@ -89,12 +78,12 @@ it('follows what it would carry while the note is empty: open for the person wit
   expect(escape.mock.calls.length).toBe(1);
 });
 
-it('opens with an annotation while there is ink, taking the keyboard once the pen lifts, and closes when the ink goes', () => {
+it('carries the annotation while there is ink, taking the keyboard once the pen lifts, and lets it go with the ink', () => {
   const annotation = (present: boolean) => ({ present });
   const view = () => document.querySelector('[data-slot="cad-file-view"]')!;
   const { update } = mount();
   update({ annotation: annotation(false) });
-  expect(box()).toBeNull();
+  expect(box()!.querySelector('[data-quick-edit-context]')).toBeNull();
   fireEvent.pointerDown(view());
   update({ annotation: annotation(true) });
   expect(box()!.querySelector('[data-quick-edit-ref="annotation"]')!.textContent).toBe('Annotation');
@@ -102,7 +91,7 @@ it('opens with an annotation while there is ink, taking the keyboard once the pe
   fireEvent.pointerUp(view(), { button: 0 });
   expect(document.activeElement).toBe(field());
   update({ annotation: annotation(false) });
-  expect(box()).toBeNull();
+  expect(box()!.querySelector('[data-quick-edit-context]')).toBeNull();
   update({ annotation: annotation(true) });
   write('A boss here.');
   update({ annotation: null });
@@ -116,7 +105,7 @@ it('offers the buttons the host can carry out, the rightmost primary and pressed
   const used = vi.fn();
   mount(testHost({ promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver, send }, usage: { used } }), { references: [face], onClear: clear });
   // The reference's own chip first (a renderer with no chips of its own has one a reference), then the bar's buttons.
-  expect(buttons()).toEqual(['base/f:base.extrude1.2', 'Close Quick Edit', 'Copy Prompt', 'Queue', 'Send']);
+  expect(buttons()).toEqual(['base/f:base.extrude1.2', 'Copy Prompt', 'Queue', 'Send']);
   expect(within(box()!).getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
   write('Make it 2 mm thicker.');
   fireEvent.keyDown(field(), { key: 'Enter', shiftKey: true });
@@ -145,8 +134,8 @@ it('copies the note with its references by their files\' absolute paths, and its
   };
   const clear = vi.fn();
   mount(host, { references: [face], annotation, prompt, onClear: clear });
-  // The annotation is a chip of its own, Annotation, on the context row; without a way to wipe it, it has no X.
-  expect(buttons()).toEqual(['Annotation', 'base/f:base.extrude1.2', 'Close Quick Edit', 'Copy Prompt']);
+  // The annotation is a chip of its own, Annotation, on the attachments row; without a way to wipe it, it has no X.
+  expect(buttons()).toEqual(['Annotation', 'base/f:base.extrude1.2', 'Copy Prompt']);
   write('Round this edge.');
   expect(prompt.files).not.toHaveBeenCalled();
   fireEvent.click(within(box()!).getByRole('button', { name: 'Copy Prompt' }));
@@ -241,10 +230,6 @@ it('a pasted reference is a chip in the note, where it was pasted, and goes as t
   fireEvent.click(within(box()!).getByRole('button', { name: 'Copy Prompt' }));
   expect(await waitFor(() => copied)).toBe('Round /models/parts/hinge.step#hinge/e:hinge.make1.4,hinge/e:hinge.make1.5 \nand\n/robots/arm.urdf#upper_arm see /models/parts/hinge.step#hinge/e:hinge.make1.9'
     + '\n\nFile: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#base/f:base.extrude1.2');
-  // The bar's X empties the note, chips and all, and puts the bar away while the selection stands.
-  const written = field();
-  fireEvent.click(within(box()!).getByRole('button', { name: 'Close Quick Edit' }));
-  expect([written.textContent, written.childNodes.length, box()]).toEqual(['', 0, null]);
 });
 
 it('every chip\'s copy pasted is its pill, as its chip shows it: the annotation, a named part', async () => {
@@ -281,16 +266,19 @@ it('keeps the note and says why when it did not go, and counts no use', async ()
   expect([used.mock.calls.length, within(box() ?? document.body).queryByRole('alert')]).toEqual([1, null]);
 });
 
-it("is a chat's input at the bottom of the view: what goes with the note on its first row, the X at its end; the note under it, its buttons at its right; one line growing as it is written to six", () => {
+it("is a chat's input at the bottom of the view: its attachments on a row over the note, no X; the note across the bar, its buttons at its bottom-right in room the note keeps clear; one line growing as it is written to four", () => {
   mount(testHost(), { references: [face], chips: [{ key: 'a', label: 'bracket', glyph: 'solid' }, { key: 'b', label: 'Annotation', glyph: 'pencil' }] });
   const [context, compose] = [...box()!.children];
   expect([context.hasAttribute('data-quick-edit-context'), compose.hasAttribute('data-quick-edit-compose')]).toEqual([true, true]);
   expect([...context.querySelectorAll('[data-quick-edit-ref]')].map(chip => chip.getAttribute('data-quick-edit-ref'))).toEqual(['a', 'b']);
-  expect(context.lastElementChild!.querySelector('[aria-label="Close Quick Edit"]') ?? context.querySelector('[data-quick-edit-close]')).toBeTruthy();
-  // The note and its buttons on one line, the buttons at its right; no corner to drag, no sheet.
-  expect([compose.firstElementChild!.hasAttribute('data-quick-edit-note-box'), compose.lastElementChild!.hasAttribute('data-quick-edit-actions')]).toEqual([true, true]);
+  expect(box()!.querySelector('[data-quick-edit-close]')).toBeNull();
+  // The note spans the bar; its buttons stand at its bottom-right, the note keeping their room (one button, the control:
+  // 28px on a desktop, from THE scale's tokens; 6px and the scrollbar's 8px lane) clear on every line; no corner to drag,
+  // no sheet.
+  expect([compose.firstElementChild!.hasAttribute('data-quick-edit-note-box'), compose.lastElementChild!.hasAttribute('data-quick-edit-actions'), field().style.paddingRight])
+    .toEqual([true, true, 'calc(1 * var(--cad-control) + 0 * var(--cad-step) + 14px)']);
   expect([box()!.querySelector('[data-quick-edit-resize]'), document.querySelector('[data-quick-edit-sheet]')]).toEqual([null, null]);
-  expect((box()!.querySelector('[data-quick-edit-note-box]') as HTMLElement).style.maxHeight).toBe('132px');
+  expect((box()!.querySelector('[data-quick-edit-note-box]') as HTMLElement).style.maxHeight).toBe('92px');
   expect(field().getAttribute('data-placeholder')).toBe('Describe a change…');
   // What a person types, and the placeholder, at the chrome's UI size (13/20), not the bar's 12px.
   expect([field().classList.contains('text-ui'), field().classList.contains('text-xs'), field().classList.contains('leading-5')]).toEqual([true, false, true]);
@@ -313,18 +301,17 @@ it('Shift+Enter writes a new line in the note, a real one that goes with it; Ent
   expect(String(await copied).startsWith('First line.\nSecond line.\n\nFile:')).toBe(true);
 });
 
-it("counts the bar coming and the person putting it away, so we can tell whether it is in the way", async () => {
+it("counts its attachments coming, so we can tell how often it has something to carry", async () => {
   const { ControlUsageProvider } = await import('../../../../../dist/usage/controls.js');
   const report = vi.fn();
   const view = (references: readonly unknown[]) => <ControlUsageProvider report={report} flushMs={0}>
     <ViewerHostContext.Provider value={testHost()}><div data-slot="cad-file-view"><QuickEdit resource={resource} references={references} /></div></ViewerHostContext.Provider>
   </ControlUsageProvider>;
-  const { rerender, unmount } = render(view([face]));
-  fireEvent.click(within(box()!).getByRole('button', { name: 'Close Quick Edit' }));
+  const { rerender, unmount } = render(view([]));
   rerender(view([face]));
   unmount();
   const counted = report.mock.calls.flatMap(([counts]) => counts.map((count: { control: string }) => count.control));
-  expect(counted).toEqual(expect.arrayContaining(['quick_edit_shown', 'quick_edit_dismissed']));
+  expect(counted).toEqual(['quick_edit_shown']);
 });
 
 it('keeps its note through a reload of the view: out of sight while it loads, and back as it was', () => {
@@ -341,7 +328,7 @@ it('docked on a phone it is the same bar, at the scale\'s sizes (its tokens: a p
   press();
   update({ references: [face] });
   expect([box()!.hasAttribute('data-docked'), document.querySelector('[data-quick-edit-sheet]'), document.activeElement === field()]).toEqual([true, null, false]);
-  expect(within(box()!).getByRole('button', { name: 'Copy Prompt' }).className).toMatch(/\bh-control\b/);
+  expect(within(box()!).getByRole('button', { name: 'Copy Prompt' }).className).toMatch(/\bsize-control\b/);
 });
 
 it('Copy needs no note: with nothing written it copies what is picked, while Queue and Send wait for one', async () => {

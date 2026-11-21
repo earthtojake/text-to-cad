@@ -49,7 +49,7 @@ The record is `{ version, settings, files }`:
 | The selection (a STEP's tree and topology, a robot's links), measurements, the drawing tools' ink | Empty |
 | Preview, its camera and its Orbit | Off, opening still; its settings are the file's, above |
 | The routine, its time and whether it is playing | At rest |
-| Quick Edit's note | Empty, its bar closed |
+| Quick Edit's note | Empty |
 | The Select mode filter, hover, menus, popovers | The page's own |
 
 Appearance applies before the first paint: the inline script in

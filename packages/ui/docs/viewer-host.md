@@ -644,8 +644,8 @@ top centre of the window, ending in Preview (a 3D view's), the tool in hand's su
 (the file's structure, then its Parameters, Joints and Animation, as tabs) docked at the left, pinned open always pushing
 the model aside (collapsed on its own where it would leave the model under 640px, until the person opens or closes it
 on that file; a mouse resting on its toggle peeks
-it over the model as a floating card, pushing nothing, and only the toggle pins it), Quick Edit's bar at the bottom centred on the window as the strip is
-(the panel never moves either; where they meet it they sit above it), the bottom row Quick Edit's alone, and at the
+it over the model as a floating card, pushing nothing, and only the toggle pins it), Quick Edit's bar always at the bottom, one row (its attachments a row above it while something is picked), centred on the window as the strip is
+(the panel never moves the strip; where they meet it the strip sits above it, and the bar centres on the model's area beside a pinned panel), the bottom row Quick Edit's alone, and at the
 top-right the camera's own control alone: the view cube (a 6rem box, 2px from the right edge and 8px off the top), or a flat view's
 "100%" zoom dropdown. Under a file's navbar the view's settings are its right end for every kind of file — **Display**,
 a toggle whose card docks under the navbar at the view's right edge, over the cube (a 3D view's Projection | Style,

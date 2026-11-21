@@ -191,7 +191,7 @@ export const UI_STRINGS_ALLOWLIST = [
   ['packages/ui/src/annotation/views.js', 'current view', "a view's name in the prompt the agent reads, not on screen"],
   ['packages/ui/src/renderers/kit/tools/quick-edit/quickEditPrompt.js', 'Snapshot (${})', "a file's label in the prompt the agent reads"],
   ['packages/ui/src/file-viewer/navigation/NavbarLinks.jsx', 'Feedback:', "the title of the GitHub issue Feedback opens, for the project's own tracker"],
-  ['packages/ui/src/export/ExportControls.tsx', 'font-normal! leading-4!', "Sonner's class names for a toast's title, no words"],
+  ['packages/ui/src/export/ExportControls.tsx', 'font-normal! leading-(--cad-leading-xs)!', "Sonner's class names for a toast's title, no words"],
   ['packages/ui/src/renderers/kit/camera/viewportCameraKit.js', 'Jump to', "each view's English name; `viewPlaneTitle` says it on screen from its sides"],
   ['packages/ui/src/renderers/kit/status/ViewUpdateStatus.jsx', 'Meshing parts', "the status vocabulary's counted meshing line, said by its key (`statusLabels.js`)"],
   ['packages/ui/src/renderers/xbf/xbfMenus.js', 'Viewer', "the empty-space menu descriptor's own name, never drawn"],

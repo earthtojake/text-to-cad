@@ -96,8 +96,9 @@ async function frame(pane, before = null) {
     // The drawing alone: the tools that float over it (the strip, Quick Edit, the corner's zoom) are not its picture,
     // and neither is the hover tip, which shows by the pointer once it has rested a moment over an entity
     // (`HOVER_TIP_DELAY_MS`): a frame slow to come to rest after a wheel over the drawing caught it, its box
-    // read as ink below the pointer.
-    const shot = await canvasOf(pane).screenshot({ style: '[data-cad-tool-groups], [data-viewport-top-right], [data-zoom-pill], [data-flat-panel-pill], [data-inspector-pill], [data-hover-tip] { visibility: hidden !important; }' });
+    // read as ink below the pointer. Quick Edit's bar is always there; its buttons ease every property (`transition-all`),
+    // visibility too, so they are hidden with no transition, or a shot catches them still showing.
+    const shot = await canvasOf(pane).screenshot({ style: '[data-cad-tool-groups], [data-viewport-top-right], [data-zoom-pill], [data-flat-panel-pill], [data-inspector-pill], [data-hover-tip], [data-quick-edit] { visibility: hidden !important; } [data-quick-edit] * { transition: none !important; }' });
     if (last?.equals(shot) && !before?.shot.equals(shot)) return Object.assign(PNG.sync.read(shot), { shot });
     last = shot;
   }

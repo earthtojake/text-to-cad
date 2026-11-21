@@ -184,10 +184,13 @@ for (const phone of [true, false]) {
     await walk('a menu');
     await page.keyboard.press('Escape');
     await page.locator('[role=menu]').waitFor({ state: 'detached' });
+    // Quick Edit's bar, at rest (its one row) and with an attachment.
+    await pane.locator('[data-quick-edit-box]').waitFor();
+    await walk('Quick Edit at rest');
     await pane.locator('[data-cad-canvas]').first().click({ button: 'right', position: { x: 120, y: 200 } });
     await page.getByRole('menuitem', { name: 'Note the press', exact: true }).click();
-    await pane.locator('[data-quick-edit-box]').waitFor();
-    await walk('Quick Edit');
+    await pane.locator('[data-quick-edit-box] [data-quick-edit-context]').waitFor();
+    await walk('Quick Edit with an attachment');
     await press(pane.locator('[data-view-preview]'));
     await pane.locator('[data-preview-bar]').waitFor();
     const view = await pane.locator('[data-cad-canvas] canvas').first().boundingBox();
@@ -343,7 +346,8 @@ test('a finger on a phone: the navbar\'s menus stay open, a held press opens the
   await atRest();
   const turned = await pose();
   assert.ok(turned.some((value, index) => Math.abs(value - opened[index]) > 1e-3), 'the view moved');
-  const [cx, cy] = [box.x + 20, box.y + box.height - 20];
+  // Empty space under the strip: the picture's bottom is Quick Edit's bar on a phone.
+  const [cx, cy] = [box.x + 20, box.y + 140];
   await page.touchscreen.tap(cx, cy);
   await page.touchscreen.tap(cx, cy);
   await page.waitForFunction(() => window.__cadDoubleClicks >= 1);
@@ -1267,31 +1271,60 @@ test('a renderer says more about its load than a download: finding the file, edi
   // And the frame still takes focus on that same press, as it always did.
   assert.equal(await page.evaluate(() => document.activeElement?.dataset?.slot), 'cad-file-view');
 
-  // Quick Edit is nowhere until something is picked; then it is the bar at the view's bottom, on the strip's centre
-  // line, clear of the corner, a chat's input: its context row over its note, one line, which grows upward as it is
-  // written, its bottom staying where it stands.
+  // Quick Edit is always there: ONE row at rest, the bar at the view's bottom on the strip's centre line, 16px up, a
+  // chat's input. A pick brings its attachments' row above the note: the bar grows upward, the note's box where it
+  // was. The note grows upward as it is written to four lines, then scrolls, its scrollbar at the bar's inner right
+  // edge and the buttons clear of the text and the thumb. Preview puts it away, so it never meets the playbar.
   const quickEdit = pane.getByRole('region', { name: 'Quick Edit', exact: true });
-  assert.equal(await pane.locator('[data-quick-edit-box]').count(), 0, 'nothing picked: no Quick Edit, not even a button');
+  const noteBox = pane.locator('[data-quick-edit-note-box]');
+  await quickEdit.waitFor();
+  const rest = await quickEdit.boundingBox(), restNote = await noteBox.boundingBox();
+  const stripBox = await pane.getByRole('group', { name: 'Interaction tools' }).boundingBox();
+  assert.ok(Math.abs(rest.x + rest.width / 2 - (stripBox.x + stripBox.width / 2)) <= 1 && Math.abs(frameBox.y + frameBox.height - 16 - rest.y - rest.height) <= 1,
+    `Quick Edit is the bar on the strip's line, 16px off the bottom: ${JSON.stringify([rest, stripBox, frameBox])}`);
+  assert.ok(rest.width <= 400 && rest.height <= 44 && await pane.locator('[data-quick-edit-context]').count() === 0, `nothing picked: one row: ${JSON.stringify(rest)}`);
   await canvasElement.click({ button: 'right', position: { x: 300, y: 200 } });
   await page.getByRole('menuitem', { name: 'Note the press', exact: true }).click();
-  await quickEdit.waitFor();
-  await quickEdit.evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
-  const opened = await quickEdit.boundingBox();
-  const stripBox = await pane.getByRole('group', { name: 'Interaction tools' }).boundingBox();
-  assert.ok(Math.abs(opened.x + opened.width / 2 - (stripBox.x + stripBox.width / 2)) <= 1 && Math.abs(frameBox.y + frameBox.height - 16 - opened.y - opened.height) <= 1,
-    `Quick Edit is the bar on the strip's line, 16px off the bottom: ${JSON.stringify([opened, stripBox, frameBox])}`);
-  assert.ok(opened.width <= 480, 'never wider than 480px');
+  await pane.locator('[data-quick-edit-context]').waitFor();
+  const picked = await quickEdit.boundingBox(), pickedNote = await noteBox.boundingBox();
+  assert.ok(picked.height >= rest.height + 20 && Math.abs(picked.y + picked.height - rest.y - rest.height) <= 0.5
+    && ['x', 'y', 'width', 'height'].every(key => Math.abs(pickedNote[key] - restNote[key]) <= 0.5),
+    `the attachments' row above, the bar's bottom and the note's box unmoved: ${JSON.stringify({ rest, picked, restNote, pickedNote })}`);
+  const stackTop = await pane.locator('[data-cad-tool-groups]').boundingBox();
+  assert.ok(stackTop.y + stackTop.height <= picked.y + 0.5, 'the tool stack stops clear of the two-row bar');
   const note = quickEdit.getByRole('textbox', { name: 'Describe your changes', exact: true });
   await note.click();
   await page.keyboard.type('One line.');
   for (const line of ['Two.', 'Three.']) { await page.keyboard.press('Shift+Enter'); await page.keyboard.type(line); }
   const grown = await quickEdit.boundingBox();
-  assert.ok(grown.height >= opened.height + 39 && Math.abs(grown.y + grown.height - opened.y - opened.height) <= 1,
-    `three lines, grown upward by two: ${opened.height} -> ${grown.height}`);
+  assert.ok(grown.height >= picked.height + 39 && Math.abs(grown.y + grown.height - picked.y - picked.height) <= 1,
+    `three lines, grown upward by two: ${picked.height} -> ${grown.height}`);
   assert.equal(await note.evaluate(element => element.innerText.split('\n').filter(Boolean).length), 3, 'real new lines');
-  // Its X puts it away, the pick kept.
-  await quickEdit.getByRole('button', { name: 'Close Quick Edit', exact: true }).click();
-  await quickEdit.waitFor({ state: 'detached' });
+  for (const line of ['Four.', 'Five.', 'Six, and a line long enough to wrap the note at the bar\'s width, past its buttons.']) {
+    await page.keyboard.press('Shift+Enter'); await page.keyboard.type(line);
+  }
+  await pane.locator('[data-quick-edit-note-box] [data-slot="scroll-area-scrollbar"]').waitFor();
+  const scrolled = await quickEdit.evaluate(bar => {
+    const box = bar.getBoundingClientRect(), style = getComputedStyle(bar);
+    const inner = box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+    const field = bar.querySelector('[data-quick-edit-note]'), view = bar.querySelector('[data-quick-edit-note-box]').getBoundingClientRect();
+    const fieldBox = field.getBoundingClientRect(), textRight = fieldBox.right - parseFloat(getComputedStyle(field).paddingRight);
+    const scrollbar = bar.querySelector('[data-quick-edit-note-box] [data-slot="scroll-area-scrollbar"]').getBoundingClientRect();
+    const buttons = [...bar.querySelectorAll('[data-quick-edit-action]')].map(button => button.getBoundingClientRect());
+    const overlaps = (a, b) => a.left < b.right - 0.5 && a.right > b.left + 0.5 && a.top < b.bottom - 0.5 && a.bottom > b.top + 0.5;
+    const text = { left: fieldBox.left, right: textRight, top: view.top, bottom: view.bottom };
+    return { noteHeight: Math.round(view.height), scrollbarAtEdge: Math.abs(scrollbar.right - inner) <= 1, textClear: textRight <= scrollbar.left + 0.5,
+      buttonsClear: buttons.length > 0 && buttons.every(button => !overlaps(button, text) && !overlaps(button, scrollbar)) };
+  });
+  assert.deepEqual(scrolled, { noteHeight: 92, scrollbarAtEdge: true, textClear: true, buttonsClear: true },
+    'a scrolling note: four lines, its scrollbar at the bar\'s inner right edge, no button over the text or the scrollbar');
+  // Preview: the playbar alone at the bottom; Quick Edit put away with the tools, its note kept.
+  await pane.getByRole('button', { name: 'Preview', exact: true }).click();
+  await pane.locator('[data-preview-bar]').waitFor();
+  assert.equal(await quickEdit.isVisible(), false, 'Quick Edit is away in Preview: nothing of it meets the playbar');
+  await pane.getByRole('button', { name: 'Exit preview', exact: true }).click();
+  await quickEdit.waitFor();
+  assert.match(await note.innerText(), /^One line\./, 'its note kept');
   assert.deepEqual(errors, []);
 });
 
@@ -1447,7 +1480,7 @@ test('the panel always pushes, and starts collapsed where the model would keep u
 
 // The strip and Quick Edit's bar are centred on the whole view, always: no panel moves or narrows them, and where they
 // meet the panel they stand over it, and take the press. The panel's tab scrolls as one.
-test('the strip and Quick Edit stay centred on the view at 1440, 867 and 620 with the panel open, over it where they meet; the panel is one scroller', async (t) => {
+test('the strip stays centred on the view at 1440, 867 and 620 with the panel open, over it where they meet; Quick Edit too, or on the model beside a panel it would cover; the panel is one scroller', async (t) => {
   const origin = await serve(t);
   const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   t.after(() => page.close());
@@ -1457,10 +1490,6 @@ test('the strip and Quick Edit stay centred on the view at 1440, 867 and 620 wit
   await page.goto(`${origin}/?file=panel.harness`);
   const pane = page.getByTestId('one');
   await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
-  // Something picked, so Quick Edit's bar is up.
-  const canvas = pane.locator('[data-cad-canvas]').first();
-  await canvas.click({ button: 'right', position: { x: 300, y: 200 } });
-  await page.getByRole('menuitem', { name: 'Note the press', exact: true }).click();
   await pane.locator('[data-quick-edit-box]').waitFor();
   const read = () => page.evaluate(() => {
     const pane = document.querySelector('[data-testid="one"]');
@@ -1473,7 +1502,8 @@ test('the strip and Quick Edit stay centred on the view at 1440, 867 and 620 wit
       const x = Math.max(box.left, panel.left) + 4, y = box.top + box.height / 2;
       return Boolean(document.elementFromPoint(x, y)?.closest(selector));
     });
-    return { view: view.left + view.width / 2, width: view.width, strip: strip.left + strip.width / 2, bar: bar.left + bar.width / 2, barWidth: bar.width,
+    const pinned = panels.length ? Math.max(...panels.map(panel => panel.right)) - view.left : 0;
+    return { view: view.left + view.width / 2, left: view.left, width: view.width, pinned, strip: strip.left + strip.width / 2, bar: bar.left + bar.width / 2, barWidth: bar.width,
       panels: panels.length, stripOver: meets(strip, '[aria-label="Interaction tools"]'), barOver: meets(bar, '[data-quick-edit-box]'),
       overlap: panels.some(panel => panel.left < bar.right && panel.right > bar.left) };
   });
@@ -1486,10 +1516,13 @@ test('the strip and Quick Edit stay centred on the view at 1440, 867 and 620 wit
     await settle(page);
     const at = await read();
     assert.ok(Math.abs(at.strip - at.view) <= 1, `${width}: the strip on the view's centre: ${JSON.stringify(at)}`);
-    assert.ok(Math.abs(at.bar - at.view) <= 1, `${width}: Quick Edit on the view's centre: ${JSON.stringify(at)}`);
-    assert.equal(Math.round(at.barWidth), Math.min(400, width - 32), `${width}: 400px at most, else the view's width less 16px a side`);
-    assert.ok(at.panels > 0 && at.stripOver && at.barOver, `${width}: over the panel where they meet: ${JSON.stringify(at)}`);
-    if (width === 620) assert.ok(at.overlap, 'at 620 the bar meets the panel, and stands over it');
+    // Quick Edit on the view's centre, unless so centred it would stand over the pinned panel: then on the model's.
+    const fit = room => Math.min(400, room - 32), centred = fit(at.width);
+    const beside = at.pinned > (at.width - centred) / 2 - 16;
+    const [centre, barWidth] = beside ? [at.left + at.pinned + (at.width - at.pinned) / 2, fit(at.width - at.pinned)] : [at.view, centred];
+    assert.ok(Math.abs(at.bar - centre) <= 1 && Math.abs(at.barWidth - barWidth) <= 1, `${width}: Quick Edit ${beside ? 'on the model beside the panel' : 'on the view\'s centre'}: ${JSON.stringify(at)}`);
+    assert.ok(at.panels > 0 && at.stripOver && !at.overlap, `${width}: the strip over the panel where they meet, Quick Edit never: ${JSON.stringify(at)}`);
+    if (width === 620) assert.ok(beside, 'at 620 the bar would meet the panel, so it stands beside it');
   }
   // The panel: one scroller for its tabs; nothing in a tab scrolls on its own.
   await page.locator('#root > div').first().evaluate(element => element.style.setProperty('width', '1440px', 'important'));
@@ -1501,10 +1534,10 @@ test('the strip and Quick Edit stay centred on the view at 1440, 867 and 620 wit
   assert.deepEqual(errors, []);
 });
 
-// Copy Prompt, Quick Edit's one action where the host takes no message (the web's), keeps its words at the bar's full
-// 400px — its text and its icon side by side inside the button, beside the note — and drops them for its icon only
-// where the window makes the bar narrower.
-test('Copy Prompt keeps its words at the 400px bar and a phone\'s full-width one, and is its icon alone only where the window is narrower than the bar', async (t) => {
+// Copy Prompt, Quick Edit's one action where the host takes no message (the web's), is the copy glyph alone, primary:
+// 28px on a desktop, 36px on a phone, its name and its tooltip "Copy Prompt". Words beside it took a third of the note's
+// row and stood between the text and the note's scrollbar.
+test('Copy Prompt is the copy glyph alone, primary, named and hinted "Copy Prompt", at the 400px bar and a phone\'s', async (t) => {
   const origin = await serve(t);
   const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   t.after(() => page.close());
@@ -1513,26 +1546,27 @@ test('Copy Prompt keeps its words at the 400px bar and a phone\'s full-width one
   await page.goto(`${origin}/?file=panel.harness`);
   const pane = page.getByTestId('one');
   await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
-  await pane.locator('[data-cad-canvas]').first().click({ button: 'right', position: { x: 300, y: 200 } });
-  await page.getByRole('menuitem', { name: 'Note the press', exact: true }).click();
-  await pane.locator('[data-quick-edit-box]').waitFor();
-  const read = () => pane.locator('[data-quick-edit-box]').evaluate(bar => {
-    const actions = [...bar.querySelectorAll('[data-quick-edit-action]')];
-    const button = bar.querySelector('[data-quick-edit-action="copy"]'), words = button.querySelector('span');
-    const box = button.getBoundingClientRect(), text = words.getBoundingClientRect(), icon = button.querySelector('svg').getBoundingClientRect();
-    return { actions: actions.length, bar: Math.round(bar.getBoundingClientRect().width), words: getComputedStyle(words).display !== 'none' && text.width > 0,
-      inside: text.right <= box.right + 0.5 && icon.right <= text.left + 0.5, text: words.textContent };
+  const bar = pane.locator('[data-quick-edit-box]');
+  await bar.waitFor();
+  await bar.getByRole('textbox', { name: 'Describe your changes', exact: true }).fill('Round the edge.');
+  const read = () => bar.evaluate(element => {
+    const buttons = [...element.querySelectorAll('[data-quick-edit-action]')];
+    const copy = buttons[0], box = copy.getBoundingClientRect();
+    return { actions: buttons.length, bar: Math.round(element.getBoundingClientRect().width), size: [Math.round(box.width), Math.round(box.height)],
+      name: copy.getAttribute('aria-label'), variant: copy.dataset.variant, words: copy.textContent.trim(), glyph: Boolean(copy.querySelector('svg')) };
   });
   // 400px on a desktop; a phone's (432px) the window's full width less 8px a side, uncapped.
-  for (const [width, bar] of [[1440, 400], [432, 416]]) {
+  for (const [width, barWidth, size] of [[1440, 400, 28], [432, 416, 36]]) {
     await page.locator('#root > div').first().evaluate((element, width) => element.style.setProperty('width', `${width}px`, 'important'), width);
     await settle(page);
-    assert.deepEqual(await read(), { actions: 1, bar, words: true, inside: true, text: 'Copy Prompt' }, `${width}: Copy Prompt in words`);
+    // The button's size eases (the primitive's `transition-all`): read it once it has.
+    await bar.evaluate(element => Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished)));
+    assert.deepEqual(await read(), { actions: 1, bar: barWidth, size: [size, size], name: 'Copy Prompt', variant: 'default', words: '', glyph: true }, `${width}: the glyph alone`);
   }
-  await page.locator('#root > div').first().evaluate(element => element.style.setProperty('width', '380px', 'important'));
+  await page.locator('#root > div').first().evaluate(element => element.style.setProperty('width', '1440px', 'important'));
   await settle(page);
-  const narrow = await read();
-  assert.deepEqual([narrow.bar < 400, narrow.words], [true, false], `a window narrower than the bar: the icon alone: ${JSON.stringify(narrow)}`);
+  await bar.locator('[data-quick-edit-action="copy"]').hover();
+  assert.match(await page.getByRole('tooltip').first().innerText(), /^Copy Prompt$/);
 });
 
 // The panel is budgeted for three tabs: the widest three a model can have (Model, Params and Motion) and the search's icon

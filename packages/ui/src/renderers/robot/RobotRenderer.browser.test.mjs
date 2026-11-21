@@ -570,7 +570,7 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   await robot.pickLinks();
   // The kept selection goes by its chip's X, so nothing is lit before the hover.
   await pane.getByRole('button', { name: 'Remove upper_arm', exact: true }).click();
-  await pane.locator('[data-quick-edit-box]').waitFor({ state: 'detached' });
+  await pane.locator('[data-quick-edit-context]').waitFor({ state: 'detached' });
   // (The viewport's own pixels: a page screenshot would also see the toolbar's hover state.)
   const still = (await robot.capture()).data;
   await page.mouse.move(...onScreen(spots.shoulder).map(value => value - 3));

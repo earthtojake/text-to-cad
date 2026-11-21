@@ -9,7 +9,7 @@ import { useI18n } from "@cad/ui/i18n";
 import { NAVBAR_CONTROL_CLASS } from "../../../lib/navbarRow.js";
 import { useControlUsage } from "../../../usage/controls.js";
 import { useStripButtonClass } from "../tools/FloatingToolBar.js";
-import { backdropScheme, usePreviewIdle } from "../tools/PreviewChrome.jsx";
+import { backdropScheme, relativeLuminance, usePreviewIdle } from "../tools/PreviewChrome.jsx";
 import { PreviewIcon } from "./PreviewIcon.jsx";
 import { DisplayIcon } from "./DisplaySettings.jsx";
 import { NAVBAR_VIEW_PLACE } from "./NavbarViewControls.jsx";
@@ -65,7 +65,7 @@ function ViewControl({ label, disabled = false, tooltipSide = "top", onClick, ch
  * @param {string} options.modelKey  The file on screen: another leaves Preview.
  * @param {object} options.fileView  The renderer's props: the file's name, `onPreviewChange`.
  * @param {HTMLElement | null} options.hostElement  The frame's root: where the pointer resting is watched.
- * @param {string} options.stageColor  The cover's colour: the view's own, as it was.
+ * @param {string} options.stageColor  The view's canvas colour: the cover's where Preview's Background is not set.
  * @param {"light" | "dark"} options.viewportScheme  The viewport's scheme, where Preview's Background says nothing.
  * @param {import("react").ComponentType<object>} options.View  Preview's view.
  * @param {object | null} options.view  What `View` draws (`RendererShell`'s `previewView`); null: nothing to mount yet.
@@ -187,12 +187,17 @@ export function usePreviewFrame({ previewing, setPreviewing, modelKey, fileView,
       sceneScaleMode={sceneScaleMode} viewRef={viewRef} onPresented={setPresented}
       orbit={orbit} orbitSpeed={orbitSpeed ?? 1} />
   </div> : null;
-  // Preview coming together underneath: the view as it was, held, until the picture is ready.
-  const overlays = <div aria-hidden={!covered} data-preview-cover={covered ? "" : undefined}
-    className={cn("absolute inset-0 z-40 flex items-center justify-center",
+  // Preview coming together underneath, covered on what Preview is about to show: its own backdrop (its Background, where
+  // it is set and opaque enough to read on), else the view's canvas, as it was; in that backdrop's ink (`scheme`: the
+  // Background's, else the viewport's), never the app's.
+  const backdrop = desired?.view?.background;
+  const coverColor = backdrop?.enabled !== false && Number(backdrop?.opacity ?? 1) >= 0.5 && relativeLuminance(backdrop?.color) !== null
+    ? backdrop.color : stageColor;
+  const overlays = <div aria-hidden={!covered} data-preview-cover={covered ? "" : undefined} data-scheme={scheme}
+    className={cn("absolute inset-0 z-40 flex items-center justify-center", scheme,
       // At once over the press, so nothing of preview shows first; it fades only as it lifts.
       covered ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0 transition-opacity duration-300 motion-reduce:transition-none")}
-    style={{ backgroundColor: stageColor }}>
+    style={{ backgroundColor: coverColor }}>
     {/* The one indicator (`loading/LoadingStep.jsx`) on Preview's own backdrop. */}
     {covered ? <LoadingStep label={t("preview.preparing")} className="mx-4" /> : null}
   </div>;

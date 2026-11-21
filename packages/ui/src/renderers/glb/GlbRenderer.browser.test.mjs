@@ -261,7 +261,7 @@ test('a static GLB opens on its native scene in Select: its tools, its display m
   await exported(page, 'static.glb');
 
   await glbTools(pane);
-  assert.equal(await pane.locator('[data-quick-edit-box]').count(), 0, 'Quick Edit opens on a pick or a mark, never by itself');
+  assert.deepEqual([await pane.locator('[data-quick-edit-box]').count(), await pane.locator('[data-quick-edit-context]').count()], [1, 0], 'Quick Edit is there, one row: nothing attached until a pick or a mark');
   assert.equal(await pane.locator('[data-navbar-view-controls]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
     'a GLB is 3D: Preview is the navbar\'s, after Display');
   assert.equal(await pane.locator('[data-playbar], [data-animation-section]').count(), 0, 'a static GLB has no playbar and no Animation tab');

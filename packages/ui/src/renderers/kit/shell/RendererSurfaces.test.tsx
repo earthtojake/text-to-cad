@@ -125,22 +125,18 @@ it('a press the renderer has nothing to say about, a secondary drag, or a press 
   expect(screen.getByRole('menu')).toBeTruthy();
 });
 
-it('Quick Edit is there once something is picked, with what the host can do, is put away in Preview, and nothing sits at the bottom', async () => {
+it('Quick Edit is always there, one row with nothing picked, its attachments over the note once something is, with what the host can do; put away in Preview', async () => {
   const destination = { kind: 'composer', available: true } as const;
   const send = vi.fn(async () => ({ status: 'sent' as const, partIds: [] }));
   const { container, canvas } = mount(testHost({ promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async () => ({ status: 'added', partIds: [] }), send } }));
   expect(container.querySelector('[data-viewport-bottom-actions]')).toBeNull();
-  // Nothing picked, nothing drawn: no Quick Edit at all, not even a button.
-  expect(container.querySelector('[data-quick-edit-box]')).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Quick Edit' })).toBeNull();
-  pick(canvas);
+  // Nothing picked, nothing drawn: the bar, one row (the note and the host's buttons), no attachments, no X.
   const box = screen.getByRole('region', { name: 'Quick Edit' });
-  // The one reference is its own chip, by its name (several are one chip, "N refs": `ReferenceChips.jsx`).
-  expect(within(box).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent)).toEqual(['press-300-200', 'Close Quick Edit', 'Copy Prompt', 'Queue', 'Send']);
-  // Its X clears the pick, as a press on the background would, and goes with it.
-  fireEvent.click(within(box).getByRole('button', { name: 'Close Quick Edit' }));
-  expect(screen.queryByRole('region', { name: 'Quick Edit' })).toBeNull();
+  const labels = () => within(box).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent);
+  expect([box.querySelector('[data-quick-edit-context]'), labels()]).toEqual([null, ['Copy Prompt', 'Queue', 'Send']]);
   pick(canvas);
+  // The one reference is its own chip, by its name (several are one chip, "N refs": `ReferenceChips.jsx`), on a row over the note.
+  expect([box.querySelector('[data-quick-edit-context]') !== null, labels()]).toEqual([true, ['press-300-200', 'Copy Prompt', 'Queue', 'Send']]);
   fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
   await waitFor(() => expect(container.querySelector('[data-preview-chrome]')!.hasAttribute('inert')).toBe(true));
   // Quick Edit stands in the layer over the panels, which Preview puts away with the rest of the chrome.
@@ -151,7 +147,7 @@ it('Quick Edit is there once something is picked, with what the host can do, is 
 // A stroke as the drawing tools put one into the model.
 const ink = (id: string) => ({ id, kind: 'stroke', points: new Float32Array([0, 0, 0, 1, 0, 0]), color: '#ff2d55', width: 2, touches: [] });
 
-it("an annotation opens Quick Edit, which sends the note with the files made of its view and its annotation, and goes with them", async () => {
+it("an annotation is Quick Edit's attachment, which sends the note with the files made of its view and its annotation, and goes with them", async () => {
   const destination = { kind: 'composer', available: true } as const;
   const send = vi.fn(async (_context: unknown) => ({ status: 'sent' as const, partIds: [] }));
   const promptFiles = {
@@ -183,9 +179,9 @@ it("an annotation opens Quick Edit, which sends the note with the files made of 
   expect(await context.parts[2].path).toBe('/tmp/p/one-1.snapshot.json');
   expect(context.parts.filter((part: any) => part.kind === 'attachment').map((part: any) => part.mimeType)).toEqual(['application/json']);
   expect(promptFiles.read).not.toHaveBeenCalled();
-  // Sent, the note goes with its annotation.
-  await waitFor(() => expect(screen.queryByRole('region', { name: 'Quick Edit' })).toBeNull());
-  expect(viewport.props.annotation.hasAnnotation).toBe(false);
+  // Sent, the note goes with its annotation: the bar is one row again.
+  await waitFor(() => expect(box.querySelector('[data-quick-edit-context]')).toBeNull());
+  expect([viewport.props.annotation.hasAnnotation, note.textContent]).toEqual([false, '']);
 });
 
 it('a clipboard destination has no snapshot in the navbar; the annotation is Quick Edit\'s chip, its pen first', async () => {
@@ -403,7 +399,7 @@ it('a host with no prompt workflow gets no snapshot, and Quick Edit copies a pro
   expect(navigation.mock.calls.flatMap(([actions]) => actions)).toEqual([]);
   pick(canvas);
   expect(within(screen.getByRole('region', { name: 'Quick Edit' })).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent))
-    .toEqual(['press-300-200', 'Close Quick Edit', 'Copy Prompt']);
+    .toEqual(['press-300-200', 'Copy Prompt']);
 });
 
 it('the renderer is told the camera settled, through what the viewport reports: a recorded move and its own settle', async () => {

@@ -626,7 +626,6 @@ export default {
   "chip.group.object": "{count} 個物件",
   "chip.group.reference": "{count} 個參照",
   "chip.group.item": "{count} 項",
-  "quickEdit.close": "關閉快速編輯",
   "quickEdit.describeLabel": "描述你的修改",
   "quickEdit.copyPrompt": "複製提示詞",
   "quickEdit.copyPromptHint": "複製提示詞",

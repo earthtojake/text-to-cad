@@ -54,10 +54,12 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *   strip), again whenever the column, the stage or what stands in the top-right corner changes.
  * - **The top-right**: the corner (below), and under it (`ViewportTopRight`, `--cad-corner-below`, measured) the host's
  *   notice once the view is up.
- * - **Quick Edit's bar** (`quickEdit`), in the same layer, at the bottom, centred on the WHOLE view, always: 400px at
- *   most, narrower only with the view (16px in from each side); over a panel where they meet; a phone's the view's full
+ * - **Quick Edit's bar** (`quickEdit`), in the same layer, at the bottom, centred on the WHOLE view: 400px at
+ *   most, narrower only with the view (16px in from each side); where it would stand over a pinned panel (a narrow
+ *   window), centred on the model's area right of it instead; a phone's the view's full
  *   width less its 8px inset a side, never capped, above its safe area. The measure writes where it stands (`--cad-quick-edit-left`,
- *   `--cad-quick-edit-width`, from the view's left).
+ *   `--cad-quick-edit-width`, from the view's left), and how far its top stands off the view's bottom
+ *   (`--cad-quick-edit-reserve`), which the tool stack's column stops clear of, the bar one row or two.
  * - **The navbar's view settings** (`navbar`: what a view portals into the file's navbar, `NavbarViewControls.jsx`),
  *   drawn while the chrome is, on a desktop and a phone alike (the corner is a desktop's alone), and **Display's
  *   card** (`card`: `{ open, content }`, `DisplaySettings.jsx`'s), docked under the navbar at the view's right edge,
@@ -118,7 +120,11 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   const scheme = viewport?.scheme === "dark" ? "dark" : viewport ? "light" : null;
   const toolsHidden = chromeHidden || compact;
   // The view catching up, said as every view says it, unless the card says why the chrome is gone.
-  const statusNode = !status || (chromeHidden && alert?.alert) ? null : <div className="pointer-events-none flex max-w-full items-center gap-2" data-viewport-status="">
+  // It says what the picture is doing, over the picture: in its scheme (Preview's backdrop's while Preview is up), never
+  // the app's, under the strip as at the top centre.
+  const statusScheme = previewing ? (preview?.scheme ?? scheme) : scheme;
+  const statusNode = !status || (chromeHidden && alert?.alert) ? null : <div className={cn("pointer-events-none flex max-w-full items-center gap-2", statusScheme)}
+    data-viewport-status="" data-scheme={statusScheme ?? undefined}>
     {status.preview ? <ViewPreviewLabel /> : null}
     <ViewUpdateStatus status={status.update ?? IDLE_STATUS} onRetry={status.onRetry ?? undefined} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
   </div>;
@@ -128,6 +134,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   useTouchGestures(root);
   const stageRef = useRef(null);
   const topControls = useRef(null);
+  const quickEditRow = useRef(null);
   const [cornerSide, setCornerSide] = useState("right");
 
   // ---- the panel (`sidebars.js`): the file's structure and its own settings, as tabs; a phone's a sheet ----------------
@@ -238,13 +245,24 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
       // rest is: whenever the view's box or what stands in it changes.
       setCornerSide(viewCornerSide(frame));
       const stageBox = stage.getBoundingClientRect();
-      // Quick Edit's bar, centred on the whole view, always: 400px at most, else the view's width less its margins; a
-      // phone's the view's full width less its inset, uncapped. No panel moves or narrows it; where it meets one, it stands over it.
+      // Quick Edit's bar, always there: centred on the whole view, 400px at most, else the view's width less its margins; a
+      // phone's the view's full width less its inset, uncapped. Where, so centred, it would stand over a pinned panel (a
+      // narrow window), it centres on the model's area instead, as it is always on screen and the panel's foot is under
+      // it there. A peek, over the view a moment, moves nothing.
       const viewWidth = frame.getBoundingClientRect().width;
       const margin = mobile ? VIEWPORT_INSET_PX : QUICK_EDIT_MARGIN_PX;
-      const barWidth = Math.max(0, mobile ? viewWidth - 2 * margin : Math.min(QUICK_EDIT_MAX_PX, viewWidth - 2 * margin));
-      frame.style.setProperty("--cad-quick-edit-left", `${Math.round((viewWidth - barWidth) / 2)}px`);
+      const fit = room => Math.max(0, mobile ? room - 2 * margin : Math.min(QUICK_EDIT_MAX_PX, room - 2 * margin));
+      let barWidth = fit(viewWidth), barLeft = (viewWidth - barWidth) / 2;
+      const pinned = mobile ? null : frame.querySelector(":scope > aside[data-flat-panel]:not([hidden]):not([data-panel-peek])");
+      const panelRight = pinned ? pinned.getBoundingClientRect().right - frame.getBoundingClientRect().left : 0;
+      if (panelRight > barLeft - margin) { barWidth = fit(viewWidth - panelRight); barLeft = panelRight + (viewWidth - panelRight - barWidth) / 2; }
+      frame.style.setProperty("--cad-quick-edit-left", `${Math.round(barLeft)}px`);
       frame.style.setProperty("--cad-quick-edit-width", `${Math.round(barWidth)}px`);
+      // What the bar takes of the view's bottom (its height, its 16px off the bottom, and 8px): the tool stack's column
+      // stops above it, as it always stands now.
+      const bar = quickEditRow.current?.getBoundingClientRect();
+      if (bar?.height) frame.style.setProperty("--cad-quick-edit-reserve", `${Math.round(frame.getBoundingClientRect().bottom - bar.top + VIEWPORT_INSET_PX)}px`);
+      else frame.style.removeProperty("--cad-quick-edit-reserve");
       // The rows with something in them: an empty one (no update under way) still takes the
       // column's gap, which would leave a wider gap under the strip than at its sides.
       const rows = [...controls.children].map(row => row.getBoundingClientRect()).filter(box => box.height > 0);
@@ -272,6 +290,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
     const resized = new ResizeObserver(measure);
     resized.observe(controls);
     resized.observe(stage);
+    if (quickEditRow.current) resized.observe(quickEditRow.current);
     const watch = () => { for (const element of stage.querySelectorAll(CORNER_BOXES)) resized.observe(element); };
     watch();
     const changed = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => { watch(); measure(); });
@@ -331,10 +350,10 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
         {chromeHidden || previewing || !contextMenu ? null : <ViewportContextMenu {...contextMenu} />}
         <div className={cn("contents", scheme)}><ViewerLoadingOverlay loading={loading} operationKey={file} /></div>
         {/* The alert card, last: over the tools, which a warning the view survives keeps on screen. */}
-        {previewing || !alert ? null : <ViewerAlertCard {...alert} file={alert.file ?? file} />}
+        {previewing || !alert ? null : <div className={cn("contents", scheme)} data-view-alert-scope=""><ViewerAlertCard {...alert} file={alert.file ?? file} /></div>}
       </div>
-      {/* The strip's column and Quick Edit's bar: centred on the whole view, always, whatever the panels do, and over
-          them where they meet (a layer of their own over the panels, an overlaid one too); hidden and inert in Preview,
+      {/* The strip's column and Quick Edit's bar: centred on the whole view (the bar on the model's area where it would
+          stand over a pinned panel), and over the panels where they meet (a layer of their own over the panels, an overlaid one too); hidden and inert in Preview,
           as the rest of the chrome is (`PreviewChrome`). */}
       <div className="pointer-events-none absolute inset-0 z-50" hidden={previewing} inert={previewing} data-view-top-layer="">
         <ToolbarTooltipScope enabled={!previewing}>
@@ -351,7 +370,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
           </div>}
           {/* Quick Edit's bar, at the bottom on the model's area's centre line (above): hidden, not unmounted, while the view
               loads, as a note being written outlives a reload. */}
-          {compact || !quickEdit ? null : <div className="pointer-events-none absolute z-30 flex flex-col justify-end" data-quick-edit-row=""
+          {compact || !quickEdit ? null : <div ref={quickEditRow} className="pointer-events-none absolute z-30 flex flex-col justify-end" data-quick-edit-row=""
             style={{ left: `var(--cad-quick-edit-left, ${INSET})`, width: `var(--cad-quick-edit-width, calc(100% - 2 * ${INSET}))`,
               bottom: mobile ? `calc(${INSET} + env(safe-area-inset-bottom, 0px))` : 2 * VIEWPORT_INSET_PX }}>{quickEdit}</div>}
         </ToolbarTooltipScope>
@@ -364,18 +383,19 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
 }
 
 // The strip and the tool stack under it share one column at the top centre of the WHOLE view, its height the room
-// down to Quick Edit's row, so however many panels are up it never runs past the view. Where the view is narrow enough
+// down to Quick Edit's bar (its measured top, one row or two), so however many panels are up it never runs past the view. Where the view is narrow enough
 // for the strip to reach the corner's cube, the strip (a layer over the corner) stands over it. It spans the view within its
 // inset and centres what it holds: positioned from the centre (`left: 50%`) it would shrink to the half right of it,
 // and the strip would wrap at half the view. No panel moves it; it stands over them.
 const INSET = `${VIEWPORT_INSET_PX}px`;
-const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, right: INSET, bottom: VIEWPORT_STACK_BOTTOM });
+const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, right: INSET, bottom: `max(${VIEWPORT_STACK_BOTTOM}, var(--cad-quick-edit-reserve, 0px))` });
 // What stands in the top-right corner: the corner's control (the cube, or a flat view's zoom), and the host's notice
 // under it (not its column).
 const CORNER_CONTROLS = "[data-view-cube], [data-zoom-pill]";
 const CORNER_BOXES = `[data-viewport-top-right] [data-viewport-notice], ${CORNER_CONTROLS}`;
-const MEASURED = ["--cad-tools-bottom", "--cad-top-right-left", "--cad-corner-below", "--cad-quick-edit-left", "--cad-quick-edit-width"];
-// Quick Edit's bar: 400px at most, centred on the whole view; narrower only with the view, 16px in from each side.
+const MEASURED = ["--cad-tools-bottom", "--cad-top-right-left", "--cad-corner-below", "--cad-quick-edit-left", "--cad-quick-edit-width", "--cad-quick-edit-reserve"];
+// Quick Edit's bar: 400px at most, centred on the whole view (or the model's area beside a pinned panel); narrower only
+// with the view, 16px in from each side.
 const QUICK_EDIT_MAX_PX = 400;
 const QUICK_EDIT_MARGIN_PX = 16;
 // Nothing to say: the status draws nothing.

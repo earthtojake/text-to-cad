@@ -248,14 +248,15 @@ function HarnessSurface({ view, data }) {
   const previewView = useMemo(() => ({ scene: previewScene, animation: data.previewAnimation ?? null, onCameraSettled }),
     [previewScene, data.previewAnimation, onCameraSettled]);
 
-  // Its test controls sit at the bottom centre, clear of the view cube (bottom-right) and the view's panel (down the left).
+  // Its test controls sit at the bottom centre, just above Quick Edit's bar (always there: its measured top,
+  // `--cad-quick-edit-reserve`), clear of the view cube (top-right) and the view's panel (down the left).
   return <RendererShell shell={shell} tools={withPanel ? [selectTool, ...shell.tools.drawing, keepTool, poseTool] : shell.tools.drawing}
     previewView={previewView}
     toolPanels={toolPanels} sidebar={sidebar} references={references} onClearReferences={() => setPicked("")}
     contextMenuItems={contextMenuItems} onContextMenuOpenChange={setMenuUp}
     frameProvider={frame => <HarnessFrameContext.Provider value={`frame:${stage}`}>{frame}</HarnessFrameContext.Provider>}
     onCanvasPointerDown={() => setPutDown(`put down @${stage}`)} boxSelect={boxSelect}
-    viewportOverlay={viewport => <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 -translate-x-1/2 text-xs" data-harness-overlay>
+    viewportOverlay={viewport => <div className="pointer-events-none absolute left-1/2 z-30 -translate-x-1/2 text-xs" style={{ bottom: "var(--cad-quick-edit-reserve, 8px)" }} data-harness-overlay>
       <span data-harness-camera-settles>{settleLabel}</span>
       <span data-harness-menu-note>{picked}</span>
       <span data-harness-menu-open>{menuUp ? "up" : ""}</span>
