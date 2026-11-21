@@ -4,7 +4,7 @@ import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { cn } from "@cad/ui/utils";
 import { FLOATING_CHROME_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 import { ANNOTATION_STROKE_WIDTHS, AnnotationStylePickers, annotationColors } from "../../../../annotation/toolbar.jsx";
-import { isHighlighterStroke, strokeSettingOf } from "../../../../annotation/geometry.js";
+import { fillableOutline, isHighlighterStroke, strokeSettingOf } from "../../../../annotation/geometry.js";
 import { annotationsOnScreen, annotationWorldPoints, closedShape, fillAreasOf } from "./annotation3d.js";
 import { useI18n } from "@cad/ui/i18n";
 
@@ -24,7 +24,7 @@ const strokeSetting = item => {
  * is no room above), following it as the camera moves — the tool strip's surface, a
  * size smaller. Colour, and for strokes their weight
  * (`AnnotationStylePickers`' dropdowns, each choice one step); Fill for a closed
- * shape (its interior, as it falls on the screen now, lying where the shape does — on its plane, or on the surface under it — one step; again
+ * shape, or a pen or highlighter loop whose ends meet on the screen now, as the Fill tool takes it (its interior, as it falls on the screen now, lying where the shape does — on its plane, or on the surface under it — one step; again
  * to take it away); and Delete, which deletes everything Select has picked (`onDelete`), a
  * measurement too.
  *
@@ -77,8 +77,14 @@ export default function AnnotationSelectionBar({ annotation, colorScheme = "ligh
   const strokes = items.filter(item => item.kind === "stroke");
   // The strokes a line style restyles: not the highlighter's band.
   const dashed = strokes.filter(item => !isHighlighterStroke(item));
-  const closed = items.filter(closedShape);
   const filledGroups = new Set(annotation.items.filter(item => item.kind === "area" && item.group).map(item => item.group));
+  // What Fill takes, as the Fill tool does (`fillableOutline`): a shape drawn closed, a pen or highlighter loop whose
+  // ends are under `FILL_LOOP_GAP_PX` apart on the screen now (re-read as the camera moves the bar), and a stroke
+  // already filled, so it can be unfilled at any zoom. Each with its outline on the screen, a loop's gap joined.
+  const runtime = runtimeRef.current, canvas = runtime?.renderer?.domElement;
+  const view = canvas ? { width: canvas.clientWidth, height: canvas.clientHeight } : null;
+  const onScreen = new Map(runtime && view ? annotationsOnScreen(runtime, strokes, view).map(ink => [ink.id, ink]) : []);
+  const closed = strokes.filter(item => closedShape(item) || (item.group && filledGroups.has(item.group)) || fillableOutline(onScreen.get(item.id)));
   const filled = closed.length > 0 && closed.every(item => item.group && filledGroups.has(item.group));
   const toggleFill = () => {
     if (filled) {
@@ -86,12 +92,11 @@ export default function AnnotationSelectionBar({ annotation, colorScheme = "ligh
       annotation.remove(annotation.items.filter(item => item.kind === "area" && groups.has(item.group)).map(item => item.id));
       return;
     }
-    const runtime = runtimeRef.current, canvas = runtime?.renderer?.domElement;
-    if (!runtime || !canvas) return;
-    const view = { width: canvas.clientWidth, height: canvas.clientHeight };
+    if (!runtime || !view) return;
     for (const shape of closed) {
       if (shape.group && filledGroups.has(shape.group)) continue;
-      const [outline] = annotationsOnScreen(runtime, [shape], view);
+      const ink = onScreen.get(shape.id);
+      const outline = ink && (ink.closed ? ink : { ...ink, closed: true });
       const areas = outline ? fillAreasOf(runtime, shape, outline, null, shape.color, view) : [];
       if (areas.length) annotation.fill(shape.id, areas);
     }

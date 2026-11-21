@@ -38,7 +38,8 @@ were drawn from every angle, lying on the surface they were drawn on. The engine
   near-black in light mode. A native color picker adds a custom color.
   `AnnotationStylePickers` also restyles the selection's ink.
 - `renderers/kit/tools/annotate/AnnotationSelectionBar.jsx` — the bar over the ink Select
-  picked: its colour and weight, Fill for a closed shape (seeded
+  picked: its colour and weight, Fill for a closed shape — a rectangle, an ellipse, or a pen or highlighter loop
+  whose ends are under `FILL_LOOP_GAP_PX` apart on the screen now (`fillableOutline`, as the Fill tool takes it) — (seeded
   inside its outline as it falls on the screen, `annotation/geometry.js`'s
   `interiorPoint` and `fillMarkAt`, and projected where the shape lies: On plane on the
   shape's own plane if its points are coplanar (a fitted plane), else On surface) and
