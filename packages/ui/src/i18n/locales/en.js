@@ -409,8 +409,6 @@ export default {
 
   // Projection, a menu of its own beside Display.
   "projection.label": "Projection",
-  "projection.current": "Projection: {mode}",
-  "projection.switchTo": "Switch to {mode}",
   "projection.orthographic": "Orthographic",
   "projection.perspective": "Perspective",
 

@@ -3,10 +3,9 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Square } from 'lucide-react';
 import StateButton from '../../../../dist/renderers/kit/shell/StateButton.js';
-import ProjectionToggle from '../../../../dist/renderers/kit/shell/ProjectionToggle.js';
 import { textGlyphIcon } from '../../../../dist/renderers/kit/shell/TextGlyph.js';
 
-// The view's one state button (`StateButton.jsx`), Projection's and a view's own: its icon is the state
+// The view's one state button (`StateButton.jsx`), a view's own (a board's side and 2D/3D): its icon is the state
 // on screen, its name says that state, its tooltip what a press does, with the key that does the same;
 // no state is drawn in the strip's pressed fill.
 beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); });
@@ -45,19 +44,4 @@ it('a word is an icon: drawn as the tile draws a Lucide icon, in its colour, hid
     .toEqual(['svg', '0 0 24 24', 'true', 'currentColor', '2D']);
   const text = glyph.querySelector('text')!;
   expect([text.textContent, text.getAttribute('font-weight'), text.style.fontVariantNumeric]).toEqual(['2D', '600', 'tabular-nums']);
-});
-
-it('Projection is the state button: the projection on screen, named, the other one its tooltip, a press switching to it', () => {
-  let projection = 'orthographic';
-  const { rerender } = render(<ProjectionToggle projection={{ value: projection, onChange: (next: string) => { projection = next; } }} />);
-  const button = screen.getByRole('button', { name: 'Projection: Orthographic' });
-  expect([button.hasAttribute('data-state-button'), button.getAttribute('data-projection'), button.hasAttribute('aria-pressed')]).toEqual([true, 'orthographic', false]);
-  hover(button);
-  expect(tip()!.textContent).toBe('Switch to Perspective');
-  away(button);
-  fireEvent.click(button);
-  expect(projection).toBe('perspective');
-  rerender(<ProjectionToggle projection={{ value: projection, onChange: (next: string) => { projection = next; } }} />);
-  expect(screen.getByRole('button', { name: 'Projection: Perspective' })).toBe(button);
-  expect(button.getAttribute('data-projection')).toBe('perspective');
 });

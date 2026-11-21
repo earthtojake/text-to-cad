@@ -22,8 +22,8 @@ const PROJECTIONS = Object.freeze(["orthographic", "perspective"]);
  * submenu): the file's modes, then, after a rule, the Grid switch, which every mode draws. A view
  * whose modes are its own names them (`label`), may show a mode that is a state rather than a choice
  * (`disabled`: what the view's own settings came to by hand), and may have no grid. A view that keeps
- * the camera's projection here, a setting it changes seldom, rather than as a tile of its own
- * (`ProjectionToggle.jsx`), ends the list with it (`projection`): after a rule, under its muted name,
+ * the camera's projection here, a setting it changes seldom (a board in 3D, in a host with no navbar),
+ * ends the list with it (`projection`): after a rule, under its muted name,
  * Orthographic and Perspective, the one on screen ticked. Last, the viewport's **Background**
  * (`background`, `@cad/core/lib/viewportTheme.js`: Light or Dark), the person's, the same in
  * every file and view: after a rule, under its muted name, each with its icon, the one chosen ticked.
@@ -72,11 +72,11 @@ export function DisplayMenuItems({ mode, grid = null, projection = null, backgro
 }
 
 /**
- * The Display button: first in the corner's stack, a 3D view's over its cube, a board's over its zoom pill
+ * The Display button: first in a board's corner stack under its zoom pill, in a host with no navbar
  * (`ViewCornerStack.jsx`, `className`, its menu to the side away from the corner, its bottom on the button's: `side`,
- * `align`): the mode on screen's sphere, opening Display's list (`DisplayMenuItems`). A mode chosen closes it, as a
- * projection chosen does; the Grid switch leaves it open. Projection is otherwise a tile of its own that
- * switches on a click (`ProjectionToggle.jsx`); on a phone Display is More's submenu instead (`RendererShell.jsx`).
+ * `align`): the preset on screen's glyph, opening Display's list (`DisplayMenuItems`). A mode chosen closes it, as a
+ * projection chosen does; the Grid switch leaves it open. On a phone Display is More's submenu instead
+ * (`BoardDisplay.jsx`). A 3D view's settings are its View menu (`ViewSettingsMenu.jsx`), in the row under its cube.
  */
 export default function DisplayPopover({ disabled = false, boundary = null, tooltipSide = "top", onOpenChange, mode, grid = null, projection = null, background = null, icon = null,
   className = null, side = "bottom", align = "center", chevron = false }) {

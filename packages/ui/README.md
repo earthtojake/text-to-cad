@@ -275,11 +275,12 @@ centre holds the file's tools — a STEP's Select (its selection filter the chev
 Draw (one plain button; its row under the strip holds the freehand and shape tools), Measure, then Explode and Clip; a robot's Select, Draw, Measure and Clip; a GLB's
 Select (its nodes), Draw, Measure, Explode (several parts) and Clip; a 3MF's Select (its
 objects), Draw, Measure and Clip; an STL's Draw and Clip — then a 3D view's Preview (a play triangle); a
-No rule parts the strip, at Figma's toolbar's proportions (48px, 32px tiles). Under a file's navbar the view's settings
-are its right end, one **View ▾** menu of submenus, the same on a phone (`kit/shell/ViewSettingsMenu.jsx`), and the
-corner at the top-right holds the cube with Home attached to it, or a flat view's zoom pill; without a navbar the cube
-has Display, Projection and Home stacked under it (a board's Display, Side and 2D/3D under its pill). A phone's picture
-has no corner. The bottom row is Quick Edit's alone. The tool in hand's
+No rule parts the strip, at Figma's toolbar's proportions (48px, 32px tiles). A 3D view's settings stand with the
+camera's, with a navbar or without: the corner at the top-right holds the cube and, centred under it, one row, Home and
+**View** (one menu of submenus, `kit/shell/ViewSettingsMenu.jsx`; its tile the projection's icon), and a 3D view's
+Preview is the navbar's right end. A flat view's settings are still the navbar's **View ▾** (the same menu), its corner
+its zoom pill; without a navbar a board's Display, Side and 2D/3D are stacked under its pill. A phone's picture has
+no cube: a 3D view's corner is View alone, its menu ending with Reset view. The bottom row is Quick Edit's alone. The tool in hand's
 controls are one row under the strip, its sub-toolbar (`kit/tools/SubToolbar.jsx`):
 the drawing tools' colour, stroke width, placement and history; Measure's chips. Explode's and
 Clip's slider rows open in a popover from their tiles, taking up no tool.
@@ -304,7 +305,7 @@ The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
 the view's panel, mobile layout, section density, keyboard scope, tooltips
 and Preview. RendererShell owns the strip and its sub-toolbar at the top centre of the window, the
 panel docked at its left (the strip and Quick Edit centred on the window over it), Quick Edit's bar at the bottom and the
-cube (Home attached to it; without a navbar Display, Projection and Home under it) at the top-right. Preview (preview
+cube with its row of Home and View under it at the top-right. Preview (preview
 mode) is the shell's own, the one place Render is drawn — whatever the file's display mode,
 which has no Render — and takes the whole page, the navbar and the strip with it, in every
 host; in the navbar's place its own bar, on no surface, names the file and holds Preview settings
@@ -345,8 +346,8 @@ a submenu of Browser where the host has one and Finder, File Explorer or File ma
 Export, a submenu of the formats; a model's Copy path and file manager act on its script). They share one look: transparent until the
 pointer is on them or their menu is open, with no tooltip. At the right is only what a host
 or a file adds: a dismissed alert's icon, the host's actions (the
-CAD app's Full size), after the view's own settings, which it portals into the navbar's view slot (View ▾ and a 3D
-view's Preview; a phone's View and Preview). A host whose own frame is its navigation shows
+CAD app's Full size), after the view's own, which it portals into the navbar's view slot (a 3D view's Preview; a
+flat view's View ▾). A host whose own frame is its navigation shows
 the view alone (`chrome: "bare"`, the CAD app's file handler), with no navbar at all. With no
 file a view shows the host's home, the model library, under the same navbar (its logo and menu,
 without Back to home, Back and Forward where the host keeps the view's history, and the host's

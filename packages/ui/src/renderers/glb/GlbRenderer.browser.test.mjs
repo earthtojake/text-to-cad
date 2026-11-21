@@ -116,14 +116,14 @@ const glbTools = async (pane) => {
     .evaluateAll(buttons => buttons.filter(button => button.hasAttribute('aria-pressed') && !button.closest('[data-view-controls]')).map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
   GLB_TOOLS, 'Select, Draw, Measure, Explode and Clip');
   const strip = pane.getByRole('group', { name: 'Interaction tools' });
-  // The strip is the tools alone, Clip last, no rule; the view's settings are the navbar's (Display, Projection, then
-  // Preview, last), and the corner keeps Home beside the cube.
+  // The strip is the tools alone, Clip last, no rule; Preview is the navbar's, and the view's settings stand with the
+  // camera's: Home and View in the row under the cube.
   assert.equal(await strip.locator('[data-view-controls]').count(), 0, 'nothing of the view on the strip');
   assert.equal(await strip.locator('[data-strip-rule]').count(), 0, 'no rule');
   assert.deepEqual(await pane.locator('[data-viewer-navbar] [data-navbar-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label').split(':')[0])),
-    ['View', 'Preview'], 'the navbar\'s view settings: View ▾ (Display, Projection, Grid, Background), then Preview');
-  assert.deepEqual(await pane.locator('[data-view-corner-home] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Home'], 'Home beside the cube');
-  // The corner is the cube's alone: no Home.
+    ['Preview'], 'the navbar\'s: Preview alone');
+  assert.deepEqual(await pane.locator('[data-view-cube-row] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Home', 'View'], 'Home and View under the cube');
+  // Nothing else of the view on screen.
   for (const name of ['Orbit', 'Pencil', 'Shapes', 'Joints']) assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
 };
 /** World point -> page coordinates, from the camera the viewport publishes. */
@@ -154,9 +154,9 @@ async function openAnimation(pane) {
 }
 // Preview's playbar, under the model, for a file with routines (Preview has no panel).
 const playbar = pane => pane.getByRole('toolbar', { name: 'Animation playback', exact: true });
-// Display: the corner's first button (`kit/shell/ViewCornerStack.jsx`, under the cube at the top-right), its menu the
-// modes a file offers (a radio each), then Grid, then the Background.
-const displayButton = pane => pane.locator('[data-navbar-view-controls] [data-display-mode]');
+// View: the second tile of the row under the cube (`kit/shell/ViewCornerStack.jsx`'s `CubeRow`), its menu's Display
+// submenu the modes a file offers (a radio each), then Grid, then the Background.
+const displayButton = pane => pane.locator('[data-view-cube-row] [data-view-menu]');
 // Display's menu opened, its rows read (the modes by id; whether Grid is there; the Background's choices), and shut again.
 async function displayMenu(pane) {
   const page = pane.page();

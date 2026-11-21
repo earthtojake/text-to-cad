@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { CUBE_HOME_INK, VIEWPORT_CUBE_TOP, VIEWPORT_STACK_BOTTOM, viewCornerLayout } from "./viewportLayout.js";
+import { CUBE_INK, CUBE_ROW_WIDTH_PX, VIEWPORT_CUBE_TOP, VIEWPORT_STACK_BOTTOM, viewCornerLayout } from "./viewportLayout.js";
 import { cubeInkBox } from "../camera/ViewPlaneControl.js";
 import { DEFAULT_VIEW_DIRECTION } from "../camera/viewportCameraKit.js";
 import { viewCornerAway } from "./ViewCorner.jsx";
@@ -15,8 +15,8 @@ test("the corner stands at the top-right: the cube, the pill, and the stack unde
   assert.deepEqual(right.pill, { right: inset, top: "calc(12px + var(--cad-viewport-corner-top, 0px))" });
   // Under the cube: its 12px, its 68px box, then a 4px gap.
   assert.deepEqual(right.stack, { right: inset, top: "calc(16px + 68px + var(--cad-viewport-corner-top, 0px))" });
-  // Home against the cube's drawing (inset in its box): 4px from it, level with its top face's top.
-  assert.deepEqual(right.home, { right: "calc(var(--cad-viewport-corner-right, 2px) + 74px)", top: "calc(19px + var(--cad-viewport-corner-top, 0px))" });
+  // The cube's row (Home, View): under its box as the stack is, 8px in from the box's edge (centred on its drawing).
+  assert.deepEqual(right.cubeRow, { right: "calc(var(--cad-viewport-corner-right, 2px) + 18px)", top: right.stack.top });
   // Under the pill: its 12px, its 24px row, then the chrome's 8px.
   assert.deepEqual(right.stackUnderPill, { right: inset, top: "calc(44px + var(--cad-viewport-corner-top, 0px))" });
   // Nothing of the corner stands at the bottom any more; the tool column stops clear of Quick Edit's row.
@@ -30,24 +30,21 @@ test("a host that anchors the corner at the left mirrors it to the top-left", ()
   const left = viewCornerLayout("left");
   const inset = "calc(var(--cad-viewport-corner-left, 0px) + 10px)";
   assert.deepEqual([left.pill.left, left.pill.right, left.stack.left, left.stackUnderPill.left], [inset, "auto", inset, inset]);
-  assert.equal(left.home.left, "calc(var(--cad-viewport-corner-left, 0px) + 74px)");
+  assert.equal(left.cubeRow.left, "calc(var(--cad-viewport-corner-left, 0px) + 18px)");
   assert.equal(left.stack.top, viewCornerLayout("right").stack.top);
   assert.deepEqual(viewCornerAway("left"), { side: "right", align: "start" });
 });
 
-// Home is attached to the cube as drawn, not to its box: the cube's outline from the view the file opens with (which
-// Home goes back to) is inset in its 68px box, and Home's 24px button stands 4px (to the pixel) left of that outline,
-// its top on the outline's top, so the two read as one control.
-test("Home stands against the drawn cube: 4px from its outline, top-aligned with its top face", () => {
-  assert.deepEqual(CUBE_HOME_INK, cubeInkBox(DEFAULT_VIEW_DIRECTION, 68));
+// The cube's row stands centred under the cube as drawn, not under its box: the cube's outline from the view the file
+// opens with (which Home goes back to) is inset in its 68px box, and the 52px row's middle is the outline's middle.
+test("the cube's row is centred under the drawn cube", () => {
+  assert.deepEqual(CUBE_INK, cubeInkBox(DEFAULT_VIEW_DIRECTION, 68));
   // A face seen square-on fills ±21 of the view box's 76 units round its centre: 15.2px in from each side of 68.
   const front = cubeInkBox([0, -1, 0], 68);
   assert.ok(Math.abs(front.left - 15.21) < 0.01 && Math.abs(front.top - 15.21) < 0.01 && Math.abs(front.right - 52.79) < 0.01);
-  const px = value => Number(/\+ (\d+)px\)$/.exec(value)?.[1] ?? /calc\((\d+)px/.exec(value)?.[1]);
-  const home = viewCornerLayout("right").home;
-  // From the corner's edge: the cube's box ends 10px in and is 68px wide; Home's right edge is `right` in.
-  const homeRight = 10 + 68 - px(home.right);
-  const homeTop = px(home.top) - 12;
-  assert.ok(Math.abs(CUBE_HOME_INK.left - homeRight - 4) <= 0.5, `gap ${CUBE_HOME_INK.left - homeRight}`);
-  assert.ok(Math.abs(homeTop - CUBE_HOME_INK.top) <= 0.5, `top ${homeTop} vs ${CUBE_HOME_INK.top}`);
+  const px = value => Number(/\+ (\d+)px\)$/.exec(value)?.[1]);
+  // From the corner's edge: the cube's box ends 10px in and is 68px wide; the row's right edge is `right` in.
+  const rowMiddle = 10 + 68 - px(viewCornerLayout("right").cubeRow.right) - CUBE_ROW_WIDTH_PX / 2;
+  const inkMiddle = 68 - (CUBE_INK.left + CUBE_INK.right) / 2 + 10;
+  assert.ok(Math.abs(rowMiddle - (10 + 68 - inkMiddle)) <= 0.5, `row ${rowMiddle} vs drawing ${10 + 68 - inkMiddle}`);
 });
