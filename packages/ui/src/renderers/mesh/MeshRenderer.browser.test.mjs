@@ -112,9 +112,10 @@ after(async () => {
   if (server) await new Promise(resolve => server.close(resolve));
 });
 
-// `width`: the view's.
-async function open(t, file, { width = 800 } = {}) {
+// `width`: the view's. `clock`: the page's timers Playwright's, to run forward (`page.clock`).
+async function open(t, file, { width = 800, clock = false } = {}) {
   const page = await browser.newPage({ viewport: { width, height: 500 }, deviceScaleFactor: 1 });
+  if (clock) await page.clock.install();
   t.after(() => page.close());
   page.setDefaultTimeout(15000);
   const errors = [];
@@ -454,11 +455,13 @@ test('every mesh file has its Model tab from the first frame, open as it stays o
   // Wide enough that the panel starts open beside the model (it keeps 640px).
   for (const [file, rows] of [['cube.stl', ['cube.stl']], ['part.stl', ['box']], ['single.3mf', ['bracket']]]) {
     const release = hold(file);
-    const { pane, errors } = await open(t, file, { width: 1000 });
+    const { page, pane, errors } = await open(t, file, { width: 1000, clock: true });
     await pane.locator('aside[data-flat-panel] [data-flat-panel-heading]').filter({ hasText: 'Model' }).waitFor();
     const first = await panelOpen(pane);
-    assert.deepEqual([first, await pane.locator('[aria-busy="true"]').count() > 0, await modelRows(pane).count()], ['true', true, 0],
-      `${file}: open, the file still loading, its list empty`);
+    // Past the update status's delay: a first load is the loading cover's to say, never "Updating view…".
+    await page.clock.runFor(1000);
+    assert.deepEqual([first, await pane.locator('[aria-busy="true"]').count() > 0, await modelRows(pane).count(), await pane.locator('[data-view-update-status]').count()],
+      ['true', true, 0, 0], `${file}: open, the file still loading, its list empty, no update status`);
     release();
     await ready(pane);
     await modelRows(pane).first().waitFor();

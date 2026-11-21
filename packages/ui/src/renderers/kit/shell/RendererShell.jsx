@@ -173,6 +173,9 @@ const DOUBLE_PRESS_MS = 600;
  *   and Preview viewport's `runtimeLifecycle` and `onCameraSettled`. Preview is a view of its own
  *   (`PreviewView.jsx`) over the editor's, which nothing of it reaches.
  */
+// The update status with nothing to say (`ViewUpdateStatus`'s).
+const NO_UPDATE = Object.freeze({ pending: false, error: null });
+
 export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, fileSections = null, references = null, referenceChips = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null, previewView = null,
   frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, boxSelect = null, inkTouches = null,
@@ -428,8 +431,11 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   // One place says the view is catching up: a newer revision of the file loading behind the model on
   // screen, or a Display change being prepared — the latter's failure first, since it is the one with
   // something to retry. Under the strip at the top centre, or in its place where there is no strip.
+  // While the file first loads there is no picture to catch up: the loading cover says what is happening,
+  // and the settings the model will open with, waiting for it, are no update (only their failure is said).
+  const viewUpdateStatus = viewerLoading && !frame.viewUpdate.status.error ? NO_UPDATE : frame.viewUpdate.status;
   const updateStatus = { preview: Boolean(frame.loading.preview), onRetry: frame.viewUpdate.retry,
-    update: frame.loading.updating && !frame.viewUpdate.status.error ? modelUpdateStatus(frame.loading.progress) : frame.viewUpdate.status };
+    update: frame.loading.updating && !frame.viewUpdate.status.error ? modelUpdateStatus(frame.loading.progress) : viewUpdateStatus };
   const quickEdit = references ? <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden} docked={mobile}
     resource={frame.resource} references={references} chips={referenceChips} nameReference={nameReference} annotation={annotation} prompt={frame.quickEditPrompt}
     notes={promptNotes} onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} /> : null;
