@@ -210,7 +210,7 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
 
 
 def _declared(document: _dfm_brep.Document, document_type: str, given: dict[str, Any], candidates: bool,
-              measured_as: str) -> tuple[str, dict[str, Any], dict[str, Any]]:
+              measured_as: str, *, printer_snapshot: dict[str, Any] | None = None) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """The process ``document``'s parts declare, the options resolved for it, and the report, which says what
     was read (``process_declared``)."""
     from cad._internal import manufacturing
@@ -220,7 +220,7 @@ def _declared(document: _dfm_brep.Document, document_type: str, given: dict[str,
         raise Unmeasured("document_empty", "the document holds no part with a face to measure")
     process, resolved, said = manufacturing.declared(
         document_type, [(part.owner or part.name, part.material) for part in document.parts], given,
-        candidates=candidates)
+        candidates=candidates, printer_snapshot=printer_snapshot)
     report = _measured(document, measured_as, process, resolved, candidates)
     report["findings"] = [*(report.get("findings") or ()), said]
     return process, resolved, report
@@ -260,7 +260,7 @@ def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]
             raise Unmeasured("document_unreadable", f"failed to read {read or 'the document'}: {error}") from None
         if process is None:
             process, resolved, report = _declared(document, document_type, dict(check.get("given") or {}),
-                                                  candidates, document_type)
+                                                  candidates, document_type, printer_snapshot=check.get("printer_settings"))
         else:
             resolved = dict(check["resolved"])
             report = _measured(document, document_type, process, resolved, candidates)
