@@ -261,7 +261,8 @@ To update, run the same command again.
 devin plugins install earthtojake/text-to-cad
 ```
 
-To update: `devin plugins update text-to-cad`.
+To update: `devin plugins update text-to-cad`. Devin CLI takes a plugin only once you are signed in
+(`devin auth login`): until then the install command skips it and says so.
 
 ### Factory Droid
 

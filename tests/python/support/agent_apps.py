@@ -52,8 +52,8 @@ THEIRS = "---\nname: {name}\ndescription: someone else's\n---\n"
 # <name>` removes that extension's folder, and, with FAKE_GEMINI_RECORD, `gemini extensions install <url> --ref <ref>`
 # writes its record; `copilot plugin` keeps its catalogs in ~/.copilot/settings.json and its plugins in
 # ~/.copilot/config.json as Copilot CLI does, its `marketplace add` failing for a catalog it has already, `install`
-# for one it has not, and `update` for a plugin not installed (as 1.0.114 does). Each call notes its folder and
-# Gemini's trust.
+# for one it has not, and `update` for a plugin not installed (as 1.0.114 does); with FAKE_SIGNED_OUT, `devin plugins`
+# refuses as Devin CLI does with nobody signed in. Each call notes its folder and Gemini's trust.
 #
 # For the install command: each call also notes the variables FAKE_LOG_ENV names and whether the file FAKE_LOG_EXISTS
 # names is there. `cad update` says a line on each stream and the lines FAKE_UPDATE_SAID names (split at `|`), waits
@@ -187,6 +187,9 @@ STAND_IN = textwrap.dedent('''\
         record.parent.mkdir(parents=True, exist_ok=True)
         ref = sys.argv[sys.argv.index("--ref") + 1]
         record.write_text(json.dumps({{"source": sys.argv[3], "type": "git", "ref": ref}}))
+    if name == "devin" and sys.argv[1:2] == ["plugins"] and os.environ.get("FAKE_SIGNED_OUT"):
+        print("Error: You must be logged in to manage plugins. Run `devin auth login` first.")
+        sys.exit(1)
     if name == "copilot" and sys.argv[1:2] == ["plugin"]:
         home = Path(os.environ["HOME"]) / ".copilot"
         settings, config = home / "settings.json", home / "config.json"

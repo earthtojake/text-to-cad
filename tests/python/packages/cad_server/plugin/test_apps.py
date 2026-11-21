@@ -573,6 +573,20 @@ class AppTableTests(PluginRuns):
         self.assertIn("GitHub Copilot CLI: failed: the earthtojake catalog is another source's (someone/else)",
                       theirs.stdout)
 
+    def test_an_app_nobody_is_signed_in_to_is_skipped_with_what_it_said_not_failed(self) -> None:
+        # Devin CLI manages plugins only for a person signed in: nothing a run does changes that, so the run does not
+        # count it as failed (and so try it again and again), and says what the app said to do.
+        self.programs("devin")
+        done = self.run_install(FAKE_SIGNED_OUT="1")
+        self.assertEqual(0, done.returncode, done.stderr)
+        self.assertEqual(self.calls("devin"), [["plugins", "update", "text-to-cad"],
+                                               ["plugins", "install", "earthtojake/text-to-cad", "-y"]])
+        self.assertIn("Devin CLI: skipped: nobody is signed in to it (Error: You must be logged in to manage plugins. "
+                      "Run `devin auth login` first.)\n", done.stdout)
+        self.assertEqual(self.kept()["record"].get("for"), cad_server.__version__)
+        # Any other failure of its command is still a failure.
+        self.assertIn("Devin CLI: failed: devin: something went wrong", self.run_install(FAKE_FAIL="devin").stdout)
+
     def test_one_app_failing_stops_no_other(self) -> None:
         self.programs("codex", "gemini")
         done = self.run_install(FAKE_FAIL="codex")

@@ -102,7 +102,10 @@ class App:
     already; without it, ``update`` runs first and ``install`` where that fails. ``handler``: an app whose old
     copies need more than its commands (Claude Code, Codex, Cursor, Gemini CLI, Grok Build, Claude Desktop,
     Hermes Agent, Antigravity), or whose commands depend on what it holds already (GitHub Copilot CLI).
-    ``folder``: an agent with no plugin command, given the skills in its own folder; ``marks`` find it."""
+    ``folder``: an agent with no plugin command, given the skills in its own folder; ``marks`` find it.
+    ``signed_out``: an app that takes a plugin only from a person signed in to it says so in these words; where it does,
+    the app is skipped with what it said, not failed (``plugin_command``): nothing a run can do changes it, and a run
+    again changes nothing until the person signs in."""
 
     key: str
     name: str
@@ -114,6 +117,7 @@ class App:
     handler: Optional[Callable[["App", Here, Context], Outcome]] = None
     folder: Optional[Callable[[Here], Path]] = None
     marks: Optional[Callable[[Here], List[Path]]] = None
+    signed_out: str = ""  # what the app's command says where nobody is signed in to it (a pattern, any case)
 
     def run(self, here: Here, context: Context) -> Outcome:
         if self.handler is not None:
@@ -144,12 +148,17 @@ def plugin_command(app: App, here: Here, context: Context) -> Outcome:
                 return ran
         return None
 
+    def give_up(failed: Ran) -> Outcome:
+        if app.signed_out and re.search(app.signed_out, failed.out, re.IGNORECASE):
+            return Outcome("skipped", f"nobody is signed in to it ({failed.last()})")
+        raise Failed(failed.last(), failed.reason)
+
     known = app.installed(here) if app.installed is not None else None
     if known and update:
         failed = run_all(update)
         if failed is None:
             return Outcome("updated")
-        raise Failed(failed.last(), failed.reason)
+        return give_up(failed)
     if known is None and update and run_all(update) is None:
         return Outcome("updated")
     install = fill(app.install, source, here)
@@ -158,7 +167,7 @@ def plugin_command(app: App, here: Here, context: Context) -> Outcome:
         return Outcome("installed")
     if app.installed is not None and app.installed(here):
         return Outcome("installed", f"its command said: {failed.last()}")
-    raise Failed(failed.last(), failed.reason)
+    return give_up(failed)
 
 
 # Claude Code and Codex: a plugin is name@catalog. Ours from GitHub is text-to-cad@earthtojake, from the repository's
@@ -1109,10 +1118,12 @@ APPS: Tuple[App, ...] = (
         install=[["plugin", "marketplace", "add", "{repo}"], ["plugin", "install", "{plugin}@text-to-cad", "--scope", "user"]],
         update=[["plugin", "marketplace", "update", "text-to-cad"], ["plugin", "update", "{plugin}@text-to-cad", "--scope", "user"]]),
     # Devin CLI. Docs https://docs.devin.ai/cli/extensibility/plugins/overview (install owner/repo -y; no ref: main;
-    # update <name>; it reads .claude-plugin/plugin.json). Not run.
+    # update <name>; it reads .claude-plugin/plugin.json; managing plugins needs a person signed in). Run, signed out
+    # (3000.14 on Windows): each command ends with exit status 1 and "Error: You must be logged in to manage plugins.
+    # Run `devin auth login` first.", so it is skipped there; not run signed in.
     App("devin", "Devin CLI", command="devin",
         install=[["plugins", "install", "{repo}", "-y"]], update=[["plugins", "update", "{plugin}"]],
-        local=[["plugins", "install", "--local", "{folder}", "-y"]]),
+        local=[["plugins", "install", "--local", "{folder}", "-y"]], signed_out=r"must be logged in"),
     # Antigravity (``antigravity``, above): installed again to update; uninstalled only where that fails. Not run.
     App("antigravity", "Antigravity", command="agy", handler=antigravity),
     # GitHub Copilot CLI (``copilot``, above): updated, else the catalog added where it has none, and installed.
